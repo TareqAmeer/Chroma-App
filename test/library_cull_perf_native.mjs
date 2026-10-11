@@ -13,6 +13,7 @@ const expectedBuild = process.env.CULL_EXPECTED_BUILD;
 const nativeProfile = process.env.CULL_NATIVE_PROFILE;
 const nativeCatalogDir = process.env.CULL_NATIVE_CATALOG_DIR;
 const nativeCacheDir = process.env.CULL_NATIVE_CACHE_DIR;
+const resumeWarmed = process.env.CULL_RESUME_WARMED === '1';
 assert(rawPath && /\.(nef|cr3|arw|raf|rw2|dng)$/i.test(rawPath), 'supply a real camera RAW path');
 assert(nativeCommit && /^[a-f0-9]{40}$/.test(nativeCommit), 'supply the verified native source commit');
 assert(expectedBuild, 'supply the expected native BUILD stamp');
@@ -44,13 +45,85 @@ const report = {
     licence: process.env.CULL_RAW_LICENSE || 'unspecified', source: process.env.CULL_RAW_SOURCE || null },
   hardware: { platform: os.platform(), release: os.release(), arch: os.arch(),
     cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, memoryBytes: os.totalmem() },
-  cache: 'Source-resolution cull cells warmed explicitly in the same native process; initial disk/OS cache unspecified',
+  cache: resumeWarmed
+    ? 'Same-process warmed-cache resume; source-resolution cull cells were already decoded before this harness attached; initial disk/OS cache unspecified'
+    : 'Source-resolution cull cells warmed explicitly in the same native process; initial disk/OS cache unspecified',
+  measurementMode: resumeWarmed
+    ? { mode: 'same-process-warmed-cache-resume', optIn: 'CULL_RESUME_WARMED=1', importAndWarmSkipped: true }
+    : { mode: 'fresh-import-and-warm', importAndWarmSkipped: false },
   isolation: { nativeCatalogDir, nativeCacheDir },
-  samples: [], failures: [],
+  samples: [], failures: [], diagnostics: { stages: [], events: [], target: null },
 };
 const output = process.env.CULL_PERF_REPORT || 'test/output/chr267-native-perf.json';
 const save = async () => { await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, JSON.stringify(report, null, 2)); };
+const diagnosticStartedAt = Date.now();
+const stage = name => report.diagnostics.stages.push({ at: new Date().toISOString(), elapsedMs: Date.now() - diagnosticStartedAt, name });
+const event = (type, data = {}) => {
+  const events = report.diagnostics.events;
+  events.push({ at: new Date().toISOString(), elapsedMs: Date.now() - diagnosticStartedAt, type, ...data });
+  if (events.length > 200) events.splice(0, events.length - 200);
+};
+const context = page.context();
+let browserDisconnected = false;
+page.on('close', () => event('playwright.page.close'));
+page.on('crash', () => event('playwright.page.crash'));
+page.on('console', message => event('playwright.console', { level: message.type(), text: message.text().slice(0, 500) }));
+page.on('pageerror', error => event('playwright.pageerror', { text: String(error).slice(0, 1000) }));
+page.on('framenavigated', frame => event('playwright.frameNavigated', { url: frame.url().slice(0, 1000), mainFrame: frame === page.mainFrame() }));
+context.on('close', () => event('playwright.context.close'));
+browser.on('disconnected', () => {
+  browserDisconnected = true;
+  event('playwright.browser.disconnected', { message: 'Native WebView CDP connection ended; measurements will fail unless the active operation completed before disconnect.' });
+});
+
+// Browser-level target events are diagnostic-only and do not change app state.
+// Failure-time /json/list comparison helps distinguish a lost Playwright page
+// from a WebView target that actually disappeared.
+let browserCdp = null;
+let pageCdp = null;
+let targetId = null;
 try {
+  browserCdp = await browser.newBrowserCDPSession();
+  for (const name of ['Target.targetCrashed', 'Target.targetDestroyed', 'Target.detachedFromTarget']) {
+    browserCdp.on(name, payload => {
+      if (name === 'Target.detachedFromTarget' || !targetId || payload.targetId === targetId
+        || payload.targetInfo?.targetId === targetId) event(`cdp.${name}`, payload);
+    });
+  }
+  await browserCdp.send('Target.setDiscoverTargets', { discover: true });
+  const targets = await browserCdp.send('Target.getTargets');
+  const pageInfo = targets.targetInfos.find(info => info.type === 'page' && info.url === page.url());
+  targetId = pageInfo?.targetId || null;
+  report.diagnostics.target = pageInfo
+    ? { ...pageInfo, browserSession: 'browser-level CDP' }
+    : { targetId: null, url: page.url(), browserSession: 'browser-level CDP' };
+  if (pageInfo?.targetId) {
+    pageCdp = await context.newCDPSession(page);
+    report.diagnostics.target.pageSessionAttached = true;
+    pageCdp.on('Inspector.detached', params => event('cdp.Inspector.detached', params));
+  }
+} catch (error) {
+  event('cdp.initialization.error', { text: String(error).slice(0, 1000) });
+}
+const compareTargetsAfterFailure = async () => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const url = new URL('/json/list', endpoint);
+    const response = await fetch(url, { signal: controller.signal });
+    const targets = await response.json();
+    const matching = targets.filter(info => info.id === targetId || info.url === report.runtime?.url);
+    report.diagnostics.failureTargetComparison = {
+      at: new Date().toISOString(), status: response.status, targetId,
+      matching: matching.map(info => ({ id: info.id, type: info.type, title: info.title, url: info.url })),
+      targetCount: targets.length,
+    };
+  } catch (error) {
+    report.diagnostics.failureTargetComparison = { at: new Date().toISOString(), targetId, error: String(error).slice(0, 500) };
+  } finally { clearTimeout(timeout); }
+};
+try {
+  stage('runtime.evaluate.start');
   const runtime = await page.evaluate(() => {
     if (new URL(location.href).searchParams.has('libtest')) throw Error('Mock Library fixture is forbidden');
     if (!window.__TAURI__?.core?.invoke) throw Error('Actual native IPC is required');
@@ -60,13 +133,53 @@ try {
       userAgent: navigator.userAgent, viewport: [innerWidth, innerHeight], dpr: devicePixelRatio,
       gpu: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : null };
   });
+  stage('runtime.evaluate.complete');
   Object.assign(report, { runtime });
   assert.equal(runtime.build, expectedBuild, 'native app source/build must match the recorded build');
   const initialCatalog = await page.evaluate(() => window.__TAURI__.core.invoke('catalog_query', { q: { limit: 3, offset: 0 } }));
-  assert(initialCatalog.total <= 2 && initialCatalog.entries.every(entry =>
-    fixturePaths.some(p => p.replaceAll('\\', '/').toLowerCase() === entry.path.replaceAll('\\', '/').toLowerCase())),
-    'use an isolated native catalog containing only this RAW fixture, never the user catalog');
+  stage('initial.catalog.complete');
+  const normalizePath = value => value.replaceAll('\\', '/').toLowerCase();
+  const expectedPaths = fixturePaths.map(normalizePath).sort();
+  const actualPaths = initialCatalog.entries.map(entry => normalizePath(entry.path)).sort();
+  assert(initialCatalog.total === 2 && actualPaths.length === 2
+    && actualPaths.every((value, index) => value === expectedPaths[index]),
+    'use an isolated native catalog containing exactly the two expected RAW fixture paths, never the user catalog');
   report.isolation.initialCatalogTotal = initialCatalog.total;
+  report.isolation.initialCatalogPaths = initialCatalog.entries.map(entry => entry.path);
+  if (resumeWarmed) {
+    stage('resume.verify-cull-view.start');
+    const resumed = await page.evaluate(expected => {
+      const survey = document.querySelector('#lib-survey');
+      if (!survey || !survey.checkVisibility()) throw Error('resume mode requires the current Library Cull view to be visible');
+      const cells = [...survey.querySelectorAll('.lib-survey-cell')];
+      if (cells.length !== 2) throw Error(`resume mode requires exactly two Cull cells; found ${cells.length}`);
+      const normalized = value => String(value || '').replaceAll('\\', '/').toLowerCase();
+      const basename = value => normalized(value).split('/').at(-1);
+      const images = typeof fxImages === 'undefined' ? [] : fxImages;
+      const entries = expected.map(path => {
+        const expectedName = basename(path);
+        const cell = cells.find(el => basename(el.querySelector('.lib-survey-name')?.textContent) === expectedName);
+        if (!cell) throw Error(`resume mode is missing Cull cell for ${expectedName}`);
+        const iw = +cell.dataset.sourceWidth, ih = +cell.dataset.sourceHeight;
+        if (iw !== 8256 || ih !== 5504) throw Error(`${expectedName} Cull source dimensions are ${iw}x${ih}, expected 8256x5504`);
+        const image = images.find(it => {
+          const candidates = [it.path, it.rawFile?.path, it.file?.path, it.name, it.rawFile?.name, it.file?.name];
+          return candidates.some(candidate => basename(candidate) === expectedName);
+        });
+        const source = image?.fullImg || image?.img;
+        const decodedWidth = source?.naturalWidth || source?.width || 0;
+        const decodedHeight = source?.naturalHeight || source?.height || 0;
+        if (decodedWidth !== 8256 || decodedHeight !== 5504)
+          throw Error(`${expectedName} decoded source is ${decodedWidth}x${decodedHeight}, expected 8256x5504`);
+        return { path, cellName: cell.querySelector('.lib-survey-name')?.textContent,
+          sourceWidth: iw, sourceHeight: ih, decodedWidth, decodedHeight };
+      });
+      if (new Set(entries.map(entry => entry.cellName)).size !== 2) throw Error('resume mode did not resolve two distinct Cull cells');
+      return entries;
+    }, fixturePaths);
+    report.resume = { verifiedAt: new Date().toISOString(), currentView: 'Library Cull', decodedSources: resumed };
+    stage('resume.verify-cull-view.complete');
+  } else {
   // A failed earlier measurement may leave this disposable app in Cull. Exit through
   // the ordinary keyboard action before requiring the folder's grid cards.
   if (await page.locator('#lib-survey').isVisible()) await page.keyboard.press('Escape');
@@ -79,7 +192,9 @@ try {
     if (!window.__TAURI__?.event?.emit) throw Error('Native folder-drop event bridge is required');
     await window.__TAURI__.event.emit('tauri://drag-drop', { paths: [folder], position: { x: 0, y: 0 } });
   }, folder);
+  stage('folder.drop.complete');
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length === 2, undefined, { timeout: 60000 });
+  stage('library.cards.ready');
   const welcomeSkip = page.locator('#cs-modal-ov').getByRole('button', { name: 'Skip for now', exact: true });
   if (await welcomeSkip.isVisible()) await welcomeSkip.click();
   const cards = page.locator('#lib-grid .lib-card');
@@ -89,11 +204,14 @@ try {
   await page.locator('#lib-cull-time-all').click();
   await page.locator('#lib-cull-time-start').click();
   await page.locator('#fx-confirm-ok').click();
+  stage('cull.entered');
   // This is deliberate warming, outside the measured navigation/zoom intervals.
   await page.waitForFunction(() => {
     const cells = [...document.querySelectorAll('#lib-survey .lib-survey-cell')];
     return cells.length === 2 && cells.every(el => +el.dataset.sourceWidth * +el.dataset.sourceHeight >= 44e6);
   }, undefined, { timeout: 180000 });
+  stage('source-resolution.warmed');
+  }
   await page.locator('#lib-survey [data-detail="fit"]').click();
   await page.locator('.lib-survey-cell[data-survey-idx="0"]').focus();
   // Start from an idle fitted presentation, not outstanding work from the warming controls.
@@ -111,6 +229,7 @@ try {
     window.__chr267WarmFitFrames = ready ? (window.__chr267WarmFitFrames || 0) + 1 : 0;
     return window.__chr267WarmFitFrames >= 2;
   }, undefined, { timeout: 15000 });
+  stage('idle-fit.ready');
   // Install an event-clock observer without modifying app functions or accelerating any work.
   await page.evaluate(() => {
     const state = window.__chr267PresentationProbe = { pending: null, results: [] };
@@ -157,9 +276,11 @@ try {
       };
       requestAnimationFrame(tick);
     };
-    document.addEventListener('keydown', capture, true);
+    // Window capture runs before the app's document-capture shortcut handler,
+    // which may stopImmediatePropagation for arrow keys.
+    window.addEventListener('keydown', capture, true);
     document.addEventListener('click', capture, true);
-    state.cleanup = () => { document.removeEventListener('keydown', capture, true); document.removeEventListener('click', capture, true); };
+    state.cleanup = () => { window.removeEventListener('keydown', capture, true); document.removeEventListener('click', capture, true); };
   });
   const arm = async (mode, index, key = null) => page.evaluate(({mode,index,key}) => {
     const s = window.__chr267PresentationProbe;
@@ -174,17 +295,21 @@ try {
   };
   navigation: for (let run = 0; run < 3; run++) {
     for (const [key, index] of [['ArrowRight', 1], ['ArrowLeft', 0]]) {
+      stage(`sharp.${run}.${index}.start`);
       await arm('sharp', index, key);
       await page.keyboard.press(key);
       const sample = await observation();
+      stage(`sharp.${run}.${index}.complete`);
       report.samples.push({run, ...sample, budgetMs: 100, pass: sample.presented && sample.ms < 100});
       if (!sample.presented) break navigation;
     }
   }
   const focusedIndex = await page.locator('.lib-survey-cell.cmp-focus').getAttribute('data-survey-idx');
   await arm('native', Number(focusedIndex));
+  stage('native-detail.start');
   await page.locator('#lib-survey [data-detail="native"]').click();
   const native = await observation();
+  stage('native-detail.complete');
   report.samples.push({...native, budgetMs: 500, pass: native.presented && native.ms < 500});
   report.nativeStages = await page.evaluate(() => (window.__rawPerfLog || []).slice(-100));
   report.failures = report.samples.filter(s => !s.pass).map(s => `${s.mode} ${s.index}: ${s.presented ? s.ms.toFixed(1)+'ms' : 'no qualifying frame'} (budget ${s.budgetMs}ms)`);
@@ -192,9 +317,21 @@ try {
   console.log(JSON.stringify({samples:report.samples, failures:report.failures, output}));
   if (report.failures.length) process.exitCode = 1;
 } catch (error) {
-  report.failures.push(String(error.stack || error)); await save(); throw error;
+  stage('harness.failure');
+  const failure = String(error.stack || error);
+  report.failures.push(browserDisconnected
+    ? `Native WebView CDP disconnected during the measurement; no reconnect was attempted because the page/session state cannot be safely resumed. Original error: ${failure}`
+    : failure);
+  if (browserDisconnected) report.diagnostics.disconnect = {
+    at: new Date().toISOString(), recoverable: false,
+    reason: 'A replacement CDP page cannot prove continuity of the warmed native process and pending presentation observer.',
+  };
+  await compareTargetsAfterFailure();
+  await save(); throw error;
 } finally {
   await page.evaluate(() => window.__chr267PresentationProbe?.cleanup?.()).catch(() => {});
   // Disconnect only. Never close the native app or reset the user's preferences/cache.
   await browser.close();
+  await pageCdp?.detach().catch(() => {});
+  await browserCdp?.detach().catch(() => {});
 }

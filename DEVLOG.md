@@ -1430,3 +1430,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added `focus_run_flags_generated_soft_image_in_blurry_only_query` to `desktop/src-tauri/src/catalog.rs`. It generates a local low-detail JPEG, indexes it, creates an offline thumbnail, runs focus scoring, then asserts stored score/flag data appears in `blurry_only`. Issue CHR-269.
 - Verification: targeted `cargo test --bin chromasmith focus_run_flags_generated_soft_image_in_blurry_only_query -j 1` passes 1/1. Labelled precision/recall and other culling criteria remain open.
 - Publication verified: integration commit `70a3334c998906f756f3dc90a003bd31a9aa9dd5` includes the CHR-247 test correction and CHR-269 regression; post-push `git fetch origin main` and `git ls-remote` both confirmed `origin/main` at that hash.
+
+### 2026-10-11 — CHR-267 real-RAW performance gate
+
+- Corrected the native Playwright gate to observe arrow-key actions at window capture before the app’s document shortcut handler, and added a verified same-process warmed-session resume mode. Node syntax validation passes.
+- Measured six keyboard-to-sharp frames at 35.295–50.725 ms (median 49.443 ms) and the 1:1 detail view at 404.135 ms on a decoded 8256×5504 CC0 Nikon Z 7 RAW; all samples pass the 100 ms / 500 ms targets. Hardware, debug build, app commit, cache state, fixture limits, and machine-readable results are recorded in `docs/validation/chr267/native-perf-2026-10-11.md` and its JSON report.
+- Validation evidence is complete for CHR-267’s two remaining timing criteria; this is warm-cache repeated navigation of two paths to one capture, not cold decode or multi-image-set proof. No production rendering code changed in this measurement slice.

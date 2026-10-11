@@ -1,0 +1,9 @@
+# CHR-267 native culling performance — 11 October 2026
+
+The published debug build passed both real-RAW timing budgets on a warm Cull session. Six arrow-key changes to the prefetched Nikon Z 7 source reached two consecutive fitted, source-resolution animation frames in **35.295–50.725 ms** (median **49.443 ms**, all under 100 ms). The 1:1 detail-view action presented a decoded source-resolution crop in **404.135 ms**, under 500 ms.
+
+The app was built from commit `67e7118000d758dd2e6a70ccd5103a488d3aa935`, BUILD `1.1011J`, debug profile. Hardware was Windows build 26300, AMD Ryzen 5 5600X (12 logical CPUs), 32 GB RAM, and AMD Radeon RX 7700 XT; WebView2/Chromium 154, 1366×672 CSS viewport at DPR 3. The task used an isolated catalog, native cache, app data directory, and WebView2 profile. Full-resolution images were already decoded in the same native app process when the resumed gate attached; initial disk/OS cache state was unspecified. The timings therefore describe warm adjacent navigation and warm 1:1 detail presentation, not cold import/decode latency.
+
+The fixture is a 45.75 MP CC0 Nikon Z 7 RAW from raw.pixls.us sample 2789. Both measured paths are hard links to that one image, so this result validates repeated navigation of a real RAW but does not represent a varied shoot or multiple camera formats. Fixture provenance and checksum are in [raw-fixture.md](raw-fixture.md); machine-readable samples are in [native-perf-2026-10-11.json](native-perf-2026-10-11.json).
+
+The timing gate initially missed arrow events because the app’s document-level shortcut handler stopped propagation before the probe. The gate now observes keydown in the earlier window capture phase; this records the same real keyboard action without changing the app’s path. The resume mode reuses a task-isolated app only after verifying the catalog has exactly the two fixture paths and both decoded sources are 8256×5504.

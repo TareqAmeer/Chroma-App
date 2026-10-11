@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "issue": "CHR-267",
+  "capturedAt": "2026-10-11T06:58:42.505Z",
+  "source": {
+    "commit": "67e7118000d758dd2e6a70ccd5103a488d3aa935",
+    "build": "1.1011J",
+    "profile": "debug"
+  },
+  "fixture": {
+    "name": "Nikon Z 7 RAW sample 2789",
+    "path": "shared CC0 fixture/nikon-z7-2789.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "decodedWidth": 8256,
+    "decodedHeight": 5504,
+    "decodedPixels": 45441024,
+    "license": "CC0-1.0",
+    "source": "https://raw.pixls.us/getfile.php/2789/nice/Nikon%20-%20Z%207%20-%2012bit%2012bit%20compressed%20%283%3A2%29.NEF",
+    "dataset": "Two distinct hard-linked paths (A.NEF/B.NEF) to one capture; tests repeated navigation, not multi-photo or cross-camera performance."
+  },
+  "hardware": {
+    "os": "Windows",
+    "osBuild": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor",
+    "logicalCpus": 12,
+    "memoryBytes": 34226311168,
+    "gpu": "ANGLE (AMD, AMD Radeon RX 7700 XT (0x0000747E) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webviewUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "viewportCss": [
+      1366,
+      672
+    ],
+    "devicePixelRatio": 3
+  },
+  "cacheState": "Same-process warmed-cache resume; source-resolution cull cells were already decoded before this harness attached; initial disk/OS cache unspecified",
+  "measurementMode": {
+    "mode": "same-process-warmed-cache-resume",
+    "optIn": "CULL_RESUME_WARMED=1",
+    "importAndWarmSkipped": true
+  },
+  "isolation": {
+    "catalog": "task-isolated catalog",
+    "cache": "task-isolated native cache",
+    "catalogRows": 2,
+    "fixturePaths": [
+      "A.NEF",
+      "B.NEF"
+    ]
+  },
+  "samples": [
+    {
+      "run": 0,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 35.2950000166893,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 0,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 49.54000002145767,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 1,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 49.34500002861023,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 1,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 46.47999995946884,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 2,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 50.4099999666214,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 2,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 50.72500002384186,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.06177325581395349,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        1020,
+        680
+      ],
+      "css": [
+        510,
+        340
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "mode": "native",
+      "key": null,
+      "index": 0,
+      "ms": 404.13499999046326,
+      "presented": true,
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 1,
+      "roi": [
+        1092,
+        340
+      ],
+      "canvas": [
+        1792,
+        558
+      ],
+      "css": [
+        1092,
+        340
+      ],
+      "budgetMs": 500,
+      "pass": true
+    }
+  ],
+  "summary": {
+    "medianSharpMs": 49.442,
+    "maxSharpMs": 50.725,
+    "native100PercentMs": 404.135,
+    "sharpAllUnder100": true,
+    "nativeUnder500": true
+  },
+  "gate": {
+    "prefetchedSharpBudgetMs": 100,
+    "fullResolution1to1BudgetMs": 500,
+    "allMeasuredSamplesPass": true,
+    "notes": "Each frame required the expected focused source, decoded 8256x5504 image, valid fitted/native canvas geometry, and two consecutive animation frames."
+  }
+}
