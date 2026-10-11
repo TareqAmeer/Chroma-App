@@ -1631,3 +1631,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Focus scoring now loads a bounded keyset page under the catalog mutex, scores thumbnails with no catalog lock held, then reacquires the mutex to persist only rows still present with the same mtime and thumbnail flag. The cursor advances across unreadable candidates and offline-only pages so they cannot starve later online photos.
 - Added deterministic tests proving writes can proceed during the injected scoring phase, that an unscorable batch does not starve later rows, and that an offline-only page does not hide later candidates. Modified `desktop/src-tauri/src/catalog.rs`.
 - Verification: `cargo check --offline --bin chromasmith --tests -j 1` passed; both new focused Rust tests passed. The broader `focus_` subset passed 7/8; the pre-existing generated-soft-image test could not write its offline thumbnail in this environment (`disk write failed`). Closed-eye inference, durable Jobs-panel scheduling, and labeled precision/recall criteria remain open.
+
+### 2026-10-11 — CHR-269 focus-lock publication
+
+- Published integration commit `1f5ce12f` to `origin/main`; the fast-forward contained feature commit `43c54018`.
+- `git push origin HEAD:main` succeeded. Remote-tip verification is recorded after the follow-up publication-record commit.
