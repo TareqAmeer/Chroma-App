@@ -44,6 +44,16 @@ try {
     assert.match(text, scenario.render, `render status for ${scenario.query}: ${text}`);
     if (scenario.query.includes('libforceoffline')) {
       assert.equal(await page.evaluate(() => window.chromasmithFullQualityReady), false, 'a reduced offline thumbnail must not be export-ready as a full-resolution render');
+      assert.match(await status.getAttribute('title'), /reconnect the source drive and reopen/, 'offline preview gives a distinct recovery action');
+    } else {
+      await page.evaluate(() => window.chromasmithSourceRenderUpdate({ render: 'preview' }));
+      assert.match(await status.innerText(), /Preview · full resolution on demand/);
+      await page.evaluate(() => window.chromasmithSourceRenderUpdate({ render: 'loading' }));
+      assert.match(await status.innerText(), /Loading full resolution/);
+      await page.waitForTimeout(50);
+      assert.match(await status.innerText(), /Loading full resolution/, 'a delayed render remains visibly loading until promotion completes');
+      await page.evaluate(() => window.chromasmithSourceRenderUpdate({ render: 'full' }));
+      assert.match(await status.innerText(), /Full resolution ready/);
     }
     await page.close();
   }

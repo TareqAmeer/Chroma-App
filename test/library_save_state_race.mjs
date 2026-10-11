@@ -39,6 +39,7 @@ try {
     window.__firstSaveFlush = window.chromasmithFlushPendingSave();
   });
   await page.waitForFunction(() => window.__libtestSidecarWriteStarted, { timeout: 10000 });
+  assert.match(await page.locator('#cs-save-state').innerText(), /Saving…/, 'the top-area state names an in-flight sidecar write');
   await page.evaluate(() => window.chromasmithOnEdit(getUISnapshot()));
   assert.match(await page.locator('#cs-save-state').innerText(), /Edited/);
   await page.evaluate(() => window.__libtestSidecarWriteRelease());
@@ -46,8 +47,25 @@ try {
   assert.match(await page.locator('#cs-save-state').innerText(), /Edited/, 'older write must leave the newer edit visibly pending');
 
   await page.evaluate(async () => await window.chromasmithFlushPendingSave());
-  assert.match(await page.locator('#cs-save-state').innerText(), /Saved/, 'only the newest completed sidecar write may report Saved');
-  console.log('PASS delayed older write keeps newer edit pending until latest sidecar write succeeds');
+  assert.match(await page.locator('#cs-save-state').innerText(), /Saved locally/, 'only the newest completed sidecar write may report Saved locally');
+
+  await page.evaluate(() => {
+    window.__libtestFailNextSidecarWrite();
+    window.chromasmithOnEdit(getUISnapshot());
+    window.__failedSaveFlush = window.chromasmithFlushPendingSave();
+  });
+  await page.evaluate(async () => await window.__failedSaveFlush);
+  const saveState = page.locator('#cs-save-state');
+  assert.match(await saveState.innerText(), /Couldn't save edit/, 'failed persistence is visible as an error, never Saved');
+  assert.equal(await saveState.evaluate(el => !!el.closest('#fx-deskbar-title')), true, 'persistence state sits beside the photo identity');
+  const retry = saveState.getByRole('button', { name: 'Retry' });
+  assert.equal(await retry.count(), 1, 'failed persistence exposes an actionable retry');
+  await page.evaluate(() => document.querySelector('#cs-save-state button')?.click());
+  await page.waitForFunction(() => /Saved locally/.test(document.getElementById('cs-save-state')?.innerText || ''));
+  assert.equal(await saveState.getByRole('button', { name: 'Retry' }).count(), 0, 'successful retry clears the recovery action');
+  const openedPath = await page.evaluate(() => window.chromasmithGetOpenedPaths()[0]);
+  assert.equal((await page.evaluate(path => window.__libtestReadSidecar(path), openedPath)).edited, true, 'retry persists the edit sidecar');
+  console.log('PASS delayed stale save preserves pending edits, and failed sidecar write offers a successful retry');
 } finally {
   await browser.close();
   server.close();

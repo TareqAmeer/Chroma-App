@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011A';
+const BUILD='1.1011B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22611,7 +22611,7 @@ function fxFullDimsText(it){
 window.chromasmithSaveState=function(st,onRetry){
   const el=document.getElementById('cs-save-state');if(!el)return;
   clearTimeout(el._t);el.className=st==='error'?'err':'';el.hidden=!st;el.textContent='';
-  const T={pending:'Edited',saving:'Saving…',saved:'Saved',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
+  const T={pending:'Edited',saving:'Saving…',saved:'Saved locally',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
   el.textContent=T[st]||'';el.title=st==='saved'?'Edit written to the photo\'s sidecar — safe to close':'';
   if(st==='error'&&onRetry){const b=document.createElement('button');b.type='button';b.textContent='Retry';b.onclick=onRetry;el.appendChild(b);}
 };
