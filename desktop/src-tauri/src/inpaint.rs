@@ -22,6 +22,10 @@ use std::{
 pub const MODEL_SHA: &str = "6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b";
 const MODEL_URL: &str = "https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan_pipeline_v2.onnx";
 const MODEL_BYTES: u64 = 28_079_181;
+const CANDIDATE_DIVERSITY_SAMPLES: usize = 1024;
+const MIN_CANDIDATE_MEAN_CHANNEL_DELTA: f32 = 4.0;
+const MIN_CANDIDATE_SIGNIFICANT_CHANNEL_DELTA: f32 = 16.0;
+const MIN_CANDIDATE_SIGNIFICANT_SAMPLE_FRACTION: f32 = 0.005;
 static ROOT: OnceLock<PathBuf> = OnceLock::new();
 static SESSION: OnceLock<Mutex<SamSession>> = OnceLock::new();
 pub fn set_root(path: PathBuf) {
@@ -51,6 +55,89 @@ fn assets(source: &Path) -> PathBuf {
 }
 fn valid_hash(id: &str) -> bool {
     id.len() == 64 && id.bytes().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Keep a compact, spatially distributed sample of the erased pixels. Comparing this signature
+/// avoids retaining multiple full-resolution candidates while filtering seed changes that only
+/// add tiny pixel noise to the same repair.
+fn candidate_sample_indices(mask: &[u8], w: u32, h: u32, limit: usize) -> Vec<usize> {
+    if limit == 0 || w == 0 || h == 0 {
+        return Vec::new();
+    }
+    let mut bounds = (w, h, 0, 0);
+    let mut selected = false;
+    for (index, &value) in mask.iter().enumerate() {
+        if value == 0 {
+            let (x, y) = (index as u32 % w, index as u32 / w);
+            bounds.0 = bounds.0.min(x);
+            bounds.1 = bounds.1.min(y);
+            bounds.2 = bounds.2.max(x);
+            bounds.3 = bounds.3.max(y);
+            selected = true;
+        }
+    }
+    if !selected {
+        return Vec::new();
+    }
+
+    let grid_side = (limit as f64).sqrt() as usize;
+    let grid_side = grid_side.max(1);
+    let mut cells = vec![None; grid_side * grid_side];
+    let (box_w, box_h) = (bounds.2 - bounds.0 + 1, bounds.3 - bounds.1 + 1);
+    for (index, &value) in mask.iter().enumerate() {
+        if value != 0 {
+            continue;
+        }
+        let (x, y) = (index as u32 % w, index as u32 / w);
+        let cell_x = (((x - bounds.0) as usize * grid_side) / box_w as usize).min(grid_side - 1);
+        let cell_y = (((y - bounds.1) as usize * grid_side) / box_h as usize).min(grid_side - 1);
+        cells[cell_y * grid_side + cell_x].get_or_insert(index);
+    }
+    cells.into_iter().flatten().collect()
+}
+
+fn candidate_signature(rgba: &[u8], sample_indices: &[usize]) -> Vec<[u8; 3]> {
+    sample_indices
+        .iter()
+        .map(|&pixel| {
+            let offset = pixel * 4;
+            [rgba[offset], rgba[offset + 1], rgba[offset + 2]]
+        })
+        .collect()
+}
+
+fn candidate_is_distinct(signature: &[[u8; 3]], accepted: &[Vec<[u8; 3]>]) -> bool {
+    !signature.is_empty()
+        && accepted.iter().all(|prior| {
+            if prior.len() != signature.len() {
+                return false;
+            }
+            let total_delta: u64 = signature
+                .iter()
+                .zip(prior)
+                .flat_map(|(current, previous)| current.iter().zip(previous))
+                .map(|(current, previous)| current.abs_diff(*previous) as u64)
+                .sum();
+            let mean_delta = total_delta as f32 / (signature.len() * 3) as f32;
+            let significant_changes = signature
+                .iter()
+                .zip(prior)
+                .filter(|(current, previous)| {
+                    let pixel_delta: u16 = current
+                        .iter()
+                        .zip(previous.iter())
+                        .map(|(current, previous)| current.abs_diff(*previous) as u16)
+                        .sum();
+                    pixel_delta as f32 / 3.0 >= MIN_CANDIDATE_SIGNIFICANT_CHANNEL_DELTA
+                })
+                .count();
+            let min_significant =
+                (signature.len() as f32 * MIN_CANDIDATE_SIGNIFICANT_SAMPLE_FRACTION)
+                    .ceil() as usize;
+            let min_significant = min_significant.max(2);
+            mean_delta >= MIN_CANDIDATE_MEAN_CHANNEL_DELTA
+                || significant_changes >= min_significant
+        })
 }
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -306,7 +393,9 @@ pub fn generate(
     {
         return Err("Expected full-resolution RGB source and non-empty binary mask".into());
     }
+    let sample_indices = candidate_sample_indices(mask, w, h, CANDIDATE_DIVERSITY_SAMPLES);
     let mut seen = Vec::new();
+    let mut accepted_signatures: Vec<Vec<[u8; 3]>> = Vec::new();
     for index in 0..6 {
         if cancel.load(Ordering::Relaxed) {
             return Err("Cancelled after current inference".into());
@@ -342,16 +431,21 @@ pub fn generate(
             }
         }
         let hash = digest(&rgba);
-        if seen.contains(&hash) {
+        let signature = candidate_signature(&rgba, &sample_indices);
+        if seen.contains(&hash) || !candidate_is_distinct(&signature, &accepted_signatures) {
             continue;
         }
         seen.push(hash);
-        on_candidate(seen.len() - 1, rgba)?;
-        if seen.len() == 3 {
+        accepted_signatures.push(signature);
+        on_candidate(accepted_signatures.len() - 1, rgba)?;
+        if accepted_signatures.len() == 3 {
             return Ok(());
         }
     }
-    Err("The model produced fewer than three distinct repairs; try a different mask or discard this attempt".into())
+    Err(
+        "The model produced fewer than three meaningfully different repairs; try a different mask or discard this attempt"
+            .into(),
+    )
 }
 static WORKING: AtomicBool = AtomicBool::new(false);
 pub fn start(
@@ -609,6 +703,67 @@ pub fn export_bundle_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_diversity_filters_identical_and_near_duplicate_repairs() {
+        let baseline = vec![[100, 120, 140]; 32];
+        let identical = baseline.clone();
+        let near_duplicate = vec![[102, 121, 142]; 32];
+        let mut alternate = baseline.clone();
+        alternate[8..16].fill([130, 150, 170]);
+
+        assert!(!candidate_is_distinct(&identical, &[baseline.clone()]));
+        assert!(!candidate_is_distinct(&near_duplicate, &[baseline.clone()]));
+        assert!(candidate_is_distinct(&alternate, &[baseline]));
+        assert!(!candidate_is_distinct(&[], &[]));
+        assert!(!candidate_is_distinct(
+            &[[100, 120, 140]],
+            &[vec![[100, 120, 140]; 2]]
+        ));
+    }
+
+    #[test]
+    fn candidate_diversity_preserves_localized_changes_but_ignores_isolated_noise() {
+        let baseline = vec![[100, 120, 140]; CANDIDATE_DIVERSITY_SAMPLES];
+        let mut localized = baseline.clone();
+        localized[..8].fill([180, 200, 220]);
+        let mut isolated_noise = baseline.clone();
+        isolated_noise[0] = [180, 200, 220];
+        let small_mask_baseline = vec![[100, 120, 140]; 32];
+        let mut small_mask_noise = small_mask_baseline.clone();
+        small_mask_noise[0] = [180, 200, 220];
+
+        assert!(candidate_is_distinct(&localized, &[baseline.clone()]));
+        assert!(!candidate_is_distinct(&isolated_noise, &[baseline]));
+        assert!(!candidate_is_distinct(
+            &small_mask_noise,
+            &[small_mask_baseline]
+        ));
+    }
+
+    #[test]
+    fn candidate_samples_are_spatially_even_and_bounded() {
+        let mask: Vec<u8> = (0..100)
+            .map(|index| if index % 2 == 0 { 0 } else { 255 })
+            .collect();
+        let samples = candidate_sample_indices(&mask, 10, 10, 8);
+        assert!(samples.len() <= 8);
+        assert!(samples.iter().all(|&index| index % 2 == 0));
+        assert!(samples.windows(2).all(|pair| pair[0] < pair[1]));
+        assert_eq!(candidate_sample_indices(&[255; 4], 2, 2, 8), Vec::<usize>::new());
+
+        let mut separated = vec![255; 100];
+        for y in 0..3 {
+            for x in 0..3 {
+                separated[y * 10 + x] = 0;
+                separated[(7 + y) * 10 + 7 + x] = 0;
+            }
+        }
+        let separated_samples = candidate_sample_indices(&separated, 10, 10, 8);
+        assert!(separated_samples.iter().any(|&index| index < 30));
+        assert!(separated_samples.iter().any(|&index| index >= 70));
+    }
+
     #[test]
     fn context_dilation_matches_square_reference_at_edges() {
         for (w, h) in [(1, 1), (3, 8), (9, 4)] {

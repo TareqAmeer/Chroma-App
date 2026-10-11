@@ -1489,3 +1489,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated feature commit `ca041563` as `4c06c643652d665cf2e18a7e5e1acd2896251916`; focused Cargo demosaic tests pass 5/5 in the clean integration checkout.
 - Post-push `git ls-remote origin refs/heads/main` confirmed `origin/main` at `4c06c643652d665cf2e18a7e5e1acd2896251916`; the remote main tip contains the CHR-260 UI/CFA changes. Full RawTherapee parity acceptance remains open and the issue remains In Progress.
+
+### 2026-10-11 — CHR-246 inpainting candidate diversity
+
+- Filtered exact and near-duplicate MI-GAN repairs using a bounded 32×32 spatial sample of pixels inside the erase mask, requiring either mean RGB delta ≥4 or a localized high-change signal across at least two sample cells. This keeps comparison memory independent of full image size; fewer than three sufficiently different repairs still fails with an actionable retry message. File: `desktop/src-tauri/src/inpaint.rs`.
+- Verification: focused `cargo test --offline --bin chromasmith inpaint::tests` passes 6/6, including near-duplicate, localized variation, isolated-noise, spatial-sampling and existing storage/cancellation cases; `node --check test/inpaint_ui.mjs` and `git diff --check` pass. The Playwright UI test cannot launch because this clean checkout has no Playwright package. Real person/wire/dust image quality remains unverified; CHR-246 AC4 and AC7 stay open.
+- Publication verification will be recorded after integration.
