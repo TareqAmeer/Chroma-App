@@ -4184,8 +4184,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width var(--dur-1)"></div></div>
           </div>
         </div>
-        <div class="fx-row" id="row-raw-ahd">
-          <div class="fx-label">Sparkle-optimized RAW <button class="fx-info-i" title="Uses AHD interpolation, which cleans up dense green/magenta false-color speckle on sunlit water/specular highlights much further than Standard — but it trades away some general chroma-noise headroom elsewhere in the frame, so it's opt-in per photo rather than a global default. Requires reopening this photo to take effect. Desktop only.">i</button></div><div class="fx-toggle" id="tg-demosaic-ahd" onclick="fxDemosaicToggled(this)"></div>
+        <div class="fx-row" id="row-raw-demosaic">
+          <div class="fx-label">RAW demosaic <button class="fx-info-i" title="Choose the decode-time method for this photo. AHD, VNG and MHC support Bayer sensors. Markesteijn 1-pass and 3-pass support standard X-Trans layouts. An incompatible choice is rejected by the decoder. Requires reopening this photo to take effect. Desktop only.">i</button></div><select class="fx-select" id="sel-demosaic-algo" onchange="fxDemosaicAlgoChanged(this.value)" aria-label="RAW demosaic method"><option value="">Standard (PPG)</option><option value="ahd">AHD (Bayer)</option><option value="vng">VNG (Bayer)</option><option value="mhc">MHC (Bayer)</option><option value="markesteijn1">Markesteijn 1-pass (X-Trans)</option><option value="markesteijn3">Markesteijn 3-pass (X-Trans)</option></select>
         </div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
@@ -7331,7 +7331,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011V';
+const BUILD='1.1011W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11128,27 +11128,29 @@ function fxDenoiseCancelClicked(){
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawNrSyncUI);
 
-// ── RAW demosaic algorithm ("" Standard / "ahd" Sparkle-optimized) — desktop only, same
+// ── RAW demosaic algorithm — desktop only, same
 // decode-time-only constraint as native NR above (raw_decode.rs's demosaic step runs before
 // anything else, so this can't take effect live either). Defaults OFF (unchanged behavior);
-// deliberately per-photo only, never a global default — see raw_decode.rs's doc comment on
-// why AHD isn't safe as the default (it improves dense sparkle-speckle photos but increases
-// general chroma noise on others, measured against the full validation suite).
+// deliberately per-photo only. The backend validates CFA compatibility for each non-default
+// choice; X-Trans Markesteijn is not a Bayer algorithm and AHD is not offered as X-Trans.
 try{window.chromasmithDemosaicAlgo=localStorage.getItem('chromasmithDemosaicAlgo')||'';}catch(e){window.chromasmithDemosaicAlgo='';}
-function fxDemosaicToggled(el){
-  const on=el.classList.toggle('on');
-  window.chromasmithDemosaicAlgo=on?'ahd':'';
+function fxDemosaicSyncUI(){
+  const sel=document.getElementById('sel-demosaic-algo');
+  if(sel){sel.value=window.chromasmithDemosaicAlgo||'';if(sel.value!==(window.chromasmithDemosaicAlgo||'')){window.chromasmithDemosaicAlgo='';sel.value='';}}
+}
+function fxDemosaicAlgoChanged(value){
+  window.chromasmithDemosaicAlgo=['ahd','vng','mhc','markesteijn1','markesteijn3'].includes(value)?value:'';
   // Per-photo via the recipe (getUISnapshot's demosaicAlgo field), same auto-persist path as
   // native NR; localStorage is only the starting default for a photo with no saved recipe yet.
   try{localStorage.setItem('chromasmithDemosaicAlgo',window.chromasmithDemosaicAlgo);}catch(e){}
   if(typeof fxHistoryPush==='function')fxHistoryPush();
   const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
   const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
-  if(window.__TAURI__)toast((on?'Sparkle-optimized RAW processing on':'Standard RAW processing')+suffix,true);
+  const labels={ '':'Standard RAW processing',ahd:'AHD RAW processing',vng:'VNG RAW processing',mhc:'MHC RAW processing',markesteijn1:'X-Trans Markesteijn 1-pass',markesteijn3:'X-Trans Markesteijn 3-pass' };
+  if(window.__TAURI__)toast((labels[window.chromasmithDemosaicAlgo]||labels[''])+suffix,true);
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
-  const tg=document.getElementById('tg-demosaic-ahd');
-  if(tg)tg.classList.toggle('on',window.chromasmithDemosaicAlgo==='ahd');
+  fxDemosaicSyncUI();
 });
 let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
 // Compare (show original) strips only the LOOK; borders/canvas matte/film frame stay so the photo's size and position never move.
@@ -20213,7 +20215,7 @@ function applyUISnapshot(s,opts){
   }
   if(s.demosaicAlgo!==undefined){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
-    const tg=document.getElementById('tg-demosaic-ahd');if(tg)tg.classList.toggle('on',s.demosaicAlgo==='ahd');
+    fxDemosaicSyncUI();
   }
   if(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined){
     const it=curItem();if(it&&(_decodeBefore.nr!==window.chromasmithRawNr||_decodeBefore.strength!==window.chromasmithRawNrHighStrength||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo))it._nrHighApplied=false;

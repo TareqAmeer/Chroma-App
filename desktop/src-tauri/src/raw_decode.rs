@@ -149,6 +149,83 @@ fn alternate_demosaic_algorithm(choice: &str) -> Option<demosaic::Algorithm> {
     }
 }
 
+/// Reject algorithms on unsupported CFA families before invoking the crate, so a user-selected
+/// method produces an actionable error rather than a backend-specific failure.
+fn validate_demosaic_cfa(choice: &str, cfa: &rawler::CFA) -> Result<(), String> {
+    let supported = match choice {
+        "ahd" | "vng" | "mhc" => (cfa.width, cfa.height) == (2, 2),
+        "markesteijn1" | "markesteijn3" => is_xtrans_cfa(cfa),
+        _ => true,
+    };
+    if supported {
+        Ok(())
+    } else {
+        let family = if choice.starts_with("markesteijn") {
+            "X-Trans"
+        } else {
+            "Bayer"
+        };
+        Err(format!(
+            "{choice} demosaic supports {family} CFA only; this file uses {}x{} CFA",
+            cfa.width, cfa.height
+        ))
+    }
+}
+
+/// Rawler represents CFA identity as a repeating color tile, not a sensor-family enum. Accept
+/// the Fuji X-Trans tiles in its pinned camera database under phase shifts and
+/// rotations/reflections; dimensions alone also admit unrelated 6x6 layouts that Markesteijn
+/// does not promise to support.
+fn is_xtrans_cfa(cfa: &rawler::CFA) -> bool {
+    const XTRANS_TILES: [&str; 5] = [
+        "RBGBRGGGRGGBGGBGGRBRGRBGGGBGGRGGRGGB",
+        "GGRGGBGGBGGRBRGRBGGGBGGRGGRGGBRBGBRG",
+        "GGRGGBGGBGGRBRGRGBGGBGGRGGRGGBRBGBRG",
+        "GRBGBRBGGRGGRGGBGGGBRGRBRGGBGGBGGRGG",
+        "GBGGRGRGRBGBGBGGRGGRGGBGBGBRGRGRGGBG",
+    ];
+    if (cfa.width, cfa.height) != (6, 6) {
+        return false;
+    }
+    for tile in XTRANS_TILES {
+        for mirror in [false, true] {
+            for turns in 0..4 {
+                for row_phase in 0..6 {
+                    for col_phase in 0..6 {
+                        let mut matches = true;
+                        'cells: for row in 0..6 {
+                            for col in 0..6 {
+                                let (mut r, mut c) =
+                                    ((row + row_phase) % 6, (col + col_phase) % 6);
+                                if mirror {
+                                    c = 5 - c;
+                                }
+                                for _ in 0..turns {
+                                    (r, c) = (c, 5 - r);
+                                }
+                                let expected = match tile.as_bytes()[r * 6 + c] {
+                                    b'R' => 0,
+                                    b'G' => 1,
+                                    b'B' => 2,
+                                    _ => unreachable!("Rawler X-Trans tiles use RGB channels"),
+                                };
+                                if cfa.color_at(row, col) != expected {
+                                    matches = false;
+                                    break 'cells;
+                                }
+                            }
+                        }
+                        if matches {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Map rawler's decoded CFA into the pinned demosaicer's CFA descriptor. Keep the existing
 /// explicit Bayer name mapping, and translate X-Trans from rawler's actual 6x6 color indices;
 /// guessing a generic Fuji pattern would produce wrong colors for shifted/variant CFAs.
@@ -187,7 +264,7 @@ fn alternate_demosaic_cfa(cfa: &rawler::CFA, choice: &str) -> Result<demosaic::C
 
 #[cfg(test)]
 mod alternate_demosaic_backend_tests {
-    use super::{alternate_demosaic_algorithm, alternate_demosaic_cfa};
+    use super::{alternate_demosaic_algorithm, alternate_demosaic_cfa, validate_demosaic_cfa};
     use demosaic::{Algorithm, CfaPattern, Channel};
 
     #[test]
@@ -207,7 +284,7 @@ mod alternate_demosaic_backend_tests {
     }
 
     #[test]
-    fn xtrans_mapping_uses_rawlers_real_6x6_cfa_pattern() {
+    fn cfa_mapping_preserves_rawlers_6x6_color_indices() {
         // rawler concatenates rows, rather than repeating the first six characters.
         // Distinct rows also catch swapped row/column indices in our mapping.
         let rawler_cfa = rawler::CFA::new(concat!(
@@ -225,6 +302,49 @@ mod alternate_demosaic_backend_tests {
             alternate_demosaic_cfa(&rawler_cfa, "markesteijn3"),
             Ok(CfaPattern::xtrans(expected))
         );
+    }
+
+    #[test]
+    fn alternate_algorithms_report_cfa_family_mismatch() {
+        let bayer = rawler::CFA::new("RGGB");
+        let xtrans = rawler::CFA::new(concat!(
+            "RBGBRG", "GGRGGB", "GGBGGR", "BRGRBG", "GGBGGR", "GGRGGB"
+        ));
+        let arbitrary_six_by_six = rawler::CFA::new(concat!(
+            "RGBGGR", "BGGGRG", "BGGRGB", "GGRGBG", "GRGBGG", "RGBGGR"
+        ));
+        assert!(validate_demosaic_cfa("ahd", &bayer).is_ok());
+        assert!(validate_demosaic_cfa("vng", &bayer).is_ok());
+        assert!(validate_demosaic_cfa("mhc", &bayer).is_ok());
+        assert!(validate_demosaic_cfa("markesteijn1", &xtrans).is_ok());
+        assert!(validate_demosaic_cfa("markesteijn3", &xtrans).is_ok());
+        assert!(validate_demosaic_cfa("markesteijn1", &arbitrary_six_by_six)
+            .unwrap_err()
+            .contains("X-Trans CFA only"));
+        assert!(validate_demosaic_cfa("markesteijn3", &bayer)
+            .unwrap_err()
+            .contains("X-Trans CFA only"));
+        assert!(validate_demosaic_cfa("ahd", &xtrans)
+            .unwrap_err()
+            .contains("Bayer CFA only"));
+    }
+
+    #[test]
+    fn rawler_fuji_xtrans_tiles_are_recognized_without_accepting_arbitrary_six_by_six() {
+        for tile in [
+            "RBGBRGGGRGGBGGBGGRBRGRBGGGBGGRGGRGGB",
+            "GGRGGBGGBGGRBRGRBGGGBGGRGGRGGBRBGBRG",
+            "GGRGGBGGBGGRBRGRGBGGBGGRGGRGGBRBGBRG",
+            "GRBGBRBGGRGGRGGBGGGBRGRBRGGBGGBGGRGG",
+            "GBGGRGRGRBGBGBGGRGGRGGBGBGBRGRGRGGBG",
+        ] {
+            let cfa = rawler::CFA::new(tile);
+            assert!(validate_demosaic_cfa("markesteijn1", &cfa).is_ok(), "{tile}");
+        }
+        let arbitrary = rawler::CFA::new(concat!(
+            "RGBGGR", "BGGGRG", "BGGRGB", "GGRGBG", "GRGBGG", "RGBGGR"
+        ));
+        assert!(validate_demosaic_cfa("markesteijn1", &arbitrary).is_err());
     }
 
     #[test]
@@ -472,6 +592,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
         let algo = alternate_demosaic_algorithm(&demosaic_choice).ok_or_else(|| {
             format!("unknown demosaic choice {demosaic_choice:?} (expected ahd|vng|mhc|markesteijn1|markesteijn3)")
         })?;
+        validate_demosaic_cfa(&demosaic_choice, &cfa_config.cfa)?;
         // Was hardcoded to bayer_rggb() ("confirmed RGGB via dump_cfa on this camera") — safe
         // while this app only handled Panasonic Bayer sensors, but with formats.rs::RAW_EXTS
         // now covering ~30 makes that's silently wrong colour for any non-RGGB layout (most

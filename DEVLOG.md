@@ -1478,3 +1478,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated task commit 427c1db9 as ca9af52e9c7ae7acefe1a279296689065c2ae316; integration mask-raster suite passed 86/86 and shader exports matched all 23 existing goldens pixel-for-pixel.
 - Post-push git fetch origin main and git ls-remote origin refs/heads/main confirmed origin/main at ca9af52e9c7ae7acefe1a279296689065c2ae316. CHR-249 remains In Progress with the remaining Lightroom parity and AI model acceptance open.
+
+### 2026-10-11 — CHR-260 X-Trans demosaic selection slice
+
+- Exposed decode-time PPG, Bayer AHD/VNG/MHC, and X-Trans Markesteijn 1/3-pass choices in RAW settings; recipe snapshots restore the selector and the selected method continues through native preview/export. Files: `chromasmith-22.html`, `desktop/src-tauri/src/raw_decode.rs`, `test/editor_wireframe_behaviour.mjs`, `test/editor_snap_lists_check.mjs`.
+- Native CFA validation recognizes all five Fuji 6×6 X-Trans tiles in the pinned Rawler camera database and rejects arbitrary 6×6 patterns; targeted Cargo tests pass 5/5, editor HTML and JS syntax checks pass, desktop build gate and `git diff --check` pass. Real-camera RAW, image-quality/performance, Bayer method breadth, controls, and pixel-shift criteria remain open; CHR-260 stays In Progress.
+- Publication verification will be recorded after the integration push.

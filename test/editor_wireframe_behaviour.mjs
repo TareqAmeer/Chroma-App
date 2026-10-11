@@ -424,13 +424,15 @@ test.describe('detail panel (DT1)', () => {
     await expect(page.locator('#seg-raw-nr button:has-text("Fast")')).not.toHaveClass(/\bon\b/);
   });
 
-  test('Sparkle-optimized RAW toggle still calls fxDemosaicToggled', async ({ editor: { page } }) => {
+  test('RAW demosaic selector persists and restores X-Trans Markesteijn choices', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="detail"]');
-    const tg = page.locator('#tg-demosaic-ahd');
-    await tg.click();
-    await expect(tg).toHaveClass(/\bon\b/);
-    await tg.click();
-    await expect(tg).not.toHaveClass(/\bon\b/);
+    const sel = page.locator('#sel-demosaic-algo');
+    await sel.selectOption('markesteijn3');
+    await expect(sel).toHaveValue('markesteijn3');
+    expect(await page.evaluate(() => getUISnapshot().demosaicAlgo)).toBe('markesteijn3');
+    await page.evaluate(() => { const snap=getUISnapshot(); snap.demosaicAlgo='markesteijn1'; applyUISnapshot(snap); });
+    await expect(sel).toHaveValue('markesteijn1');
+    await expect(page.locator('#sel-demosaic-algo option[value="markesteijn1"]')).toContainText('X-Trans');
   });
 
   test('lens Auto toggle still calls fxLensAutoToggled without throwing', async ({ editor: { page, errors } }) => {
