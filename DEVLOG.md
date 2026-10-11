@@ -1473,3 +1473,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a zero-default mask-local Sharpen Mask control that reduces sharpening in smooth regions, plus a selected-mask grayscale Alt preview; negative local softening remains unchanged. Files: chromasmith-22.html, 	est/mask_raster.mjs.
 - Verification: mask-raster suite 86/86, global sharpening-mask browser regression passes, export shader harness renders 35 fixture/recipe pairs, and 23 existing golden images remain pixel-identical. Editor UI audit reports unrelated library/top-bar and phone-control issues; full editor gates also lack local Playwright packages in this checkout.
 - Lightroom reference parity for masked Clarity/Texture/Dehaze, AI Denoise/Super Resolution/Raw Details, licensing/model delivery, and five-photo signoff remain open; CHR-249 stays In Progress.
+
+### 2026-10-11 — CHR-249 mask sharpening publication verification
+
+- Integrated task commit 427c1db9 as ca9af52e9c7ae7acefe1a279296689065c2ae316; integration mask-raster suite passed 86/86 and shader exports matched all 23 existing goldens pixel-for-pixel.
+- Post-push git fetch origin main and git ls-remote origin refs/heads/main confirmed origin/main at ca9af52e9c7ae7acefe1a279296689065c2ae316. CHR-249 remains In Progress with the remaining Lightroom parity and AI model acceptance open.
