@@ -58,7 +58,7 @@ async function main() {
   const nativeCdp=process.env.NATIVE_CDP;
   const browser = nativeCdp?await chromium.connectOverCDP(nativeCdp):await chromium.launch({
     executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
+    args: [process.platform === 'win32' ? '--use-gl=angle' : '--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });
 
@@ -332,6 +332,32 @@ async function main() {
       ck('4. undo restores the pre-paint raster', same(beforePaint, fxState.masks[0].px), fxState.masks[0].px?digest(fxState.masks[0].px):'undefined');
       await fxRedo();
       ck('4. redo restores the painted raster', same(painted, fxState.masks[0].px));
+
+      // ── CHR-249: mask-local Sharpen is separate from Texture and follows mask coverage ──
+      fxState.masks.length=0;mskSel=-1;mskAdd('radial');
+      const sharpMask=fxState.masks[0];Object.assign(sharpMask,{cx:.5,cy:.5,rx:.42,ry:.42,rot:0,feather:.05,sharp:0,tex:0});
+      _mskTexDirty=true;
+      ck('CHR-249 mask panel exposes a distinct Sharpen slider',!!document.querySelector('[data-k="sharp"]'));
+      const localSharpRender=()=>{FX.render(getFXParams(),128,96,{glowScale:1,seed:3.25});return Uint8Array.from(FX.getPixels().px);};
+      const sharpOff=localSharpRender();sharpMask.sharp=100;const sharpOn=localSharpRender();
+      let insideDelta=0,outsideDelta=0,insideCount=0,outsideCount=0;
+      for(let y=0;y<96;y++)for(let x=0;x<128;x++){
+        const d=Math.abs(x-64)/128,dy=Math.abs(y-48)/96,r=Math.hypot(d,dy),i=(y*128+x)*4;
+        const delta=Math.abs(sharpOn[i]-sharpOff[i])+Math.abs(sharpOn[i+1]-sharpOff[i+1])+Math.abs(sharpOn[i+2]-sharpOff[i+2]);
+        if(r<.16){insideDelta+=delta;insideCount++;}else if(r>.49){outsideDelta+=delta;outsideCount++;}
+      }
+      ck('CHR-249 local Sharpen changes edge detail inside the mask',insideDelta>0,`inside delta ${insideDelta}`);
+      ck('CHR-249 local Sharpen leaves pixels outside the mask unchanged',outsideDelta===0,`outside delta ${outsideDelta}`);
+      sharpMask.sharp=0;const neutralAgain=localSharpRender();
+      ck('CHR-249 zero Amount is pixel-identical to Sharpen off',same(sharpOff,neutralAgain));
+      sharpMask.sharp=65;const sharpenedBeforeSnapshot=localSharpRender();
+      const sharpWire=JSON.parse(JSON.stringify(getUISnapshot()));
+      ck('CHR-249 mask Sharpen value is included in snapshots',sharpWire.masks?.[0]?.sharp===65,String(sharpWire.masks?.[0]?.sharp));
+      applyUISnapshot(sharpWire);_mskTexDirty=true;
+      ck('CHR-249 mask Sharpen render survives snapshot round-trip',same(sharpenedBeforeSnapshot,localSharpRender()));
+      const legacySharp=JSON.parse(JSON.stringify(sharpWire));delete legacySharp.masks[0].sharp;applyUISnapshot(legacySharp);
+      ck('CHR-249 legacy masks migrate with neutral Sharpen',fxState.masks[0].sharp===0,String(fxState.masks[0].sharp));
+      fxState.masks.length=0;mskSel=-1;mskAdd('brush');fxState.masks[0].px.fill(0);_mskTexDirty=true;
 
       // Two real pointer strokes must become two independent history steps.
       fxHistory=[];fxHistIdx=-1;_fxHistLocked=false;mskPaintErase=false;mskPaintMode=true;
