@@ -1642,3 +1642,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Prevented an older autosave completion from replacing a newer pending edit with “Saved” or a stale-write error. Added a deterministic delayed-sidecar control to the LIBTEST mock and a regression test that holds the first write while queuing a second edit.
 - Files: `desktop/library-ui.js`, `test/library_save_state_race.mjs`, and `package.json`.
 - Verification: `npm run save-state:test` passes; JavaScript syntax and `git diff --check` pass. The full Editor gates started but stopped advancing during the catalog visual matrix, so no full-gate result is claimed. Source-availability/render-tier UI and remaining CHR-194 recovery scenarios are open.
+
+### 2026-10-11 — CHR-194 save-state race publication
+
+- Integration commit `b71d060f535185be790e409e6a0ad87298266822` fast-forwarded the feature commit to `origin/main`.
+- The clean integration checkout passed `npm run save-state:test`; `git ls-remote origin refs/heads/main` matched the published hash. The broader Editor gates stopped advancing in the catalog visual matrix and are not claimed as passing.
