@@ -1669,3 +1669,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `49e8fd9f` integrated as `a199ca2b358df00335f9032b4003e1cc15164729` and fast-forwarded to `origin/main`.
 - The integration checkout passed the focused Masks rail interaction test, desktop build, JavaScript syntax check, and `git diff --check`. `git ls-remote origin refs/heads/main` matched `a199ca2b358df00335f9032b4003e1cc15164729`.
+
+### 2026-10-11 — CHR-194 source and render status slice
+
+- Added a persistent top-area indicator for original availability, full-quality offline cache, reduced offline preview, and preview/full-resolution render state. Reduced offline thumbnails remain explicitly not full-quality-ready; added LIBTEST offline-source simulation and a focused browser test.
+- Files: `chromasmith-22.html`, `desktop/library-ui.js`, `test/library_source_render_status.mjs`, and `package.json`. The focused source/render browser test, desktop build, HTML validity, JavaScript syntax, and whitespace checks pass. CHR-194 remains In Progress: actionable persistence-failure and delayed-render recovery tests, full-resolution-cache validation, and CHR-166 placement coordination remain open.

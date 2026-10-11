@@ -1974,6 +1974,8 @@ body.mobile-cl .cl-book-pages{grid-template-columns:repeat(2,minmax(0,1fr))}
 #cs-save-state{margin-left:10px;font-size:var(--fs-1);color:var(--mut);white-space:nowrap}
 #cs-save-state.err{color:var(--err)}
 #cs-save-state button{all:unset;cursor:pointer;text-decoration:underline;margin-left:4px}
+#cs-source-render-state{min-width:0;max-width:min(360px,30vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:8px;font-size:var(--fs-1);color:var(--mut)}
+#cs-source-render-state[data-source="offlinePreview"],#cs-source-render-state[data-render="unavailable"]{color:var(--warn,var(--err))}
 .cl-cell.cl-framed{box-shadow:0 2px 10px rgba(0,0,0,.28)}
 .cl-deck-sh{position:absolute;pointer-events:none;filter:drop-shadow(0 3px 5px rgba(0,0,0,.4))}
 .cl-cell.cl-deckle.sel{outline:none}.cl-cell.cl-deckle.sel .cl-in{outline:var(--bw-2) solid var(--acc);outline-offset:-2px}
@@ -3961,7 +3963,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
     <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
          semi-destructive action in the always-visible cluster; Undo/Redo already cover the
          common "I changed my mind" case. -->
-    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span><span id="cs-save-state" role="status" aria-live="polite" hidden></span></div>
+    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span><span id="cs-save-state" role="status" aria-live="polite" hidden></span><span id="cs-source-render-state" role="status" aria-live="polite" aria-atomic="true" hidden></span></div>
     <div id="fx-deskbar-right">
       <div id="fx-deskbar-tools"></div>
       <button class="fx-db" id="btn-second-display" onclick="fxSecondDisplayOpen()" title="Show this photo on another display" aria-label="Show on another display" style="display:none">Second display</button>
@@ -7338,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011W';
+const BUILD='1.1011X';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22459,6 +22461,23 @@ window.chromasmithSaveState=function(st,onRetry){
   const T={pending:'Edited',saving:'Saving…',saved:'Saved',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
   el.textContent=T[st]||'';el.title=st==='saved'?'Edit written to the photo\'s sidecar — safe to close':'';
   if(st==='error'&&onRetry){const b=document.createElement('button');b.type='button';b.textContent='Retry';b.onclick=onRetry;el.appendChild(b);}
+};
+let _csPhotoSourceMode='',_csPhotoRenderMode='';
+window.chromasmithSourceRenderUpdate=function(update={}){
+  if(update.source!==undefined)_csPhotoSourceMode=update.source;
+  if(update.render!==undefined)_csPhotoRenderMode=update.render;
+  const el=document.getElementById('cs-source-render-state');if(!el)return;
+  const sourceText={checking:'Checking source…',original:'Original available',offlineCache:'Offline full-quality cache',offlinePreview:'Reduced-quality offline preview',missing:'Source unavailable'}[_csPhotoSourceMode]||'';
+  const renderText={checking:'Loading preview…',preview:'Preview · full resolution on demand',loading:'Loading full resolution…',full:'Full resolution ready',unavailable:'Full resolution unavailable'}[_csPhotoRenderMode]||'';
+  if(!sourceText&&!renderText){el.hidden=true;el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
+  const visible=[sourceText,renderText].filter(Boolean).join(' · ');
+  const sourceDetail={checking:'Checking whether the original or an offline cached copy can be used.',original:'The original photo source was readable when this photo opened.',offlineCache:'The original is unavailable; editing is using a full-quality offline cached copy.',offlinePreview:'The original and full-quality offline cache are unavailable. This is a reduced-quality preview; reconnect the source drive and reopen for full-resolution editing.',missing:'The source could not be read. Reconnect the drive and reopen the photo.'}[_csPhotoSourceMode]||'';
+  const renderDetail={checking:'The editor is loading the first preview.',preview:'The visible image is a fast preview. Full-resolution pixels load when needed.',loading:'The full-resolution image is being loaded and rendered.',full:'The full-resolution image is ready for detailed edits and export.',unavailable:'Full-resolution pixels are unavailable from this source.'}[_csPhotoRenderMode]||'';
+  const detail=[sourceDetail,renderDetail].filter(Boolean).join(' ');
+  if(el.textContent!==visible)el.textContent=visible;
+  if(el.title!==detail)el.title=detail;
+  if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
+  el.dataset.source=_csPhotoSourceMode;el.dataset.render=_csPhotoRenderMode;el.hidden=false;
 };
 function fxRefreshDims(){
   const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;

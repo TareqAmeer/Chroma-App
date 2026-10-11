@@ -182,7 +182,9 @@
         }
         return Promise.resolve(png.buffer);
       }
-      case 'read_file_bytes': return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
+      case 'read_file_bytes':
+        if (/[?&]libforceoffline=1/.test(location.search)) return Promise.reject(new Error('libtest: source disconnected'));
+        return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
       case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
       // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
@@ -1055,6 +1057,7 @@
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
     syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
     offlineEditPaths: new Set(), // paths currently open against the reduced-res offline preview (N1a) — see openInEditorInner
+    photoSourceModes: new Map(), // path -> original | offlineCache | offlinePreview for the Editor's persistent source/render status
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
     cameraFilter: 'all',
     lensFilter: 'all',
@@ -4889,6 +4892,7 @@
   async function openInEditorInner(path) {
     const openT0 = performance.now();
     rawPerf('open-start', path);
+    window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
     // handoff path) after the user has already navigated to something else.
@@ -4907,6 +4911,7 @@
     const hdrPreview = !!window.chromasmithHdrPreview;
     const isRaw = RAW_EXT_RE.test(path);
     const cached = hdrPreview ? null : imgCache.get(path);
+    let photoSourceMode = state.photoSourceModes.get(path) || 'original';
     let displayOverlayPromise = Promise.resolve(() => {});
     // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT.
     // They must never enter the Editor path: the first editor pixels always come from our
@@ -4992,10 +4997,12 @@
       if (fullPromotionStarted || (!fullAssetPath && !fullCachedEntry) || !previewEntry || previewEntry.img.naturalWidth >= 4000) return;
       fullPromotionStarted = true;
       window.chromasmithFullQualityReady = false;
+      window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
       const promoteT0 = performance.now();
       const glowEl = document.getElementById('fx-zoom-wrap');
       const run = async () => {
         if (glowEl) glowEl.classList.add('lib-full-loading');
+        window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'loading' });
         try {
           let fullImg;
           let promotionSource = 'asset';
@@ -5021,12 +5028,17 @@
           const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
           const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
           window.chromasmithFullQualityReady = true;
+          window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
           const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;
           rawPerf('open-full-quality-promoted', path, {
             ms: performance.now() - promoteT0, width: fullImg.naturalWidth || fullImg.width,
             height: fullImg.naturalHeight || fullImg.height, source: promotionSource,
           });
-        } catch (e) { rawPerf('open-full-quality-promotion-failed', path, { error: String(e) }); }
+        } catch (e) {
+          rawPerf('open-full-quality-promotion-failed', path, { error: String(e) });
+          if (state.openedPath === path) window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'unavailable' });
+          promo = null;
+        }
         finally { if (glowEl && (!state.openedPath || state.openedPath === path)) glowEl.classList.remove('lib-full-loading'); }
       };
       // Screen-sized editing (the Lightroom/darktable model): fit view — and this app's "100%"
@@ -5213,6 +5225,7 @@
         // either way, so this is a no-op for that case.
         const fileMime = offlinePreview ? 'image/jpeg' : (hqOfflineCacheExt ? mimeFromName('x.' + hqOfflineCacheExt) : mimeFromName(path));
         const byteLen = pathSource ? Number(new DataView(pathSource).getBigUint64(0, true)) : buf.byteLength;
+        photoSourceMode = offlinePreview ? 'offlinePreview' : (hqOfflineCacheExt ? 'offlineCache' : 'original');
         rawPerf('open-read-source', path, { ms: 0, bytes: byteLen, offlinePreview, byPath: !!pathSource });
         const file = pathSource ? makePathRawFile(path, new Uint8Array(pathSource, 8), byteLen, fileMime) : new File([buf], baseName(path), { type: fileMime, lastModified: 0 });
         window.chromasmithSourcePath = path;
@@ -5245,24 +5258,30 @@
           const opened = fxImages[0];
           if (opened.fullImg && opened.img !== opened.fullImg) {
             window.chromasmithFullQualityReady = false;
+            window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
             let done = null;
             window.chromasmithEnsureFullQuality = () => {
               if (state.openedPath !== path || fxImages[0] !== opened) return Promise.resolve();
-              if (!done) done = new Promise((resolve) => requestAnimationFrame(() => {
+              if (!done) {
+                window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'loading' });
+                done = new Promise((resolve) => requestAnimationFrame(() => {
                 const t0 = performance.now();
                 opened.img = opened.fullImg; fxImg = opened.img;
                 try { autoDetectBW(opened.img); } catch (_) {}
                 updateWork(); renderPreview();
                 window.chromasmithFullQualityReady = true;
+                window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
                 rawPerf('open-full-quality-promoted', path, { ms: performance.now() - t0, source: 'decoded-frame' });
                 resolve();
-              }));
+                }));
+              }
               return done;
             };
           }
         }
       }
       state.openedPath = path;
+      state.photoSourceModes.set(path, photoSourceMode);
       // Opening a photo from the Library used to leave whatever tool panel was last open sitting
       // over the image — the photo itself, not a chosen tool, should be the first thing you see.
       // Same mechanism a rail-icon click already uses to close the panel (fxSection,
@@ -5346,10 +5365,23 @@
       scrollLibraryToPath(path);
       const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
       if (card) card.classList.add('sel');
-      if (fullAssetPath || fullCachedEntry) startFullPromotion();
-      else if (!(fxImages[0] && fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg)) window.chromasmithFullQualityReady = true;
+      if (photoSourceMode === 'offlinePreview') {
+        // The 360px offline thumbnail is useful for culling, but it must never be treated as a
+        // full-resolution render or pass the export guard as if the original were available.
+        window.chromasmithFullQualityReady = false;
+        window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'unavailable' });
+      } else if (fullAssetPath || fullCachedEntry) {
+        window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
+        startFullPromotion();
+      } else if (fxImages[0] && fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg) {
+        window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
+      } else {
+        window.chromasmithFullQualityReady = true;
+        window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
+      }
     } catch (e) {
       console.error('openInEditor', e);
+      window.chromasmithSourceRenderUpdate?.({ source: 'missing', render: 'unavailable' });
       reveal.cancel(path);
       if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
     } finally {

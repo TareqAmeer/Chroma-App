@@ -49,6 +49,7 @@
     "test:ui": "npm run lint:ai && npm run lint:formats && npm run lint:library-content && npm run tokens:gates && npm run wireframe:test && npm run library:responsive-test && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test && npm run editor:gates",
     "lib:test": "node test/library_photo_activity.mjs && node test/library_scroll_anchor.mjs && node test/library_save_state_race.mjs && node test/library_unified_view.mjs && node test/library_perf.mjs && node test/reveal_timing.mjs && npm run library:batch-test",
     "save-state:test": "node test/library_save_state_race.mjs",
+    "library:source-render-test": "node test/library_source_render_status.mjs",
     "reveal:test": "node test/reveal_timing.mjs",
     "preview": "node test/preview_server.mjs",
     "editor:coverage": "node test/editor_coverage.mjs",
