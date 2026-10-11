@@ -62,3 +62,13 @@ When reading a Linear issue that contains markdown image links (e.g., `![alt](ht
    `.scripts/fetch-linear-image.sh "<IMAGE_URL>" "/tmp/issue_image.png"`
 3. Inspect `/tmp/issue_image.png` using local vision/image viewing capabilities.
 4. Reference visual context (UI layout bugs, design specs, alignment issues) directly in the `### Implementation Plan`.
+
+## Storage-efficient worktree policy
+
+This repository has a 50 GB working-folder budget. Avoid creating a linked worktree for each ticket: reuse the current checkout and switch feature branches serially when its working tree is safe to switch. Keep completed commits on their feature branches and integrate them through the normal clean main checkout. Create at most one temporary linked worktree at a time, only when parallel isolation is necessary; record why it is needed and remove it as soon as its task-owned changes are preserved. Do not duplicate model/vendor assets or build outputs into another checkout.
+
+Run desktop Cargo builds through `desktop/package.json` scripts (`npm run dev` or `npm run build`) so `scripts/tauri-shared-cache.mjs` directs all linked checkouts to the same per-user Cargo target directory. For direct Cargo commands, set `CARGO_TARGET_DIR` to that same directory first. Rust target directories are generated cache and may be removed when no build is using them; never delete source, untracked work, vendor/model assets, or an entire checkout as a cache-cleanup shortcut. Inspect Git status and the exact resolved path before cleanup. Never use `git clean -fdx` for storage reclamation.
+
+Keep large shared, immutable assets in one canonical checkout unless a build explicitly requires a different location. Do not hardlink editable source or use `git clone --shared` as a worktree substitute; edits through a hardlink affect every name, and Git's shared-clone object alternates can become invalid after source garbage collection. Git linked worktrees already share repository objects and refs while retaining distinct working directories, so prefer one working directory and shared generated caches over multiple full copies.
+
+References: [Git worktrees](https://git-scm.com/docs/git-worktree), [Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html), [Git shared clones](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---shared), and [Windows hard links](https://learn.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions).

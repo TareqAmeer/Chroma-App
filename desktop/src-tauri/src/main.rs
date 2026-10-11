@@ -398,6 +398,14 @@ struct SamPointIn {
     positive: bool
 }
 
+#[derive(serde::Deserialize)]
+struct SamBoxIn {
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+}
+
 /// Runs a multi-point-prompt query (a Lightroom-style "brush over the object" scribble, sampled
 /// into points by chromasmith-22.html's mskAiScribble* — NOT a single tap) against the CACHED
 /// embedding from the most recent sam_encode call. Returns the mask raster (one byte per pixel,
@@ -415,6 +423,25 @@ fn sam_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Resp
     let mask = sam::decode_points(&cache.embedding, &pts)?;
     let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
     let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam_points header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Runs an EdgeSAM rectangle-prompt query against the EdgeSAM cache. Rectangle labels are not
+/// part of the verified SAM2 contract, so this command intentionally never uses SAM2_EMBED.
+#[tauri::command(async)]
+fn sam_box(token: String, rect: SamBoxIn) -> Result<tauri::ipc::Response, String> {
+    let guard = SAM_EMBED.lock().unwrap();
+    let cache = guard.as_ref().ok_or("sam_box: no photo encoded yet — call sam_encode first")?;
+    if cache.token != token {
+        return Err("sam_box: the encoded photo has changed — re-encode before selecting".into());
+    }
+    let mask = sam::decode_box(&cache.embedding, rect.x1, rect.y1, rect.x2, rect.y2)?;
+    let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam_box header: {e}"))?;
     let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
@@ -2879,6 +2906,7 @@ fn main() {
             sam_encode,
             scrfd_detect,
             sam_points,
+            sam_box,
             subject_learn,
             subject_locate,
             subject_locate_multi,

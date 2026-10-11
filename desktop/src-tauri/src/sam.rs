@@ -9,7 +9,8 @@
 // (onnx.load() for I/O names/shapes, a real inference run against a real photo for sane output),
 // not guessed, and cross-checked against EdgeSAM's own
 // segment_anything/onnx/predictor_onnx.py (SamPredictorONNX.predict/postprocess_masks):
-//   - Decoder takes only 3 inputs: image_embeddings, point_coords, point_labels. No mask_input /
+//   - Decoder takes only 3 inputs: image_embeddings, point_coords, point_labels. Label values
+//     0/1 are negative/positive clicks and 2/3 are top-left/bottom-right box corners. No mask_input /
 //     has_mask_input / orig_im_size — EdgeSAM's ONNX graph does NOT upscale the mask itself.
 //   - Decoder always returns MULTIMASK output: scores [1,4] + low-res mask logits [1,4,256,256]
 //     (no single-mask mode). Caller must argmax the scores to pick the best of the 4 channels.
@@ -664,15 +665,49 @@ pub fn decode_points(embed: &Embedding, points: &[(f32, f32, bool)]) -> Result<V
     if points.is_empty() {
         return Err("SAM decode: no points given".into());
     }
+    let prompts: Vec<((f32, f32), f32)> = points
+        .iter()
+        .map(|&(x, y, positive)| ((x, y), if positive { 1.0 } else { 0.0 }))
+        .collect();
+    decode_prompt(embed, &prompts)
+}
+
+/// Runs EdgeSAM's box prompt. The exported decoder accepts corner labels in the same dynamic
+/// point tensors as clicks: 2 is top-left and 3 is bottom-right. Coordinates are normalized in
+/// original-photo space, matching decode_points and the UI's mask geometry convention.
+pub fn decode_box(
+    embed: &Embedding,
+    x1: f32,
+    y1: f32,
+    x2: f32,
+    y2: f32,
+) -> Result<Vec<u8>, String> {
+    if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
+        return Err("SAM box decode: coordinates must be finite".into());
+    }
+    let left = x1.min(x2).clamp(0.0, 1.0);
+    let right = x1.max(x2).clamp(0.0, 1.0);
+    let top = y1.min(y2).clamp(0.0, 1.0);
+    let bottom = y1.max(y2).clamp(0.0, 1.0);
+    if right - left < 1e-6 || bottom - top < 1e-6 {
+        return Err("SAM box decode: drag a rectangle with nonzero width and height".into());
+    }
+    decode_prompt(embed, &[((left, top), 2.0), ((right, bottom), 3.0)])
+}
+
+fn decode_prompt(embed: &Embedding, prompts: &[((f32, f32), f32)]) -> Result<Vec<u8>, String> {
+    if prompts.is_empty() {
+        return Err("SAM decode: no prompts given".into());
+    }
     let scale = SAM_SIZE as f32 / embed.orig_w.max(embed.orig_h) as f32;
-    let mut coords = Vec::with_capacity(points.len() * 2);
-    let mut labels = Vec::with_capacity(points.len());
-    for &(nx, ny, positive) in points {
+    let mut coords = Vec::with_capacity(prompts.len() * 2);
+    let mut labels = Vec::with_capacity(prompts.len());
+    for &((nx, ny), label) in prompts {
         coords.push(nx.clamp(0.0, 1.0) * embed.orig_w as f32 * scale);
         coords.push(ny.clamp(0.0, 1.0) * embed.orig_h as f32 * scale);
-        labels.push(if positive { 1.0 } else { 0.0 });
+        labels.push(label);
     }
-    let n = points.len() as i64;
+    let n = prompts.len() as i64;
     // The unpadded region of the SAM_SIZE square canvas that the resized image actually occupies
     // — needed to crop the upsampled mask back out of the zero-padded square (see bilinear_resize
     // doc comment above and predictor_onnx.py's postprocess_masks).
@@ -960,6 +995,24 @@ mod tests {
             outside < 0.2,
             "EdgeSAM mask should mostly avoid the background, got outside={outside:.3}"
         );
+    }
+
+    #[test]
+    fn edgesam_box_prompt_selects_object_and_normalizes_reversed_corners() {
+        setup_models();
+        let img = make_square_image();
+        let embed = encode(&img.rgb, img.w, img.h).expect("EdgeSAM encode failed");
+        let x1 = img.sq_x0 as f32 / img.w as f32;
+        let y1 = img.sq_y0 as f32 / img.h as f32;
+        let x2 = img.sq_x1 as f32 / img.w as f32;
+        let y2 = img.sq_y1 as f32 / img.h as f32;
+        let mask = decode_box(&embed, x1, y1, x2, y2).expect("EdgeSAM box decode failed");
+        let reverse = decode_box(&embed, x2, y2, x1, y1).expect("reversed box decode failed");
+        assert_eq!(mask, reverse, "drag direction must not change the box prompt");
+        let (inside, outside) = score_mask(&mask, &img);
+        println!("EdgeSAM box: inside={inside:.3} outside={outside:.3}");
+        assert!(inside > 0.5, "box prompt should cover most of the square, got {inside:.3}");
+        assert!(outside < 0.2, "box prompt should mostly avoid background, got {outside:.3}");
     }
 
     #[test]

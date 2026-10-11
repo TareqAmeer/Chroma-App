@@ -29,8 +29,11 @@ HWC and normalization happens OUTSIDE the graph (caller must do it):
 not a drop-in:
 - inputs: `image_embeddings` `[1,256,64,64]`; `point_coords` `[1,N,2]` float32 in the RESIZED
   (pre-pad, 1024-longest-side) pixel-coordinate space — same convention as MobileSAM; `point_labels`
-  `[1,N]` float32 (1=positive, 0=negative, -1=padding — a lone point still needs the padding
-  point, same as MobileSAM). **No** `mask_input` / `has_mask_input` / `orig_im_size` inputs.
+  `[1,N]` float32 (`0`=negative click, `1`=positive click, `2`=top-left box corner,
+  `3`=bottom-right box corner, `-1`=padding). The decoder supports a box as two coordinates and
+  labels 2/3; the app sends normalized drags through its EdgeSAM-only `sam_box` command. **No**
+  `mask_input` / `has_mask_input` / `orig_im_size` inputs. SAM2 remains on its separate point-only
+  route until its exact exported graph's rectangle prompt contract is verified.
 - outputs: `scores` `[1,4]` and `masks` `[1,4,256,256]` — ALWAYS 4 multimask candidates (no
   single-mask mode). The caller must pick `argmax(scores)` and upsample that one 256×256 channel
   itself in two bilinear stages (256→1024 padded square, crop to the unpadded input region, then

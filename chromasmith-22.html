@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011G';
+const BUILD='1.1011H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15772,6 +15772,7 @@ function _mskToSnap(m,skipRaster){
   for(const k in m){if(k==='px'||k[0]==='_')continue;o[k]=m[k];}
   o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
   if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
+  if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
   if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
   return o;
@@ -15780,6 +15781,7 @@ function _mskFromSnap(o){
   const m=Object.assign({},o);
   m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
   if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
+  if(o.aiBox)m.aiBox=Object.assign({},o.aiBox);
   if(o.aiProvenance)m.aiProvenance=_mskNormalizeAIProvenance(o.aiProvenance);
   return _mskMigrate(m);
 }
@@ -15859,11 +15861,11 @@ function _mskMigrate(m){
 const _MSK_AI_PROVENANCE_VERSION=1,_MSK_AI_PROMPT_SCHEMA_VERSION=1,_MSK_SKY_SEED_VERSION='sky-grid-v1';
 function _mskNormalizeAIProvenance(p){
   if(!p||typeof p!=='object'||p.schemaVersion!==_MSK_AI_PROVENANCE_VERSION)return null;
-  const backend=['sam_points','sam2_points'].includes(p.backend)?p.backend:null;
+  const backend=['sam_points','sam2_points','sam_box'].includes(p.backend)?p.backend:null;
   const modelId=p.modelId==='edge-sam'||p.modelId==='sam2-hiera-tiny'?p.modelId:null;
   const source=p.sourceLocation&&p.sourceLocation.kind==='path'&&typeof p.sourceLocation.value==='string'?{kind:'path',value:p.sourceLocation.value}:null;
   return{schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:p.promptSchemaVersion===_MSK_AI_PROMPT_SCHEMA_VERSION?_MSK_AI_PROMPT_SCHEMA_VERSION:null,
-    backend,modelId:modelId&&((backend==='sam_points'&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
+    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
     modelVersion:null,artifactDigest:null,sourceLocation:source,skySeedAlgorithmVersion:p.skySeedAlgorithmVersion===_MSK_SKY_SEED_VERSION?_MSK_SKY_SEED_VERSION:null,
     recordedAt:typeof p.recordedAt==='string'?p.recordedAt:null};
 }
@@ -15871,7 +15873,7 @@ function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
-    backend:backend||null,modelId:backend==='sam_points'?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':null,
+    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':null,
     modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
     skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
 }
@@ -16212,7 +16214,7 @@ async function mskEmbeddedMatteFallback(kind,label,item){
 // you can keep refining), and the FULL accumulated point set is resubmitted on every stroke end
 // to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
 // same convention the old tap mode used for Alt-click.
-let _samToken=null,_samEncoding=false,mskAiTapMode=false,_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
+let _samToken=null,_samEncoding=false,mskAiTapMode=false,mskAiPromptMode='scribble',_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
 // Invalidates BOTH cached SAM embeddings — must be called on every photo change (new load AND
 // filmstrip/arrow-key switching within a batch), not just _samToken alone. Missing sam2Token
 // here was the "AI Select masks a different photo" bug: samRunPoints prefers sam2Token whenever
@@ -16229,7 +16231,9 @@ function _samFramedInvoke(cmd,jsonObj,payload){
   return window.__TAURI__.core.invoke(cmd,framed);
 }
 function mskAiTapToggle(force){
-  mskAiTapMode=force!==undefined?force:!mskAiTapMode;
+  if(force!==undefined)mskAiTapMode=force;
+  else if(mskAiPromptMode==='scribble'&&mskAiTapMode)mskAiTapMode=false;
+  else{mskAiPromptMode='scribble';mskAiTapMode=true;}
   // ⚠️ The button had TWO competing representations of "armed" and they drifted apart, which is
   // what made it appear stuck: mskRebuild renders it with bsec/bgh plus a "✓" label, while this
   // function only ever flipped a different class ('on') and never re-rendered. Clicking it changed
@@ -16241,10 +16245,19 @@ function mskAiTapToggle(force){
     b.classList.toggle('on',mskAiTapMode);
     b.classList.toggle('bsec',mskAiTapMode);
     b.classList.toggle('bgh',!mskAiTapMode);
+    b.setAttribute('aria-pressed',String(mskAiTapMode&&mskAiPromptMode==='scribble'));
     b.innerHTML=icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select');
   }
   if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
+  const hint=document.getElementById('msk-ai-prompt-hint');if(hint)hint.textContent=mskAiPromptMode==='box'?'Drag a rectangle around the object. This prompt uses EdgeSAM; Paint below to refine.':'Drag a rough scribble over the object (Alt/Option-drag excludes an area). Scribbles add up across strokes. Then Paint below if needed.';
   if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
+}
+function mskAiBoxToggle(){
+  mskAiPromptMode=mskAiPromptMode==='box'?'scribble':'box';mskAiTapMode=mskAiPromptMode==='box';
+  const b=document.getElementById('btn-msk-ai-box');if(b){b.classList.toggle('bsec',mskAiPromptMode==='box');b.classList.toggle('bgh',mskAiPromptMode!=='box');b.setAttribute('aria-pressed',String(mskAiPromptMode==='box'));b.textContent=mskAiPromptMode==='box'?'Rectangle mode — drag on photo':'Rectangle select';}
+  const s=document.getElementById('btn-msk-ai-tap');if(s){s.classList.toggle('bsec',mskAiPromptMode==='scribble'&&mskAiTapMode);s.classList.toggle('bgh',mskAiPromptMode!=='scribble'||!mskAiTapMode);}
+  const hint=document.getElementById('msk-ai-prompt-hint');if(hint)hint.textContent=mskAiPromptMode==='box'?'Drag a rectangle around the object. This prompt uses EdgeSAM; Paint below to refine.':'Drag a rough scribble over the object (Alt/Option-drag excludes an area). Scribbles add up across strokes. Then Paint below if needed.';
+  if(FX.cv)FX.cv.style.cursor=mskAiPromptMode==='box'?'crosshair':'';
 }
 // Two-tier fast/quality encode, mirroring desktop-native.js's NativeLibRawShim.refine() pattern
 // for RAW decode: EdgeSAM (fast, ~1s) is awaited so the first scribble has SOMETHING to query
@@ -16387,9 +16400,16 @@ function _samRefineMask(mask,w,h){
     return out;
   }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
 }
+function _samNormalizeBox(box){
+  if(!box||![box.x0,box.y0,box.x1,box.y1].every(Number.isFinite))return null;
+  const x0=Math.max(0,Math.min(1,Math.min(box.x0,box.x1))),x1=Math.max(0,Math.min(1,Math.max(box.x0,box.x1)));
+  const y0=Math.max(0,Math.min(1,Math.min(box.y0,box.y1))),y1=Math.max(0,Math.min(1,Math.max(box.y0,box.y1)));
+  return x1-x0>=0.004&&y1-y0>=0.004?{x0,y0,x1,y1}:null;
+}
 async function samRunPoints(m,opts={}){
   if(!window.__TAURI__)return{ok:false,error:'AI mask recomputation requires the desktop app'};
-  if(!m.aiPoints||!m.aiPoints.length)return{ok:false,error:'This mask has no saved AI prompts'};
+  const aiBox=m.aiBox&&typeof _samNormalizeBox==='function'?_samNormalizeBox(m.aiBox):null,hasPoints=!!(m.aiPoints&&m.aiPoints.length);
+  if(!aiBox&&!hasPoints)return{ok:false,error:'This mask has no saved AI prompts'};
   const item=curItem();
   // A target raster is replaced, but the user's requested Feather/Edge settings remain part of
   // the mask's intent and are reapplied to the new photo by the normal raster builder.
@@ -16408,9 +16428,11 @@ async function samRunPoints(m,opts={}){
       const msg='AI Select is not ready yet — try again in a moment';
       if(!opts.silent){toast(msg);_samLastError=msg;mskRebuild();}return{ok:false,error:msg};
     }
-    const points=samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive}));
-    const useSam2=!!_sam2Token;
-    const buf=await window.__TAURI__.core.invoke(useSam2?'sam2_points':'sam_points',{token:useSam2?_sam2Token:_samToken,points});
+    const points=hasPoints?samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive})):null;
+    const useSam2=!aiBox&&!!_sam2Token;
+    const cmd=aiBox?'sam_box':(useSam2?'sam2_points':'sam_points');
+    const payload=aiBox?{token:_samToken,rect:{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}}:{token:useSam2?_sam2Token:_samToken,points};
+    const buf=await window.__TAURI__.core.invoke(cmd,payload);
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
@@ -16423,7 +16445,7 @@ async function samRunPoints(m,opts={}){
     }
     const refined=_samRefineMask(mask,header.width,header.height);
     m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
-    _mskRecordAIProvenance(m,item,useSam2?'sam2_points':'sam_points',m.origin==='sky');
+    _mskRecordAIProvenance(m,item,aiBox?'sam_box':(useSam2?'sam2_points':'sam_points'),m.origin==='sky');
     if(opts.detached){m.refineFeather=detachedRefinement.feather;m.refineEdge=detachedRefinement.edge;}
     else{m.refineFeather=0;m.refineEdge=0;}
     delete m._refineCache;
@@ -17445,7 +17467,7 @@ async function mskFaceSelectSkin(){
 }
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
-  m.aiPoints=[];const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
+  m.aiPoints=[];delete m.aiBox;const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
   delete m._subjPending;   // a fresh scribble replaces whatever Find result was pending confirmation
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
@@ -17613,9 +17635,9 @@ async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=
 }
 function _mskPortableIsUnsupported(m){
   if(m.origin==='sky')return false;
-  return mskIsAI(m)&&!(m.origin==='ai'&&Array.isArray(m.aiPoints)&&m.aiPoints.length>0);
+  return mskIsAI(m)&&!(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));
 }
-function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&Array.isArray(m.aiPoints)&&m.aiPoints.length>0);}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));}
 async function _mskPortableReevaluate(m,target){
   if(m.origin==='sky'){
     if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
@@ -18242,7 +18264,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // selection. SAM only runs once, on stroke release (not per pointermove) — dragging stays
   // smooth even though each query is a real native round-trip.
   const AI_MIN_SPACING=0.012; // normalized-image-fraction min distance between sampled points
-  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false,_aiStrokeStartLen=0;
+  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false,_aiStrokeStartLen=0,_aiBoxDrag=null;
   // Live scribble feedback: the actual mask (m.px) only updates after a real async SAM round
   // trip on stroke release, so without this the user drags blind and sees nothing until it
   // resolves. This draws the raw traced points immediately into #fx-mask-overlay (same
@@ -18257,8 +18279,31 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const pts=m.aiPoints||[];
     svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
   }
+  function _aiRenderLiveBox(a,b){
+    const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+    const box=mskOverlayBox();if(!box)return;
+    svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';svg.classList.add('on');
+    const x=Math.min(a.nx,b.nx),y=Math.min(a.ny,b.ny),w=Math.abs(a.nx-b.nx),h=Math.abs(a.ny-b.ny);
+    svg.innerHTML=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(255,90,60,.12)" stroke="#ff5a3c" stroke-width="0.0025" vector-effect="non-scaling-stroke"/>`;
+  }
   fxCanvasOn('pointerdown',e=>{
-    if(!mskAiTapMode)return;
+    if(mskAiPromptMode!=='box'||!mskAiTapMode)return;
+    const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+    e.preventDefault();e.stopPropagation();try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
+    const p=_mskPointToUV(e);if(p)_aiBoxDrag={mask:m,item:curItem(),start:p,end:p,previous:m.aiBox?Object.assign({},m.aiBox):null};
+    if(_aiBoxDrag)_aiRenderLiveBox(_aiBoxDrag.start,_aiBoxDrag.end);
+  });
+  fxCanvasOn('pointermove',e=>{if(!_aiBoxDrag)return;e.preventDefault();e.stopPropagation();const p=_mskPointToUV(e);if(p){_aiBoxDrag.end=p;_aiRenderLiveBox(_aiBoxDrag.start,p);}});
+  const aiBoxEnd=e=>{
+    if(!_aiBoxDrag)return;const d=_aiBoxDrag;_aiBoxDrag=null;
+    if(e.type==='pointercancel'||curItem()!==d.item||fxState.masks[mskSel]!==d.mask){d.mask.aiBox=d.previous;mskOverlaySync();return;}
+    const box=_samNormalizeBox({x0:d.start.nx,y0:d.start.ny,x1:d.end.nx,y1:d.end.ny});
+    if(!box){if(typeof toast==='function')toast('Drag a larger rectangle around the object');mskOverlaySync();return;}
+    d.mask.aiBox=box;d.mask.aiPoints=[];samRunPoints(d.mask,{expectedItem:d.item});
+  };
+  fxCanvasOn('pointerup',aiBoxEnd);fxCanvasOn('pointercancel',aiBoxEnd);fxCanvasOn('lostpointercapture',aiBoxEnd);
+  fxCanvasOn('pointerdown',e=>{
+    if(!mskAiTapMode||mskAiPromptMode!=='scribble')return;
     const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
@@ -18272,7 +18317,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     }
   });
   fxCanvasOn('pointermove',e=>{
-    if(!mskAiTapMode||!_aiStroke)return;
+    if(!mskAiTapMode||mskAiPromptMode!=='scribble'||!_aiStroke)return;
     const m=_aiStroke;
     e.preventDefault();e.stopPropagation();
     const p=_mskPointToUV(e);if(!p)return;
@@ -18306,6 +18351,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
       _aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;
       if(typeof mskOverlaySync==='function')mskOverlaySync(); // clear the live-stroke dots drawn so far
     }
+    if(_aiBoxDrag){_aiBoxDrag.mask.aiBox=_aiBoxDrag.previous;_aiBoxDrag=null;if(typeof mskOverlaySync==='function')mskOverlaySync();}
   };
 })();
 // ══ MASK PANEL STRUCTURE ═════════════════════════════════════════════════════════════════════
@@ -19401,8 +19447,9 @@ function mskRebuild(){
   }else{ // brush / sky / AI raster mask
     if(mskIsAI(m)){
       shape+='<div class="btn-row">'
-        +'<button class="btn '+(mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
-        +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all scribble points and start over">Clear points</button></div>'
+        +'<button class="btn '+(mskAiPromptMode==='scribble'&&mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" aria-pressed="'+String(mskAiPromptMode==='scribble'&&mskAiTapMode)+'" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiPromptMode==='scribble'&&mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
+        +'<button class="btn '+(mskAiPromptMode==='box'?'bsec':'bgh')+'" id="btn-msk-ai-box" aria-pressed="'+String(mskAiPromptMode==='box')+'" onclick="mskAiBoxToggle()" title="Drag a rectangle around the object for a fast EdgeSAM selection">'+(mskAiPromptMode==='box'?'Rectangle mode — drag on photo':'Rectangle select')+'</button>'
+        +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all saved AI prompts and start over">Clear prompts</button></div>'
         +(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button>'
           +'<button class="btn bgh" onclick="mskFaceSelectSkin()" title="Adds a NEW mask selecting only face-parsed skin within this selection (cheeks/forehead/neck) — a supplementary, face-crop-scoped alternative to this Skin mask\'s own colour-range gate, not a replacement for it.">'+icon('wand',14)+(_faceparseRunning?' Finding skin…':' Add Skin (Face Parse)')+'</button></div>'
           // Same model, the opposite job: instead of excluding these from a Skin selection, make
@@ -19417,7 +19464,7 @@ function mskRebuild(){
         // silent, so a web/iOS user doesn't wonder whether "Remember this subject" ever existed
         // for them or is simply missing on this platform.
         +(!window.__TAURI__?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:6px">Named subjects ("remember this dog, find it in other photos") needs the desktop app — it runs an on-device model this platform doesn\'t have.</div>':'')
-        +'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':'Drag a rough scribble over the object to select it (Alt/Option-drag excludes an area). Scribbles add up across strokes — keep going to refine. Then Paint below if needed.')+'</div>'
+        +'<div id="msk-ai-prompt-hint" role="status" aria-live="polite" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">'+(_samEncoding?'Preparing this photo for AI Select…':mskAiPromptMode==='box'?'Drag a rectangle around the object. This prompt uses EdgeSAM; Paint below to refine.':'Drag a rough scribble over the object (Alt/Option-drag excludes an area). Scribbles add up across strokes. Then Paint below if needed.')+'</div>'
         +(_sam2Encoding?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Improving selection quality in the background…</div>':'')
         // Previously a failed encode/select was only logged to the hidden diagnostics panel — a
         // scribble that silently did nothing looked identical to one that just hadn't run yet.

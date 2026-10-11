@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "build:dist": "node ../tools/scripts/build-desktop.mjs",
-    "dev": "npm run build:dist && tauri dev",
-    "build": "npm run build:dist && tauri build"
+    "dev": "npm run build:dist && node ../scripts/tauri-shared-cache.mjs dev",
+    "build": "npm run build:dist && node ../scripts/tauri-shared-cache.mjs build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
