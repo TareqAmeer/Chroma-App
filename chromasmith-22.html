@@ -865,6 +865,11 @@ body.diag-on .diag-only{display:flex}
   position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
 #db-title-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
 #db-title-status{color:var(--mut);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Persistent scope indicator: compact enough to live beside undo while leaving its complete
+   scope explanation available to sighted users and assistive technology. */
+.fx-batch-scope{display:inline-flex;align-items:center;min-width:0;max-width:min(320px,24vw);flex:0 1 320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums;line-height:1.2;padding:4px 7px;border:1px solid var(--bdr);border-radius:var(--r-pill);background:var(--sur2)}
+@media(max-width:1200px){.fx-batch-scope{max-width:min(220px,22vw);flex-basis:min(220px,22vw)}}
 /* Below this the bar has no room for a centre title at all — the tools matter more. */
 @media(max-width:1200px){#fx-deskbar-title{display:none}}
 #db-title-status.spin::before{content:'⟳';display:inline-block;animation:fxspin .8s linear infinite}
@@ -3951,6 +3956,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <div style="position:relative;display:inline-flex" id="db-history-wrap">
         <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
       </div>
+      <span class="fx-batch-scope" id="fx-batch-scope" role="status" aria-live="polite" aria-atomic="true" style="display:none"></span>
     </div>
     <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
          semi-destructive action in the always-visible cluster; Undo/Redo already cover the
@@ -7332,7 +7338,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011S';
+const BUILD='1.1011T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13903,12 +13909,13 @@ async function verCompare(i){const d=await window.chromasmithVersions.get();cons
   fxSetSplitSrc('pin');toast(`Comparing with "${v.name}" — drag the split line`);}
 function adjSyncScopeUI(){
   if(typeof secScopeSyncUI==='function')secScopeSyncUI();
-  const row=document.getElementById('adj-scope-row');if(!row)return;
+  const row=document.getElementById('adj-scope-row');if(!row){syncBatchScopeStatus();return;}
   row.style.display=fxImages.length>1?'flex':'none';
   const btn=document.getElementById('btn-adj-scope');if(!btn)return;
   const it=curItem();const on=!!(it&&it.adjustOverride);
   btn.classList.toggle('bpri',on);btn.classList.toggle('bgh',!on);
   btn.innerHTML=''+(on?'Independent — click to sync to shared':'This photo only');
+  syncBatchScopeStatus();
 }
 function resetNR(){
   ['nr-lum','nr-col','nr-hldesat','nr-con'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
@@ -23936,6 +23943,7 @@ function buildFilmstrip(){
     el.appendChild(b);
   });
   el.scrollLeft=_sl; // rebuild wiped scroll position -> strip jumped on every switch
+  syncBatchScopeStatus();
 }
 function fxSelectImage(idx){
   // A user switch while semantic mask work is awaiting SAM/save cancels the remaining targets.
@@ -23988,6 +23996,7 @@ function fxSelectImage(idx){
   // (adjToggleScope), else the shared batch-wide baseline.
   applyAdjustVals(it.adjustOverride||fxState.sharedAdjust||domAdjustVals());
   if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
+  syncBatchScopeStatus();
   if(typeof secScopeShowItem==='function')secScopeShowItem(it);
   document.getElementById('fx-fname').value=it.name;
   fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext));
@@ -25559,6 +25568,20 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
 // Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
 // (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
 function setExportScope(scope){fxExportScope=scope;syncExportScopeUI();}
+function syncBatchScopeStatus(){
+  const el=document.getElementById('fx-batch-scope');if(!el)return;
+  const count=fxImages.length;
+  if(!count){el.style.display='none';el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
+  const item=curItem(),index=Math.min(fxCurIdx+1,count);
+  const adjustment=item&&item.adjustOverride?'independent':'shared';
+  const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
+  const visible=count>1?`Photo ${index} of ${count} · Adjustments ${adjustment} · Export ${exportLabel}`:`Single photo · Export ${exportLabel}`;
+  const detail=`Photo ${index} of ${count}. Basic adjustments are ${adjustment} for this photo${adjustment==='shared'?' and follow the batch value':' and override the shared batch value'}. Other sections may use their own shared or per-photo scope controls. Masks and crop/transform are per photo; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}.`;
+  if(el.textContent!==visible)el.textContent=visible;
+  if(el.title!==detail)el.title=detail;
+  if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
+  el.style.display='inline-flex';
+}
 function syncExportScopeUI(){
   const n=fxImages.length,row=document.getElementById('fx-export-scope-row');
   if(row)row.style.display=n>1?'block':'none';
@@ -25572,6 +25595,7 @@ function syncExportScopeUI(){
   const scope=n>1?fxExportScope:'all';
   const btn=document.getElementById('btn-fx-export');if(!btn)return;
   btn.innerHTML='Export'+(n>1?(scope==='current'?' current photo':` all (${n})`):'');
+  syncBatchScopeStatus();
 }
 // Lightroom "Edit In" handoff — see library-ui.js's window.chromasmithEditInPath wiring and
 // the write-back redirect inside exportFX's save phase below. Just arms the flag and reuses
