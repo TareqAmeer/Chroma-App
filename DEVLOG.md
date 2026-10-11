@@ -1775,3 +1775,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - CHR-194 files: `chromasmith-22.html`, `test/library_save_state_race.mjs`, `test/library_source_render_status.mjs`, `DEVLOG.md`. The successful sidecar state now reads “Saved locally.” Browser coverage forces a mocked sidecar-write failure, asserts the visible Retry action and no false Saved state, then verifies successful retry persists; source/render checks hold the loading state before promotion and distinguish original from reduced offline-preview status.
 - Verification: both focused Chrome browser suites pass; source behavior remains explicitly simulated in the browser harness, with no claim of native volume/cache verification.
 - CHR-194 remains In Progress: full-quality offline-cache selection, native delayed promotion, and CHR-166 placement alignment still need confirmation. Existing persistence-success and original/offline-preview behavior is covered; this slice adds failure recovery evidence. Feature commit `f51b05536a52118490df0f3fb0c5160d09752cc8` was integrated as `89b35a18267e1a0c2066c4ed1d467ff949a79b0a`, pushed to `origin/main`, and confirmed with `git ls-remote` at that exact hash.
+
+### 2026-10-11 — CHR-192 Gallery-to-Studio return regression
+
+- CHR-192 file: `test/editor_wireframe_behaviour.mjs`. Added a Gallery ↔ Studio interaction regression that checks the current photo index and object identity survive the round trip, then confirms the Masks rail is visible and opens its controls without changing selection.
+- Verification: focused Playwright case, JavaScript syntax check, Editor HTML validity check, and `git diff --check` pass. This covers preserving the active photo through view changes; restoring a browsed folder/selection and the other navigation/layout acceptance criteria remain open.
+- Publication: pending integration and remote verification.

@@ -275,6 +275,30 @@ test.describe('rail', () => {
     await expect.poll(() => page.evaluate(() => fxCurIdx)).toBe(selectedPhoto);
   });
 
+  test('Gallery returns to the same selected photo in Studio', async ({ editor: { page } }) => {
+    const skipGuide = page.locator('#cs-modal-ov [data-guide-skip]');
+    if (await skipGuide.count()) await skipGuide.click();
+    await page.getByRole('button', { name: 'Studio' }).click();
+    const originalIndex = await page.evaluate(() => {
+      window.__galleryReturnPhoto = fxImages[fxCurIdx];
+      return fxCurIdx;
+    });
+    expect(await page.evaluate(() => !!window.__galleryReturnPhoto)).toBe(true);
+
+    await page.locator('#cs-tog-lib').click();
+    await expect(page.locator('#lib-overlay')).toHaveClass(/\bfull\b/);
+    await page.getByRole('button', { name: 'Studio' }).click();
+    await expect(page.locator('#lib-overlay')).not.toHaveClass(/\bfull\b/);
+    await expect.poll(() => page.evaluate(() => fxCurIdx)).toBe(originalIndex);
+    expect(await page.evaluate((index) => fxImages[index] === window.__galleryReturnPhoto, originalIndex)).toBe(true);
+    const masksRailButton = page.locator('#fx-toolrail [data-sec="masks"]');
+    await expect(masksRailButton).toBeVisible();
+    await masksRailButton.click();
+    await expect(page.locator('.fx-ctrl[data-fxsec="local"]')).toHaveClass(/sec-active/);
+    await expect.poll(() => page.evaluate(() => fxCurIdx)).toBe(originalIndex);
+    await page.evaluate(() => { delete window.__galleryReturnPhoto; });
+  });
+
   test('clicking a rail item opens its panel section', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="adjust"]');
     await expect(page.locator('[data-fxsec="adjust"]')).toHaveClass(/sec-active|active/).catch(async () => {
