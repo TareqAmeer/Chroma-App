@@ -1512,6 +1512,12 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Feature commit `361c0aa7` is integrated as `dbda25de4ef490c3aed2f32093156de7ab04a747`; the clean integration checkout passes the seven JS batch tests and the focused skipped-item native regression (1/1).
 - A fresh fetch and `git ls-remote origin refs/heads/main` verified `origin/main` at `dbda25de4ef490c3aed2f32093156de7ab04a747`, containing the CHR-273 retry fix. Restart reporting and complete UI acceptance remain open; issue remains In Progress.
 
+### 2026-10-11 — CHR-273 retry and restart browser evidence
+
+- Extended the Library mock to produce a skipped item and expanded `test/recipe_batch_ui.mjs` to verify progress counts, failed/skipped reasons, selecting both retryable outcomes, retry, and exact undo in dark and light themes. Refactored the existing startup recovery path into a callable helper and added `test/recipe_batch_recovery.mjs` to seed a persisted interrupted journal, verify next-launch reporting, and resume pending/failed items. Files: `desktop/library-ui.js`, `test/recipe_batch_ui.mjs`, `test/recipe_batch_recovery.mjs`.
+- Verification: startup recovery Playwright scenario passes; existing mixed failed/skipped retry + undo Playwright flow passes in dark/light; `node --test test/recipe_batch.mjs` passes 7/7; JS syntax and `git diff --check` pass. The focused Rust test could not build in this fresh worktree because required ignored asset `desktop/src-tauri/vendor/sam2/encoder.onnx` is absent; no Rust source changed.
+- CHR-273 AC1, AC2, and AC4 now have browser and native-journal evidence; AC3, AC7, and other real-catalog performance/restart edge cases remain open. Status stays In Progress pending the remaining end-to-end and responsiveness criteria.
+
 ### 2026-10-11 — CHR-253 embedded hair matte
 
 - Added a macOS desktop Hair Matte action and generalized embedded portrait matte import for hair and teeth, including per-photo extraction reuse/locking, editable raster Brush masks, provenance, and photo identity checks after both extraction and PNG decode. Files: `chromasmith-22.html`, `test/teeth_whitening.mjs`, `test/mask_depth_preview.mjs`.

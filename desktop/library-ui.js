@@ -61,10 +61,19 @@
   // Virtual-copy state for the harness, so the version rows in the context menu are reachable
   // without a real sidecar on disk.
   let ltVersions = [], ltActive = 0;
-  const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set();
+  const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set(), ltBatchSkips = new Set();
   let ltFailNextSidecarWrite = false;
   if (LIBTEST) {
     window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
+    window.libtestRecipeBatchSkipNext = indices => { indices.forEach(i => ltBatchSkips.add(i)); };
+    if (/[?&]libtestBatchRecovery=1/.test(location.search)) {
+      const id = 27301;
+      ltRecipeBatches.set(id, { id, label: 'Interrupted paste', status: 'running', createdAt: Date.now(), items: [
+        { index: 0, path: '/test/Photos/applied.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'applied', error: null },
+        { index: 1, path: '/test/Photos/pending.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'pending', error: null },
+        { index: 2, path: '/test/Photos/failed.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'failed', error: 'Simulated interrupted write failure' },
+      ] });
+    }
     window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
     window.__libtestSeedSidecar = (path, sidecar) => {
       const value = { rating: 0, label: '', color_label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
@@ -204,6 +213,7 @@
         const batch = ltRecipeBatches.get(A.id), item = batch.items[A.index];
         if (batch.status !== 'running') return Promise.resolve(structuredClone(item));
         if (ltBatchFailures.delete(item.index)) { item.status = 'failed'; item.error = 'Simulated sidecar write failure'; }
+        else if (ltBatchSkips.delete(item.index)) { item.status = 'skipped'; item.error = 'Skipped by test fixture'; }
         else { ltBatchSidecars.set(item.path, { ...item.before, recipe: item.recipe, edited: true }); item.status = 'applied'; item.error = null; }
         if (!batch.items.some(i => i.status === 'pending')) batch.status = 'completed';
         return Promise.resolve(structuredClone(item));
@@ -13524,17 +13534,21 @@
   /// pill), but now ALSO mirrors progress here so there's one consistent place showing "is
   /// anything running" regardless of which feature started it. `patch.cancelFn`, if given, wires
   /// the pill's own Cancel button; omit it for a job with no cancel path.
-  if (!LIBTEST) setTimeout(() => { invoke('recipe_batch_list').then(async batches => {
+  async function recoverInterruptedRecipeBatch() {
+    const batches = await invoke('recipe_batch_list');
     const unfinished = batches.find(b => ['running', 'undoing'].includes(b.status) || b.pending || b.failed);
-    if (unfinished) {
-      let batch = await invoke('recipe_batch_get', { id: unfinished.id });
-      // A renderer restart has no worker for this journal. Persist interruption so native
-      // undo and the report agree; Resume explicitly restarts its remaining items.
-      if (['running', 'undoing'].includes(batch.status)) batch = await invoke('recipe_batch_cancel', { id: batch.id });
-      showRecipeBatch(batch);
-      toast('Unfinished batch edits are available in Edit → Batch edit history');
-    }
-  }).catch(e => console.error('batch recovery', e)); }, 0);
+    if (!unfinished) return null;
+    let batch = await invoke('recipe_batch_get', { id: unfinished.id });
+    // A renderer restart has no worker for this journal. Persist interruption so native
+    // undo and the report agree; Resume explicitly restarts its remaining items.
+    if (['running', 'undoing'].includes(batch.status)) batch = await invoke('recipe_batch_cancel', { id: batch.id });
+    showRecipeBatch(batch);
+    toast('Unfinished batch edits are available in Edit → Batch edit history');
+    return batch;
+  }
+  if (LIBTEST) window.libtestRecoverInterruptedRecipeBatch = recoverInterruptedRecipeBatch;
+  if (!LIBTEST || /[?&]libtestBatchRecovery=1/.test(location.search))
+    setTimeout(() => recoverInterruptedRecipeBatch().catch(e => console.error('batch recovery', e)), 0);
   window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
   window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };
 

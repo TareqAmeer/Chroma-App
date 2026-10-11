@@ -37,6 +37,7 @@ try {
     source.sliders['nr-color-detail'] = 82;
     window.__copiedRecipe = btoa(unescape(encodeURIComponent(JSON.stringify(source))));
     window.libtestRecipeBatchFailNext([1]);
+    window.libtestRecipeBatchSkipNext([2]);
   });
   const cards = page.locator('#lib-grid .lib-card[data-path]');
   const paths = [];
@@ -74,7 +75,7 @@ try {
   assert.ok(first, 'no journal/errors ' + JSON.stringify(errors) + ': ' + JSON.stringify(await page.evaluate(() => ({ calls: window.__libtestRecipeBatchCalls, text: document.body.innerText.slice(-2000) }))));
   assert.equal(typeof first.id, 'number');
   assert.deepEqual(first.items.map(item => item.path).sort(), paths.slice().sort());
-  assert.deepEqual(first.items.map(item => item.status), ['applied', 'failed', 'applied']);
+  assert.deepEqual(first.items.map(item => item.status), ['applied', 'failed', 'skipped']);
   const recipes = await page.evaluate(items => items.filter(i => i.status === 'applied').map(i => JSON.parse(decodeURIComponent(escape(atob(i.recipe))))), first.items);
   recipes.forEach(recipe => {
     assert.equal(recipe.sliders['adj-exp'], 30);
@@ -98,6 +99,8 @@ try {
   await page.evaluate(async () => { if (!document.querySelector('#lib-overlay').classList.contains('on')) await window.chromasmithToggleLibrary(); });
   if (!(await page.locator('#lib-overlay').evaluate(el => el.classList.contains('full')))) await page.keyboard.press('g');
   await page.locator('#lib-act-pill').click();
+  const activitySummary = await page.locator('#lib-act-pill').innerText();
+  assert.match(activitySummary, /1 applied · 1 failed · 0 pending · 1 skipped/);
   await page.screenshot({ path: "test/output/recipe-batch-" + theme + '-activity.png' });
   await page.locator('#lib-act-batch-results').click({ timeout: 5000 });
   await page.locator('dialog[open] table tbody tr').first().waitFor();
@@ -108,10 +111,13 @@ try {
   assert.notEqual(dialogTheme.background, dialogTheme.text);
   if(theme==='light') assert.notEqual(dialogTheme.background, 'rgb(32, 32, 36)', 'light dialog must use theme background');
   assert.equal(await page.locator('dialog[open] table tbody tr').count(), 3);
+  const reasons = await page.locator('dialog[open] table tbody').innerText();
+  assert.match(reasons, /failed: Simulated sidecar write failure/);
+  assert.match(reasons, /skipped: Skipped by test fixture/);
   await page.locator('dialog[open] [data-action="select"]').click();
   await page.waitForTimeout(200);
   const selectedPaths = await page.locator('#lib-grid .lib-card.multi').evaluateAll(nodes => nodes.map(n => n.dataset.path));
-  assert.deepEqual(selectedPaths, [first.items[1].path]);
+  assert.deepEqual(selectedPaths, [first.items[1].path, first.items[2].path]);
   await page.evaluate(() => window.chromasmithRecipeBatchHistory());
   await page.locator(`dialog[open] [data-batch="${first.id}"]`).click();
   await page.locator('dialog[open] [data-action="resume"]').click();
@@ -130,7 +136,7 @@ try {
   assert.equal(untouchedAfterUndo.recipe, originalRecipes[untouchedPath]);
   assert.deepEqual(errors, [], `browser console/page errors; failed responses: ${failedResponses.join(', ')}`);
   assert.deepEqual(failedResponses, [], 'all app resources should load');
-  console.log(theme + ' PASS: Detail/NR selective paste to 3 photos; per-photo values preserved outside selected categories; unselected identity; retry and exact undo.');
+  console.log(theme + ' PASS: Detail/NR selective paste; applied/failed/skipped counts and reasons; selected failure+skip retry; exact undo.');
   await page.close();
   }
 } finally {
