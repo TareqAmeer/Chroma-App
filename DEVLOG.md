@@ -1436,3 +1436,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Corrected the native Playwright gate to observe arrow-key actions at window capture before the app’s document shortcut handler, and added a verified same-process warmed-session resume mode. Node syntax validation passes.
 - Measured six keyboard-to-sharp frames at 35.295–50.725 ms (median 49.443 ms) and the 1:1 detail view at 404.135 ms on a decoded 8256×5504 CC0 Nikon Z 7 RAW; all samples pass the 100 ms / 500 ms targets. Hardware, debug build, app commit, cache state, fixture limits, and machine-readable results are recorded in `docs/validation/chr267/native-perf-2026-10-11.md` and its JSON report.
 - Validation evidence is complete for CHR-267’s two remaining timing criteria; this is warm-cache repeated navigation of two paths to one capture, not cold decode or multi-image-set proof. No production rendering code changed in this measurement slice.
+
+### 2026-10-11 — CHR-267 performance publication verification
+
+- Native timing evidence and the corrected measurement gate were published to `origin/main` in integration commit `3011dca125c112c533504fbf9e812afd24c198b0` (task feature commit `5f8368bb08e9f77d464e5592d6c3f8a133197a77`).
+- After push, `git fetch origin main` and `git ls-remote origin refs/heads/main` both confirmed `origin/main` at `3011dca125c112c533504fbf9e812afd24c198b0`; the published integration is an ancestor of the remote branch.
