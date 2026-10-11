@@ -264,11 +264,11 @@ async function main() {
       const beforeNoMatte = JSON.stringify(getUISnapshot()), nativeInvoke = window.__TAURI__.core.invoke;
       delete fxImages[0]._embeddedAuxiliaryPromise;
       window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); return []; };
-      await mskAddEmbeddedTeethWhitening();
-      eck('missing embedded teeth matte leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
-      delete fxImages[0]._embeddedAuxiliaryPromise;
-      await mskAddEmbeddedHairMatte();
-      eck('missing embedded hair matte leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+      for(const kind of ['teeth','hair','skin','glasses','sky']){
+        delete fxImages[0]._embeddedAuxiliaryPromise;
+        if(kind==='teeth')await mskAddEmbeddedTeethWhitening();else await mskAddEmbeddedPortraitMatte(kind);
+        eck(`missing embedded ${kind} matte leaves masks unchanged`,JSON.stringify(getUISnapshot())===beforeNoMatte);
+      }
       delete fxImages[0]._embeddedAuxiliaryPromise;
       const emptyCanvas = document.createElement('canvas'); emptyCanvas.width = matteWidth; emptyCanvas.height = matteHeight;
       const emptyContext = emptyCanvas.getContext('2d'); emptyContext.fillStyle = '#000'; emptyContext.fillRect(0, 0, matteWidth, matteHeight);
