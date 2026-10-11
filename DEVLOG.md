@@ -1429,3 +1429,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added `focus_run_flags_generated_soft_image_in_blurry_only_query` to `desktop/src-tauri/src/catalog.rs`. It generates a local low-detail JPEG, indexes it, creates an offline thumbnail, runs focus scoring, then asserts stored score/flag data appears in `blurry_only`. Issue CHR-269.
 - Verification: targeted `cargo test --bin chromasmith focus_run_flags_generated_soft_image_in_blurry_only_query -j 1` passes 1/1. Labelled precision/recall and other culling criteria remain open.
+- Publication verified: integration commit `70a3334c998906f756f3dc90a003bd31a9aa9dd5` includes the CHR-247 test correction and CHR-269 regression; post-push `git fetch origin main` and `git ls-remote` both confirmed `origin/main` at that hash.
