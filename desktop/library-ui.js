@@ -26,6 +26,19 @@
   let rawReviewActive = false;
   let rawReviewActiveJob = null;
   const rawReviewQueue = [];
+  let rawFaceReviewSession = null;
+  let rawFaceReviewSessionId = 0;
+  function retireRawFaceReviewSession() {
+    const session = rawFaceReviewSession;
+    if (!session) return;
+    session.cancelled = true;
+    rawFaceReviewSession = null;
+    session.wrap?.remove();
+    for (const url of session.urls || []) URL.revokeObjectURL(url);
+    session.urls?.clear();
+    const queued = rawReviewQueue.findIndex((job) => job.kind === 'face-review' && job.ownerJobId === session.jobId);
+    if (queued >= 0) rawReviewQueue.splice(queued, 1)[0].reject(new Error('RAW face review superseded'));
+  }
   function queueRawReview(path, load, kind = 'quicklook', ownerJobId = null) {
     return new Promise((resolve, reject) => {
       rawReviewQueue.push({ path, load, resolve, reject, kind, ownerJobId });
@@ -44,10 +57,11 @@
   function pumpRawReview() {
     if (rawReviewActive || !rawReviewQueue.length) return;
     const current = rawReviewQueue.findIndex((job) => job.kind === 'quicklook' && job.path === quicklook.path);
-    // Quick Look requests remain ahead of background preparation even when speculative; the
-    // current image is preferred within that lane. A preparation item is only queued on demand.
+    // Quick Look requests remain ahead of background work even when speculative; the current
+    // image wins within that lane. Explicit face review then outranks bulk preparation.
     const quicklookIndex = current >= 0 ? current : rawReviewQueue.findIndex((job) => job.kind === 'quicklook');
-    const job = rawReviewQueue.splice(quicklookIndex >= 0 ? quicklookIndex : 0, 1)[0];
+    const faceReviewIndex = rawReviewQueue.findIndex((job) => job.kind === 'face-review');
+    const job = rawReviewQueue.splice(quicklookIndex >= 0 ? quicklookIndex : faceReviewIndex >= 0 ? faceReviewIndex : 0, 1)[0];
     rawReviewActive = true;
     rawReviewActiveJob = job;
     Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; rawReviewActiveJob = null; pumpRawReview(); });
@@ -3709,6 +3723,7 @@
     window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
     window.__libShowQuickLook = (p) => showQuickLook(p);
+    window.__libtestOpenFaceCloseups = (path) => openPhotoPeopleEditor([path], { closeups: true });
     window.__libtestPrepareRawReviewPreviews = (paths) => prepareRawReviewPreviews(paths);
     window.__libtestCancelRawReviewPreviews = () => _rawReviewPrep?.cancel();
     window.__libtestRawReviewState = () => ({ active: rawReviewActiveJob ? { path: rawReviewActiveJob.path, kind: rawReviewActiveJob.kind } : null,
@@ -12131,10 +12146,59 @@
     } catch (err) { toast(humanizeErr('import from Google Photos', err), 'err'); }
   }
 
+  // RAW close-up crops must originate from the same developed display proxy used by Quick Look.
+  // One proxy request is shared across every face in this photo's panel; native keeps its
+  // recipe-aware face-crop cache, while these returned crop bytes are never put in the legacy
+  // face-id-only People avatar cache.
+  function loadRawReviewFaceCrop(session, faceId, imgEl) {
+    const isSessionCurrent = () => !session.cancelled && rawFaceReviewSession === session;
+    const isImageCurrent = () => isSessionCurrent() && imgEl.isConnected;
+    imgEl.alt = 'Developed RAW face crop loading';
+    if (!session.proxyPromise) {
+      session.proxyPromise = (async () => {
+        const settings = await rawCacheSettings(session.path, 'review');
+        if (!isSessionCurrent()) return null;
+        try {
+          const asset = await queueRawReview(session.path,
+            () => session.cancelled ? null : cacheOneRaw(session.path, 'review', settings),
+            'face-review', session.jobId);
+          return asset && isSessionCurrent() ? settings.recipeKey : null;
+        } catch (error) {
+          if (!isSessionCurrent()) return null;
+          throw error;
+        }
+      })();
+    }
+    session.proxyPromise.then((rawReviewRecipeKey) => {
+      if (!rawReviewRecipeKey || !isImageCurrent()) return null;
+      return invoke('catalog_face_crop', { faceId, rawReviewRecipeKey });
+    }).then((buf) => {
+      if (!buf || !isImageCurrent()) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      session.urls.add(url);
+      imgEl.src = url;
+      imgEl.alt = 'Developed RAW face crop';
+      imgEl.classList.add('loaded');
+    }).catch(() => {
+      if (!isImageCurrent()) return;
+      imgEl.alt = 'Developed RAW face crop unavailable';
+      imgEl.classList.add('failed');
+    });
+  }
+
   // ── People editor for selected photos (grid right-click ▸ People…) ────────────────────────
   // Every face in the selection, grouped by person: rename a face, remove a wrong tag (remembered,
   // so auto-tagging never re-adds it), or remove one person from all selected photos at once.
   async function openPhotoPeopleEditor(paths, { closeups = false } = {}) {
+    // A close-up panel is a photo-scoped review session. Retiring it invalidates outstanding
+    // async work and removes any queued (not yet decoding) proxy request; an active decode may
+    // finish and populate the shared disk proxy, but cannot paint a later panel.
+    retireRawFaceReviewSession();
+    const reviewPath = closeups ? paths[0] : '';
+    const reviewSession = closeups && RAW_EXT_RE.test(reviewPath)
+      ? { jobId: `raw-face-review-${++rawFaceReviewSessionId}`, path: reviewPath, cancelled: false, urls: new Set() }
+      : null;
+    rawFaceReviewSession = reviewSession;
     const MAX = 200;
     const faces = [];
     for (const path of paths.slice(0, MAX)) {
@@ -12143,8 +12207,10 @@
       const fs = await invoke('catalog_faces_for_path', { path, stack: !closeups }).catch(() => []);
       (fs || []).forEach((f) => faces.push(f));
     }
+    if (closeups && reviewSession && (reviewSession.cancelled || rawFaceReviewSession !== reviewSession)) return;
     const wrap = document.createElement('div');
     wrap.id = 'lib-people-edit';
+    if (reviewSession) reviewSession.wrap = wrap;
     if (closeups) wrap.classList.add('lib-face-closeups');
     wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
     const render = () => {
@@ -12168,7 +12234,7 @@
         </div>`).join('');
       wrap.innerHTML = `<div class="lib-pe-card" role="dialog" aria-modal="true" aria-label="${closeups ? 'Face close-ups' : 'People in selected photos'}">
           <div class="lib-pe-top"><span>${closeups ? `Face close-ups — ${esc(baseName(paths[0]))}` : `People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}`}</span><button type="button" class="lib-btn" data-close aria-label="${closeups ? 'Close face close-ups' : 'Close people editor'}">Done</button></div>
-          ${closeups ? '<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.</p>' : ''}
+          ${closeups ? `<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.${reviewSession ? ' RAW crops use a developed fit preview; use the Editor for full-resolution detail.' : ''}</p>` : ''}
           ${faces.length ? sections : `<div class="mut" style="padding:20px 0">${closeups ? 'No faces have been scanned in this photo yet.' : 'No faces found in the selected photos.'}</div>`}
           ${paths.length > MAX ? `<div class="mut" style="font-size:11px">Showing the first ${MAX} photos.</div>` : ''}
         </div>`;
@@ -12178,7 +12244,11 @@
         el.onclick = openMenu;
         el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openMenu(ev); } };
       });
-      wrap.querySelectorAll('.lib-face-closeup-item').forEach((el) => loadFaceCrop(parseInt(el.dataset.faceId, 10), el.querySelector('img')));
+      wrap.querySelectorAll('.lib-face-closeup-item').forEach((el) => {
+        const faceId = parseInt(el.dataset.faceId, 10), img = el.querySelector('img');
+        if (!reviewSession) { loadFaceCrop(faceId, img); return; }
+        loadRawReviewFaceCrop(reviewSession, faceId, img);
+      });
       wrap.querySelectorAll('[data-remove-person]').forEach((b) => {
         b.onclick = async () => {
           const pid = parseInt(b.dataset.removePerson, 10);
@@ -12188,7 +12258,12 @@
       });
       wrap.querySelector('[data-close]').onclick = close;
     };
-    const close = () => { wrap.remove(); if (!closeups) { refreshPeople(); refreshView(); } };
+    const close = () => {
+      wrap.remove();
+      if (reviewSession && rawFaceReviewSession === reviewSession) retireRawFaceReviewSession();
+      for (const url of reviewSession?.urls || []) URL.revokeObjectURL(url);
+      if (!closeups) { refreshPeople(); refreshView(); }
+    };
     const untag = async (ids) => {
       try {
         await invoke('catalog_untag_faces', { faceIds: ids });

@@ -4240,12 +4240,12 @@ fn record_pet_sighting_run(
 /// that photo once. Cropped+resized result is cached again under its own key so repeat renders
 /// (the same person's row in three different views) don't even re-touch the source thumbnail.
 #[tauri::command]
-pub async fn catalog_face_crop(app: tauri::AppHandle, face_id: i64) -> Result<tauri::ipc::Response, String> {
+pub async fn catalog_face_crop(app: tauri::AppHandle, face_id: i64, raw_review_recipe_key: Option<String>) -> Result<tauri::ipc::Response, String> {
     // Off the main thread: a cache miss decodes a 1600px preview, and the People sidebar asks
     // for every person's crop on each refresh — sync, that froze the app after every face edit.
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
-        face_crop_run(&app.state::<CatalogState>(), face_id)
+        face_crop_run(&app.state::<CatalogState>(), face_id, raw_review_recipe_key.as_deref())
     })
     .await
     .map_err(|e| format!("catalog_face_crop task panicked: {e}"))?
@@ -4276,7 +4276,7 @@ pub async fn catalog_face_preview(app: tauri::AppHandle, face_id: i64) -> Result
     .map_err(|e| format!("catalog_face_preview task panicked: {e}"))?
 }
 
-fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Response, String> {
+fn face_crop_run(state: &CatalogState, face_id: i64, raw_review_recipe_key: Option<&str>) -> Result<tauri::ipc::Response, String> {
     let (photo_id, x0, y0, x1, y1): (i64, f32, f32, f32, f32) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         conn.query_row(
@@ -4302,9 +4302,22 @@ fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Respo
         abs_path(&last_path, is_local != 0, &rel_path)
     };
 
-    // v2: source switched from the 360px grid thumbnail to the 1600px quicklook preview — bump
-    // the key or every already-cached (pixelated) v1 crop keeps being served forever.
-    let cache_key = format!("face-{face_id}-v2.jpg");
+    let is_raw = Path::new(&path).extension().and_then(|e| e.to_str())
+        .map(|ext| crate::formats::is_raw_ext(&ext.to_ascii_lowercase())).unwrap_or(false);
+    if is_raw && raw_review_recipe_key.is_some_and(|key| key.trim().is_empty()) {
+        return Err("RAW review recipe key is empty".into());
+    }
+    let raw_review_recipe_key = if is_raw { raw_review_recipe_key } else { None };
+    // RAW review crops are tied to the exact developed proxy and normalized detector box. A
+    // changed source/profile/box therefore cannot keep serving an old camera-preview crop.
+    // People & Pets retains its v2 key and source behavior when no review recipe is supplied.
+    let cache_key = match raw_review_recipe_key {
+        Some(recipe_key) => {
+            let proxy = crate::library::get_display_decode_cache_path(path.clone(), recipe_key.to_string(), 2560)?;
+            face_review_crop_cache_key(&proxy, face_id, [x0, y0, x1, y1])
+        }
+        None => format!("face-{face_id}-v2.jpg"),
+    };
     let cache_path = crate::library::cache_dir().join(&cache_key);
     if let Ok(bytes) = std::fs::read(&cache_path) {
         if bytes.len() > 128 {
@@ -4318,7 +4331,7 @@ fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Respo
     // "the faces are so pixelated it's hard to tell who it is". `quicklook_preview_bytes` is the
     // same 1600px-long-edge tier Quick Look already uses (RAW: camera's own embedded preview, no
     // full demosaic — still fast), giving ~4.4x the linear source resolution to crop from.
-    let thumb_bytes = crate::library::quicklook_preview_bytes(&path)?;
+    let (thumb_bytes, _) = face_crop_source(&path, raw_review_recipe_key)?;
     let img = image::load_from_memory(&thumb_bytes).map_err(|e| format!("decode preview: {e}"))?;
     let (w, h) = (img.width() as f32, img.height() as f32);
 
@@ -4349,6 +4362,26 @@ fn face_crop_run(state: &CatalogState, face_id: i64) -> Result<tauri::ipc::Respo
         .map_err(|e| format!("encode face crop: {e}"))?;
     let _ = std::fs::write(&cache_path, &out);
     Ok(tauri::ipc::Response::new(out))
+}
+
+/// RAW review must use the developed proxy prepared for this recipe. A missing proxy is an
+/// explicit miss; it must not silently substitute the camera-rendered embedded preview.
+fn face_crop_source(path: &str, raw_review_recipe_key: Option<&str>) -> Result<(Vec<u8>, Option<String>), String> {
+    if let Some(recipe_key) = raw_review_recipe_key {
+        let is_raw = Path::new(path).extension().and_then(|e| e.to_str())
+            .map(|ext| crate::formats::is_raw_ext(&ext.to_ascii_lowercase())).unwrap_or(false);
+        if !is_raw { return Err("RAW review source requires a RAW photo".into()); }
+        if recipe_key.trim().is_empty() { return Err("RAW review recipe key is empty".into()); }
+        let proxy_path = crate::library::get_display_decode_cache_path(path.to_string(), recipe_key.to_string(), 2560)?;
+        let bytes = std::fs::read(&proxy_path).map_err(|e| format!("read developed RAW face source: {e}"))?;
+        return Ok((bytes, Some(proxy_path)));
+    }
+    crate::library::quicklook_preview_bytes(path).map(|bytes| (bytes, None))
+}
+
+fn face_review_crop_cache_key(proxy_identity: &str, face_id: i64, bbox: [f32; 4]) -> String {
+    let bbox_key = bbox.iter().map(|value| format!("{:08x}", value.to_bits())).collect::<String>();
+    format!("face-{face_id}-review-{:016x}.jpg", fnv1a_str(&format!("{proxy_identity}|{bbox_key}")))
 }
 
 // ── Face embedding (AI stack Phase B, part 1) — ArcFace, resumable via `photo_faces.embedding IS
@@ -9583,6 +9616,52 @@ pub fn catalog_keywords(state: tauri::State<CatalogState>) -> Result<Vec<Keyword
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_face_review_uses_developed_proxy_and_source_aware_crop_keys() {
+        let source = std::env::temp_dir().join(format!("cs_face_review_{}_{}.NEF", std::process::id(), gen_id()));
+        let source_b = std::env::temp_dir().join(format!("cs_face_review_other_{}_{}.NEF", std::process::id(), gen_id()));
+        std::fs::write(&source, b"synthetic RAW source without embedded preview").unwrap();
+        std::fs::write(&source_b, b"different synthetic RAW source").unwrap();
+        let source_str = source.to_string_lossy().into_owned();
+        let source_b_str = source_b.to_string_lossy().into_owned();
+        let recipe_a = format!("face-review-a-{}", gen_id());
+        let recipe_b = format!("face-review-b-{}", gen_id());
+        let rgba = image::RgbaImage::from_pixel(600, 400, image::Rgba([210, 35, 75, 255])).into_raw();
+        let mut stage = std::time::Instant::now();
+        let proxy_a = crate::library::write_display_cache_from_rgba(&source_str, &recipe_a, 600, 400, &rgba,
+            2560, "synthetic.NEF", &mut stage).unwrap();
+        let proxy_b = crate::library::write_display_cache_from_rgba(&source_str, &recipe_b, 600, 400, &rgba,
+            2560, "synthetic.NEF", &mut stage).unwrap();
+        let source_proxy_b = crate::library::write_display_cache_from_rgba(&source_b_str, &recipe_a, 600, 400, &rgba,
+            2560, "synthetic.NEF", &mut stage).unwrap();
+
+        let (developed_bytes, identity) = face_crop_source(&source_str, Some(&recipe_a)).unwrap();
+        assert_eq!(identity.as_deref(), Some(proxy_a.as_str()));
+        assert_eq!(developed_bytes, std::fs::read(&proxy_a).unwrap(), "review must consume the developed proxy bytes");
+        let developed = image::load_from_memory(&developed_bytes).unwrap().to_rgb8();
+        let pixel = developed.get_pixel(developed.width() / 2, developed.height() / 2);
+        assert!((pixel[0] as i16 - 210).abs() < 12 && (pixel[1] as i16 - 35).abs() < 12
+            && (pixel[2] as i16 - 75).abs() < 12, "unexpected developed proxy pixel: {pixel:?}");
+
+        let bbox = [0.1, 0.2, 0.6, 0.8];
+        let key_a = face_review_crop_cache_key(&proxy_a, 73, bbox);
+        assert_eq!(key_a, face_review_crop_cache_key(&proxy_a, 73, bbox));
+        assert_ne!(key_a, face_review_crop_cache_key(&proxy_a, 73, [0.11, 0.2, 0.6, 0.8]));
+        assert_ne!(key_a, face_review_crop_cache_key(&proxy_a, 74, bbox));
+        assert_ne!(key_a, face_review_crop_cache_key(&proxy_b, 73, bbox), "profile-specific source proxy must invalidate crop cache");
+        assert_ne!(key_a, face_review_crop_cache_key(&source_proxy_b, 73, bbox), "different RAW source must invalidate crop cache");
+
+        let missing_recipe = format!("face-review-missing-{}", gen_id());
+        let missing = face_crop_source(&source_str, Some(&missing_recipe)).unwrap_err();
+        assert!(missing.contains("no cached display proxy"), "missing developed proxy must not fall back to camera preview: {missing}");
+
+        std::fs::remove_file(proxy_a).unwrap();
+        std::fs::remove_file(proxy_b).unwrap();
+        std::fs::remove_file(source_proxy_b).unwrap();
+        std::fs::remove_file(source).unwrap();
+        std::fs::remove_file(source_b).unwrap();
+    }
 
     fn temp_db() -> Connection {
         let dir = std::env::temp_dir().join(format!("cs_catalog_{}_{}", std::process::id(), gen_id()));
