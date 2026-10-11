@@ -12347,6 +12347,37 @@ mod tests {
         assert!(laplacian_variance_from_jpeg(&tiny).is_none(), "too small to say anything meaningful — must decline, not fabricate a score");
     }
 
+    /// Covers the complete local pipeline with deterministic image data: ingest a generated
+    /// low-detail JPEG, create its offline thumbnail, score it, then read it through the query
+    /// used by the blurry-review surface. This deliberately has no dependency on geneva/.
+    #[test]
+    fn focus_run_flags_generated_soft_image_in_blurry_only_query() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("focus_blurry_query");
+        let source = dir.join("soft.jpg");
+        std::fs::write(&source, encode_gray_jpeg(128, 128, |_, _| 128)).unwrap();
+
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        let scan = scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(scan.added, 1, "generated source image must be indexed");
+        let thumbs = thumbnail_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(thumbs.generated, 1, "offline thumbnail must be generated before focus scoring");
+
+        let focus = focus_run(&conn, &mut |_| {}, &cancel).unwrap();
+        assert_eq!(focus.scored, 1);
+        assert_eq!(focus.flagged, 1, "uniform image has no edge detail and should be flagged as blurry");
+
+        let page = query_run(&conn, CatalogQuery { blurry_only: true, ..Default::default() }).unwrap();
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].name, "soft.jpg");
+        assert!(page.entries[0].blurry);
+        assert!(page.entries[0].sharpness.unwrap() < FOCUS_BLUR_THRESHOLD);
+
+        std::fs::remove_file(offline_thumb_path(1)).ok();
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// End-to-end against a real photo (skipped cleanly if geneva/ isn't present, same posture
     /// as the other real-file tests in this module): focus_run only scores photos that already
     /// have an offline thumbnail, marks `blurry` from the threshold, and is resumable exactly
