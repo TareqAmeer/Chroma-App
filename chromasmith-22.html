@@ -7338,7 +7338,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011U';
+const BUILD='1.1011V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -28854,14 +28854,15 @@ function _eachSection(cb){
 // the rail button and the tool. Members are listed in FX_SECTIONS order for readability; the
 // button is emitted at whichever member buildToolRail reaches first, and the cards stack in
 // DOM order regardless of this array.
-// Swiss v2 (2026-09-28): the rail is five stages. Each stage stacks its member cards in one
+// Swiss v2 (2026-09-28): the rail groups related stages. Each stage stacks its member cards in one
 // scrolling panel with sticky titles, and a sub-tab row (sk2SubTabs) jumps between them.
-// Crop / Masks / Retouch sit inside stages now; they are still button-driven, so stacking them
-// does not switch any tool on by itself. Old nine-group layout: git tag pre-swiss-v2.
+// Crop and Retouch remain inside stages; Masks has a first-class destination so it no longer
+// requires scanning the Texture stage. Old nine-group layout: git tag pre-swiss-v2.
 const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks','filmneg']},
   light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
   colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
-  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','redeye','local']},
+  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','redeye']},
+  masks:{label:'Masks',icon:'local',members:['local']},
   output:{label:'Crop',icon:'crop',members:['crop','rotate','straighten','borders','canvas','export','wm','exppreset','style','share']}};
 const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
 // Desktop/web panel: the Looks card is two tools, not one — the preset library ("Looks", with its

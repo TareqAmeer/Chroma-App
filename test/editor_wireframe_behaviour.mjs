@@ -256,6 +256,25 @@ test.describe('left cluster: undo/redo/show original/full resolution', () => {
 // TOOL RAIL
 // ════════════════════════════════════════════════════════════════════════════════════════════
 test.describe('rail', () => {
+  test('Masks has a direct rail destination and opens its controls without changing the selected photo', async ({ editor: { page } }) => {
+    const skipGuide = page.locator('#cs-modal-ov [data-guide-skip]');
+    if (await skipGuide.count()) await skipGuide.click();
+    await page.getByRole('button', { name: 'Studio' }).click();
+    await page.evaluate(() => {
+      document.body.classList.add('deskx');
+      localStorage.setItem('cs_rail_flat', '0');
+      buildToolRail();
+    });
+    const selectedPhoto = await page.evaluate(() => fxCurIdx);
+    const masksRailButton = page.locator('#fx-toolrail [data-sec="masks"]');
+    await expect(masksRailButton).toBeVisible();
+    await expect(masksRailButton).toHaveAttribute('aria-label', 'Masks');
+    await masksRailButton.click();
+    await expect(page.locator('.fx-ctrl[data-fxsec="local"]')).toHaveClass(/sec-active/);
+    await expect(masksRailButton).toHaveClass(/on/);
+    await expect.poll(() => page.evaluate(() => fxCurIdx)).toBe(selectedPhoto);
+  });
+
   test('clicking a rail item opens its panel section', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="adjust"]');
     await expect(page.locator('[data-fxsec="adjust"]')).toHaveClass(/sec-active|active/).catch(async () => {
