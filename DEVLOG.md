@@ -1583,3 +1583,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Verification: the focused subprocess test passes; all recipe-batch Rust tests pass (9 passed, 1 ignored); recipe-batch JavaScript unit tests pass 7/7. The browser recovery UI test was not rerun in this checkout because Playwright is absent; its prior passing result is documented above.
 - Process-boundary persistence plus the existing startup-reporting UI test covers interrupted-job reporting and resume. The tests exercise native persistence and UI orchestration separately; no single Tauri GUI/native-catalog relaunch test was run.
 - Published as integration commit `d4388704f8fdc23f6d09278bf4970c749a1c96f5`; a fresh `git ls-remote origin refs/heads/main` confirmed that exact commit on the remote. The feature commit is contained in the published history.
+
+### 2026-10-11 — CHR-246 real-photo MI-GAN quality check
+
+- Added a reusable, attributed 4000×3000 Wikimedia Commons power-line photograph at `test/fixtures/chr246-real/power-lines.jpg` (Nicholas Frisardi, CC BY-SA 3.0; SHA-256 `da0e90b0ff663dd8ab543414a44e6c4e068fd005b4e87e96c2d6204286449510`).
+- Ran the native Windows MI-GAN generator with the app-pinned 28,079,181-byte model; its SHA-256 matched `6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b`, and it returned three candidates in about 26 seconds. At full 4000×3000 review size, the tested tower-removal stroke left the tower structure visible and produced obvious smeared patches in the neighboring tree and sky. This fails the natural-image quality bar; AC4 and AC7 remain unchecked and CHR-246 stays In Progress. The test covered a power tower only, not a person or sensor-dust spot.
