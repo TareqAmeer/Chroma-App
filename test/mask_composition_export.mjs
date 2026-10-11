@@ -111,6 +111,7 @@ try{
     // Select Background is a soft complement of the successful subject raster. Exercise that
     // production helper through a painted-mask texture and the same renderer/export path.
     const bgRenderer=new FXR(document.createElement('canvas'));
+    check('background GPU renderer stays healthy',bgRenderer.ok&&!bgRenderer.gl.isContextLost());
     const geomSrc=applyGeomTo(src,{rot:90,crop:{x:.08,y:.1,w:.8,h:.75}}),gw=geomSrc.width,gh=geomSrc.height;
     bgRenderer.setImage(geomSrc);
     const subject=new Uint8Array(gw*gh);
@@ -148,7 +149,7 @@ try{
     const composedParity=await tileDeltas([backgroundMask,rangeMask]);
     check('background complement direct and rotated/cropped tiled pixels agree',bgParity.delta<=1,
       `max ${bgParity.delta}; geometry ${gw}x${gh}`);
-    return{checks:ck,glLost:renderer.gl.isContextLost(),parityDiagnostic:{composedMaxDelta:composedParity.delta,composedPixel:`${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}`,geometry:`${gw}x${gh}`},debug:{n:renderer._mskU?.mA?.length,
+    return{checks:ck,glLost:renderer.gl.isContextLost()||bgRenderer.gl.isContextLost(),parityDiagnostic:{composedMaxDelta:composedParity.delta,composedPixel:`${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}`,geometry:`${gw}x${gh}`},debug:{n:renderer._mskU?.mA?.length,
       e:Array.from(renderer._mskU?.mE||[]).slice(0,16),
       operands:Array.from(renderer._mskU?.mO||[]).filter((_,i)=>i%4<2).slice(0,8),
       topo:Array.from(renderer._mskU?.mTopo||[]),
@@ -160,7 +161,7 @@ if(result?.skip){console.log(`SKIP: ${result.skip}`);process.exitCode=0;}
 else{
   let fail=0;for(const c of result.checks){console.log(`  ${c.pass?'PASS':'FAIL'} ${c.name}${c.detail?` [${c.detail}]`:''}`);if(!c.pass)fail++;}
   if(result.parityDiagnostic)console.log(`NOTE: composed background + range-gated brush max delta is ${result.parityDiagnostic.composedMaxDelta} at ${result.parityDiagnostic.composedPixel} (${result.parityDiagnostic.geometry}); this remains outside the passing single-background gate.`);
-  if(result.glLost){console.log('SKIP: WebGL context was lost after composition renders; preview/export parity is inconclusive.');}
+  if(result.glLost){console.log('FAIL: WebGL context was lost after render checks; pixel evidence is inconclusive.');fail++;}
   console.log(`${result.checks.length-fail}/${result.checks.length} pixel checks PASS`);
   if(fail)process.exitCode=1;
 }
