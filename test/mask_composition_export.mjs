@@ -135,21 +135,52 @@ try{
     const rangeMask=makeRaster('range-mask',stripe,{lumLo:.3,lumHi:.72,exp:-.7,composeOp:'intersect',operandId:'background-mask'});
     const composedBg=renderBackground([backgroundMask,rangeMask]);
     check('range-gated mask composition changes the background result',digest(composedBg)!==digest(bgPixels));
-    const tileDeltas=async list=>{
+    const tileDeltas=async(list,showSelection=-1,forcedTileSize=64)=>{
       const P=fxCompareParams();P.masks=list;bgRenderer._maskReferenceSize={w:gw,h:gh};
-      bgRenderer.setImage(geomSrc);bgRenderer.render(P,gw,gh,{glowScale:1,seed:4.25});const full=Uint8Array.from(bgRenderer.getPixels().px);
+      const preview=showSelection>=0?{previewOnly:MSK_PREVIEW_RENDER_TOKEN,showSel:showSelection,showSelMode:2}:{};
+      bgRenderer.setImage(geomSrc);bgRenderer.render(P,gw,gh,{glowScale:1,seed:4.25,...preview});const full=Uint8Array.from(bgRenderer.getPixels().px);
       const oldTileSize=fxExportTileSize,oldShouldTile=shouldTile;let tiled;
-      try{fxExportTileSize=()=>64;shouldTile=()=>true;tiled=await processToCanvas(P,geomSrc,gw,gh,()=>{},bgRenderer);}
-      finally{fxExportTileSize=oldTileSize;shouldTile=oldShouldTile;}
+      const originalRender=bgRenderer.render;
+      try{
+        fxExportTileSize=()=>forcedTileSize;shouldTile=()=>true;
+        if(showSelection>=0)bgRenderer.render=function(params,w,h,opts){return originalRender.call(this,params,w,h,{...opts,...preview});};
+        tiled=await processToCanvas(P,geomSrc,gw,gh,()=>{},bgRenderer);
+      }
+      finally{fxExportTileSize=oldTileSize;shouldTile=oldShouldTile;bgRenderer.render=originalRender;}
       const tile=new Uint8Array(tiled.getContext('2d').getImageData(0,0,gw,gh).data);
       let delta=0,at=0;for(let i=0;i<full.length;i++){const d=Math.abs(full[i]-tile[i]);if(d>delta){delta=d;at=i;}}
-      return{delta,at};
+      const pixelOffset=Math.floor(at/4)*4;
+      return{delta,at,fullPixel:Array.from(full.slice(pixelOffset,pixelOffset+4)),tilePixel:Array.from(tile.slice(pixelOffset,pixelOffset+4))};
     };
     const bgParity=await tileDeltas([backgroundMask]);
+    const bgCoverageParity=await tileDeltas([backgroundMask],0);
     const composedParity=await tileDeltas([backgroundMask,rangeMask]);
+    const composedCoverageParity=await tileDeltas([backgroundMask,rangeMask],1);
+    const rangeOnly={...rangeMask,composeOp:null,operandId:null};
+    const rangeCoverageParity=await tileDeltas([rangeOnly],0);
+    const rangeShapeParity=await tileDeltas([{...rangeOnly,lumLo:0,lumHi:1}],0);
+    const asymmetric=new Uint8Array(gw*gh);
+    for(let y=0;y<gh;y++)for(let x=0;x<gw;x++)asymmetric[y*gw+x]=(x*37+y*71+(x*y*13))&255;
+    const asymmetricMask=makeRaster('asymmetric-raster',asymmetric,{lumLo:0,lumHi:1});
+    const asymmetricCoverageParity=await tileDeltas([asymmetricMask],0);
+    const asymmetricSingleTileParity=await tileDeltas([asymmetricMask],0,128);
     check('background complement direct and rotated/cropped tiled pixels agree',bgParity.delta<=1,
       `max ${bgParity.delta}; geometry ${gw}x${gh}`);
-    return{checks:ck,glLost:renderer.gl.isContextLost()||bgRenderer.gl.isContextLost(),parityDiagnostic:{composedMaxDelta:composedParity.delta,composedPixel:`${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}`,geometry:`${gw}x${gh}`},debug:{n:renderer._mskU?.mA?.length,
+    check('background selection preview direct and tiled pixels agree',bgCoverageParity.delta<=1,
+      `max ${bgCoverageParity.delta} at ${Math.floor(bgCoverageParity.at/4)%gw},${Math.floor(bgCoverageParity.at/4/gw)}; direct ${bgCoverageParity.fullPixel}; tiled ${bgCoverageParity.tilePixel}`);
+    check('asymmetric brush raster preview agrees across forced tile seams',asymmetricCoverageParity.delta<=1,
+      `max ${asymmetricCoverageParity.delta} at ${Math.floor(asymmetricCoverageParity.at/4)%gw},${Math.floor(asymmetricCoverageParity.at/4/gw)}; direct ${asymmetricCoverageParity.fullPixel}; tiled ${asymmetricCoverageParity.tilePixel}`);
+    check('asymmetric brush raster preview agrees when export uses one tile',asymmetricSingleTileParity.delta<=1,
+      `max ${asymmetricSingleTileParity.delta} at ${Math.floor(asymmetricSingleTileParity.at/4)%gw},${Math.floor(asymmetricSingleTileParity.at/4/gw)}; direct ${asymmetricSingleTileParity.fullPixel}; tiled ${asymmetricSingleTileParity.tilePixel}`);
+    check('composed background and range-gated brush direct/tiled pixels agree',composedParity.delta<=1,
+      `max ${composedParity.delta} at ${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}; direct ${composedParity.fullPixel}; tiled ${composedParity.tilePixel}; geometry ${gw}x${gh}`);
+    check('composed effective coverage direct/tiled samples agree',composedCoverageParity.delta<=1,
+      `max ${composedCoverageParity.delta} at ${Math.floor(composedCoverageParity.at/4)%gw},${Math.floor(composedCoverageParity.at/4/gw)}; direct ${composedCoverageParity.fullPixel}; tiled ${composedCoverageParity.tilePixel}`);
+    check('range-gated brush coverage direct/tiled samples agree',rangeCoverageParity.delta<=1,
+      `max ${rangeCoverageParity.delta} at ${Math.floor(rangeCoverageParity.at/4)%gw},${Math.floor(rangeCoverageParity.at/4/gw)}; direct ${rangeCoverageParity.fullPixel}; tiled ${rangeCoverageParity.tilePixel}`);
+    check('ungated brush shape direct/tiled samples agree',rangeShapeParity.delta<=1,
+      `max ${rangeShapeParity.delta} at ${Math.floor(rangeShapeParity.at/4)%gw},${Math.floor(rangeShapeParity.at/4/gw)}; direct ${rangeShapeParity.fullPixel}; tiled ${rangeShapeParity.tilePixel}`);
+    return{checks:ck,glLost:renderer.gl.isContextLost()||bgRenderer.gl.isContextLost(),parityDiagnostic:{composedMaxDelta:composedParity.delta,composedPixel:`${Math.floor(composedParity.at/4)%gw},${Math.floor(composedParity.at/4/gw)}`,composedCoverageDelta:composedCoverageParity.delta,composedCoveragePixel:`${Math.floor(composedCoverageParity.at/4)%gw},${Math.floor(composedCoverageParity.at/4/gw)}`,rangeCoverageDelta:rangeCoverageParity.delta,rangeCoveragePixel:`${Math.floor(rangeCoverageParity.at/4)%gw},${Math.floor(rangeCoverageParity.at/4/gw)}`,rangeShapeDelta:rangeShapeParity.delta,rangeShapePixel:`${Math.floor(rangeShapeParity.at/4)%gw},${Math.floor(rangeShapeParity.at/4/gw)}`,asymmetricCoverageDelta:asymmetricCoverageParity.delta,asymmetricCoveragePixel:`${Math.floor(asymmetricCoverageParity.at/4)%gw},${Math.floor(asymmetricCoverageParity.at/4/gw)}`,geometry:`${gw}x${gh}`},debug:{n:renderer._mskU?.mA?.length,
       e:Array.from(renderer._mskU?.mE||[]).slice(0,16),
       operands:Array.from(renderer._mskU?.mO||[]).filter((_,i)=>i%4<2).slice(0,8),
       topo:Array.from(renderer._mskU?.mTopo||[]),
