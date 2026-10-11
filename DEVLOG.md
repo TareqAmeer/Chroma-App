@@ -1415,3 +1415,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - `mskRefinementSupported()` now returns a strict boolean for unsupported/depth-unavailable selections. The extracted layout test context now stubs the shared AI provenance recorder used by sky re-detection.
 - Files: `chromasmith-22.html`, `test/mask_refinement_layout.mjs`; issue CHR-274. Verification: refinement math 28/28, layout 29/29, browser 13/13, depth GPU native/reset and two-tile parity, editor HTML validity, and `git diff --check` pass. All-zoom preview/export verification and labelled halo measurements remain open.
+
+### 2026-10-11 — CHR-274 publication verification
+
+- Published feature commit `03d9739c115c645d3851863bdf167fa628c2795f` to `origin/main` by fast-forward from `a568ab061c9b3cd59a8288ca8e83f9b1c7d3aee1`; remote `git ls-remote` matched the feature commit.
