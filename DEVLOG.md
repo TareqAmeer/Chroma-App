@@ -1696,3 +1696,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Files: `desktop/library-ui.js` and `test/recipe_batch_ui.mjs`. The batch data-model, dark/light UI, cancellation/no-journal, partial outcome/retry, exact undo, and 5,000-item responsiveness checks pass. CHR-193 remains In Progress; persistent single/selected scope language and tone/crop/export predictability still need direct implementation and validation.
 - Feature commit `76395fbf3e532c67b9282806001ef66a1ef51e4b` was integrated after the focused batch suite passed on the integration checkout and fast-forwarded to `origin/main`.
 - `git ls-remote origin refs/heads/main` confirmed `76395fbf3e532c67b9282806001ef66a1ef51e4b` immediately after publication.
+
+### 2026-10-11 — CHR-246 fixture diagnostics
+
+- Extended the native inpaint fixture probe with per-candidate mask coverage, masked-region RGB change, one-pixel unmasked halo RGB change, and outside-mask identity diagnostics. The report explicitly states these are diagnostics, not a quality score; inference and mask behavior are unchanged.
+- Files: `desktop/src-tauri/examples/inpaint_probe.rs`. The two deterministic metric tests, person-mask fixture test, Rust formatting check, and whitespace check pass. Native inference was not run because the pinned model and Windows ONNX Runtime are unavailable here; CHR-246 AC4/AC7 remain unchecked.
