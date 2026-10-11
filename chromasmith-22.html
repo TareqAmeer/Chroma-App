@@ -7331,7 +7331,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011L';
+const BUILD='1.1011M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16031,6 +16031,71 @@ function mskAddTeethWhitening(){
   return true;
 }
 
+// Use only an auxiliary matte embedded in the selected source photo. There is deliberately no
+// model fallback here: unsupported platforms and photos without a teeth matte keep the manual
+// brush workflow above, rather than implying that the editor inferred enamel from the preview.
+async function mskAddEmbeddedTeethWhitening(){
+  if(!window.__TAURI__||!window.__TAURI__.core||typeof window.__TAURI__.core.invoke!=='function'){
+    if(typeof toast==='function')toast('Embedded teeth mattes are available in the macOS desktop app. Use Teeth Whitening (manual) to paint enamel.',false);
+    return false;
+  }
+  if(fxState.masks.length>=MSK_MAX){
+    if(typeof toast==='function')toast('Maximum '+MSK_MAX+' masks — delete one first',false);
+    return false;
+  }
+  const it=curItem(),path=it&&it.path;
+  if(!it||!path){if(typeof toast==='function')toast('Could not find this photo’s source file. Use Teeth Whitening (manual).',false);return false;}
+  if(it._embeddedTeethImporting)return false;
+  it._embeddedTeethImporting=true;
+  try{
+    let maps;
+    try{
+      if(!it._embeddedAuxiliaryPromise)it._embeddedAuxiliaryPromise=window.__TAURI__.core.invoke('extract_embedded_auxiliary',{path});
+      maps=await it._embeddedAuxiliaryPromise;
+    }catch(e){
+      delete it._embeddedAuxiliaryPromise;
+      if(curItem()===it&&typeof toast==='function')toast('Could not read embedded teeth data on this platform. Use Teeth Whitening (manual).',false);
+      return false;
+    }
+    if(curItem()!==it||curItem().path!==path)return false;
+    const matte=Array.isArray(maps)?maps.find(map=>map&&map.kind==='teeth'&&map.png_b64):null;
+    if(!matte){if(typeof toast==='function')toast('This photo has no embedded teeth matte. Use Teeth Whitening (manual) to paint enamel.',false);return false;}
+    const image=new Image();
+    image.src='data:image/png;base64,'+matte.png_b64;
+    await image.decode();
+    if(!matte.width||!matte.height||image.naturalWidth!==matte.width||image.naturalHeight!==matte.height)
+      throw new Error('embedded matte dimensions do not match its PNG');
+    const{w,h}=mskTexDims();
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    const cx=cv.getContext('2d',{willReadFrequently:true});
+    if(!cx)throw new Error('canvas unavailable');
+    const sourceAspect=(it.img.naturalWidth||it.img.width)/(it.img.naturalHeight||it.img.height);
+    const matteAspect=image.naturalWidth/image.naturalHeight;
+    if(!Number.isFinite(sourceAspect)||!Number.isFinite(matteAspect)||Math.abs(sourceAspect/matteAspect-1)>0.02)
+      throw new Error('matte dimensions do not match the displayed photo orientation');
+    cx.drawImage(image,0,0,w,h);
+    const rgba=cx.getImageData(0,0,w,h).data,px=new Uint8ClampedArray(w*h);
+    for(let i=0;i<px.length;i++)px[i]=rgba[i*4];
+    if(!px.some(value=>value>0)){
+      if(typeof toast==='function')toast('This photo’s embedded teeth matte contains no selected pixels. Use Teeth Whitening (manual) if needed.',false);
+      return false;
+    }
+    const m=mskAdd('brush',mask=>{
+      mask.origin='embedded-teeth';mask.name='Teeth Whitening (embedded matte)';
+      mask.temp=-0.12;mask.sat=-0.12;mask.px=px;mask.mtW=w;mask.mtH=h;
+      mask.sourcePath=path;mask.sourceKind='teeth';mask.sourceWidth=matte.width;mask.sourceHeight=matte.height;
+    });
+    if(!m||fxState.masks[mskSel]!==m)return false;
+    mskRebuild();
+    if(typeof renderPreview==='function')renderPreview();
+    if(typeof toast==='function')toast('Embedded teeth matte added. Review its edges before whitening.',true);
+    return true;
+  }catch(e){
+    if(typeof toast==='function')toast('Could not align this photo’s embedded teeth matte. Use Teeth Whitening (manual).',false);
+    return false;
+  }finally{it._embeddedTeethImporting=false;}
+}
+
 // ── AI brush-select: EdgeSAM multi-point-prompt segmentation, native shell only (main.rs's
 // sam_encode/sam_points — see desktop/src-tauri/src/sam.rs). Encodes the CURRENT photo once
 // (a few hundred ms, same working resolution the brush/sky masks already use — mskTexDims,
@@ -18185,6 +18250,7 @@ function mskAddMenu(ev){
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
     +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Teeth Matte','brush','', 'mskAddEmbeddedTeethWhitening()'):'')
     +item('Brush','brush','brush')+item('Sky','sky','sky')
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')+item('AI Select','wand','ai'):'')

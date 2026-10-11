@@ -1441,3 +1441,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Native timing evidence and the corrected measurement gate were published to `origin/main` in integration commit `3011dca125c112c533504fbf9e812afd24c198b0` (task feature commit `5f8368bb08e9f77d464e5592d6c3f8a133197a77`).
 - After push, `git fetch origin main` and `git ls-remote origin refs/heads/main` both confirmed `origin/main` at `3011dca125c112c533504fbf9e812afd24c198b0`; the published integration is an ancestor of the remote branch.
+
+### 2026-10-11 — CHR-247 embedded teeth matte import
+
+- Added an opt-in macOS menu action that imports only a teeth matte embedded in the current source photo as a provenance-tagged, editable Brush mask; manual teeth painting remains available when the matte is absent. Files: `chromasmith-22.html`, `desktop/library-ui.js`, `test/teeth_whitening.mjs`.
+- Verification: teeth-whitening browser flow 29/29, composition and refinement math suites, editor HTML validity, native-gate check, syntax checks, and whitespace validation pass. No real embedded-teeth fixture or macOS runtime was available; no automatic teeth inference or matte-quality claim is made. The unrelated baseline `native_contract` fails for existing `album_remove` registration and `read_export_sidecar` mock coverage; this change adds no new native-contract failure.

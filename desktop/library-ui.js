@@ -124,6 +124,7 @@
     const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
     const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
     switch (cmd) {
+      case 'extract_embedded_auxiliary': return Promise.resolve([]); // browser stand-in: no source-photo auxiliaries
       case 'list_dir': {
         libtestListDirCalls++;
         const dir = String(A.path || '/test');

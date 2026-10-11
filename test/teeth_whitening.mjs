@@ -50,12 +50,15 @@ async function main() {
     await page.evaluate(async (b64) => {
       const bin = atob(b64), arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      await window.loadFXImages([new File([arr], 'portrait.png', { type: 'image/png' })]);
+      await window.loadFXImages([
+        new File([arr], 'portrait-a.png', { type: 'image/png' }),
+        new File([arr], 'portrait-b.png', { type: 'image/png' }),
+      ]);
     }, fixture);
     await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages.length > 0 && fxWork && curItem()?.img, null, { timeout: 15000 });
     await page.evaluate(() => updateWork());
 
-    checks = await page.evaluate(async () => {
+    checks = await Promise.race([page.evaluate(async () => {
       const out = [];
       const ck = (name, pass, detail) => out.push({ name, pass: !!pass, detail: detail == null ? '' : String(detail) });
       const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => v === b[i]);
@@ -68,6 +71,8 @@ async function main() {
       const action = [...document.querySelectorAll('.msk-more-it')]
         .find((button) => button.textContent.includes('Teeth Whitening (manual)'));
       ck('manual Teeth Whitening is discoverable in + Mask', !!action);
+      ck('embedded matte action is hidden outside the native desktop shell',
+        ![...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')));
       action?.click();
       const mask = fxState.masks[mskSel];
       ck('action creates a selected Brush mask', !!mask && mask.type === 'brush' && mskSel === 0);
@@ -125,6 +130,109 @@ async function main() {
         && same(restored.px, m.px));
 
       await new Promise((resolve) => setTimeout(resolve, 450));
+      // Mock the native macOS auxiliary extractor while exercising the real browser helper.
+      // The two-tone PNG makes the imported raster's resampling/coverage observable without
+      // depending on a machine-specific HEIC/RAW auxiliary-matte fixture.
+      const embeddedChecks = [];
+      const eck = (name, pass, detail) => embeddedChecks.push({ name, pass: !!pass, detail: detail == null ? '' : String(detail) });
+      const matteWidth = 32, matteHeight = Math.max(2, Math.round(32 / (fxImages[0].img.naturalWidth / fxImages[0].img.naturalHeight)));
+      const pixel = document.createElement('canvas'); pixel.width = matteWidth; pixel.height = matteHeight;
+      const ctx = pixel.getContext('2d'), id = ctx.createImageData(matteWidth, matteHeight);
+      for (let y = 0; y < matteHeight; y++) for (let x = 0; x < matteWidth; x++) {
+        const i = (y * matteWidth + x) * 4, value = x < matteWidth / 2 ? 0 : 255;
+        id.data[i] = id.data[i + 1] = id.data[i + 2] = value; id.data[i + 3] = 255;
+      }
+      ctx.putImageData(id, 0, 0);
+      const pngB64 = pixel.toDataURL('image/png').split(',')[1];
+      fxImages[0].path = 'fixture/portrait-a.heic'; fxImages[1].path = 'fixture/portrait-b.heic';
+      const calls = [];
+      window.__embeddedMatteCore = window.__TAURI__?.core;
+      window.__TAURI__ = { ...(window.__TAURI__ || {}), core: { invoke: async (command, args) => {
+        calls.push({ command, args });
+        if (command !== 'extract_embedded_auxiliary') throw new Error('Unexpected native command: ' + command);
+        return [{ kind: 'teeth', width: matteWidth, height: matteHeight, png_b64: pngB64 }];
+      } } };
+      window.CS_PLATFORM = { os: 'windows' };
+      document.querySelector('button[onclick="mskAddMenu(event)"]').click();
+      ck('embedded matte action is hidden on unsupported desktop platforms',
+        ![...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')));
+      document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
+      window.CS_PLATFORM.os = 'macos';
+      document.querySelector('button[onclick="mskAddMenu(event)"]').click();
+      ck('embedded matte action is available on macOS desktop',
+        [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')));
+      document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
+      const preEmbeddedCount = fxState.masks.length;
+      const embeddedResult = await mskAddEmbeddedTeethWhitening();
+      const embedded = fxState.masks[mskSel];
+      const embeddedEnergy = embedded?.px?.reduce((n, v) => n + v, 0) || 0;
+      const extractionCalls = calls.filter(call=>call.command==='extract_embedded_auxiliary');
+      eck('embedded teeth matte invokes native extraction for the current photo path', extractionCalls.length === 1
+        && extractionCalls[0].args?.path === 'fixture/portrait-a.heic');
+      eck('embedded matte creates a selected editable raster Brush mask', !!embeddedResult
+        && fxState.masks.length === preEmbeddedCount + 1 && embedded?.type === 'brush'
+        && embedded.px instanceof Uint8ClampedArray && embedded.px.length === embedded.mtW * embedded.mtH
+        && embeddedEnergy > 0 && embeddedEnergy < embedded.px.length * 255,
+        `${embedded?.mtW}x${embedded?.mtH}, energy ${embeddedEnergy}`);
+      eck('embedded matte records teeth source provenance', embedded?.origin === 'embedded-teeth'
+        && embedded?.name === 'Teeth Whitening (embedded matte)'
+        && embedded?.sourcePath === 'fixture/portrait-a.heic' && embedded?.sourceKind === 'teeth'
+        && embedded?.sourceWidth === matteWidth && embedded?.sourceHeight === matteHeight);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const embeddedAfterCreate = fxState.masks.length;
+      await fxUndo();
+      eck('one undo removes the imported embedded matte', fxState.masks.length === embeddedAfterCreate - 1);
+      await fxRedo();
+      eck('one redo restores the embedded raster and provenance', fxState.masks.length === embeddedAfterCreate
+        && fxState.masks.some(mask => mask.origin === 'embedded-teeth' && mask.px instanceof Uint8ClampedArray
+          && mask.px.some(value => value > 0)));
+
+      // An unsupported file returns no teeth map; a native error also leaves the recipe intact.
+      const beforeNoMatte = JSON.stringify(getUISnapshot()), nativeInvoke = window.__TAURI__.core.invoke;
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); return []; };
+      await mskAddEmbeddedTeethWhitening();
+      eck('missing embedded teeth matte leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      const emptyCanvas = document.createElement('canvas'); emptyCanvas.width = matteWidth; emptyCanvas.height = matteHeight;
+      const emptyContext = emptyCanvas.getContext('2d'); emptyContext.fillStyle = '#000'; emptyContext.fillRect(0, 0, matteWidth, matteHeight);
+      const emptyPngB64 = emptyCanvas.toDataURL('image/png').split(',')[1];
+      window.__TAURI__.core.invoke = async (command, args) => {
+        calls.push({ command, args });
+        return [{ kind: 'teeth', width: matteWidth, height: matteHeight, png_b64: emptyPngB64 }];
+      };
+      await mskAddEmbeddedTeethWhitening();
+      eck('empty embedded teeth matte does not create a blank whitening mask', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); throw new Error('fixture extraction failure'); };
+      await mskAddEmbeddedTeethWhitening();
+      eck('native extraction error leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+
+      // Resolve a delayed native response after switching photos: it must not attach to either
+      // the outgoing or newly selected photo.
+      let releaseExtraction;
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      window.__TAURI__.core.invoke = async (command, args) => {
+        calls.push({ command, args });
+        if(command!=='extract_embedded_auxiliary')return [];
+        return new Promise(resolve => { releaseExtraction = () => resolve([{ kind: 'teeth', width: matteWidth, height: matteHeight, png_b64: pngB64 }]); });
+      };
+      await fxSelectImage(0);
+      const firstPhotoMaskCount = fxState.masks.length;
+      const staleWork = mskAddEmbeddedTeethWhitening();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      await fxSelectImage(1);
+      const secondPhotoMaskCount = fxState.masks.length;
+      releaseExtraction?.();
+      const staleResult = await Promise.race([staleWork.then(value=>value,e=>{throw e;}),
+        new Promise(resolve=>setTimeout(()=>resolve('timeout'),1500))]);
+      eck('photo switch discards a stale embedded matte result', staleResult === false && fxCurIdx === 1
+        && fxState.masks.length === secondPhotoMaskCount
+        && fxImages[0].masks.length === firstPhotoMaskCount);
+      window.__TAURI__.core.invoke = nativeInvoke;
+      if (window.__embeddedMatteCore) window.__TAURI__.core = window.__embeddedMatteCore;
+      out.push(...embeddedChecks);
+
       while (fxState.masks.length < MSK_MAX) mskAdd('brush');
       const beforeFailure = JSON.stringify(getUISnapshot()), selectedBefore = mskSel;
       const createdAtCapacity = mskAddTeethWhitening();
@@ -133,7 +241,7 @@ async function main() {
         && JSON.stringify(getUISnapshot()) === beforeFailure);
       mskPaintStop();
       return out;
-    });
+    }), new Promise((_, reject) => setTimeout(() => reject(new Error('Browser evaluation timed out after 45 seconds')), 45000))]);
   } finally {
     await browser.close();
     server.close();
