@@ -1484,3 +1484,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Exposed decode-time PPG, Bayer AHD/VNG/MHC, and X-Trans Markesteijn 1/3-pass choices in RAW settings; recipe snapshots restore the selector and the selected method continues through native preview/export. Files: `chromasmith-22.html`, `desktop/src-tauri/src/raw_decode.rs`, `test/editor_wireframe_behaviour.mjs`, `test/editor_snap_lists_check.mjs`.
 - Native CFA validation recognizes all five Fuji 6×6 X-Trans tiles in the pinned Rawler camera database and rejects arbitrary 6×6 patterns; targeted Cargo tests pass 5/5, editor HTML and JS syntax checks pass, desktop build gate and `git diff --check` pass. Real-camera RAW, image-quality/performance, Bayer method breadth, controls, and pixel-shift criteria remain open; CHR-260 stays In Progress.
 - Publication verification will be recorded after the integration push.
+
+### 2026-10-11 — CHR-260 publication verification
+
+- Integrated feature commit `ca041563` as `4c06c643652d665cf2e18a7e5e1acd2896251916`; focused Cargo demosaic tests pass 5/5 in the clean integration checkout.
+- Post-push `git ls-remote origin refs/heads/main` confirmed `origin/main` at `4c06c643652d665cf2e18a7e5e1acd2896251916`; the remote main tip contains the CHR-260 UI/CFA changes. Full RawTherapee parity acceptance remains open and the issue remains In Progress.
