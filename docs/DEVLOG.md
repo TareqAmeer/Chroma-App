@@ -225,3 +225,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a LIBTEST-only entry point for the real Library batch preparation/drain path plus a deterministic mock IPC delay, and added `test/recipe_batch_responsiveness.mjs` to hold a 5,000-item job active while the jobs tray and sort menu remain interactive.
 - Chrome regression passed: 49 animation frames over the 800 ms active-job interval (maximum frame gap 31.7 ms), the sort menu responded while the journal remained `running`, and cancellation completed. `npm run library:batch-test` passed the 7 journal tests, dark/light result UI flows, and this responsiveness gate.
 - Modified `desktop/library-ui.js`, `package.json`, `test/recipe_batch_responsiveness.mjs`, and `docs/DEVLOG.md`. CHR-273 AC7 is supported by browser-mock UI responsiveness evidence; AC4 real native process-kill/quit recovery remains open.
+
+### CHR-273 — active batch responsiveness publication verified
+
+- Published feature commit `b306880b` as integration commit `a8dd664fae6110f8ab4a5e643dc7d4e2315b76df` on `origin/main`; fetch, `git ls-remote`, and ancestry checks confirmed the remote tip and inclusion.
+- The integrated `npm run library:batch-test` passed: journal tests 7/7, selective-result UI flows in dark and light, and the 5,000-item active-job responsiveness gate (49 frames over 800 ms, maximum observed gap 40.1 ms, sort-menu interaction and cancellation successful). AC7 is supported by this browser-mock UI evidence. AC4 remains open because a real native process-kill/quit and restart round trip was not exercised; CHR-273 remains In Progress.
