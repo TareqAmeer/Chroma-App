@@ -17,29 +17,65 @@
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
   const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
-  // Embedded JPEG previews are the fast culling tier used by Quick Look and Compare. Share
-  // native requests and retain only a small LRU window to avoid unbounded ArrayBuffer growth.
+  // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
+  // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
   const QUICKLOOK_CACHE_MAX = 5;
+  const QUICKLOOK_CACHE_BYTES = 32 * 1024 * 1024;
   const quicklookPreviews = new Map();
   const quicklookRequests = new Map();
-  function quicklookPreview(path) {
+  let rawReviewActive = false;
+  const rawReviewQueue = [];
+  function queueRawReview(path, load) {
+    return new Promise((resolve, reject) => {
+      rawReviewQueue.push({ path, load, resolve, reject });
+      while (rawReviewQueue.length > 3) {
+        const stale = rawReviewQueue.findIndex((job) => job.path !== quicklook.path);
+        rawReviewQueue.splice(stale < 0 ? 0 : stale, 1)[0].reject(new Error('RAW preview superseded'));
+      }
+      pumpRawReview();
+    });
+  }
+  function pumpRawReview() {
+    if (rawReviewActive || !rawReviewQueue.length) return;
+    const current = rawReviewQueue.findIndex((job) => job.path === quicklook.path);
+    const job = rawReviewQueue.splice(current < 0 ? 0 : current, 1)[0];
+    rawReviewActive = true;
+    Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; pumpRawReview(); });
+  }
+  async function quicklookPreview(path) {
     if (!path) return Promise.reject(new Error('missing preview path'));
-    if (quicklookPreviews.has(path)) {
-      const bytes = quicklookPreviews.get(path);
+    const isRaw = RAW_EXT_RE.test(path);
+    const settings = isRaw ? await rawCacheSettings(path, 'review') : null;
+    const key = displayCacheKey(path, settings?.recipeKey || 'image-preview');
+    if (quicklookPreviews.get(path)?.key === key) {
+      const record = quicklookPreviews.get(path);
       quicklookPreviews.delete(path);
-      quicklookPreviews.set(path, bytes);
-      return Promise.resolve(bytes);
+      quicklookPreviews.set(path, record);
+      return record.bytes;
     }
-    if (quicklookRequests.has(path)) return quicklookRequests.get(path);
-    const request = invoke('get_quicklook_preview', { path }).then((bytes) => {
-      quicklookPreviews.delete(path);
-      quicklookPreviews.set(path, bytes);
-      while (quicklookPreviews.size > QUICKLOOK_CACHE_MAX) quicklookPreviews.delete(quicklookPreviews.keys().next().value);
+    if (quicklookRequests.get(path)?.key === key) return quicklookRequests.get(path).promise;
+    const request = (isRaw ? queueRawReview(path, async () => {
+      const asset = await cacheOneRaw(path, 'review', settings);
+      const response = await fetch(window.__TAURI__?.core?.convertFileSrc ? window.__TAURI__.core.convertFileSrc(asset) : asset);
+      if (!response.ok) throw new Error('Developed RAW preview asset unavailable');
+      return response.arrayBuffer();
+    }) : invoke('get_quicklook_preview', { path })).then((bytes) => {
+      if (quicklookRequests.get(path)?.promise === request) {
+        quicklookPreviews.delete(path);
+        quicklookPreviews.set(path, { key, bytes });
+        let total = [...quicklookPreviews.values()].reduce((sum, record) => sum + (record.bytes.byteLength || record.bytes.length || 0), 0);
+        while (quicklookPreviews.size > QUICKLOOK_CACHE_MAX || total > QUICKLOOK_CACHE_BYTES) {
+          const oldest = quicklookPreviews.keys().next().value;
+          const record = quicklookPreviews.get(oldest);
+          total -= record.bytes.byteLength || record.bytes.length || 0;
+          quicklookPreviews.delete(oldest);
+        }
+      }
       return bytes;
     }).finally(() => {
-      if (quicklookRequests.get(path) === request) quicklookRequests.delete(path);
+      if (quicklookRequests.get(path)?.promise === request) quicklookRequests.delete(path);
     });
-    quicklookRequests.set(path, request);
+    quicklookRequests.set(path, { key, promise: request });
     return request;
   }
   // Every Library-originated Editor load goes through here so loadFXImages can tell it apart
@@ -1042,6 +1078,19 @@
     } catch (e) { return null; }
   }
   const initialLibraryView = savedLibraryView();
+  let navigationMetadataRevision = 0;
+  // Writes, rollback, undo and async metadata loads can change ordering without a grid render.
+  class NavigationMetadataMap extends Map {
+    set(key, value) { navigationMetadataRevision++; return super.set(key, value); }
+    delete(key) { const changed = super.delete(key); if (changed) navigationMetadataRevision++; return changed; }
+    clear() { if (this.size) navigationMetadataRevision++; super.clear(); }
+  }
+  class NavigationMembershipSet extends Set {
+    add(value) { if (!this.has(value)) navigationMetadataRevision++; return super.add(value); }
+    delete(value) { const changed = super.delete(value); if (changed) navigationMetadataRevision++; return changed; }
+    clear() { if (this.size) navigationMetadataRevision++; super.clear(); }
+  }
+  let navigationCache = null, navigationBuilds = 0;
   const state = {
     // ?libnoroot=1 exercises the true first-launch state (renderLibraryNoRoot) — otherwise
     // LIBTEST always has a root, so that path would be untestable in the harness.
@@ -1049,13 +1098,13 @@
     expanded: new Set(),
     currentFolder: LIBTEST ? '' : (initialLibraryView?.kind === 'folder' ? initialLibraryView.path : (localStorage.getItem(LS_LAST_FOLDER) || '')),
     entries: [],           // image entries in the currently-viewed folder
-    sidecars: new Map(),   // path -> {rating,label,edited,recipe} (cached client-side)
-    meta: new Map(),       // path -> {camera,lens,date,iso}
+    sidecars: new NavigationMetadataMap(), // path -> {rating,label,edited,recipe}
+    meta: new NavigationMetadataMap(),     // path -> {camera,lens,date,iso}
     clipTags: new Map(),   // photo id -> [{term,score}] (R10 suggested-tag cache, see renderInfoPanel)
-    dupeClusters: new Map(), // path -> clusterId (only present for clusters of size > 1)
+    dupeClusters: new NavigationMetadataMap(), // path -> clusterId (only present for clusters of size > 1)
     dupeClusterSizes: new Map(), // clusterId -> size
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
-    syncedPaths: new Set(),  // paths known-synced to Google Photos (gphotos registry, folder-local cache)
+    syncedPaths: new NavigationMembershipSet(), // paths known-synced to Google Photos
     offlineEditPaths: new Set(), // paths currently open against the reduced-res offline preview (N1a) — see openInEditorInner
     photoSourceModes: new Map(), // path -> original | offlineCache | offlinePreview for the Editor's persistent source/render status
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
@@ -1106,6 +1155,30 @@
     includeSubfolders: localStorage.getItem('chromasmith_lib_subfolders') === '1',
     _folderScope: null,
   };
+
+  function libraryNavigationOrder(rebuild = false) {
+    const signature = JSON.stringify([state.source, state._catalogPaged, state.sortBy, state.sortDir,
+      state.typeFilter, state.cameraFilter, state.lensFilter, state.isoFilter, state.dupeFilter,
+      state.syncedFilter, state.facesFilter, state.search, state.ratingFilter, state.tagFilter,
+      state.colorLabelFilter, COLOR_LABELS_ENABLED]);
+    if (rebuild || !navigationCache || navigationCache.source !== state.entries
+      || navigationCache.length !== state.entries.length || navigationCache.signature !== signature
+      || navigationCache.revision !== navigationMetadataRevision) {
+      const entries = sortEntries(state.entries.filter(passesFilters));
+      navigationCache = { entries, index: new Map(entries.map((entry, i) => [entry.path, i])),
+        source: state.entries, length: state.entries.length, signature, revision: navigationMetadataRevision };
+      navigationBuilds++;
+      // The virtual index must describe the rendered rows, not just the freshly filtered list.
+      // Metadata-only writes normally patch cards; reconcile the grid if membership/order
+      // actually changed, otherwise retain its DOM and scroll position.
+      const rendered = state._virtAll;
+      if (!rebuild && state.open && state.source !== 'lr' && ['grid', 'list'].includes(state.viewMode)
+        && rendered && (rendered.length !== entries.length || rendered.some((entry, i) => entry.path !== entries[i].path))) {
+        renderGrid();
+      }
+    }
+    return navigationCache;
+  }
 
   // Keep the recursive-view choice with the catalog folder scope. Older versions used one
   // application-wide checkbox; preserve that choice as the migrated default while allowing
@@ -3029,8 +3102,9 @@
   // (see get_decode_cache/save_decode_cache in library.rs) is keyed on this alongside
   // path+mtime+size, so switching RAW profile / native NR / demosaic algo / auto-lens can never
   // serve a stale cached decode.
-  function rawRecipeKey(forceFull, path) {
-    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+  function rawRecipeKey(forceFull, path, settings = null) {
+    const profile = settings ? settings.profile : ((typeof rawProfile === 'function') ? rawProfile() : '');
+    const opts = settings || { rawNr: window.chromasmithRawNr, demosaicAlgo: window.chromasmithDemosaicAlgo, autoLens: window.chromasmithAutoLens, lensOverride: window.chromasmithLensOverride, lensOverrideFocal: window.chromasmithLensOverrideFocal, fullCleanup: window.chromasmithRawFullCleanup };
     // Must include every setting that changes the NATIVE decode's pixels (see decode_raw_v2's
     // params in main.rs) — a manual lens pick (window.chromasmithLensOverride/Focal) changes the
     // distortion-correction geometry baked into the cached JPEG just like autoLens does, so it
@@ -3039,10 +3113,10 @@
     // Fast and High are DECODE-TIME identical (High's extra neural pass runs out of band via
     // denoise_raw_high, never through decode_raw_v2 — see raw_decode.rs's NrTier) — the disk
     // cache only needs to distinguish Off from not-Off, same 2-way key as the old boolean.
-    return [profile, window.chromasmithRawNr !== 'off' ? 1 : 0,
-      window.chromasmithDemosaicAlgo || '', window.chromasmithAutoLens ? 1 : 0,
-      window.chromasmithLensOverride || '', window.chromasmithLensOverrideFocal || 0,
-      (forceFull || window.chromasmithRawFullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
+    return [profile, opts.rawNr !== 'off' ? 1 : 0,
+      opts.demosaicAlgo || '', opts.autoLens ? 1 : 0,
+      opts.lensOverride || '', opts.lensOverrideFocal || 0,
+      (forceFull || opts.fullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
       + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
   async function showDisplayProvisional(path, recipeKey) {
@@ -3641,6 +3715,7 @@
     window.__libResolveHeldTrash = () => { const resolve = window.__libtestHeldTrash?.shift(); if (resolve) resolve(); };
     window.__libUndoLast = () => libUndoLast();
     window.__libSetLabel = (path, label) => setLabel(path, label);
+    window.__libNavigationState = (at = 0) => { const nav = libraryNavigationOrder(); return { builds: navigationBuilds, count: nav.entries.length, pathAt: nav.entries[at]?.path, cursor: state._kbCursor, cursorIndex: nav.index.get(state._kbCursor) ?? -1 }; };
     window.__libDeleteCullRejects = () => cullDeleteRejected();
     window.__libEnterSurvey = enterSurveyMode;
     window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), cullLabels: surveyState.cullAllPaths.map((path) => (state.sidecars.get(path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
@@ -3802,7 +3877,7 @@
       if (fresh && (!o || o.cols !== fresh.cols || Math.abs(o.rowH - fresh.rowH) > 0.5)) { state._virtMetrics = fresh; state._virtRange = null; }
     }
     if (state._virtOn && state._virtMetrics) {
-      const idx = (state._virtAll || []).findIndex((e) => e.path === path);
+      const idx = state._virtPathIndex?.get(path) ?? -1;
       if (idx < 0) return;
       const inRange = state._virtRange && idx >= state._virtRange[0] * state._virtMetrics.cols && idx < (state._virtRange[1] + 1) * state._virtMetrics.cols;
       if (inRange) {
@@ -6933,44 +7008,36 @@
     return files;
   }
 
-  // One RAW → persistent decode cache (+ display proxy). tier 'full' (the Cache RAWs action) runs
-  // the complete cleanup under the 'full' key; 'interactive' (neighbour warm-up) produces what an
-  // interactive open would, under the normal key. Rust reads the file by path.
-  async function cacheOneRaw(path, tier) {
-    let rawNr = window.chromasmithRawNr || 'fast';
-    let demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+  // Resolve per-photo native settings without changing the editor's active photo globals.
+  async function rawCacheSettings(path, tier) {
+    let rawNr = 'fast', demosaicAlgo = '';
+    try {
+      rawNr = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast');
+      demosaicAlgo = localStorage.getItem('chromasmithDemosaicAlgo') || '';
+    } catch (e) {}
     try {
       const sc = await getSidecar(path);
       if (sc.recipe) {
         const snap = snapshotFromB64(sc.recipe);
-        rawNr = snap.rawNr !== undefined ? snap.rawNr : (snap.nativeNr === false ? 'off' : rawNr);
+        if (snap.rawNr !== undefined) rawNr = snap.rawNr;
+        else if (snap.nativeNr !== undefined) rawNr = snap.nativeNr ? 'fast' : 'off';
         if (snap.demosaicAlgo !== undefined) demosaicAlgo = snap.demosaicAlgo;
       }
     } catch (e) {}
-    const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
-    const autoLens = !!window.chromasmithAutoLens;
-    const lensOverride = window.chromasmithLensOverride || '';
-    const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
-    // The batch cache is the "wait once, get the finished image" path: it always runs the COMPLETE
-    // cleanup (shadow NR + false-colour + hue defringe + chroma NR) and is stored under the
-    // 'full' key. openInEditorInner prefers a 'full' entry when one exists, and export skips its
-    // own deferred-cleanup pass for photos opened from it (window.__chromasmithFullCleanupPaths).
-    const cacheNr = rawNr === 'off' ? 'off' : (tier === 'interactive' && !window.chromasmithRawFullCleanup ? 'chroma' : 'fast');
-    // CHR-120: this used to rebuild the key inline, field-by-field, in parallel with
-    // rawRecipeKey() (the function openInEditorInner's lookup actually calls) — two
-    // independent formulas over the same fields WILL drift eventually, and when they do,
-    // the open-time lookup silently misses this exact cache entry and falls through to a
-    // full fresh RAW decode (confirmed live: a photo batch-cached moments earlier still
-    // took a full ~2min re-decode on open because of exactly this). Call the SAME function
-    // instead, briefly substituting this photo's own sidecar-resolved rawNr/demosaicAlgo
-    // for the globals rawRecipeKey() reads, so a per-photo sidecar override still applies
-    // to the key without needing a second implementation of it.
-    const _prevRawNr = window.chromasmithRawNr, _prevDemosaic = window.chromasmithDemosaicAlgo;
-    window.chromasmithRawNr = rawNr;
-    window.chromasmithDemosaicAlgo = demosaicAlgo;
-    const recipeKey = rawRecipeKey(tier !== 'interactive', path);
-    window.chromasmithRawNr = _prevRawNr;
-    window.chromasmithDemosaicAlgo = _prevDemosaic;
+    const settings = { rawNr, demosaicAlgo,
+      profile: typeof rawProfile === 'function' ? rawProfile() : '',
+      autoLens: !!window.chromasmithAutoLens,
+      lensOverride: window.chromasmithLensOverride || '',
+      lensOverrideFocal: window.chromasmithLensOverrideFocal || 0,
+      fullCleanup: !!window.chromasmithRawFullCleanup };
+    const full = tier === 'full';
+    settings.recipeKey = rawRecipeKey(full, path, settings);
+    settings.cacheNr = rawNr === 'off' ? 'off' : (!full && !settings.fullCleanup ? 'chroma' : 'fast');
+    return settings;
+  }
+  // Review stores only a bounded developed display proxy; full caching remains explicit.
+  async function cacheOneRaw(path, tier, resolvedSettings = null) {
+    const { profile, autoLens, lensOverride, lensOverrideFocal, demosaicAlgo, recipeKey, cacheNr } = resolvedSettings || await rawCacheSettings(path, tier);
     const identT0 = performance.now(); const ident = await invoke('peek_raw_camera_path', { path }); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
     let mode = 'srgb', lutKey = '';
     if (profile && typeof window.chromasmithResolveRawLut === 'function') {
@@ -6980,7 +7047,7 @@
       if (res.mode === 'lut') { mode = 'lut'; lutKey = res.lutKey; }
     }
     const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
-      autoLens, demosaicAlgo, lensOverride, lensOverrideFocal });
+      autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, displayOnly: tier === 'review' });
     rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
     return result;
   }
@@ -8056,7 +8123,7 @@
     grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
     const listHead = document.getElementById('lib-list-head');
     if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
-    const shown = sortEntries(state.entries.filter(passesFilters));
+    const shown = libraryNavigationOrder(true).entries;
     // ── Virtualisation ────────────────────────────────────────────────────────────────────
     // Measured (test/probe_grid.mjs, before this): 200 files = 5,114 DOM nodes, 1,000 = 17,914,
     // and 5,000 never finished loading at all — the page timed out at 30s. About 18 nodes per
@@ -8068,6 +8135,7 @@
     // existing behaviour (drag-select, keyboard nav, the dupe badges) and its DOM. Small folders
     // keep exactly the code they had.
     state._virtAll = shown;
+    state._virtPathIndex = navigationCache.index;
     const virtOn = shown.length >= VIRT_MIN && !isList;
     state._virtOn = virtOn;
     // Item 31: aspect-ratio thumbnails only below VIRT_MIN — virtualization's row/col windowing
@@ -9886,16 +9954,13 @@
     return Math.max(1, parts.length);
   }
   // ── Quick Look (Space) ──────────────────────────────────────────────────────────────────
-  // Photo Mechanic's core trick: flip through a folder at speed using only the fast embedded-
-  // JPEG preview (get_quicklook_preview — no RAW demosaic), so culling never pays for a full
-  // decode. Deliberately NEVER touches the real editor-open pipeline (openInEditorInner) —
-  // leaving Quick Look, however you leave it, triggers no decode at all; only pressing Enter to
-  // actually open the photo does, exactly like every other path into the editor already does.
+  // RAW review uses our native development pipeline and bounded fit-size proxies.
+  // Cold files show a loading state; camera JPEGs never substitute for review pixels.
   const quicklook = { active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
   function queueQuickLookNeighbors(path) {
     if (!quicklook.active || quicklook.path !== path) return;
-    const shown = sortEntries(state.entries.filter(passesFilters));
-    const index = shown.findIndex((entry) => entry.path === path);
+    const nav = libraryNavigationOrder(), shown = nav.entries;
+    const index = nav.index.get(path) ?? -1;
     if (index < 0) return;
     const generation = quicklook.generation;
     quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
@@ -9953,7 +10018,7 @@
   }
   async function showQuickLook(path) {
     if (!path) return;
-    quicklook.generation++;
+    const generation = ++quicklook.generation;
     quicklook.prefetchQueue = [];
     quicklook.active = true;
     quicklook.path = path;
@@ -9961,19 +10026,21 @@
     el.classList.add('on');
     const img = document.getElementById('lib-ql-img');
     const caption = document.getElementById('lib-ql-caption');
-    caption.textContent = baseName(path) + ' — loading…';
+    caption.textContent = baseName(path) + (RAW_EXT_RE.test(path) ? ' — developing RAW…' : ' — loading…');
+    img.dataset.previewSource = '';
     img.classList.remove('loaded');
     try {
       const buf = await quicklookPreview(path);
-      if (!quicklook.active || quicklook.path !== path) return; // superseded or closed
+      if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       img.src = quicklook.url;
+      img.dataset.previewSource = RAW_EXT_RE.test(path) ? 'developed-raw' : 'image';
       img.classList.add('loaded');
       caption.textContent = baseName(path);
       queueQuickLookNeighbors(path);
     } catch (e) {
-      if (quicklook.active && quicklook.path === path) caption.textContent = baseName(path) + ' — preview unavailable';
+      if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
     }
   }
   function hideQuickLook() {
@@ -10030,8 +10097,8 @@
     // arrows/space/escape/enter/rating-flag keys must never also fall through to the grid's
     // OWN cursor-movement handling further down.
     if (quicklook.active) {
-      const shownQl = sortEntries(state.entries.filter(passesFilters));
-      const idxQl = shownQl.findIndex((en) => en.path === quicklook.path);
+      const navQl = libraryNavigationOrder(), shownQl = navQl.entries;
+      const idxQl = navQl.index.get(quicklook.path) ?? -1;
       const gotoQl = (delta) => {
         if (!shownQl.length) return;
         const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
@@ -10155,9 +10222,8 @@
     // sorted/filtered order, Enter opens it, X rejects / P picks / U clears the flag on it (or
     // on the multi-selection when one exists). The highlight rides on state.openedPath when a
     // photo is open, else an internal cursor.
-    const shown = state.entries.filter(passesFilters);
-    const sorted = shown.length ? sortEntries(shown) : [];
-    const curIdx = sorted.findIndex((en) => en.path === (state._kbCursor || state.openedPath));
+    const nav = libraryNavigationOrder(), sorted = nav.entries;
+    const curIdx = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
     // moveTo(next, extend): jump the cursor to an absolute index. extend=true (shift held)
     // range-selects from the last non-shift anchor to the new cursor, mirroring the mouse's
     // shift-click range select (handleCardClick above) instead of collapsing to a single card.
@@ -10165,8 +10231,7 @@
       if (!sorted.length) return;
       next = Math.max(0, Math.min(sorted.length - 1, next));
       state._kbCursor = sorted[next].path;
-      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
-      if (card) { card.scrollIntoView({ block: 'nearest' }); }
+      scrollLibraryToPath(state._kbCursor);
       if (extend) {
         if (selectAnchor < 0) selectAnchor = curIdx >= 0 ? curIdx : next;
         const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
@@ -15571,15 +15636,16 @@
       if (quicklook.active) hideQuickLook(); else if (path) showQuickLook(path); else return false;
     });
     window.chromasmithRegisterShortcut('library.next', (e) => {
+      if (state.source === 'lr') return false;
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(1); return; }
       if (quicklook.active) {
-        const shown = sortEntries(state.entries.filter(passesFilters));
-        const i = shown.findIndex(p => p.path === quicklook.path);
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(quicklook.path) ?? -1;
         if (i >= 0 && i + 1 < shown.length) showQuickLook(shown[i + 1].path);
       } else {
-        const shown = sortEntries(state.entries.filter(passesFilters));
-        const i = shown.findIndex(p => p.path === (state._kbCursor || state.openedPath));
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
         if (shown.length) {
           const next = Math.min(shown.length - 1, (i < 0 ? -1 : i) + 1);
           state._kbCursor = shown[next].path;
@@ -15588,21 +15654,21 @@
             const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
             state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
           } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
-          const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
-          if (card) card.scrollIntoView({ block: 'nearest' }); updateCardSelClasses();
+          scrollLibraryToPath(state._kbCursor); updateCardSelClasses();
         } else return false;
       }
     });
     window.chromasmithRegisterShortcut('library.previous', (e) => {
+      if (state.source === 'lr') return false;
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(-1); return; }
       if (quicklook.active) {
-        const shown = sortEntries(state.entries.filter(passesFilters));
-        const i = shown.findIndex(p => p.path === quicklook.path);
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(quicklook.path) ?? -1;
         if (i > 0) showQuickLook(shown[i - 1].path);
       } else {
-        const shown = sortEntries(state.entries.filter(passesFilters));
-        const i = shown.findIndex(p => p.path === (state._kbCursor || state.openedPath));
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
         if (shown.length) {
           const next = Math.max(0, i < 0 ? 0 : i - 1);
           state._kbCursor = shown[next].path;
@@ -15611,8 +15677,7 @@
             const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
             state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
           } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
-          const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(state._kbCursor)}"]`);
-          if (card) card.scrollIntoView({ block: 'nearest' }); updateCardSelClasses();
+          scrollLibraryToPath(state._kbCursor); updateCardSelClasses();
         } else return false;
       }
     });

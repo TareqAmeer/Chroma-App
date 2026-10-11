@@ -1154,7 +1154,9 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
 /// the RAW demosaic cost again. The persistent PNG remains the restart fallback.
 #[tauri::command(async)]
 fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
-                    demosaic_algo: String, lens_override: String, lens_override_focal: f64) -> Result<String, String> {
+                    demosaic_algo: String, lens_override: String, lens_override_focal: f64,
+                    display_only: Option<bool>) -> Result<String, String> {
+    let display_only = display_only.unwrap_or(false);
     let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
     let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
     let mut stage_t = std::time::Instant::now();
@@ -1168,8 +1170,9 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     }
     if library::decode_cache_exists(&path, &recipe_key)? {
         diag::stage("cache", &file_name, "already_cached_check", &mut stage_t);
-        library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
+        let display_path = library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
         diag::stage("cache", &file_name, "display_proxy_from_existing", &mut stage_t);
+        if display_only { return Ok(display_path); }
         // CHR-120: this shortcut used to return without ever touching RAW_EDITOR_CACHE — so a
         // "Cache RAWs" batch action on a photo already cached from an earlier app launch (the
         // common case: the on-disk PNG persists across relaunches, RAW_EDITOR_CACHE does not)
@@ -1202,6 +1205,11 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         }
         return Ok("cached".into());
     }
+    if display_only {
+        if let Ok(display_path) = library::get_display_decode_cache_path(path.clone(), recipe_key.clone(), 2560) {
+            return Ok(display_path);
+        }
+    }
     let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo.as_str(), _ => "" };
     let lens_override = match (lens_override.is_empty(), lens_override_focal > 0.0) {
         (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
@@ -1231,6 +1239,12 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
+    if display_only {
+        // RAW review needs only a bounded display asset. Keep the developed pixels transient:
+        // this branch must not write the full decode cache or warm RAW_EDITOR_CACHE.
+        return library::write_display_cache_from_rgba(&path, &recipe_key, decoded.width, decoded.height,
+            &rgba, 2560, &file_name, &mut stage_t);
+    }
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs()).unwrap_or(0);
@@ -3626,6 +3640,71 @@ mod effective_dcp_mode_tests {
         let (mode, used) = effective_dcp_mode("linear16", "", None);
         assert_eq!(mode, "linear16");
         assert_eq!(used, 0);
+    }
+}
+
+#[cfg(test)]
+mod raw_display_only_cache_tests {
+    use super::cache_raw_decode;
+    use std::path::Path;
+
+    fn unique_recipe(label: &str) -> String {
+        format!("raw-display-only-{label}-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos())
+    }
+
+    fn temp_raw(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("cs_raw_display_{label}_{}_{}.NEF", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::write(&path, b"synthetic cache-hit source").unwrap();
+        path
+    }
+
+    fn cache_display_only(path: &Path, recipe_key: &str) -> String {
+        cache_raw_decode(path.to_string_lossy().into_owned(), recipe_key.to_string(), "srgb".into(),
+            String::new(), "off".into(), false, "ahd".into(), String::new(), 0.0, Some(true)).unwrap()
+    }
+
+    #[test]
+    fn display_only_reuses_matching_proxy_without_full_or_memory_cache() {
+        let source = temp_raw("hit");
+        let path = source.to_string_lossy().into_owned();
+        let recipe = unique_recipe("hit");
+        let rgba = vec![127u8; 64 * 32 * 4];
+        let mut stage = std::time::Instant::now();
+        let expected = crate::library::write_display_cache_from_rgba(&path, &recipe, 64, 32, &rgba,
+            2560, "synthetic.NEF", &mut stage).unwrap();
+
+        let returned = cache_display_only(&source, &recipe);
+        assert_eq!(returned, expected);
+        assert!(!crate::library::decode_cache_exists(&path, &recipe).unwrap());
+        assert!(!super::RAW_EDITOR_CACHE.lock().unwrap().iter()
+            .any(|entry| entry.path == path && entry.recipe_key == recipe));
+
+        std::fs::remove_file(returned).unwrap();
+        std::fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires CULL_RAW_PATH pointing to a real RAW fixture"]
+    fn real_raw_display_only_writes_bounded_proxy_only() {
+        let source = std::env::var_os("CULL_RAW_PATH").expect("set CULL_RAW_PATH to a real RAW fixture");
+        let source = Path::new(&source);
+        assert!(source.is_file(), "CULL_RAW_PATH must name a real RAW fixture");
+        let path = source.to_string_lossy().into_owned();
+        let recipe = unique_recipe("real");
+
+        let proxy = cache_display_only(source, &recipe);
+        let dimensions = image::image_dimensions(&proxy).unwrap();
+        assert!(dimensions.0.max(dimensions.1) <= 2560, "proxy dimensions were {dimensions:?}");
+        let aspect = dimensions.0 as f64 / dimensions.1 as f64;
+        assert!((aspect - 1.5).abs() < 0.01, "expected the fixture's 3:2 aspect, got {dimensions:?}");
+        assert!(!crate::library::decode_cache_exists(&path, &recipe).unwrap());
+        assert!(!super::RAW_EDITOR_CACHE.lock().unwrap().iter()
+            .any(|entry| entry.path == path && entry.recipe_key == recipe));
+
+        // This is keyed uniquely for this test, so the returned proxy is the only artifact to remove.
+        std::fs::remove_file(proxy).unwrap();
     }
 }
 

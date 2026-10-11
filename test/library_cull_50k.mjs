@@ -55,6 +55,42 @@ try {
   assert.ok(opened.cards <= 240, `mounted grid cards stay bounded (got ${opened.cards})`);
   assert.ok(opened.gridNodes <= opened.cards * 32 + 100, `virtual grid subtree scales with mounted cards, not 50k records (cards=${opened.cards}, nodes=${opened.gridNodes})`);
 
+  // Real keyboard handlers must reuse the current view's order, rather than sorting 50k rows
+  // for every key. This is UI contract evidence, not native RAW decode timing.
+  await page.keyboard.press('Home');
+  const navigationBefore = await page.evaluate(() => window.__libNavigationState(16));
+  start = performance.now();
+  for (let i = 0; i < 32; i++) await page.keyboard.press('ArrowRight');
+  for (let i = 0; i < 16; i++) await page.keyboard.press('ArrowLeft');
+  const navigationMs = elapsed(start);
+  const navigationAfter = await page.evaluate(() => window.__libNavigationState(16));
+  assert.equal(navigationAfter.cursor, navigationBefore.pathAt, 'rapid forward/reverse keys reach the expected photo');
+  assert.equal(navigationAfter.builds, navigationBefore.builds, 'unchanged navigation does not rebuild the 50k order per key');
+  await page.keyboard.press('End');
+  await page.waitForFunction(() => { const nav = window.__libNavigationState(); return nav.cursorIndex === 49999 && !!document.querySelector(`#lib-grid .lib-card[data-path="${CSS.escape(nav.cursor)}"]`); });
+  assert.ok((await page.evaluate(() => window.__libState().range[0])) > 0, 'keyboard navigation mounts and scrolls to a distant virtual photo');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+
+  // A flag write can change filtered membership without rendering the grid. Verify that the
+  // cache sees that write and undo, not just changes that happen to trigger renderGrid().
+  const flaggedPath = await page.evaluate(() => window.__libNavigationState().cursor);
+  await page.evaluate(async (p) => {
+    await window.__libSetLabel(p, 'Red');
+    const filter = document.getElementById('lib-tag-filter');
+    filter.value = 'red'; filter.dispatchEvent(new Event('change', { bubbles: true }));
+  }, flaggedPath);
+  await page.waitForFunction(() => window.__libNavigationState().cursorIndex >= 0);
+  const beforeClear = await page.evaluate(() => window.__libNavigationState());
+  await page.evaluate((p) => window.__libSetLabel(p, ''), flaggedPath);
+  const cleared = await page.evaluate(() => window.__libNavigationState());
+  assert.equal(cleared.cursorIndex, -1, 'clearing Reject removes the current photo from reject-filtered navigation');
+  assert.ok(cleared.builds > beforeClear.builds, 'metadata write invalidates navigation');
+  await page.evaluate(() => window.__libUndoLast());
+  assert.ok((await page.evaluate(() => window.__libNavigationState())).cursorIndex >= 0, 'undo restores filtered navigation membership');
+  await page.evaluate(() => { const filter = document.getElementById('lib-tag-filter'); filter.value = 'all'; filter.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForFunction(() => window.__libState().n === 50000 && window.__libNavigationState().count === 50000);
+
   // Scroll well beyond the first viewport to prove the virtual grid can move while retaining a
   // bounded mounted window. The catalog mock returns all entries in one response, so this does
   // not simulate the native DB's page latency or storage cost.
@@ -120,7 +156,7 @@ try {
   assert.ok(page2.groupNodes < 900, `second group page with recommendation controls stays bounded (got ${page2.groupNodes} nodes)`);
   assert.ok(nextPageMs < 1000, `group-page button click paints within one second (got ${nextPageMs}ms)`);
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  console.log(`PASS CHR-267 50k synthetic Library/cull scale gate: open=${openMs}ms cards=${opened.cards}/240 gridNodes=${opened.gridNodes} pageDOM=${opened.dom}; scroll=${scroll.after}px mounted=${scroll.cards}; select=${selectMs}ms; groups=${picker.groups}→${fine.groups}, regroup=${regroupMs}ms, visible=${fine.shown}/50; next-page=${nextPageMs}ms; errors=0.`);
+  console.log(`PASS CHR-267 50k synthetic Library/cull scale gate: open=${openMs}ms cards=${opened.cards}/240 gridNodes=${opened.gridNodes} pageDOM=${opened.dom}; 48 navigation keys=${navigationMs}ms with no order rebuilds; metadata/undo invalidation passed; scroll=${scroll.after}px mounted=${scroll.cards}; select=${selectMs}ms; groups=${picker.groups}→${fine.groups}, regroup=${regroupMs}ms, visible=${fine.shown}/50; next-page=${nextPageMs}ms; errors=0.`);
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
