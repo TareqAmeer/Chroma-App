@@ -1636,3 +1636,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published integration commit `1f5ce12f` to `origin/main`; the fast-forward contained feature commit `43c54018`.
 - `git push origin HEAD:main` succeeded. `git ls-remote origin refs/heads/main` returned `926e7cba7d1ce7f695914474afc67d94cf75ad33`; that verified remote tip descends from `1f5ce12f` and contains feature commit `43c54018`.
+
+### 2026-10-11 — CHR-193 editor scope-status slice
+
+- Added a persistent deskbar status showing loaded-photo position/count, Basic Adjustment shared/independent mode, and the active export target; its accessible description distinguishes per-photo masks/geometry from shared batch values.
+- Added a focused Editor interaction test for photo switching, adjustment scope, and export scope. `npm run behaviour:test -- --grep "desktop scope status"`, `node --check test/editor_wireframe_behaviour.mjs`, `git diff --check`, and the desktop build pass. The full `npm run editor:gates` visual matrix stalled without producing results and remains unverified.
+- CHR-193 remains In Progress: batch recipe preview/undo, broader scope predictability, and partial batch outcome reporting are still open.

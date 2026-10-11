@@ -767,6 +767,32 @@ test.describe('point color panel — dynamic #pc-list (T29)', () => {
 });
 
 test.describe('export panel — dynamic #style-list (T29)', () => {
+  test('desktop scope status stays in sync with photo selection, adjustment scope, and export target', async ({ editor: { page } }) => {
+    // The fixture boots the full-screen Library takeover; exercise the same docked desktop
+    // deskbar the production Editor shows beside the photo.
+    await page.evaluate(() => { document.body.classList.remove('lib-full');document.body.classList.add('fx-deskb'); });
+    const fixtureB64 = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
+    await page.evaluate(async (b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const first = new File([bytes], 'portrait-one.png', { type: 'image/png' });
+      const second = new File([bytes], 'portrait-two.png', { type: 'image/png' });
+      await window.loadFXImages([first, second]);
+    }, fixtureB64);
+    const status = page.locator('#fx-batch-scope');
+    await expect(status).toBeVisible();
+    await expect(status).toContainText('Photo 1 of 2');
+    await expect(status).toContainText('Adjustments shared');
+    await expect(status).toContainText('Export all 2');
+    await expect(status).toHaveAttribute('aria-live', 'polite');
+    await expect(status).toHaveAttribute('title', /Masks and crop\/transform are per photo/);
+    await page.evaluate(() => fxSelectImage(1));
+    await expect(status).toContainText('Photo 2 of 2');
+    await page.evaluate(() => adjToggleScope());
+    await expect(status).toContainText('Adjustments independent');
+    await page.evaluate(() => setExportScope('current'));
+    await expect(status).toContainText('Export this photo');
+  });
+
   test('Save as Style… adds an entry, deleting it removes it', async ({ editor: { page } }) => {
     const before = await page.locator('#style-list .btn-row').count();
 
