@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011Y';
+const BUILD='1.1011Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25749,10 +25749,11 @@ function syncBatchScopeStatus(){
   const section=activeCard&&activeCard.dataset.fxsec||'adjust';
   const sectionName=CS_NAMES[section]||({masks:'Masks',adjustments:'Adjustments'}[section]||section);
   const perPhoto=SEC_ALWAYS_ONE.includes(section)||(section==='adjust'?!!(item&&item.adjustOverride):!!(item&&item.secOverride&&item.secOverride[section]));
-  const scope=count===1?'this photo only':SEC_ALWAYS_ONE.includes(section)?'per photo':perPhoto?'this photo only':SEC_SCOPE_DOM.includes(section)||section==='adjust'?'shared':'all photos';
+  const scope=count===1||SEC_ALWAYS_ONE.includes(section)?'this photo only':perPhoto?'this photo (override)':`all ${count} open photos`;
   const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
-  const visible=count>1?`Photo ${index} of ${count} · ${sectionName} ${scope} · Export ${exportLabel}`:`Single photo · ${sectionName} ${scope} · Export ${exportLabel}`;
-  const detail=`Photo ${index} of ${count}. ${sectionName} ${scope}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared batch value':''}. Basic adjustments ${item&&item.adjustOverride?'override':'follow'} the shared batch value. Masks and crop/transform are per photo; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}.`;
+  const sectionTarget=count>1&&perPhoto?'this photo only':count>1?`all ${count} open photos`:'this photo only';
+  const visible=count>1?`Photo ${index} of ${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Single photo · ${sectionName} → ${scope} · Export ${exportLabel}`;
+  const detail=`Photo ${index} of ${count}. ${sectionName} affects ${sectionTarget}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared value':''}. Basic adjustments ${item&&item.adjustOverride?'override the shared value for this photo':'follow the shared batch value unless overridden per photo'}. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}${fxExportScope==='current'?' only':' open photos'}.`;
   if(el.textContent!==visible)el.textContent=visible;
   if(el.title!==detail)el.title=detail;
   if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);

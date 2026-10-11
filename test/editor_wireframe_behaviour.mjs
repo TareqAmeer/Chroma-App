@@ -799,21 +799,24 @@ test.describe('export panel — dynamic #style-list (T29)', () => {
     }, fixtureB64);
     const status = page.locator('#fx-batch-scope');
     await expect(status).toBeVisible();
+    await page.evaluate(() => fxSection('adjust'));
     await expect(status).toContainText('Photo 1 of 2');
-    await expect(status).toContainText('Adjustments shared');
+    await expect(status).toContainText('Light → all 2 open photos');
     await expect(status).toContainText('Export all 2');
     await expect(status).toHaveAttribute('aria-live', 'polite');
-    await expect(status).toHaveAttribute('title', /Masks and crop\/transform are per photo/);
+    await expect(status).toHaveAttribute('title', /Masks and crop\/transform always affect this photo only/);
+    await expect(status).toHaveAttribute('aria-label', /Basic adjustments follow the shared batch value unless overridden per photo/);
     await page.evaluate(() => fxSelectImage(1));
     await expect(status).toContainText('Photo 2 of 2');
     await page.evaluate(() => adjToggleScope());
-    await expect(status).toContainText('Adjustments independent');
+    await expect(status).toContainText('Light → this photo (override)');
+    await expect(status).toHaveAttribute('title', /Basic adjustments override the shared value for this photo/);
     await page.evaluate(() => setExportScope('current'));
     await expect(status).toContainText('Export this photo');
     await page.evaluate(() => fxSection('grain'));
-    await expect(status).toContainText('Grain shared');
+    await expect(status).toContainText('Sharpen → all 2 open photos');
     await page.evaluate(() => fxSection('crop'));
-    await expect(status).toContainText('Crop per photo');
+    await expect(status).toContainText('Crop → this photo only');
   });
 
   test('Save as Style… adds an entry, deleting it removes it', async ({ editor: { page } }) => {
