@@ -1498,6 +1498,73 @@ mod tests {
         }
     }
 
+    /// The recovered registration convention must also compose with the pair blender on real
+    /// overlap geometry. Build two partial crops from one continuous world, estimate A->B using
+    /// the production aligner, then pass that estimate (not the known transform) to stitch_pair.
+    #[test]
+    fn panorama_registered_partial_crops_stitch_world_content() {
+        let (w, h) = (160usize, 160usize);
+        let truth = pano::Similarity { tx: -24.0, ty: 1.0, theta: 0.035, scale: 1.02 };
+        let (sin_t, cos_t) = truth.theta.sin_cos();
+        let reference = synth_gray(w, h, |x, y| world_fn(x as f32, y as f32));
+        // If q=T(p) maps reference coordinates p into the moving frame, then moving(q) is
+        // sampled from the same continuous world at T^-1(q). This avoids adding a second raster
+        // interpolation to the registration's synthetic partial-overlap fixture.
+        let moving = synth_gray(w, h, |x, y| {
+            let dx = x as f32 - truth.tx;
+            let dy = y as f32 - truth.ty;
+            let px = (cos_t * dx + sin_t * dy) / truth.scale;
+            let py = (-sin_t * dx + cos_t * dy) / truth.scale;
+            world_fn(px, py)
+        });
+        let (tx, ty, theta, scale) = align::register_similarity(&reference, &moving, w, h, 80);
+        assert!((tx - truth.tx).abs() < 1.0, "registration tx={tx}, expected {}", truth.tx);
+        assert!((ty - truth.ty).abs() < 1.0, "registration ty={ty}, expected {}", truth.ty);
+        assert!((theta - truth.theta).abs() < 0.012, "registration theta={theta}, expected {}", truth.theta);
+        assert!((scale - truth.scale).abs() < 0.02, "registration scale={scale}, expected {}", truth.scale);
+
+        let a_img = rgb_from_gray(&reference, w, h);
+        let b_img = rgb_from_gray(&moving, w, h);
+        let recovered = pano::Similarity { tx, ty, theta, scale };
+        let stitched = pano::stitch_pair(&a_img, &b_img, &recovered).expect("stitch recovered partial crops");
+
+        let (sin_r, cos_r) = recovered.theta.sin_cos();
+        let b_to_a = |bx: f32, by: f32| {
+            let dx = bx - recovered.tx;
+            let dy = by - recovered.ty;
+            ((cos_r * dx + sin_r * dy) / recovered.scale, (-sin_r * dx + cos_r * dy) / recovered.scale)
+        };
+        let corners = [b_to_a(0.0, 0.0), b_to_a(w as f32, 0.0), b_to_a(0.0, h as f32), b_to_a(w as f32, h as f32)];
+        let ox = corners.iter().map(|p| p.0).fold(0.0f32, f32::min).floor();
+        let oy = corners.iter().map(|p| p.1).fold(0.0f32, f32::min).floor();
+        assert!(stitched.w > w && stitched.w < w * 2, "partial overlap should produce a bounded expanded canvas: {}x{}", stitched.w, stitched.h);
+        assert!(stitched.h > h / 2 && stitched.h < h * 2, "rotation should keep canvas height bounded: {}x{}", stitched.w, stitched.h);
+
+        let sample = |ax: f32, ay: f32| {
+            let x = (ax - ox).round() as usize;
+            let y = (ay - oy).round() as usize;
+            assert!(x < stitched.w && y < stitched.h, "world probe ({ax},{ay}) is outside {}x{} canvas", stitched.w, stitched.h);
+            stitched.data[(y * stitched.w + x) * 3]
+        };
+        // A-only content remains stable far from the seam.
+        let a_probe = (12.0, 80.0);
+        assert!((sample(a_probe.0, a_probe.1) - world_fn(a_probe.0, a_probe.1)).abs() < 0.04,
+            "A-exclusive content drifted after registration and blending");
+        // An interior point in B's exclusive region verifies both expanded canvas bounds and
+        // B->A inverse placement, while an overlap point verifies both images agree in the seam.
+        let b_probe = b_to_a(145.0, 80.0);
+        assert!(b_probe.0 > w as f32 + 3.0, "probe must be beyond A's right edge: {b_probe:?}");
+        assert!((sample(b_probe.0, b_probe.1) - world_fn(b_probe.0, b_probe.1)).abs() < 0.05,
+            "B-exclusive content or canvas placement drifted");
+        let overlap_probe = (100.0, 80.0);
+        let mapped = (scale * (cos_r * overlap_probe.0 - sin_r * overlap_probe.1) + tx,
+            scale * (sin_r * overlap_probe.0 + cos_r * overlap_probe.1) + ty);
+        assert!(mapped.0 >= 0.0 && mapped.0 < w as f32 && mapped.1 >= 0.0 && mapped.1 < h as f32,
+            "overlap probe should lie in both crops: {mapped:?}");
+        assert!((sample(overlap_probe.0, overlap_probe.1) - world_fn(overlap_probe.0, overlap_probe.1)).abs() < 0.05,
+            "overlap content drifted after registration and blending");
+    }
+
     /// Real end-to-end panorama stitch: two overlapping crops of one larger world, related by a
     /// KNOWN small rotation/translation, actually composited via `pano::stitch_pair` (not just
     /// the alignment primitive above). Confirms (1) the composite reproduces the world's true
