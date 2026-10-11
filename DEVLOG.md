@@ -1584,6 +1584,11 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Process-boundary persistence plus the existing startup-reporting UI test covers interrupted-job reporting and resume. The tests exercise native persistence and UI orchestration separately; no single Tauri GUI/native-catalog relaunch test was run.
 - Published as integration commit `d4388704f8fdc23f6d09278bf4970c749a1c96f5`; a fresh `git ls-remote origin refs/heads/main` confirmed that exact commit on the remote. The feature commit is contained in the published history.
 
+### 2026-10-11 — CHR-246 natural-photo fixture publication
+
+- The attributed power-line fixture and quality review record were integrated as `9e7d41db` and `9a05447a`, then fast-forwarded to `origin/main`.
+- A fresh `git ls-remote origin refs/heads/main` confirmed `9a05447aa6ce792779e1c6f7131385e62af4a29e`. The fixture SHA-256 matches its README and the MI-GAN quality failure is documented in Linear; CHR-246 remains In Progress with AC4 and AC7 open.
+
 ### 2026-10-11 — CHR-246 real-photo MI-GAN quality check
 
 - Added a reusable, attributed 4000×3000 Wikimedia Commons power-line photograph at `test/fixtures/chr246-real/power-lines.jpg` (Nicholas Frisardi, CC BY-SA 3.0; SHA-256 `da0e90b0ff663dd8ab543414a44e6c4e068fd005b4e87e96c2d6204286449510`).
