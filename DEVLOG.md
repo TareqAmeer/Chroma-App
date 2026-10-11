@@ -1603,3 +1603,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Files: `package.json`, `test/teeth_whitening_render.mjs`, and `DEVLOG.md`. Feature commit `12a100f6df2e1b2489d0be696ac35570c899f236` was integrated as `29111d7c5f7ea06c5d5e6786f914470c4765d962` and fast-forwarded to `origin/main`.
 - The clean integration checkout passed the manual workflow (49/49), headed Chrome preview/render/export suite (11/11; preview max delta 0), JavaScript syntax, and whitespace checks. After the fast-forward, `git ls-remote origin refs/heads/main` returned `29111d7c5f7ea06c5d5e6786f914470c4765d962`, which contains the feature commit; this record is the publication follow-up.
+
+### 2026-10-11 — CHR-274 depth refinement zoom parity
+
+- Added `npm run mask:depth-preview` to run the depth-mask preview/export gate in headed Chrome with its normal GPU path. A lost WebGL context now fails this live-preview mode instead of silently counting as a pass; the existing headless SwiftShader mode remains available for deterministic export checks.
+- Expanded `test/mask_depth_refinement_gpu.mjs` to compare fit, 28/50/75/100% fit-buffer zooms, the full-resolution transition at 112%, and 125/150/200/300/400/600/800% crop previews against tiled export. Panned checks cover both horizontal/vertical directions at 150/200/400/800%.
+- Verification: headed GPU depth/refinement/export suite passes fit plus all 15 zoom/pan probes (max channel difference 22; mean below 0.06); two-tile output is byte-identical to direct output, reset preserves native depth identity, and crop/rotation dimensions are correct. Refinement math passes 28/28; JS syntax and `git diff --check` pass. Labelled photographic hair/foliage/fine-edge halo measurements remain open for CHR-274.
