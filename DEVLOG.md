@@ -1506,3 +1506,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Fixed Resume so the result-report selection sends the selected batch item indices; native resume makes only selected retryable failures/skips pending, preserves preflight errors, and never resets applied items. Files: `desktop/library-ui.js`, `desktop/src-tauri/src/recipe_batch.rs`.
 - Verification: `node --check desktop/library-ui.js` and `node --test test/recipe_batch.mjs` pass (7/7); focused Rust regression `resume_retries_only_selected_skips_and_never_preflight_or_applied_items` passes (1/1). Browser result-flow test could not run because Playwright is not installed in this checkout.
 - CHR-273 checklist: keep the per-photo progress/reason, skipped-result browser flow, next-launch recovery, and jobs-panel interaction criteria open until their UI evidence is available; existing 5,000 real-sidecar, selective-settings, and one-step undo evidence remains checked. Publication verification will follow integration.
+
+### 2026-10-11 — CHR-273 publication verification
+
+- Feature commit `361c0aa7` is integrated as `dbda25de4ef490c3aed2f32093156de7ab04a747`; the clean integration checkout passes the seven JS batch tests and the focused skipped-item native regression (1/1).
+- A fresh fetch and `git ls-remote origin refs/heads/main` verified `origin/main` at `dbda25de4ef490c3aed2f32093156de7ab04a747`, containing the CHR-273 retry fix. Restart reporting and complete UI acceptance remain open; issue remains In Progress.
