@@ -264,3 +264,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Extended `test/teeth_whitening_render.mjs` to use the real embedded-teeth import helper with a deterministic two-tone PNG matte, then verify source provenance, resampled selection, localized correction, snapshot-render identity, and forced tiled/direct parity.
 - Focused Chrome render probe passes all 10 deterministic checks; the embedded matte has left coverage 255/right coverage 0 and tiled maximum channel delta 0. Live app preview parity explicitly skips because the main WebGL context is lost before the probe. Synthetic geometry does not establish real portrait registration or edge quality, and catalog/portable-container round trip remains untested; CHR-253 AC1/3/4/6 remain open.
 - Modified `test/teeth_whitening_render.mjs` and `docs/DEVLOG.md`.
+
+### CHR-253 — embedded teeth matte render test publication verified
+
+- Published feature commit `a3255035` as integration commit `a080bb303a38a9b77fe7ce8b7f36e6f73e77577c` on `origin/main`; fetch, `git ls-remote`, and ancestry checks confirmed publication.
+- Clean-checkout focused Chrome render test passed all 10 deterministic checks: embedded matte import/resampling, selected-only correction, snapshot rendering, and two-tile/direct parity all passed (max channel delta 0). The preview parity probe explicitly skipped because the main app WebGL context was lost before sampling; CHR-253 AC1/3/4/6 remain open and the ticket remains In Progress.
