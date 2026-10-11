@@ -1694,3 +1694,5 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added a pre-apply target review for ordinary and selective recipe paste. It shows deduplicated target names, readiness, exact counts, and lets users cancel before any batch journal or recipe write is created.
 - Files: `desktop/library-ui.js` and `test/recipe_batch_ui.mjs`. The batch data-model, dark/light UI, cancellation/no-journal, partial outcome/retry, exact undo, and 5,000-item responsiveness checks pass. CHR-193 remains In Progress; persistent single/selected scope language and tone/crop/export predictability still need direct implementation and validation.
+- Feature commit `76395fbf3e532c67b9282806001ef66a1ef51e4b` was integrated after the focused batch suite passed on the integration checkout and fast-forwarded to `origin/main`.
+- `git ls-remote origin refs/heads/main` confirmed `76395fbf3e532c67b9282806001ef66a1ef51e4b` immediately after publication.
