@@ -1458,3 +1458,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added the focused `test/mask_local_dehaze.mjs` regression to the standard `npm run mask:test` gate and aligned its Playwright/Chrome overrides with the other mask browser tests. Files: `package.json`, `test/mask_local_dehaze.mjs`.
 - Verification: the integrated mask gate passes (raster suite 76/76 and local Dehaze 11/11), including signed effect, masked-only coverage, zero identity, undo/snapshot/copy, tiled parity, and shader compilation checks. Lightroom visual parity and five-photo signoff remain open.
+- Publication verified: integration commit `a7f2c516fbcf3ee61e0a1866e830ce8146dd4f97` is present on `origin/main`; post-push fetch, `git ls-remote`, and ancestry check all matched that remote tip.
