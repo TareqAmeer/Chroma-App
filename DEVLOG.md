@@ -1551,3 +1551,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended `test/mask_depth_refinement_gpu.mjs` to exercise the real `renderPreview()` fit and settled 200%, 400%, and 800% zoom paths, capture the crop UVs actually used by the renderer, and compare visible preview pixels with the corresponding tiled export region. The test now emits explicit WebGL context-loss diagnostics and leaves parity unchecked when its live preview canvas is unavailable.
 - Verification: native/reset GPU output, refined/tiled output, crop/rotation dimensions, and two-tile assertions pass; `node --check` and `git diff --check` pass. In the headless SwiftShader environment the live preview context is lost before comparison, so zoom parity is skipped with trace evidence; no preview/export match is claimed. CHR-274 AC4 and labelled-photo halo AC5 remain open.
+
+### 2026-10-11 — CHR-274 harness progress publication
+
+- Feature commit `d08a42b37636761815045f7fcddcf1df75b80fee` was integrated as `73c2fc0e9f695d44dcf9557c20c747acf70a56eb` and pushed to `origin/main`.
+- A fresh `git ls-remote origin refs/heads/main` verified the remote tip at `73c2fc0e9f695d44dcf9557c20c747acf70a56eb`. The clean integration checkout reran the two-tile GPU test; export/reset checks passed and live preview parity explicitly skipped because the visible context is lost under headless SwiftShader. CHR-274 AC4 and labelled-photo AC5 remain open.
