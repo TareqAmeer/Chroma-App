@@ -1511,3 +1511,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `361c0aa7` is integrated as `dbda25de4ef490c3aed2f32093156de7ab04a747`; the clean integration checkout passes the seven JS batch tests and the focused skipped-item native regression (1/1).
 - A fresh fetch and `git ls-remote origin refs/heads/main` verified `origin/main` at `dbda25de4ef490c3aed2f32093156de7ab04a747`, containing the CHR-273 retry fix. Restart reporting and complete UI acceptance remain open; issue remains In Progress.
+
+### 2026-10-11 — CHR-253 embedded hair matte
+
+- Added a macOS desktop Hair Matte action and generalized embedded portrait matte import for hair and teeth, including per-photo extraction reuse/locking, editable raster Brush masks, provenance, and photo identity checks after both extraction and PNG decode. Files: `chromasmith-22.html`, `test/teeth_whitening.mjs`, `test/mask_depth_preview.mjs`.
+- Verification: embedded/manual matte browser suite 38/38, depth-preview browser test, mask-composition identity test 1/1, composition menu 18 checks, composition pixel/export test 13/13, HTML validity, JS syntax, and `git diff --check` pass. The depth-preview and composition-menu tests now wait for setup history debounce before checking undo behavior.
+- CHR-253 AC2 and AC5 have focused code/test evidence; AC1, AC3, AC4, and AC6 remain open. Tests use mocked mattes; real portrait orientation, registration, edge quality, and full model/platform/catalog coverage remain unverified. Issue remains In Progress.

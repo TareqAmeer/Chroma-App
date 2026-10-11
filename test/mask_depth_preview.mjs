@@ -26,6 +26,9 @@ try{
     fxSection('local',true);const panel=document.querySelector('.fx-ctrl[data-fxsec="local"]');if(panel?.classList.contains('fx-sec-collapsed'))fxSecToggle(panel);
     fxState.masks=[{type:'none',origin:'depth',depOn:true,depLo:.25,depHi:.75,refineFeather:0,refineEdge:0,amount:100,lumLo:0,lumHi:1}];
     mskSel=0;_mskEnsureIds(fxState.masks);mskRebuild();
+    // Let any setup-triggered fxUpdate history debounce settle before taking the read-only
+    // baseline; otherwise that unrelated timer can fire while Escape is being tested.
+    await new Promise(resolve=>setTimeout(resolve,450));
     const trigger=document.getElementById('btn-msk-depth-preview');
     const before={snapshot:JSON.stringify(getUISnapshot()),params:JSON.stringify(getFXParams()),history:fxHistory.length,index:fxHistIdx,exportScope:fxExportScope};
     trigger.focus();trigger.click();
@@ -40,11 +43,11 @@ try{
   assert.ok(setup.closeFocused,'opening the preview moves keyboard focus to its Close button');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(100);
-  const afterEscape=await page.evaluate(before=>({closed:!document.querySelector('.msk-depth-preview-dialog')?.open,
-    focus:document.activeElement?.id,trigger:document.getElementById('btn-msk-depth-preview')?.id,
-    unchanged:before.snapshot===JSON.stringify(getUISnapshot())&&before.params===JSON.stringify(getFXParams())&&before.history===fxHistory.length&&before.index===fxHistIdx&&before.exportScope===fxExportScope}),setup.before);
+  const afterEscape=await page.evaluate(before=>{const parts={snapshot:before.snapshot===JSON.stringify(getUISnapshot()),params:before.params===JSON.stringify(getFXParams()),history:before.history===fxHistory.length,index:before.index===fxHistIdx,exportScope:before.exportScope===fxExportScope};return{closed:!document.querySelector('.msk-depth-preview-dialog')?.open,
+    focus:document.activeElement?.id,trigger:document.getElementById('btn-msk-depth-preview')?.id,parts,
+    unchanged:Object.values(parts).every(Boolean)};},setup.before);
   assert.ok(afterEscape.closed&&afterEscape.focus==='btn-msk-depth-preview',`Escape closes the preview and restores focus to its trigger: ${JSON.stringify(afterEscape)}`);
-  assert.ok(afterEscape.unchanged,'opening and closing preview leaves adjustments, history and export scope untouched');
+  assert.ok(afterEscape.unchanged,'opening and closing preview leaves adjustments, history and export scope untouched: '+JSON.stringify(afterEscape.parts));
   const repeated=await page.evaluate(()=>{const b=document.getElementById('btn-msk-depth-preview');b.focus();b.click();const first=!!window.__mskDepthPreview;mskDepthPreviewClose(true);b.focus();b.click();return{first,count:document.querySelectorAll('.msk-depth-preview-dialog').length,secondFocused:document.activeElement?.getAttribute('aria-label')==='Close depth map preview'};});
   await page.waitForTimeout(40);
   const repeatFocus=await page.evaluate(()=>document.activeElement?.getAttribute('aria-label')==='Close depth map preview');

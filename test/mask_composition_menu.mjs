@@ -28,7 +28,7 @@ try{
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html?deskx=1`,{waitUntil:'load'});
   await page.waitForFunction(()=>typeof mskSetComposition==='function'&&typeof mskMoreMenu==='function');
-  await page.evaluate(()=>{
+  await page.evaluate(async()=>{
     const skip=document.querySelector('[data-tour-action="close"]');skip?.click();
     document.getElementById('cs-modal-ov')?.remove();
     const make=(id,name)=>({id,name,type:'radial',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,
@@ -37,6 +37,9 @@ try{
     fxSection('local',true);toggleFX('local');mskRebuild();
     const snap=getUISnapshot({skipRaster:true}),rasters=fxState.masks.map(m=>m.px||null);
     fxHistory=[{j:JSON.stringify(snap),snap,rasters,label:'Start',ts:Date.now()}];fxHistIdx=0;fxSyncTopbarDisabled();
+    // Let setup-triggered fxUpdate history debounce settle before asserting the explicit Apply
+    // operation adds exactly one undo entry.
+    await new Promise(resolve=>setTimeout(resolve,450));
     document.querySelector('.msk-more').click();
     document.querySelector('.msk-more-menu .msk-more-it[aria-haspopup="dialog"]').click();
     window.__composeAutofocused=document.activeElement===document.querySelector('#msk-compose-operation');

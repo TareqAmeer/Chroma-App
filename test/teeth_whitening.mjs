@@ -146,21 +146,23 @@ async function main() {
       const pngB64 = pixel.toDataURL('image/png').split(',')[1];
       fxImages[0].path = 'fixture/portrait-a.heic'; fxImages[1].path = 'fixture/portrait-b.heic';
       const calls = [];
+      let embeddedKind = 'teeth';
       window.__embeddedMatteCore = window.__TAURI__?.core;
       window.__TAURI__ = { ...(window.__TAURI__ || {}), core: { invoke: async (command, args) => {
         calls.push({ command, args });
         if (command !== 'extract_embedded_auxiliary') throw new Error('Unexpected native command: ' + command);
-        return [{ kind: 'teeth', width: matteWidth, height: matteHeight, png_b64: pngB64 }];
+        return [{ kind: embeddedKind, width: matteWidth, height: matteHeight, png_b64: pngB64 }];
       } } };
       window.CS_PLATFORM = { os: 'windows' };
       document.querySelector('button[onclick="mskAddMenu(event)"]').click();
       ck('embedded matte action is hidden on unsupported desktop platforms',
-        ![...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')));
+        ![...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')||button.textContent.includes('Embedded Hair Matte')));
       document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
       window.CS_PLATFORM.os = 'macos';
       document.querySelector('button[onclick="mskAddMenu(event)"]').click();
       ck('embedded matte action is available on macOS desktop',
-        [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')));
+        [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte'))
+        && [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Hair Matte')));
       document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
       const preEmbeddedCount = fxState.masks.length;
       const embeddedResult = await mskAddEmbeddedTeethWhitening();
@@ -187,12 +189,40 @@ async function main() {
         && fxState.masks.some(mask => mask.origin === 'embedded-teeth' && mask.px instanceof Uint8ClampedArray
           && mask.px.some(value => value > 0)));
 
+      // Hair uses the same photo-bound extraction and editable Brush raster, but has no teeth
+      // whitening color correction. The original image remains the provenance source.
+      embeddedKind = 'hair'; delete fxImages[0]._embeddedAuxiliaryPromise;
+      const preHairCount = fxState.masks.length;
+      const hairResult = await mskAddEmbeddedHairMatte();
+      const hair = fxState.masks[mskSel];
+      eck('embedded hair matte creates a selected editable Brush mask', !!hairResult
+        && fxState.masks.length === preHairCount + 1 && hair?.type === 'brush'
+        && hair.px instanceof Uint8ClampedArray && hair.px.length === hair.mtW * hair.mtH
+        && hair.px.some(value => value > 0));
+      eck('embedded hair matte records source path, kind, and dimensions', hair?.origin === 'embedded-hair'
+        && hair?.name === 'Hair (embedded matte)' && hair?.sourcePath === 'fixture/portrait-a.heic'
+        && hair?.sourceKind === 'hair' && hair?.sourceWidth === matteWidth && hair?.sourceHeight === matteHeight);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const hairCount = fxState.masks.length;
+      await fxUndo();
+      eck('one undo removes the imported hair matte', fxState.masks.length === hairCount - 1);
+      await fxRedo();
+      eck('redo and snapshot round trip preserve the hair selection and provenance', fxState.masks.length === hairCount
+        && fxState.masks.some(mask => mask.origin === 'embedded-hair' && mask.sourceKind === 'hair'
+          && mask.px instanceof Uint8ClampedArray && mask.px.some(value => value > 0)));
+      const hairSnapshot = JSON.parse(JSON.stringify(getUISnapshot())); applyUISnapshot(hairSnapshot);
+      eck('save/reopen snapshot retains the hair matte Brush raster', fxState.masks.some(mask => mask.origin === 'embedded-hair'
+        && mask.sourceKind === 'hair' && mask.sourcePath === 'fixture/portrait-a.heic' && mask.px?.some(value => value > 0)));
+
       // An unsupported file returns no teeth map; a native error also leaves the recipe intact.
       const beforeNoMatte = JSON.stringify(getUISnapshot()), nativeInvoke = window.__TAURI__.core.invoke;
       delete fxImages[0]._embeddedAuxiliaryPromise;
       window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); return []; };
       await mskAddEmbeddedTeethWhitening();
       eck('missing embedded teeth matte leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      await mskAddEmbeddedHairMatte();
+      eck('missing embedded hair matte leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
       delete fxImages[0]._embeddedAuxiliaryPromise;
       const emptyCanvas = document.createElement('canvas'); emptyCanvas.width = matteWidth; emptyCanvas.height = matteHeight;
       const emptyContext = emptyCanvas.getContext('2d'); emptyContext.fillStyle = '#000'; emptyContext.fillRect(0, 0, matteWidth, matteHeight);
@@ -207,6 +237,35 @@ async function main() {
       window.__TAURI__.core.invoke = async (command, args) => { calls.push({ command, args }); throw new Error('fixture extraction failure'); };
       await mskAddEmbeddedTeethWhitening();
       eck('native extraction error leaves masks unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+      delete fxImages[0]._embeddedAuxiliaryPromise;
+      await mskAddEmbeddedHairMatte();
+      eck('native extraction error also leaves the hair mask list unchanged', JSON.stringify(getUISnapshot()) === beforeNoMatte);
+
+      // A photo can change while the returned PNG is decoding, after native extraction has
+      // already completed. The import must recheck photo identity at this second async boundary.
+      await fxSelectImage(0); embeddedKind = 'hair'; delete fxImages[0]._embeddedAuxiliaryPromise;
+      const nativeDecode = window.Image.prototype.decode;
+      let decodeStarted = false, releaseDecode;
+      window.Image.prototype.decode = function(){
+        if(!this.src.startsWith('data:image/png;base64,'))return nativeDecode.call(this);
+        decodeStarted = true;
+        return new Promise((resolve,reject)=>{releaseDecode=()=>nativeDecode.call(this).then(resolve,reject);});
+      };
+      window.__TAURI__.core.invoke = async (command,args)=>{
+        calls.push({command,args});
+        return [{kind:'hair',width:matteWidth,height:matteHeight,png_b64:pngB64}];
+      };
+      const beforeDecodeSwitch = fxState.masks.length, decodeWork = mskAddEmbeddedHairMatte();
+      for(let i=0;i<100&&!decodeStarted;i++)await new Promise(resolve=>setTimeout(resolve,5));
+      eck('hair matte PNG reaches the asynchronous decode step',decodeStarted);
+      await fxSelectImage(1);
+      const afterDecodeSwitch = fxState.masks.length, outgoingAfterSwitch = fxImages[0].masks.length;
+      releaseDecode?.();
+      const staleDecodeResult = await Promise.race([decodeWork,new Promise(resolve=>setTimeout(()=>resolve('timeout'),1500))]);
+      window.Image.prototype.decode = nativeDecode;
+      eck('photo switch during PNG decode cannot attach hair mask to either photo',staleDecodeResult===false
+        && fxCurIdx===1 && fxState.masks.length===afterDecodeSwitch
+        && fxImages[0].masks.length===outgoingAfterSwitch && beforeDecodeSwitch===outgoingAfterSwitch);
 
       // Resolve a delayed native response after switching photos: it must not attach to either
       // the outgoing or newly selected photo.
@@ -215,18 +274,18 @@ async function main() {
       window.__TAURI__.core.invoke = async (command, args) => {
         calls.push({ command, args });
         if(command!=='extract_embedded_auxiliary')return [];
-        return new Promise(resolve => { releaseExtraction = () => resolve([{ kind: 'teeth', width: matteWidth, height: matteHeight, png_b64: pngB64 }]); });
+        return new Promise(resolve => { releaseExtraction = () => resolve([{ kind: embeddedKind, width: matteWidth, height: matteHeight, png_b64: pngB64 }]); });
       };
       await fxSelectImage(0);
       const firstPhotoMaskCount = fxState.masks.length;
-      const staleWork = mskAddEmbeddedTeethWhitening();
+      const staleWork = mskAddEmbeddedHairMatte();
       await new Promise(resolve => setTimeout(resolve, 20));
       await fxSelectImage(1);
       const secondPhotoMaskCount = fxState.masks.length;
       releaseExtraction?.();
       const staleResult = await Promise.race([staleWork.then(value=>value,e=>{throw e;}),
         new Promise(resolve=>setTimeout(()=>resolve('timeout'),1500))]);
-      eck('photo switch discards a stale embedded matte result', staleResult === false && fxCurIdx === 1
+      eck('photo switch discards a stale embedded hair matte result', staleResult === false && fxCurIdx === 1
         && fxState.masks.length === secondPhotoMaskCount
         && fxImages[0].masks.length === firstPhotoMaskCount);
       window.__TAURI__.core.invoke = nativeInvoke;
