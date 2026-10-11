@@ -1653,3 +1653,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Added a persistent deskbar status showing loaded-photo position/count, Basic Adjustment shared/independent mode, and the active export target; its accessible description distinguishes per-photo masks/geometry from shared batch values.
 - Added a focused Editor interaction test for photo switching, adjustment scope, and export scope. `npm run behaviour:test -- --grep "desktop scope status"`, `node --check test/editor_wireframe_behaviour.mjs`, `git diff --check`, and the desktop build pass. The full `npm run editor:gates` visual matrix stalled without producing results and remains unverified.
 - CHR-193 remains In Progress: batch recipe preview/undo, broader scope predictability, and partial batch outcome reporting are still open.
+
+### 2026-10-11 — CHR-193 publication
+
+- Integration commit `56f7d6cf25c55d7206d336c098a9dd9a272ea0c9` includes feature commit `0221f0fe` and preserves CHR-194 updates on main.
+- `git ls-remote origin refs/heads/main` confirmed `56f7d6cf25c55d7206d336c098a9dd9a272ea0c9`. The feature-branch focused browser test passed; the isolated integration checkout lacked `@playwright/test`, and the full visual gates remained stalled, so no broader gate pass is claimed.
