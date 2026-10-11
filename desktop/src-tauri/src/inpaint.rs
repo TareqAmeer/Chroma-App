@@ -106,6 +106,60 @@ fn candidate_signature(rgba: &[u8], sample_indices: &[usize]) -> Vec<[u8; 3]> {
         .collect()
 }
 
+/// Mean source-to-repair RGB delta on masked boundary pixels, weighted by the
+/// feathered candidate alpha and reported in 0–255 units. This diagnostic cue
+/// does not measure seam quality, semantic correctness, or texture continuation.
+fn candidate_boundary_edit_delta(
+    rgb: &[u8],
+    mask: &[u8],
+    rgba: &[u8],
+    w: u32,
+    h: u32,
+) -> Option<f32> {
+    let pixels = (w as usize).checked_mul(h as usize)?;
+    if pixels == 0
+        || rgb.len() != pixels.checked_mul(3)?
+        || mask.len() != pixels
+        || rgba.len() != pixels.checked_mul(4)?
+        || mask.iter().any(|&value| value != 0 && value != 255)
+    {
+        return None;
+    }
+
+    let (width, height) = (w as usize, h as usize);
+    let mut channel_delta_sum = 0u64;
+    let mut boundary_weight = 0u64;
+    for y in 0..height {
+        for x in 0..width {
+            let i = y * width + x;
+            if mask[i] != 0 {
+                continue;
+            }
+            let touches_source = (x > 0 && mask[i - 1] == 255)
+                || (x + 1 < width && mask[i + 1] == 255)
+                || (y > 0 && mask[i - width] == 255)
+                || (y + 1 < height && mask[i + width] == 255);
+            if !touches_source {
+                continue;
+            }
+
+            let alpha = rgba[i * 4 + 3] as u64;
+            for channel in 0..3 {
+                let source = rgb[i * 3 + channel] as u64;
+                let candidate = rgba[i * 4 + channel] as u64;
+                // Weight RGB difference by the stored feather alpha. Avoid a
+                // temporary full-frame composite buffer.
+                channel_delta_sum += source.abs_diff(candidate) * alpha;
+            }
+            boundary_weight += alpha;
+        }
+    }
+    if boundary_weight == 0 {
+        return Some(0.0);
+    }
+    Some(channel_delta_sum as f32 / (boundary_weight as f32 * 3.0))
+}
+
 fn candidate_is_distinct(signature: &[[u8; 3]], accepted: &[Vec<[u8; 3]>]) -> bool {
     !signature.is_empty()
         && accepted.iter().all(|prior| {
@@ -156,6 +210,8 @@ pub struct Candidate {
     pub path: String,
     pub hash: String,
     pub changed_pixels: usize,
+    /// Feather-alpha-weighted mean RGB boundary edit delta (0–255); diagnostic only.
+    pub boundary_edit_delta: f32,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -525,6 +581,8 @@ pub fn start(
                 .enumerate()
                 .filter(|(i, p)| p[3] != 0 && p[..3] != rgb[i * 3..i * 3 + 3])
                 .count();
+            let boundary_edit_delta = candidate_boundary_edit_delta(&rgb, &mask, &rgba, w, h)
+                .ok_or("Invalid candidate dimensions for boundary diagnostic")?;
             let image = ImageBuffer::<Rgba<u8>, _>::from_raw(w, h, rgba)
                 .ok_or("Invalid candidate pixels")?;
             let path = dir.join(format!("{index}.png"));
@@ -534,6 +592,7 @@ pub fn start(
                 path: path.to_string_lossy().into_owned(),
                 hash: hash_file(&path)?,
                 changed_pixels,
+                boundary_edit_delta,
             };
             if let Ok(mut map) = jobs().lock() {
                 if let Some(job) = map.get_mut(&id) {
@@ -703,6 +762,46 @@ pub fn export_bundle_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn boundary_edit_delta_reports_mean_rgb_change_and_handles_empty_or_invalid_inputs() {
+        let rgb = vec![40; 3 * 3 * 3];
+        let mut mask = vec![255; 9];
+        mask[4] = 0;
+        let mut matching = vec![0; 9 * 4];
+        for pixel in 0..9 {
+            matching[pixel * 4..pixel * 4 + 3].copy_from_slice(&[40; 3]);
+            matching[pixel * 4 + 3] = if mask[pixel] == 0 { 255 } else { 0 };
+        }
+        assert_eq!(
+            candidate_boundary_edit_delta(&rgb, &mask, &matching, 3, 3),
+            Some(0.0)
+        );
+
+        let mut hard_seam = matching.clone();
+        hard_seam[4 * 4..4 * 4 + 3].copy_from_slice(&[240; 3]);
+        let score = candidate_boundary_edit_delta(&rgb, &mask, &hard_seam, 3, 3).unwrap();
+        assert!((score - 200.0).abs() < 0.01, "unexpected score {score}");
+
+        assert_eq!(
+            candidate_boundary_edit_delta(&rgb, &vec![0; 9], &matching, 3, 3),
+            Some(0.0)
+        );
+        assert_eq!(
+            candidate_boundary_edit_delta(&rgb, &mask, &matching, 0, 3),
+            None
+        );
+        assert_eq!(
+            candidate_boundary_edit_delta(&rgb[..8], &mask, &matching, 3, 3),
+            None
+        );
+        let mut invalid_mask = mask.clone();
+        invalid_mask[0] = 128;
+        assert_eq!(
+            candidate_boundary_edit_delta(&rgb, &invalid_mask, &matching, 3, 3),
+            None
+        );
+    }
 
     #[test]
     fn candidate_diversity_filters_identical_and_near_duplicate_repairs() {

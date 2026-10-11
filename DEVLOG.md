@@ -1745,3 +1745,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - The composed complement + range-gated Brush diagnostic still differs by max channel delta 32 at 77×96. CHR-247 remains In Progress; composed preview/tiled parity and labelled-photo mask quality remain open.
 
 - Publication: feature commits `f95b1649` and `2916c905` were integrated as `9df09a38` and `f2de8f6f`; the verified pre-record `origin/main` tip was `f2de8f6fcfdb7fa82af3d6c20fce3de79be01aae`. The integration preserves the composed-mask discrepancy as an open criterion and does not claim full CHR-247 completion.
+
+### 2026-10-11 — CHR-246 candidate boundary-edit diagnostic
+
+- Added a feather-alpha-weighted mean RGB source-to-repair delta for masked boundary pixels to native candidate metadata, and displayed it as a diagnostic cue on candidate review cards. The label explains that it does not measure semantic correctness or texture quality; candidates remain user-reviewed at full resolution.
+- Verification: all 7 `inpaint::tests` pass through the shared per-user Cargo target, including bounded delta, empty-boundary, invalid-input and hard-change fixtures. `test/inpaint_ui.mjs` passes for preview/geometry/recipe/export parity (four tiles, 0 delta) and the diagnostic label/limitation; editor HTML validity, JS syntax and `git diff --check` pass. Browser/native model inference was mocked; no natural-photo quality inference was repeated. Rustfmt check still flags pre-existing formatting drift elsewhere in `inpaint.rs`.
+- CHR-246 remains In Progress; the seam cue does not establish good object removal. AC4 and AC7 remain open pending acceptable human-reviewed person, wire and dust results.
