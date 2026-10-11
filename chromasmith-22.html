@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011T';
+const BUILD='1.1011U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13207,9 +13207,10 @@ async function loadRw2(file,opts){
   // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
   const half=!!(opts&&opts.half)&&!window.__TAURI__;
   const filmSource=!!(opts&&opts.filmSource);
+  const rawDecodeSettings=file&&file.__csRawDecodeSettings||null;
   window.__pm&&window.__pm('loadRw2-enter');
   if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
-  let profile=rawProfile();
+  let profile=rawDecodeSettings&&Object.prototype.hasOwnProperty.call(rawDecodeSettings,'profile')?rawDecodeSettings.profile:rawProfile();
   const LibRaw=await getLibRaw();
   // By-path RAW (desktop Library open, see library-ui's makePathRawFile): the native shim reads
   // the file itself, so no bytes are loaded here; the rare paths below that need them (embedded
@@ -13225,7 +13226,10 @@ async function loadRw2(file,opts){
   const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
   try{
     await withRawDecodeTimeout(raw,async()=>{
-      await raw.open(bytes,srcPath?{...(profile?dcpSettings:sdrSettings),sourcePath:srcPath}:(profile?dcpSettings:sdrSettings));
+      const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
+      if(srcPath)openSettings.sourcePath=srcPath;
+      if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      await raw.open(bytes,openSettings);
       window.__pm&&window.__pm('loadRw2-opened');
       m=await raw.metadata();
       // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
@@ -13254,7 +13258,9 @@ async function loadRw2(file,opts){
     const raw2=new LibRaw();
     try{
       await withRawDecodeTimeout(raw2,async()=>{
-        await raw2.open(await fullBytes(),sdrSettings);
+        const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
+        if(srcPath)fallbackSettings.sourcePath=srcPath;
+        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
         img=await raw2.imageData();
       });
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}

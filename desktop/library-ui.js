@@ -7045,6 +7045,7 @@
     const files = await readPathsAsFiles(paths);
     if (!files.length) return files;
     const okPaths = files.okPaths || paths; // fallback keeps old behavior if a caller-supplied files array skipped readPathsAsFiles
+    await prepareBatchRawFiles(files, okPaths);
     state.openedPath = '';
     window.chromasmithSourcePath = null;
     state.openedPaths = okPaths;
@@ -7062,6 +7063,29 @@
     } catch (e) { console.error('seed shared FX for batch open', e); }
     paths.forEach((p) => invoke('touch_recent', { path: p }).catch(() => {}));
     if (state.source === 'recents') renderCollectionCounts();
+    return files;
+  }
+
+  // Preserve each surviving file's source/settings association for NativeLibRawShim. Batch
+  // editor loads use shared editor controls, but RAW decode choices (saved NR/demosaic recipe
+  // and current lens/profile settings) must be resolved per source without changing those
+  // shared controls. `okPaths` is deliberately zipped after readPathsAsFiles filters failures.
+  async function prepareBatchRawFiles(files, okPaths) {
+    for (let i = 0; i < files.length; i++) {
+      const path = okPaths[i];
+      if (!path || !RAW_EXT_RE.test(path)) continue;
+      const settings = await rawCacheSettings(path, 'interactive');
+      files[i].__csSourcePath = path;
+      files[i].__csRawDecodeSettings = Object.freeze({
+        profile: settings.profile,
+        rawNr: settings.rawNr,
+        demosaicAlgo: settings.demosaicAlgo,
+        autoLens: settings.autoLens,
+        lensOverride: settings.lensOverride,
+        lensOverrideFocal: settings.lensOverrideFocal,
+        fullCleanup: settings.fullCleanup,
+      });
+    }
     return files;
   }
 
@@ -13726,6 +13750,7 @@
   }
 
   if (LIBTEST) {
+    window.__libtestPrepareBatchRawFiles = prepareBatchRawFiles;
     // No real backend under libtest to fire real catalog-scan/ingest-progress events — this is
     // the same "manual debug trigger" pattern window.libtestLrConnect() already uses, so the
     // indicator's in-progress/done/failed states are screenshot-verifiable without one.

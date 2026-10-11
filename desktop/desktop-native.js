@@ -210,7 +210,8 @@
       // ran a 24M-pixel trilinear loop on the JS main thread. The 65^3 LUT is baked once per
       // profile in JS (bakeDcpLUT; dcpFit is ISO-independent since the native-decode refit)
       // and registered with Rust once per session.
-      const profile = (typeof rawProfile === 'function') ? rawProfile() : '';
+      const profile = settings && Object.prototype.hasOwnProperty.call(settings, 'profile')
+        ? settings.profile : ((typeof rawProfile === 'function') ? rawProfile() : '');
       let mode = 'srgb', lutKey = '';
       // Cheap EXIF-only peek (no demosaic), ALWAYS — it yields make/model (for the DCP profile
       // choice) AND lens (with the RW2 kamadak-exif fallback rawler's own parse misses). Doing
@@ -248,28 +249,33 @@
           }
         }
       }
-      const autoLens = !!window.chromasmithAutoLens;
+      const autoLens = settings && Object.prototype.hasOwnProperty.call(settings, 'autoLens') ? !!settings.autoLens : !!window.chromasmithAutoLens;
       // ⚠️ decode_raw_v2 only ever accepts "off"/"fast" — High-tier neural NR runs via the
       // SEPARATE denoise_raw_high command (window.chromasmithDenoiseHigh), never through this
       // path, so a 'high' selection collapses to 'fast' here (the cheap passes still run
       // automatically; the expensive one only runs on explicit request or at export — see
       // raw_decode.rs's NrTier and rawdenoise.rs's module doc for the full two-tier rationale).
-      const rawNrSelected = window.chromasmithRawNr || (window.chromasmithNativeNr !== false ? 'fast' : 'off');
+      const rawNrSelected = settings && Object.prototype.hasOwnProperty.call(settings, 'rawNr')
+        ? settings.rawNr : (window.chromasmithRawNr || (window.chromasmithNativeNr !== false ? 'fast' : 'off'));
       // 'chroma' = interactive tier (chroma-wavelet NR only; shadow NR / false-colour / hue
       // defringe are deferred to export or the manual "Full cleanup" toggle — see raw_decode.rs's
       // NrTier::Chroma). 'fast' = the complete pass. Everything that isn't the interactive open
       // (export, batch cache, thumbnails) keeps requesting the complete pass.
-      const rawNr = rawNrSelected === 'off' ? 'off' : (window.chromasmithRawFullCleanup ? 'fast' : 'chroma');
+      const fullCleanup = settings && Object.prototype.hasOwnProperty.call(settings, 'fullCleanup') ? !!settings.fullCleanup : !!window.chromasmithRawFullCleanup;
+      const rawNr = rawNrSelected === 'off' ? 'off' : (fullCleanup ? 'fast' : 'chroma');
       // Per-photo "RAW Processing" mode: "" (Standard/PPG, default) or "ahd" (Sparkle-
       // optimized — trades some general chroma-noise headroom for much cleaner rendering of
       // dense sunlit-water/specular sparkle fields; NOT a global default, see raw_decode.rs).
-      const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+      const demosaicAlgo = settings && Object.prototype.hasOwnProperty.call(settings, 'demosaicAlgo')
+        ? (settings.demosaicAlgo || '') : (window.chromasmithDemosaicAlgo || '');
       // Manual lens override — a "Maker Model" string from list_lens_profiles + a focal length
       // in mm, set by the Lens Correction panel when EXIF auto-detection has nothing to go on
       // (manual/adapted lenses like TTArtisan write no lens EXIF at all). Empty/0 means "use
       // EXIF detection as normal" — see raw_decode.rs's lens_override param.
-      const lensOverride = window.chromasmithLensOverride || '';
-      const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
+      const lensOverride = settings && Object.prototype.hasOwnProperty.call(settings, 'lensOverride')
+        ? (settings.lensOverride || '') : (window.chromasmithLensOverride || '');
+      const lensOverrideFocal = settings && Object.prototype.hasOwnProperty.call(settings, 'lensOverrideFocal')
+        ? (settings.lensOverrideFocal || 0) : (window.chromasmithLensOverrideFocal || 0);
       const extra = { autoLens, rawNr, demosaicAlgo, lensOverride, lensOverrideFocal, filmSource: !!settings.filmSource };
       // Two-phase decode ("RAW load takes 15s"): the FIRST decode always requests `fast:true`
       // — Rust skips the false-color-suppression / hue-defringe / native-NR passes (the serial
