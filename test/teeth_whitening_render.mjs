@@ -20,9 +20,13 @@ const server = createServer(async (req, res) => {
   } catch { res.writeHead(404); res.end('not found'); }
 });
 
+const livePreviewMode = process.env.TEETH_LIVE_PREVIEW === '1' || process.argv.includes('--live-preview');
 const browser = await chromium.launch({
+  // Use the installed browser's normal GPU path for the optional live-preview gate. The
+  // default software renderer is retained for deterministic headless shader/export checks.
+  headless: !livePreviewMode,
   executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
+  args: livePreviewMode ? [] : ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
 });
 const errors = [];
 try {
