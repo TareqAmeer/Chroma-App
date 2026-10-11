@@ -1635,4 +1635,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-269 focus-lock publication
 
 - Published integration commit `1f5ce12f` to `origin/main`; the fast-forward contained feature commit `43c54018`.
-- `git push origin HEAD:main` succeeded. Remote-tip verification is recorded after the follow-up publication-record commit.
+- `git push origin HEAD:main` succeeded. `git ls-remote origin refs/heads/main` returned `926e7cba7d1ce7f695914474afc67d94cf75ad33`; that verified remote tip descends from `1f5ce12f` and contains feature commit `43c54018`.
