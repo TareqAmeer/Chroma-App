@@ -1814,3 +1814,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-200 RAW scheduling publication
 - Published feature `e7305c20` through clean integration as `74295ab2ea9083914e2467b155b3e0bad045e27a`; non-force push and ls-remote verified exact remote main. No base-source changes or conflicts during integration; verified native source patch preserved and diff check passed.
 - Matching CHR-200 follow-up checklist records dispatch/cache validation and remains In Review; original native responsiveness, interruption and restart/retry criteria remain open.
+
+### 2026-10-11 — CHR-200 selected RAW review preparation
+- Added selected-RAW preparation in context menu and More, using developed fit-only proxies and the shared foreground-prioritized review queue. Enqueues one preparation item at a time; one active plus bounded speculative requests. Jobs reports progress/failures, cancellation removes pending work or waits for the active frame, and completed caches remain reusable. Files: `desktop/library-ui.js`, `test/library_raw_preparation.mjs`, `test/library_raw_quicklook.mjs`; issue CHR-200.
+- Focused prep browser regression passed real menu reachability, serialization/priority, display-only calls, active/queued cancellation, truthful partial-failure history and no embedded/full-cache calls. Syntax/diff checks pass; broader UI gates run once after the combined RAW review UI slice. No restart/resume checkpoint or mid-demosaic cancellation claim.

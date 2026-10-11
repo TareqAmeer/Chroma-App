@@ -24,23 +24,33 @@
   const quicklookPreviews = new Map();
   const quicklookRequests = new Map();
   let rawReviewActive = false;
+  let rawReviewActiveJob = null;
   const rawReviewQueue = [];
-  function queueRawReview(path, load) {
+  function queueRawReview(path, load, kind = 'quicklook', ownerJobId = null) {
     return new Promise((resolve, reject) => {
-      rawReviewQueue.push({ path, load, resolve, reject });
-      while (rawReviewQueue.length > 3) {
-        const stale = rawReviewQueue.findIndex((job) => job.path !== quicklook.path);
-        rawReviewQueue.splice(stale < 0 ? 0 : stale, 1)[0].reject(new Error('RAW preview superseded'));
+      rawReviewQueue.push({ path, load, resolve, reject, kind, ownerJobId });
+      // Keep up to three speculative Quick Look requests plus one persistent preparation
+      // request. Preparation is lazy (one item at a time) and must never be evicted as though
+      // it were disposable neighbour prefetch.
+      while (rawReviewQueue.filter((job) => job.kind === 'quicklook').length > 3) {
+        const queuedQuicklook = rawReviewQueue.filter((job) => job.kind === 'quicklook');
+        const stale = queuedQuicklook.find((job) => job.path !== quicklook.path) || queuedQuicklook[0];
+        const index = rawReviewQueue.indexOf(stale);
+        rawReviewQueue.splice(index, 1)[0].reject(new Error('RAW preview superseded'));
       }
       pumpRawReview();
     });
   }
   function pumpRawReview() {
     if (rawReviewActive || !rawReviewQueue.length) return;
-    const current = rawReviewQueue.findIndex((job) => job.path === quicklook.path);
-    const job = rawReviewQueue.splice(current < 0 ? 0 : current, 1)[0];
+    const current = rawReviewQueue.findIndex((job) => job.kind === 'quicklook' && job.path === quicklook.path);
+    // Quick Look requests remain ahead of background preparation even when speculative; the
+    // current image is preferred within that lane. A preparation item is only queued on demand.
+    const quicklookIndex = current >= 0 ? current : rawReviewQueue.findIndex((job) => job.kind === 'quicklook');
+    const job = rawReviewQueue.splice(quicklookIndex >= 0 ? quicklookIndex : 0, 1)[0];
     rawReviewActive = true;
-    Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; pumpRawReview(); });
+    rawReviewActiveJob = job;
+    Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; rawReviewActiveJob = null; pumpRawReview(); });
   }
   async function quicklookPreview(path) {
     if (!path) return Promise.reject(new Error('missing preview path'));
@@ -3699,6 +3709,12 @@
     window.__libToggleUnifiedView = (on) => setUnifiedView(on);
     window.__libSelect = (p) => { state.selected.add(p); };
     window.__libShowQuickLook = (p) => showQuickLook(p);
+    window.__libtestPrepareRawReviewPreviews = (paths) => prepareRawReviewPreviews(paths);
+    window.__libtestCancelRawReviewPreviews = () => _rawReviewPrep?.cancel();
+    window.__libtestRawReviewState = () => ({ active: rawReviewActiveJob ? { path: rawReviewActiveJob.path, kind: rawReviewActiveJob.kind } : null,
+      queued: rawReviewQueue.map((job) => ({ path: job.path, kind: job.kind })),
+      prep: _rawReviewPrep ? { jobId: _rawReviewPrep.jobId, stage: _rawReviewPrep.stage, done: _rawReviewPrep.done, total: _rawReviewPrep.total,
+        current: _rawReviewPrep.current, cancelled: _rawReviewPrep.cancelled } : null });
     // CHR-184 test hooks: drive the real keyword/album write paths and read back what undo restored.
     window.__libAddKeyword = (p, kw) => addKeywordToPhoto(p, kw);
     window.__libRemoveKeyword = (p, kw) => removeKeywordFromPhoto(p, kw);
@@ -7096,6 +7112,66 @@
 
   // Warm the persistent full-resolution RAW cache without opening photos in the editor.
   let _cacheWarmCancel = null;
+  let _rawReviewPrep = null;
+  async function prepareRawReviewPreviews(paths) {
+    if (_rawReviewPrep) return _rawReviewPrep.promise;
+    const rawPaths = [...new Set((paths || []).filter((p) => RAW_EXT_RE.test(p)))];
+    if (!rawPaths.length) { toast('Select at least one RAW photo to prepare', false); return; }
+    const record = { jobId: `raw-review-prep-${Date.now()}`, stage: 'working', done: 0, total: rawPaths.length,
+      current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelled: false };
+    record.cancel = () => {
+      record.cancelled = true;
+      // A not-yet-started prep request can be removed; an active native decode is allowed to
+      // finish so its completed proxy remains useful, then the loop stops before the next photo.
+      const queued = rawReviewQueue.findIndex((job) => job.kind === 'prep' && job.ownerJobId === record.jobId);
+      if (queued >= 0) rawReviewQueue.splice(queued, 1)[0].reject(new Error('RAW review preparation cancelled'));
+    };
+    _rawReviewPrep = record;
+    const update = (patch) => {
+      Object.assign(record, patch);
+      const activityPatch = { jobId: record.jobId, stage: record.stage, done: record.done, total: record.total,
+        current: record.current, kind: 'raw-review-prep', label: 'Preparing RAW review previews',
+        cancelFn: record.stage === 'done' ? null : record.cancel };
+      if (record.outcome !== undefined) activityPatch.outcome = record.outcome;
+      if (record.failed !== undefined) activityPatch.failed = record.failed;
+      activityUpdate('raw-review-prep', activityPatch);
+    };
+    update({});
+    record.promise = (async () => {
+      let prepared = 0, failed = [];
+      try {
+        for (let i = 0; i < rawPaths.length && !record.cancelled; i++) {
+          const path = rawPaths[i];
+          update({ current: baseName(path) });
+          let completed = false;
+          try {
+            // Resolve per-photo settings just before enqueueing, and queue only this one item.
+            // The shared pump gives all Quick Look work priority and permits only one RAW review
+            // decode at a time. The native display-only cache survives cancellation.
+            const settings = await rawCacheSettings(path, 'review');
+            if (record.cancelled) break;
+            const result = await queueRawReview(path, () => record.cancelled ? null : cacheOneRaw(path, 'review', settings), 'prep', record.jobId);
+            if (result === null) break; // cancelled after dequeue but before native work dispatched
+            prepared++;
+            completed = true;
+          } catch (error) {
+            if (!record.cancelled) failed.push(`${baseName(path)}: ${humanizeErr('prepare preview', error)}`);
+          }
+          if (record.cancelled && !completed) break;
+          update({ done: i + 1, current: baseName(path) });
+        }
+      } finally {
+        const cancelled = record.cancelled;
+        const summary = cancelled ? `Preparation stopped — ${prepared} of ${rawPaths.length} ready` : `Prepared ${prepared} RAW review preview${prepared === 1 ? '' : 's'}`;
+        record.stage = 'done';
+        const outcome = cancelled ? 'cancelled' : failed.length ? (prepared ? 'partial' : 'failed') : 'completed';
+        update({ stage: 'done', outcome, done: record.done, current: summary, failed: failed.length ? failed : undefined });
+        toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
+        if (_rawReviewPrep === record) _rawReviewPrep = null;
+      }
+    })();
+    return record.promise;
+  }
   async function cacheSelectedRaws(paths) {
     const rawPaths = paths.filter((p) => RAW_EXT_RE.test(p));
     if (!rawPaths.length) { toast('Select at least one RAW photo to cache', false); return; }
@@ -7767,6 +7843,14 @@
       cacheRawItem.title = 'The selected photos do not include a supported RAW file';
     } else {
       cacheRawItem.title = 'Build exact full-quality studio caches for the selected RAW photos';
+    }
+    const reviewRawItem = item(`Prepare RAW review previews${rawCount > 1 ? ` (${rawCount})` : ''}`, () => prepareRawReviewPreviews(paths));
+    if (!rawCount) {
+      reviewRawItem.style.opacity = '.4';
+      reviewRawItem.style.pointerEvents = 'none';
+      reviewRawItem.title = 'The selected photos do not include a supported RAW file';
+    } else {
+      reviewRawItem.title = 'Prepare display-sized developed previews for RAW review';
     }
     sep();
     // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
@@ -8769,12 +8853,14 @@
       + `<button class="lib-btn sk2-bb-more-btn" style="white-space:nowrap;flex:none" aria-expanded="false">More</button>`
       + `<span class="sk2-bb-more" hidden>`
       + B('cache-raw', 'Cache selected RAWs', 'Build exact full-quality studio caches for the selected RAW photos')
+      + B('review-raw', 'Prepare RAW review previews', 'Prepare display-sized developed previews for the selected RAW photos')
       + B('clear-label', 'Clear flag')
       + (COLOR_LABELS_ENABLED ? `<select data-act="color-label" aria-label="Colour label" title="Apply a colour label"><option value="">Colour label…</option><option value="Red">Red</option><option value="Yellow">Yellow</option><option value="Green">Green</option><option value="Blue">Blue</option><option value="Purple">Purple</option><option value="__clear">Clear colour</option></select>` : '')
       + B('deselect', 'Deselect') + `</span>`;
     const mb = bar.querySelector('.sk2-bb-more-btn'), mo = bar.querySelector('.sk2-bb-more');
     mb.onclick = () => { mo.hidden = !mo.hidden; mb.setAttribute('aria-expanded', String(!mo.hidden)); };
     bar.querySelector('[data-act="cache-raw"]').onclick = () => cacheSelectedRaws(paths());
+    bar.querySelector('[data-act="review-raw"]').onclick = () => prepareRawReviewPreviews(paths());
     bar.querySelector('[data-act="reject"]').onclick = () => paths().forEach((p) => setLabel(p, 'Red'));
     bar.querySelector('[data-act="pick"]').onclick = () => paths().forEach((p) => setLabel(p, 'Green'));
     bar.querySelector('[data-act="clear-label"]').onclick = () => paths().forEach((p) => setLabel(p, ''));

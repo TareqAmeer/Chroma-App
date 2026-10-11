@@ -10,7 +10,8 @@ const root = process.cwd();
 const server = createServer(async (req, res) => {
   try {
     const relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '');
-    const file = path.resolve(root, relative);
+    const sourceRelative = relative === 'desktop/dist/library-ui.js' ? 'desktop/library-ui.js' : relative;
+    const file = path.resolve(root, sourceRelative);
     if (!file.startsWith(root + path.sep)) throw Error('outside root');
     res.setHeader('Content-Type', file.endsWith('.html') ? 'text/html' : file.endsWith('.js') ? 'text/javascript' : file.endsWith('.png') ? 'image/png' : 'application/octet-stream');
     res.end(await readFile(file));
