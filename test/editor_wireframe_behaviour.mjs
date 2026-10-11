@@ -275,6 +275,31 @@ test.describe('rail', () => {
     await expect.poll(() => page.evaluate(() => fxCurIdx)).toBe(selectedPhoto);
   });
 
+  test('returning from Gallery to Studio preserves the current photo and selection', async ({ editor: { page } }) => {
+    const skipGuide = page.locator('#cs-modal-ov [data-guide-skip]');
+    if (await skipGuide.count()) await skipGuide.click();
+    await page.getByRole('button', { name: 'Studio' }).click();
+    await page.evaluate(() => {
+      document.body.classList.add('deskx');
+      localStorage.setItem('cs_rail_flat', '0');
+      buildToolRail();
+    });
+
+    const selected = await page.evaluate(() => ({ index: fxCurIdx, name: fxImages[fxCurIdx]?.name }));
+    expect(selected.name).toBeTruthy();
+    await page.locator('#fx-toolrail [data-sec="masks"]').click();
+    await expect(page.locator('.fx-ctrl[data-fxsec="local"]')).toHaveClass(/sec-active/);
+
+    await page.locator('#cs-tog-lib').click();
+    await expect(page.locator('#lib-overlay')).toHaveClass(/\bfull\b/);
+    await expect(page.locator('#cs-tog-lib')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.locator('#cs-tog-studio').click();
+    await expect(page.locator('#lib-overlay')).not.toHaveClass(/\bfull\b/);
+    await expect(page.locator('#cs-tog-studio')).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => page.evaluate(() => ({ index: fxCurIdx, name: fxImages[fxCurIdx]?.name }))).toEqual(selected);
+  });
+
   test('clicking a rail item opens its panel section', async ({ editor: { page } }) => {
     await page.click('#fx-toolrail [data-sec="adjust"]');
     await expect(page.locator('[data-fxsec="adjust"]')).toHaveClass(/sec-active|active/).catch(async () => {
