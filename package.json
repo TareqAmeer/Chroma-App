@@ -26,6 +26,7 @@
     "mask:refinement-math": "node test/mask_refinement_math.mjs",
     "mask:quality:self-test": "node test/mask_refinement_quality.mjs --self-test",
     "mask:quality": "node test/mask_refinement_quality.mjs --manifest",
+    "inpaint:quality:review-check": "node test/inpaint_quality_review.mjs --self-test",
     "mask:box-ui-test": "node test/mask_box_prompt_ui.mjs && node test/mask_ai_provenance.mjs",
     "wireframe:test": "node test/wireframe_inventory.mjs",
     "wireframe:icons": "node test/wireframe_inventory.mjs --icons-baseline",

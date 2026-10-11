@@ -25,3 +25,19 @@ from Wikimedia Commons. It is licensed under Creative Commons Attribution 2.0 Ge
   `cargo run --locked --manifest-path desktop/src-tauri/Cargo.toml --example inpaint_probe -- <onnxruntime.dll> <model-directory> test/fixtures/chr246-real/woman-crossing.jpg test/output/chr246-person test/fixtures/chr246-real/woman-crossing-mask.json`
 
 Please preserve this attribution and indicate any changes if the image is redistributed.
+
+## Candidate review report
+
+After running the native `inpaint_probe` with the pinned model/runtime, create a JSON manifest
+outside the repository that records the model hash, runtime, photo source/license, mask definition,
+and the three generated `candidate-*.png` paths. Generate a standalone 100% visual review page:
+
+```sh
+node test/inpaint_quality_review.mjs --manifest /path/to/review-manifest.json --output /path/to/chr246-review.html
+```
+
+The report embeds the source and candidates, records asset hashes, and lets a human reviewer mark
+wire remnants, smearing, repeat patterns, or colour shifts and export a JSON review record. It is
+not an automated image-quality score. Keep generated pages and review records outside Git unless
+they have been reviewed for attribution and privacy. The app-pinned model is documented in
+`desktop/src-tauri/vendor/inpainting/README.md`.
