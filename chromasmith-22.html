@@ -585,7 +585,8 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 /* "..." menu */
 .msk-more-menu{position:fixed;z-index:var(--z-menu);min-width:230px;background:var(--glass-bg);
   -webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
-  border:1px solid var(--bdr);border-radius:var(--r);padding:4px;box-shadow:var(--lift-2)}
+  border:1px solid var(--bdr);border-radius:var(--r);padding:4px;box-shadow:var(--lift-2);
+  max-height:min(72vh,480px);overflow-y:auto}
 .msk-more-it{display:flex;align-items:center;gap:var(--sp-2);width:100%;min-height:30px;padding:0 var(--sp-2);background:none;
   border:none;border-radius:6px;cursor:pointer;color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);text-align:left}
 .msk-more-it:hover:not(:disabled){background:var(--sur2)}
@@ -7331,7 +7332,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011Z';
+const BUILD='1.1011A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16068,8 +16069,9 @@ function mskAddTeethWhitening(){
 // model fallback here: unsupported platforms and photos without the requested matte keep the
 // manual brush workflow, rather than implying that the editor inferred anatomy from the preview.
 async function mskAddEmbeddedPortraitMatte(kind){
-  if(kind!=='hair'&&kind!=='teeth')return false;
-  const label=kind==='teeth'?'teeth':'hair';
+  const labels={hair:'hair',skin:'skin',teeth:'teeth',glasses:'glasses',sky:'sky'};
+  const label=labels[kind];
+  if(!label)return false;
   if(!window.__TAURI__||!window.__TAURI__.core||typeof window.__TAURI__.core.invoke!=='function'){
     if(typeof toast==='function')toast('Embedded '+label+' mattes are available in the macOS desktop app. Use Brush to paint this area manually.',false);
     return false;
@@ -16117,7 +16119,8 @@ async function mskAddEmbeddedPortraitMatte(kind){
       return false;
     }
     const m=mskAdd('brush',mask=>{
-      mask.origin='embedded-'+kind;mask.name=kind==='teeth'?'Teeth Whitening (embedded matte)':'Hair (embedded matte)';
+      mask.origin='embedded-'+kind;
+      mask.name=kind==='teeth'?'Teeth Whitening (embedded matte)':label[0].toUpperCase()+label.slice(1)+' (embedded matte)';
       if(kind==='teeth'){mask.temp=-0.12;mask.sat=-0.12;}
       mask.px=px;mask.mtW=w;mask.mtH=h;
       mask.sourcePath=path;mask.sourceKind=kind;mask.sourceWidth=matte.width;mask.sourceHeight=matte.height;
@@ -16125,7 +16128,7 @@ async function mskAddEmbeddedPortraitMatte(kind){
     if(!m||fxState.masks[mskSel]!==m)return false;
     mskRebuild();
     if(typeof renderPreview==='function')renderPreview();
-    if(typeof toast==='function')toast(kind==='teeth'?'Embedded teeth matte added. Review its edges before whitening.':'Embedded hair matte added. Review its edges before editing.',true);
+    if(typeof toast==='function')toast(kind==='teeth'?'Embedded teeth matte added. Review its edges before whitening.':'Embedded '+label+' matte added. Review its edges before editing.',true);
     return true;
   }catch(e){
     if(typeof toast==='function')toast('Could not align this photo’s embedded '+label+' matte. Use Brush to paint manually.',false);
@@ -18291,6 +18294,9 @@ function mskAddMenu(ev){
     +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Teeth Matte','brush','', 'mskAddEmbeddedTeethWhitening()'):'')
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Hair Matte','brush','', 'mskAddEmbeddedHairMatte()'):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Skin Matte','brush','', "mskAddEmbeddedPortraitMatte('skin')"):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Glasses Matte','brush','', "mskAddEmbeddedPortraitMatte('glasses')"):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Sky Matte','brush','', "mskAddEmbeddedPortraitMatte('sky')"):'')
     +item('Brush','brush','brush')+item('Sky','sky','sky')
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')+item('AI Select','wand','ai'):'')
@@ -18302,7 +18308,8 @@ function mskAddMenu(ev){
   const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
-  d.style.top=(r.bottom+4)+'px';
+  const top=r.bottom+4,maxTop=innerHeight-d.offsetHeight-8;
+  d.style.top=Math.max(8,Math.min(top,maxTop))+'px';
   d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
   setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
 }

@@ -187,13 +187,16 @@ async function main() {
       window.CS_PLATFORM = { os: 'windows' };
       document.querySelector('button[onclick="mskAddMenu(event)"]').click();
       ck('embedded matte action is hidden on unsupported desktop platforms',
-        ![...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte')||button.textContent.includes('Embedded Hair Matte')));
+        ![...document.querySelectorAll('.msk-more-it')].some(button=>/Embedded (Teeth|Hair|Skin|Glasses|Sky) Matte/.test(button.textContent)));
       document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
       window.CS_PLATFORM.os = 'macos';
       document.querySelector('button[onclick="mskAddMenu(event)"]').click();
       ck('embedded matte action is available on macOS desktop',
-        [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Teeth Matte'))
-        && [...document.querySelectorAll('.msk-more-it')].some(button=>button.textContent.includes('Embedded Hair Matte')));
+        ['Teeth','Hair','Skin','Glasses','Sky'].every(name=>[...document.querySelectorAll('.msk-more-it')]
+          .some(button=>button.textContent.includes(`Embedded ${name} Matte`))));
+      const menu=document.querySelector('.msk-more-menu'),menuRect=menu?.getBoundingClientRect();
+      ck('expanded matte menu scrolls within the viewport',!!menu&&menu.scrollHeight>menu.clientHeight
+        &&menuRect.top>=0&&menuRect.bottom<=innerHeight);
       document.querySelectorAll('.msk-more-menu').forEach(menu=>menu.remove());
       const preEmbeddedCount = fxState.masks.length;
       const embeddedResult = await mskAddEmbeddedTeethWhitening();
@@ -244,6 +247,18 @@ async function main() {
       const hairSnapshot = JSON.parse(JSON.stringify(getUISnapshot())); applyUISnapshot(hairSnapshot);
       eck('save/reopen snapshot retains the hair matte Brush raster', fxState.masks.some(mask => mask.origin === 'embedded-hair'
         && mask.sourceKind === 'hair' && mask.sourcePath === 'fixture/portrait-a.heic' && mask.px?.some(value => value > 0)));
+
+      for (const kind of ['skin','glasses','sky']) {
+        embeddedKind=kind;delete fxImages[0]._embeddedAuxiliaryPromise;
+        const before=fxState.masks.length,result=await mskAddEmbeddedPortraitMatte(kind),mask=fxState.masks[mskSel];
+        const title=kind[0].toUpperCase()+kind.slice(1);
+        eck(`embedded ${kind} matte creates a selected editable Brush mask`,!!result&&fxState.masks.length===before+1
+          &&mask?.type==='brush'&&mask.px instanceof Uint8ClampedArray&&mask.px.length===mask.mtW*mask.mtH&&mask.px.some(value=>value>0));
+        eck(`embedded ${kind} matte keeps source provenance without teeth-only correction`,mask?.origin===`embedded-${kind}`
+          &&mask?.name===`${title} (embedded matte)`&&mask?.sourcePath==='fixture/portrait-a.heic'
+          &&mask?.sourceKind===kind&&mask?.sourceWidth===matteWidth&&mask?.sourceHeight===matteHeight
+          &&mask?.temp===0&&mask?.sat===0);
+      }
 
       // An unsupported file returns no teeth map; a native error also leaves the recipe intact.
       const beforeNoMatte = JSON.stringify(getUISnapshot()), nativeInvoke = window.__TAURI__.core.invoke;

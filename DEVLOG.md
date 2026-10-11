@@ -1566,3 +1566,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `6c9490d833fcfa6bf9c56c5a64d3f0ee352db5db` was integrated as `daa818adfffc2215d50822d289c646daf97bdcc6` and pushed to `origin/main`.
 - A fresh `git ls-remote origin refs/heads/main` verified that exact remote tip. The clean integration checkout passed `npm run teeth:test`: workflow 39/39; rendered correction and export checks pass, including direct/tiled max delta 0. Live preview parity is still skipped because the headless SwiftShader app context is lost before readback; CHR-294 remains In Progress with its combined preview criterion open.
+
+### 2026-10-11 — CHR-253 embedded semantic matte action coverage
+
+- Added macOS menu actions for embedded Skin, Glasses, and Sky semantic mattes, reusing the source-photo auxiliary extraction and editable Brush import path. Imported masks retain their kind/path/dimensions, and only Teeth receives whitening defaults. The expanded + Mask menu is height-bounded, scrollable, and repositioned to stay within the viewport.
+- Verification: embedded/manual matte browser workflow 46/46, including all five semantic matte types, unsupported-platform gating, provenance, and menu viewport bounds; rendered teeth correction/export checks pass with direct/tiled max delta 0; HTML validity, JS syntax, and `git diff --check` pass. Live preview remains skipped for the already-lost headless SwiftShader context. The full Editor gates did not complete: the wireframe-diff retry stalled and was interrupted; component registry check is stale on this checkout. CHR-253 AC1/3/4/6 and real-photo edge-quality evidence remain open.
