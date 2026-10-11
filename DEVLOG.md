@@ -1786,4 +1786,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - CHR-247 files: `chromasmith-22.html`, `test/mask_texture_upload.mjs`, `DEVLOG.md`. Corrected the invalid WebGL `pixelStorei` parameter used while uploading packed mask slots 4–7; the focused regression calls that upload and requires a clean WebGL error state.
 - Verification: mask composition identity/graph test, focused WebGL upload regression, Editor HTML validity, JS syntax, and `git diff --check` pass. Separately, raw GPU readback still differs for an asymmetric slot-0 mask in a forced single-tile path; that diagnostic remains preserved in a named stash and parity is not claimed.
-- Publication: pending integration and remote verification.
+- Publication: feature commit `b908bc808c238a976cc1e7f89d779911f4770333` was integrated as `69f01991f1c642666cd26225012bb090157064ef`, pushed to `origin/main`, and confirmed with `git ls-remote` at that exact hash.
