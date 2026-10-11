@@ -1620,3 +1620,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Files: `package.json`, `test/mask_depth_refinement_gpu.mjs`, and `DEVLOG.md`. Feature commit `23bae268dce50508f6aa03b33169042dbc0f6475` was integrated as `fe0ebedd87247b92cfd2f82f774c463dda4da8c4` and fast-forwarded to `origin/main`.
 - The clean integration checkout reran the headed live-preview gate and 28/28 refinement math checks. After pushing the implementation, `git ls-remote origin refs/heads/main` matched `fe0ebedd87247b92cfd2f82f774c463dda4da8c4`. Labelled photo edge-quality/halo verification remains open; CHR-274 stays In Progress.
+
+### 2026-10-11 — CHR-249 mask sharpening regression publication
+
+- CHR-249 feature commit `d2094414` is published in integration commit `7fdc452b3672d2a37c402c03d17bae844408aeda`; `git ls-remote origin refs/heads/main` confirmed that exact remote tip after the fast-forward push.
+- The clean integration checkout passed `npm run mask:test`: raster 93/93, local Dehaze 11/11, and local Texture/Clarity 7/7. Feature files: `test/mask_raster.mjs` and `test/mask_local_texture_clarity.mjs`; broader CHR-249 Lightroom/model/reference criteria remain open.
