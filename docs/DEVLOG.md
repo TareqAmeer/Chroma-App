@@ -269,3 +269,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published feature commit `a3255035` as integration commit `a080bb303a38a9b77fe7ce8b7f36e6f73e77577c` on `origin/main`; fetch, `git ls-remote`, and ancestry checks confirmed publication.
 - Clean-checkout focused Chrome render test passed all 10 deterministic checks: embedded matte import/resampling, selected-only correction, snapshot rendering, and two-tile/direct parity all passed (max channel delta 0). The preview parity probe explicitly skipped because the main app WebGL context was lost before sampling; CHR-253 AC1/3/4/6 remain open and the ticket remains In Progress.
+
+# CHR-246 paired full-resolution candidate review (2026-10-11)
+
+- Added a synchronized 1:1 comparison between the exact generation input and each composited local-erasure candidate, with honest local-estimate/quality-review guidance.
+- Added browser coverage for labels, native dimensions, and aligned bidirectional panning. `node --check`, editor HTML validity, inpaint review self-test, and `git diff --check` pass; the Playwright interaction test could not launch because this checkout lacks its Chromium executable.
+- CHR-246 AC4 and AC7 remain open: review ergonomics do not establish acceptable object-removal quality. No checklist criteria were changed.
