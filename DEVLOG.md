@@ -1593,3 +1593,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added a reusable, attributed 4000×3000 Wikimedia Commons power-line photograph at `test/fixtures/chr246-real/power-lines.jpg` (Nicholas Frisardi, CC BY-SA 3.0; SHA-256 `da0e90b0ff663dd8ab543414a44e6c4e068fd005b4e87e96c2d6204286449510`).
 - Ran the native Windows MI-GAN generator with the app-pinned 28,079,181-byte model; its SHA-256 matched `6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b`, and it returned three candidates in about 26 seconds. At full 4000×3000 review size, the tested tower-removal stroke left the tower structure visible and produced obvious smeared patches in the neighboring tree and sky. This fails the natural-image quality bar; AC4 and AC7 remain unchecked and CHR-246 stays In Progress. The test covered a power tower only, not a person or sensor-dust spot.
+
+### 2026-10-11 — CHR-294 healthy-context preview verification
+
+- Added `npm run teeth:preview`, which launches installed Chrome in headed mode without forcing SwiftShader, then samples the editor’s live FX canvas before creating an isolated renderer. This keeps the default headless deterministic test intact while providing a repeatable healthy-context gate.
+- Verification: manual teeth workflow 49/49; `npm run teeth:preview` passes 11/11 renderer checks. Live app preview is nonblank, has a healthy WebGL context, and matches direct production rendering exactly (max RGB delta 0; range 157). Save/reopen, editable reset, detail retention, embedded-mask confinement, and two-tile output also pass (tile max delta 0). CHR-294’s last acceptance criterion is satisfied.
