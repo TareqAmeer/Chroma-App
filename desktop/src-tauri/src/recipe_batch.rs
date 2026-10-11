@@ -269,14 +269,34 @@ pub fn recipe_batch_cancel(id: i64, state: tauri::State<CatalogState>) -> Result
     get(&c, id)
 }
 #[tauri::command(async)]
-pub fn recipe_batch_resume(id: i64, state: tauri::State<CatalogState>) -> Result<Batch, String> {
-    let mut c = state.conn.lock().map_err(|e| e.to_string())?;
+pub fn recipe_batch_resume(
+    id: i64,
+    retry_indices: Option<Vec<i64>>,
+    state: tauri::State<CatalogState>,
+) -> Result<Batch, String> {
+    resume(
+        &mut *state.conn.lock().map_err(|e| e.to_string())?,
+        id,
+        retry_indices.as_deref(),
+    )
+}
+fn resume(c: &mut Connection, id: i64, retry_indices: Option<&[i64]>) -> Result<Batch, String> {
     schema(&c)?;
     if get(&c, id)?.status == "undone" {
         return Err("An undone batch cannot be resumed".into());
     }
     let tx = c.transaction().map_err(|e| e.to_string())?;
-    tx.execute("UPDATE recipe_batch_items SET status='pending',error=NULL WHERE batch_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE 'Preflight:%')",[id]).map_err(|e|e.to_string())?;
+    if let Some(indices) = retry_indices {
+        for index in indices {
+            tx.execute(
+                "UPDATE recipe_batch_items SET status='pending',error=NULL WHERE batch_id=? AND item_index=? AND (status='skipped' OR (status='failed' AND (error IS NULL OR error NOT LIKE 'Preflight:%'))) ",
+                params![id, index],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    } else {
+        tx.execute("UPDATE recipe_batch_items SET status='pending',error=NULL WHERE batch_id=? AND status='failed' AND (error IS NULL OR error NOT LIKE 'Preflight:%')",[id]).map_err(|e|e.to_string())?;
+    }
     tx.execute(
         "UPDATE recipe_batches SET status='running' WHERE id=? AND status!='undone'",
         [id],
@@ -391,6 +411,44 @@ mod tests {
         assert!(b.error.as_ref().unwrap().contains("missing"));
         assert_eq!(get(&c, 1).unwrap().status, "completed");
         assert_eq!(apply(&c, 1, 0).unwrap().status, "failed");
+    }
+    #[test]
+    fn resume_retries_only_selected_skips_and_never_preflight_or_applied_items() {
+        let _cache = crate::library::isolate_cache_dir("recipe_batch_retry_skipped");
+        let dir = test_dir();
+        let paths = (0..4)
+            .map(|index| {
+                let path = dir.join(format!("photo-{index}.jpg"));
+                std::fs::write(&path, b"photo").unwrap();
+                path.to_string_lossy().into_owned()
+            })
+            .collect::<Vec<_>>();
+        let mut c = Connection::open(dir.join("catalog.db")).unwrap();
+        let b = create(
+            &mut c,
+            "Paste".into(),
+            vec![
+                Input { path: paths[0].clone(), recipe: String::new(), expected_recipe: None, expected_active: None, error: None },
+                Input { path: paths[1].clone(), recipe: String::new(), expected_recipe: None, expected_active: None, error: None },
+                Input { path: paths[2].clone(), recipe: "target".into(), expected_recipe: None, expected_active: None, error: Some("broken source".into()) },
+                Input { path: paths[3].clone(), recipe: "target".into(), expected_recipe: None, expected_active: None, error: None },
+            ],
+        ).unwrap();
+        assert_eq!(b.items.iter().map(|item| item.status.as_str()).collect::<Vec<_>>(), ["skipped", "skipped", "failed", "pending"]);
+        c.execute("UPDATE recipe_batch_items SET status='applied' WHERE batch_id=? AND item_index=3", [b.id]).unwrap();
+
+        let resumed = resume(&mut c, b.id, Some(&[0])).unwrap();
+        assert_eq!(resumed.status, "running");
+        assert_eq!(resumed.items.iter().map(|item| item.status.as_str()).collect::<Vec<_>>(), ["pending", "skipped", "failed", "applied"]);
+        assert!(resumed.items[2].error.as_deref().unwrap().starts_with("Preflight:"));
+
+        assert_eq!(apply(&c, b.id, 0).unwrap().status, "applied");
+        let final_batch = get(&c, b.id).unwrap();
+        assert_eq!(final_batch.items[1].status, "skipped", "an unselected skip must remain untouched");
+        assert_eq!(final_batch.items[2].status, "failed", "preflight failures require repair before retry");
+        assert_eq!(final_batch.items[3].status, "applied", "already-applied photos must not replay");
+        drop(c);
+        let _ = std::fs::remove_dir_all(dir);
     }
     #[test]
     fn empty_batch_is_rejected() {

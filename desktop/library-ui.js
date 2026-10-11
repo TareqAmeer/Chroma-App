@@ -209,7 +209,7 @@
         return Promise.resolve(structuredClone(item));
       }
       case 'recipe_batch_cancel': { const b = ltRecipeBatches.get(A.id); b.status = 'cancelled'; return Promise.resolve(structuredClone(b)); }
-      case 'recipe_batch_resume': { const b = ltRecipeBatches.get(A.id); b.status = 'running'; b.items.forEach(i => { if (i.status === 'failed') i.status = 'pending'; }); return Promise.resolve(structuredClone(b)); }
+      case 'recipe_batch_resume': { const b = ltRecipeBatches.get(A.id), retry = A.retryIndices ? new Set(A.retryIndices) : null; b.status = 'running'; b.items.forEach(i => { if ((retry ? retry.has(i.index) && ['failed', 'skipped'].includes(i.status) : i.status === 'failed') && !String(i.error || '').startsWith('Preflight:')) { i.status = 'pending'; i.error = null; } }); return Promise.resolve(structuredClone(b)); }
       case 'recipe_batch_undo': {
         const b = ltRecipeBatches.get(A.id);
         b.items.filter(i => i.status === 'applied').forEach(i => {
@@ -7155,16 +7155,22 @@
     d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;padding:18px;width:620px;max-width:90vw';
     d.setAttribute('aria-labelledby', 'recipe-batch-result-title-' + id);
     const render = () => {
-      d.innerHTML = `<h3 id="recipe-batch-result-title-${id}" style="margin:0 0 12px">${esc(batch.label)} — results</h3><div style="max-height:50vh;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th align="left">Photo</th><th align="left">Result</th></tr></thead><tbody>${batch.items.map(i => `<tr><td>${esc(i.path)}</td><td>${esc(i.status)}${i.error ? ': ' + esc(i.error) : ''}</td></tr>`).join('')}</tbody></table></div>${batch.items.some(i => String(i.error || '').startsWith('Preflight:')) ? '<p style="font-size:12px">Preparation failures need repair before applying again. Select failed photos, fix their source recipe or access, then repeat Paste.</p>' : ''}<div style="display:flex;gap:8px;margin-top:14px"><button class="btn bgh" data-action="resume">Resume / retry failed</button><button class="btn bgh" data-action="select">Select failed / skipped</button><button class="btn bgh" data-action="undo">Undo batch</button><button class="btn bgh" data-action="close">Close</button></div>`;
+      d.innerHTML = `<h3 id="recipe-batch-result-title-${id}" style="margin:0 0 12px">${esc(batch.label)} — results</h3><div style="max-height:50vh;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th align="left">Photo</th><th align="left">Result</th></tr></thead><tbody>${batch.items.map(i => `<tr><td>${esc(i.path)}</td><td>${esc(i.status)}${i.error ? ': ' + esc(i.error) : ''}</td></tr>`).join('')}</tbody></table></div>${batch.items.some(i => String(i.error || '').startsWith('Preflight:')) ? '<p style="font-size:12px">Preparation failures need repair before applying again. Select failed photos, fix their source recipe or access, then repeat Paste.</p>' : ''}<div style="display:flex;gap:8px;margin-top:14px"><button class="btn bgh" data-action="resume">Resume / retry selected</button><button class="btn bgh" data-action="select">Select failed / skipped</button><button class="btn bgh" data-action="undo">Undo batch</button><button class="btn bgh" data-action="close">Close</button></div>`;
       d.querySelector('[data-action="close"]').onclick = () => d.close();
       d.querySelector('[data-action="select"]').onclick = () => {
         state.selected = new Set(batch.items.filter(i => ['failed', 'skipped', 'conflict'].includes(i.status)).map(i => i.path));
         syncSelCount(); renderGrid(); d.close();
       };
-      d.querySelector('[data-action="resume"]').disabled = recipeBatchRuns.has(id) || !batch.items.some(i => (i.status === 'pending' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
+      const selectedPaths = state.selected;
+      const selectedRetryable = batch.items.some(i => selectedPaths.has(i.path) && (i.status === 'skipped' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
+      d.querySelector('[data-action="resume"]').disabled = recipeBatchRuns.has(id) || (!selectedRetryable && !batch.items.some(i => i.status === 'pending' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
       d.querySelector('[data-action="undo"]').disabled = recipeBatchRuns.has(id) || !batch.items.some(i => i.status === 'applied');
       d.querySelector('[data-action="resume"]').onclick = async () => {
-        try { batch = await invoke('recipe_batch_resume', { id }); d.close(); await runRecipeBatch(batch); }
+        try {
+          const retryIndices = batch.items.filter(i => selectedPaths.has(i.path) && ['failed', 'skipped'].includes(i.status)).map(i => i.index);
+          batch = await invoke('recipe_batch_resume', { id, ...(retryIndices.length ? { retryIndices } : {}) });
+          d.close(); await runRecipeBatch(batch);
+        }
         catch (e) { toast(humanizeErr('resume this batch', e), 'err'); }
       };
       d.querySelector('[data-action="undo"]').onclick = async () => {

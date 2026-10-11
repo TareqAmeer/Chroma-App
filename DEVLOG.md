@@ -1500,3 +1500,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated feature commit 6d67e33b as $published; focused Cargo inpainting tests pass 6/6 in the clean integration checkout.
 - Post-push git ls-remote origin refs/heads/main confirmed origin/main at $published, containing the candidate-diversity change. Real person/wire/dust image quality remains unverified; CHR-246 AC4/AC7 stay open.
+
+### 2026-10-11 — CHR-273 selected skipped-item retry
+
+- Fixed Resume so the result-report selection sends the selected batch item indices; native resume makes only selected retryable failures/skips pending, preserves preflight errors, and never resets applied items. Files: `desktop/library-ui.js`, `desktop/src-tauri/src/recipe_batch.rs`.
+- Verification: `node --check desktop/library-ui.js` and `node --test test/recipe_batch.mjs` pass (7/7); focused Rust regression `resume_retries_only_selected_skips_and_never_preflight_or_applied_items` passes (1/1). Browser result-flow test could not run because Playwright is not installed in this checkout.
+- CHR-273 checklist: keep the per-photo progress/reason, skipped-result browser flow, next-launch recovery, and jobs-panel interaction criteria open until their UI evidence is available; existing 5,000 real-sidecar, selective-settings, and one-step undo evidence remains checked. Publication verification will follow integration.
