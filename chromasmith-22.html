@@ -7340,7 +7340,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011V';
+const BUILD='1.1012A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10901,6 +10901,7 @@ function fxLensStatusRefresh(){
   if(!window.chromasmithAutoLens){status.textContent='';return;}
   const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
   if(!fxImages.length){status.textContent='No photo loaded.';return;}
+  if(exif.lensStatusUnknown){status.textContent='Correction status is unavailable for this cached RAW photo.';status.style.color='';return;}
   if(window.chromasmithLensApplied===true){
     status.textContent='✓ Applied on this photo'+(exif.lens?' ('+exif.lens+')':'')+'.';
     status.style.color='var(--ok, #4caf50)';
@@ -13544,6 +13545,7 @@ function fxDisplayTierCanvas(full){
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
   return c;
 }
+function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
 async function loadFXImages(fileList){
   if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
   fxRememberPrevious();
@@ -13586,7 +13588,7 @@ async function loadFXImages(fileList){
   // its own 25 default), and rail icons (tg-adjust/tg-curves/tg-hsl/tg-local/tg-art/tg-vig/
   // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
   // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
-  const loadKey=[...files,...videoFiles].map(f=>`${f.name}:${f.size}:${f.lastModified||0}`).sort().join('|');
+  const loadKey=[...files,...videoFiles].map(fxFileLoadKey).sort().join('|');
   if(loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
   window.__pm&&window.__pm('lfx-snapshot-done');
   const entries=[];
@@ -13626,13 +13628,13 @@ async function loadFXImages(fileList){
         const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf});
         // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
         // on EVERY open path — library-ui's get_meta refines this later on library opens.
-        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined;
+        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined;
         // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
         // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
         // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
         const work=file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
         // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
-        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):''}:undefined,fileSize:file.size});continue;}
+        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }

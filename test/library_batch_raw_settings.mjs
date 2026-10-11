@@ -66,6 +66,7 @@ vm.runInContext([
   between(library, 'async function readPathsAsFiles(', '  // ── ROADMAP R13'),
   between(library, 'async function prepareBatchRawFiles(', '  // Resolve per-photo native settings'),
   between(library, 'async function rawCacheSettings(', '  // Review stores only'),
+  between(native, '  function parseCachedRawFrame(', '  const _rustLuts ='),
   between(native, 'class NativeLibRawShim {', '  window.getLibRaw ='),
   'globalThis.Shim = NativeLibRawShim;',
 ].join('\n'), context);
@@ -153,7 +154,7 @@ windowMock.__chromasmithPersistTarget = { path: paths[0], size: 4, recipeKey: 'p
 const matchedTarget = new context.Shim();
 await matchedTarget.open(new Uint8Array(0), { ...files[0].__csRawDecodeSettings, sourcePath: paths[0], outputBps: 8 });
 assert.equal(requests.at(-1).cachePath, paths[0]);
-assert.equal(requests.at(-1).recipeKey, 'photo-a-key');
+assert.equal(requests.at(-1).recipeKey, 'unused-settings-key', 'batch file uses its own resolved recipe target');
 const refining = new context.Shim();
 await refining.open(new Uint8Array(0), { ...files[1].__csRawDecodeSettings, sourcePath: paths[2], outputBps: 8, fullCleanup: true });
 assert.equal(requests.at(-1).rawNr, 'fast');

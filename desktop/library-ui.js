@@ -5284,7 +5284,7 @@
     }
     try {
       if (diskCached) {
-        const loadKey = `${baseName(path)}:diskcache:${recipeKey}`;
+        const loadKey = `${path}:diskcache:${recipeKey}`;
         deferEditorRender = !!(fullAssetPath || fullCachedEntry) && diskCached.img.naturalWidth < 4000;
         deferredDisplayRender = deferEditorRender;
         const installT0 = performance.now();
@@ -5381,7 +5381,7 @@
           } else {
             state.offlineEditPaths.delete(path);
           }
-          const loadKey = `${baseName(path)}:${byteLen}:0`; // must match loadFXImages' own key formula
+          const loadKey = fxFileLoadKey(file); // shared with loadFXImages, including native source identity
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
           if (!offlinePreview) imgCacheStore(path, isRaw && !hdrPreview ? displayTierEntry(fxImages[0]) : fxImages[0], loadKey);
@@ -6768,11 +6768,32 @@
   // there instead desyncs the moment any one photo fails to read (a missing/locked file mid-
   // selection), silently applying photo A's crop/masks to photo B's render — or, with several
   // failures compounding, exporting nothing recognizable at all.
-  async function readPathsAsFiles(paths) {
+  async function readPathsAsFiles(paths, options = {}) {
     const files = []; const failed = []; const okPaths = [];
+    const pathBackedRaw = !!(options && options.pathBackedRaw && window.__TAURI__);
     for (const p of paths) {
-      try { const buf = await invoke('read_file_bytes', { path: p }); files.push(new File([buf], baseName(p), { type: mimeFromName(p) })); okPaths.push(p); }
-      catch (e) { console.error('read_file_bytes', p, e); failed.push(p); }
+      try {
+        let file = null;
+        if (pathBackedRaw && RAW_EXT_RE.test(p)) {
+          try {
+            const head = await invoke('read_file_head', { path: p, len: 262144 });
+            const buffer = head instanceof ArrayBuffer ? head
+              : ArrayBuffer.isView(head) ? head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength) : null;
+            if (buffer && buffer.byteLength >= 9) {
+              const sourceSize = Number(new DataView(buffer).getBigUint64(0, true));
+              const headLength = buffer.byteLength - 8;
+              if (Number.isSafeInteger(sourceSize) && sourceSize > 0 && headLength > 0 && headLength <= sourceSize) {
+                file = makePathRawFile(p, new Uint8Array(buffer, 8), sourceSize, mimeFromName(p));
+              }
+            }
+          } catch (_) { /* A failed/invalid head falls back to the original full-file read below. */ }
+        }
+        if (!file) {
+          const buf = await invoke('read_file_bytes', { path: p });
+          file = new File([buf], baseName(p), { type: mimeFromName(p) });
+        }
+        files.push(file); okPaths.push(p);
+      } catch (e) { console.error('read_file_bytes', p, e); failed.push(p); }
     }
     if (failed.length) toast(`Could not read ${failed.length} of ${paths.length} photo(s)`, false);
     files.okPaths = okPaths;
@@ -7042,7 +7063,7 @@
   // (touch_recent) — batch opens used to skip this entirely, so an externally-opened or
   // multi-selected batch never showed up in the Recents smart collection.
   async function openPathsInEditor(paths) {
-    const files = await readPathsAsFiles(paths);
+    const files = await readPathsAsFiles(paths, { pathBackedRaw: !!window.__TAURI__ });
     if (!files.length) return files;
     const okPaths = files.okPaths || paths; // fallback keeps old behavior if a caller-supplied files array skipped readPathsAsFiles
     await prepareBatchRawFiles(files, okPaths);
@@ -7076,6 +7097,7 @@
       if (!path || !RAW_EXT_RE.test(path)) continue;
       const settings = await rawCacheSettings(path, 'interactive');
       files[i].__csSourcePath = path;
+      const cacheTargets = [{ path, recipeKey: settings.recipeKey }];
       files[i].__csRawDecodeSettings = Object.freeze({
         profile: settings.profile,
         rawNr: settings.rawNr,
@@ -7084,6 +7106,8 @@
         lensOverride: settings.lensOverride,
         lensOverrideFocal: settings.lensOverrideFocal,
         fullCleanup: settings.fullCleanup,
+        cacheTargets: Object.freeze(cacheTargets.map(target => Object.freeze(target))),
+        cacheTarget: Object.freeze({ path, recipeKey: settings.recipeKey }),
       });
     }
     return files;

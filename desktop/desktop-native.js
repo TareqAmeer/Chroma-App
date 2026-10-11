@@ -124,6 +124,33 @@
     framed.set(payload, 4 + json.length);
     return invoke(cmd, framed);
   };
+  function parseCachedRawFrame(value) {
+    let bytes;
+    if (value instanceof ArrayBuffer) bytes = new Uint8Array(value);
+    else if (ArrayBuffer.isView(value)) bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    else return null;
+    if (bytes.byteLength < 8) return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const width = view.getUint32(0, true), height = view.getUint32(4, true);
+    const pixelBytes = width * height * 4;
+    if (!width || !height || !Number.isSafeInteger(pixelBytes) || pixelBytes !== bytes.byteLength - 8) return null;
+    return { width, height, pixels: new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, pixelBytes) };
+  }
+  async function readCachedRawFrame(sourcePath, settings) {
+    if (!sourcePath || !Array.isArray(settings && settings.cacheTargets) || settings.filmSource || settings.filmNegative) return null;
+    for (const target of settings.cacheTargets) {
+      if (!target || target.path !== sourcePath || typeof target.recipeKey !== 'string' || !target.recipeKey) continue;
+      if (window.chromasmithHdrPreview) {
+        try { if (await invoke('hdr_headroom_clear', { path: sourcePath, recipeKey: target.recipeKey }) !== true) continue; }
+        catch (_) { continue; }
+      }
+      try {
+        const frame = parseCachedRawFrame(await invoke('get_cached_raw_decode', { path: sourcePath, recipeKey: target.recipeKey }));
+        if (frame) return frame;
+      } catch (_) { /* missing or stale cache falls through to normal development */ }
+    }
+    return null;
+  }
   const _rustLuts = {}; // lutKey -> true once registered with the Rust side this session
   // CHR-162: one resolver for every native RAW develop (open, refine, High NR, export cleanup,
   // Library cache warm) so they can't disagree about a photo's colour. Order: bundled/Adobe-on-disk
@@ -205,6 +232,7 @@
       // showExif) is the only correct place to trigger this — this flag update just makes sure
       // that later call has fresh data to read.
       window.chromasmithLensApplied = undefined;
+      this._cachedPixels = null; this._cacheLensStatusUnknown = false;
       // DCP path: the whole develop (decode + PPG demosaic + baked-LUT apply) runs in Rust
       // and returns display-ready RGBA8 — the old flow shipped 145MB of u16 RGB over IPC and
       // ran a 24M-pixel trilinear loop on the JS main thread. The 65^3 LUT is baked once per
@@ -301,11 +329,28 @@
       // single-pass open (no refine) is cached too — it used to be written only from the refine
       // callback, which the single-pass chroma tier never reaches, so nothing was cached at all.
       // The size check keeps a dropped file (Match/Collage) from ever using a stale target.
-      const pt = window.__chromasmithPersistTarget;
+      const globalTarget = window.__chromasmithPersistTarget;
       window.__chromasmithPersistTarget = null;
-      this._persist = (pt && (sourcePath ? pt.path === sourcePath : pt.size === bytes.byteLength)) ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
+      const hasFileTarget = !!(settings && Object.prototype.hasOwnProperty.call(settings, 'cacheTarget'));
+      const pt = hasFileTarget ? settings.cacheTarget : globalTarget;
+      const targetMatches = hasFileTarget ? !!(pt && sourcePath && pt.path === sourcePath)
+        : !!(pt && (sourcePath ? pt.path === sourcePath : pt.size === bytes.byteLength));
+      this._persist = (targetMatches && typeof pt.recipeKey === 'string' && pt.recipeKey
+        && !(settings && (settings.filmSource || settings.filmNegative)))
+        ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
       const src = sourcePath ? { sourcePath } : {};
       const persistNow = (this._persist && !this._needsRefine) ? this._persist : {};
+      const cached = await readCachedRawFrame(sourcePath, settings);
+      if (cached) {
+        this._w = cached.width; this._h = cached.height;
+        this._cacheLensStatusUnknown = true;
+        try { const meta = await invoke('get_meta', { path: sourcePath }); this._iso = Number.isFinite(meta && meta.iso) && meta.iso > 0 ? meta.iso : undefined; }
+        catch (_) { this._iso = undefined; }
+        this._cachedPixels = cached.pixels; this._hasExt = false;
+        this._needsRefine = false; this._single = true;
+        this._mode = mode === 'linear16' ? 'srgb' : mode;
+        return;
+      }
       window.__pm('native-fast-invoke');
       const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, ...src, fast: !single } : { mode, ...extra, ...persistNow, ...src, fast: !single }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
@@ -338,9 +383,10 @@
       // photoStyle: Panasonic PhotoStyle tag (docs/ROADMAP.md F2), 17 = V-Log — undefined for every
       // other make/camera, chromasmith-22.html's loadRw2 uses it to auto-enable the V-Log input
       // transform so footage shot in V-Log doesn't render flat/green until the user notices.
-      return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '', photoStyle: id.photoStyle };
+      return { iso_speed: this._iso, make: id.make || '', model: id.model || '', lens: id.lens || '', photoStyle: id.photoStyle, lensStatusUnknown: !!this._cacheLensStatusUnknown };
     }
     async imageData() {
+      if (this._cachedPixels) return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: this._cachedPixels };
       if (this._mode === 'linear16') {
         return { width: this._w, height: this._h, colors: 3, bits: 16, data: new Uint16Array(this._buf, 24) };
       }
