@@ -1528,3 +1528,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `c64f7d2c132c36fa648f6fdfd6150e19044a5ba7` was integrated as `433e675bef291dd3619b8c983dd3747824c641a6` and pushed to `origin/main` after all focused browser, pixel, HTML, and diff checks passed in the clean integration checkout.
 - `git ls-remote origin refs/heads/main` confirmed `origin/main` at `ae8418aeb95138f00a5175fe86a306d290c93ea6`; the tip includes integration commit `433e675bef291dd3619b8c983dd3747824c641a6`. CHR-253 remains In Progress because real-photo matte quality and broader platform/catalog acceptance are still open.
+
+### 2026-10-11 — CHR-273 native process recovery
+
+- Added a subprocess regression that abruptly exits after the first item of a durable recipe batch is applied, then reopens the file-backed SQLite journal, verifies the interrupted running state and per-photo progress, and resumes the remaining item. File: `desktop/src-tauri/src/recipe_batch.rs`.
+- Verification: focused native subprocess test passes; full recipe-batch Rust suite passes (9 passed, 1 ignored). Existing JavaScript recipe-batch unit suite passes 7/7. The browser recovery UI test was not rerun in this checkout because Playwright is absent; its prior passing result remains recorded above.
+- This supplies process-boundary persistence evidence for CHR-273’s interrupted-batch recovery criterion, alongside the startup-reporting UI test. The native and browser tests are separate layers; no single Tauri GUI plus native-catalog restart test was run. Feature commit and publication verification are pending.

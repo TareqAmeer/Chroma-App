@@ -468,6 +468,107 @@ mod tests {
         p
     }
     #[test]
+    fn crash_fixture_child() {
+        let Ok(db_path) = std::env::var("CHR_RECIPE_BATCH_CRASH_DB") else {
+            return;
+        };
+        let first = std::env::var("CHR_RECIPE_BATCH_CRASH_FIRST").unwrap();
+        let second = std::env::var("CHR_RECIPE_BATCH_CRASH_SECOND").unwrap();
+        let _cache = crate::library::isolate_cache_dir("recipe_batch_process_crash_child");
+        std::fs::write(&first, b"photo").unwrap();
+        std::fs::write(&second, b"photo").unwrap();
+        let mut c = Connection::open(db_path).unwrap();
+        c.pragma_update(None, "journal_mode", "WAL").unwrap();
+        let batch = create(
+            &mut c,
+            "Crash recovery fixture".into(),
+            [first, second]
+                .into_iter()
+                .map(|path| Input {
+                    path,
+                    recipe: "target".into(),
+                    expected_recipe: None,
+                    expected_active: None,
+                    error: None,
+                })
+                .collect(),
+        )
+        .unwrap();
+        assert_eq!(apply(&c, batch.id, 0).unwrap().status, "applied");
+        // Exit without dropping the SQLite connection, matching a forced process kill after
+        // one item was durably written and before the worker could finish the remaining item.
+        std::process::exit(73);
+    }
+    #[test]
+    fn process_crash_recovers_persisted_batch_and_resumes_remaining_items() {
+        let _cache = crate::library::isolate_cache_dir("recipe_batch_process_crash_parent");
+        let dir = test_dir();
+        let db = dir.join("catalog.db");
+        let first = dir.join("first.jpg");
+        let second = dir.join("second.jpg");
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "recipe_batch::tests::crash_fixture_child", "--nocapture"])
+            .env("CHR_RECIPE_BATCH_CRASH_DB", &db)
+            .env("CHR_RECIPE_BATCH_CRASH_FIRST", &first)
+            .env("CHR_RECIPE_BATCH_CRASH_SECOND", &second)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(73), "child output: {}", String::from_utf8_lossy(&output.stderr));
+
+        let mut c = Connection::open(&db).unwrap();
+        let ids = {
+            let mut s = c
+                .prepare("SELECT id FROM recipe_batches WHERE label='Crash recovery fixture'")
+                .unwrap();
+            s.query_map([], |row| row.get::<_, i64>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            ids.len(),
+            1,
+            "the batch journal must survive process termination"
+        );
+        let batch = get(&c, ids[0]).unwrap();
+        assert_eq!(
+            batch.status, "running",
+            "startup must find and report the interrupted job"
+        );
+        assert_eq!(
+            batch
+                .items
+                .iter()
+                .map(|i| i.status.as_str())
+                .collect::<Vec<_>>(),
+            ["applied", "pending"]
+        );
+        assert_eq!(
+            crate::library::get_sidecar(first.to_string_lossy().into_owned()).recipe,
+            "target"
+        );
+
+        // This is the native part of the next-launch recovery flow: the startup UI cancels
+        // the stale running worker, presents the persisted item report, then resumes pending work.
+        c.execute(
+            "UPDATE recipe_batches SET status='cancelled' WHERE id=? AND status='running'",
+            [batch.id],
+        )
+        .unwrap();
+        assert_eq!(get(&c, batch.id).unwrap().items[1].status, "pending");
+        assert_eq!(resume(&mut c, batch.id, None).unwrap().status, "running");
+        assert_eq!(apply(&c, batch.id, 1).unwrap().status, "applied");
+        let recovered = get(&c, batch.id).unwrap();
+        assert_eq!(recovered.status, "completed");
+        assert!(recovered.items.iter().all(|item| item.status == "applied"));
+        assert_eq!(
+            crate::library::get_sidecar(second.to_string_lossy().into_owned()).recipe,
+            "target"
+        );
+        drop(c);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    #[test]
     fn reopen_apply_undo_and_preserve_later_edits() {
         let _cache = crate::library::isolate_cache_dir("recipe_batch_reopen");
         let dir = test_dir();
