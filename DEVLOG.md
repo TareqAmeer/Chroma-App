@@ -1830,3 +1830,7 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-269 face compatibility test correction
 - Updated test/library_assisted_culling.mjs to explicitly exercise the legacy JPEG close-up and People flows using a non-RAW catalog fixture. The prior RAW fixture now correctly requires developed preview IPC; dedicated library_raw_faces.mjs covers that contract separately.
 - Focused compatibility regression passes with the canonical shared browser; diff check passes. No production behavior changed; issue CHR-269.
+
+### 2026-10-11 — CHR-200/269/276 combined RAW review publication
+- Published selected RAW preparation (e90b226f), developed RAW face review (8a1dd012), rendering-boundary caption/plan (0daaae21), and JPEG compatibility test (44cc38e4) through merged main f32b62bb29c684e08ae38970ef7133c9cd83142b. Normal push and ls-remote verified the exact remote tip after preserving concurrent HDR-cache changes.
+- Merged Quick Look/preparation/RAW-face regressions, Library syntax/content lint, diff check and native display-only tests (2 passed, real-fixture test intentionally not repeated) pass. Full UI gates: 20/33 pass; unchanged 879 inventory findings, token CRLF-only drift resolves with regeneration/check, 12 other failures remain. Files/evidence: docs/validation/chr267/raw-review-followup-2026-10-11.md; each linked issue remains partially complete.

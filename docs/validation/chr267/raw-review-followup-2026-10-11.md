@@ -15,3 +15,9 @@ This proves developed RAW provenance and bounded persistent fit-cache behavior, 
 ## CHR-200 scheduling follow-up
 
 Display-only development now dispatches demosaic and colour conversion to the existing interactive pool; full-cache batch placement stays unchanged. Targeted offline dispatch/cache suite passed 2 tests; real Nikon fixture passed again in 55.81 s. The dispatch test also preserves CS_INTERACTIVE_POOL=0 caller fallback. No native foreground/background latency or wall-time improvement claim follows from these unit/integration test timings.
+
+## Combined RAW review UI verification
+
+Selected preparation, developed RAW face crops and rendering-boundary captions passed their focused browser tests. Legacy JPEG close-up/People compatibility passed after making its fixture explicitly non-RAW. Native synthetic face-crop source/pixel/cache-key/missing-source test passed. Combined full Editor gates completed with 20/33 PASS and 13 failures; structural inventory has exactly the same 879 finding strings as the saved earlier run. The extra tokens-check failure was CRLF formatting drift: generator regeneration produced no Git content diff, and the targeted check then passed (12 other failures remain). No blanket UI or native desktop pass is claimed.
+
+Remote main advanced with HDR-cache handling during publication. It was merged without conflicts; RAW Quick Look, preparation and face browser contracts all passed again against the merged code. Cold speed, native portrait crop quality, creative-edit parity and native foreground-load measurements remain open.
