@@ -1495,3 +1495,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Filtered exact and near-duplicate MI-GAN repairs using a bounded 32×32 spatial sample of pixels inside the erase mask, requiring either mean RGB delta ≥4 or a localized high-change signal across at least two sample cells. This keeps comparison memory independent of full image size; fewer than three sufficiently different repairs still fails with an actionable retry message. File: `desktop/src-tauri/src/inpaint.rs`.
 - Verification: focused `cargo test --offline --bin chromasmith inpaint::tests` passes 6/6, including near-duplicate, localized variation, isolated-noise, spatial-sampling and existing storage/cancellation cases; `node --check test/inpaint_ui.mjs` and `git diff --check` pass. The Playwright UI test cannot launch because this clean checkout has no Playwright package. Real person/wire/dust image quality remains unverified; CHR-246 AC4 and AC7 stay open.
 - Publication verification will be recorded after integration.
+
+### 2026-10-11 — CHR-246 publication verification
+
+- Integrated feature commit 6d67e33b as $published; focused Cargo inpainting tests pass 6/6 in the clean integration checkout.
+- Post-push git ls-remote origin refs/heads/main confirmed origin/main at $published, containing the candidate-diversity change. Real person/wire/dust image quality remains unverified; CHR-246 AC4/AC7 stay open.
