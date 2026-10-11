@@ -1467,3 +1467,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - CHR-244 publication: integrated the registered partial panorama stitch pipeline test at 1a7f513d; integration verification passed cargo test --offline --bin chromasmith panorama_ -j 1 (3/3).
 - Verified origin/main at 1a7f513dbe0ef413619b95b13ce850874a4818e8; full N-way panorama acceptance remains open and the issue stays In Progress.
+
+### 2026-10-11 — CHR-249 mask-local sharpening protection
+
+- Added a zero-default mask-local Sharpen Mask control that reduces sharpening in smooth regions, plus a selected-mask grayscale Alt preview; negative local softening remains unchanged. Files: chromasmith-22.html, 	est/mask_raster.mjs.
+- Verification: mask-raster suite 86/86, global sharpening-mask browser regression passes, export shader harness renders 35 fixture/recipe pairs, and 23 existing golden images remain pixel-identical. Editor UI audit reports unrelated library/top-bar and phone-control issues; full editor gates also lack local Playwright packages in this checkout.
+- Lightroom reference parity for masked Clarity/Texture/Dehaze, AI Denoise/Super Resolution/Raw Details, licensing/model delivery, and five-photo signoff remain open; CHR-249 stays In Progress.

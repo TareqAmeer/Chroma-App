@@ -344,6 +344,7 @@ async function main() {
       const sharpMask=fxState.masks[0];Object.assign(sharpMask,{cx:.5,cy:.5,rx:.42,ry:.42,rot:0,feather:.05,sharp:0,tex:0});
       _mskTexDirty=true;
       ck('CHR-249 mask panel exposes a distinct Sharpen slider',!!document.querySelector('[data-k="sharp"]'));
+      ck('CHR-249 mask panel exposes independent Sharpen Mask protection',!!document.querySelector('[data-k="sharpMask"]'));
       const localSharpRender=()=>{FX.render(getFXParams(),128,96,{glowScale:1,seed:3.25});return Uint8Array.from(FX.getPixels().px);};
       const sharpOff=localSharpRender();sharpMask.sharp=100;const sharpOn=localSharpRender();
       let insideDelta=0,outsideDelta=0,insideCount=0,outsideCount=0;
@@ -356,13 +357,43 @@ async function main() {
       ck('CHR-249 local Sharpen leaves pixels outside the mask unchanged',outsideDelta===0,`outside delta ${outsideDelta}`);
       sharpMask.sharp=0;const neutralAgain=localSharpRender();
       ck('CHR-249 zero Amount is pixel-identical to Sharpen off',same(sharpOff,neutralAgain));
-      sharpMask.sharp=65;const sharpenedBeforeSnapshot=localSharpRender();
+      sharpMask.sharp=100;sharpMask.sharpMask=0;const unprotectedSharp=localSharpRender();
+      sharpMask.sharpMask=100;const protectedSharp=localSharpRender();
+      const sharpenDelta=img=>{let sum=0;for(let i=0;i<img.length;i+=4)for(let c=0;c<3;c++)sum+=Math.abs(img[i+c]-sharpOff[i+c]);return sum;};
+      ck('CHR-249 local Sharpen Mask protects smooth areas',sharpenDelta(protectedSharp)<sharpenDelta(unprotectedSharp),`${sharpenDelta(protectedSharp)} vs ${sharpenDelta(unprotectedSharp)}`);
+      ck('CHR-249 local Sharpen Mask preserves detected edges',sharpenDelta(protectedSharp)>0,String(sharpenDelta(protectedSharp)));
+      sharpMask.sharp=-100;sharpMask.sharpMask=0;const unprotectedSoftening=localSharpRender();
+      sharpMask.sharpMask=100;const protectedSoftening=localSharpRender();
+      ck('CHR-249 Sharpen Mask leaves intentional negative softening unchanged',same(unprotectedSoftening,protectedSoftening));
+      sharpMask.sharp=100;sharpMask.sharpMask=100;
+      const localToggle=document.getElementById('tg-local');if(localToggle&&!localToggle.classList.contains('on'))localToggle.click();
+      const sharpMaskInput=document.querySelector('[data-k="sharpMask"]');sharpMaskInput.focus();
+      sharpMaskInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',bubbles:true}));
+      const sharpPreviewOpts=mskPreviewRenderOptions({glowScale:1,seed:3.25});
+      FX.render(getFXParams(),128,96,sharpPreviewOpts);
+      const localMaskPreview=Uint8Array.from(FX.getPixels().px);let previewMin=255,previewMax=0,previewNonGray=0;
+      for(let i=0;i<localMaskPreview.length;i+=4){previewMin=Math.min(previewMin,localMaskPreview[i]);previewMax=Math.max(previewMax,localMaskPreview[i]);if(localMaskPreview[i]!==localMaskPreview[i+1]||localMaskPreview[i]!==localMaskPreview[i+2])previewNonGray++;}
+      ck('CHR-249 Alt targeted at the local slider previews only grayscale protected edges',
+        sharpPreviewOpts.showSharpMask===mskSel&&_mskSharpMaskPreview&&!_adjSharpMaskPreview&&previewNonGray===0&&previewMin<8&&previewMax>220,
+        `${previewMin}..${previewMax}, color=${previewNonGray}`);
+      sharpMaskInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Alt',bubbles:true}));const previewRestored=localSharpRender();
+      ck('CHR-249 releasing Alt restores local sharpening exactly',same(protectedSharp,previewRestored));
+      document.getElementById('sl-adj-sharp-mask').focus();
+      document.getElementById('sl-adj-sharp-mask').dispatchEvent(new KeyboardEvent('keydown',{key:'Alt',bubbles:true}));
+      ck('CHR-249 Alt outside the mask control keeps the global preview route',_adjSharpMaskPreview&&!_mskSharpMaskPreview);
+      document.getElementById('sl-adj-sharp-mask').dispatchEvent(new KeyboardEvent('keyup',{key:'Alt',bubbles:true}));
+      sharpMask.sharp=65;sharpMask.sharpMask=72;const sharpenedBeforeSnapshot=localSharpRender();
+      const protectedBeforeSnapshot=localSharpRender();
       const sharpWire=JSON.parse(JSON.stringify(getUISnapshot()));
       ck('CHR-249 mask Sharpen value is included in snapshots',sharpWire.masks?.[0]?.sharp===65,String(sharpWire.masks?.[0]?.sharp));
+      ck('CHR-249 mask Sharpen Mask value is included in snapshots',sharpWire.masks?.[0]?.sharpMask===72,String(sharpWire.masks?.[0]?.sharpMask));
       applyUISnapshot(sharpWire);_mskTexDirty=true;
       ck('CHR-249 mask Sharpen render survives snapshot round-trip',same(sharpenedBeforeSnapshot,localSharpRender()));
+      ck('CHR-249 protected Sharpen render survives snapshot round-trip',same(protectedBeforeSnapshot,localSharpRender()));
       const legacySharp=JSON.parse(JSON.stringify(sharpWire));delete legacySharp.masks[0].sharp;applyUISnapshot(legacySharp);
       ck('CHR-249 legacy masks migrate with neutral Sharpen',fxState.masks[0].sharp===0,String(fxState.masks[0].sharp));
+      const legacyMask=JSON.parse(JSON.stringify(sharpWire));delete legacyMask.masks[0].sharpMask;applyUISnapshot(legacyMask);
+      ck('CHR-249 legacy masks keep smooth-area protection neutral',fxState.masks[0].sharpMask==null||fxState.masks[0].sharpMask===0,String(fxState.masks[0].sharpMask));
       fxState.masks.length=0;mskSel=-1;mskAdd('brush');fxState.masks[0].px.fill(0);_mskTexDirty=true;
 
       // Two real pointer strokes must become two independent history steps.

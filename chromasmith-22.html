@@ -7331,7 +7331,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1011T';
+const BUILD='1.1011U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8390,6 +8390,7 @@ uniform vec3 mskShowSelColor;    // UI-only overlay colour for modes 0 and 1
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
 uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
 uniform float mskAnySharp; // 1 when any mask has nonzero local Sharpen, so srcHP is computed
+uniform float mskAnySharpMask; // 1 when any locally sharpened mask protects smooth areas
 // Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
 // Sampled in LOCAL uv, not global: the buffer is built from the same tile that is being rendered,
 // and renderTiled's halo guarantees the neighbourhood the blur needed is present.
@@ -8408,7 +8409,8 @@ uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see 
                           // Unlike Texture/Clarity there is no "negative" reading: this operator only
                           // smooths, so 0 is simply off. y: Whites (-1..1), z: Blacks (-1..1),
                           // w: local Dehaze (-1..1).
-uniform vec4 mskL[8];     // x: local Sharpen amount (-1..1); yzw reserved.
+uniform vec4 mskL[8];     // x: local Sharpen amount (-1..1); y: smooth-area protection (0..1); zw reserved.
+uniform float mskShowSharpMask; // selected mask edge-protection preview index, -1 when inactive
 uniform vec2 uvOffL,uvScaleL;
 // ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
 // (0..1, same range-gate convention as mskD's lumLo/lumHi); w: signed local Vibrance (-1..1).
@@ -8873,6 +8875,14 @@ if(adjSharpMask>0.0&&(adjSharp!=0.0||showSharpMask)){
   float threshold=0.12*adjSharpMask;
   sharpKeep=smoothstep(threshold,threshold+0.025,edge);
 }
+float localSharpEdge=0.0;
+if(mskAnySharpMask>0.5||mskShowSharpMask>=0.0){
+  float localLumL=dot(fnTex(vidUV(uv-vec2(texSize.x,0.0))).rgb,vec3(.2126,.7152,.0722));
+  float localLumR=dot(fnTex(vidUV(uv+vec2(texSize.x,0.0))).rgb,vec3(.2126,.7152,.0722));
+  float localLumU=dot(fnTex(vidUV(uv-vec2(0.0,texSize.y))).rgb,vec3(.2126,.7152,.0722));
+  float localLumD=dot(fnTex(vidUV(uv+vec2(0.0,texSize.y))).rgb,vec3(.2126,.7152,.0722));
+  localSharpEdge=max(abs(localLumR-localLumL),abs(localLumD-localLumU));
+}
 if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&(mskAnyClarity<0.5)){
   float detailRadius=3.0;
   vec3 nbDetail=(fnTex(vidUV(uv+vec2(0.,texSize.y*detailRadius)))+fnTex(vidUV(uv-vec2(0.,texSize.y*detailRadius)))
@@ -8994,6 +9004,12 @@ if(mskN>0.5){
     if(float(i)>=mskN)break;
     float coverage=selWeights[i];
     float w=coverage*mskE[i].w;              // Amount/mute scale this adjustment, never operand coverage
+    if(mskShowSharpMask>=0.0&&abs(mskShowSharpMask-float(i))<0.5){
+      float threshold=0.12*max(mskL[i].y,0.01);
+      float keep=smoothstep(threshold,threshold+0.025,localSharpEdge);
+      o=vec4(vec3(clamp(coverage*keep,0.0,1.0)),1.0);
+      return;
+    }
     // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
     // gate) over a greyscale photo and stop. The JS/SVG overlay can only draw the shape, so it
     // cannot show what the gates do — and a colour range is untunable if you cannot see it.
@@ -9036,7 +9052,11 @@ if(mskN>0.5){
       // Local Sharpen uses the same radius-1 source edge response as global Sharpen, but is
       // independently weighted by the mask's effective selection and Amount. Its zero default
       // preserves existing masks; positive values add edge contrast, negative values soften it.
-      if(mskL[i].x!=0.0){c.rgb=c.rgb+srcHP*(mskL[i].x*w*0.75);if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);}
+      if(mskL[i].x!=0.0){
+        float localSharpKeep=1.0;
+        if(mskL[i].x>0.0&&mskL[i].y>0.0){float threshold=0.12*mskL[i].y;localSharpKeep=smoothstep(threshold,threshold+0.025,localSharpEdge);}
+        c.rgb=c.rgb+srcHP*(mskL[i].x*w*localSharpKeep*0.75);if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
       // Clarity: midtone-weighted wide-radius contrast, the same 4*l*(1-l) weighting the global
       // Clarity uses — so it builds structure in the midtones without touching highlight
       // roll-off or crushing shadows, and negative smooths.
@@ -10202,6 +10222,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mK[o+2]=m.bl||0;        // Blacks: signed -1..1, identity for legacy masks
       mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
       mL[o]=(m.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
+      mL[o+1]=(m.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -10332,6 +10353,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mskAnyTex:MK.some(m=>m.tex)?1:0,
       mskAnyClarity:MK.some(m=>m.clarity)?1:0,
       mskAnySharp:MK.some(m=>m.sharp)?1:0,
+      mskAnySharpMask:MK.some(m=>m.sharp>0&&m.sharpMask)?1:0,
       mskAnyNR:MK.some(m=>m.nr)?1:0,
       skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
       // ROADMAP R7 — depthTx bound whenever a real map has been uploaded for THIS photo (via
@@ -10346,6 +10368,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
        mskShowSelOutline:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelOutline)?1:0,
        mskShowSelMode:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelMode!=null)?opts.showSelMode:0,
        mskShowSelColor:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelColor)?opts.showSelColor:[1,.15,.15],
+       mskShowSharpMask:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSharpMask!=null)?opts.showSharpMask:-1,
       uvOffL,uvScaleL,
       adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
       adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
@@ -10675,7 +10698,7 @@ function fxSecondDisplayUpdate(){
       const renderTile=(src,maxPixels)=>{
         const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
         const k=Math.min(1,1800/w,1800/h,Math.sqrt(maxPixels/(w*h))),rw=Math.max(1,Math.round(w*k)),rh=Math.max(1,Math.round(h*k));
-        FXDisplay.resetTextureSnapshotFrom(FX);FXDisplay.setImage(src);FXDisplay.render(getFXParams(),rw,rh,{glowScale:fxPreviewGlowScale(),scOverride:w/FXR.CAL.refWidth,showSel:-1});
+        FXDisplay.resetTextureSnapshotFrom(FX);FXDisplay.setImage(src);FXDisplay.render(getFXParams(),rw,rh,{...mskPreviewRenderOptions({glowScale:fxPreviewGlowScale(),scOverride:w/FXR.CAL.refWidth}),showSel:-1});
         return{dataUrl:FXDisplay.cv.toDataURL('image/jpeg',0.88),width:w,height:h};
       };
       if(_fxDisplayMode==='grid'){
@@ -13724,8 +13747,16 @@ function fxUpdate(){
 // The settled frame is identical to a cold render — only the interim frames are cheap, and they
 // are all replaced by it. test/perf_bench.mjs asserts both halves.
 let _fxRenderRAF=0;
-function fxSharpMaskPreview(on){const next=!!on;if(_adjSharpMaskPreview===next)return;_adjSharpMaskPreview=next;fxScheduleRender();}
-document.addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat){e.preventDefault();fxSharpMaskPreview(true);}},true);
+function fxSharpMaskPreview(on,target=document.activeElement){
+  const next=!!on;
+  if(next){
+    const active=target||document.activeElement;
+    if(active&&active.dataset&&active.dataset.k==='sharpMask'&&mskSel>=0&&fxState.masks[mskSel])_mskSharpMaskPreview=true;
+    else _adjSharpMaskPreview=true;
+  }else{_adjSharpMaskPreview=false;_mskSharpMaskPreview=false;}
+  fxScheduleRender();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat){e.preventDefault();fxSharpMaskPreview(true,e.target);}},true);
 document.addEventListener('keyup',e=>{if(e.key==='Alt')fxSharpMaskPreview(false);},true);
 window.addEventListener('blur',()=>fxSharpMaskPreview(false));
 function fxScheduleRender(){
@@ -19563,6 +19594,7 @@ function mskRebuild(){
     +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
     +_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
+    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
     +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.')
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
     // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
@@ -19762,7 +19794,8 @@ function mskShowSelIdx(){
 }
 function mskPreviewRenderOptions(extra={}){
   return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),previewOnly:MSK_PREVIEW_RENDER_TOKEN};
+    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
 }
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
@@ -22637,6 +22670,7 @@ function matchSeriesClear(){
   toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
 }
 let _adjSharpMaskPreview=false;
+let _mskSharpMaskPreview=false;
 const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
 function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:(f==='sharp-radius'?1:0));if(sl)sl.value=val;if(vl)vl.textContent=val;});}
