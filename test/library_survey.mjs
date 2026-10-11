@@ -100,7 +100,9 @@ try {
   await page.evaluate((selected) => selected.forEach((p) => window.__libSelect(p)), comparePaths);
   const editorEntriesBeforeCompare = await page.evaluate(() => window.__libCompareState().editorEntries);
   await page.keyboard.press('c');
-  await page.waitForFunction(() => document.querySelectorAll('#lib-compare.on .lib-cmp-pane').length === 2 && [...document.querySelectorAll('#lib-compare .lib-cmp-name')].every((el) => el.textContent), { timeout: 45000 });
+  await page.waitForFunction(() => document.querySelectorAll('#lib-compare.on .lib-cmp-pane').length === 2
+    && [...document.querySelectorAll('#lib-compare .lib-cmp-pane')].every((pane) => !pane.hasAttribute('aria-busy'))
+    && [...document.querySelectorAll('#lib-compare .lib-cmp-name')].every((el) => el.textContent && !el.textContent.startsWith('Loading ')), { timeout: 45000 });
   const paneNames = () => page.locator('.lib-cmp-name').evaluateAll((els) => els.map((el) => el.textContent));
   const expectedNames = comparePaths.map((p) => path.basename(p));
   assert.deepEqual(await paneNames(), expectedNames.slice(0, 2), 'Compare opens the first two selected photos in A/B');
@@ -131,6 +133,42 @@ try {
   compareState = await page.evaluate(() => window.__libCompareState());
   assert.deepEqual(new Set(compareState.loaded), new Set([comparePaths[4], comparePaths[0]]), 'manual reassignment preserves full path mapping with a two-frame bound');
   assert.equal(compareState.editorEntries, editorEntriesBeforeCompare, 'navigation keeps Editor state untouched');
+  const delayedPath = comparePaths[3];
+  await page.evaluate((p) => {
+    window.__libtestSeedSidecar(p, { label: '', rating: 0 });
+    window.__cmpDeferredLoader = (path) => new Promise((resolve, reject) => {
+      window.__cmpResolve = () => { const image = document.createElement('canvas'); image.width = 64; image.height = 48;
+        image.getContext('2d').fillRect(0, 0, 64, 48); resolve({ path, ext: 'jpg', img: image, fullImg: image, exif: {} }); };
+      window.__cmpReject = () => reject(new Error('fixture decode failed'));
+    });
+    window.__libtestSetCompareLoader(window.__cmpDeferredLoader);
+  }, delayedPath);
+  await page.locator('.lib-cmp-photo-sel[data-pane="A"]').selectOption('3');
+  await page.waitForFunction(() => document.querySelector('.lib-cmp-pane[data-pane="A"]')?.getAttribute('aria-busy') === 'true');
+  assert.match(await page.locator('.lib-cmp-name[data-pane="A"]').textContent(), /^Loading /);
+  await page.keyboard.press('p');
+  await page.keyboard.press('5');
+  assert.deepEqual(await page.evaluate((p) => { const { label, rating } = window.__libtestReadSidecar(p); return { label, rating }; }, delayedPath), { label: '', rating: 0 }, 'keyboard pick/rating cannot target the newly selected path before its pixels are presented');
+  await page.evaluate(() => window.__cmpResolve());
+  await page.waitForFunction((name) => document.querySelector('.lib-cmp-name[data-pane="A"]')?.textContent === name
+    && !document.querySelector('.lib-cmp-pane[data-pane="A"]')?.hasAttribute('aria-busy'), path.basename(delayedPath));
+  const oldPanePixels = await page.locator('.lib-cmp-pane[data-pane="A"] canvas').evaluate((c) => [c.width, c.height]);
+
+  const failedPath = comparePaths[1];
+  await page.evaluate((p) => {
+    window.__libtestSeedSidecar(p, { label: '', rating: 0 });
+    window.__libtestSetCompareLoader(() => new Promise((resolve, reject) => { window.__cmpReject = () => reject(new Error('fixture decode failed')); }));
+  }, failedPath);
+  await page.locator('.lib-cmp-photo-sel[data-pane="A"]').selectOption('1');
+  await page.waitForFunction(() => document.querySelector('.lib-cmp-pane[data-pane="A"]')?.getAttribute('aria-busy') === 'true');
+  await page.keyboard.press('x');
+  await page.keyboard.press('4');
+  assert.deepEqual(await page.evaluate((p) => { const { label, rating } = window.__libtestReadSidecar(p); return { label, rating }; }, failedPath), { label: '', rating: 0 }, 'keyboard reject/rating cannot target a replacement that later fails');
+  await page.evaluate(() => window.__cmpReject());
+  await page.waitForFunction(() => document.querySelector('.lib-cmp-pane[data-pane="A"] .lib-detail-error')?.textContent.includes('fixture decode failed'));
+  assert.deepEqual(await page.locator('.lib-cmp-pane[data-pane="A"] canvas').evaluate((c) => [c.width, c.height]), oldPanePixels, 'failed replacement preserves prior pixels while reporting the failure');
+  assert.match(await page.locator('.lib-cmp-name[data-pane="A"]').textContent(), /^Could not load /);
+  await page.evaluate(() => window.__libtestSetCompareLoader(null));
   await page.keyboard.press('Tab');
   assert(await page.locator('.lib-cmp-pane[data-pane="A"]').evaluate((el) => el.classList.contains('cmp-focus')), 'Tab switches keyboard focus to pane A');
   await page.keyboard.press('Escape');

@@ -3724,6 +3724,7 @@
     window.__libSelect = (p) => { state.selected.add(p); };
     window.__libCompareState = () => ({ active: compareState.active, selected: compareState.paths.slice(), loaded: [...compareState.items.keys()], loadCount: compareState.loadCount,
       activeLoads: compareState.activeLoads, maxConcurrentLoads: compareState.maxConcurrentLoads, editorEntries: typeof fxImages !== 'undefined' ? fxImages.length : 0 });
+    window.__libtestSetCompareLoader = (loader) => { _libtestCompareLoader = typeof loader === 'function' ? loader : null; };
     window.__libShowQuickLook = (p) => showQuickLook(p);
     window.__libtestOpenFaceCloseups = (path) => openPhotoPeopleEditor([path], { closeups: true });
     window.__libtestPrepareRawReviewPreviews = (paths) => prepareRawReviewPreviews(paths);
@@ -9119,6 +9120,7 @@
     zoom: 1, panX: 0, panY: 0,
     prevViewMode: 'grid',
   };
+  let _libtestCompareLoader = null;
   const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
     cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullManualPreferenceGroups: new Set(), cullRecommendationByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
   const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
@@ -9573,6 +9575,7 @@
     host.querySelectorAll('.lib-flag').forEach((flag) => {
       flag.onclick = async () => {
         const which = flag.dataset.pane;
+        if (!comparePaneReady(which)) return;
         const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
         if (!path) return;
         if (flag.dataset.flag === 'Favorite') {
@@ -9601,14 +9604,35 @@
       flag.classList.toggle('on', f === 'Favorite' ? !!sc.favorite : sc.label === f);
     });
     const nameEl = host.querySelector(`.lib-cmp-name[data-pane="${which}"]`);
-    if (nameEl) nameEl.textContent = baseName(path);
+    if (nameEl) {
+      const pane = host.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
+      nameEl.textContent = p.pendingPath === path ? `Loading ${baseName(path)}…`
+        : pane?.dataset.detailError ? `Could not load ${baseName(path)}`
+          : baseName(path);
+    }
+  }
+  function comparePaneReady(which) {
+    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
+    return !!p && !!comparePathForIdx(p.idx) && p.presentedPath === comparePathForIdx(p.idx)
+      && p.presentedSrcKey === p.srcKey && p.renderReady === true && p.pendingPath !== comparePathForIdx(p.idx);
   }
   // Source-detail renders use a private context and never select a photo in the Editor.
   async function renderComparePane(which) {
     const p=compareState[which==='A'?'paneA':'paneB'];
     const pane=compareHost()?.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
     if(!pane)return;
-    await detailRender(pane,p,p.idx,p.srcKey,comparePathForIdx(p.idx), (path, token) => ensureCompareItem(path, token));
+    const path = comparePathForIdx(p.idx);
+    p.pendingPath = path;
+    p.renderReady = false;
+    pane.setAttribute('aria-busy', 'true');
+    delete pane.dataset.detailError;
+    pane.querySelector('.lib-detail-error')?.remove();
+    const nameEl = pane.querySelector('.lib-cmp-name');
+    if (nameEl) nameEl.textContent = `Loading ${baseName(path)}…`;
+    const rendering = detailRender(pane,p,p.idx,p.srcKey,path, (sourcePath, token) => ensureCompareItem(sourcePath, token));
+    const revision = p.pendingRevision;
+    const ready = await rendering;
+    if (revision === p.pendingRevision) p.renderReady = ready;
     syncCompareChrome(which);
   }
   function compareWantedPaths() {
@@ -9634,6 +9658,15 @@
     const cached = compareState.items.get(path);
     if (cached) return cached;
     pruneCompareItems();
+    if (_libtestCompareLoader) {
+      const item = await _libtestCompareLoader(path);
+      if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) {
+        releaseCompareItem(item); return null;
+      }
+      if (!item) throw new Error(`Could not decode ${baseName(path)}`);
+      item.path = path; compareState.items.set(path, item); pruneCompareItems();
+      return compareState.items.get(path) || null;
+    }
     const files = await readPathsAsFiles([path], { pathBackedRaw: !!window.__TAURI__ });
     if (!files.length) throw new Error(`Could not read ${baseName(path)}`);
     await prepareBatchRawFiles(files, files.okPaths || [path]);
@@ -9688,14 +9721,15 @@
   function setupCompareZoomPan(){detailControls(compareHost());}
   async function detailRender(el,cell,idx,srcKey,path,itemResolver=null){
     const revision=cell.detailRevision=(cell.detailRevision||0)+1,entry=compareState.entryToken;
+    if (itemResolver) cell.pendingRevision = revision;
     // Serialize only this viewer's renders; source reads/metadata may finish in any order.
     const job=async()=>{
-      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
-      const it=itemResolver?await itemResolver(path,entry):(typeof fxImages!=='undefined'?fxImages[idx]:null);if(!it)return;
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      const it=itemResolver?await itemResolver(path,entry):(typeof fxImages!=='undefined'?fxImages[idx]:null);if(!it)return false;
       if(it._rawHalf&&typeof fxPromoteWebRaw==='function')await fxPromoteWebRaw(it);
       if(typeof fnEnsureNative==='function')await fnEnsureNative(it);
       const sc=await getSidecar(path),meta=await getMeta(path);
-      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
       let strip=el.querySelector('.lib-detail-meta');if(!strip){strip=document.createElement('div');strip.className='lib-detail-meta';strip.style.cssText='padding:4px 8px;height:24px;box-sizing:border-box;flex:none;color:var(--mut);font-size:11px';el.appendChild(strip);}strip.hidden=!detailState.metadata;
       let source=it.fullImg||it.img;
       if(typeof geomCanvas==='function')source=geomCanvas({...it,img:source});
@@ -9726,18 +9760,25 @@
           detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
         }finally{if(restoreUI)applyUISnapshot(live,{skipRender:true});if(undo)undo();_fxHistLocked=locked;}
       }
-      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
       const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
       Object.assign(el.dataset,{sourceWidth:String(iw),sourceHeight:String(ih),detailScale:String(scale),detailX:String(x),detailY:String(y),detailWidth:String(sw),detailHeight:String(sh)});
 
       const row=state.entries.find(e=>e.path===path);strip.textContent=[meta.shutter,meta.aperture,meta.iso?'ISO '+meta.iso:'',row?.sharpness!=null?'Focus '+Math.round(row.sharpness):''].filter(Boolean).join(' · ')||'Exposure metadata unavailable';
+      if (itemResolver && cell.pendingRevision === revision) {
+        cell.presentedPath = path; cell.presentedSrcKey = srcKey; cell.pendingPath = '';
+        el.removeAttribute('aria-busy'); delete el.dataset.detailError;
+        el.querySelector('.lib-detail-error')?.remove();
+      }
+      return true;
     };
     detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{
-      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return;
-      console.error('compare detail',e);el.dataset.detailError=String(e.message||e);
-      const canvas=el.querySelector('canvas');if(canvas){canvas.width=canvas.height=0;}
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      console.warn('compare detail',e);el.dataset.detailError=String(e.message||e);
       let error=el.querySelector('.lib-detail-error');if(!error){error=document.createElement('div');error.className='lib-detail-error';error.style.cssText='padding:16px;color:var(--mut);font-size:12px';el.querySelector('.lib-cmp-canvas-wrap')?.appendChild(error);}
       if(error)error.textContent=`Could not load ${baseName(path)}: ${String(e.message||e)}`;
+      if (itemResolver && cell.pendingRevision === revision) { cell.pendingPath = ''; el.removeAttribute('aria-busy'); }
+      return false;
     });
   }
 
@@ -9753,6 +9794,8 @@
   /// all stay in one place — a second writer here is how the two views drift apart, which is the
   /// defect ROADMAP 14 describes.
   async function compareApplyLabel(path, label) {
+    const pane = compareState.focus;
+    if (!comparePaneReady(pane) || comparePathForIdx(compareState[pane === 'A' ? 'paneA' : 'paneB'].idx) !== path) return false;
     await setLabel(path, label);
     ['A', 'B'].forEach((w) => {
       if (comparePathForIdx(compareState[w === 'A' ? 'paneA' : 'paneB'].idx) === path) renderComparePane(w);
@@ -10515,8 +10558,9 @@
       // thing you could not do here was the culling verb itself: X/P/U and the colour labels were
       // grid-only, so judging two frames side by side meant leaving Compare to act on the answer.
       // Same setLabel() the grid calls, so there is no second write path to keep in sync.
-      const target = comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx);
-      if (!target) return;
+      const targetPane = compareState.focus;
+      const target = comparePathForIdx(compareState[targetPane === 'A' ? 'paneA' : 'paneB'].idx);
+      if (!target || !comparePaneReady(targetPane)) return;
       // Ratings work here exactly as they do in the grid — that parity IS ROADMAP Library 14,
       // and compare is where a rating is most useful, since it is the mode built for choosing
       // between two frames.
@@ -15977,7 +16021,8 @@
       if (quicklook.active) return [quicklook.path];
       if (state.source === 'lr') return [];
       if (state.viewMode === 'survey' && compareState.active) return [surveyTargetPath()];
-      if (state.viewMode === 'compare' && compareState.active) return [comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx)];
+      if (state.viewMode === 'compare' && compareState.active) return comparePaneReady(compareState.focus)
+        ? [comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx)] : [];
       return shortcutTargets();
     };
     const applyShortcutLabel = (label) => { const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;

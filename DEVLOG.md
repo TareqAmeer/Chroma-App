@@ -1875,3 +1875,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Production RAW settings/cache/path regressions and expanded Survey/Compare browser checks pass, including two-frame bounds and one active decode. Added explicit isolated native 45MP validation harness `test/library_compare_native.mjs`; execution and broader gate results are recorded separately, without claiming native performance from mocks.
 - Twelve inactive worktrees are preserved under private recovery refs and checksum-verified shared evidence; 25 unique diagnostic dumps are losslessly compressed (7,718,299,077 bytes reclaimed). `AGENTS.md` records permanent shared dependency roots and junction checks; shared Playwright resolution and affected tests pass after migration. Primary drafts and the active CHR-195 test checkout remain preserved.
 
+### 2026-10-12 — CHR-268 review safety and disk budget
+
+- Pending/failed Compare replacements cannot receive flags or ratings until their requested source has been presented; loading status and preserved prior pixels stay honest. `desktop/library-ui.js` and `test/library_survey.mjs` cover delayed success/failure and metadata-action guards.
+- Fourteen inactive worktrees now have source recovery refs and verified evidence archives. Repository logical file lengths measured 49,425,795,878 bytes (49.43 GB / 46.03 GiB), below the 50 GB target; active/unrelated drafts remain preserved.
+- Added `scripts/diagnostics-light.py` and `AGENTS.md` guidance to retain routine diagnostics without automatic full Windows memory dumps. Removed only seven unnecessary dumps created by this turn's idle validation session, preserving checksum records, events and thread-state text; prior unique dumps remain in verified lossless archives.
+
