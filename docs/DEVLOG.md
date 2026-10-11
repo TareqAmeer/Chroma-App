@@ -219,3 +219,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Expanded mask-origin, Alt-context and stroke-undo regressions are published in `origin/main` integration commit `68bcb134b06c882c0775fa99981b8b03ab6af2fb`; fetch, remote ref hash and ancestry verification passed.
 - Integrated `test/mask_raster.mjs` passed 61/61 and `test/heal_erase.mjs` passed 7/7. AC4/AC5 are checked from browser evidence; AC2 remains open for physical touch/Apple Pencil validation. Issue remains In Progress.
+
+### 2026-10-11 — CHR-273 active batch responsiveness gate
+
+- Added a LIBTEST-only entry point for the real Library batch preparation/drain path plus a deterministic mock IPC delay, and added `test/recipe_batch_responsiveness.mjs` to hold a 5,000-item job active while the jobs tray and sort menu remain interactive.
+- Chrome regression passed: 49 animation frames over the 800 ms active-job interval (maximum frame gap 31.7 ms), the sort menu responded while the journal remained `running`, and cancellation completed. `npm run library:batch-test` passed the 7 journal tests, dark/light result UI flows, and this responsiveness gate.
+- Modified `desktop/library-ui.js`, `package.json`, `test/recipe_batch_responsiveness.mjs`, and `docs/DEVLOG.md`. CHR-273 AC7 is supported by browser-mock UI responsiveness evidence; AC4 real native process-kill/quit recovery remains open.

@@ -75,6 +75,14 @@
       ] });
     }
     window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
+    // Exercise the real preparation/drain path with a large deterministic selection. The
+    // delay is applied only by the LIBTEST journal mock below so a browser regression can
+    // observe the running state long enough to interact with the Library.
+    window.libtestRecipeBatchStartLarge = count => startRecipeBatch(
+      'Responsiveness fixture',
+      Array.from({ length: Math.max(1, Math.min(5000, Number(count) || 1)) }, (_, index) => `/test/Photos/BATCH_${String(index + 1).padStart(5, '0')}.RW2`),
+      () => window.__copiedRecipe || 'responsiveness-fixture-recipe'
+    );
     window.__libtestSeedSidecar = (path, sidecar) => {
       const value = { rating: 0, label: '', color_label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
       ltBatchSidecars.set(path, structuredClone(value));
@@ -210,13 +218,17 @@
       case 'recipe_batch_list': return Promise.resolve([...ltRecipeBatches.values()].map(b => ({ id: b.id, label: b.label, status: b.status, createdAt: b.createdAt, total: b.items.length, pending: b.items.filter(i => i.status === 'pending').length, failed: b.items.filter(i => i.status === 'failed').length, conflict: b.items.filter(i => i.status === 'conflict').length })));
       case 'recipe_batch_get': return Promise.resolve(structuredClone(ltRecipeBatches.get(A.id)));
       case 'recipe_batch_apply_item': {
-        const batch = ltRecipeBatches.get(A.id), item = batch.items[A.index];
-        if (batch.status !== 'running') return Promise.resolve(structuredClone(item));
-        if (ltBatchFailures.delete(item.index)) { item.status = 'failed'; item.error = 'Simulated sidecar write failure'; }
-        else if (ltBatchSkips.delete(item.index)) { item.status = 'skipped'; item.error = 'Skipped by test fixture'; }
-        else { ltBatchSidecars.set(item.path, { ...item.before, recipe: item.recipe, edited: true }); item.status = 'applied'; item.error = null; }
-        if (!batch.items.some(i => i.status === 'pending')) batch.status = 'completed';
-        return Promise.resolve(structuredClone(item));
+        const applyItem = () => {
+          const batch = ltRecipeBatches.get(A.id), item = batch.items[A.index];
+          if (batch.status !== 'running') return Promise.resolve(structuredClone(item));
+          if (ltBatchFailures.delete(item.index)) { item.status = 'failed'; item.error = 'Simulated sidecar write failure'; }
+          else if (ltBatchSkips.delete(item.index)) { item.status = 'skipped'; item.error = 'Skipped by test fixture'; }
+          else { ltBatchSidecars.set(item.path, { ...item.before, recipe: item.recipe, edited: true }); item.status = 'applied'; item.error = null; }
+          if (!batch.items.some(i => i.status === 'pending')) batch.status = 'completed';
+          return Promise.resolve(structuredClone(item));
+        };
+        const delay = Math.max(0, Number(window.__libtestRecipeBatchApplyDelayMs) || 0);
+        return delay ? new Promise(resolve => setTimeout(() => resolve(applyItem()), delay)) : applyItem();
       }
       case 'recipe_batch_cancel': { const b = ltRecipeBatches.get(A.id); b.status = 'cancelled'; return Promise.resolve(structuredClone(b)); }
       case 'recipe_batch_resume': { const b = ltRecipeBatches.get(A.id), retry = A.retryIndices ? new Set(A.retryIndices) : null; b.status = 'running'; b.items.forEach(i => { if ((retry ? retry.has(i.index) && ['failed', 'skipped'].includes(i.status) : i.status === 'failed') && !String(i.error || '').startsWith('Preflight:')) { i.status = 'pending'; i.error = null; } }); return Promise.resolve(structuredClone(b)); }

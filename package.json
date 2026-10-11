@@ -32,7 +32,7 @@
     "library:unified-view-test": "node test/library_unified_view.mjs",
     "library:job-history-test": "node test/library_job_history.mjs",
     "export:job-notification-test": "node test/export_job_notification.mjs",
-    "library:batch-test": "node --test --test-isolation=none test/recipe_batch.mjs && node test/recipe_batch_ui.mjs",
+    "library:batch-test": "node --test --test-isolation=none test/recipe_batch.mjs && node test/recipe_batch_ui.mjs && node test/recipe_batch_responsiveness.mjs",
     "editor:wireframe-test": "node test/editor_wireframe_diff.mjs",
     "editor:inventory": "node test/editor_wireframe_inventory.mjs",
     "editor:inventory-icons": "node test/editor_wireframe_inventory.mjs --icons-baseline",
