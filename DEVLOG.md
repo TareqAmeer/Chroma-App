@@ -1556,3 +1556,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Feature commit `d08a42b37636761815045f7fcddcf1df75b80fee` was integrated as `73c2fc0e9f695d44dcf9557c20c747acf70a56eb` and pushed to `origin/main`.
 - A fresh `git ls-remote origin refs/heads/main` verified the remote tip at `73c2fc0e9f695d44dcf9557c20c747acf70a56eb`. The clean integration checkout reran the two-tile GPU test; export/reset checks passed and live preview parity explicitly skipped because the visible context is lost under headless SwiftShader. CHR-274 AC4 and labelled-photo AC5 remain open.
+
+### 2026-10-11 — CHR-294 real teeth-mask session reload
+
+- Extended `test/teeth_whitening.mjs` to create the manual Brush workflow, save through the production `saveSession()` path, reload the page, and verify that the restored mask keeps its name, manual provenance, Brush type, temperature/saturation values, raster dimensions, and painted coverage. The test reloads the portrait fixture before continuing the existing undo/redo and embedded-matte workflow checks.
+- Verification: `npm run teeth:test` passes the workflow (39/39) and rendered GPU/export checks (10 assertions), including exact direct/tiled parity (max delta 0). Live app preview remains explicitly skipped because its WebGL context is already lost in headless SwiftShader; CHR-294 AC4 stays unchecked until preview parity is measured on a healthy live context.

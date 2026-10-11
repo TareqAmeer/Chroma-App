@@ -29,6 +29,20 @@ function startServer(root) {
   });
 }
 
+async function loadPortraitFixture(page, fixture) {
+  await page.evaluate(async (b64) => {
+    const bin = atob(b64), arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    await window.loadFXImages([
+      new File([arr], 'portrait-a.png', { type: 'image/png' }),
+      new File([arr], 'portrait-b.png', { type: 'image/png' }),
+    ]);
+  }, fixture);
+  await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages.length > 0 && fxWork && curItem()?.img,
+    null, { timeout: 15000 });
+  await page.evaluate(() => updateWork());
+}
+
 async function main() {
   const server = await startServer(ROOT);
   const { port } = server.address();
@@ -38,7 +52,7 @@ async function main() {
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });
 
-  let checks;
+  let checks, persistenceChecks = [];
   try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
     page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
@@ -47,16 +61,33 @@ async function main() {
     await page.waitForFunction(() => typeof window.loadFXImages === 'function'
       && typeof window.getUISnapshot === 'function', null, { timeout: 30000 });
     const fixture = (await readFile(path.join(__dirname, 'fixtures', 'portrait.png'))).toString('base64');
-    await page.evaluate(async (b64) => {
-      const bin = atob(b64), arr = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      await window.loadFXImages([
-        new File([arr], 'portrait-a.png', { type: 'image/png' }),
-        new File([arr], 'portrait-b.png', { type: 'image/png' }),
-      ]);
-    }, fixture);
-    await page.waitForFunction(() => typeof fxImages !== 'undefined' && fxImages.length > 0 && fxWork && curItem()?.img, null, { timeout: 15000 });
-    await page.evaluate(() => updateWork());
+    await loadPortraitFixture(page, fixture);
+
+    const savedMask = await page.evaluate(() => {
+      fxState.masks.length = 0; mskSel = -1;
+      document.querySelector('button[onclick="mskAddMenu(event)"]').click();
+      [...document.querySelectorAll('.msk-more-it')]
+        .find((button) => button.textContent.includes('Teeth Whitening (manual)'))?.click();
+      const mask = fxState.masks[mskSel];
+      mask.px.fill(0); mask.px[0] = 255; mask.px[mask.px.length - 1] = 127;
+      saveSession(true);
+      return { name: mask.name, origin: mask.origin, type: mask.type, temp: mask.temp, sat: mask.sat,
+        mtW: mask.mtW, mtH: mask.mtH, coverage: [mask.px[0], mask.px[mask.px.length - 1]],
+        maskCount: fxState.masks.length };
+    });
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(() => typeof window.loadFXImages === 'function'
+      && typeof window.getUISnapshot === 'function' && Array.isArray(fxState?.masks), null, { timeout: 30000 });
+    const reopenedMask = await page.evaluate(() => {
+      const mask = fxState.masks[mskSel];
+      return mask && { name: mask.name, origin: mask.origin, type: mask.type, temp: mask.temp, sat: mask.sat,
+        mtW: mask.mtW, mtH: mask.mtH, coverage: [mask.px?.[0], mask.px?.[mask.px.length - 1]],
+        maskCount: fxState.masks.length };
+    });
+    persistenceChecks.push({ name: 'real save/reload preserves manual teeth Brush identity, correction and painted raster',
+      pass: !!reopenedMask && JSON.stringify(reopenedMask) === JSON.stringify(savedMask),
+      detail: `saved ${JSON.stringify(savedMask)}; reopened ${JSON.stringify(reopenedMask)}` });
+    await loadPortraitFixture(page, fixture);
 
     checks = await Promise.race([page.evaluate(async () => {
       const out = [];
@@ -307,6 +338,7 @@ async function main() {
   }
 
   let fail = 0;
+  checks.unshift(...persistenceChecks);
   console.log('\nmanual teeth whitening workflow');
   console.log('-------------------------------------------------------------------------');
   for (const c of checks) {
