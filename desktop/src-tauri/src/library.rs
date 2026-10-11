@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Extension lists live in formats.rs (the single source of truth, mirrored against
 // chromasmith-22.html's FMT_* registry — see that module's doc comment). Re-exported here so
@@ -869,6 +869,7 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
             .map_err(|e| format!("encode display preview: {e}"))?;
         crate::diag::stage("display_proxy", &file_name, "jpeg_encode", &mut stage_t);
         std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+        request_decode_cache_prune();
         crate::diag::stage("display_proxy", &file_name, "jpeg_write", &mut stage_t);
     } else {
         crate::diag::stage("display_proxy", &file_name, "already_exists_check", &mut stage_t);
@@ -920,6 +921,7 @@ pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, h
         .map_err(|e| format!("encode display preview: {e}"))?;
     crate::diag::stage("display_proxy", file_name, "jpeg_encode", stage_t);
     std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    request_decode_cache_prune();
     crate::diag::stage("display_proxy", file_name, "jpeg_write", stage_t);
     Ok(out_path.to_string_lossy().into_owned())
 }
@@ -1010,6 +1012,7 @@ pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, 
     std::fs::rename(&tmp, dir.join(&name)).map_err(|e| format!("write decode cache: {e}"))?;
     // The legacy PNG under the same stem is now dead weight.
     let _ = std::fs::remove_file(dir.join(&png_key));
+    request_decode_cache_prune();
     Ok(())
 }
 
@@ -3302,53 +3305,137 @@ pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     hex.len() == 16 && hex.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+const DECODE_CACHE_CAP: u64 = 14 * 1024 * 1024 * 1024;
+const DECODE_CACHE_RECENT_GRACE: Duration = Duration::from_secs(30);
+
+/// Prune only explicit cache entries. `file_type` excludes symlinks so a cache-looking link
+/// cannot make maintenance inspect or delete a file outside this directory. Runtime scans keep
+/// entries newer than `recent_grace` so readers starting immediately after a write can open them.
+fn prune_cache_dir(
+    dir: &Path,
+    cap: u64,
+    evictable: impl Fn(&str) -> bool,
+    preserve_temps: bool,
+    recent_grace: Duration,
+    now: SystemTime,
+) -> (u64, bool) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return (0, false) };
+    let mut files: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
+    let mut protected_recent = 0u64;
+    for entry in rd.filter_map(|e| e.ok()) {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !evictable(&name) || (preserve_temps && name.contains(".tmp.")) { continue; }
+        if !entry.file_type().ok().map(|t| t.is_file()).unwrap_or(false) { continue; }
+        let Ok(meta) = entry.metadata() else { continue };
+        let Ok(modified) = meta.modified() else { continue };
+        if now.duration_since(modified).unwrap_or_default() < recent_grace {
+            protected_recent = protected_recent.saturating_add(meta.len());
+            continue;
+        }
+        let when = meta.accessed().unwrap_or(modified);
+        files.push((when, meta.len(), entry.path()));
+    }
+    let total: u64 = files.iter().map(|f| f.1).sum::<u64>().saturating_add(protected_recent);
+    if total <= cap { return (0, false); }
+    files.sort_by_key(|f| f.0);
+    let mut freed = 0u64;
+    for (_, len, path) in files {
+        if total.saturating_sub(freed) <= cap { break; }
+        if std::fs::remove_file(path).is_ok() { freed = freed.saturating_add(len); }
+    }
+    // Retry only when the protected recent bytes alone explain the remaining overage. Failed
+    // removals or other permanent excess do not create an endless timed scan loop.
+    let remaining = total.saturating_sub(freed);
+    let deferred = remaining > cap && remaining.saturating_sub(protected_recent) <= cap;
+    (freed, deferred)
+}
+
+#[derive(Default)]
+struct DecodePruneSchedule {
+    pending: bool,
+    dirty: bool,
+    last_started: Option<Instant>,
+}
+
+impl DecodePruneSchedule {
+    fn request(&mut self) -> bool {
+        self.dirty = true;
+        if self.pending { false } else { self.pending = true; true }
+    }
+
+    /// Consume queued work and return its cooldown. Requests during that wait or scan set dirty
+    /// again, so the worker performs a trailing pass instead of dropping the final write.
+    fn next_delay(&mut self, now: Instant, interval: Duration) -> Option<Duration> {
+        if !self.dirty {
+            self.pending = false;
+            return None;
+        }
+        self.dirty = false;
+        Some(self.last_started.map(|last| interval.saturating_sub(now.saturating_duration_since(last))).unwrap_or_default())
+    }
+
+    fn begin_scan(&mut self, now: Instant) {
+        // Requests before this point are covered by the impending scan; requests during it remain dirty.
+        self.dirty = false;
+        self.last_started = Some(now);
+    }
+
+    fn defer_recent_eviction(&mut self) {
+        if self.pending { self.dirty = true; }
+    }
+
+    fn spawn_failed(&mut self) {
+        self.pending = false;
+    }
+}
+
+static DECODE_PRUNE_SCHEDULE: OnceLock<Mutex<DecodePruneSchedule>> = OnceLock::new();
+
+/// Coalesce writes into one background worker. Cooldown waits and scans never hold the scheduler
+/// lock, and a request during either causes a trailing scan after the 60-second interval.
+fn request_decode_cache_prune() {
+    const MIN_INTERVAL: Duration = Duration::from_secs(60);
+    let schedule = DECODE_PRUNE_SCHEDULE.get_or_init(|| Mutex::new(DecodePruneSchedule::default()));
+    let should_spawn = schedule.lock().unwrap_or_else(|e| e.into_inner()).request();
+    if !should_spawn { return; }
+    let spawned = std::thread::Builder::new().name("cs-decode-cache-prune".into()).spawn(|| {
+        crate::bgwork::mark_current_thread_background();
+        loop {
+            let schedule = DECODE_PRUNE_SCHEDULE.get().expect("prune schedule initialized");
+            let delay = schedule.lock().unwrap_or_else(|e| e.into_inner()).next_delay(Instant::now(), MIN_INTERVAL);
+            let Some(delay) = delay else { break };
+            if !delay.is_zero() { std::thread::sleep(delay); }
+            schedule.lock().unwrap_or_else(|e| e.into_inner()).begin_scan(Instant::now());
+            let (freed, deferred) = prune_cache_dir(
+                &decode_cache_dir(), DECODE_CACHE_CAP, is_evictable_decode_file, true,
+                DECODE_CACHE_RECENT_GRACE, SystemTime::now(),
+            );
+            if freed > 0 { eprintln!("cache prune: freed {}MB from decode cache", freed / (1024 * 1024)); }
+            if deferred {
+                DECODE_PRUNE_SCHEDULE.get().expect("prune schedule initialized")
+                    .lock().unwrap_or_else(|e| e.into_inner()).defer_recent_eviction();
+            }
+        }
+    });
+    if spawned.is_err() {
+        schedule.lock().unwrap_or_else(|e| e.into_inner()).spawn_failed();
+    }
+}
+
 /// Launch-time cache pruning — both cache dirs were unbounded (thumbnails ~50-150KB each,
 /// decode-cache JPEGs 5-15MB each; stale mtime/recipe keys accumulate forever since keys change
 /// whenever the source file or its RAW-stage settings do). Cap each dir and evict least-
 /// recently-ACCESSED first (falls back to modified time on a filesystem without atime tracking).
 /// Called once from main()'s setup on a background thread — never blocks startup.
 pub fn prune_caches() {
-    // ⚠️ Measured against a real ~30k-photo library before raising this: cache_dir() (thumbnail
-    // + .meta.json + .phash.json) sat at 1.2GB / 91,873 files — well over the OLD 500MB cap,
-    // which would have deleted ~700MB of it on every single prune, forcing every one of those
-    // files to be regenerated (including the RAW metadata read this session's B fix targets)
-    // over and over. 6GB + the 14GB decode cap below matches the 20GB the cache-usage UI already
-    // advertises, and scales to a ~100k-photo library without thrashing.
-    const THUMB_CAP: u64 = 6 * 1024 * 1024 * 1024; // 6GB
-    // Raised from 2GB to 14GB (library-catalog plan's cache-budget split: ~6GB never-pruned
-    // offline thumbnails + ~14GB LRU full-size decodes, out of a 20GB total). This tier already
-    // does exactly what "recent edits open instantly" needs — a full-resolution decoded JPEG
-    // keyed on path+mtime+size+recipe_key (decode_cache_key) — it just needed headroom to hold
-    // more than a couple hundred RAWs at once. LRU eviction policy is unchanged, still oldest-
-    // access-first; only the ceiling moved.
-    const DECODE_CAP: u64 = 14 * 1024 * 1024 * 1024; // 14GB
-    for (dir, cap) in [(cache_dir(), THUMB_CAP), (decode_cache_dir(), DECODE_CAP)] {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        let mut files: Vec<(std::time::SystemTime, u64, PathBuf)> = rd
-            .filter_map(|e| e.ok())
-            .filter_map(|e| {
-                let name = e.file_name();
-                let name = name.to_string_lossy();
-                let evictable = if dir == decode_cache_dir() { is_evictable_decode_file(&name) } else { is_evictable_cache_file(&name) };
-                if !evictable { return None; }
-                let m = e.metadata().ok()?;
-                if !m.is_file() { return None; }
-                let when = m.accessed().or_else(|_| m.modified()).ok()?;
-                Some((when, m.len(), e.path()))
-            })
-            .collect();
-        let total: u64 = files.iter().map(|f| f.1).sum();
-        if total <= cap { continue }
-        files.sort_by_key(|f| f.0); // least-recently-accessed first
-        let mut freed = 0u64;
-        for (_, len, p) in files {
-            if total - freed <= cap { break }
-            if std::fs::remove_file(&p).is_ok() {
-                freed += len;
-            }
-        }
-        eprintln!("cache prune: freed {}MB from {}", freed / (1024 * 1024), dir.display());
-    }
+    // 6GB working thumbnails + 14GB decoded frames/proxies matches the budget advertised by the app.
+    const THUMB_CAP: u64 = 6 * 1024 * 1024 * 1024;
+    let now = SystemTime::now();
+    let (thumb_freed, _) = prune_cache_dir(&cache_dir(), THUMB_CAP, is_evictable_cache_file, false, Duration::ZERO, now);
+    if thumb_freed > 0 { eprintln!("cache prune: freed {}MB from thumbnails", thumb_freed / (1024 * 1024)); }
+    let (decode_freed, _) = prune_cache_dir(&decode_cache_dir(), DECODE_CACHE_CAP, is_evictable_decode_file, false, Duration::ZERO, now);
+    if decode_freed > 0 { eprintln!("cache prune: freed {}MB from decode cache", decode_freed / (1024 * 1024)); }
 }
 
 /// Reveal a file in the OS file browser (Finder on macOS, Explorer on Windows) — standard
@@ -4590,5 +4677,110 @@ mod hdr_clear_marker_tests {
         assert!(is_evictable_decode_file("0123456789abcdef.hdrclear"));
         assert!(is_evictable_decode_file("0123456789abcdef.qoi"));
         assert!(!is_evictable_decode_file("notahexstem.hdrclear"));
+    }
+}
+
+
+#[cfg(test)]
+mod cache_prune_tests {
+    use super::{is_evictable_decode_file, prune_cache_dir, DecodePruneSchedule};
+    use std::fs::{File, FileTimes};
+    use std::path::PathBuf;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    fn scratch() -> (PathBuf, PathBuf) {
+        let tag = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("cs_prune_budget_{}_{}", std::process::id(), tag));
+        let outside = dir.with_extension("outside");
+        std::fs::create_dir_all(&dir).unwrap();
+        (dir, outside)
+    }
+
+    fn set_age(path: &std::path::Path, seconds: u64) {
+        let when = SystemTime::now().checked_sub(Duration::from_secs(seconds)).unwrap();
+        File::options().write(true).open(path).unwrap().set_times(FileTimes::new().set_accessed(when).set_modified(when)).unwrap();
+    }
+
+    #[test]
+    fn decode_prune_removes_only_known_regular_entries_and_preserves_active_temps() {
+        let (dir, external) = scratch();
+        let display = dir.join("0123456789abcdef.display-2560.jpg");
+        let full = dir.join("fedcba9876543210.qoi");
+        let active_tmp = dir.join("fedcba9876543210.qoi.tmp.123");
+        let registry = dir.join("favorites_registry.json");
+        let unknown = dir.join("do-not-prune.bin");
+        for path in [&display, &full, &active_tmp, &registry, &unknown] { std::fs::write(path, vec![1u8; 64]).unwrap(); }
+        std::fs::write(&external, vec![2u8; 64]).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&external, dir.join("0011223344556677.qoi")).unwrap();
+
+        let recent_now = SystemTime::now();
+        let (fresh_freed, deferred) = prune_cache_dir(&dir, 1, is_evictable_decode_file, true, Duration::from_secs(30), recent_now);
+        assert_eq!(fresh_freed, 0);
+        assert!(deferred, "overage explained by grace-protected entries must request a trailing pass");
+        let now = recent_now + Duration::from_secs(31);
+        let (freed, deferred) = prune_cache_dir(&dir, 1, is_evictable_decode_file, true, Duration::from_secs(30), now);
+        assert_eq!(freed, 128);
+        assert!(!deferred);
+        assert!(!display.exists());
+        assert!(!full.exists());
+        assert!(active_tmp.exists());
+        assert!(registry.exists());
+        assert!(unknown.exists());
+        #[cfg(unix)]
+        assert!(std::fs::symlink_metadata(dir.join("0011223344556677.qoi")).is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_file(external).unwrap();
+    }
+
+    #[test]
+    fn prune_evicts_oldest_accessed_entry_only_to_cap() {
+        let (dir, outside) = scratch();
+        let oldest = dir.join("1111111111111111.qoi");
+        let middle = dir.join("2222222222222222.display-2560.jpg");
+        let newest = dir.join("3333333333333333.qoi");
+        for path in [&oldest, &middle, &newest] { std::fs::write(path, vec![7u8; 40]).unwrap(); }
+        set_age(&oldest, 300);
+        set_age(&middle, 200);
+        set_age(&newest, 100);
+
+        let (freed, deferred) = prune_cache_dir(&dir, 80, is_evictable_decode_file, true, Duration::ZERO, SystemTime::now());
+        assert_eq!(freed, 40);
+        assert!(!deferred);
+        assert!(!oldest.exists(), "LRU entry should be evicted first");
+        assert!(middle.exists());
+        assert!(newest.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!outside.exists());
+    }
+
+    #[test]
+    fn grace_deferred_eviction_queues_a_retry_without_another_write() {
+        let t0 = Instant::now();
+        let mut s = DecodePruneSchedule::default();
+        assert!(s.request());
+        assert_eq!(s.next_delay(t0, Duration::from_secs(60)), Some(Duration::ZERO));
+        s.begin_scan(t0);
+        s.defer_recent_eviction();
+        assert_eq!(s.next_delay(t0, Duration::from_secs(60)), Some(Duration::from_secs(60)));
+        s.begin_scan(t0 + Duration::from_secs(60));
+        assert_eq!(s.next_delay(t0 + Duration::from_secs(60), Duration::from_secs(60)), None);
+    }
+
+    #[test]
+    fn prune_schedule_retains_requests_during_scan_and_cooldown() {
+        let t0 = Instant::now();
+        let interval = Duration::from_secs(60);
+        let mut s = DecodePruneSchedule::default();
+        assert!(s.request());
+        assert_eq!(s.next_delay(t0, interval), Some(Duration::ZERO));
+        s.begin_scan(t0);
+        assert!(!s.request());
+        assert_eq!(s.next_delay(t0 + Duration::from_secs(5), interval), Some(Duration::from_secs(55)));
+        assert!(!s.request());
+        s.begin_scan(t0 + interval);
+        assert_eq!(s.next_delay(t0 + interval, interval), None);
+        assert!(!s.pending);
+        assert!(s.request());
     }
 }
