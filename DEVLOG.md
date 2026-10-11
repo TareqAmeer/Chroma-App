@@ -1598,3 +1598,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Added `npm run teeth:preview`, which launches installed Chrome in headed mode without forcing SwiftShader, then samples the editor’s live FX canvas before creating an isolated renderer. This keeps the default headless deterministic test intact while providing a repeatable healthy-context gate.
 - Verification: manual teeth workflow 49/49; `npm run teeth:preview` passes 11/11 renderer checks. Live app preview is nonblank, has a healthy WebGL context, and matches direct production rendering exactly (max RGB delta 0; range 157). Save/reopen, editable reset, detail retention, embedded-mask confinement, and two-tile output also pass (tile max delta 0). CHR-294’s last acceptance criterion is satisfied.
+
+### 2026-10-11 — CHR-294 preview verification publication
+
+- Files: `package.json`, `test/teeth_whitening_render.mjs`, and `DEVLOG.md`. Feature commit `12a100f6df2e1b2489d0be696ac35570c899f236` was integrated as `29111d7c5f7ea06c5d5e6786f914470c4765d962` and fast-forwarded to `origin/main`.
+- The clean integration checkout passed the manual workflow (49/49), headed Chrome preview/render/export suite (11/11; preview max delta 0), JavaScript syntax, and whitespace checks. After the fast-forward, `git ls-remote origin refs/heads/main` returned `29111d7c5f7ea06c5d5e6786f914470c4765d962`, which contains the feature commit; this record is the publication follow-up.
