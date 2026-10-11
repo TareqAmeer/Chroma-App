@@ -97,7 +97,11 @@ try {
   await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length >= 3, { timeout: 30000 });
   const comparePaths = await page.locator('#lib-grid .lib-card').evaluateAll((cards) => cards.slice(0, 5).map((card) => card.dataset.path));
-  await page.evaluate((selected) => selected.forEach((p) => window.__libSelect(p)), comparePaths);
+  // Real card clicks set the grid keyboard cursor, unlike the selection-only fixture API.
+  // This catches capture-phase library.open stealing Enter from Compare's promote action.
+  const compareCards = page.locator('#lib-grid .lib-card');
+  await compareCards.nth(0).click();
+  for (let i = 1; i < comparePaths.length; i++) await compareCards.nth(i).click({ modifiers: ['Control'] });
   const editorEntriesBeforeCompare = await page.evaluate(() => window.__libCompareState().editorEntries);
   await page.keyboard.press('c');
   await page.waitForFunction(() => document.querySelectorAll('#lib-compare.on .lib-cmp-pane').length === 2

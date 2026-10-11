@@ -1881,3 +1881,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Fourteen inactive worktrees now have source recovery refs and verified evidence archives. Repository logical file lengths measured 49,425,795,878 bytes (49.43 GB / 46.03 GiB), below the 50 GB target; active/unrelated drafts remain preserved.
 - Added `scripts/diagnostics-light.py` and `AGENTS.md` guidance to retain routine diagnostics without automatic full Windows memory dumps. Removed only seven unnecessary dumps created by this turn's idle validation session, preserving checksum records, events and thread-state text; prior unique dumps remain in verified lossless archives.
 
+### 2026-10-12 — CHR-268 native Enter conflict
+
+- Native validation exposed capture-phase `library.open` consuming Enter while Compare was active. Its handler now yields to Compare promotion; real-card browser selection exercises the keyboard cursor that the former fixture selection helper omitted.
+- `test/library_survey.mjs` passes with actual card clicks, promotion and pending/failed action guards. `test/library_compare_native.mjs` records page/detach events and permits retry only against its exact three-source disposable catalog; native final validation follows this commit.
+

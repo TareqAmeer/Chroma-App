@@ -16052,6 +16052,8 @@
       });
     }
     window.chromasmithRegisterShortcut('library.open', () => {
+      // Compare owns Enter for promotion; the capture-phase opener must let it through.
+      if (state.viewMode === 'compare' && compareState.active) return false;
       const path = state._kbCursor || (state.selected.size === 1 ? [...state.selected][0] : '');
       if (quicklook.active) { const p = quicklook.path; hideQuickLook(); openInEditor(p); }
       else if (path) openInEditor(path); else return false;

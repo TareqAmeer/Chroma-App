@@ -25,19 +25,31 @@ for (const source of sources) {
 const report = { issue: 'CHR-268', capturedAt: new Date().toISOString(), commit, build,
   fixture: { path: raw, sha256, bytes: (await stat(raw)).size, dataset: 'Three hard-linked paths of one real capture; not varied photographs' },
   isolation: { catalog: process.env.CULL_NATIVE_CATALOG_DIR, cache: process.env.CULL_NATIVE_CACHE_DIR },
-  hardware: { platform: os.platform(), release: os.release(), cpu: os.cpus()[0]?.model, memoryBytes: os.totalmem() }, samples: [] };
+  hardware: { platform: os.platform(), release: os.release(), cpu: os.cpus()[0]?.model, memoryBytes: os.totalmem() }, samples: [], events: [] };
 const output = process.env.CULL_PERF_REPORT || 'test/output/chr268-native-compare.json';
 const browser = await chromium.connectOverCDP(process.env.NATIVE_CDP || 'http://127.0.0.1:9223');
 try {
   const page = browser.contexts()[0].pages().find(p => !p.url().includes('devtools'));
   assert(page, 'Native WebView required');
+  page.on('close', () => report.events.push({ event: 'page.close', at: new Date().toISOString() }));
+  page.on('crash', () => report.events.push({ event: 'page.crash', at: new Date().toISOString() }));
+  page.on('pageerror', error => report.events.push({ event: 'page.error', message: String(error), at: new Date().toISOString() }));
+  browser.on('disconnected', () => report.events.push({ event: 'browser.disconnected', at: new Date().toISOString() }));
+  const cdp = await page.context().newCDPSession(page);
+  cdp.on('Inspector.detached', event => report.events.push({ event: 'Inspector.detached', detail: event, at: new Date().toISOString() }));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   const runtime = await page.evaluate(async () => {
     if (new URL(location.href).searchParams.has('libtest') || !window.__TAURI__?.core?.invoke) throw Error('Real native app required');
     const catalog = await window.__TAURI__.core.invoke('catalog_query', { q: { offset: 0, limit: 10 } });
     return { build: BUILD, url: location.href, catalog };
   });
   assert.equal(runtime.build, build);
-  assert.equal(runtime.catalog.total, 0, 'Refuse to operate on an existing catalog');
+  const normalized = value => String(value).replaceAll('\\', '/').toLowerCase();
+  const actualPaths = runtime.catalog.entries.map(entry => normalized(entry.path)).sort();
+  const expectedPaths = sources.map(normalized).sort();
+  assert(runtime.catalog.total === 0 || (runtime.catalog.total === 3 && JSON.stringify(actualPaths) === JSON.stringify(expectedPaths)), 'Refuse to operate on any catalog except the exact disposable fixture catalog');
+  report.isolation.initialCatalogTotal = runtime.catalog.total;
+  report.cache = runtime.catalog.total ? 'Retry after earlier source development; native source cache may be warm. No cold decode or latency target asserted.' : 'Fresh disposable import; disk/OS cache unspecified. No latency target asserted.';
   report.runtime = { build: runtime.build, url: runtime.url };
   await page.evaluate(async folder => {
     if (typeof csFirstEditSkip === 'function') csFirstEditSkip();
