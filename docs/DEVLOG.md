@@ -230,3 +230,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published feature commit `b306880b` as integration commit `a8dd664fae6110f8ab4a5e643dc7d4e2315b76df` on `origin/main`; fetch, `git ls-remote`, and ancestry checks confirmed the remote tip and inclusion.
 - The integrated `npm run library:batch-test` passed: journal tests 7/7, selective-result UI flows in dark and light, and the 5,000-item active-job responsiveness gate (49 frames over 800 ms, maximum observed gap 40.1 ms, sort-menu interaction and cancellation successful). AC7 is supported by this browser-mock UI evidence. AC4 remains open because a real native process-kill/quit and restart round trip was not exercised; CHR-273 remains In Progress.
+
+### 2026-10-11 — CHR-294 teeth whitening render evidence
+
+- Added `test/teeth_whitening_render.mjs` to render the existing manual-teeth defaults through the production `FXR` shader and export pipeline using a synthetic warm, high-frequency enamel fixture. It checks brush-only color change, exact outside-mask and zero-reset behavior, retained fine detail, rendered snapshot restoration, and direct/two-tile parity.
+- `npm run teeth:test` passes: workflow/import contract 38/38; GPU render checks 6/6. The enamel sample shifts R −6/G 0/B +8, outside pixels are unchanged, fine-detail contrast retention is 100%, and tiled/direct output max channel delta is 0. The synthetic fixture validates math and export wiring, not real-photo whitening quality. App-level preview canvas readback remained blank in the headless fixture, so AC4 preview evidence is still incomplete.
+- Modified `package.json`, `test/teeth_whitening_render.mjs`, and `docs/DEVLOG.md`. CHR-294 AC3 is supported; AC4 remains unchecked. CHR-253 real matte extraction/alignment, portrait-quality and platform coverage remain open.
