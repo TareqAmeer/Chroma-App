@@ -1701,3 +1701,5 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Extended the native inpaint fixture probe with per-candidate mask coverage, masked-region RGB change, one-pixel unmasked halo RGB change, and outside-mask identity diagnostics. The report explicitly states these are diagnostics, not a quality score; inference and mask behavior are unchanged.
 - Files: `desktop/src-tauri/examples/inpaint_probe.rs`. The two deterministic metric tests, person-mask fixture test, Rust formatting check, and whitespace check pass. Native inference was not run because the pinned model and Windows ONNX Runtime are unavailable here; CHR-246 AC4/AC7 remain unchecked.
+- Feature commit `6017307e118cbbc7222352478bd1c57b75ec8031` was fast-forwarded to `origin/main` after the person-mask fixture, Rust formatting, and whitespace checks passed in the integration checkout.
+- `git ls-remote origin refs/heads/main` confirmed `6017307e118cbbc7222352478bd1c57b75ec8031` immediately after publication. Native candidate review remains necessary before checking AC4/AC7.
