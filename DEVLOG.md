@@ -1535,6 +1535,12 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - The browser now checks progress totals, failure/skip reasons, selected retry of both outcomes, and one-step undo; the restart scenario checks journal recovery and resuming pending/failed entries. CHR-273 AC1 and AC2 now have end-to-end UI evidence. Startup reporting and resume from a seeded persisted journal are covered, but a real process-kill/quit round trip against the native catalog is not; keep combined AC4 open. Jobs-panel responsiveness (AC7) and broader real-catalog restart/performance verification remain open. Issue stays In Progress.
 - `git ls-remote origin refs/heads/main` confirmed `origin/main` at `8233207de77af0d37779b6ac3035f1dbf8ba7627`; the tip contains integration commit `1f3b9a9df75e44691f7961eb8bce1d575218b4d8`.
 
+### 2026-10-11 — CHR-249 local Texture and Clarity publication
+
+- Feature commit `a04cf307` was integrated and pushed to `origin/main` as `a325ba079db95eff73fb93143bd109945999d86f`. A fresh fetch and `git ls-remote` confirmed that exact remote tip, and the refreshed `origin/main` tracking ref contains the integration commit.
+- The integrated mask gate passes: raster 86/86, local Dehaze 11/11, and local Texture/Clarity 7/7. The latter verifies signed effects within the mask, outside-mask isolation, neutral identity, snapshot round-trip, and direct/tiled parity (max channel delta 0).
+- CHR-249 remains In Progress. Lightroom visual matching, five-photo 100% review, AI Denoise, Super Resolution, Raw Details, and local model delivery remain open.
+
 ### 2026-10-11 — CHR-249 local Texture and Clarity regression
 
 - Added `test/mask_local_texture_clarity.mjs` to `npm run mask:test`. It verifies signed local Texture/Clarity changes, mask-boundary isolation, exact zero identity, snapshot round-trip, and direct/tiled output parity on a deterministic GPU fixture. Files: `test/mask_local_texture_clarity.mjs`, `package.json`, `DEVLOG.md`.
