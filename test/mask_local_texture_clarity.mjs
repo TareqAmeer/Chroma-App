@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Focused GPU regression for per-mask Texture and Clarity, including production tiled export.
-import { chromium } from 'playwright';
+const { chromium } = await import(process.env.CHROMASMITH_PLAYWRIGHT_MODULE || 'playwright');
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

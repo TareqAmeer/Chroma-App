@@ -418,6 +418,30 @@ async function main() {
       if (fxImages.length === 1) {
         fxImages.push({ ...fxImages[0], masks: [] });   // a second photo, enough for the copy path
       }
+      const copySourceIndex=fxCurIdx;
+      let copyMask=fxState.masks[0];
+      document.getElementById('tg-local')?.classList.add('on');
+      copyMask.sharp=0;copyMask.sharpMask=0;_mskTexDirty=true;
+      const copyNeutralRender=localSharpRender();
+      copyMask.sharp=65;copyMask.sharpMask=72;_mskTexDirty=true;
+      const expectedCopiedRender=localSharpRender();
+      ck('CHR-249 copy fixture visibly uses non-neutral mask sharpening',!same(copyNeutralRender,expectedCopiedRender));
+
+      // The same mask-local values and their rendered pixels must survive normal history restore.
+      fxHistory=[];fxHistIdx=-1;_fxHistLocked=false;fxHistoryPush();
+      copyMask.sharp=0;copyMask.sharpMask=0;_mskTexDirty=true;fxHistoryPush();
+      await fxUndo();
+      ck('CHR-249 undo restores local Sharpen and Sharpen Mask values',
+        fxState.masks[0].sharp===65&&fxState.masks[0].sharpMask===72,
+        `${fxState.masks[0].sharp}/${fxState.masks[0].sharpMask}`);
+      ck('CHR-249 undo restores the copied-control render exactly',same(expectedCopiedRender,localSharpRender()));
+      await fxRedo();
+      ck('CHR-249 redo restores the neutral local Sharpen values',
+        fxState.masks[0].sharp===0&&fxState.masks[0].sharpMask===0,
+        `${fxState.masks[0].sharp}/${fxState.masks[0].sharpMask}`);
+      copyMask=fxState.masks[0];
+      copyMask.sharp=65;copyMask.sharpMask=72;_mskTexDirty=true;fxHistoryPush();
+      const copiedRenderExpected=localSharpRender();
       fxImages[fxCurIdx].masks = fxState.masks;
       mskCopyToAll();
       const other = fxImages.find((_, i) => i !== fxCurIdx);
@@ -425,6 +449,14 @@ async function main() {
       ck('6. copy-to-all copied the mask', !!copied && copied.px && copied.px.length === fxState.masks[0].px.length);
       ck('6. copied raster is a SEPARATE array', copied && copied.px !== fxState.masks[0].px);
       ck('6. copied raster is byte-identical', copied && same(fxState.masks[0].px, copied.px));
+      ck('CHR-249 copy-to-all preserves local Sharpen and Sharpen Mask values',
+        copied?.sharp===65&&copied?.sharpMask===72,`${copied?.sharp}/${copied?.sharpMask}`);
+      fxSelectImage(other===fxImages[0]?0:1);
+      ck('CHR-249 copied mask settings survive switching to the target photo',
+        fxState.masks[0]?.sharp===65&&fxState.masks[0]?.sharpMask===72,
+        `${fxState.masks[0]?.sharp}/${fxState.masks[0]?.sharpMask}`);
+      ck('CHR-249 target photo renders the copied mask settings identically',same(copiedRenderExpected,localSharpRender()));
+      fxSelectImage(copySourceIndex);
 
       // ── CHR-247: raster composition follows stable IDs when list order changes ──
       document.getElementById('tg-local')?.classList.add('on');
