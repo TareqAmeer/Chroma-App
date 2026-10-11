@@ -1521,4 +1521,4 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 ### 2026-10-11 — CHR-253 publication verification
 
 - Feature commit `c64f7d2c132c36fa648f6fdfd6150e19044a5ba7` was integrated as `433e675bef291dd3619b8c983dd3747824c641a6` and pushed to `origin/main` after all focused browser, pixel, HTML, and diff checks passed in the clean integration checkout.
-- Verify the final remote main tip after recording this publication entry; CHR-253 remains In Progress because real-photo matte quality and broader platform/catalog acceptance are still open.
+- `git ls-remote origin refs/heads/main` confirmed `origin/main` at `ae8418aeb95138f00a5175fe86a306d290c93ea6`; the tip includes integration commit `433e675bef291dd3619b8c983dd3747824c641a6`. CHR-253 remains In Progress because real-photo matte quality and broader platform/catalog acceptance are still open.
