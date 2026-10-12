@@ -1,0 +1,32 @@
+{
+  "issue": "CHR-247",
+  "date": "2026-10-12",
+  "candidate_commit": "27fcb23efa3d8826ab86bf7294ff6afcd88f383b",
+  "candidate_build": "1.1012Y",
+  "scope": "Saved AI-mask backend intent during portable copy/re-evaluation.",
+  "checks": [
+    {
+      "command": "node test/mask_ai_provenance.mjs",
+      "result": "PASS",
+      "coverage": "Actual production encoder/dispatch helpers with synthetic pixels and mocked native IPC; saved EdgeSAM remains EdgeSAM, cold EdgeSAM prepares its token, saved SAM 2 encodes directly without EdgeSAM, unknown provenance retains automatic selection, and box prompts dispatch sam_box. Required-encoder failures and inconsistent backend/prompt combinations leave candidate pixels and provenance unchanged. Portable sky checks cover known-backend failure and unknown legacy fallback."
+    },
+    {
+      "command": "node test/mask_portable_copy.mjs",
+      "result": "PASS (12/12)",
+      "coverage": "Portable-copy transaction, cancellation, per-target failure isolation, persistence rollback, and undo behavior."
+    },
+    {
+      "command": "node test/mask_portable_copy_ui.mjs",
+      "result": "PASS",
+      "coverage": "Playwright production UI orchestration with mocked inference and sidecar I/O; checks saved point-backend intent is forwarded for each target while legacy sky remains automatic, and verifies copy/undo persistence behavior."
+    },
+    {
+      "command": "git diff --check -- test/mask_ai_provenance.mjs test/mask_portable_copy_ui.mjs docs/validation/chr247/backend-intent-2026-10-12.json",
+      "result": "PASS"
+    }
+  ],
+  "limits": [
+    "No real segmentation models were loaded or invoked; inference/native IPC were mocked.",
+    "These checks establish backend selection and failure-preservation behavior, not mask quality or cross-photo segmentation accuracy."
+  ]
+}

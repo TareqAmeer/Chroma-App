@@ -28,7 +28,7 @@ try{
   fxImages=items;fxCurIdx=0;fxState.masks=items[0].masks;mskSel=0;
   mskRebuild();const semanticButton=document.querySelector('#local-ctl button[onclick="mskCopyAndReevaluate()"]');
   const buttonText=semanticButton?.textContent||'',buttonTitle=semanticButton?.title||'';
-  let saves=0,batchAutosaves=0,injectPersistEdit='';const messages=[];log=(...args)=>messages.push(args);
+  let saves=0,batchAutosaves=0,injectPersistEdit='';const messages=[],backendRequests=[];log=(...args)=>messages.push(args);
   const canonical=v=>Array.isArray(v)?v.map(canonical):(!v||typeof v!=='object'?v:Object.keys(v).sort().reduce((o,k)=>(o[k]=canonical(v[k]),o),{}));
   curItem=()=>fxImages[fxCurIdx];
   fxSelectImage=idx=>{if(_mskSemanticCopyJob&&!_mskSemanticCopyJob.internalSwitch)_mskSemanticCopyJob.cancelled=true;fxImages[fxCurIdx].masks=fxState.masks;fxCurIdx=idx;fxState.masks=fxImages[idx].masks||(fxImages[idx].masks=[]);};
@@ -47,7 +47,7 @@ try{
    else if(injectPersistEdit==='copy-recovery')injectPersistEdit='';
    return{ok:true,durable:true};
   };
-  window.samRunPoints=async(m,opts)=>{if(curItem()!==opts.expectedItem)return{ok:false,error:'wrong photo'};m.px=new Uint8Array([200+fxCurIdx,210+fxCurIdx]);m.mtW=2;m.mtH=1;m.aiProvenance={schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,recordedAt:'target'};return{ok:true};};
+  window.samRunPoints=async(m,opts)=>{backendRequests.push(opts.preferredBackend??null);if(curItem()!==opts.expectedItem)return{ok:false,error:'wrong photo'};m.px=new Uint8Array([200+fxCurIdx,210+fxCurIdx]);m.mtW=2;m.mtH=1;m.aiProvenance={schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,recordedAt:'target'};return{ok:true};};
   const sourceRaster=[...ai.px];await mskCopyAndReevaluate();
   const afterCopy={ids:items.slice(1).map(i=>i.masks.map(m=>m.id)),pixels:items.slice(1).map(i=>[...i.masks[0].px]),provenance:items.slice(1).map(i=>i.masks[0].aiProvenance),source:[...ai.px],refine:[items[1].masks[0].refineFeather,items[1].masks[0].refineEdge,items[1].masks[1].refineFeather,items[1].masks[1].refineEdge],categories:sidecars.slice(1).map(sc=>[sc.recipe.geom,sc.recipe.sliders]),saves,batchAutosaves,active:fxCurIdx,messages,undo:!!_mskSemanticCopyUndo};
   // User moves to target B before undo; Undo must restore B, not the original copy source.
@@ -56,13 +56,14 @@ try{
   for(let i=1;i<items.length;i++){items[i].masks=initial[i].map(m=>_mskFromSnap(m));sidecars[i].recipe={...sidecars[i].recipe,masks:initial[i]};}
   fxSelectImage(0);injectPersistEdit='copy-first';await mskCopyAndReevaluate();
   const duringSave={targetA:items[1].masks.map(m=>m.id),sidecarA:sidecars[1].recipe.masks.map(m=>m.id),targetB:items[2].masks.map(m=>m.id),message:messages.some(m=>String(m[0]).includes('latest edits were restored'))};
-  return{buttonText,buttonTitle,afterCopy,afterUndo,duringSave,legacyProvenance};
+  return{buttonText,buttonTitle,afterCopy,afterUndo,duringSave,legacyProvenance,backendRequests};
  });
  assert.equal(result.buttonText,'Copy + re-evaluate AI/sky');assert.match(result.buttonTitle,/unsupported AI masks leave that photo unchanged/);
  assert.deepEqual(result.afterCopy.ids,[['prompt-a','sky-a','paint-a'],['prompt-a','sky-a','paint-a']]);
  assert.deepEqual(result.afterCopy.pixels,[[201,211],[202,212]]);
  assert.deepEqual(result.afterCopy.provenance,Array.from({length:2},()=>({schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,recordedAt:'target'})),'new target provenance survives portable commit and sidecar snapshots');
  assert.equal(result.legacyProvenance,null,'legacy prompted masks stay explicitly unknown');
+ assert.deepEqual(result.backendRequests.slice(0,4),['sam_points',null,'sam_points',null],'production portable reevaluation forwards saved point-backend intent while unknown sky masks retain automatic selection');
  assert.deepEqual(result.afterCopy.source,[11,12]);assert.deepEqual(result.afterCopy.refine,[20,-5,44,15]);
  assert.deepEqual(result.afterCopy.categories,[[{crop:[.1,.2]},{exposure:'8'}],[{crop:[.3,.4]},{exposure:'-4'}]]);
  assert.equal(result.afterCopy.saves,2);assert.equal(result.afterCopy.active,0);
