@@ -7,6 +7,8 @@ Agent-generated changelog of completed features and architectural decisions.
 - `test/library_source_render_status.mjs` passes actual original/reduced/HQ-cache selection and persistence routing, warm disconnect, unavailable replay/discard and available replay. Removed manual render-label transitions. Save-state race, syntax, Library content lint and whitespace checks pass; eight existing native queue tests cover baseline refusal, conflicts, replay, discard, restart and migrations using the unchanged cached test artifact.
 - Evidence is in `docs/validation/chr194/`. Browser HQ pixels and drive availability use explicit test fixtures; no live drive reconnect, photographic quality or native HQ-cache generation is claimed. No layout/shader change or repeated full Editor audit; the prior audit still has twelve failures and 879 findings.
 
+- CHR-194 publication verified at `a877555ed88514916f07adb896bef4eca7c0339b` via non-force push and matching remote main. Safely merged newer HDR memory reuse and CHX2 companion changes; integrated source/persistence, save-race and updated HDR densify checks pass. Later native changes are confined to HDR helpers/tests, leaving the tested queue/sidecar code unchanged; no new native HDR runtime claim. Linear is In Review with the bounded slice checked.
+
 ## 2026-10-12 — CHR-199 reclaim culling viewport space
 
 - `desktop/library-ui.js` hides the grid-only folder title while Compare/Survey/Cull is active and restores it automatically in Gallery. Culling keeps one range label plus `Photo N focused` with the existing keyboard hints; focused pane/filmstrip sizes and fit/native/linked controls remain unchanged.
