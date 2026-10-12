@@ -12,6 +12,8 @@ Agent-generated changelog of completed features and architectural decisions.
 
 - Integrated newer main HDR lazy-open change `889207e5`; the measured Cull path (`openPathsInEditor`, `showCullPage`, `renderSurveyCell`, `detailRender`) is unchanged. Integrated batch RAW settings, lazy paths, finished-cache safety, HDR densify and culling browser regressions pass. No full unchanged layout-gate repeat or native timing rerun is claimed for the normal Editor HDR-open path.
 
+- CHR-267 publication verified at `96bb036b4c380491ef36bec67b922f3d6a22107e` by non-force push and matching remote main. Linear is In Review; two-capture native timing evidence is checked separately, while the combined RAW-first recipe/cache/parity criterion remains unchecked.
+
 ## 2026-10-12 — CHR-247 preserve portable mask backend intent
 
 - `chromasmith-22.html` now re-evaluates portable prompted masks through their recorded EdgeSAM or SAM 2.1 backend, prepares the requested cold encoder without upgrading live masks, and preserves unknown legacy automatic selection. Contradictory rectangle/point provenance and unavailable known sky refinement fail the target without committing replacement pixels/provenance.
