@@ -1886,3 +1886,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Native validation exposed capture-phase `library.open` consuming Enter while Compare was active. Its handler now yields to Compare promotion; real-card browser selection exercises the keyboard cursor that the former fixture selection helper omitted.
 - `test/library_survey.mjs` passes with actual card clicks, promotion and pending/failed action guards. `test/library_compare_native.mjs` records page/detach events and permits retry only against its exact three-source disposable catalog; native final validation follows this commit.
 
+### 2026-10-12 — CHR-268 final verification
+
+- Actual native BUILD `1.1012E` / frontend `baeb2de7` passed four real 8256×5504 RAW Compare checkpoints: fit, cycle, promote and linked 100% detail. Maximum retained private frames two, concurrent decode one; Editor state unchanged, no recorded page/detach errors. Three paths are hard links to one CC0 Nikon capture, not varied-camera evidence. Reports: `docs/validation/chr268/private-compare-native-2026-10-12.{json,md}`.
+- Final Editor gates passed 21/33; the same twelve failures remain and inventory is unchanged at 879 findings. Focused production RAW and real-card Survey/Compare regressions pass. Current native total RSS/latency, varied captures and creative/HDR parity remain open; user testing remains In Review after publication.
+

@@ -1,0 +1,153 @@
+{
+  "issue": "CHR-268",
+  "capturedAt": "2026-10-11T23:59:23.904Z",
+  "commit": "baeb2de7efd50a568e283180ffd390b6e18ba874",
+  "build": "1.1012E",
+  "fixture": {
+    "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\nikon-z7-2789.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "dataset": "Three hard-linked paths of one real capture; not varied photographs"
+  },
+  "isolation": {
+    "catalog": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr268-20261012\\catalog",
+    "cache": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr268-20261012\\cache",
+    "initialCatalogTotal": 3
+  },
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             ",
+    "memoryBytes": 34226311168
+  },
+  "samples": [
+    {
+      "panes": [
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        },
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        }
+      ],
+      "editorUnchanged": true,
+      "globalsUnchanged": true,
+      "maxFrames": 2,
+      "maxActive": 1,
+      "calls": [
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF"
+        ]
+      ]
+    },
+    {
+      "panes": [
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        },
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        }
+      ],
+      "editorUnchanged": true,
+      "globalsUnchanged": true,
+      "maxFrames": 2,
+      "maxActive": 1,
+      "calls": [
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\C.NEF"
+        ]
+      ]
+    },
+    {
+      "panes": [
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        },
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 0.0655281007751938,
+          "error": null
+        }
+      ],
+      "editorUnchanged": true,
+      "globalsUnchanged": true,
+      "maxFrames": 2,
+      "maxActive": 1,
+      "calls": [
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\C.NEF"
+        ]
+      ]
+    },
+    {
+      "panes": [
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 1,
+          "error": null
+        },
+        {
+          "width": 8256,
+          "height": 5504,
+          "scale": 1,
+          "error": null
+        }
+      ],
+      "editorUnchanged": true,
+      "globalsUnchanged": true,
+      "maxFrames": 2,
+      "maxActive": 1,
+      "calls": [
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF"
+        ],
+        [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\C.NEF"
+        ]
+      ]
+    }
+  ],
+  "events": [],
+  "cache": "Retry after earlier source development; native source cache may be warm. No cold decode or latency target asserted.",
+  "runtime": {
+    "build": "1.1012E",
+    "url": "http://cs.localhost/index.html"
+  },
+  "result": "PASS"
+}
