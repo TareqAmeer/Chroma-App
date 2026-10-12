@@ -25,7 +25,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
-    try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); localStorage.setItem('chromasmithQuickLookDeveloped', '1'); } catch {}
+    try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); localStorage.setItem('chromasmithAutoPreviews', '0'); localStorage.setItem('chromasmithQuickLookDeveloped', '1'); } catch {}
     window.__rawPrepCalls = [];
     window.__rawPrepResolvers = {};
     window.__rawPrepActive = 0;

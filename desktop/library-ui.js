@@ -7589,6 +7589,62 @@
     }, +window.chromasmithWarmDelayMs || 1500);
   }
 
+  // ── Background preview building (Lightroom's "Build Previews"): once you have settled on a
+  // folder, develop the 2560px display preview for every RAW in view — nearest to where you are
+  // first — one photo at a time and only while you are idle. By the time you cull, opening a photo
+  // finds a prepared proxy instead of a cold decode. Serial (shares rawReviewQueue's one-at-a-time
+  // lane), pauses on any input / editor open / Quick Look / manual Cache RAWs or Prepare job, and
+  // photos that already have a matching proxy are a quick native hit (display-only reuses it).
+  // localStorage chromasmithAutoPreviews='0' turns it off.
+  const AUTO_PREVIEW_IDLE_MS = 2500, AUTO_PREVIEW_MAX = 400;
+  let _autoPrevLastInput = performance.now(), _autoPrevRunning = false;
+  const _autoPrevDone = new Set(), _autoPrevFailed = new Set();
+  const _autoPrevTouch = () => { _autoPrevLastInput = performance.now(); };
+  ['keydown', 'mousedown', 'wheel', 'touchstart', 'mousemove'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  function autoPreviewsEnabled() {
+    try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
+  }
+  function autoPreviewUserBusy() {
+    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive)
+      || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
+  }
+  function autoPreviewCandidates() {
+    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
+    const anchor = state.openedPath || state._kbCursor || [...state.selected][0] || sorted[0];
+    const at = Math.max(0, sorted.indexOf(anchor));
+    return sorted.map((p, i) => [p, i])
+      .filter(([p]) => RAW_EXT_RE.test(p) && !_autoPrevDone.has(p) && !_autoPrevFailed.has(p))
+      .sort((a, b) => Math.abs(a[1] - at) - Math.abs(b[1] - at) || a[1] - b[1])
+      .slice(0, AUTO_PREVIEW_MAX).map(([p]) => p);
+  }
+  async function autoPreviewTick() {
+    if (_autoPrevRunning || !autoPreviewsEnabled() || !state.open || state.source === 'lr') return;
+    if (autoPreviewUserBusy()) return;
+    _autoPrevRunning = true;
+    let built = 0;
+    try {
+      for (const next of autoPreviewCandidates()) {
+        if (autoPreviewUserBusy() || !state.open) break;
+        try {
+          await queueRawReview(next, () => cacheOneRaw(next, 'review'), 'auto-prep');
+          _autoPrevDone.add(next); built++;
+        } catch (_) { _autoPrevFailed.add(next); }
+        // Let the review lane release (its finally runs after our resolution) before re-checking
+        // busy, or rawReviewActive would still read true and end the run after one photo.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    } finally {
+      _autoPrevRunning = false;
+      if (built) rawPerf('auto-previews-built', '', { count: built });
+    }
+  }
+  setInterval(() => { void autoPreviewTick(); }, 3000);
+  if (LIBTEST) {
+    window.libtestAutoPreviewTick = autoPreviewTick;
+    window.libtestAutoPreviewIdle = () => { _autoPrevLastInput = -1e9; };
+    window.libtestAutoPreviewTouch = _autoPrevTouch;
+  }
+
   // Warm the persistent full-resolution RAW cache without opening photos in the editor.
   let _cacheWarmCancel = null;
   let _rawReviewPrep = null;
