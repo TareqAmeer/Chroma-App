@@ -10821,6 +10821,18 @@
       'button,a[href],input,textarea,select,summary,label,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="switch"],[role="tab"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'
     ));
   }
+  // Pointer hover over a grid card, for Space (Quick Look). Tracked at document level so every
+  // grid (local, filmstrip, cloud) is covered without per-grid wiring. Cleared when the pointer
+  // leaves a card for non-card space.
+  state._hoverPath = null;
+  document.addEventListener('mouseover', (e) => {
+    const card = e.target && e.target.closest ? e.target.closest('.lib-card[data-path]') : null;
+    state._hoverPath = card ? card.dataset.path : null;
+  }, true);
+  document.addEventListener('mouseout', (e) => {
+    const next = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('.lib-card[data-path]') : null;
+    if (!next) state._hoverPath = null;
+  }, true);
   document.addEventListener('keydown', (e) => {
     if (!state.open) return;
     const t = e.target;
@@ -10888,11 +10900,10 @@
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(quicklook.path, ''); toast('Flag cleared'); return; }
       return;
     }
-    // Space opens Quick Look for whatever's currently highlighted — same target resolution
-    // order kbTargets() below uses (cursor, then the open photo), so it's the photo you'd
-    // expect it to be regardless of whether you got here by mouse or keyboard.
+    // Space opens Quick Look: the photo under the pointer first, then the selected photo, then
+    // the keyboard cursor / open photo as a last resort.
     if (e.key === ' ' && state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey') {
-      const target = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
+      const target = state._hoverPath || (state.selected.size === 1 ? [...state.selected][0] : '') || state._kbCursor || state.openedPath || '';
       if (target) { e.preventDefault(); showQuickLook(target); return; }
     }
     // ⌘A/Ctrl+A select-all, ahead of the generic modifier-key bailout below (every other
