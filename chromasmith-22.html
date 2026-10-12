@@ -41,7 +41,7 @@ else{document.documentElement.classList.add('cs-boot-web');var _csBootOff=functi
 /* Desktop boot gate (see the inline script above): hides the web-layout editor chrome until
    the Tauri shell has actually settled into the Library. visibility (not display:none) so
    layout/measurements that happen during startup are unaffected — only paint is suppressed. */
-html.cs-boot-tauri body>header,html.cs-boot-tauri body>main{visibility:hidden}
+html.cs-boot-tauri body>header,html.cs-boot-tauri body>main,html.cs-boot-tauri #cs-brand{visibility:hidden}
 html.cs-boot-web body>main,html.cs-boot-web #cs-brand{visibility:hidden}
 /* While the big file streams in, say so instead of showing a blank screen (slow mobile data). */
 html.cs-boot-web body::after{content:'Loading Chromasmith…';position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;background:#121212;color:#8d8b85;font:14px system-ui,sans-serif;animation:csBootPulse 1.4s ease-in-out infinite alternate}
@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012R';
+const BUILD='1.1012S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
