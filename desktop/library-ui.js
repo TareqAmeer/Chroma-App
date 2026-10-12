@@ -68,9 +68,15 @@
     rawReviewActiveJob = job;
     Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; rawReviewActiveJob = null; pumpRawReview(); });
   }
-  async function quicklookPreview(path) {
+  // Quick Look on a RAW shows the camera's embedded JPEG by default (instant, so flipping through
+  // a shoot while culling never waits on a decode). The developed RAW render is opt-in per photo
+  // (D key) — or always, with localStorage chromasmithQuickLookDeveloped='1'.
+  function quicklookAlwaysDeveloped() {
+    try { return localStorage.getItem('chromasmithQuickLookDeveloped') === '1'; } catch (_) { return false; }
+  }
+  async function quicklookPreview(path, developed = false) {
     if (!path) return Promise.reject(new Error('missing preview path'));
-    const isRaw = RAW_EXT_RE.test(path);
+    const isRaw = RAW_EXT_RE.test(path) && (developed || quicklookAlwaysDeveloped());
     const settings = isRaw ? await rawCacheSettings(path, 'review') : null;
     const key = displayCacheKey(path, settings?.recipeKey || 'image-preview');
     if (quicklookPreviews.get(path)?.key === key) {
@@ -10774,8 +10780,10 @@
     qlPeakSync();
     toast(qlPeakOn ? 'Focus peaking on — red marks the sharpest edges' : 'Focus peaking off');
   }
-  async function showQuickLook(path) {
+  async function showQuickLook(path, developed = false) {
     if (!path) return;
+    const isRawPath = RAW_EXT_RE.test(path);
+    const wantDeveloped = isRawPath && (developed || quicklookAlwaysDeveloped());
     const generation = ++quicklook.generation;
     quicklook.prefetchQueue = [];
     quicklook.active = true;
@@ -10784,21 +10792,21 @@
     el.classList.add('on');
     const img = document.getElementById('lib-ql-img');
     const caption = document.getElementById('lib-ql-caption');
-    caption.textContent = baseName(path) + (RAW_EXT_RE.test(path) ? ' — developing RAW…' : ' — loading…');
+    caption.textContent = baseName(path) + (wantDeveloped ? ' — developing RAW…' : ' — loading…');
     img.dataset.previewSource = '';
     caption.title = '';
     img.classList.remove('loaded');
     try {
-      const buf = await quicklookPreview(path);
-      const reviewSidecar = RAW_EXT_RE.test(path) ? await getSidecar(path) : null;
+      const buf = await quicklookPreview(path, developed);
+      const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       img.src = quicklook.url;
-      img.dataset.previewSource = RAW_EXT_RE.test(path) ? 'developed-raw' : 'image';
+      img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
       img.classList.add('loaded');
-      const creativeEditsOmitted = RAW_EXT_RE.test(path) && !!reviewSidecar?.edited;
-      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : '');
+      const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
+      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
       queueQuickLookNeighbors(path);
     } catch (e) {
@@ -10895,6 +10903,11 @@
         e.preventDefault(); setRating(quicklook.path, parseInt(e.key, 10)); toast(`Rated ${e.key} star${e.key === '1' ? '' : 's'}`); return;
       }
       if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); toggleQuickLookPeak(); return; }
+      if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (RAW_EXT_RE.test(quicklook.path)) showQuickLook(quicklook.path, true);
+        return;
+      }
       if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(quicklook.path, 'Red'); toast('Rejected'); return; }
       if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(quicklook.path, 'Green'); toast('Picked'); return; }
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(quicklook.path, ''); toast('Flag cleared'); return; }

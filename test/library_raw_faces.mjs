@@ -24,7 +24,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
-    try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {}
+    try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); localStorage.setItem('chromasmithQuickLookDeveloped', '1'); } catch {}
     localStorage.removeItem('chromasmith_lib_theme');
     localStorage.setItem('csTheme', 'dark');
     window.__rawFaceCalls = [];
