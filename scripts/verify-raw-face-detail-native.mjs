@@ -18,6 +18,9 @@ const cacheDir = process.env.CULL_NATIVE_CACHE_DIR;
 const endpoint = process.env.NATIVE_CDP || 'http://127.0.0.1:9223';
 const reportPath = process.env.CULL_RAW_FACE_DETAIL_REPORT || 'docs/validation/chr269/raw-face-detail-native.json';
 const outputCrop = process.env.CULL_RAW_FACE_DETAIL_CROP || 'docs/validation/chr269/raw-face-detail-crop.jpg';
+const priorNativeDecodeAttempts = Number(process.env.CULL_PRIOR_NATIVE_DECODE_ATTEMPTS || 0);
+assert(Number.isSafeInteger(priorNativeDecodeAttempts) && priorNativeDecodeAttempts >= 0, 'prior native decode attempt count must be a nonnegative integer');
+const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
 assert(rawPath && /\.nef$/i.test(rawPath), 'Set CULL_RAW_PATH to the canonical Nikon Z7 NEF');
 assert(expectedBuild && /^[a-f0-9]{40}$/.test(sourceCommit || ''), 'Set exact CULL_EXPECTED_BUILD and CULL_NATIVE_COMMIT');
 assert(['debug', 'release'].includes(nativeProfile), 'Set CULL_NATIVE_PROFILE to debug or release');
@@ -30,11 +33,18 @@ assert.equal(path.resolve(catalogDir).toLowerCase(), path.resolve(expectedCatalo
 assert.equal(path.resolve(cacheDir).toLowerCase(), path.resolve(expectedCacheDir).toLowerCase(), 'cache setting must be the CHR-269 task-owned directory');
 assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), sourceCommit, 'checkout must match the recorded source commit');
 
-const sourceBytes = await readFile(rawPath);
+const fixtureDir = path.basename(path.dirname(rawPath)).toLowerCase() === 'chr268-native-compare'
+  ? path.dirname(rawPath)
+  : path.join(path.dirname(rawPath), 'chr268-native-compare');
+const sourcePath = path.basename(path.dirname(rawPath)).toLowerCase() === 'chr268-native-compare'
+  ? path.resolve(rawPath)
+  : path.join(fixtureDir, 'A.NEF');
+const canonicalRawPath = path.join(path.dirname(fixtureDir), 'nikon-z7-2789.NEF');
+assert(samePath(rawPath, sourcePath) || samePath(rawPath, canonicalRawPath), 'CULL_RAW_PATH must be the canonical fixture or its existing A.NEF hard link');
+const sourceBytes = await readFile(canonicalRawPath);
 const sourceSha = createHash('sha256').update(sourceBytes).digest('hex');
 assert.equal(sourceSha, expectedSha, 'canonical RAW fixture checksum mismatch');
 const sourceStat = await stat(rawPath);
-const sourcePath = path.join(path.dirname(rawPath), 'chr268-native-compare', 'A.NEF');
 const aliasStat = await stat(sourcePath);
 assert.equal(aliasStat.ino, sourceStat.ino, 'A.NEF must be the existing hard link to the canonical RAW fixture');
 assert.equal(aliasStat.dev, sourceStat.dev, 'A.NEF hard link must reside on the same volume as the canonical RAW');
@@ -43,7 +53,7 @@ assert.equal(createHash('sha256').update(await readFile(sourcePath)).digest('hex
 const box = { x0: 0.4, y0: 0.16, x1: 0.52, y1: 0.55 };
 const report = {
   issue: 'CHR-269', capturedAt: new Date().toISOString(), sourceCommit, expectedBuild, nativeProfile,
-  fixture: { canonicalPath: rawPath, commandSourcePath: sourcePath, sha256: sourceSha, bytes: sourceStat.size,
+  fixture: { canonicalPath: canonicalRawPath, commandSourcePath: sourcePath, sha256: sourceSha, bytes: sourceStat.size,
     sourceIsExistingFixtureHardlink: true, syntheticFaceBox: box,
     portraitDetectionOrIdentityValidated: false },
   settings: { mode: 'srgb', lutKey: '', rawNr: 'off', autoLens: false, demosaicAlgo: 'ahd',
@@ -54,12 +64,12 @@ const report = {
   isolation: { catalogDir, configuredCacheDir: cacheDir,
     decodeCacheNote: 'Native RAW decode cache uses the platform LocalAppData root; CS_CACHE_DIR does not redirect it. The unique recipe is checked for full/display/editor cache misses before and after this command.' },
   runtime: null, databaseSeed: null, editorState: null, beforeCache: null, response: null,
+  nativeDecodeAttemptsIncludingPrior: priorNativeDecodeAttempts,
   stages: [], result: 'RUNNING', hardware: { platform: os.platform(), release: os.release(), arch: os.arch(),
     cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, memoryBytes: os.totalmem() },
 };
 const stage = name => report.stages.push({ name, at: new Date().toISOString() });
 const save = async () => { await mkdir(path.dirname(reportPath), { recursive: true }); await writeFile(reportPath, JSON.stringify(report, null, 2)); };
-const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
 
 // SQLite is modified only inside the CHR-269 disposable catalog. Python's standard-library
 // sqlite3 avoids adding a Node dependency. Existing unrelated face rows are preserved.
@@ -151,7 +161,7 @@ try {
   report.runtime = { build: runtime.build, url: runtime.url, catalogTotal: runtime.catalog.total,
     catalogPaths: (runtime.catalog.entries || []).map(entry => entry.path) };
   assert.equal(runtime.build, expectedBuild, 'native app BUILD does not match expected build');
-  const expectedPaths = ['A.NEF', 'B.NEF', 'C.NEF'].map(name => path.join(path.dirname(rawPath), 'chr268-native-compare', name));
+  const expectedPaths = ['A.NEF', 'B.NEF', 'C.NEF'].map(name => path.join(fixtureDir, name));
   assert(runtime.catalog.total === 3 && runtime.catalog.entries?.length === 3 &&
     expectedPaths.every(expected => runtime.catalog.entries.some(entry => samePath(entry.path, expected))),
   'Refuse to seed or call native code unless catalog is exactly the three disposable compare fixtures');
@@ -166,8 +176,20 @@ try {
     sourceIdentity: 'canonical path joined from the isolated photo row volume + rel_path' };
 
   const invoke = (command, args = {}) => page.evaluate(([cmd, value]) => window.__TAURI__.core.invoke(cmd, value), [command, args]);
+  // Chromium's CDP value serializer does not reliably preserve Tauri's raw IPC
+  // Uint8Array/ArrayBuffer return value. Convert only this bounded response to a plain
+  // number array inside the WebView, before it crosses the CDP boundary.
+  const invokeBinary = (command, args = {}) => page.evaluate(async ([cmd, value]) => {
+    const response = await window.__TAURI__.core.invoke(cmd, value);
+    if (response instanceof ArrayBuffer) return Array.from(new Uint8Array(response));
+    if (ArrayBuffer.isView(response)) {
+      return Array.from(new Uint8Array(response.buffer, response.byteOffset, response.byteLength));
+    }
+    if (Array.isArray(response)) return response;
+    return { unsupportedBinaryShape: Object.prototype.toString.call(response), keys: Object.keys(response || {}).slice(0, 8) };
+  }, [command, args]);
   const faces = await invoke('catalog_faces_for_path', { path: sourcePath, stack: false });
-  assert(faces.some(face => face.faceId === seed.faceId), 'native read connection did not observe the synthetic persisted face row');
+  assert(faces.some(face => face.face_id === seed.faceId), 'native read connection did not observe the synthetic persisted face row');
   assert.equal(await invoke('catalog_face_scan_status', { path: sourcePath }), true, 'face scan status must be complete to avoid model reprocessing');
   const selectedFaces = [{ faceId: seed.faceId, x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 }];
   const recipeKey = `chr269-face-detail:${sourceSha.slice(0,16)}:${Date.now()}-${process.pid}`;
@@ -209,8 +231,9 @@ try {
   });
   report.editorState = { before: beforeEditor };
   stage('native-developed-detail-decode-start');
+  report.nativeDecodeAttemptsIncludingPrior += 1;
   const startedAt = Date.now();
-  const detailPromise = invoke('catalog_raw_face_detail', request);
+  const detailPromise = invokeBinary('catalog_raw_face_detail', request);
   let rawResponse, timeoutId;
   try {
     rawResponse = await Promise.race([detailPromise, new Promise((_, reject) => {

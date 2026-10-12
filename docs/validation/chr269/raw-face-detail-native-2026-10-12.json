@@ -1,0 +1,173 @@
+{
+  "issue": "CHR-269",
+  "capturedAt": "2026-10-12T03:58:14.807Z",
+  "sourceCommit": "48cb8c306304f8d9829f46e732dddb464dde00cf",
+  "expectedBuild": "1.1012K",
+  "nativeProfile": "debug",
+  "fixture": {
+    "canonicalPath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\nikon-z7-2789.NEF",
+    "commandSourcePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "sourceIsExistingFixtureHardlink": true,
+    "syntheticFaceBox": {
+      "x0": 0.4,
+      "y0": 0.16,
+      "x1": 0.52,
+      "y1": 0.55
+    },
+    "portraitDetectionOrIdentityValidated": false
+  },
+  "settings": {
+    "mode": "srgb",
+    "lutKey": "",
+    "rawNr": "off",
+    "autoLens": false,
+    "demosaicAlgo": "ahd",
+    "lensOverride": "",
+    "lensOverrideFocal": 0,
+    "recipeKey": "chr269-face-detail:e54a6c4264bf6852:1791777494938-21648",
+    "dcpProfileApplied": false,
+    "dcpNote": "Baseline sRGB request; no DCP LUT was supplied or claimed."
+  },
+  "validationScope": {
+    "actualTauriCommand": true,
+    "libraryUIInvoked": false,
+    "realFaceDetectorInvoked": false,
+    "syntheticBoxOnly": true,
+    "portraitOrEyeRecognitionClaimed": false
+  },
+  "isolation": {
+    "catalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr269-20261012\\catalog",
+    "configuredCacheDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr269-20261012\\cache",
+    "decodeCacheNote": "Native RAW decode cache uses the platform LocalAppData root; CS_CACHE_DIR does not redirect it. The unique recipe is checked for full/display/editor cache misses before and after this command."
+  },
+  "runtime": {
+    "build": "1.1012K",
+    "url": "http://cs.localhost/index.html",
+    "catalogTotal": 3,
+    "catalogPaths": [
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF",
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF",
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\C.NEF"
+    ]
+  },
+  "databaseSeed": {
+    "photoId": 1,
+    "faceId": 1,
+    "mtime": 1791655932,
+    "sourcePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF",
+    "bbox": [
+      0.4,
+      0.16,
+      0.52,
+      0.55
+    ],
+    "seeded": false,
+    "catalogPath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr269-20261012\\catalog\\catalog.db",
+    "sourceIdentity": "canonical path joined from the isolated photo row volume + rel_path"
+  },
+  "editorState": {
+    "before": {
+      "frameCount": 0,
+      "hasFrameArray": true,
+      "selectedPath": null,
+      "lensApplied": null,
+      "hasPersistenceTarget": false
+    },
+    "after": {
+      "frameArraySame": true,
+      "frameObjectsSame": true,
+      "selectedPathSame": true,
+      "lensAppliedSame": true,
+      "persistenceTargetSame": true
+    }
+  },
+  "beforeCache": {
+    "fullDecodePath": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached decode"
+    },
+    "displayProxyPath": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached display proxy"
+    },
+    "editorFrame": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached decode"
+    }
+  },
+  "response": {
+    "bytes": 403349,
+    "headerBytes": 146,
+    "sourceWidth": 8256,
+    "sourceHeight": 5504,
+    "cropCount": 1,
+    "crop": {
+      "faceId": 1,
+      "width": 945,
+      "height": 2048,
+      "bytes": 403199,
+      "sha256": "0c1aa18e5156550e960aab23ad8f295be3c93b77495461a81c87dcbc51540c3f",
+      "savedPath": "docs/validation/chr269/raw-face-detail-crop.jpg"
+    },
+    "expectedGeometry": {
+      "x0": 2955,
+      "y0": 129,
+      "cropWidth": 1684,
+      "cropHeight": 3649,
+      "outputWidth": 945,
+      "outputHeight": 2048
+    },
+    "syntheticFaceRow": true,
+    "portraitOrEyeValidation": false
+  },
+  "nativeDecodeAttemptsIncludingPrior": 2,
+  "stages": [
+    {
+      "name": "seed-synthetic-face-in-task-catalog",
+      "at": "2026-10-12T03:58:14.860Z"
+    },
+    {
+      "name": "native-developed-detail-decode-start",
+      "at": "2026-10-12T03:58:14.952Z"
+    },
+    {
+      "name": "native-developed-detail-decode-complete",
+      "at": "2026-10-12T03:59:01.716Z"
+    },
+    {
+      "name": "complete",
+      "at": "2026-10-12T03:59:01.746Z"
+    }
+  ],
+  "result": "PASS",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             ",
+    "logicalCpus": 12,
+    "memoryBytes": 34226311168
+  },
+  "decode": {
+    "elapsedMs": 46764,
+    "outcome": "completed",
+    "timingIsPerformanceClaim": false,
+    "note": "Observed one real native RAW detail decode; elapsed time is diagnostic only, not a latency target."
+  },
+  "afterCache": {
+    "fullDecodePath": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached decode"
+    },
+    "displayProxyPath": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached display proxy"
+    },
+    "editorFrame": {
+      "miss": true,
+      "error": "Error: page.evaluate: no cached decode"
+    }
+  }
+}
