@@ -3990,6 +3990,20 @@
     }, 80);
   }
 
+  // scrollIntoView() also scrolls every overflow:hidden ancestor horizontally to reveal the card.
+  // #lib-overlay is overflow:hidden, and toggleExpandedView() calls renderGrid() while its 0.12s
+  // width transition is still running (overlay still docked-narrow), so the card sits past the
+  // visible edge and the overlay got scrolled by ~200px that never reverted once it widened —
+  // the whole gallery shifted left (sidebar off-screen, header cut). Only the vertical scroll is
+  // wanted here, so put back every ancestor's (and the window's) horizontal scroll afterwards.
+  function scrollCardIntoView(card, opts) {
+    const kept = [];
+    for (let el = card.parentElement; el; el = el.parentElement) kept.push([el, el.scrollLeft]);
+    const winX = window.scrollX;
+    card.scrollIntoView(opts);
+    for (const [el, x] of kept) if (el.scrollLeft !== x) el.scrollLeft = x;
+    if (window.scrollX !== winX) window.scrollTo(winX, window.scrollY);
+  }
   /// Scrolls the sidebar grid so the given path's card is visible. Used after opening a photo
   /// into the editor so the newly-active card doesn't stay scrolled off-screen. Works whether or
   /// not the grid is virtualized: a virtualized grid may not have mounted a DOM card for `path`
@@ -4017,7 +4031,7 @@
       const inRange = state._virtRange && idx >= state._virtRange[0] * state._virtMetrics.cols && idx < (state._virtRange[1] + 1) * state._virtMetrics.cols;
       if (inRange) {
         const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-        if (card) { card.scrollIntoView({ block: center ? 'center' : 'nearest' }); return; }
+        if (card) { scrollCardIntoView(card, { block: center ? 'center' : 'nearest' }); return; }
       }
       const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
         ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
@@ -4028,7 +4042,7 @@
       return;
     }
     const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.scrollIntoView({ block: center ? 'center' : 'nearest' });
+    if (card) scrollCardIntoView(card, { block: center ? 'center' : 'nearest' });
   }
 
   // Thumbnail loader with a small concurrency pool + viewport priority. renderGrid used to
