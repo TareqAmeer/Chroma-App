@@ -175,3 +175,19 @@ than a naive "diagnose then fix" loop:
 - If `tools/diagnostics/` seems to be missing a signal you needed, say so
   explicitly in your report rather than silently working around it — that's
   a gap worth fixing in the tool, not just in this one bug.
+
+## Speed rules (apply by default — the user should never have to ask)
+
+Past runs took 20-110 min mostly on repeated builds, gates and wide benchmarks.
+- One focused change per increment: measure, fix, verify, commit+push, move on.
+  Never chain unrelated tasks (cause + feature + culling pass) in one run.
+- No full gates after each edit. Use quick targeted checks (cargo check, the one
+  relevant probe/test, one bench run). Run full gates (cargo test with baseline
+  comparison, library_flows, perf:test, editor:gates) ONCE at the end, in the
+  background (run_in_background + Monitor), and report.
+- Reuse one built+installed app between experiments; rebuild only when the code
+  you changed requires it. Use the real build output path (install-app.sh).
+- Benchmarks: 2-3 representative files, N=3. No wide library scans unless the bug
+  is specifically about a rare case.
+- Keep the machine quiet while benchmarking: no extra parallel heavy jobs.
+- If measurements show the remaining ideas are low-value, stop early and say so.
