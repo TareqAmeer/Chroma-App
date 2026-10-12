@@ -2935,7 +2935,7 @@ body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{max-width:100%;font-
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{max-width:100%;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #cs-source-render-state{max-width:100%;margin-left:0}
 /* Top-bar declutter: these readouts/buttons are hidden on desktop (markup + JS kept intact). */
-body.deskx #fx-batch-scope,body.deskx #cs-save-state,body.deskx #cs-source-render-state,body.deskx #btn-second-display,body.deskx #sk2-act-jobs{display:none!important}
+#fx-batch-scope,#cs-save-state,#cs-source-render-state,#btn-second-display,#sk2-act-jobs{display:none!important}
 /* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
@@ -7258,7 +7258,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012T';
+const BUILD='1.1012U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
