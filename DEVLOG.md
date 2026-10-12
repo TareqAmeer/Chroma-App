@@ -1956,3 +1956,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Integrated the task as 8538bdf6 on top of current main ff60622f, preserving its HDR warm-up-before-marker fix. Three-way application and blob comparisons prove all 11 task files match the feature tip, except the build stamp and the preserved six-line main HDR addition. All feature commits remain on codex/chr192-culling-navigation; stamp-only cherry-pick attempt is also preserved.
 - Final integrated gates: 21/33 pass, the same 12 known failing gates and 879 inventory findings; full suite is not green. Focused navigation/RAW preparation/RAW faces/history/shortcut checks pass. Extra normal-motion discovery verifies a named visible resizer and visible Reset layout under Settings / Appearance; no reset was invoked. Native S source/state/header verification and reviewed screenshot are included.
+
+### CHR-192 — verified main publication
+
+- Published c20bd2ac2eec354888a4f75cffb3ab354c7d0fb6 to origin/main by normal fast-forward push; git ls-remote matched exactly. Newer main HDR behavior is preserved, all task changes/native evidence are published, and the original feature commits remain named and recoverable.
+- Linear CHR-192 is In Review with all five supported criteria checked and verification limits recorded: native laptop state/header checks pass, Settings / Appearance reset discovery passes, integrated UI gates retain 21/33 passes and the same 12 failed gates/879 findings. No claim of a fully green suite or new RAW quality/performance evidence is made.
