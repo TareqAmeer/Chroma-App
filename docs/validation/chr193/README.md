@@ -16,6 +16,11 @@ task-isolated Tauri WebView over CDP. The helper requires `CULL_EXPECTED_BUILD` 
 result report at `docs/validation/chr193/geometry-batch-native.json` by default and closes only its
 CDP client, not the native app.
 
+For an already-loaded three-PNG native session, setting `CULL_GEOMETRY_BATCH_DARK_DIALOG=1` runs
+only a dark-theme confirmation-dialog check, records element bounds/contrast, captures the dialog,
+and cancels it. Set the report/screenshot output variables to the `*-dark` paths to keep that
+evidence alongside the full-flow result.
+
 Run the browser contract after the CHR-193 source changes and again against the final built
 candidate. Run the native helper only when the parent task has launched the exact isolated build
 and supplied the matching environment values. A PASS proves these UI/history flows for ordinary
