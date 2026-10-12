@@ -26,18 +26,13 @@ import time
 IS_WINDOWS = sys.platform == 'win32'
 
 EXE_NAME = 'chromasmith.exe' if IS_WINDOWS else 'chromasmith'
-# 2026-09-14: no installed copy is made — the app runs from the release build output in place.
+# No installed copy is made — the app runs from the build output in place (find_process resolves
+# where that is: the shared cargo target dir, see scripts/cargo-target.mjs).
+import find_process as _fp
 if IS_WINDOWS:
-    EXE_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        'desktop', 'src-tauri', 'target', 'release', 'chromasmith.exe',
-    )
+    EXE_PATH = _fp.REAL_APP_PATH
 else:
-    EXE_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
-        'Contents', 'MacOS', 'chromasmith',
-    )
+    EXE_PATH = os.path.join(_fp.REAL_APP_PATH, 'Contents', 'MacOS', 'chromasmith')
 
 GLSL_ERROR_RE = re.compile(r'GLSL (compile|link) error', re.IGNORECASE)
 CORRUPT_DB_RE = re.compile(r'catalog\.corrupt-\d+\.db')

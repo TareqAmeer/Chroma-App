@@ -24,14 +24,28 @@ EXE_NAME = 'chromasmith.exe' if IS_WINDOWS else 'chromasmith'
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def cargo_target_dir():
+    """Where `npm run build` puts the Rust build output — mirrors scripts/cargo-target.mjs (the
+    single source of truth; scripts/tauri-shared-cache.mjs sets CARGO_TARGET_DIR from it)."""
+    if os.environ.get('CARGO_TARGET_DIR'):
+        return os.environ['CARGO_TARGET_DIR']
+    if os.environ.get('LOCALAPPDATA'):
+        return os.path.join(os.environ['LOCALAPPDATA'], 'Chroma-App', 'cargo-target')
+    cache = os.environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(cache, 'chroma-app', 'cargo-target')
+
+
+def _resolve_build_output(*rel):
+    real = os.path.join(cargo_target_dir(), 'release', *rel)
+    legacy = os.path.join(_REPO_ROOT, 'desktop', 'src-tauri', 'target', 'release', *rel)
+    # Pre-shared-cache builds lived in the repo; only fall back when the real output doesn't exist.
+    return legacy if (not os.path.exists(real) and os.path.exists(legacy)) else real
+
+
 if IS_WINDOWS:
-    REAL_APP_PATH = os.path.join(
-        _REPO_ROOT, 'desktop', 'src-tauri', 'target', 'release', 'chromasmith.exe',
-    )
+    REAL_APP_PATH = _resolve_build_output('chromasmith.exe')
 else:
-    REAL_APP_PATH = os.path.join(
-        _REPO_ROOT, 'desktop', 'src-tauri', 'target', 'release', 'bundle', 'macos', 'Chromasmith.app',
-    )
+    REAL_APP_PATH = _resolve_build_output('bundle', 'macos', 'Chromasmith.app')
 
 # Matches diag.rs's diag_state_path() (env::temp_dir()) — see native_bridge.py's own comment
 # on why this used to be a hardcoded "/tmp/..." literal that silently broke on Windows.

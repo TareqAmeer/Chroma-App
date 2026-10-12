@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cargoTargetDir } from './cargo-target.mjs';
 
 const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'desktop');
 const tauriCli = path.join(desktopDir, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
@@ -12,13 +12,11 @@ if (!command) {
   process.exit(2);
 }
 
-const cacheRoot = process.env.LOCALAPPDATA
-  ? path.join(process.env.LOCALAPPDATA, 'Chroma-App', 'cargo-target')
-  : path.join(process.env.XDG_CACHE_HOME || path.join(homedir(), '.cache'), 'chroma-app', 'cargo-target');
+const cacheRoot = cargoTargetDir();
 
 const child = spawn(process.execPath, [tauriCli, ...process.argv.slice(2)], {
   cwd: desktopDir,
-  env: { ...process.env, CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR || cacheRoot },
+  env: { ...process.env, CARGO_TARGET_DIR: cacheRoot },
   stdio: 'inherit',
   windowsHide: true,
 });

@@ -7,7 +7,8 @@ import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os'; import path from 'node:path'; import { randomBytes } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 const T=tmpdir(), F=k=>path.join(T,`chromasmith_automation_${k}.json`);
-const APP='desktop/src-tauri/target/release/bundle/macos/Chromasmith.app';
+import { appBundlePath } from '../scripts/cargo-target.mjs';
+const APP=appBundlePath();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const token=randomBytes(18).toString('hex'); const w=(p,v)=>{writeFileSync(p+'.t',JSON.stringify(v));renameSync(p+'.t',p);};
 async function ev(code,t=3000){const id=randomBytes(8).toString('hex');w(F('command'),{id,token,action:'eval',code});const e=Date.now()+t;while(Date.now()<e){try{const r=JSON.parse(readFileSync(F('result'),'utf8'));if(r.id===id)return r.ok?r.result:{err:r.error};}catch(_){}await sleep(40);}return null;}

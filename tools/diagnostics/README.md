@@ -6,9 +6,9 @@ categorized event log — so debugging starts from evidence instead of
 screenshots and assumptions.
 
 On macOS, the app is built via `desktop/install-app.sh`, which registers it in
-place at `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` — no
+place at `<cargo target dir>/release/bundle/macos/Chromasmith.app` (default `~/.cache/chroma-app/cargo-target`; `node scripts/cargo-target.mjs bundle` prints the exact path) — no
 copy is made. On Windows, the tool attaches to `chromasmith.exe` directly out of
-`desktop/src-tauri/target/release/` (or `target/debug/` for a dev build) — see
+`<cargo target dir>/release/` (or `debug/` for a dev build) — see
 docs/windows-port.md's G17 entry for the full module-by-module Windows port
 notes (process discovery, freeze detection, log/db paths, screenshot capture,
 stack sampling — all verified live, not just compiled). Needs `pip install
@@ -64,7 +64,7 @@ pip install -r tools/diagnostics/requirements.txt
 
 ## Usage
 
-1. Launch `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app` normally (Dock, Finder, or `open`).
+1. Launch `<cargo target dir>/release/bundle/macos/Chromasmith.app` (default `~/.cache/chroma-app/cargo-target`; `node scripts/cargo-target.mjs bundle` prints the exact path) normally (Dock, Finder, or `open`).
 2. Start a capture session:
    ```bash
    python3 tools/diagnostics/cli.py start --duration 15m
@@ -198,7 +198,7 @@ this is local-only.
 
 - The app must be found by process name (`chromasmith`) and, when more than one
   candidate is running, the one at
-  `desktop/src-tauri/target/release/bundle/macos/Chromasmith.app`
+  `<cargo target dir>/release/bundle/macos/Chromasmith.app` (default `~/.cache/chroma-app/cargo-target`; `node scripts/cargo-target.mjs bundle` prints the exact path)
   (`find_process.REAL_APP_PATH`) is preferred. If more than one instance is
   running you'll see a warning naming the app path it attached to; check that
   before trusting the run.

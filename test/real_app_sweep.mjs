@@ -26,7 +26,8 @@ const arg = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=
 const DEPTH = +arg('depth', 1), LIMIT = +arg('limit', 1e9), ONLY = arg('surface', null);
 const T = tmpdir(), SANDBOX = path.join(T, 'cs_real_sweep');
 const F = (k) => path.join(T, `chromasmith_automation_${k}.json`);
-const APP = path.resolve('desktop/src-tauri/target/release/bundle/macos/Chromasmith.app');
+import { appBundlePath } from '../scripts/cargo-target.mjs';
+const APP = appBundlePath();
 const SKIP = /export|save to|reveal|finder|open in|lightroom|google|photos library|sign ?in|sign ?out|log ?out|quit|update|install|download|share|email|report a bug|feedback|website|help|delete|trash|move to|eject/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
