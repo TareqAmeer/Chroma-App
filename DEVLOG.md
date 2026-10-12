@@ -1924,3 +1924,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Removed the duplicate photo-caption/zoom clone and retained the canonical Studio header; named icon rail controls expose Exposure & Tone, Crop, Masks and Versions & History. Updated chromasmith-22.html and desktop/library-ui.js.
 - Moved the original activity/thumbnail widgets into one Jobs disclosure shared between Gallery and Studio. Idle history recovery actions now bind correctly; Enter/Space respect focused controls, Escape returns focus and click-away closes the disclosure.
 - Browser navigation in both themes at 1366x768 passes with folder/scroll/source/225% zoom preserved; job-history 12/12, RAW preparation, RAW face-review and syntax/content checks pass. Added test/library_navigation.mjs and scripts/verify-library-navigation-native.mjs; full UI gates and actual native navigation validation are pending in the candidate build.
+
+### CHR-192 — Gallery transition regression and final validation candidate
+
+- Native normal-motion testing exposed synthetic scroller clamping during Studio layout changes. Added separate Gallery anchors, early photo-open snapshots, guarded restoration after layout transitions, and cancellation on user navigation in desktop/library-ui.js.
+- The focused navigation gate now covers dark/light reduced motion and dark normal motion; target photos are centered before measuring the real click-start anchor, and assertions wait for stable geometry. This corrects an automation auto-scroll artifact in earlier diagnostics while retaining strict source/anchor/offset checks.
+- Added isolated native test catalog/profile guards and reusable WebView profile guidance in AGENTS.md. Full first UI run retained 21/33 passes, 12 known failures and 879 unchanged inventory findings; final native evidence and post-fix gate results follow.

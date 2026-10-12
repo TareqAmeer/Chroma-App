@@ -7,11 +7,12 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const root = process.cwd();
+const librarySourceOverride = process.env.CULL_NAV_LIBRARY_SOURCE;
 const server = createServer(async (request, response) => {
   try {
     const relative = decodeURIComponent(new URL(request.url, 'http://localhost').pathname).replace(/^\/+/, '');
     const builtLibrary = relative === 'desktop/dist/library-ui.js';
-    const file = path.join(root, builtLibrary ? 'desktop/library-ui.js' : relative);
+    const file = builtLibrary && librarySourceOverride ? librarySourceOverride : path.join(root, builtLibrary ? 'desktop/library-ui.js' : relative);
     let body = await readFile(file);
     const ext = path.extname(file);
     const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.otf': 'font/otf', '.wasm': 'application/wasm' };
@@ -37,8 +38,8 @@ const historyRow = {
   detail: 'Resume checks sources, settings and prepared previews before continuing',
 };
 
-async function runTheme(theme) {
-  const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, reducedMotion: 'reduce' });
+async function runTheme(theme, { normalMotion = false } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, reducedMotion: normalMotion ? 'no-preference' : 'reduce' });
   const nativeProbe = await context.newPage();
   await nativeProbe.setContent('<button id="native-space">Space activation</button>');
   await nativeProbe.evaluate(() => { document.getElementById('native-space').onclick = () => { window.spaceActivated = true; }; });
@@ -123,8 +124,27 @@ async function runTheme(theme) {
     await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card[data-path]').length >= 4);
 
     const grid = page.locator('#lib-main');
-    await grid.evaluate(el => { el.scrollTop = 2800; });
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    if (normalMotion) {
+      const targetCard = page.locator('#lib-grid .lib-card[data-path]').nth(49);
+      assert.match(await targetCard.getAttribute('data-path'), /chart-050\.png$/, 'normal-motion scenario scrolls the exact PNG target into view');
+      await targetCard.scrollIntoViewIfNeeded();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    } else {
+      await grid.evaluate(el => { el.scrollTop = 2800; });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }
+    // A partially clipped target makes Playwright scroll during dblclick, before application
+    // handlers run. Center the actual target first, then use that settled position as the
+    // navigation baseline, matching a user click on a fully visible card.
+    const targetCard = page.locator('#lib-grid .lib-card[data-path]').nth(49);
+    await targetCard.evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
+    const targetGeometry = await targetCard.evaluate(el => ({ top: el.getBoundingClientRect().top,
+      bottom: el.getBoundingClientRect().bottom, path: el.dataset.path,
+      viewportTop: document.getElementById('lib-main').getBoundingClientRect().top,
+      viewportBottom: document.getElementById('lib-main').getBoundingClientRect().bottom }));
+    assert(targetGeometry.top >= targetGeometry.viewportTop && targetGeometry.bottom <= targetGeometry.viewportBottom,
+      `target must be fully visible before capturing scroll baseline: ${JSON.stringify(targetGeometry)}`);
     const anchorBefore = await page.evaluate(() => {
       const root = document.getElementById('lib-main');
       const bounds = root.getBoundingClientRect();
@@ -133,15 +153,30 @@ async function runTheme(theme) {
       });
       return { path: card?.dataset.path || '', offset: card ? card.getBoundingClientRect().top - bounds.top : null,
         folder: document.querySelector('#lib-side .lib-tree-row.on')?.textContent.trim() || '',
-        index: card ? [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].indexOf(card) : -1 };
+        index: card ? [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].indexOf(card) : -1,
+        scrollTop: root.scrollTop, mainWidth: bounds.width, mainHeight: bounds.height,
+        gridWidth: document.getElementById('lib-grid')?.getBoundingClientRect().width,
+        columns: document.getElementById('lib-grid') ? getComputedStyle(document.getElementById('lib-grid')).gridTemplateColumns : '' };
     });
     assert(anchorBefore.path, 'scrolled Gallery should have a visible photo anchor');
     assert.match(anchorBefore.folder, /Session/, `selected folder should be Session; root was ${rootPath}`);
 
-    await page.locator('#lib-grid .lib-card[data-path]').nth(anchorBefore.index).dblclick();
+    await page.evaluate(() => {
+      window.__chr192PointerDown = [];
+      document.getElementById('lib-main').addEventListener('pointerdown', event => {
+        const card = event.target.closest?.('.lib-card[data-path]');
+        if (card) window.__chr192PointerDown.push({ path: card.dataset.path, scrollTop: event.currentTarget.scrollTop,
+          rectTop: card.getBoundingClientRect().top, rectBottom: card.getBoundingClientRect().bottom,
+          detail: event.detail || 0 });
+      }, true);
+    });
+    await targetCard.dblclick();
+    const pointerOpen = await page.evaluate(() => window.__chr192PointerDown?.at(-1) || null);
+    assert(pointerOpen && Math.abs(pointerOpen.scrollTop - anchorBefore.scrollTop) <= 1,
+      `captured Gallery baseline must match the actual photo pointerdown: ${JSON.stringify({ anchorBefore, pointerOpen })}`);
     await page.waitForFunction(() => window.chromasmithHasOpenedPhoto?.() && window.chromasmithSourcePath, null, { timeout: 15000 });
     const source = await page.evaluate(() => window.chromasmithSourcePath);
-    assert.equal(source, anchorBefore.path, 'Gallery double-click should open the exact selected ordinary PNG');
+    assert.equal(source, targetGeometry.path, 'Gallery double-click should open the exact fully visible ordinary PNG');
     await page.locator('#fx-zoom-slider').evaluate(el => {
       el.value = '225'; el.dispatchEvent(new Event('input', { bubbles: true }));
     });
@@ -197,17 +232,32 @@ async function runTheme(theme) {
 
     await page.locator('#cs-tog-lib').click();
     await page.waitForFunction(() => document.body.classList.contains('lib-full'), null, { timeout: 10000 });
+    // Wait until the scrollport and grid stop resizing before reading the returning anchor.
+    // This matters even with reduced motion because the native Workspace layout and CSS can
+    // still publish a transition after the body mode class flips.
+    await page.waitForFunction(() => {
+      const root = document.getElementById('lib-main'), grid = document.getElementById('lib-grid');
+      if (!root || !grid) return false;
+      const now = [root.clientWidth, root.clientHeight, grid.clientWidth, getComputedStyle(grid).gridTemplateColumns,
+        root.scrollTop.toFixed(2)].join('|');
+      if (window.__chr192LayoutSample === now) window.__chr192LayoutStableFrames = (window.__chr192LayoutStableFrames || 0) + 1;
+      else { window.__chr192LayoutSample = now; window.__chr192LayoutStableFrames = 0; }
+      return window.__chr192LayoutStableFrames >= 3;
+    }, null, { timeout: 10000 });
     const roundTrip = await page.evaluate(() => {
       const root = document.getElementById('lib-main'), bounds = root.getBoundingClientRect();
       const card = [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].find(el => {
         const rect = el.getBoundingClientRect(); return rect.bottom > bounds.top && rect.top < bounds.bottom;
       });
+      const grid = document.getElementById('lib-grid');
       return { folder: document.querySelector('#lib-side .lib-tree-row.on')?.textContent.trim() || '',
-        anchor: card?.dataset.path || '', offset: card ? card.getBoundingClientRect().top - bounds.top : null };
+        anchor: card?.dataset.path || '', offset: card ? card.getBoundingClientRect().top - bounds.top : null,
+        scrollTop: root.scrollTop, mainWidth: bounds.width, mainHeight: bounds.height,
+        gridWidth: grid?.getBoundingClientRect().width, columns: grid ? getComputedStyle(grid).gridTemplateColumns : '' };
     });
     assert.match(roundTrip.folder, /Session/);
-    assert.equal(roundTrip.anchor, anchorBefore.path, `Gallery anchor identity changed: ${JSON.stringify({ anchorBefore, roundTrip })}`);
-    assert(Math.abs(roundTrip.offset - anchorBefore.offset) <= 2, `Gallery scroll anchor moved: ${JSON.stringify({ anchorBefore, roundTrip })}`);
+    assert.equal(roundTrip.anchor, anchorBefore.path, `Gallery anchor identity changed (${theme}, ${normalMotion ? 'no-preference' : 'reduced'}): ${JSON.stringify({ anchorBefore, roundTrip })}`);
+    assert(Math.abs(roundTrip.offset - anchorBefore.offset) <= 2, `Gallery scroll anchor moved (${theme}, ${normalMotion ? 'no-preference' : 'reduced'}): ${JSON.stringify({ anchorBefore, roundTrip })}`);
     const galleryJobs = await page.evaluate(() => ({
       visible: document.getElementById('sk2-act-jobs')?.getClientRects().length > 0,
       galleryHost: !!document.getElementById('sk2-act-jobs')?.closest('#lib-top-right'),
@@ -275,15 +325,22 @@ async function runTheme(theme) {
     assert.equal(jobCalls[1].args.expectedRecipeKeys[0].index, 0);
     assert(jobCalls[1].args.expectedRecipeKeys[0].recipeKey, 'resume dispatch carries the freshly resolved per-photo recipe key');
     assert.deepEqual(errors, [], `page errors: ${errors.join('; ')}`);
-    return { theme, source, rootPath: rootPath, folder: roundTrip.folder, anchor: roundTrip.anchor,
+    return { theme, motion: normalMotion ? 'no-preference' : 'reduced', source, rootPath: rootPath,
+      folder: roundTrip.folder, anchorBefore: anchorBefore.path, anchor: roundTrip.anchor,
       zoom: studioAfter.zoom, jobs: jobCalls.map(call => call.command), railItems: studioBefore.rail.length };
   } finally { await context.close(); }
 }
 
 try {
-  const dark = await runTheme('dark');
-  const light = await runTheme('light');
-  console.log(JSON.stringify({ result: 'PASS', viewport: '1366x768', browser: true, nativeDecode: false, dark, light }));
+  if (process.env.CULL_NAV_CASE === 'normal') {
+    const normalMotion = await runTheme('dark', { normalMotion: true });
+    console.log(JSON.stringify({ result: 'PASS', viewport: '1366x768', browser: true, nativeDecode: false, normalMotion }));
+  } else {
+    const dark = await runTheme('dark');
+    const light = await runTheme('light');
+    const normalMotion = await runTheme('dark', { normalMotion: true });
+    console.log(JSON.stringify({ result: 'PASS', viewport: '1366x768', browser: true, nativeDecode: false, dark, light, normalMotion }));
+  }
 } finally {
   await browser.close();
   await new Promise(resolve => server.close(resolve));

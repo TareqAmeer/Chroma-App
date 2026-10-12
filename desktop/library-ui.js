@@ -5032,6 +5032,9 @@
     };
   };
   async function openInEditor(path) {
+    if (state.open && state.expanded_view && !state.unified_view) {
+      rememberGalleryScrollPosition();
+    }
     rawPerf('open-click', path);
     // The keyboard cursor follows the LATEST requested open (not the one that finishes last):
     // a click/double-click/Enter/version open never moved it, so the next arrow key stepped from
@@ -5099,6 +5102,8 @@
   }
   window.chromasmithHdrCompanionDensify = hdrCompanionDensify;
   async function openInEditorInner(path) {
+    // Capture before save flushing or editor setup can change the Gallery layout.
+    if (state.open && state.expanded_view && !state.unified_view) rememberGalleryScrollPosition();
     const openT0 = performance.now();
     rawPerf('open-start', path);
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
@@ -6145,15 +6150,95 @@
   // back at the top of the grid. Keyed by folder path (not a single "last scroll") so hopping
   // between folders in the tree/recents doesn't clobber each folder's own position.
   const scrollByFolder = new Map();
+  // Studio's docked layout can clamp #lib-main while its width animates down, destroying the
+  // Gallery's useful position if we persist those synthetic scroll events as the same value.
+  // Keep a path+viewport-offset anchor for Gallery independently of docked browsing pixels.
+  const galleryScrollByFolder = new Map();
+  let galleryScrollRestoreToken = 0;
+  let galleryScrollTransitionPending = false;
+  let galleryScrollSnapshotLocked = false;
+  function captureGalleryScrollAnchor() {
+    const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+    if (!main || !gridEl) return null;
+    const top = main.getBoundingClientRect().top;
+    const cards = gridEl.querySelectorAll('.lib-card[data-path]');
+    let card = null;
+    for (const candidate of cards) {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.bottom > top) { card = candidate; break; }
+    }
+    return card ? { path: card.dataset.path, viewportOffset: card.getBoundingClientRect().top - top } : null;
+  }
+  function rememberGalleryScrollPosition() {
+    if (!state.currentFolder) return null;
+    if (galleryScrollSnapshotLocked) return galleryScrollByFolder.get(state.currentFolder) || null;
+    const anchor = captureGalleryScrollAnchor();
+    if (anchor) {
+      galleryScrollByFolder.set(state.currentFolder, anchor);
+      galleryScrollSnapshotLocked = true;
+      galleryScrollTransitionPending = true;
+    }
+    return anchor;
+  }
+  function restoreGalleryScrollAnchor(folder, token) {
+    const anchor = galleryScrollByFolder.get(folder);
+    if (!anchor || !anchor.path) return;
+    const afterLayout = () => {
+      if (token !== galleryScrollRestoreToken) return;
+      if (!state.open || !state.expanded_view) return;
+      if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
+      const layout = document.querySelector('.fx-layout');
+      const running = layout && layout.getAnimations ? layout.getAnimations({ subtree: false }).filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns') : [];
+      if (running.length) { Promise.allSettled(running.map(animation => animation.finished)).then(afterLayout); return; }
+      requestAnimationFrame(() => {
+        if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view) return;
+        if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
+        const latest = layout && layout.getAnimations ? layout.getAnimations({ subtree: false }).filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns') : [];
+        if (latest.length) { Promise.allSettled(latest.map(animation => animation.finished)).then(afterLayout); return; }
+        scrollLibraryToPath(anchor.path);
+        const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+        const card = gridEl && gridEl.querySelector(`.lib-card[data-path="${CSS.escape(anchor.path)}"]`);
+        if (main && card) {
+          main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.viewportOffset;
+          galleryScrollByFolder.set(folder, captureGalleryScrollAnchor() || anchor);
+        }
+        galleryScrollTransitionPending = false;
+      });
+    };
+    afterLayout();
+  }
   function wireScrollPersist() {
     const libMain = document.getElementById('lib-main');
     if (!libMain) return;
+    const cancelGalleryRestoreForInput = () => {
+      if (!galleryScrollTransitionPending || !state.open || !state.expanded_view) return;
+      galleryScrollTransitionPending = false;
+      galleryScrollRestoreToken++;
+    };
+    libMain.addEventListener('wheel', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('touchstart', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('pointerdown', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('dblclick', (event) => {
+      if (!state.open || !state.expanded_view || state.unified_view) return;
+      if (event.target.closest?.('.lib-card[data-path]')) {
+        rememberGalleryScrollPosition();
+      }
+    }, true);
+    libMain.addEventListener('keydown', (event) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) cancelGalleryRestoreForInput();
+    });
     let raf = 0;
     libMain.addEventListener('scroll', () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        if (state.currentFolder) scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+        if (state.currentFolder) {
+          scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+          if (state.open && state.expanded_view && !state.unified_view && !galleryScrollTransitionPending) {
+            const anchor = captureGalleryScrollAnchor();
+            if (anchor) galleryScrollByFolder.set(state.currentFolder, anchor);
+          }
+        }
       });
     }, { passive: true });
   }
@@ -10312,6 +10397,9 @@
   overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(!state.showInfo);
   function toggleExpandedView(force) {
     const goingFull = force !== undefined ? force : !state.expanded_view;
+    const leavingGallery = state.open && state.expanded_view && !goingFull;
+    const enteringGallery = state.open && goingFull && !state.expanded_view;
+    if (leavingGallery) rememberGalleryScrollPosition();
     // Full mode's sidebar (--lib-side-w, 150-420px, default 230) and the docked filmstrip
     // (--dock-w-user, 90-420px, default 120) are two independently-resizable widths — so
     // switching the Library/Develop tabs (full <-> docked) previously made the left column
@@ -10343,6 +10431,7 @@
       }
     }
     state.expanded_view = goingFull;
+    if (leavingGallery) galleryScrollSnapshotLocked = false;
     state.unified_view = false;
     document.body.classList.remove('lib-unified-view');
     localStorage.removeItem('chromasmith_lib_unified_view');
@@ -10358,7 +10447,20 @@
     // detection. Without it, #lib-grid kept whatever markup/columns it had from the mode you were
     // just in (often empty, if the grid never rendered while full-view was still loading), so the
     // docked filmstrip could read as "no photos in this folder" for a folder that plainly has some.
-    renderGrid();
+    const gridReady = renderGrid();
+    if (enteringGallery && state.currentFolder && galleryScrollByFolder.has(state.currentFolder)) {
+      galleryScrollTransitionPending = true;
+      const folder = state.currentFolder;
+      const token = ++galleryScrollRestoreToken;
+      Promise.resolve(gridReady).then(() => restoreGalleryScrollAnchor(folder, token)).catch(() => {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+      });
+    } else if (enteringGallery) {
+      galleryScrollRestoreToken++;
+      galleryScrollTransitionPending = false;
+    } else if (!state.expanded_view) {
+      galleryScrollRestoreToken++;
+    }
     renderBatchBar(); // CHR-118: bar is suppressed while docked; restore/remove it when the mode flips
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
@@ -16312,6 +16414,7 @@
   }
 
   async function toggleLibrary(opts) {
+    if (state.open && state.expanded_view) rememberGalleryScrollPosition();
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
     document.body.classList.toggle('lib-docked', state.open);

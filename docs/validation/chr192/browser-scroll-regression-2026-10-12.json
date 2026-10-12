@@ -1,0 +1,23 @@
+{
+  "issue": "CHR-192",
+  "baselineCommit": "f38f39cd710d043e64e83ecf4045ee142f3fd7e9",
+  "baselineSourceSha256": "78ceecfb08fe09d438abb76ca465e439613013a08d1d8c9264385d2618c7a3fa",
+  "baselineResult": "FAIL",
+  "baselineBefore": {
+    "anchor": "chart-036.png",
+    "offset": -104.89,
+    "scrollTop": 1162
+  },
+  "baselineAfter": {
+    "anchor": "chart-008.png",
+    "offset": -149.89,
+    "scrollTop": 479
+  },
+  "fixedSourceSha256": "37d731dc186fbac51107b2a20ecf1c6bf70750c959e51b948d3775f288b614c4",
+  "fixedScenariosPassed": [
+    "dark reduced motion",
+    "light reduced motion",
+    "dark normal motion"
+  ],
+  "method": "Fully visible target centered before baseline; pointerdown position must equal baseline; stable geometry before final assertion. Browser mocks only, native verification recorded separately."
+}
