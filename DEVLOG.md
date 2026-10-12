@@ -1918,3 +1918,36 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published implementation `f6c70342`, native evidence/crop `aed6691c2e61f6e287dcdd1b6cae1460221dc434`; non-force push and exact remote hash verified. Integration preserved shared-build diagnostics `080262aa`; range-diff confirmed all task patches unchanged.
 - Integrated RAW faces/preparation/journal tests pass; native 16 regressions and actual RAW crop verification pass. Full UI gates 21/33 retain 12 known failures/879 existing findings. Linear is In Review with checked slice evidence and open portrait/lens/AI/quality criteria. No new checkout, dependency/model install or RAW copy was created.
+
+### CHR-192 — navigation and persistent Jobs disclosure (12 October 2026)
+
+- Removed the duplicate photo-caption/zoom clone and retained the canonical Studio header; named icon rail controls expose Exposure & Tone, Crop, Masks and Versions & History. Updated chromasmith-22.html and desktop/library-ui.js.
+- Moved the original activity/thumbnail widgets into one Jobs disclosure shared between Gallery and Studio. Idle history recovery actions now bind correctly; Enter/Space respect focused controls, Escape returns focus and click-away closes the disclosure.
+- Browser navigation in both themes at 1366x768 passes with folder/scroll/source/225% zoom preserved; job-history 12/12, RAW preparation, RAW face-review and syntax/content checks pass. Added test/library_navigation.mjs and scripts/verify-library-navigation-native.mjs; full UI gates and actual native navigation validation are pending in the candidate build.
+
+### CHR-192 — Gallery transition regression and final validation candidate
+
+- Native normal-motion testing exposed synthetic scroller clamping during Studio layout changes. Added separate Gallery anchors, early photo-open snapshots, guarded restoration after layout transitions, and cancellation on user navigation in desktop/library-ui.js.
+- The focused navigation gate now covers dark/light reduced motion and dark normal motion; target photos are centered before measuring the real click-start anchor, and assertions wait for stable geometry. This corrects an automation auto-scroll artifact in earlier diagnostics while retaining strict source/anchor/offset checks.
+- Added isolated native test catalog/profile guards and reusable WebView profile guidance in AGENTS.md. Full first UI run retained 21/33 passes, 12 known failures and 879 unchanged inventory findings; final native evidence and post-fix gate results follow.
+
+### CHR-192 — native visual header follow-up
+
+- Actual native PNG navigation passed on 1.1012P with exact Session/chart-036 anchor and 1167.33px scroll restoration, source chart-050 and 225% zoom, both themes and Jobs keyboard/focus behavior.
+- Screenshot review found leftover caption-era unbounded title CSS overlapping the scope/zoom toolbar. Bounded the canonical title/status column, corrected zoom folding selectors and shortened visible scope copy while retaining the complete explanation in its title/ARIA description; chromasmith-22.html. Final visual verification follows this candidate.
+
+### CHR-192 — native timing and laptop header candidate
+
+- Expanded Gallery restoration to wait for the Library overlay width transition as well as the layout grid, then verify stable geometry before restoring the anchor. Strict normal-motion browser trace restores chart-036 at -104.89px and scrollTop 1162; temporary instrumentation was removed.
+- Native Q testing exposed these timing and header-folding limits; retained failed evidence rather than claiming a pass. The laptop header now uses the existing compact wordmark at widths below 1400px, keeping the logo and Gallery/Studio switch to free space for photo identity and zoom.
+
+### CHR-192 — measured title readability and async completion gates
+
+- The native title column accepted 40.9px and left only 8.9px after padding. The fit calculation now requires measured filename/availability width and folds optional controls before hiding identity; one-photo scope copy is compact, with complete scope/export semantics in title and ARIA text.
+- Navigation gates wait for the expected path and viewport offset before checking stability, and require readable filename bounds, accessible zoom, and no title/scope/zoom/Jobs overlap. A short fully visible filename is measured against its natural text width; the former clipped/hidden title still fails. Normal-motion focused browser gate passes after this correction.
+
+### CHR-192 — final native S verification
+
+- Actual isolated Tauri/WebView2 verification PASS on source 010635e70ac44197e1ba800db08c886205f8c21e / BUILD 1.1012S: 72 hardlinked ordinary PNG paths; Gallery restores Session, chart-036, -117.354px offset and 1167.333px scroll, with chart-050 at 225% zoom preserved. Both themes and Enter/Space/Escape/click-away Jobs behavior pass; no RAW decoding is part of this navigation gate.
+- Native filename renders fully at 55.5px against 56px natural width; zoom is visible at 80x24px and scope/Jobs bounds do not overlap. Screenshot visually reviewed. Browser dark/light reduced motion and dark normal motion all pass; history recovery dispatch is exercised. Evidence: docs/validation/chr192/library-navigation-native-2026-10-12-S.json and PNG. Earlier failed harness/header attempts are preserved in the shared runtime, not reported as final success.
+- Backend source tree matches compiled 48cb8c30 and current main; no native rebuild, RAW copy, model/dependency installation or new checkout was needed. Previous full UI run on R retained 21/33 passes, the same 12 known failed gates and 879 inventory findings; final integrated gates follow. Native test process was closed by verified PID/path.

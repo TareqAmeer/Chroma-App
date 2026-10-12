@@ -867,9 +867,9 @@ body.diag-on .diag-only{display:flex}
 #db-title-status{color:var(--mut);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Persistent scope indicator: compact enough to live beside undo while leaving its complete
    scope explanation available to sighted users and assistive technology. */
-.fx-batch-scope{display:inline-flex;align-items:center;min-width:0;max-width:min(320px,24vw);flex:0 1 320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.fx-batch-scope{display:inline-flex;align-items:center;min-width:0;max-width:min(240px,20vw);flex:0 1 240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums;line-height:1.2;padding:4px 7px;border:1px solid var(--bdr);border-radius:var(--r-pill);background:var(--sur2)}
-@media(max-width:1200px){.fx-batch-scope{max-width:min(220px,22vw);flex-basis:min(220px,22vw)}}
+@media(max-width:1200px){.fx-batch-scope{max-width:min(200px,18vw);flex-basis:min(200px,18vw)}}
 /* Below this the bar has no room for a centre title at all — the tools matter more. */
 @media(max-width:1200px){#fx-deskbar-title{display:none}}
 #db-title-status.spin::before{content:'⟳';display:inline-block;animation:fxspin .8s linear infinite}
@@ -1439,11 +1439,12 @@ body.deskx.cs-page-other #fx-page-title .fx-page-back{background:none;border:0;c
 body.deskx.cs-page-other #fx-page-title .fx-page-back:hover{color:var(--k-color-ink)}
 body.deskx.cs-page-other #fx-deskbar #fx-deskbar-left,body.sk2.deskx.cs-page-other #fx-deskbar #fx-deskbar-title,body.deskx.cs-page-other #fx-deskbar #fx-deskbar-right>:not(#fx-settings),body.deskx.cs-page-other #fx-deskbar #btn-fx-fullres,body.deskx.cs-page-other #fx-deskbar #btn-before{display:none!important}
 body.deskx.cs-page-other #cs-tog-studio.on{opacity:.55}
-/* Narrow windows: the wordmark text goes, the logo mark stays; the brand-width fit() re-measures it. */
-@media(max-width:1100px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
+/* At laptop widths, keep the logo mark and Gallery/Studio switch but drop the wordmark; fit() then
+   measures the compact brand so the deskbar can retain the photo identity and zoom controls. */
+@media(max-width:1400px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
 body.sk2.deskx.fx-deskbar-fold2 #fx-deskbar #fx-deskbar-title #db-title-name{display:none!important}
-body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-title #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
-body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-title #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
+body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
+body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
 /* Last fold (below the ~760px design floor): drop the flag/favourite buttons rather than let them run into All FX — P/X/F keys and the filmstrip still set them. */
 body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-red,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-green,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-favorite{display:none!important}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
@@ -1737,8 +1738,6 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
 body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
-/* Room under the photo for the caption strip, so a photo (and the reveal frame that predicts it) never touches it. */
-body.deskx.sk2 .fx-canvas-wrap{padding-bottom:48px}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -2639,22 +2638,6 @@ body.sk2 #lib-overlay .lib-card:hover:not(.sel):not(.multi)::after{border-width:
 body.sk2 #lib-overlay .lib-btn{text-transform:none!important;letter-spacing:0!important;font-weight:400!important;border-color:transparent!important;box-shadow:none!important;background:transparent!important;border-radius:0!important;color:var(--k-color-ink)}
 body.sk2 #lib-overlay .lib-btn:hover{color:var(--k-color-ink);box-shadow:inset 0 -1px 0 var(--k-color-ink)!important}
 body.sk2 #lib-overlay .lib-btn.on,body.sk2 #lib-overlay .lib-btn[aria-pressed=true]{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 -2px 0 var(--k-color-ink)!important}
-/* Photo caption (gallery-wall label) under the photo. */
-body.sk2 #sk2-cap-copy{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;margin:0;white-space:nowrap;overflow:hidden;width:auto;justify-content:flex-start;pointer-events:none}
-body.sk2 #sk2-cap-copy .cp-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
-body.sk2 #sk2-cap-copy>:not(.cp-name):not(.cp-sl){flex-shrink:0}
-body.sk2 #sk2-cap-copy{container-type:inline-size}
-@container (max-width:600px){body.sk2 #sk2-cap-copy .cp-sl{display:none}}
-@container (max-width:560px){body.sk2 #sk2-cap-copy .cp-status{display:none}}
-@container (max-width:480px){body.sk2 #sk2-cap-copy{gap:4px}body.sk2 #sk2-cap-copy .cp-zc{gap:2px}}
-body.sk2 #sk2-cap-copy .cp-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
-body.sk2 #sk2-cap-copy .cp-sl{width:80px;flex:0 0 80px;order:0;margin-top:0}
-body.sk2 #sk2-cap-copy .cp-zb{padding:0!important;min-width:28px!important}
-body.sk2 #sk2-cap-copy .cp-loupe,body.sk2 #sk2-cap-copy .cp-pct{display:none!important}
-body.sk2 #sk2-cap-copy .cp-zc{margin-left:auto;pointer-events:auto;gap:6px}
-body.sk2 #fx-deskbar-title.sk2-cap{position:absolute;z-index:3;display:flex;flex-direction:row;align-items:baseline;gap:12px;transform:none;margin:0;pointer-events:none;white-space:nowrap;overflow:hidden}
-body.sk2 #fx-deskbar-title.sk2-cap #db-title-name{font-size:12px;color:var(--k-color-ink);font-weight:400;overflow:hidden;text-overflow:ellipsis}
-body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2 #ff-borders .sk2-layers{margin:2px 0 12px}
 body.sk2 #ff-borders .fx-row[hidden]{display:none!important}
 body.sk2 #ff-borders[data-sk2-layer=b1] [data-layer=b2],body.sk2 #ff-borders[data-sk2-layer=b2] [data-layer=b1]{display:none!important}
@@ -2700,11 +2683,6 @@ body.sk2 .cs-tour-step{position:relative;padding-left:48px;margin-bottom:22px!im
 body.sk2 .cs-tour-step::before{content:attr(data-n);position:absolute;left:0;top:-4px;font-size:30px;letter-spacing:-.04em;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2 .cs-tour-k{display:none}
 body.sk2 .cs-tour-step>div:nth-child(2){font-size:15px!important;font-weight:500!important}
-/* 7 · Photo controls (zoom, reject, pick, favourite) travel with the caption under the photo. */
-body.sk2 #fx-deskbar-title.sk2-cap{width:auto;justify-content:flex-start}
-body.sk2 #fx-deskbar-title.sk2-cap #fx-zoom-ctrl{margin-left:auto;pointer-events:auto;gap:6px}
-body.sk2 #fx-deskbar-title.sk2-cap{pointer-events:none}
-body.sk2 #fx-deskbar-title.sk2-cap>*{pointer-events:auto}
 /* 8 · Gallery/studio slab no taller than the words. */
 body.sk2 #cs-brand-tog{--k-two-tone-slab-a-top:4px;--k-two-tone-slab-a-bottom:0px;--k-two-tone-slab-b-top:9px;--k-two-tone-slab-b-bottom:3px}
 /* 9 · Search: sentence case, underline only. */
@@ -2932,7 +2910,6 @@ body.sk2 .fx-toggle::before{content:'';position:absolute;inset:-7px 0 -7px -4px}
 /* Loading: while a photo opens the empty-state prompt steps aside. */
 body.sk2.sk2-opening #fx-no-img>:not(.sk2-open){visibility:hidden}
 body.sk2 .sk2-open{display:none}
-body.sk2 #fx-deskbar-title.sk2-cap #db-title-name,body.sk2 #fx-deskbar-title.sk2-cap #db-title-status{flex:none;max-width:none;overflow:visible}
 body.sk2.sk2-opening #fx-photo-work-status{display:none!important}
 body.sk2.sk2-opening .sk2-open{display:flex;flex-direction:column;align-items:center;gap:10px;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:var(--sk-t4);color:var(--k-color-muted);visibility:visible}
 body.sk2 .sk2-open i{display:block;width:160px;height:1px;background:var(--bdr);position:relative;overflow:hidden}
@@ -2951,19 +2928,12 @@ body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-
 body.sk2.sk2-native .fx-ctrl[data-fxsec="image"]{display:none!important}
 body.sk2.sk2-native #sk2-sub button[data-k="image"]{display:none!important}
 body.sk2.sk2-native #sk2-sub:has(button[data-k="image"]):not(:has(button:nth-child(3))){display:none!important}
-/* Photo caption: fades out the moment the photo moves, fades back in once it settles —
-   under the photo when there is room, otherwise as one line in the top bar. */
-body.sk2 #fx-deskbar-title{transition:opacity .16s var(--k-motion-easing)}
-body.sk2 #fx-deskbar-title.sk2-cap-hide{opacity:0!important;transition:none}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:14px;max-width:none!important;overflow:visible!important;white-space:nowrap}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{flex:none}
-/* The title now carries zoom + flags, so the bar's middle column must size to it (a fixed 240px
-   track let it spill over All FX). When space runs short the dimensions go first. */
-body.sk2.deskx #fx-deskbar{grid-template-columns:minmax(max-content,1fr) auto minmax(max-content,1fr)!important}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title #fx-zoom-ctrl{display:flex!important;flex-wrap:nowrap;align-items:center;gap:6px;margin-left:10px}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;align-items:center;gap:1px;max-width:100%!important;min-width:0;overflow:hidden!important;white-space:nowrap}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{min-width:0;max-width:100%;flex-shrink:1}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!important}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{max-width:100%;font-size:12px;color:var(--k-color-ink)}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{max-width:100%;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #cs-source-render-state{max-width:100%;margin-left:0}
 /* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
@@ -3132,10 +3102,10 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
 // CHR-196: ONE visible name per tool, used by the jump strip, the section headers, the rail
 // section list and the command palette (all four used to drift: Basic/Tone, Sharpen/
 // Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
-const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Light',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
+const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Exposure & Tone',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
   pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
   retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Transform',borders:'Borders',canvas:'Canvas',
-  versions:'Versions',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
+  versions:'Versions & History',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
 // Everyday words and old names that should find each tool in the command palette (⌘K).
 const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
   looks:'presets film luts look',curves:'tone curve',hsl:'hsl color mixer hue saturation luminance',pointcolor:'point color',wheels:'color wheels grading lift gamma gain',
@@ -3344,58 +3314,6 @@ function sk2ExportWire(){
   if(typeof buildToolRail==='function')buildToolRail();
 }
 </script>
-<script>/* Swiss v2 — gallery-wall label: the photo's name + size sit in a small caption under the photo
-   when there is room below it; when the photo fills the view (or the caption is switched off in
-   View), the same element goes back to the top bar. Moved, never duplicated (keeps its ids/status). */
-(function(){
-  const K='cs_sk2_caption';
-  window.sk2CaptionOn=()=>{try{return localStorage.getItem(K)!=='0'}catch(e){return true}};
-  window.sk2CaptionToggle=()=>{try{localStorage.setItem(K,sk2CaptionOn()?'0':'1')}catch(e){}sk2Caption();};
-  let home=null,raf=0,settle=0,lastKey='';
-  // The caption hides the instant the photo moves (zoom/pan/resize) and comes back, faded in, once
-  // it has been still for a moment — so it never slides across the photo or jumps visibly.
-  window.sk2Caption=function(){
-    const t=document.getElementById('fx-deskbar-title'),cv=document.getElementById('fx-canvas');
-    const r=cv&&cv.getBoundingClientRect(),key=r?[r.left|0,r.top|0,r.width|0,r.height|0].join():'';
-    // The caption has one fixed home (bottom of the preview), so there is nothing to hide while
-    // the photo pans/zooms — the old hide-then-replace made it flicker on every drag.
-    lastKey=key;place();};
-  function place(){cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{
-    const t=document.getElementById('fx-deskbar-title'),wrap=document.getElementById('fx-wrap');if(!t||!wrap)return;
-    if(!home)home={p:t.parentNode,n:t.nextSibling};
-    const zc=document.getElementById('fx-zoom-ctrl');if(zc&&zc.parentNode!==t&&document.body.classList.contains('deskx'))t.appendChild(zc); // 7: photo controls ride with the caption
-    const bd=document.getElementById('fx-canvas-bd'),cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
-    const deskx=document.body.classList.contains('deskx');
-    const r=cv&&cv.getBoundingClientRect(),w=wrap.getBoundingClientRect();
-    const zoomed=typeof fxZoom!=="undefined"&&(Math.abs(fxZoom-FX_FIT)>1e-3||fxPanX||fxPanY);
-    const fits=!zoomed&&r&&r.left>=w.left-1&&r.right<=w.right+1&&r.top>=w.top-1;
-    // The real caption always lives in the top bar. While the photo is at fit, an id-free live copy
-    // also sits under it; zooming or panning removes the copy and only the top bar keeps it.
-    if(t.classList.contains('sk2-cap')||t.parentNode===wrap){t.classList.remove('sk2-cap');t.style.left=t.style.top=t.style.maxWidth=t.style.width='';home.p.insertBefore(t,home.n&&home.n.parentNode===home.p?home.n:null);}
-    let cap=document.getElementById('sk2-cap-copy');
-    if(deskx&&sk2CaptionOn()&&!zoomed){
-      if(!cap){cap=document.createElement('div');cap.id='sk2-cap-copy';cap.className='sk2-cap';wrap.appendChild(cap);
-        new MutationObserver(()=>place()).observe(t,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','style','disabled','value','title']});}
-      const cl0=t.cloneNode(true);cl0.removeAttribute('id');[['db-title-name','cp-name'],['db-title-status','cp-status'],['fx-zoom-ctrl','cp-zc'],['fx-zoom-slider','cp-sl'],['fx-zoom-pct','cp-pct'],['btn-loupe','cp-loupe'],['btn-zoom-out','cp-zb'],['btn-zoom-in','cp-zb']].forEach(([i,c])=>{const n=cl0.querySelector('#'+i);if(n)n.classList.add(c);});cl0.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
-      cl0.style.cssText='';cl0.classList.remove('sk2-cap');
-      const html=cl0.innerHTML;if(cap._h!==html){cap.innerHTML=html;cap._h=html;}
-      const os=t.querySelector('#fx-zoom-slider'),cs=cap.querySelector('input[type=range]');if(os&&cs)cs.value=os.value;
-      const zc0=t.querySelector('#fx-zoom-ctrl'),zc1=cap.querySelector('.cp-zc');if(zc0&&zc1)zc1.style.display=zc0.style.display;
-      cap.style.display='flex';
-      const cw=Math.min(w.width-32,Math.max(620,r?r.width:0)),cl=(w.width-cw)/2;
-      cap.style.left=cl+'px';cap.style.width=cw+'px';
-      // CHR-192: sit just under the photo itself, not pinned to the bottom of the canvas area.
-      cap.style.top=Math.min(w.height-34,r?Math.round(r.bottom-w.top+8):w.height-34)+'px';
-      if(cw<240)cap.style.display='none'; // too narrow for flags + zoom: the top-bar caption is the only copy
-    }else if(cap){cap.style.display='none';}
-  });};
-  function wire(){const cv=document.getElementById('fx-canvas'),wrap=document.getElementById('fx-wrap');if(!cv||!wrap)return;
-    const ro=new ResizeObserver(()=>sk2Caption());ro.observe(cv);ro.observe(wrap);
-    const bd=document.getElementById('fx-canvas-bd');if(bd)ro.observe(bd);
-    new MutationObserver(()=>sk2Caption()).observe(cv,{attributes:true,attributeFilter:['style','width','height']});
-    window.addEventListener('resize',()=>sk2Caption());sk2Caption();}
-  if(document.readyState!=='loading')wire();else document.addEventListener('DOMContentLoaded',wire);
-})();</script>
 <script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
 (function(){
 function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
@@ -3461,8 +3379,6 @@ ready(function(){
     new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
     seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
   document.querySelectorAll('.fx-panel .seg').forEach(mirror);
-  // Zoom/pan: re-place the photo caption (fades out, lands in the top bar while zoomed).
-  var az=window._applyZoom;if(typeof az==='function'&&window.sk2Caption){window._applyZoom=function(){var r=az.apply(this,arguments);sk2Caption();return r};}
   // Light stage: a folded histogram above Basic; drawn only while it is open.
   var adj=document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
   if(adj&&!document.getElementById('sk2-hist')){var d=document.createElement('details');d.id='sk2-hist';d.className='sk2-more sk2-hist';
@@ -3956,7 +3872,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
       </div>
       <div style="position:relative;display:inline-flex" id="db-history-wrap">
-        <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit &amp; export history for this photo" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
+        <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit history and exported versions" aria-label="Edit history and exported versions" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
       </div>
       <span class="fx-batch-scope" id="fx-batch-scope" role="status" aria-live="polite" aria-atomic="true" style="display:none"></span>
     </div>
@@ -4960,7 +4876,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:none"></div>
           </div>
           <div style="position:relative;display:inline-flex">
-            <button class="db-btn" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history timeline"><span class="fx-db-ic" id="ic-timeline"></span></button>
+            <button class="db-btn" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history and exported versions" aria-label="Edit history and exported versions"><span class="fx-db-ic" id="ic-timeline"></span></button>
             <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:var(--z-dropdown);box-shadow:none"></div>
           </div>
           <button class="db-btn" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay"><span class="fx-db-ic" id="ic-scope"></span></button>
@@ -7340,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012P';
+const BUILD='1.1012Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14913,7 +14829,9 @@ function csShortcutSet(id,binding){const def=csShortcutDefs.find(x=>x.id===id);i
   let all={};try{all=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');}catch(_){}if(!binding||csShortcutSameBinding(binding,def.defaultBinding))delete all[id];else all[id]=binding;localStorage.setItem(CS_SHORTCUTS_KEY,JSON.stringify(all));}
 function csShortcutRegister(id,handler){if(csShortcutDefs.some(x=>x.id===id)&&typeof handler==='function')csShortcutHandlers[id]=handler;}
 function csColorLabelsEnabled(){return typeof window.chromasmithColorLabelsEnabled==='function'?window.chromasmithColorLabelsEnabled():localStorage.getItem('chromasmith_color_labels_enabled')!=='0';}
-function csShortcutCapture(e){if(window.__csShortcutCapturing)return;if(window.MobileUI&&window.MobileUI.dialog)return;const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;if(e.isComposing||e.key==='Process')return;const singleDisabled=localStorage.getItem(CS_SHORTCUTS_PREF)==='1',libraryOpen=!!(window.chromasmithLibraryIsOpen&&window.chromasmithLibraryIsOpen()),libraryFull=libraryOpen&&!!(document.getElementById('lib-overlay')&&document.getElementById('lib-overlay').classList.contains('full')),contextActive=a=>a.contexts.some(c=>c==='editor'&&!libraryFull||c==='library'&&libraryOpen);for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!csShortcutMatch(e,csShortcutBinding(a.id)))continue;const b=csShortcutParse(csShortcutBinding(a.id));if(singleDisabled&&!b.meta&&!b.ctrl&&!b.alt)continue;if(!contextActive(a))continue;let result;try{result=csShortcutHandlers[a.id](e);}catch(err){console.error('shortcut '+a.id,err);}if(result===false)continue;e.preventDefault();e.stopImmediatePropagation();return;}for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!contextActive(a))continue;if(a.defaultBinding!==csShortcutBinding(a.id)&&csShortcutMatch(e,a.defaultBinding)){e.preventDefault();e.stopImmediatePropagation();return;}}}
+function csNativeActivationKey(e){return(e.key==='Enter'||e.key===' ')&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey;}
+function csNativeActivationTarget(target){const el=target&&target.nodeType===1?target:(target&&target.parentElement);return!!(el&&el.closest&&el.closest('button,a[href],input,textarea,select,summary,label,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="switch"],[role="tab"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'));}
+function csShortcutCapture(e){if(window.__csShortcutCapturing)return;if(window.MobileUI&&window.MobileUI.dialog)return;const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;if(csNativeActivationKey(e)&&csNativeActivationTarget(t))return;if(e.isComposing||e.key==='Process')return;const singleDisabled=localStorage.getItem(CS_SHORTCUTS_PREF)==='1',libraryOpen=!!(window.chromasmithLibraryIsOpen&&window.chromasmithLibraryIsOpen()),libraryFull=libraryOpen&&!!(document.getElementById('lib-overlay')&&document.getElementById('lib-overlay').classList.contains('full')),contextActive=a=>a.contexts.some(c=>c==='editor'&&!libraryFull||c==='library'&&libraryOpen);for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!csShortcutMatch(e,csShortcutBinding(a.id)))continue;const b=csShortcutParse(csShortcutBinding(a.id));if(singleDisabled&&!b.meta&&!b.ctrl&&!b.alt)continue;if(!contextActive(a))continue;let result;try{result=csShortcutHandlers[a.id](e);}catch(err){console.error('shortcut '+a.id,err);}if(result===false)continue;e.preventDefault();e.stopImmediatePropagation();return;}for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!contextActive(a))continue;if(a.defaultBinding!==csShortcutBinding(a.id)&&csShortcutMatch(e,a.defaultBinding)){e.preventDefault();e.stopImmediatePropagation();return;}}}
 const csShortcutHeldActive=new Set();
 function csShortcutHeldCapture(e,phase){
   const ending=phase==='end';
@@ -15442,15 +15360,19 @@ function appHSync(){
 (function(){
   const bar=document.getElementById('fx-deskbar');
   if(!bar)return;
-  // Fold by real fit, not a fixed width: the title now carries zoom + flags, so fold one step at a
-  // time (cheapest first) until the three clusters no longer touch.
-  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-fold2','fx-deskbar-tight2','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold5'];
+  // Fold by real fit, not a fixed width: keep the photo identity readable while the zoom controls
+  // remain in the right tools cluster; fold optional controls one step at a time until they fit.
+  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-tight2','fx-deskbar-fold5','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold2'];
   const fits=()=>{const l=document.getElementById('fx-deskbar-left'),t=document.getElementById('fx-deskbar-title'),r=document.getElementById('fx-deskbar-right');
     if(!l||!t||!r||!t.getClientRects().length)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
     // the title's children can spill past its own box (nowrap flex), so measure their real extent too
     let lo=b.left,hi=b.right;for(const k of t.children){const q=k.getBoundingClientRect();if(q.width>0){lo=Math.min(lo,q.left);hi=Math.max(hi,q.right);}}
     b.left=lo;b.right=hi;
-    return a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
+    const name=t.querySelector('#db-title-name'),availability=t.querySelector('#cs-source-render-state');
+    const needed=Math.max(name&&!name.hidden?Math.min(200,name.scrollWidth):0,availability&&!availability.hidden?Math.min(160,availability.scrollWidth):0);
+    const ts=getComputedStyle(t),innerWidth=t.clientWidth-(parseFloat(ts.paddingLeft)||0)-(parseFloat(ts.paddingRight)||0);
+    const readable=!needed||innerWidth>=needed;
+    return readable&&a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
   let busy=false;
   const sync=()=>{
     if(busy)return;const w=bar.offsetWidth;if(!w)return;busy=true;
@@ -25772,7 +25694,7 @@ function syncBatchScopeStatus(){
   const scope=count===1||SEC_ALWAYS_ONE.includes(section)?'this photo only':perPhoto?'this photo (override)':`all ${count} open photos`;
   const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
   const sectionTarget=count>1&&perPhoto?'this photo only':count>1?`all ${count} open photos`:'this photo only';
-  const visible=count>1?`Photo ${index} of ${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Single photo · ${sectionName} → ${scope} · Export ${exportLabel}`;
+  const visible=count>1?`Photo ${index}/${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Photo 1 · ${sectionName}`;
   const detail=`Photo ${index} of ${count}. ${sectionName} affects ${sectionTarget}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared value':''}. Basic adjustments ${item&&item.adjustOverride?'override the shared value for this photo':'follow the shared batch value unless overridden per photo'}. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}${fxExportScope==='current'?' only':' open photos'}.`;
   if(el.textContent!==visible)el.textContent=visible;
   if(el.title!==detail)el.title=detail;
@@ -28467,7 +28389,6 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
   if(window.sk2HistPinned)h+=`<button class="fx-ovf-item${sk2HistPinned()?' on':''}" onclick="sk2HistPinToggle();this.classList.toggle('on',sk2HistPinned())"><span>Pin histogram</span>${chk}</button>`;
-  if(window.sk2CaptionOn)h+=`<button class="fx-ovf-item${sk2CaptionOn()?' on':''}" onclick="sk2CaptionToggle();this.classList.toggle('on',sk2CaptionOn())"><span>Caption under photo</span>${chk}</button>`;
   // Reveal lab is a tuning tool: only offered when asked for (?reveallab=1 or localStorage cs_reveal_lab=1).
   if(typeof window.chromasmithRevealLab==='function'&&(/[?&]reveallab=1/.test(location.search)||(()=>{try{return localStorage.getItem('cs_reveal_lab')==='1'}catch(e){return false}})()))h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
   h+='<div class="fx-ovf-sep"></div>';
@@ -29422,6 +29343,7 @@ function buildToolRail(){        // desktop vertical labelled rail
     }
     const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=bKey;
     b.title=bLb;
+    b.setAttribute('aria-label',bLb);
     b.innerHTML=`<span class="fx-rail-ic">${icon(bIcon,22)}</span><span class="fx-rail-lb" data-ab="${RAIL_CODE[bKey]||bLb.slice(0,3).toUpperCase()}">${bLb}</span>`;
     b.onclick=()=>fxSection(bKey);
     rail.appendChild(b);
@@ -30605,6 +30527,7 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(inInput||e.metaKey||e.ctrlKey||e.altKey)return;
+  if(csNativeActivationKey(e)&&csNativeActivationTarget(e.target))return;
   if(!fxImages.length)return;
   // ── Video transport shortcuts (Shotcut/Kdenlive/Resolve convention). Only while the CURRENT
   // item is a video, so photo shortcuts (arrows = filmstrip nav, Space = compare) are unaffected.

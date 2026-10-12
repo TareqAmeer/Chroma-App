@@ -3039,6 +3039,61 @@
       ['lib-status-sel', 'lib-status-labels', 'lib-count'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) meta.appendChild(e); });
       title.append(left, meta);
     }
+    // Background progress belongs in the top-right status rail, but the rail wrapper itself is
+    // deliberately a DIV: the job-history control inside it is the only button. Keeping the
+    // original updater-owned nodes preserves their IDs/listeners, while the history popover can
+    // remain mounted (and keyboard-reachable) even after the active job has gone idle.
+    if (document.body.classList.contains('sk2') && top && !overlay.querySelector('#sk2-act')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'sk2-act';
+      wrap.style.cssText = 'display:inline-flex;position:relative;align-items:center;gap:8px;max-width:360px;min-width:0;flex:0 1 auto';
+      const live = document.createElement('span');
+      live.className = 'sk2-act-body';
+      live.style.cssText = 'display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:240px';
+      const dot = document.createElement('span');
+      dot.className = 'sk2-act-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      dot.hidden = true;
+      const jobs = document.createElement('button');
+      jobs.id = 'sk2-act-jobs';
+      jobs.type = 'button';
+      jobs.className = 'lib-btn';
+      jobs.textContent = 'Jobs';
+      jobs.title = 'Recent background jobs';
+      jobs.setAttribute('aria-label', 'Recent background jobs');
+      jobs.setAttribute('aria-expanded', 'false');
+      jobs.setAttribute('aria-controls', 'sk2-act-pop');
+      const pop = document.createElement('div');
+      pop.id = 'sk2-act-pop';
+      pop.hidden = true;
+      pop.setAttribute('role', 'region');
+      pop.setAttribute('aria-label', 'Recent background jobs');
+      pop.style.cssText = 'position:absolute;top:calc(100% + 6px);right:0;z-index:9999;width:min(420px,calc(100vw - 16px));max-height:min(62vh,520px);overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;box-shadow:var(--lift-2);';
+      const thumbProgress = overlay.querySelector('#lib-thumb-progress');
+      const activityEl = overlay.querySelector('#lib-activity');
+      if (thumbProgress) live.appendChild(thumbProgress);
+      if (activityEl) live.appendChild(activityEl);
+      wrap.append(dot, live, jobs, pop);
+      top.appendChild(wrap);
+      jobs.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const open = pop.hidden;
+        compactJobsOpen = open;
+        activity.expanded = open;
+        pop.hidden = !open;
+        jobs.setAttribute('aria-expanded', String(open));
+        wrap.classList.toggle('open', open);
+        renderActivity();
+      };
+      wrap.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !pop.hidden) {
+          compactJobsOpen = false;
+          activity.expanded = false;
+          pop.hidden = true; jobs.setAttribute('aria-expanded', 'false'); wrap.classList.remove('open'); jobs.focus();
+          e.stopPropagation();
+        }
+      });
+    }
     // 12: housekeeping rows (Library folders…, Free up space…, …) fold behind one "Manage" row.
     const mg = () => {
       const first = overlay.querySelector('.sk2-manage');
@@ -3050,10 +3105,8 @@
     new MutationObserver(mg).observe(overlay, { childList: true, subtree: true }); mg();
     // (The docked filmstrip's photo counter was removed — it repeated the total and never said
     // which photo was open.)
-    // Background-work progress (#lib-activity, #lib-thumb-progress) stays in the #lib-bottom
-    // status bar. It used to be moved into a top-bar #sk2-act button that showed/hid as jobs
-    // ticked; being a <button> inside #lib-top, every appearance changed syncTopOverflow()'s
-    // collision measurement and flipped the bar between full and compact mid-session.
+    // Under Swiss v2, #lib-activity and #lib-thumb-progress live in the stable-width top-right
+    // activity wrapper above; the wrapper does not appear/disappear with job transitions.
   })();
   // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
   // body-level overlay — see the big comment above the style block. .fx-layout already exists
@@ -4979,6 +5032,9 @@
     };
   };
   async function openInEditor(path) {
+    if (state.open && state.expanded_view && !state.unified_view) {
+      rememberGalleryScrollPosition();
+    }
     rawPerf('open-click', path);
     // The keyboard cursor follows the LATEST requested open (not the one that finishes last):
     // a click/double-click/Enter/version open never moved it, so the next arrow key stepped from
@@ -5046,6 +5102,8 @@
   }
   window.chromasmithHdrCompanionDensify = hdrCompanionDensify;
   async function openInEditorInner(path) {
+    // Capture before save flushing or editor setup can change the Gallery layout.
+    if (state.open && state.expanded_view && !state.unified_view) rememberGalleryScrollPosition();
     const openT0 = performance.now();
     rawPerf('open-start', path);
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
@@ -6098,15 +6156,121 @@
   // back at the top of the grid. Keyed by folder path (not a single "last scroll") so hopping
   // between folders in the tree/recents doesn't clobber each folder's own position.
   const scrollByFolder = new Map();
+  // Studio's docked layout can clamp #lib-main while its width animates down, destroying the
+  // Gallery's useful position if we persist those synthetic scroll events as the same value.
+  // Keep a path+viewport-offset anchor for Gallery independently of docked browsing pixels.
+  const galleryScrollByFolder = new Map();
+  let galleryScrollRestoreToken = 0;
+  let galleryScrollTransitionPending = false;
+  let galleryScrollSnapshotLocked = false;
+  function captureGalleryScrollAnchor() {
+    const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+    if (!main || !gridEl) return null;
+    const top = main.getBoundingClientRect().top;
+    const cards = gridEl.querySelectorAll('.lib-card[data-path]');
+    let card = null;
+    for (const candidate of cards) {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.bottom > top) { card = candidate; break; }
+    }
+    return card ? { path: card.dataset.path, viewportOffset: card.getBoundingClientRect().top - top } : null;
+  }
+  function rememberGalleryScrollPosition() {
+    if (!state.currentFolder) return null;
+    if (galleryScrollSnapshotLocked) return galleryScrollByFolder.get(state.currentFolder) || null;
+    const anchor = captureGalleryScrollAnchor();
+    if (anchor) {
+      galleryScrollByFolder.set(state.currentFolder, anchor);
+      galleryScrollSnapshotLocked = true;
+      galleryScrollTransitionPending = true;
+    }
+    return anchor;
+  }
+  function restoreGalleryScrollAnchor(folder, token) {
+    const anchor = galleryScrollByFolder.get(folder);
+    if (!anchor || !anchor.path) return;
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const pendingLayoutAnimations = () => {
+      const layout = document.querySelector('.fx-layout');
+      const overlay = document.getElementById('lib-overlay');
+      const layoutAnimations = layout?.getAnimations?.({ subtree: false }) || [];
+      const overlayAnimations = overlay?.getAnimations?.({ subtree: false }) || [];
+      return [
+        ...layoutAnimations.filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns'),
+        ...overlayAnimations.filter(animation => animation.playState === 'running' && ['width', 'grid-template-columns', 'grid-template-rows'].includes(animation.transitionProperty)),
+      ];
+    };
+    const galleryGeometry = () => {
+      const main = document.getElementById('lib-main'), grid = document.getElementById('lib-grid'), overlay = document.getElementById('lib-overlay');
+      if (!main || !grid || !overlay) return '';
+      return [overlay.clientWidth, overlay.clientHeight, main.clientWidth, main.clientHeight, grid.clientWidth,
+        getComputedStyle(grid).gridTemplateColumns, main.scrollTop.toFixed(2)].join('|');
+    };
+    const waitForStableLayout = async () => {
+      let previous = '';
+      for (let frame = 0; frame < 12; frame++) {
+        if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return false;
+        const animations = pendingLayoutAnimations();
+        if (animations.length) await Promise.allSettled(animations.map(animation => animation.finished));
+        await nextFrame();
+        const current = galleryGeometry();
+        if (current && current === previous && pendingLayoutAnimations().length === 0) return true;
+        previous = current;
+      }
+      return false;
+    };
+    const afterLayout = async () => {
+      if (token !== galleryScrollRestoreToken) return;
+      if (!state.open || !state.expanded_view) return;
+      if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
+      if (!await waitForStableLayout()) {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+        return;
+      }
+      if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return;
+      scrollLibraryToPath(anchor.path);
+      const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+      const card = gridEl && gridEl.querySelector(`.lib-card[data-path="${CSS.escape(anchor.path)}"]`);
+      if (main && card) {
+        main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.viewportOffset;
+        galleryScrollByFolder.set(folder, captureGalleryScrollAnchor() || anchor);
+      }
+      galleryScrollTransitionPending = false;
+    };
+    afterLayout().catch(() => { if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false; });
+  }
   function wireScrollPersist() {
     const libMain = document.getElementById('lib-main');
     if (!libMain) return;
+    const cancelGalleryRestoreForInput = () => {
+      if (!galleryScrollTransitionPending || !state.open || !state.expanded_view) return;
+      galleryScrollTransitionPending = false;
+      galleryScrollRestoreToken++;
+    };
+    libMain.addEventListener('wheel', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('touchstart', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('pointerdown', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('dblclick', (event) => {
+      if (!state.open || !state.expanded_view || state.unified_view) return;
+      if (event.target.closest?.('.lib-card[data-path]')) {
+        rememberGalleryScrollPosition();
+      }
+    }, true);
+    libMain.addEventListener('keydown', (event) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) cancelGalleryRestoreForInput();
+    });
     let raf = 0;
     libMain.addEventListener('scroll', () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        if (state.currentFolder) scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+        if (state.currentFolder) {
+          scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+          if (state.open && state.expanded_view && !state.unified_view && !galleryScrollTransitionPending) {
+            const anchor = captureGalleryScrollAnchor();
+            if (anchor) galleryScrollByFolder.set(state.currentFolder, anchor);
+          }
+        }
       });
     }, { passive: true });
   }
@@ -10265,6 +10429,9 @@
   overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(!state.showInfo);
   function toggleExpandedView(force) {
     const goingFull = force !== undefined ? force : !state.expanded_view;
+    const leavingGallery = state.open && state.expanded_view && !goingFull;
+    const enteringGallery = state.open && goingFull && !state.expanded_view;
+    if (leavingGallery) rememberGalleryScrollPosition();
     // Full mode's sidebar (--lib-side-w, 150-420px, default 230) and the docked filmstrip
     // (--dock-w-user, 90-420px, default 120) are two independently-resizable widths — so
     // switching the Library/Develop tabs (full <-> docked) previously made the left column
@@ -10296,6 +10463,7 @@
       }
     }
     state.expanded_view = goingFull;
+    if (leavingGallery) galleryScrollSnapshotLocked = false;
     state.unified_view = false;
     document.body.classList.remove('lib-unified-view');
     localStorage.removeItem('chromasmith_lib_unified_view');
@@ -10305,12 +10473,26 @@
     syncDockPadding();
     syncListViewAvailability(); // HANDOVER §3.12 — docked-ness just changed, re-sync the list button
     syncSideTabs(); // the Library/Develop tab pair's active state was static — see that function
+    syncJobsHost(); // keep the one persistent Jobs control reachable in Gallery and Studio
     // renderGrid() itself detects docked vs. full (the `docked` const inside it) and re-lays-out
     // #lib-grid accordingly — but nothing forced a rebuild when THIS toggle is what changes that
     // detection. Without it, #lib-grid kept whatever markup/columns it had from the mode you were
     // just in (often empty, if the grid never rendered while full-view was still loading), so the
     // docked filmstrip could read as "no photos in this folder" for a folder that plainly has some.
-    renderGrid();
+    const gridReady = renderGrid();
+    if (enteringGallery && state.currentFolder && galleryScrollByFolder.has(state.currentFolder)) {
+      galleryScrollTransitionPending = true;
+      const folder = state.currentFolder;
+      const token = ++galleryScrollRestoreToken;
+      Promise.resolve(gridReady).then(() => restoreGalleryScrollAnchor(folder, token)).catch(() => {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+      });
+    } else if (enteringGallery) {
+      galleryScrollRestoreToken++;
+      galleryScrollTransitionPending = false;
+    } else if (!state.expanded_view) {
+      galleryScrollRestoreToken++;
+    }
     renderBatchBar(); // CHR-118: bar is suppressed while docked; restore/remove it when the mode flips
     requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
@@ -10325,6 +10507,37 @@
     const inDevelop = !state.expanded_view && !state.unified_view && !!state.openedPath;
     libTab.classList.toggle('on', !inDevelop);
     devTab.classList.toggle('on', inDevelop);
+  }
+  function syncJobsHost() {
+    const wrap = document.getElementById('sk2-act');
+    if (!wrap || !document.body.classList.contains('sk2')) return;
+    const gallery = state.open && state.expanded_view;
+    const galleryHost = overlay.querySelector('#lib-top-right');
+    const studioHost = document.getElementById('fx-deskbar-tools');
+    const host = gallery ? galleryHost : (studioHost || galleryHost);
+    if (!host || wrap.parentElement === host) return;
+    // A moved popover would otherwise keep its old viewport anchor. Close it during the
+    // transition, then mount the original node (and its existing listeners) at the new host.
+    compactJobsOpen = false;
+    activity.expanded = false;
+    const button = wrap.querySelector('#sk2-act-jobs');
+    if (button) {
+      button.className = gallery ? 'lib-btn' : 'fx-db';
+      button.setAttribute('aria-expanded', 'false');
+    }
+    wrap.classList.remove('open');
+    wrap.style.cssText = gallery
+      ? 'display:inline-flex;position:relative;align-items:center;gap:8px;max-width:360px;min-width:0;flex:0 1 auto'
+      : 'display:inline-flex;position:relative;align-items:center;gap:6px;max-width:min(360px,32vw);min-width:0;flex:0 1 auto;margin-left:8px';
+    const live = wrap.querySelector('.sk2-act-body');
+    if (live) live.style.cssText = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:clamp(72px,18vw,220px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis';
+    const dot = wrap.querySelector('.sk2-act-dot');
+    if (dot) dot.style.cssText = 'width:8px;height:8px;flex:none;background:var(--k-color-accent-a);border-radius:50%';
+    const thumb = wrap.querySelector('#lib-thumb-progress');
+    if (thumb) thumb.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--mut)';
+    host.appendChild(wrap);
+    const pop = wrap.querySelector('#sk2-act-pop');
+    if (pop) { pop.hidden = true; pop.style.left = ''; pop.style.right = '0'; }
   }
   window.chromasmithMenuContext = () => ({ galleryFull: state.open && state.expanded_view, selectionCount: cmKbTargets().length });
   window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
@@ -10485,10 +10698,19 @@
     if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }
   }
 
+  function isNativeActivationTarget(target) {
+    const el = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    return !!(el && el.closest && el.closest(
+      'button,a[href],input,textarea,select,summary,label,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="switch"],[role="tab"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'
+    ));
+  }
   document.addEventListener('keydown', (e) => {
     if (!state.open) return;
     const t = e.target;
     if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    // Native controls own Enter/Space activation. In particular, don't let the Library's
+    // image-open / Quick Look bindings consume activation of the persistent Studio Jobs button.
+    if ((e.key === 'Enter' || e.key === ' ') && isNativeActivationTarget(t)) return;
     // HANDOVER §3.5: the sort menu, gear menu and filters panel each closed on outside click
     // but ignored Escape entirely. Close whichever transient layer is open and stop — placed
     // BEFORE the full-window-exit Escape below (:5719ish) so Escape dismisses the topmost menu
@@ -13691,6 +13913,8 @@
   // via window._activityDebugSnapshot() (see its own comment) rather than guessing from the UI.
   const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip', 'hq_offline'];
   let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
+  let compactJobsOpen = false;
+  syncJobsHost(); // initial mount after the Jobs disclosure state has been initialized
   // BEGIN LIBRARY_JOB_HISTORY_HELPERS
   const ACTIVITY_HISTORY_KEY = 'chromasmith-job-history-v1';
   const ACTIVITY_ACTIVE_KEY = 'chromasmith-active-jobs-v1';
@@ -13830,10 +14054,47 @@
     return 0;
   }
 
+  function positionCompactJobsPopover() {
+    const historyPop = document.getElementById('sk2-act-pop');
+    const activityWrap = document.getElementById('sk2-act');
+    if (!historyPop || historyPop.hidden || !activityWrap) return;
+    const wr = activityWrap.getBoundingClientRect();
+    const pw = historyPop.offsetWidth || 360;
+    const margin = 8;
+    const left = Math.max(margin, Math.min(wr.right - pw, window.innerWidth - pw - margin));
+    historyPop.style.left = `${left - wr.left}px`;
+    historyPop.style.right = 'auto';
+    historyPop.style.top = `${wr.height + 6}px`;
+    historyPop.style.maxHeight = `${Math.max(120, window.innerHeight - wr.bottom - 16)}px`;
+  }
+
   function renderActivity() {
     const el = document.getElementById('lib-activity');
     if (!el) return;
-    if (!activity.visible) { el.innerHTML = renderActivityHistory(); syncPhotoWorkBadges(); return; }
+    const historyPop = document.getElementById('sk2-act-pop');
+    const jobsButton = document.getElementById('sk2-act-jobs');
+    const activityWrap = document.getElementById('sk2-act');
+    const activityDot = activityWrap && activityWrap.querySelector('.sk2-act-dot');
+    if (historyPop) historyPop.hidden = !compactJobsOpen;
+    if (jobsButton) {
+      jobsButton.textContent = 'Jobs';
+      jobsButton.setAttribute('aria-label', activityHistory.length ? `Recent background jobs, ${activityHistory.length}` : 'Recent background jobs');
+      jobsButton.setAttribute('aria-expanded', String(compactJobsOpen));
+    }
+    if (activityWrap) activityWrap.classList.toggle('busy', activity.visible && activity.stage !== 'done');
+    if (activityDot) activityDot.hidden = !(activity.visible && activity.stage !== 'done');
+    if (!activity.visible) {
+      el.innerHTML = '';
+      if (historyPop) {
+        historyPop.innerHTML = renderActivityHistory(compactJobsOpen) || '<div style="padding:12px;font-size:11px;color:var(--mut)">No recent jobs yet.</div>';
+        wireActivityHistoryActions(historyPop);
+        positionCompactJobsPopover();
+      } else {
+        el.innerHTML = renderActivityHistory();
+        wireActivityHistoryActions(el);
+      }
+      syncPhotoWorkBadges(); return;
+    }
     const pct = Math.round(activityFrac() * 100);
     // While the initial directory walk is still running, `total` is genuinely unknown (it's
     // only known once the whole tree has been enumerated — see walk_root's own comment) — so
@@ -13875,12 +14136,13 @@
           return `<div class="lib-act-stage" data-activity-job-id="${escAttr2(qKind)}"><span style="width:12px;display:inline-block;text-align:center">›</span><span>${esc(qLabel)}${q.noRecentProgress ? ' · No recent progress' : ''}</span><span class="lib-act-stage-n">${qPct != null ? `${q.done} of ${q.total}` : ''}</span>${q.noRecentProgress ? '<span class="lib-act-stage-n" role="status">Warning; not a confirmed failure.</span>' : ''}</div>`;
         }).join('') + `</div>`
       : '';
-    let html = `<span class="lib-act-pill" id="lib-act-pill" title="Working in the background. You can keep editing. Click for details." style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
+    let html = `<span class="lib-act-pill" id="lib-act-pill" title="Working in the background. You can keep editing. ${historyPop ? 'Open Jobs for details.' : 'Click for details.'}" style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
       <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${queuedBadge}${collapsedBar}`;
+    let activityDetails = '';
     if (activity.expanded && isGenericJob) {
       const bar = activity.stage !== 'done' && activity.total
         ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
-      html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
+      activityDetails = `<div class="lib-act-pop" onclick="event.stopPropagation()">
         <div class="lib-act-pop-head"><span>${esc(activity.label || 'Job')}</span>
           <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : _activityStalled ? 'Cancel' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
         <div class="lib-act-pop-body">
@@ -13888,11 +14150,11 @@
           <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
           ${_activityStalled ? `<div class="lib-act-stage-n" role="status">No recent progress. The job has not been confirmed as failed; you can wait or cancel it.</div>` : ''}
           ${activity.stage !== 'done' ? `<div class="lib-act-stage-n">${esc(activityRecoveryCopy(activity))}</div>` : ''}
-        </div>${queuedHtml}${renderActivityHistory()}</div>`;
+        </div>${queuedHtml}${historyPop ? '' : renderActivityHistory()}</div>`;
     } else if (activity.expanded) {
       const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
       const activeIdx = stages.indexOf(activity.stage);
-      html += `<div class="lib-act-pop" onclick="event.stopPropagation()">
+      activityDetails = `<div class="lib-act-pop" onclick="event.stopPropagation()">
         <div class="lib-act-pop-head"><span>${activity.stage === 'done'
             ? esc(label)
             : _activityStalled
@@ -13927,42 +14189,33 @@
             + `</div>`
           : '')
         + queuedHtml
-        + renderActivityHistory()
+        + (historyPop ? '' : renderActivityHistory())
         + `</div>`;
     }
+    if (!historyPop) html += activityDetails;
     html += `</span>`;
     el.innerHTML = html;
+    if (historyPop) {
+      historyPop.innerHTML = `${activityDetails}${renderActivityHistory(compactJobsOpen) || '<div style="padding:12px;font-size:11px;color:var(--mut)">No recent jobs yet.</div>'}`;
+      historyPop.hidden = !compactJobsOpen;
+      // The active pill's details markup normally floats above its footer anchor. In SK2 it is
+      // content inside the one top-anchored Jobs popover, so restore it to normal flow here.
+      historyPop.querySelectorAll('.lib-act-pop').forEach((panel) => {
+        panel.style.position = 'static'; panel.style.bottom = 'auto'; panel.style.right = 'auto';
+        panel.style.width = 'auto'; panel.style.maxWidth = 'none'; panel.style.boxShadow = 'none';
+        panel.style.border = '0'; panel.style.borderRadius = '0'; panel.style.background = 'transparent';
+        panel.style.zIndex = 'auto';
+      });
+      wireActivityHistoryActions(historyPop);
+      positionCompactJobsPopover();
+    } else wireActivityHistoryActions(el);
     syncPhotoWorkBadges();
-    el.querySelectorAll('[data-job-reveal-id]').forEach((button) => {
-      button.onclick = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const row = activityHistory.find((item) => item.id === button.dataset.jobRevealId);
-        if (row && row.revealPath) invoke('reveal_in_finder', { path: row.revealPath }).catch((err) => toast(humanizeErr('show exported file', err), 'err'));
-      };
-    });
-    el.querySelectorAll('[data-job-batch-results-id]').forEach((button) => {
-      button.onclick = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const row = activityHistory.find((item) => item.id === button.dataset.jobBatchResultsId);
-        if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
-      };
-    });
-    el.querySelectorAll('[data-job-index-resume-id]').forEach((button) => {
-      button.onclick = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const row = activityHistory.find((item) => item.id === button.dataset.jobIndexResumeId);
-        if (row) resumeCatalogIndex(row);
-      };
-    });
-    el.querySelectorAll('[data-job-raw-resume-id]').forEach((button) => {
-      button.onclick = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const row = activityHistory.find(item => item.id === button.dataset.jobRawResumeId);
-        if (row?.rawReviewJobId) void prepareRawReviewPreviews([], row.rawReviewJobId);
-      };
-    });
     const pill = document.getElementById('lib-act-pill');
-    if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
+    if (pill) pill.onclick = (e) => {
+      e.stopPropagation();
+      if (historyPop) document.getElementById('sk2-act-jobs')?.click();
+      else { activity.expanded = !activity.expanded; renderActivity(); }
+    };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
     // come before it), but .lib-act-pop's CSS was a plain right:0 — meaning "align the popover's
     // right edge to the pill's right edge", i.e. extend LEFTWARD from a pill that's often close
@@ -13988,13 +14241,14 @@
         pop.style.overflowY = 'auto';
       }
     }
-    const resultsBtn = document.getElementById('lib-act-batch-results');
+    const detailHost = historyPop || el;
+    const resultsBtn = detailHost.querySelector('#lib-act-batch-results');
     if (resultsBtn) resultsBtn.onclick = () => recipeBatchResults(activity.batchId).catch(e => toast(humanizeErr('open batch results', e), 'err'));
-    const pauseBtn = document.getElementById('lib-act-pause');
+    const pauseBtn = detailHost.querySelector('#lib-act-pause');
     if (pauseBtn) {
       pauseBtn.onclick = (e) => { e.stopPropagation(); bgSetPaused(!bgPaused()); };
     }
-    const cancelBtn = document.getElementById('lib-act-cancel');
+    const cancelBtn = detailHost.querySelector('#lib-act-cancel');
     if (cancelBtn) {
       cancelBtn.onclick = (e) => {
         e.stopPropagation();
@@ -14016,9 +14270,41 @@
     }
   }
 
-  function renderActivityHistory() {
+  function wireActivityHistoryActions(container) {
+    if (!container) return;
+    container.querySelectorAll('[data-job-reveal-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobRevealId);
+        if (row && row.revealPath) invoke('reveal_in_finder', { path: row.revealPath }).catch((err) => toast(humanizeErr('show exported file', err), 'err'));
+      };
+    });
+    container.querySelectorAll('[data-job-batch-results-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobBatchResultsId);
+        if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
+      };
+    });
+    container.querySelectorAll('[data-job-index-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobIndexResumeId);
+        if (row) resumeCatalogIndex(row);
+      };
+    });
+    container.querySelectorAll('[data-job-raw-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find(item => item.id === button.dataset.jobRawResumeId);
+        if (row?.rawReviewJobId) void prepareRawReviewPreviews([], row.rawReviewJobId);
+      };
+    });
+  }
+
+  function renderActivityHistory(open = activity.visible) {
     if (!activityHistory.length) return '';
-    return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
+    return `<details class="lib-act-history" aria-label="Recent job history" ${open ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
         `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.rawReviewJobId && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-raw-resume-id="${esc(row.id)}">Resume RAW preparation</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
@@ -16040,8 +16326,13 @@
   wireActivityListeners();
   // Click anywhere outside the popover collapses it — the same "click-away closes it" gesture
   // every other popover/menu in this file already uses.
-  document.addEventListener('click', () => {
-    if (activity.expanded) { activity.expanded = false; renderActivity(); }
+  document.addEventListener('click', (e) => {
+    if (document.getElementById('sk2-act')?.contains(e.target)) return;
+    if (compactJobsOpen || activity.expanded) {
+      compactJobsOpen = false;
+      activity.expanded = false;
+      renderActivity();
+    }
   });
 
   // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
@@ -16155,10 +16446,12 @@
   }
 
   async function toggleLibrary(opts) {
+    if (state.open && state.expanded_view) rememberGalleryScrollPosition();
     state.open = !state.open;
     overlay.classList.toggle('on', state.open);
     document.body.classList.toggle('lib-docked', state.open);
     if (!state.open && state.expanded_view) toggleExpandedView(false); // don't stay full-window for next open
+    syncJobsHost();
     syncDockPadding();
     // The dock shifts the app's layout; the preview canvas measures the window to fit, so
     // poke a resize once the CSS has applied.
@@ -16238,6 +16531,7 @@
       });
     }
     window.chromasmithRegisterShortcut('library.open', () => {
+      if (isNativeActivationTarget(document.activeElement)) return false;
       // Compare owns Enter for promotion; the capture-phase opener must let it through.
       if (state.viewMode === 'compare' && compareState.active) return false;
       const path = state._kbCursor || (state.selected.size === 1 ? [...state.selected][0] : '');
@@ -16245,6 +16539,7 @@
       else if (path) openInEditor(path); else return false;
     });
     window.chromasmithRegisterShortcut('library.quicklook', () => {
+      if (isNativeActivationTarget(document.activeElement)) return false;
       const path = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
       if (quicklook.active) hideQuickLook(); else if (path) showQuickLook(path); else return false;
     });
