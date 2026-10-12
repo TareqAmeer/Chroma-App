@@ -1,0 +1,85 @@
+{
+  "issue": "CHR-193",
+  "capturedAt": "2026-10-12T09:19:48.447Z",
+  "sourceCommit": "dea63433139657b9ab3f847edd8975353fc56dba",
+  "expectedBuild": "1.1012T",
+  "endpoint": "http://127.0.0.1:9223",
+  "nativeAppPid": 900,
+  "taskCatalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr193\\catalog",
+  "webviewProfile": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\webview-profile",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             "
+  },
+  "fixtureSources": [
+    "test/fixtures/chart.png",
+    "test/fixtures/portrait.png",
+    "test/fixtures/orientation_panorama.png"
+  ],
+  "nativeRawDecode": false,
+  "result": "PASS",
+  "runtime": {
+    "build": "1.1012T",
+    "url": "http://cs.localhost/index.html",
+    "tauriInvoke": true,
+    "theme": "dark",
+    "viewport": {
+      "width": 1366,
+      "height": 768,
+      "devicePixelRatio": 1.0000000298023224
+    }
+  },
+  "darkDialog": {
+    "open": true,
+    "message": "Copy geometry from “chart” to 2 other loaded photos?\n\nTargets: portrait, panorama\n\nThis overwrites their existing crop, rotation, flip, and straighten. One Undo restores these loaded photos.",
+    "cancelText": "Cancel",
+    "applyText": "Apply to 2 photos",
+    "dialog": {
+      "x": 473,
+      "y": 284.16668701171875,
+      "width": 420,
+      "height": 199.6666717529297,
+      "right": 893,
+      "bottom": 483.83335876464844
+    },
+    "messageBounds": {
+      "x": 490,
+      "y": 301.16668701171875,
+      "width": 386,
+      "height": 117,
+      "right": 876,
+      "bottom": 418.16668701171875
+    },
+    "cancelBounds": {
+      "x": 679.8177490234375,
+      "y": 432.16668701171875,
+      "width": 65.45833587646484,
+      "height": 34.66666793823242,
+      "right": 745.2760848999023,
+      "bottom": 466.8333549499512
+    },
+    "applyBounds": {
+      "x": 753.2760620117188,
+      "y": 432.16668701171875,
+      "width": 122.72396087646484,
+      "height": 34.66666793823242,
+      "right": 876.0000228881836,
+      "bottom": 466.8333549499512
+    },
+    "visible": {
+      "dialog": true,
+      "message": true,
+      "cancel": true,
+      "apply": true
+    },
+    "darkBackground": "rgb(20, 20, 20)",
+    "darkText": "rgb(242, 240, 234)",
+    "theme": "dark",
+    "viewport": {
+      "width": 1366,
+      "height": 768
+    }
+  },
+  "screenshot": "docs/validation/chr193/geometry-batch-native-dark.png"
+}

@@ -37,7 +37,7 @@ export async function loadGeometryFixtures(page, root = process.cwd()) {
   await page.waitForFunction(() => Array.isArray(fxImages) && fxImages.length === 3 && fxCurIdx === 0, null, { timeout: 15000 });
 }
 
-export async function exerciseGeometryBatch(page) {
+export async function exerciseGeometryBatch(page, { onConfirmDialog } = {}) {
   const waitGeometry = async expected => {
     try {
       await page.waitForFunction(geoms => JSON.stringify(fxImages.map(item => item.geom)) === JSON.stringify(geoms), expected, { timeout: 5000 });
@@ -80,6 +80,7 @@ export async function exerciseGeometryBatch(page) {
   assert.match(cancelText, /Targets: portrait, panorama/);
   assert.match(cancelText, /crop, rotation, flip, and straighten/);
   assert.equal(await page.locator('#fx-confirm-ok').innerText(), 'Apply to 2 photos');
+  if (onConfirmDialog) await onConfirmDialog({ message: cancelText, source: original.source, targets: original.targets });
   await page.locator('#fx-confirm-cancel').click();
   await page.locator('#fx-confirm-modal').waitFor({ state: 'hidden' });
   let state = await page.evaluate(() => ({ geoms: fxImages.map(item => item.geom), index: fxHistIdx, length: fxHistory.length }));
@@ -148,8 +149,8 @@ export async function exerciseGeometryBatch(page) {
   targets = await page.evaluate(() => fxImages.slice(1).map(item => item.geom));
   assert.deepEqual(targets, [original.before[0], original.before[0]], 'timeline commit across the edge must reapply target geometry');
 
-  // A rendered-image promotion (for example fit proxy -> full-resolution decode) keeps the same
-  // photo entry and must not invalidate its geometry history just because the img object changed.
+  // A rendered-image promotion keeps the same photo entry and source identity; simulate that on
+  // the small fixture by replacing only the decoded image object with a pixel-identical image.
   await page.evaluate(async () => {
     const old = fxImages[1].img;
     const canvas = document.createElement('canvas');
@@ -201,7 +202,7 @@ export async function exerciseGeometryBatch(page) {
   await page.locator('#btn-redo-db').click();
   await page.waitForFunction(idx => fxHistIdx === idx, resetIndex, { timeout: 5000 });
   await waitGeometry([resetGeom, original.before[1], original.before[2]]);
-  return { source: original.source, targetCount: original.targets.length, historyLabel: applied.label, staleConfirmation: 'unchanged', timeline: 'preview-only then committed', samePhotoPromotion: 'undo retained', replacedPhoto: 'stale edge skipped', resetAll: 'undo restores copied target geometry; redo restores pre-copy geometry' };
+  return { source: original.source, targetCount: original.targets.length, historyLabel: applied.label, staleConfirmation: 'unchanged', timeline: 'preview-only then committed', sameEntryImageReplacement: 'undo retained', replacedPhoto: 'stale edge skipped', resetAll: 'undo restores copied target geometry; redo restores pre-copy geometry' };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

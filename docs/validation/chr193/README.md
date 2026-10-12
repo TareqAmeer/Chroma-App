@@ -2,7 +2,7 @@
 
 `node test/geometry_batch_scope.mjs` drives the production Editor in a Playwright page. It uses
 the existing tiny chart, portrait, and panorama PNG fixtures and checks cancel/stale confirmation,
-one batch history edge, Undo/Redo, timeline preview versus commit, same-photo image promotion,
+one batch history edge, Undo/Redo, timeline preview versus commit, same-entry image replacement,
 stale replaced-photo history behavior, and Reset All Undo/Redo across the batch edge. It reads
 `desktop/dist/index.html`, so rebuild the desktop dist after changing the source HTML before
 running it.

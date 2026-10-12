@@ -1,0 +1,44 @@
+{
+  "issue": "CHR-193",
+  "capturedAt": "2026-10-12T09:16:32.180Z",
+  "sourceCommit": "dea63433139657b9ab3f847edd8975353fc56dba",
+  "expectedBuild": "1.1012T",
+  "endpoint": "http://127.0.0.1:9223",
+  "nativeAppPid": 900,
+  "taskCatalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr193\\catalog",
+  "webviewProfile": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\webview-profile",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             "
+  },
+  "fixtureSources": [
+    "test/fixtures/chart.png",
+    "test/fixtures/portrait.png",
+    "test/fixtures/orientation_panorama.png"
+  ],
+  "nativeRawDecode": false,
+  "result": "PASS",
+  "runtime": {
+    "build": "1.1012T",
+    "url": "http://cs.localhost/index.html",
+    "tauriInvoke": true,
+    "theme": "light",
+    "viewport": {
+      "width": 1366,
+      "height": 768,
+      "devicePixelRatio": 1.0000000298023224
+    }
+  },
+  "behavior": {
+    "source": "chart",
+    "targetCount": 2,
+    "historyLabel": "Geometry applied to 2 photos",
+    "staleConfirmation": "unchanged",
+    "timeline": "preview-only then committed",
+    "samePhotoPromotion": "undo retained",
+    "replacedPhoto": "stale edge skipped",
+    "resetAll": "undo restores copied target geometry; redo restores pre-copy geometry"
+  },
+  "screenshot": "docs/validation/chr193/geometry-batch-native.png"
+}
