@@ -1918,3 +1918,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published implementation `f6c70342`, native evidence/crop `aed6691c2e61f6e287dcdd1b6cae1460221dc434`; non-force push and exact remote hash verified. Integration preserved shared-build diagnostics `080262aa`; range-diff confirmed all task patches unchanged.
 - Integrated RAW faces/preparation/journal tests pass; native 16 regressions and actual RAW crop verification pass. Full UI gates 21/33 retain 12 known failures/879 existing findings. Linear is In Review with checked slice evidence and open portrait/lens/AI/quality criteria. No new checkout, dependency/model install or RAW copy was created.
+
+### CHR-192 — navigation and persistent Jobs disclosure (12 October 2026)
+
+- Removed the duplicate photo-caption/zoom clone and retained the canonical Studio header; named icon rail controls expose Exposure & Tone, Crop, Masks and Versions & History. Updated chromasmith-22.html and desktop/library-ui.js.
+- Moved the original activity/thumbnail widgets into one Jobs disclosure shared between Gallery and Studio. Idle history recovery actions now bind correctly; Enter/Space respect focused controls, Escape returns focus and click-away closes the disclosure.
+- Browser navigation in both themes at 1366x768 passes with folder/scroll/source/225% zoom preserved; job-history 12/12, RAW preparation, RAW face-review and syntax/content checks pass. Added test/library_navigation.mjs and scripts/verify-library-navigation-native.mjs; full UI gates and actual native navigation validation are pending in the candidate build.

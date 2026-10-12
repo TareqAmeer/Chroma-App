@@ -136,7 +136,8 @@ test('renderer restart moves generic active snapshots to interrupted history wit
 });
 
 test('history view remains mounted without a current activity and stalled copy avoids claiming failure', () => {
-  assert.match(source, /if \(!activity\.visible\) \{ el\.innerHTML = renderActivityHistory\(\)/);
+  assert.match(source, /if \(!activity\.visible\) \{\s*el\.innerHTML = ''[\s\S]{0,260}historyPop\.innerHTML = renderActivityHistory\(compactJobsOpen\)/,
+    'idle activity clears the legacy slot and refreshes the common Jobs history disclosure');
   assert.match(source, /No recent progress\. This is a warning, not a confirmed failure\./);
   assert.match(source, /data-job-history-id=/);
   assert.match(source, /Failed items/);
