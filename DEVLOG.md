@@ -1930,3 +1930,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Native normal-motion testing exposed synthetic scroller clamping during Studio layout changes. Added separate Gallery anchors, early photo-open snapshots, guarded restoration after layout transitions, and cancellation on user navigation in desktop/library-ui.js.
 - The focused navigation gate now covers dark/light reduced motion and dark normal motion; target photos are centered before measuring the real click-start anchor, and assertions wait for stable geometry. This corrects an automation auto-scroll artifact in earlier diagnostics while retaining strict source/anchor/offset checks.
 - Added isolated native test catalog/profile guards and reusable WebView profile guidance in AGENTS.md. Full first UI run retained 21/33 passes, 12 known failures and 879 unchanged inventory findings; final native evidence and post-fix gate results follow.
+
+### CHR-192 — native visual header follow-up
+
+- Actual native PNG navigation passed on 1.1012P with exact Session/chart-036 anchor and 1167.33px scroll restoration, source chart-050 and 225% zoom, both themes and Jobs keyboard/focus behavior.
+- Screenshot review found leftover caption-era unbounded title CSS overlapping the scope/zoom toolbar. Bounded the canonical title/status column, corrected zoom folding selectors and shortened visible scope copy while retaining the complete explanation in its title/ARIA description; chromasmith-22.html. Final visual verification follows this candidate.

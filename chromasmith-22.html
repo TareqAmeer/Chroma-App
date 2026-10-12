@@ -867,9 +867,9 @@ body.diag-on .diag-only{display:flex}
 #db-title-status{color:var(--mut);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Persistent scope indicator: compact enough to live beside undo while leaving its complete
    scope explanation available to sighted users and assistive technology. */
-.fx-batch-scope{display:inline-flex;align-items:center;min-width:0;max-width:min(320px,24vw);flex:0 1 320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.fx-batch-scope{display:inline-flex;align-items:center;min-width:0;max-width:min(240px,20vw);flex:0 1 240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   color:var(--mut);font-size:11px;font-variant-numeric:tabular-nums;line-height:1.2;padding:4px 7px;border:1px solid var(--bdr);border-radius:var(--r-pill);background:var(--sur2)}
-@media(max-width:1200px){.fx-batch-scope{max-width:min(220px,22vw);flex-basis:min(220px,22vw)}}
+@media(max-width:1200px){.fx-batch-scope{max-width:min(200px,18vw);flex-basis:min(200px,18vw)}}
 /* Below this the bar has no room for a centre title at all — the tools matter more. */
 @media(max-width:1200px){#fx-deskbar-title{display:none}}
 #db-title-status.spin::before{content:'⟳';display:inline-block;animation:fxspin .8s linear infinite}
@@ -1442,8 +1442,8 @@ body.deskx.cs-page-other #cs-tog-studio.on{opacity:.55}
 /* Narrow windows: the wordmark text goes, the logo mark stays; the brand-width fit() re-measures it. */
 @media(max-width:1100px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
 body.sk2.deskx.fx-deskbar-fold2 #fx-deskbar #fx-deskbar-title #db-title-name{display:none!important}
-body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-title #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
-body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-title #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
+body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
+body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
 /* Last fold (below the ~760px design floor): drop the flag/favourite buttons rather than let them run into All FX — P/X/F keys and the filmstrip still set them. */
 body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-red,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-flag-green,body.sk2.deskx.fx-deskbar-fold5 #fx-deskbar #btn-favorite{display:none!important}
 body.fx-deskb .fx-layout{grid-template-columns:auto 360px 1fr}
@@ -2927,11 +2927,12 @@ body.sk2 #lib-overlay .lib-menu .opt,body.sk2 #lib-overlay .lib-menu button.opt-
 body.sk2.sk2-native .fx-ctrl[data-fxsec="image"]{display:none!important}
 body.sk2.sk2-native #sk2-sub button[data-k="image"]{display:none!important}
 body.sk2.sk2-native #sk2-sub:has(button[data-k="image"]):not(:has(button:nth-child(3))){display:none!important}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:14px;max-width:none!important;overflow:visible!important;white-space:nowrap}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{flex:none}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;align-items:center;gap:1px;max-width:100%!important;min-width:0;overflow:hidden!important;white-space:nowrap}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title>*{min-width:0;max-width:100%;flex-shrink:1}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!important}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{font-size:12px;color:var(--k-color-ink)}
-body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{max-width:100%;font-size:12px;color:var(--k-color-ink)}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{max-width:100%;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
+body.sk2.deskx #fx-deskbar #fx-deskbar-title #cs-source-render-state{max-width:100%;margin-left:0}
 /* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
@@ -7254,7 +7255,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012P';
+const BUILD='1.1012Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25688,7 +25689,7 @@ function syncBatchScopeStatus(){
   const scope=count===1||SEC_ALWAYS_ONE.includes(section)?'this photo only':perPhoto?'this photo (override)':`all ${count} open photos`;
   const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
   const sectionTarget=count>1&&perPhoto?'this photo only':count>1?`all ${count} open photos`:'this photo only';
-  const visible=count>1?`Photo ${index} of ${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Single photo · ${sectionName} → ${scope} · Export ${exportLabel}`;
+  const visible=count>1?`Photo ${index}/${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Photo 1 · ${sectionName} · Export this photo`;
   const detail=`Photo ${index} of ${count}. ${sectionName} affects ${sectionTarget}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared value':''}. Basic adjustments ${item&&item.adjustOverride?'override the shared value for this photo':'follow the shared batch value unless overridden per photo'}. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}${fxExportScope==='current'?' only':' open photos'}.`;
   if(el.textContent!==visible)el.textContent=visible;
   if(el.title!==detail)el.title=detail;
