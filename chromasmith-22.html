@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012O';
+const BUILD='1.1012P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13720,6 +13720,13 @@ function fxSharpMaskPreview(on,target=document.activeElement){
 document.addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat){e.preventDefault();fxSharpMaskPreview(true,e.target);}},true);
 document.addEventListener('keyup',e=>{if(e.key==='Alt')fxSharpMaskPreview(false);},true);
 window.addEventListener('blur',()=>fxSharpMaskPreview(false));
+// A caller that has JUST rendered the final state (the deferred library open: recipe applied,
+// renderPreview() run) drops the debounced renders fxUpdate() queued — they would redraw the
+// identical frame 1-2 more times (~0.1-0.2s of main thread each).
+function fxCancelScheduledRender(){
+  if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+  clearTimeout(fxTimer);_fxPreviewInteracting=false;
+}
 function fxScheduleRender(){
   if(!_fxRenderRAF){
     _fxPreviewInteracting=true;

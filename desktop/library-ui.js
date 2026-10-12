@@ -5281,6 +5281,7 @@
     let fullCachedEntry = null;
     let fullPromotionStarted = false;
     let deferEditorRender = false;
+    let memoryHitDeferred = false;
     let deferredDisplayRender = false;
     let deferredRecipeApply = null;
     const startFullPromotion = () => {
@@ -5487,11 +5488,15 @@
         if (!fullCachedEntry || hdrCompanion) imgCacheStore(path, { ...diskCached, exif: { ...diskCached.exif } }, loadKey);
       } else if (cached) {
         cached.ts = Date.now(); // touch for LRU
-        deferEditorRender = false;
-        deferredDisplayRender = false;
+        // Memory hit: install without rendering, then apply the recipe and render ONCE in the
+        // deferred rAF below (same path as a display-tier disk hit). Installing + rendering and
+        // then re-rendering after the recipe/default restore paid two full renders (~0.2s each).
+        deferEditorRender = true;
+        deferredDisplayRender = true;
+        memoryHitDeferred = true;
         // A copy: promotion swaps the ACTIVE entry's img to full resolution, and the cached
         // entry must stay at the display tier so the next reopen is fast too.
-        installFXImages([{ ...cached.entry, exif: { ...(cached.entry.exif || {}) } }], cached.loadKey, { deferRender: false });
+        installFXImages([{ ...cached.entry, exif: { ...(cached.entry.exif || {}) } }], cached.loadKey, { deferRender: true });
       } else {
         // N1a piece 1: a real decode source for a cached-only (offline) photo. There is no
         // full-resolution offline cache — building one would be a separate, much bigger
@@ -5656,11 +5661,14 @@
         // blanks the on-disk sidecar recipe and greys out the menu item, but without this the
         // ACTUAL RENDER never reverts, since nothing else re-applies defaults when there's no
         // recipe to restore. See test/probe_reset_cached_reopen.mjs.
-        try {
-          window.chromasmithApplyPristineDefault();
-          if (typeof applyRawDefaults === 'function') applyRawDefaults();
-          fxUpdate();
-        } catch (e) { console.error('reset to defaults', e); }
+        const applyPristine = () => {
+          try {
+            window.chromasmithApplyPristineDefault();
+            if (typeof applyRawDefaults === 'function') applyRawDefaults();
+            fxUpdate();
+          } catch (e) { console.error('reset to defaults', e); }
+        };
+        if (deferEditorRender) deferredRecipeApply = applyPristine; else applyPristine();
       }
       rawPerf('open-mark-after-recipe', path, { ms: performance.now() - openT0 });
       // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
@@ -5724,10 +5732,15 @@
       if (st && st.classList.contains('spin') && typeof fxDeskbarTitle === 'function') fxDeskbarTitle(undefined, '', false);
       if (deferredDisplayRender) {
         requestAnimationFrame(() => {
+          const _rafT0 = performance.now();
           try {
+            // installFXImages skipped its smart-default pass because the render was deferred; run it
+            // here so the render sees exactly what the non-deferred order (detect, render, recipe) did.
+            if (memoryHitDeferred && fxImages[0] && typeof autoDetectBW === 'function') { try { autoDetectBW(fxWork || fxImg); } catch (_) {} }
             if (deferredRecipeApply) deferredRecipeApply();
             const renderT0 = performance.now(); renderPreview();
-            rawPerf('open-display-render', path, { ms: performance.now() - openT0, renderMs: performance.now() - renderT0, width: FX.w, height: FX.h });
+            if (typeof fxCancelScheduledRender === 'function') fxCancelScheduledRender(); // the recipe apply queued renders of this same frame
+            rawPerf('open-display-render', path, { ms: performance.now() - openT0, renderMs: performance.now() - renderT0, width: FX.w, height: FX.h, rafEntryMs: _rafT0 - openT0, preRenderMs: renderT0 - _rafT0 });
           } catch (e) { rawPerf('open-display-render-failed', path, { error: String(e) }); }
           hideDisplayOverlay();
           reveal.pixels(path);

@@ -13,7 +13,10 @@ import raw_bench as rb  # noqa: E402
 import raw_open_bench as rob  # noqa: E402
 
 JS = """(async()=>{window.__rawPerfLog=[];const t0=performance.now();await window.chromasmithOpenInEditor(%s);
-const ms=Math.round(performance.now()-t0);const ev=(window.__rawPerfLog||[]);
+// time-to-visible: the deferred display render (rAF after the open resolves) is when pixels land
+const dl=performance.now()+4000;while(!(window.__rawPerfLog||[]).some(e=>e.event==='open-display-render'||e.event==='open-display-render-failed')&&!(window.__rawPerfLog||[]).some(e=>e.event==='open-fully-loaded'&&!window.__rawPerfLog.some(x=>x.event==='open-display-overlay'&&false))&&performance.now()<dl)await new Promise(r=>setTimeout(r,10));
+await new Promise(r=>setTimeout(r,120));
+const dr=(window.__rawPerfLog||[]).find(e=>e.event==='open-display-render');const ms=Math.round(dr?dr.t-t0:performance.now()-t0);const ev=(window.__rawPerfLog||[]);
 const fl=ev.find(e=>e.event==='open-fully-loaded');const st=ev.find(e=>e.event==='open-start');const b=st?st.t:t0;
 return JSON.stringify({ms,src:fl&&fl.source,ev:ev.filter(e=>/^open-(cache|hdr|display|mark|sidecar|waited|full)/.test(e.event)).map(e=>[e.event,Math.round(e.t-b),e.ms!=null?Math.round(e.ms):null])})})()"""
 
