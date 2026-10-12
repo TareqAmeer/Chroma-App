@@ -1,0 +1,14 @@
+{
+  "issue": "CHR-193",
+  "integrationCommit": "7de860a996711fec40d2bd29d112446e5da86320",
+  "candidateCommit": "dea63433139657b9ab3f847edd8975353fc56dba",
+  "remoteBase": "e10c0f19fcc71b65a65f719d7073eb8b385f053d",
+  "candidateHTMLIdenticalExceptBuild": true,
+  "newerMainLibraryBlobPreserved": "3e2011294c6c23f770133f9ebf6695878a9f2ac4",
+  "integratedFocusedChecks": [
+    "geometry_batch_scope PASS",
+    "geometry_controls PASS",
+    "history_hover_preview PASS"
+  ],
+  "nativeBackendTree": "2e6aaec26386d0cbac22411cad487ec4338b2c79"
+}
