@@ -8,7 +8,9 @@ const start=html.indexOf('let _fxTimelinePreviewBase=-1');
 const end=html.indexOf('// 2026-09-09:',start);
 assert(start>=0&&end>start,'history preview handlers exist');
 const calls=[];
-const context={fxHistIdx:2,fxSyncTopbarDisabled(){},async _fxHistoryRestore(i){calls.push(i);}};
+const commits=[];
+const context={fxHistIdx:2,fxSyncTopbarDisabled(){},async _fxHistoryRestore(i){calls.push(i);},
+  async _fxHistoryTransition(from,to){commits.push([from,to]);await context._fxHistoryRestore(to);}};
 vm.createContext(context);
 vm.runInContext(html.slice(start,end),context);
 
@@ -18,11 +20,13 @@ assert.deepEqual(calls,[0],'hover restores the selected historical edit');
 await context._fxTimelinePreviewEnd();
 assert.deepEqual(calls,[0,2],'pointer exit restores the committed edit');
 assert.equal(context.fxHistIdx,2);
+assert.deepEqual(commits,[],'hover and pointer exit never invoke a committed batch transition');
 
 await context._fxTimelinePreview(1);
 await context._fxTimelinePreviewEnd(1);
 assert.deepEqual(calls,[0,2,1,1],'click commits its previewed edit');
 assert.equal(context.fxHistIdx,1,'click moves the undo/redo cursor');
+assert.deepEqual(commits,[[2,1]],'click commits across the previous history cursor');
 
 const gate=Promise.withResolvers();
 context._fxHistoryRestore=async i=>{calls.push(`begin:${i}`);if(i===0)await gate.promise;calls.push(`end:${i}`);};

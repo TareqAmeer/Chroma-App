@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012S';
+const BUILD='1.1012T';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11124,6 +11124,16 @@ if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
 });
 let fxExportCancel=false;                // set by the Cancel button to abort a batch export
 let fxHistory=[], fxHistIdx=-1, _fxHistLocked=false; // undo/redo
+let _fxGeomBatchEpoch=0,_fxGeomBatchNextId=1,_fxGeomBatchPending=false;
+const _fxGeomBatchItemIds=new WeakMap(),_fxGeomBatchFileIds=new WeakMap();
+function _fxGeomBatchIdentity(map,obj){if(!obj||typeof obj!=='object')return 0;let id=map.get(obj);if(!id){id=_fxGeomBatchNextId++;map.set(obj,id);}return id;}
+function _fxGeomBatchItemId(item){return _fxGeomBatchIdentity(_fxGeomBatchItemIds,item);}
+function _fxGeomBatchSourceKey(item){
+  if(!item)return'';
+  const file=item.rawFile;
+  return JSON.stringify([item.path||'',item.name||'',item.ext||'',item.fileSize??'',
+    file?_fxGeomBatchIdentity(_fxGeomBatchFileIds,file):0,file?.name||'',file?.size??'',file?.lastModified??'']);
+}
 let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interactive crop state
 let cropGrid='3x3'; try{cropGrid=localStorage.getItem('chromasmith_crop_grid')||'3x3';}catch(e){}
 const CROP_GRID_MODES=['3x3','4x4','9x9','golden','off'];
@@ -13374,6 +13384,7 @@ function installFXImages(entries,loadKey,opts){
   // the next tap/AI-mask-add re-encodes lazily rather than eagerly here, so opening a photo you
   // never use AI Select on never pays the encode cost.
   samInvalidate();mskAiTapMode=false;
+  _fxGeomBatchEpoch++;
   fxImages=entries;
   setTimeout(()=>{if(typeof csInstallHint==='function')csInstallHint();},4000);
   // Phones open on the looks: Chromasmith is a film-look app first, tools second.
@@ -20427,7 +20438,8 @@ function snapDiffLabel(prevSnap,nextSnap){
 // for a mere 512x384 mask). Instead each entry holds the raster BY REFERENCE and copy-on-write
 // (mskPxForWrite) guarantees nobody mutates an array a history entry is pointing at. A
 // slider-only session therefore keeps ONE raster shared across all 20 entries.
-function fxHistoryPush(){
+function fxHistoryPush(opts){
+  opts=opts||{};
   if(_fxHistLocked)return;
   fxEnsureFullQuality('edit'); // first real edit → full-resolution source (see fxEnsureFullQuality)
   const snap=getUISnapshot({skipRaster:true});
@@ -20437,10 +20449,12 @@ function fxHistoryPush(){
   // identity too — copy-on-write makes a mutated raster a DIFFERENT array object, so reference
   // equality is exactly the right test and costs nothing.
   const cur=fxHistory[fxHistIdx];
-  if(cur&&cur.j===j&&cur.rasters.length===rasters.length&&cur.rasters.every((p,i)=>p===rasters[i]))return;
+  if(!opts.force&&cur&&cur.j===j&&cur.rasters.length===rasters.length&&cur.rasters.every((p,i)=>p===rasters[i]))return;
   const prev=cur?cur.snap:null;   // kept as an object; re-parsing it per push was pure waste
   fxHistory=fxHistory.slice(0,fxHistIdx+1);
-  fxHistory.push({j,snap,rasters,label:snapDiffLabel(prev,snap),ts:Date.now()});
+  const entry={j,snap,rasters,label:opts.label||snapDiffLabel(prev,snap),ts:Date.now()};
+  if(opts.geometryBatch)entry.geometryBatch=opts.geometryBatch;
+  fxHistory.push(entry);
   if(fxHistory.length>20){fxHistory.shift();}
   fxHistIdx=fxHistory.length-1;
   fxSyncTopbarDisabled();
@@ -20475,6 +20489,63 @@ async function _fxHistoryRestore(i){
   fxUpdate();
   _fxHistLocked=false;
 }
+// A batch geometry operation is attached only to its history edge, not copied into every
+// ordinary snapshot. IDs come from WeakMaps, so the edge retains tiny geometry objects rather
+// than photo/Image objects or their potentially large decoded frames.
+function _fxApplyGeometryBatchEdge(edge,forward){
+  const batch=edge&&edge.geometryBatch;
+  if(!batch||batch.epoch!==_fxGeomBatchEpoch)return false;
+  let changed=false;const currentById=new Map(fxImages.map(item=>[_fxGeomBatchItemId(item),item]));
+  for(const record of batch.items){
+    const item=currentById.get(record.itemId);
+    if(!item||_fxGeomBatchSourceKey(item)!==record.sourceKey)continue;
+    item.geom=JSON.parse(JSON.stringify(forward?record.after:record.before));
+    changed=true;
+  }
+  return changed;
+}
+function _fxCaptureGeometryBatchTargets(from,to){
+  const step=to>from?1:-1,itemsById=new Map(fxImages.map(item=>[_fxGeomBatchItemId(item),item])),captured=new Map();
+  const visit=edgeIndex=>{
+    const batch=fxHistory[edgeIndex]?.geometryBatch;if(!batch||batch.epoch!==_fxGeomBatchEpoch)return;
+    for(const record of batch.items){
+      const item=itemsById.get(record.itemId);
+      if(!item||_fxGeomBatchSourceKey(item)!==record.sourceKey||captured.has(record.itemId))continue;
+      captured.set(record.itemId,{item,itemId:record.itemId,sourceKey:record.sourceKey,before:JSON.parse(JSON.stringify(item.geom||defGeom()))});
+    }
+  };
+  if(to>from)for(let edge=from+1;edge<=to;edge++)visit(edge);
+  else if(to<from)for(let edge=from;edge>to;edge--)visit(edge);
+  return [...captured.values()];
+}
+function _fxFinishGeometryBatchTargets(captured,epoch){
+  if(epoch!==_fxGeomBatchEpoch)return null;
+  const items=[],currentItems=new Set(fxImages);
+  for(const row of captured){
+    if(!currentItems.has(row.item)||_fxGeomBatchSourceKey(row.item)!==row.sourceKey)continue;
+    const after=JSON.parse(JSON.stringify(row.item.geom||defGeom()));
+    if(JSON.stringify(row.before)!==JSON.stringify(after))items.push({itemId:row.itemId,sourceKey:row.sourceKey,before:row.before,after});
+  }
+  return items.length?{epoch,items}:null;
+}
+async function _fxHistoryTransition(from,to){
+  await _fxHistoryRestore(to);
+  if(from===to)return;
+  let geometryChanged=false;
+  if(to>from){
+    for(let edge=from+1;edge<=to;edge++)if(_fxApplyGeometryBatchEdge(fxHistory[edge],true))geometryChanged=true;
+  }else{
+    // Batch metadata belongs to the edge after its parent index: undo leaves `from` first.
+    for(let edge=from;edge>to;edge--)if(_fxApplyGeometryBatchEdge(fxHistory[edge],false))geometryChanged=true;
+  }
+  if(geometryChanged){
+    const item=curItem();if(item){
+      const angle=(item.geom&&item.geom.angle)||0,ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
+      if(ss){ss.value=_stA2S(angle);fxPaintSlider(ss);}if(sv)sv.textContent=angle.toFixed(2)+'°';
+    }
+    broadcastGeom();updateWork();renderPreview();buildLookGallery();
+  }
+}
 // 3.1.14: hold Undo opens edit history, shift-click resets, reset also lives in the history
 // dropdown already (fxToggleTimelinePopover's own list has no reset row — see the NOTE below).
 // Click alone still just undoes — the common case shouldn't need a modifier.
@@ -20507,14 +20578,14 @@ function fxHistFlash(verb,label){
 }
 async function fxUndo(){
   if(fxHistIdx<=0){log('Nothing to undo','info');return;}
-  fxHistIdx--;await _fxHistoryRestore(fxHistIdx);
+  const from=fxHistIdx;fxHistIdx--;await _fxHistoryTransition(from,fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Undo','info');fxHistFlash('Undo',fxHistory[fxHistIdx+1]&&fxHistory[fxHistIdx+1].label);
   fxSyncTopbarDisabled();
 }
 async function fxRedo(){
   if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
-  fxHistIdx++;await _fxHistoryRestore(fxHistIdx);
+  const from=fxHistIdx;fxHistIdx++;await _fxHistoryTransition(from,fxHistIdx);
   if(typeof hapt==='function')hapt();
   log('Redo','info');fxHistFlash('Redo',fxHistory[fxHistIdx]&&fxHistory[fxHistIdx].label);
   fxSyncTopbarDisabled();
@@ -20537,9 +20608,11 @@ function fxSyncTopbarDisabled(){
 async function fxResetAll(){
   if(!fxHistory.length)return;
   if(typeof hapt==='function')hapt();
-  await _fxHistoryRestore(0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
+  const from=fxHistIdx,epoch=_fxGeomBatchEpoch,captured=_fxCaptureGeometryBatchTargets(from,0);
+  await _fxHistoryTransition(from,0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
   if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
-  fxHistoryPush();
+  const geometryBatch=_fxFinishGeometryBatchTargets(captured,epoch);
+  fxHistoryPush(geometryBatch?{force:true,label:'Reset all edits',geometryBatch}:undefined);
   fxUpdate();
   log('Reset all edits','info');
 }
@@ -20709,7 +20782,8 @@ function _fxTimelinePreviewEnd(commitIdx=-1){
   if(commitIdx>=0)fxHistIdx=commitIdx;
   _fxTimelinePreviewQueue=_fxTimelinePreviewQueue.then(async()=>{
     if(token!==_fxTimelinePreviewToken)return;
-    await _fxHistoryRestore(target);
+    if(commitIdx>=0)await _fxHistoryTransition(base,target);
+    else await _fxHistoryRestore(target);
     if(token===_fxTimelinePreviewToken)fxSyncTopbarDisabled();
   });
   return _fxTimelinePreviewQueue;
@@ -24006,15 +24080,32 @@ function defGeom(){return{rot:0,flipH:false,flipV:false,angle:0,crop:null};}
 // to copy the current photo's geometry onto the rest of a batch (mirrors mskCopyToAll's
 // pattern for masks).
 function broadcastGeom(){if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
-function geomApplyToAll(){
-  if(fxImages.length<2)return;
-  const it=curItem();if(!it||!it.geom)return;
-  const clone=JSON.stringify(it.geom);
-  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].geom=JSON.parse(clone);
-  if(typeof hapt==='function')hapt();
-  toast(`Applied crop/rotation to ${fxImages.length-1} other photo(s)`,true);
-  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
-  log(`Geometry applied to all ${fxImages.length} images`,'ok');
+async function geomApplyToAll(){
+  if(_fxGeomBatchPending||fxImages.length<2)return;
+  const batch=fxImages,index=fxCurIdx,source=curItem(),epoch=_fxGeomBatchEpoch,sourceKey=_fxGeomBatchSourceKey(source);
+  if(!source||!source.geom)return;
+  const targets=batch.filter((_,i)=>i!==index),targetContext=targets.map(item=>({item,itemId:_fxGeomBatchItemId(item),sourceKey:_fxGeomBatchSourceKey(item)})),count=targets.length;
+  const sourceName=source.name||'Current photo';
+  const targetNames=targets.map(item=>item.name||'Unnamed photo').join(', ');
+  _fxGeomBatchPending=true;
+  try{
+    const ok=await confirmModal(`Copy geometry from “${sourceName}” to ${count} other loaded photo${count===1?'':'s'}?\n\nTargets: ${targetNames}\n\nThis overwrites their existing crop, rotation, flip, and straighten. One Undo restores these loaded photos.`,'Apply to '+count+' photos');
+    if(!ok)return;
+    // confirmModal is asynchronous. Never apply a stale decision after the user changes photo,
+    // reloads/replaces the batch, or otherwise changes which entries this action would target.
+    const currentBatchSet=new Set(batch);
+    if(epoch!==_fxGeomBatchEpoch||fxImages!==batch||fxCurIdx!==index||curItem()!==source||_fxGeomBatchSourceKey(source)!==sourceKey||batch.length!==targets.length+1||
+      targetContext.some(({item,sourceKey:key})=>!currentBatchSet.has(item)||_fxGeomBatchSourceKey(item)!==key))return;
+    const after=JSON.parse(JSON.stringify(source.geom));
+    const records=targets.map(item=>({itemId:_fxGeomBatchItemId(item),sourceKey:_fxGeomBatchSourceKey(item),
+      before:JSON.parse(JSON.stringify(item.geom||defGeom())),after:JSON.parse(JSON.stringify(after))}));
+    for(const item of targets)item.geom=JSON.parse(JSON.stringify(after));
+    if(typeof hapt==='function')hapt();
+    toast(`Applied geometry to ${count} other photo${count===1?'':'s'}`,true);
+    updateWork();renderPreview();buildLookGallery();
+    fxHistoryPush({force:true,label:`Geometry applied to ${count} photos`,geometryBatch:{epoch,items:records}});
+    log(`Geometry applied to ${count} other loaded photos`,'ok');
+  }finally{_fxGeomBatchPending=false;}
 }
 // Crop defaults to "As shot": keeping the camera's own frame is what almost every edit wants, and
 // a free crop is the deliberate choice rather than the accident. ⚠️ The <select> and `cropAR` are
@@ -29204,8 +29295,8 @@ function fxShowHistoryList(){
   if(!fxHistory.length){toast('No edits yet');return;}
   const rows=fxHistory.map((h,i)=>`<button class="btn bgh fx-hist-row${i===fxHistIdx?' on':''}" data-i="${i}" style="display:block;width:100%;text-align:left;margin:0 0 4px">${i===0?'Opened':(h.label||'Edit')}<span style="float:right;color:var(--mut);font-size:11px">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></button>`).reverse().join('');
   _csModal('History',`<div style="max-height:55vh;overflow-y:auto">${rows}</div>`);
-  document.querySelectorAll('#cs-modal-ov .fx-hist-row').forEach(b=>b.onclick=async()=>{const i=+b.dataset.i;document.getElementById('cs-modal-ov').remove();
-    await _fxHistoryRestore(i);fxHistIdx=i;if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled();});
+  document.querySelectorAll('#cs-modal-ov .fx-hist-row').forEach(b=>b.onclick=async()=>{const i=+b.dataset.i,from=fxHistIdx;document.getElementById('cs-modal-ov').remove();
+    fxHistIdx=i;await _fxHistoryTransition(from,i);if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled();});
 }
 // (4) Preset strength: after applying a saved Preset, blend every slider between the photo's
 // state before the preset and the preset itself.

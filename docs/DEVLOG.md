@@ -1,6 +1,12 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+## 2026-10-12 — CHR-193 counted, recoverable geometry copy
+
+- `chromasmith-22.html` now reviews the source, exact loaded-photo target count/names and geometry replacement warning before copying. Cancel and stale source/batch decisions preserve target geometry; membership and history lookup use linear-time maps/sets.
+- A batch history edge retains geometry and weak identity metadata, supports Undo/Redo and committed history jumps, and keeps hover previews local. Reset All records its own reversible target transition. Same-photo RAW image promotion preserves identity; replaced entries are skipped. Per-target sidecar persistence and selected-subset scope across tone/paste/export remain open.
+- `test/geometry_batch_scope.mjs` passes the production browser workflow, including Reset All recovery; existing geometry controls and history-hover checks pass. Added the native companion `scripts/verify-geometry-batch-native.mjs`, validation documentation and the culling-plan checkpoint. Native candidate and final gate evidence are recorded below after execution.
+
 ## 2026-10-06 — CHR-284 Android JPEG export performance
 
 - Added memory/GPU-bounded 2048px Android tiles, reusable temporary canvases with cancellation cleanup, and nonblocking inexact completion notifications in `chromasmith-22.html`; preserve full resolution, JPEG quality and the separate export renderer.
