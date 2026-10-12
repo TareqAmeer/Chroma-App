@@ -5342,12 +5342,17 @@
     if (!diskCached && !cached && isRaw && (!hdrPreview || hdrCompanion)) {
       try {
         const cacheT0 = performance.now(); const nativeBuf = await invoke('get_cached_raw_decode', { path, recipeKey });
+        rawPerf('open-cache-ipc', path, { ms: performance.now() - cacheT0, bytes: nativeBuf.byteLength });
+        const canvasT0 = performance.now();
         const head = new Uint32Array(nativeBuf, 0, 2);
         const c = document.createElement('canvas'); c.width = head[0]; c.height = head[1];
         c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), head[0], head[1]), 0, 0);
+        rawPerf('open-cache-canvas', path, { ms: performance.now() - canvasT0 });
         if (hdrCompanion) try {
           // Dense scene-linear rebuilt from frame + stored overlay (see hdrCompanionDensify).
+          const densT0 = performance.now();
           const dense = hdrCompanionDensify(hdrCompanion, new Uint8ClampedArray(nativeBuf, 8), head[0], head[1]);
+          rawPerf('open-hdr-densify', path, { ms: performance.now() - densT0 });
           const w = head[0], h = head[1];
           c._sceneLinear = { data: dense, w, h };
           c._sceneLinearPresent = true;
@@ -5361,7 +5366,9 @@
         // An HDR-companion frame is installed exactly the way loadFXImages installs a fresh
         // decode: the ~2560px working copy as `img`, the full canvas (carrying _sceneLinear) as
         // `fullImg` — so it renders identically to the uncached open, without a 24MP float upload.
+        const workT0 = performance.now();
         const hdrWork = (hdrCompanion && typeof fxDisplayTierCanvas === 'function') ? fxDisplayTierCanvas(c) : null;
+        if (hdrWork) rawPerf('open-hdr-work-copy', path, { ms: performance.now() - workT0 });
         diskCached = {
           img: hdrWork || c, fullImg: hdrWork ? c : undefined, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
           exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
@@ -5556,6 +5563,7 @@
         requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
         window.setTimeout(() => { if (state.unified_view) window.dispatchEvent(new Event('resize')); }, 250);
       }
+      rawPerf('open-mark-after-install', path, { ms: performance.now() - openT0 });
       if (!LIBTEST) { try { localStorage.setItem(LS_LAST_PATH, path); } catch (e) {} }
       // The editor needs the ORIGINAL file path to read its HDR gain map at export
       // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
@@ -5590,6 +5598,7 @@
           fxUpdate();
         } catch (e) { console.error('reset to defaults', e); }
       }
+      rawPerf('open-mark-after-recipe', path, { ms: performance.now() - openT0 });
       // Real metadata (camera/lens/shutter/aperture/iso/date) via rawler on the Rust side —
       // the editor's own RW2 branch attaches none, so without this #fx-exif stays empty.
       // Metadata is panel-only and can be slow on an external volume. Do not block the first
@@ -5641,6 +5650,7 @@
       reveal.cancel(path);
       if (typeof toast === 'function') toast(`Couldn't open ${baseName(path)} — ${friendlyRawError(e)}`, false);
     } finally {
+      rawPerf('open-mark-finally', path, { ms: performance.now() - openT0 });
       const hideDisplayOverlay = await displayOverlayPromise;
       if (!deferredDisplayRender) hideDisplayOverlay();
       if (spin) spin.style.display = 'none';
@@ -5665,6 +5675,7 @@
       // display path signals from its own rAF above. The reveal ignores this for a stale path.
       if (!deferredDisplayRender) reveal.pixels(path);
       if (fullAssetPath || fullCachedEntry) startFullPromotion();
+      rawPerf('open-mark-pre-loaded', path, { ms: performance.now() - openT0 });
       rawPerf('open-fully-loaded', path, { ms: performance.now() - openT0, source: cached ? 'memory' : (diskCached ? 'persistent-cache' : 'decode') });
       if (isRaw && state.openedPath === path) warmNeighbour(path);
     }
