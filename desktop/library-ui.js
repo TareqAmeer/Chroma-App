@@ -1059,7 +1059,17 @@
   // editor chrome — the Library was still using them and looked like a different application.
   // Module scope: used by the header markup AND by renderGrid's per-card badges.
   const ic = (n, sz) => (typeof window.icon === 'function' ? window.icon(n, sz || 16) : '');
-  function imgCacheSize() { let s = 0; imgCache.forEach((v) => { s += v.size; }); return s; }
+  // An HDR entry's lazy scene-linear buffer (hdrDenseBytesNow, set where it is defined) only
+  // counts once materialised, so the budget stays honest without charging every cached photo 288MB.
+  function imgCacheSize() {
+    let s = 0;
+    imgCache.forEach((v) => {
+      s += v.size;
+      const f = v.entry && v.entry.fullImg;
+      if (f && typeof f._hdrDenseBytesNow === 'function') s += f._hdrDenseBytesNow();
+    });
+    return s;
+  }
   // Full-resolution frames are only worth keeping in RAM for the most recent couple of photos
   // (the likely back-and-forth); older entries keep just their ~2560px working copy (~17MB, not
   // ~96MB) and promote from the native/persistent cache if ever needed. On an 8GB Mac ten 24MP
@@ -5093,29 +5103,25 @@
     return true;
   };
   // Rebuilds the dense scene-linear buffer (w*h*3 f32) from the cached RGBA8 frame plus the sparse
-  // overlay native persisted (library.rs "HDR companion cache"): rgba8/255 everywhere (exact for
-  // values <= 1.0), overlaid with the stored f16 values for pixels that exceeded it.
-  // Layout (LE): "CHX1" | stem u64 | w u32 | h u32 | count u32 | idx u32*count | f16 u16*3*count.
+  // overlay native persisted (library.rs "HDR companion cache"): rgba8/255 everywhere, and for each
+  // stored pixel any channel with a non-zero excess byte becomes 1 + q/255*scale.
+  // Layout (LE): "CHX2" | stem u64 | w u32 | h u32 | count u32 | scale f32 | idx u32*count | u8*3*count.
   function hdrCompanionDensify(blob, px, w, h) {
     const dv = new DataView(blob);
+    if (dv.getUint32(0, true) !== 0x32584843) throw new Error('hdr companion format');
     if (dv.getUint32(12, true) !== w || dv.getUint32(16, true) !== h) throw new Error('hdr companion size mismatch');
-    const count = dv.getUint32(20, true);
-    if (blob.byteLength !== 24 + count * 10) throw new Error('hdr companion truncated');
+    const count = dv.getUint32(20, true), scale = dv.getFloat32(24, true);
+    if (blob.byteLength !== 28 + count * 7) throw new Error('hdr companion truncated');
     const dense = new Float32Array(w * h * 3);
     for (let i = 0, j = 0, k = 0; i < w * h; i++, j += 4, k += 3) {
       dense[k] = px[j] / 255; dense[k + 1] = px[j + 1] / 255; dense[k + 2] = px[j + 2] / 255;
     }
-    const idx = new Uint32Array(blob, 24, count);
-    const vals = new Uint16Array(blob, 24 + 4 * count, 3 * count);
-    const f16 = (v) => {
-      const e = (v >> 10) & 0x1f, m = v & 0x3ff, sg = (v & 0x8000) ? -1 : 1;
-      if (e === 0) return sg * m * 5.960464477539063e-8;
-      if (e === 31) return m ? NaN : sg * Infinity;
-      return sg * (1 + m / 1024) * Math.pow(2, e - 15);
-    };
+    const idx = new Uint32Array(blob, 28, count);
+    const vals = new Uint8Array(blob, 28 + 4 * count, 3 * count);
+    const step = scale / 255;
     for (let n = 0; n < count; n++) {
       const k = idx[n] * 3;
-      dense[k] = f16(vals[3 * n]); dense[k + 1] = f16(vals[3 * n + 1]); dense[k + 2] = f16(vals[3 * n + 2]);
+      for (let c = 0; c < 3; c++) { const q = vals[3 * n + c]; if (q) dense[k + c] = 1 + q * step; }
     }
     return dense;
   }
@@ -5145,7 +5151,14 @@
     // (marker written by the native decode) — its cached SDR frame then equals the HDR decode.
     let hdrPreview = !!window.chromasmithHdrPreview;
     const isRaw = RAW_EXT_RE.test(path);
-    let cached = hdrPreview ? null : imgCache.get(path);
+    let cached = imgCache.get(path);
+    // HDR preview may reuse a memory entry only when it still carries the full frame with its
+    // scene-linear companion (trimmed/SDR-only entries must re-resolve through native).
+    let hdrFromMemory = false;
+    if (hdrPreview) {
+      hdrFromMemory = !!(cached && cached.entry.fullImg && cached.entry.fullImg._sceneLinearPresent);
+      if (!hdrFromMemory) cached = null;
+    }
     let photoSourceMode = 'original';
     // A warm display cache can outlive the source drive. Probe availability on every open using
     // the native zero-byte header/stat path; keep render readiness tied to the pixels below.
@@ -5233,7 +5246,7 @@
     }
     // Both lookups are independent native stat/reads on the same volume — overlap them.
     let hdrCompanion = null;
-    if (hdrPreview && isRaw) {
+    if (hdrPreview && isRaw && !hdrFromMemory) {
       const lookT0 = performance.now();
       const [clear, comp] = await Promise.all([
         invoke('hdr_headroom_clear', { path, recipeKey }).catch(() => false),
@@ -5242,7 +5255,7 @@
       rawPerf('open-hdr-lookup', path, { ms: performance.now() - lookT0, clear: !!clear, companion: !!comp });
       if (clear) {
         hdrPreview = false;
-        cached = imgCache.get(path);
+        cached = imgCache.get(path); // marker says no headroom: the SDR entry is exact
         if (cached && spin) spin.style.display = 'none';
       } else {
         hdrCompanion = comp; // a photo WITH headroom: sparse f16 overlay beside the cached frame
@@ -5337,15 +5350,15 @@
         if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 500 }); else go();
       }, 700);
     };
-    if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth < 4000) {
+    if (cached && isRaw && (!hdrPreview || hdrFromMemory) && cached.entry.img.naturalWidth < 4000) {
       try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}
     }
-    if (cached && isRaw && !hdrPreview && cached.entry.img.naturalWidth >= 4000) {
+    if (cached && isRaw && (!hdrPreview || hdrFromMemory) && cached.entry.img.naturalWidth >= 4000) {
       fullCachedEntry = cached.entry;
     }
     // A decoded-this-session RAW is kept at the display tier with its full frame alongside
     // (displayTierEntry): reopen installs the small one, the full one is the on-demand promotion.
-    if (cached && isRaw && !hdrPreview && cached.entry.fullImg) fullCachedEntry = { img: cached.entry.fullImg };
+    if (cached && isRaw && (!hdrPreview || hdrFromMemory) && cached.entry.fullImg) fullCachedEntry = { img: cached.entry.fullImg };
     if (isRaw && !hdrPreview && (!cached || cached.entry.img.naturalWidth >= 4000)) {
       // The display tier is the first editor source. It is already prepared by batch caching,
       // so the first paint never waits for the 24MP GPU texture/FBO chain. Full quality is
@@ -5385,6 +5398,7 @@
           // 0.8-0.9s of every headroom-photo open). The pixels come back from the canvas then.
           const w = head[0], h = head[1], companion = hdrCompanion;
           let dense = null;
+          c._hdrDenseBytesNow = () => (dense && Object.getOwnPropertyDescriptor(c, '_sceneLinear') ? w * h * 12 : 0);
           Object.defineProperty(c, '_sceneLinear', { configurable: true, enumerable: true, get() {
             if (!dense) {
               const t0 = performance.now();
@@ -5413,6 +5427,7 @@
           exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len,
                    date: m.date, lens: m.lens, make: m.make, model: m.model },
         };
+        if (hdrCompanion && diskCached.fullImg) fullCachedEntry = { img: diskCached.fullImg }; // on-demand promotion keeps the HDR companion
         rawPerf('open-cache-native', path, { ms: performance.now() - cacheT0, bytes: nativeBuf.byteLength });
       } catch (e) {
         try {
@@ -5463,7 +5478,7 @@
         // independently; sharing the same object would make the next reopen pay the full GPU
         // upload again instead of taking the fast display path.
         // (not for an HDR companion frame: its ~288MB float buffer isn't in imgCache's size accounting)
-        if (!fullCachedEntry && !hdrCompanion) imgCacheStore(path, { ...diskCached, exif: { ...diskCached.exif } }, loadKey);
+        if (!fullCachedEntry || hdrCompanion) imgCacheStore(path, { ...diskCached, exif: { ...diskCached.exif } }, loadKey);
       } else if (cached) {
         cached.ts = Date.now(); // touch for LRU
         deferEditorRender = false;
