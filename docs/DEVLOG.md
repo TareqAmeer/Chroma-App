@@ -10,6 +10,8 @@ Agent-generated changelog of completed features and architectural decisions.
 - Native candidate `dea63433139657b9ab3f847edd8975353fc56dba`, BUILD `1.1012T`, passes the same geometry/history workflow in the actual Tauri WebView at 1366×768 with three ordinary PNG fixtures. The source identity test simulates image-object replacement; no real RAW promotion, photographic quality or decode-performance result is claimed. Counted dialog screenshots and provenance are in `docs/validation/chr193/`.
 - Full Editor audit: 21/33 gates pass, with the same 12 failures and 879 inventory findings as the CHR-192 integration baseline. `editor-gates-2026-10-12.json` records the comparison. This is not a full UI-suite pass.
 
+- CHR-193 publication verified at `ed3e95164c43a5c629429844bc938b7c0eae7718`: non-force fast-forward push and `git ls-remote` matched. Native-tested candidate `dea63433` is included; integrated HTML matches it except BUILD, while newer main signing and Library timing changes are preserved. Integrated geometry batch/controls/history-hover checks pass; Linear is In Review with slice criteria checked and broader selected-scope criteria open.
+
 ## 2026-10-06 — CHR-284 Android JPEG export performance
 
 - Added memory/GPU-bounded 2048px Android tiles, reusable temporary canvases with cancellation cleanup, and nonblocking inexact completion notifications in `chromasmith-22.html`; preserve full resolution, JPEG quality and the separate export renderer.
