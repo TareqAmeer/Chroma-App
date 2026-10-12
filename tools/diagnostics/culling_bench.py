@@ -26,7 +26,7 @@ STEP_JS = """
   const ms = performance.now() - t0;
   const ev = (window.__rawPerfLog || []);
   const fl = ev.find(e => e.event === 'open-fully-loaded');
-  return JSON.stringify({{ok:true, ms, src: fl && fl.source, ev: ev.filter(e => (e.ms != null && e.ms > 150) || /hdr|warm|cache|decode-start|native-fast|clear/i.test(e.event)).map(e => e.event + '@' + Math.round(e.t - t0) + (e.ms != null ? '=' + Math.round(e.ms) : ''))}});
+  return JSON.stringify({{ok:true, ms, src: fl && fl.source, ev: ev.filter(e => (e.ms != null && e.ms > 150) || /hdr|warm|neigh|cache|decode-start|native-fast|clear/i.test(e.event)).map(e => e.event + '@' + Math.round(e.t - t0) + (e.ms != null ? '=' + Math.round(e.ms) : '') + (e.reason ? ':' + e.reason + (e.entries != null ? '/' + e.entries : '') : ''))}});
 }})()
 """
 
@@ -59,6 +59,8 @@ def main():
     ap.add_argument('--rapid-ms', type=int, default=0, help='also run a held-key scenario with this gap')
     ap.add_argument('--skip', type=int, default=0, help='skip this many never-cached files first (so scenarios do not reuse files)')
     ap.add_argument('--label', default='run')
+    ap.add_argument('--reverse', action='store_true', help='walk the run in descending filename order (the grid is date-descending)')
+    ap.add_argument('--warm-delay-ms', type=int, default=0, help='set window.chromasmithWarmDelayMs for this run')
     args = ap.parse_args()
     token = rob.fresh_start()
     cands = sorted(p for p in glob.glob(os.path.join(args.folder, f'*.{args.ext}')) if not os.path.basename(p).startswith('.'))
@@ -83,7 +85,10 @@ def main():
     rb.app_eval(token, rb.OPEN_LIBRARY_JS)
     rb.log('navigating folder (first visit of a large folder can take minutes)...')
     rb.app_eval(token, rb.OPEN_FOLDER_JS.format(path=rb.js_str(args.folder)), timeout=600)
-    rb.app_poll(token, rb.CARD_EXISTS_JS.format(path=rb.js_str(run[0])), lambda r: r is True, 120)
+    try:  # the card is only cosmetic (reveal aspect); a virtualised/filtered grid must not abort the bench
+        rb.app_poll(token, rb.CARD_EXISTS_JS.format(path=rb.js_str(run[0])), lambda r: r is True, 20)
+    except RuntimeError:
+        rb.log('card not rendered in the grid — opening by path anyway')
     # first visit of a folder starts catalog/thumbnail indexing — time photos only once the app is idle
     pid = rb.find_pid(); quiet = 0; t_end = time.time() + 300
     while quiet < 5 and time.time() < t_end:
@@ -91,8 +96,11 @@ def main():
         quiet = quiet + 1 if cpu < 40 else 0
         time.sleep(1)
     rb.log(f'app idle (quiet={quiet}) — starting timed run')
+    if args.warm_delay_ms:
+        rb.app_eval(token, f'(window.chromasmithWarmDelayMs={args.warm_delay_ms},"ok")')
     steps = []
-    for p in run[:args.n]:
+    seq = list(reversed(run[:args.n])) if args.reverse else run[:args.n]
+    for p in seq:
         r = json.loads(rb.app_eval(token, STEP_JS.format(path=rb.js_str(p)), timeout=120))
         r['file'] = os.path.basename(p); steps.append(r)
         rb.log(f'dwell step {r["file"]}: {r.get("ms", -1):.0f}ms src={r.get("src")} {r.get("ev")}')

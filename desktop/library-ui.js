@@ -7489,22 +7489,30 @@
     if (off) return;
     const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
     const idx = sorted.indexOf(path);
-    if (idx < 0) return;
+    if (idx < 0) { rawPerf('neighbour-warm-skip', path, { reason: 'not-in-view', entries: state.entries.length }); return; }
     if (_lastOpenIdx >= 0 && idx !== _lastOpenIdx) _warmDir = idx > _lastOpenIdx ? 1 : -1;
     _lastOpenIdx = idx;
-    const target = sorted[idx + _warmDir];
-    if (!target || !RAW_EXT_RE.test(target)) return;
+    // The next RAW in the direction of travel: RAW+JPEG pairs put a JPG (or other non-RAW) next to
+    // every RAW in the grid, which used to end the warm-up before it started (neighbour = JPG).
+    const stemOf = (q) => q.replace(/\.[^./]+$/, '');
+    let target = null;
+    for (let step = 1; step <= 4; step++) {
+      const q = sorted[idx + _warmDir * step];
+      if (!q) break;
+      if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) { target = q; break; }
+    }
+    if (!target) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
     setTimeout(async () => {
-      if (token !== _warmToken || state.openedPath !== path || _warmInflight) return;
+      if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
       for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
-        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); return; } catch (_) {}
+        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); return; } catch (_) {}
       }
       const t0 = performance.now();
       const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
       _warmInflight = { path: target, promise };
       try { await promise; } finally { _warmInflight = null; }
       rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
-    }, 1500);
+    }, +window.chromasmithWarmDelayMs || 1500);
   }
 
   // Warm the persistent full-resolution RAW cache without opening photos in the editor.
