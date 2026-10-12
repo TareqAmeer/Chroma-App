@@ -1,0 +1,18 @@
+{
+  "featureTip": "49aeb7d46ba75ae7ab11b20c0b566f6d26950910",
+  "newMain": "ff60622f525dc0989662b3fbeb2e7df3f639ce67",
+  "checks": {
+    "AGENTS.md": true,
+    "DEVLOG.md": true,
+    "chromasmith-22.html": true,
+    "desktop/library-ui.js": true,
+    "docs/validation/chr192/browser-scroll-regression-2026-10-12.json": true,
+    "docs/validation/chr192/editor-gates-R-2026-10-12.json": true,
+    "docs/validation/chr192/library-navigation-native-2026-10-12-S.json": true,
+    "docs/validation/chr192/library-navigation-native-2026-10-12-S.png": true,
+    "scripts/verify-library-navigation-native.mjs": true,
+    "test/library_job_history.mjs": true,
+    "test/library_navigation.mjs": true
+  },
+  "exceptions": "HTML BUILD stamp follows main commit hook; Library preserves newer six-line HDR warm-up wait."
+}

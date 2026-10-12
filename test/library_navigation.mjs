@@ -113,6 +113,7 @@ async function runTheme(theme, { normalMotion = false } = {}) {
 
   const page = await context.newPage();
   const errors = [];
+  let workspaceDiscoverability = null;
   page.on('pageerror', error => errors.push(error.message));
   try {
     await page.goto(`http://127.0.0.1:${port}/desktop/dist/index.html?libtest=1&libn=72&deskx=1`, { waitUntil: 'load', timeout: 60000 });
@@ -231,6 +232,32 @@ async function runTheme(theme, { normalMotion = false } = {}) {
     assert(studioBefore.rail.length > 0 && studioBefore.rail.every(item => item.text && item.aria), 'tool rail controls keep visible names and accessible names');
     assert.deepEqual(studioBefore.jobs, { visible: true, studioHost: true, buttonCount: 1, popoverCount: 1,
       activityCount: 1, activityInSharedHost: true, legacyFooterActivity: false }, 'Studio exposes one shared Jobs host with no legacy footer activity');
+
+    if (normalMotion) {
+      const resizers = await page.locator('#fx-panel-resizer, #fx-rail-resizer, #lib-unified-resizer').evaluateAll(elements =>
+        elements.map(el => ({ id: el.id, role: el.getAttribute('role') || el.tagName.toLowerCase(), label: el.getAttribute('aria-label') || '', title: el.getAttribute('title') || '', visible: el.getClientRects().length > 0 })));
+      const visibleResizers = resizers.filter(item => item.visible);
+      assert(visibleResizers.length > 0 && visibleResizers.every(item => item.label),
+        `Every visible Studio resizer has an accessible name: ${JSON.stringify(resizers)}`);
+      assert(visibleResizers.some(item => item.id === 'fx-rail-resizer' && item.label === 'Resize tool bar'),
+        `Studio exposes its visible tool-bar resizer: ${JSON.stringify(resizers)}`);
+      assert(resizers.some(item => item.id === 'fx-panel-resizer' && item.label === 'Resize tool panel'),
+        `The native tool-panel resizer keeps its accessible name when this pane is hidden: ${JSON.stringify(resizers)}`);
+      const settings = page.locator('button[aria-label="Settings — transform, edit settings, view, appearance"]');
+      const settingsLabel = await settings.getAttribute('aria-label');
+      assert.match(settingsLabel || '', /view/i, 'Settings entry advertises the View controls');
+      await settings.click();
+      const appearanceCategory = page.locator('#fx-settings-cats .fx-settings-cat[data-cat="appearance"]');
+      await appearanceCategory.waitFor({ state: 'visible' });
+      assert.equal((await appearanceCategory.textContent()).trim(), 'Appearance');
+      await appearanceCategory.click();
+      // The existing layout reset is grouped with Appearance; do not invoke it during discovery.
+      const resetLayout = page.locator('#fx-appearance-menu button.fx-ovf-item').filter({ hasText: /^Reset layout$/ });
+      await resetLayout.waitFor({ state: 'visible' });
+      workspaceDiscoverability = { resizers, category: (await appearanceCategory.textContent()).trim(), resetLayout: (await resetLayout.textContent()).trim() };
+      await settings.click();
+      await page.waitForFunction(() => !document.getElementById('fx-settings-menu')?.classList.contains('on'));
+    }
 
     // The same Jobs control must be keyboard-operable in Studio; Escape closes it, returns focus,
     // and does not switch the workspace. Clicking elsewhere closes it too.
@@ -363,7 +390,8 @@ async function runTheme(theme, { normalMotion = false } = {}) {
     assert.deepEqual(errors, [], `page errors: ${errors.join('; ')}`);
     return { theme, motion: normalMotion ? 'no-preference' : 'reduced', source, rootPath: rootPath,
       folder: roundTrip.folder, anchorBefore: anchorBefore.path, anchor: roundTrip.anchor,
-      zoom: studioAfter.zoom, jobs: jobCalls.map(call => call.command), railItems: studioBefore.rail.length };
+      zoom: studioAfter.zoom, jobs: jobCalls.map(call => call.command), railItems: studioBefore.rail.length,
+      ...(workspaceDiscoverability ? { workspaceDiscoverability } : {}) };
   } finally { await context.close(); }
 }
 

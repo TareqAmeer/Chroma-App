@@ -1,0 +1,145 @@
+{
+  "issue": "CHR-192",
+  "sourceCommit": "8538bdf6e3e3910f95c23bea5f71a2c0fd6d4126",
+  "command": "npm run editor:gates -- --jobs=8",
+  "passed": 21,
+  "failed": 12,
+  "gates": [
+    {
+      "gate": "editor:inventory",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:responsive",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:coverage",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:wireframe-diff",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:snap-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:html-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:self-reschedule-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:native-gate-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:keyboard-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:token-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:webkit-smoke",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:undo-stress",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:session-roundtrip",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:fuzz-input",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:canvas-resize-leak",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:offline-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:crosstab-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:axe-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:icon-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:motion-token-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:forced-colors-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:hover-focus-matrix",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:empty-error-states",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:photo-activity-test",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:zoom-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:long-string-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:hidpi-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:surface-coverage",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:cvd-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:tokens-check",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:components-check",
+      "result": "FAIL"
+    },
+    {
+      "gate": "editor:tokens-verify",
+      "result": "PASS"
+    },
+    {
+      "gate": "editor:catalog-visual",
+      "result": "FAIL"
+    }
+  ],
+  "inventoryFindings": 879,
+  "inventoryMissing": [],
+  "comparison": "Same 12 failures and 879 findings as pre-integration; full UI suite remains failing.",
+  "focusedChecks": "Navigation three theme/motion cases, RAW preparation, RAW faces, history 12/12 and shortcut registry 62 actions pass. Normal-motion discovery also verifies visible named rail resizer and Reset layout under Settings / Appearance."
+}
