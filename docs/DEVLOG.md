@@ -1,6 +1,12 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+## 2026-10-12 — CHR-267 varied RAW native gate
+
+- Extended `test/library_cull_perf_native.mjs` with an optional distinct second RAW, independent checksums/extensions/dimensions and focused source identity on each timing sample. Existing same-capture mode and the 44 MP qualification floor remain; sources use hard links in a separate varied fixture folder.
+- Added `docs/validation/chr267/varied-raw-fixtures.md` for the existing Nikon Z 7 and a checksum-verified CC0 Canon EOS R5 original. One 40.6 MB canonical download fits the 49.453 GB pre-download workspace audit; no RAW binaries are tracked or duplicated.
+- Static syntax/whitespace checks pass. Native execution evidence is recorded after the isolated real-app run; this harness extension alone does not establish varied RAW presentation performance or recipe-colour parity.
+
 ## 2026-10-12 — CHR-247 preserve portable mask backend intent
 
 - `chromasmith-22.html` now re-evaluates portable prompted masks through their recorded EdgeSAM or SAM 2.1 backend, prepares the requested cold encoder without upgrading live masks, and preserves unknown legacy automatic selection. Contradictory rectangle/point provenance and unavailable known sky refinement fail the target without committing replacement pixels/provenance.
