@@ -7,6 +7,8 @@ Agent-generated changelog of completed features and architectural decisions.
 - Extended `test/mask_ai_provenance.mjs` with production encoder/dispatch, warm-other-backend, cold-requested-backend, failure-preservation, prompt conflict and sky fallback checks. Focused provenance checks, portable-copy 12/12, fresh-dist browser copy/undo orchestration, HTML nesting and whitespace checks pass.
 - This JS-only slice uses existing commands and mocked model responses; no new models, native inference or labelled photographic quality result is claimed. Existing layout/style gates were unchanged and not rerun; the published CHR-193 full audit remains 21/33 passing with 879 inventory findings. Model revision/digest remain unknown. Broader CHR-247 parity criteria remain open.
 
+- Publication verified: candidate `27fcb23efa3d8826ab86bf7294ff6afcd88f383b` is included in `origin/main` at `c9c1cfd9783c68b3234def497153a417345e8142`, confirmed by non-force push and matching `git ls-remote`. Final production HTML equals the tested candidate except BUILD. Linear is In Review; backend-intent slice checks are ticked, broader original parity criteria remain open. Evidence: `docs/validation/chr247/backend-intent-2026-10-12.json`.
+
 ## 2026-10-12 — CHR-193 counted, recoverable geometry copy
 
 - `chromasmith-22.html` now reviews the source, exact loaded-photo target count/names and geometry replacement warning before copying. Cancel and stale source/batch decisions preserve target geometry; membership and history lookup use linear-time maps/sets.
