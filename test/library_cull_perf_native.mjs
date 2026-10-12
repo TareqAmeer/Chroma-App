@@ -207,8 +207,17 @@ try {
         const decodedHeight = source?.naturalHeight || source?.height || 0;
         if (decodedWidth !== fixture.width || decodedHeight !== fixture.height)
           throw Error(`${expectedName} decoded source is ${decodedWidth}x${decodedHeight}, expected ${fixture.width}x${fixture.height}`);
+        const settings = image?.rawFile?.__csRawDecodeSettings || {};
         return { path, sha256: fixture.sha256, imagePath, cellName: cell.querySelector('.lib-survey-name')?.textContent,
-          sourceWidth: iw, sourceHeight: ih, decodedWidth, decodedHeight };
+          sourceWidth: iw, sourceHeight: ih, decodedWidth, decodedHeight,
+          observedRawDecodeSettings: {
+            profile: typeof settings.profile === 'string' ? settings.profile : null,
+            rawNr: typeof settings.rawNr === 'string' ? settings.rawNr : null,
+            demosaicAlgo: typeof settings.demosaicAlgo === 'string' ? settings.demosaicAlgo : null,
+            autoLens: typeof settings.autoLens === 'boolean' ? settings.autoLens : null,
+            lensOverride: typeof settings.lensOverride === 'string' ? !!settings.lensOverride : null,
+            fullCleanup: typeof settings.fullCleanup === 'boolean' ? settings.fullCleanup : null,
+          } };
       });
       if (new Set(entries.map(entry => entry.cellName)).size !== 2) throw Error('resume mode did not resolve two distinct Cull cells');
       return entries;
@@ -382,6 +391,35 @@ try {
   stage('native-detail.complete');
   report.samples.push({...native, budgetMs: 500, pass: native.presented && native.ms < 500});
   assertMeasuredFixture(native, Number(focusedIndex));
+  if (variedCaptureMode) {
+    // Measure the second capture's native-detail transition in the same already-warmed
+    // process. Fit first so this sample measures the same fit-to-native action as A.
+    await page.locator('#lib-survey [data-detail="fit"]').click();
+    await page.locator('.lib-survey-cell[data-survey-idx="1"]').focus();
+    await page.waitForFunction(expected => {
+      const cell = document.querySelector('.lib-survey-cell.cmp-focus');
+      const fixture = expected[1], wrap = cell?.querySelector('.lib-cmp-canvas-wrap'), canvas = cell?.querySelector('canvas');
+      if (!cell || cell.dataset.surveyIdx !== '1' || +cell.dataset.sourceWidth !== fixture.width
+        || +cell.dataset.sourceHeight !== fixture.height || !wrap || !canvas) return false;
+      const name = cell.querySelector('.lib-survey-name')?.textContent?.toLowerCase();
+      if (name !== fixture.name) return false;
+      const images = typeof fxImages === 'undefined' ? [] : fxImages;
+      const image = images.find(it => (it.rawFile?.__csSourcePath || it.path || '').replaceAll('\\', '/').toLowerCase() === fixture.path.replaceAll('\\', '/').toLowerCase());
+      const source = image?.fullImg || image?.img;
+      if ((source?.naturalWidth || source?.width || 0) !== fixture.width
+        || (source?.naturalHeight || source?.height || 0) !== fixture.height) return false;
+      const fit = Math.min(1, wrap.clientWidth / fixture.width, wrap.clientHeight / fixture.height), rect = canvas.getBoundingClientRect();
+      return Math.abs(rect.width - fixture.width * fit) < 3 && Math.abs(rect.height - fixture.height * fit) < 3
+        && canvas.width >= Math.floor(rect.width) && canvas.height >= Math.floor(rect.height);
+    }, expectedPresentationFixtures, { timeout: 15000 });
+    await arm('native', 1);
+    stage('native-detail.B.start');
+    await page.locator('#lib-survey [data-detail="native"]').click();
+    const nativeB = await observation();
+    stage('native-detail.B.complete');
+    report.samples.push({...nativeB, photoSlot: 'B', budgetMs: 500, pass: nativeB.presented && nativeB.ms < 500});
+    assertMeasuredFixture(nativeB, 1);
+  }
   report.nativeStages = await page.evaluate(() => (window.__rawPerfLog || []).slice(-100));
   report.failures = report.samples.filter(s => !s.pass).map(s => `${s.mode} ${s.index}: ${s.presented ? s.ms.toFixed(1)+'ms' : 'no qualifying frame'} (budget ${s.budgetMs}ms)`);
   await save();
