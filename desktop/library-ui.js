@@ -194,6 +194,9 @@
   }
   function libtestInvoke(cmd, args) {
     const A = args || {};
+    if (LIBTEST && (cmd === 'queue_offline_edit' || cmd === 'set_sidecar')) {
+      (window.__libtestPersistenceCalls ||= []).push({ command: cmd, args: structuredClone(A) });
+    }
     if (LIBTEST && window.__libtestCatalogInvoke) {
       const mocked = window.__libtestCatalogInvoke(cmd, structuredClone(A));
       if (mocked && mocked.__libtestHandled === true) return Promise.resolve(mocked.result);
@@ -245,7 +248,12 @@
         return Promise.resolve(png.buffer);
       }
       case 'read_file_bytes':
-        if (/[?&]libforceoffline=1/.test(location.search)) return Promise.reject(new Error('libtest: source disconnected'));
+        if (!(window.__libtestOriginalAvailable !== undefined
+          ? !!window.__libtestOriginalAvailable : !/[?&]libforceoffline=1/.test(location.search))
+          && !(/[?&]libhqcache=1/.test(location.search)
+            && [..._hqOfflineByPath.values()].some((entry) => entry.path === A.path))) {
+          return Promise.reject(new Error('libtest: source disconnected'));
+        }
         return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
       case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
       case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
@@ -913,8 +921,17 @@
       // Gallery -> Editor open fail ("decode failed") in libtest, because the opener trusts the
       // header over the file name. Missing is what every caller already handles (full read).
       // Caught by test/library_flows.mjs.
-      case 'get_thumbnail_fast': case 'read_file_head':
+      case 'read_file_head': {
+        if (A.len === 0) {
+          const available = window.__libtestOriginalAvailable !== undefined
+            ? !!window.__libtestOriginalAvailable : !/[?&]libforceoffline=1/.test(location.search);
+          if (!available) return Promise.reject(new Error('libtest: source disconnected'));
+          const probe = new ArrayBuffer(8); new DataView(probe).setBigUint64(0, 1n, true);
+          return Promise.resolve(probe);
+        }
         return Promise.reject(new Error('libtest: fast path unavailable'));
+      }
+      case 'get_thumbnail_fast': return Promise.reject(new Error('libtest: fast path unavailable'));
       // The mock's ".RW2" files are really PNG bytes, so a camera ident would route them into the
       // RAW decoder; only ?libraw=1 (a test that supplies real RAW bytes) gets one.
       case 'peek_raw_camera': case 'peek_raw_camera_path':
@@ -1140,7 +1157,7 @@
     dupeClusterSizes: new Map(), // clusterId -> size
     _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
     syncedPaths: new NavigationMembershipSet(), // paths known-synced to Google Photos
-    offlineEditPaths: new Set(), // paths currently open against the reduced-res offline preview (N1a) — see openInEditorInner
+    originalUnavailableEditPaths: new Set(), // paths whose edits must queue until the original volume returns, regardless of render tier
     photoSourceModes: new Map(), // path -> original | offlineCache | offlinePreview for the Editor's persistent source/render status
     typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
     cameraFilter: 'all',
@@ -5129,7 +5146,18 @@
     let hdrPreview = !!window.chromasmithHdrPreview;
     const isRaw = RAW_EXT_RE.test(path);
     let cached = hdrPreview ? null : imgCache.get(path);
-    let photoSourceMode = state.photoSourceModes.get(path) || 'original';
+    let photoSourceMode = 'original';
+    // A warm display cache can outlive the source drive. Probe availability on every open using
+    // the native zero-byte header/stat path; keep render readiness tied to the pixels below.
+    try {
+      await invoke('read_file_head', { path, len: 0 });
+      state.originalUnavailableEditPaths.delete(path);
+      state.photoSourceModes.set(path, 'original');
+    } catch (_) {
+      state.originalUnavailableEditPaths.add(path);
+      photoSourceMode = 'missing';
+      state.photoSourceModes.set(path, photoSourceMode);
+    }
     let displayOverlayPromise = Promise.resolve(() => {});
     // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT.
     // They must never enter the Editor path: the first editor pixels always come from our
@@ -5515,13 +5543,17 @@
         if (fxImages[0]) {
           fxImages[0].fileSize = byteLen; // shown as the "Size" row in the metadata panel
           fxImages[0].offlinePreview = offlinePreview;
+          if (offlinePreview || hqOfflineCacheExt) {
+            // Persistence follows original availability, not render quality: both the reduced
+            // catalog thumbnail and full-quality hq-offline copy are stand-ins for a missing source.
+            state.originalUnavailableEditPaths.add(path);
+          } else {
+            state.originalUnavailableEditPaths.delete(path);
+          }
           if (offlinePreview) {
-            state.offlineEditPaths.add(path);
             if (typeof toast === 'function') {
               toast(`${baseName(path)} — drive not connected. Editing a reduced-quality offline preview; edits are queued and applied at full resolution once it reconnects.`, false);
             }
-          } else {
-            state.offlineEditPaths.delete(path);
           }
           const loadKey = fxFileLoadKey(file); // shared with loadFXImages, including native source identity
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
@@ -5789,12 +5821,10 @@
       const recipe = snapshotToB64(perPhotoSnap);
       const updated = { ...cur, edited: true, recipe };
       state.sidecars.set(path, updated);
-      if (state.offlineEditPaths.has(path)) {
-        // N1a piece 2: the real file/sidecar isn't reachable right now (that's exactly why this
-        // path is in offlineEditPaths — see openInEditorInner) — there is nowhere for set_sidecar
-        // to write to. Queue the recipe in the catalog DB instead; it replays for real once the
-        // volume reconnects (see wireOfflineQueueReconnect below). This does NOT update the local
-        // sidecar cache/UI "edited" badge as saved-for-real — it stays queued until applied.
+      if (state.originalUnavailableEditPaths.has(path)) {
+        // The real file/sidecar isn't reachable, whether pixels came from the reduced thumbnail
+        // or the full-quality hq-offline cache. Queue in the catalog DB for replay on reconnect;
+        // do not imply that the original sidecar has already been saved.
         queued = true;
         await invoke('queue_offline_edit', { path, recipe }).catch((e) => { failed = true; console.error('queue_offline_edit', e); });
       } else {
@@ -5855,7 +5885,7 @@
       ? window.chromasmithMaskToSnapshot(m) : m);
     Object.assign(snap, mergePhotoMaskRecipeSnapshot(snap, encodedMasks));
     const recipe = snapshotToB64(snap);
-    const queued = state.offlineEditPaths.has(path);
+    const queued = state.originalUnavailableEditPaths.has(path);
     if (queued) {
       await invoke('queue_offline_edit', { path, recipe });
     } else {
@@ -14415,6 +14445,24 @@
 
   if (LIBTEST) {
     window.__libtestPrepareBatchRawFiles = prepareBatchRawFiles;
+    window.__libtestSetOriginalAvailable = (available) => { window.__libtestOriginalAvailable = !!available; };
+    window.__libtestOriginalSourceState = (path) => ({
+      openedPath: state.openedPath,
+      openedPaths: [...(state.openedPaths || [])],
+      sourceMode: state.photoSourceModes.get(path) || null,
+      queueRequired: state.originalUnavailableEditPaths.has(path),
+    });
+    window.__libtestSeedHqOfflineCache = (originalPath, cachePath, bytes) => {
+      if (!/[?&]libhqcache=1/.test(location.search)) throw new Error('libtest HQ cache fixture requires ?libhqcache=1');
+      if (!(/^\/test\/(?:Photos|AllPhotos)\//.test(String(originalPath || '')))
+        || !String(cachePath || '').startsWith('/test/offline-cache/')) throw new Error('libtest HQ cache fixture paths must stay under /test');
+      const value = bytes instanceof ArrayBuffer ? bytes
+        : (ArrayBuffer.isView(bytes) ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : null);
+      if (!value || !value.byteLength) throw new Error('libtest HQ cache fixture requires image bytes');
+      _hqOfflineByPath.set(originalPath, { path: cachePath, reason: 'libtest' });
+      (window.__libtestFileBytes ||= Object.create(null))[cachePath] = value;
+      return { originalPath, cachePath };
+    };
     // No real backend under libtest to fire real catalog-scan/ingest-progress events — this is
     // the same "manual debug trigger" pattern window.libtestLrConnect() already uses, so the
     // indicator's in-progress/done/failed states are screenshot-verifiable without one.
@@ -16659,6 +16707,18 @@
   // `offlineQueuePromptOpen` guards against re-opening the modal on the next poll tick while the
   // user hasn't answered the current one yet.
   let offlineQueuePromptOpen = false;
+  async function confirmOriginalSourceAvailable(path) {
+    try { await invoke('read_file_head', { path, len: 0 }); }
+    catch (error) {
+      if (LIBTEST) (window.__libtestSourceAvailabilityConfirms ||= []).push({ path, openedPath: state.openedPath, available: false, error: String(error && error.message || error) });
+      return false;
+    }
+    if (LIBTEST) (window.__libtestSourceAvailabilityConfirms ||= []).push({ path, openedPath: state.openedPath, available: true });
+    state.originalUnavailableEditPaths.delete(path);
+    state.photoSourceModes.set(path, 'original');
+    if (state.openedPath === path) window.chromasmithSourceRenderUpdate?.({ source: 'original' });
+    return true;
+  }
   function offlineQueueConflictModal(n) {
     return new Promise((res) => {
       let dlg = document.getElementById('lib-offq-modal');
@@ -16692,7 +16752,10 @@
     const conflicted = queued.filter((q) => q.conflict);
     // Non-conflicted entries replay silently and automatically — no prompt for the common case.
     for (const q of noConflict) {
-      try { await invoke('apply_queued_edit', { id: q.id }); } catch (e) { console.error('apply_queued_edit', e); }
+      try {
+        await invoke('apply_queued_edit', { id: q.id });
+        await confirmOriginalSourceAvailable(q.path);
+      } catch (e) { console.error('apply_queued_edit', e); }
     }
     if (noConflict.length && typeof toast === 'function') {
       toast(`${noConflict.length} offline edit${noConflict.length > 1 ? 's' : ''} applied now that the drive is reconnected.`, true);
@@ -16704,10 +16767,16 @@
     try {
       const choice = await offlineQueueConflictModal(conflicted.length);
       if (choice === 'apply') {
-        for (const q of conflicted) { try { await invoke('apply_queued_edit', { id: q.id }); } catch (e) { console.error('apply_queued_edit', e); } }
+        for (const q of conflicted) {
+          try { await invoke('apply_queued_edit', { id: q.id }); await confirmOriginalSourceAvailable(q.path); }
+          catch (e) { console.error('apply_queued_edit', e); }
+        }
         if (typeof toast === 'function') toast(`Applied ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''} despite the change${conflicted.length > 1 ? 's' : ''}.`, true);
       } else if (choice === 'ignore') {
-        for (const q of conflicted) { try { await invoke('discard_queued_edit', { id: q.id }); } catch (e) { console.error('discard_queued_edit', e); } }
+        for (const q of conflicted) {
+          try { await invoke('discard_queued_edit', { id: q.id }); }
+          catch (e) { console.error('discard_queued_edit', e); }
+        }
         if (typeof toast === 'function') toast(`Discarded ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''}.`, false);
       }
       // choice === null (dismissed via Escape): leave the entries queued — the next reconnect

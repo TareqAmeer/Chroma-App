@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-12",
+  "scope": "Offline edit persistence routing for original, reduced-preview, and full-quality offline-cache source modes.",
+  "coverage": {
+    "original": "Autosave and mask-set save both call set_sidecar; source is full-resolution ready.",
+    "offlinePreview": "A missing-source probe selects the reduced preview; autosave and mask-set save both queue against the original path, and no sidecar write occurs.",
+    "offlineHqCache": "A seeded cached JPEG is selected when the original read fails; autosave and mask-set save queue against the original path while full-quality readiness remains true.",
+    "warmCacheDisconnect": "Reopening a warm full-quality image while the original probe fails preserves the existing image object and render tier, marks the source missing, and queues the next edit.",
+    "replayAndDiscard": "Applying or discarding edits while the original remains unavailable leaves the source unavailable. Successful replay records a true zero-byte availability probe for the same opened path, clears queue-required routing, and a later edit uses set_sidecar."
+  },
+  "validation": [
+    "node test/library_source_render_status.mjs — PASS",
+    "node test/library_save_state_race.mjs — PASS",
+    "node --check desktop/library-ui.js — PASS",
+    "node --check test/library_source_render_status.mjs — PASS",
+    "node test/lint_library_content.mjs — PASS",
+    "git diff --check — PASS"
+  ],
+  "limitations": [
+    "The offline HQ cache is seeded by the LIBTEST fixture seam with a tiny synthetic PNG; this verifies source-selection and persistence routing, not full-resolution image quality or native cache generation.",
+    "Reconnect availability is simulated by the test seam, not a live mounted drive."
+  ]
+}

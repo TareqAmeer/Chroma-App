@@ -1,6 +1,12 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+## 2026-10-12 — CHR-194 offline source availability and durable edits
+
+- `desktop/library-ui.js` routes edits/mask saves from both offline cache tiers to the durable queue. Every open, including warm pixel-cache reuse, probes current original availability with zero-payload `read_file_head`; cached render readiness remains independent. Discard never marks a source online, and replay clears unavailable state only after a fresh successful probe with current-photo HUD guarding.
+- `test/library_source_render_status.mjs` passes actual original/reduced/HQ-cache selection and persistence routing, warm disconnect, unavailable replay/discard and available replay. Removed manual render-label transitions. Save-state race, syntax, Library content lint and whitespace checks pass; eight existing native queue tests cover baseline refusal, conflicts, replay, discard, restart and migrations using the unchanged cached test artifact.
+- Evidence is in `docs/validation/chr194/`. Browser HQ pixels and drive availability use explicit test fixtures; no live drive reconnect, photographic quality or native HQ-cache generation is claimed. No layout/shader change or repeated full Editor audit; the prior audit still has twelve failures and 879 findings.
+
 ## 2026-10-12 — CHR-199 reclaim culling viewport space
 
 - `desktop/library-ui.js` hides the grid-only folder title while Compare/Survey/Cull is active and restores it automatically in Gallery. Culling keeps one range label plus `Photo N focused` with the existing keyboard hints; focused pane/filmstrip sizes and fit/native/linked controls remain unchanged.

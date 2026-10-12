@@ -1,0 +1,50 @@
+{
+  "tests": [
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::queue_offline_edit_refuses_a_path_with_no_catalog_baseline",
+      "output": "\nrunning 1 test\ntest catalog::tests::queue_offline_edit_refuses_a_path_with_no_catalog_baseline ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.05s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::no_conflict_entries_are_flagged_correctly_and_auto_replayable",
+      "output": "\nrunning 1 test\ntest catalog::tests::no_conflict_entries_are_flagged_correctly_and_auto_replayable ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.10s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::a_changed_original_is_flagged_as_a_conflict_and_not_auto_replayed",
+      "output": "\nrunning 1 test\ntest catalog::tests::a_changed_original_is_flagged_as_a_conflict_and_not_auto_replayed ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.03s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::ignore_discards_the_queued_edit_without_touching_the_original",
+      "output": "\nrunning 1 test\ntest catalog::tests::ignore_discards_the_queued_edit_without_touching_the_original ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.04s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::apply_anyway_applies_the_queued_edit_despite_the_conflict",
+      "output": "\nrunning 1 test\ntest catalog::tests::apply_anyway_applies_the_queued_edit_despite_the_conflict ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.04s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::queue_entry_survives_a_simulated_app_restart",
+      "output": "\nrunning 1 test\ntest catalog::tests::queue_entry_survives_a_simulated_app_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.05s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::offline_queue_migration_preserves_existing_queued_recipe",
+      "output": "\nrunning 1 test\ntest catalog::tests::offline_queue_migration_preserves_existing_queued_recipe ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.03s\n"
+    },
+    {
+      "exitCode": 0,
+      "test": "catalog::tests::offline_queue_migration_repairs_missing_table_in_v21_catalog",
+      "output": "\nrunning 1 test\ntest catalog::tests::offline_queue_migration_repairs_missing_table_in_v21_catalog ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.03s\n"
+    }
+  ],
+  "binary": "C:\\Users\\Tareq\\AppData\\Local\\Chroma-App\\cargo-target\\debug\\deps\\chromasmith-6e569ef5d1e5408b.exe",
+  "passed": 8,
+  "reuse": "Existing compiled native test artifact contains current RAW-face tests; Rust source unchanged throughout these JS-only tasks; no build or dependency install",
+  "binarySha256": "41e87a4efefda3f45e74d1edf23ef4745b7649cd3425b1a915ccc16387ff6eb3",
+  "issue": "CHR-194",
+  "nativeSourceTree": "2e6aaec26386d0cbac22411cad487ec4338b2c79"
+}
