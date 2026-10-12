@@ -38,6 +38,20 @@ const historyRow = {
   detail: 'Resume checks sources, settings and prepared previews before continuing',
 };
 
+function assertHeaderGeometry(header, label, titleText) {
+  const requiredTitleWidth = Math.min(100, header.title.scrollWidth || 0);
+  assert(titleText?.trim() && header.title.visible && header.title.height > 0 && header.title.width + 1 >= requiredTitleWidth,
+    `${label}: photo filename must be fully visible up to 100px: ${JSON.stringify({ titleText, requiredTitleWidth, title: header.title })}`);
+  assert(header.zoom.visible && header.zoom.width >= 48 && /zoom/i.test(header.zoom.aria || ''),
+    `${label}: zoom control must remain visible and accessible: ${JSON.stringify(header.zoom)}`);
+  const overlaps = (a, b) => a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+  for (const [name, other] of [['scope', header.scope], ['zoom', header.zoom], ['Jobs', header.jobs]]) {
+    assert(!overlaps(header.title, other), `${label}: filename overlaps ${name}: ${JSON.stringify({ title: header.title, other })}`);
+  }
+  assert(!overlaps(header.scope, header.zoom) && !overlaps(header.scope, header.jobs),
+    `${label}: photo scope overlaps zoom or Jobs: ${JSON.stringify(header)}`);
+}
+
 async function runTheme(theme, { normalMotion = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, reducedMotion: normalMotion ? 'no-preference' : 'reduce' });
   const nativeProbe = await context.newPage();
@@ -184,6 +198,12 @@ async function runTheme(theme, { normalMotion = false } = {}) {
       source: window.chromasmithSourcePath,
       zoom: document.getElementById('fx-zoom-slider')?.value,
       title: document.getElementById('db-title-name')?.textContent.trim(),
+      header: (() => { const rect = el => { const r = el?.getBoundingClientRect(), s = el && getComputedStyle(el); return r && {
+        x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:el.scrollWidth,
+        visible:!!el.getClientRects().length && s.display!=='none' && s.visibility==='visible' && Number(s.opacity)>0,
+        aria:el.getAttribute('aria-label') }; };
+        return { title:rect(document.getElementById('db-title-name')), zoom:rect(document.getElementById('fx-zoom-slider')),
+          scope:rect(document.getElementById('fx-batch-scope')), jobs:rect(document.getElementById('sk2-act-jobs')) }; })(),
       titleNodes: document.querySelectorAll('#db-title-name').length,
       zoomNodes: document.querySelectorAll('#fx-zoom-slider').length,
       capClones: document.querySelectorAll('#sk2-cap-copy').length,
@@ -204,6 +224,7 @@ async function runTheme(theme, { normalMotion = false } = {}) {
     assert.equal(studioBefore.source, source);
     assert.equal(studioBefore.zoom, '225');
     assert.equal(studioBefore.title, source.split('/').pop().replace(/\.[^.]+$/, ''));
+    assertHeaderGeometry(studioBefore.header, `Studio header (${theme})`, studioBefore.title);
     assert.equal(studioBefore.titleNodes, 1, 'the canonical photo title must not be duplicated');
     assert.equal(studioBefore.zoomNodes, 1, 'the canonical zoom slider must not be duplicated');
     assert.equal(studioBefore.capClones, 0, 'Gallery must not mount cloned Studio header controls');
@@ -232,18 +253,25 @@ async function runTheme(theme, { normalMotion = false } = {}) {
 
     await page.locator('#cs-tog-lib').click();
     await page.waitForFunction(() => document.body.classList.contains('lib-full'), null, { timeout: 10000 });
-    // Wait until the scrollport and grid stop resizing before reading the returning anchor.
-    // This matters even with reduced motion because the native Workspace layout and CSS can
-    // still publish a transition after the body mode class flips.
-    await page.waitForFunction(() => {
+    // The async Gallery-anchor restore can start after the layout first looks stable.
+    // Require the expected card and viewport offset to remain correct while geometry settles.
+    await page.waitForFunction(({ path, offset }) => {
       const root = document.getElementById('lib-main'), grid = document.getElementById('lib-grid');
       if (!root || !grid) return false;
+      const bounds = root.getBoundingClientRect();
+      const card = [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].find(el => {
+        const rect = el.getBoundingClientRect(); return rect.bottom > bounds.top && rect.top < bounds.bottom;
+      });
+      if (!card || card.dataset.path !== path || Math.abs(card.getBoundingClientRect().top - bounds.top - offset) > 2) {
+        window.__chr192LayoutStableFrames = 0;
+        return false;
+      }
       const now = [root.clientWidth, root.clientHeight, grid.clientWidth, getComputedStyle(grid).gridTemplateColumns,
         root.scrollTop.toFixed(2)].join('|');
       if (window.__chr192LayoutSample === now) window.__chr192LayoutStableFrames = (window.__chr192LayoutStableFrames || 0) + 1;
       else { window.__chr192LayoutSample = now; window.__chr192LayoutStableFrames = 0; }
       return window.__chr192LayoutStableFrames >= 3;
-    }, null, { timeout: 10000 });
+    }, { path: anchorBefore.path, offset: anchorBefore.offset }, { timeout: 5000 });
     const roundTrip = await page.evaluate(() => {
       const root = document.getElementById('lib-main'), bounds = root.getBoundingClientRect();
       const card = [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].find(el => {
@@ -298,13 +326,21 @@ async function runTheme(theme, { normalMotion = false } = {}) {
     const studioAfter = await page.evaluate(() => ({
       source: window.chromasmithSourcePath, zoom: document.getElementById('fx-zoom-slider')?.value,
       title: document.getElementById('db-title-name')?.textContent.trim(),
+      header: (() => { const rect = el => { const r = el?.getBoundingClientRect(), s = el && getComputedStyle(el); return r && {
+        x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:el.scrollWidth,
+        visible:!!el.getClientRects().length && s.display!=='none' && s.visibility==='visible' && Number(s.opacity)>0,
+        aria:el.getAttribute('aria-label') }; };
+        return { title:rect(document.getElementById('db-title-name')), zoom:rect(document.getElementById('fx-zoom-slider')),
+          scope:rect(document.getElementById('fx-batch-scope')), jobs:rect(document.getElementById('sk2-act-jobs')) }; })(),
       titleNodes: document.querySelectorAll('#db-title-name').length,
       zoomNodes: document.querySelectorAll('#fx-zoom-slider').length,
       capClones: document.querySelectorAll('#sk2-cap-copy').length,
       railAccessible: [...document.querySelectorAll('#fx-toolrail .fx-rail-btn')].every(button =>
         !!button.querySelector('.fx-rail-lb')?.textContent.trim() && !!button.getAttribute('aria-label')),
     }));
-    assert.deepEqual(studioAfter, {
+    assertHeaderGeometry(studioAfter.header, `Studio header after Gallery return (${theme})`, studioAfter.title);
+    const { header: _headerGeometry, ...studioAfterCore } = studioAfter;
+    assert.deepEqual(studioAfterCore, {
       source, zoom: '225', title: source.split('/').pop().replace(/\.[^.]+$/, ''), titleNodes: 1, zoomNodes: 1,
       capClones: 0, railAccessible: true,
     }, 'Studio identity, zoom, header uniqueness, and named rail should survive round trip');

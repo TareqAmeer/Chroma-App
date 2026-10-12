@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012R';
+const BUILD='1.1012S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15360,15 +15360,19 @@ function appHSync(){
 (function(){
   const bar=document.getElementById('fx-deskbar');
   if(!bar)return;
-  // Fold by real fit, not a fixed width: the title now carries zoom + flags, so fold one step at a
-  // time (cheapest first) until the three clusters no longer touch.
-  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-fold2','fx-deskbar-tight2','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold5'];
+  // Fold by real fit, not a fixed width: keep the photo identity readable while the zoom controls
+  // remain in the right tools cluster; fold optional controls one step at a time until they fit.
+  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-tight2','fx-deskbar-fold5','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold2'];
   const fits=()=>{const l=document.getElementById('fx-deskbar-left'),t=document.getElementById('fx-deskbar-title'),r=document.getElementById('fx-deskbar-right');
     if(!l||!t||!r||!t.getClientRects().length)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
     // the title's children can spill past its own box (nowrap flex), so measure their real extent too
     let lo=b.left,hi=b.right;for(const k of t.children){const q=k.getBoundingClientRect();if(q.width>0){lo=Math.min(lo,q.left);hi=Math.max(hi,q.right);}}
     b.left=lo;b.right=hi;
-    return a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
+    const name=t.querySelector('#db-title-name'),availability=t.querySelector('#cs-source-render-state');
+    const needed=Math.max(name&&!name.hidden?Math.min(200,name.scrollWidth):0,availability&&!availability.hidden?Math.min(160,availability.scrollWidth):0);
+    const ts=getComputedStyle(t),innerWidth=t.clientWidth-(parseFloat(ts.paddingLeft)||0)-(parseFloat(ts.paddingRight)||0);
+    const readable=!needed||innerWidth>=needed;
+    return readable&&a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
   let busy=false;
   const sync=()=>{
     if(busy)return;const w=bar.offsetWidth;if(!w)return;busy=true;
@@ -25690,7 +25694,7 @@ function syncBatchScopeStatus(){
   const scope=count===1||SEC_ALWAYS_ONE.includes(section)?'this photo only':perPhoto?'this photo (override)':`all ${count} open photos`;
   const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
   const sectionTarget=count>1&&perPhoto?'this photo only':count>1?`all ${count} open photos`:'this photo only';
-  const visible=count>1?`Photo ${index}/${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Photo 1 · ${sectionName} · Export this photo`;
+  const visible=count>1?`Photo ${index}/${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Photo 1 · ${sectionName}`;
   const detail=`Photo ${index} of ${count}. ${sectionName} affects ${sectionTarget}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared value':''}. Basic adjustments ${item&&item.adjustOverride?'override the shared value for this photo':'follow the shared batch value unless overridden per photo'}. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}${fxExportScope==='current'?' only':' open photos'}.`;
   if(el.textContent!==visible)el.textContent=visible;
   if(el.title!==detail)el.title=detail;

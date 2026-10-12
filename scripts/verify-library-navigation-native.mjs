@@ -42,6 +42,19 @@ const report = { issue: 'CHR-192', capturedAt: new Date().toISOString(), sourceC
 const save = async () => { await mkdir(path.dirname(reportPath), { recursive: true }); await writeFile(reportPath, JSON.stringify(report, null, 2)); };
 const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
 const sameBrowserPath = (a, b) => String(a || '').replace(/[\\/]+/g, '/').toLowerCase() === String(b || '').replace(/[\\/]+/g, '/').toLowerCase();
+const assertHeaderGeometry = (header, label, titleText) => {
+  const requiredTitleWidth = Math.min(100, header.title.scrollWidth || 0);
+  assert(titleText?.trim() && header.title.visible && header.title.height > 0 && header.title.width + 1 >= requiredTitleWidth,
+    `${label}: filename must be fully visible up to 100px: ${JSON.stringify({ titleText, requiredTitleWidth, title: header.title })}`);
+  assert(header.zoom.visible && header.zoom.width >= 48 && /zoom/i.test(header.zoom.aria || ''),
+    `${label}: zoom control must be visible and accessible: ${JSON.stringify(header.zoom)}`);
+  const overlaps = (a, b) => a.x < b.right && a.right > b.x && a.y < b.bottom && a.bottom > b.y;
+  for (const [name, other] of [['scope', header.scope], ['zoom', header.zoom], ['Jobs', header.jobs]]) {
+    assert(!overlaps(header.title, other), `${label}: filename overlaps ${name}: ${JSON.stringify({ title: header.title, other })}`);
+  }
+  assert(!overlaps(header.scope, header.zoom) && !overlaps(header.scope, header.jobs),
+    `${label}: photo scope overlaps zoom or Jobs: ${JSON.stringify(header)}`);
+};
 
 const browser = await chromium.connectOverCDP(endpoint);
 try {
@@ -227,6 +240,12 @@ try {
   const studioState = await page.evaluate(() => ({
     source: window.chromasmithSourcePath, zoom: document.getElementById('fx-zoom-slider')?.value,
     title: document.getElementById('db-title-name')?.textContent.trim(),
+    header: (() => { const rect = el => { const r = el?.getBoundingClientRect(), s = el && getComputedStyle(el); return r && {
+      x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:el.scrollWidth,
+      visible:!!el.getClientRects().length && s.display!=='none' && s.visibility==='visible' && Number(s.opacity)>0,
+      aria:el.getAttribute('aria-label') }; };
+      return { title:rect(document.getElementById('db-title-name')), zoom:rect(document.getElementById('fx-zoom-slider')),
+        scope:rect(document.getElementById('fx-batch-scope')), jobs:rect(document.getElementById('sk2-act-jobs')) }; })(),
     titleCount: document.querySelectorAll('#db-title-name').length,
     zoomCount: document.querySelectorAll('#fx-zoom-slider').length,
     sourceSlots: document.querySelectorAll('#fx-canvas').length,
@@ -237,21 +256,33 @@ try {
   assert.equal(studioState.zoom, '225');
   assert.equal(studioState.titleCount, 1); assert.equal(studioState.zoomCount, 1); assert.equal(studioState.capClones, 0);
   assert.equal(studioState.title, path.basename(fixturePath, path.extname(fixturePath)), 'photo title identifies the opened PNG');
+  report.studio = studioState;
+  await save();
+  assertHeaderGeometry(studioState.header, 'Native Studio header', studioState.title);
   assert(studioState.rails.length > 0 && studioState.rails.every(item => item.text && item.aria), 'tool rail names remain accessible');
   assert.equal(studioState.sourceSlots, 1, 'one canonical Studio source slot is visible in the DOM');
   await setTheme('dark');
   await exerciseJobs('Enter', 'dark', '#fx-deskbar-tools', '#cs-brand-name');
   await page.locator('#cs-tog-lib').click();
   await page.waitForFunction(() => document.body.classList.contains('lib-full'));
-  await page.waitForFunction(() => {
+  await page.waitForFunction(({ path, offset }) => {
     const main = document.getElementById('lib-main'), grid = document.getElementById('lib-grid');
     if (!main || !grid) return false;
+    const bounds = main.getBoundingClientRect();
+    const card = [...document.querySelectorAll('#lib-grid .lib-card[data-path]')].find(el => {
+      const rect = el.getBoundingClientRect(); return rect.bottom > bounds.top && rect.top < bounds.bottom;
+    });
+    if (!card || card.dataset.path.toLowerCase() !== path.toLowerCase()
+      || Math.abs(card.getBoundingClientRect().top - bounds.top - offset) > 2) {
+      window.__chr192ReturnStableFrames = 0;
+      return false;
+    }
     const sample = [main.clientWidth, main.clientHeight, grid.clientWidth,
       getComputedStyle(grid).gridTemplateColumns, main.scrollTop.toFixed(2)].join('|');
     if (window.__chr192ReturnSample === sample) window.__chr192ReturnStableFrames = (window.__chr192ReturnStableFrames || 0) + 1;
     else { window.__chr192ReturnSample = sample; window.__chr192ReturnStableFrames = 0; }
     return window.__chr192ReturnStableFrames >= 3;
-  }, null, { timeout: 10000 });
+  }, { path: anchorBefore.path, offset: anchorBefore.offset }, { timeout: 5000 });
   const roundTrip = await gallerySnapshot();
   assert.match(roundTrip.folder, /Session/);
   assert(sameBrowserPath(roundTrip.path, anchorBefore.path), `Gallery visible anchor must return: ${JSON.stringify({ anchorBefore, roundTrip })}`);
@@ -267,6 +298,12 @@ try {
   await exerciseJobs('Enter', 'light', '#fx-deskbar-tools', '#cs-brand-name');
   const finalState = await page.evaluate(() => ({ source: window.chromasmithSourcePath,
     zoom: document.getElementById('fx-zoom-slider')?.value,
+    header: (() => { const rect = el => { const r = el?.getBoundingClientRect(), s = el && getComputedStyle(el); return r && {
+      x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,scrollWidth:el.scrollWidth,
+      visible:!!el.getClientRects().length && s.display!=='none' && s.visibility==='visible' && Number(s.opacity)>0,
+      aria:el.getAttribute('aria-label') }; };
+      return { title:rect(document.getElementById('db-title-name')), zoom:rect(document.getElementById('fx-zoom-slider')),
+        scope:rect(document.getElementById('fx-batch-scope')), jobs:rect(document.getElementById('sk2-act-jobs')) }; })(),
     bodyLight: document.body.classList.contains('light'),
     titleCount: document.querySelectorAll('#db-title-name').length,
     zoomCount: document.querySelectorAll('#fx-zoom-slider').length,
@@ -274,6 +311,7 @@ try {
     popoverCount: document.querySelectorAll('#sk2-act-pop').length }));
   assert(sameBrowserPath(finalState.source, fixturePath));
   assert.equal(finalState.zoom, '225');
+  assertHeaderGeometry(finalState.header, 'Native Studio header after Gallery return', path.basename(fixturePath, path.extname(fixturePath)));
   assert.equal(finalState.bodyLight, true);
   assert.deepEqual([finalState.titleCount, finalState.zoomCount, finalState.jobsCount, finalState.popoverCount], [1, 1, 1, 1]);
 

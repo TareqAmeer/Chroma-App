@@ -1940,3 +1940,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Expanded Gallery restoration to wait for the Library overlay width transition as well as the layout grid, then verify stable geometry before restoring the anchor. Strict normal-motion browser trace restores chart-036 at -104.89px and scrollTop 1162; temporary instrumentation was removed.
 - Native Q testing exposed these timing and header-folding limits; retained failed evidence rather than claiming a pass. The laptop header now uses the existing compact wordmark at widths below 1400px, keeping the logo and Gallery/Studio switch to free space for photo identity and zoom.
+
+### CHR-192 — measured title readability and async completion gates
+
+- The native title column accepted 40.9px and left only 8.9px after padding. The fit calculation now requires measured filename/availability width and folds optional controls before hiding identity; one-photo scope copy is compact, with complete scope/export semantics in title and ARIA text.
+- Navigation gates wait for the expected path and viewport offset before checking stability, and require readable filename bounds, accessible zoom, and no title/scope/zoom/Jobs overlap. A short fully visible filename is measured against its natural text width; the former clipped/hidden title still fails. Normal-motion focused browser gate passes after this correction.
