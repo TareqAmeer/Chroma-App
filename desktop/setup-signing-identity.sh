@@ -22,9 +22,10 @@ keyUsage=critical,digitalSignature
 extendedKeyUsage=critical,codeSigning
 basicConstraints=critical,CA:false
 CNF
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout "$T/k.pem" -out "$T/c.pem" -config "$T/cert.cnf" 2>/dev/null
-openssl pkcs12 -export -inkey "$T/k.pem" -in "$T/c.pem" -out "$T/id.p12" -passout pass:chromasmith
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout "$T/k.pem" -out "$T/c.pem" -config "$T/cert.cnf" 2>/dev/null
+/usr/bin/openssl pkcs12 -export -inkey "$T/k.pem" -in "$T/c.pem" -out "$T/id.p12" -passout pass:chromasmith
 security import "$T/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P chromasmith -T /usr/bin/codesign
+# (/usr/bin/openssl = LibreSSL: its PKCS12 format imports into the keychain; Homebrew OpenSSL 3 does not.)
 # Trust it for code signing (macOS asks for your password once).
 security add-trusted-cert -r trustRoot -p codeSign -k "$HOME/Library/Keychains/login.keychain-db" "$T/c.pem"
 echo "Created '$NAME'. Next: ./install-app.sh, then Allow the prompts ONCE (or grant Full Disk Access)."
