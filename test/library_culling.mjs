@@ -34,14 +34,48 @@ try {
   await page.evaluate(() => window.__libOpenFolder('/test/Photos'));
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length >= 8, { timeout: 30000 });
   const paths = await page.locator('#lib-grid .lib-card').evaluateAll((cards) => cards.slice(0, 10).map((card) => card.dataset.path));
+  const assertGridTitle = async (expectedVisible, mode) => {
+    const title = await page.locator('#lib-grid-title').evaluate(el => ({
+      visible: !!el.getClientRects().length && getComputedStyle(el).display !== 'none'
+        && getComputedStyle(el).visibility !== 'hidden' && Number(getComputedStyle(el).opacity) > 0,
+      width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height,
+    }));
+    assert.equal(title.visible, expectedVisible, `${mode}: Gallery title visibility ${JSON.stringify(title)}`);
+    if (!expectedVisible) assert(title.width === 0 || title.height === 0, `${mode}: hidden title must not occupy visible layout space`);
+  };
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const setTheme = async light => page.evaluate(expected => {
+    if (document.body.classList.contains('light') !== expected) toggleTheme();
+  }, light);
+  // The same Gallery title must yield while the real Compare and Survey surfaces own the view,
+  // then return when each exits. Keep these two-photo checks before the larger cull selection.
+  await page.evaluate(selected => { selected.forEach(path => window.__libSelect(path)); window.__libRenderGrid(); }, paths.slice(0, 2));
+  await setTheme(false);
+  await page.locator('#lib-view-menu-btn').click();
+  await page.locator('#lib-compare-btn').click();
+  await page.waitForFunction(() => document.querySelector('#lib-compare')?.classList.contains('on'));
+  await assertGridTitle(false, 'Compare');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#lib-compare')?.classList.contains('on'));
+  await assertGridTitle(true, 'Gallery after Compare');
+  await setTheme(true);
+  await page.locator('#lib-view-menu-btn').click();
+  await page.locator('#lib-survey-btn').click();
+  await page.waitForFunction(() => document.querySelector('#lib-survey')?.classList.contains('on'));
+  await assertGridTitle(false, 'Survey');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#lib-survey')?.classList.contains('on'));
+  await assertGridTitle(true, 'Gallery after Survey');
+  await setTheme(false);
   // Deliberately add them in reverse selection order: the shoot should still follow the
   // Library's visible sort order, not whichever card was clicked first.
-  await page.evaluate((selected) => { selected.forEach((p) => window.__libSelect(p)); window.__libRenderGrid(); }, [...paths].reverse());
+  await page.evaluate((selected) => { selected.forEach((p) => window.__libSelect(p)); window.__libRenderGrid(); }, [...paths.slice(2)].reverse());
   await page.locator('#cs-modal-ov button').filter({ hasText: /^Got it$/ }).click({ timeout: 3000 }).catch(() => {});
   await page.waitForSelector('#lib-batchbar [data-act="cull"]');
   assert.equal(await page.locator('#lib-batchbar [data-act="cull"]').textContent(), 'Cull selection');
   await page.locator('#lib-batchbar [data-act="cull"]').click();
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && window.__libSurveyState().groupPicker, { timeout: 45000 });
+  await assertGridTitle(false, 'Culling group picker');
 
   assert.equal((await page.evaluate(() => window.__libCullTimeGroups())).length, 2, '60-second threshold chains adjacent captures; missing time stays separate');
   await page.selectOption('#lib-cull-time-gap', '15');
@@ -113,6 +147,17 @@ try {
   await page.waitForSelector('#fx-confirm-modal[open]');
   await page.click('#fx-confirm-ok');
   await page.waitForFunction(() => window.__libSurveyState()?.active && window.__libSurveyState().mode === 'cull' && !window.__libSurveyState().groupPicker, { timeout: 45000 });
+  await assertGridTitle(false, 'Culling review');
+  const cullFocusNote = await page.locator('#lib-compare-bar .survey-focus-note').textContent();
+  assert.equal(await page.locator('#lib-compare-bar .survey-count').count(), 1, 'Culling exposes one range label');
+  assert.equal((await page.locator('#lib-compare-bar .survey-count').textContent()).trim(), 'Culling · 1–4 of 10');
+  assert.doesNotMatch(cullFocusNote, /Culling\s*[·:]/, 'the focus note does not repeat the range label');
+  assert.match(cullFocusNote, /Photo 1 focused/);
+  assert.match(cullFocusNote, /arrows\/Tab move/);
+  assert.match(cullFocusNote, /Enter pick and advance/);
+  assert.match(cullFocusNote, /Shift\+P\/X flag and advance/);
+  assert.match(cullFocusNote, /Esc exits/);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const orderedCullPaths = await page.evaluate(() => window.__libSurveyState().cullPaths);
   assert.match(orderedCullPaths[0], /IMG_1001\.RW2$/, 'confirmed culling begins with the manually preferred frame');
   assert.ok((await page.evaluate(() => window.__libSurveyState().cullLabels)).every((label) => !label), 'entering the cull review still leaves every label unchanged');

@@ -2264,6 +2264,8 @@
     #lib-compare.on{display:flex}
     #lib-main:has(#lib-compare.on) #lib-grid{display:none}
     #lib-main:has(#lib-survey.on) #lib-grid{display:none}
+    #lib-overlay.full #lib-main:has(#lib-compare.on) #lib-grid-title,
+    #lib-overlay.full #lib-main:has(#lib-survey.on) #lib-grid-title{display:none}
     #lib-compare-panes{display:flex;gap:8px;flex:1;min-height:0}
     #lib-survey{display:none;flex:1;height:100%;min-height:0;flex-direction:column;gap:8px}
     #lib-survey.on{display:flex}
@@ -9642,7 +9644,7 @@
     if (bar) {
       const info = bar.querySelector('.survey-focus-note');
       if (info) info.textContent = surveyState.cells.length ? (compareState.mode === 'cull'
-        ? `Culling · ${surveyState.cullOffset + surveyState.focus + 1} of ${surveyState.cullPaths.length} · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits`
+        ? `Photo ${surveyState.cullOffset + surveyState.focus + 1} focused · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits`
         : `Photo ${surveyState.focus + 1} focused · arrows/Tab move · Delete removes · X/P/U flag · 0–5 rate`) : '';
     }
   }
