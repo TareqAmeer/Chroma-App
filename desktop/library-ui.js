@@ -5201,22 +5201,22 @@
       _warmToken++;
       const w0 = performance.now(); await _warmInflight.promise; rawPerf('open-waited-for-warm', path, { ms: performance.now() - w0 });
     }
-    if (hdrPreview && isRaw) {
-      try {
-        if (await invoke('hdr_headroom_clear', { path, recipeKey })) {
-          hdrPreview = false;
-          cached = imgCache.get(path);
-          if (cached && spin) spin.style.display = 'none';
-        }
-      } catch (_) { /* keep the full-decode behaviour */ }
-    }
-    // A photo WITH headroom: its unquantized companion is persisted sparsely beside the cached
-    // RGBA8 frame (native get_hdr_companion validates key + frame size). When present, the open
-    // takes the native-frame path below and rebuilds the dense buffer from frame + overlay —
-    // no native decode. Absent/stale: falls through to the full decode, as before.
+    // Both lookups are independent native stat/reads on the same volume — overlap them.
     let hdrCompanion = null;
     if (hdrPreview && isRaw) {
-      try { hdrCompanion = await invoke('get_hdr_companion', { path, recipeKey }); } catch (_) { hdrCompanion = null; }
+      const lookT0 = performance.now();
+      const [clear, comp] = await Promise.all([
+        invoke('hdr_headroom_clear', { path, recipeKey }).catch(() => false),
+        invoke('get_hdr_companion', { path, recipeKey }).catch(() => null),
+      ]);
+      rawPerf('open-hdr-lookup', path, { ms: performance.now() - lookT0, clear: !!clear, companion: !!comp });
+      if (clear) {
+        hdrPreview = false;
+        cached = imgCache.get(path);
+        if (cached && spin) spin.style.display = 'none';
+      } else {
+        hdrCompanion = comp; // a photo WITH headroom: sparse f16 overlay beside the cached frame
+      }
     }
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
@@ -5350,11 +5350,20 @@
         rawPerf('open-cache-canvas', path, { ms: performance.now() - canvasT0 });
         if (hdrCompanion) try {
           // Dense scene-linear rebuilt from frame + stored overlay (see hdrCompanionDensify).
-          const densT0 = performance.now();
-          const dense = hdrCompanionDensify(hdrCompanion, new Uint8ClampedArray(nativeBuf, 8), head[0], head[1]);
-          rawPerf('open-hdr-densify', path, { ms: performance.now() - densT0 });
-          const w = head[0], h = head[1];
-          c._sceneLinear = { data: dense, w, h };
+          // Lazy: the dense 288MB float buffer is only read when this full frame is actually
+          // uploaded (promotion / zoom / export), never on the fit-view open path (measured:
+          // 0.8-0.9s of every headroom-photo open). The pixels come back from the canvas then.
+          const w = head[0], h = head[1], companion = hdrCompanion;
+          let dense = null;
+          Object.defineProperty(c, '_sceneLinear', { configurable: true, enumerable: true, get() {
+            if (!dense) {
+              const t0 = performance.now();
+              const px = c.getContext('2d').getImageData(0, 0, w, h).data;
+              dense = { data: hdrCompanionDensify(companion, px, w, h), w, h };
+              rawPerf('open-hdr-densify', path, { ms: performance.now() - t0, lazy: true });
+            }
+            return dense;
+          } });
           c._sceneLinearPresent = true;
         } catch (hdrErr) { hdrCompanion = null; rawPerf('open-hdr-companion-rejected', path, { error: String(hdrErr) }); }
         // The cache itself is native RGBA pixels, but the SOURCE FILE is the real RAW — ext/exif
@@ -5411,7 +5420,7 @@
       }
     }
     // HDR preview must never silently open as SDR: a frame without its companion is discarded.
-    if (hdrPreview && diskCached && !((diskCached.fullImg || diskCached.img) && (diskCached.fullImg || diskCached.img)._sceneLinear)) diskCached = null;
+    if (hdrPreview && diskCached && !((diskCached.fullImg || diskCached.img) && (diskCached.fullImg || diskCached.img)._sceneLinearPresent)) diskCached = null;
     try {
       if (diskCached) {
         const loadKey = `${path}:diskcache:${recipeKey}`;
