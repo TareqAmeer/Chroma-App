@@ -90,3 +90,12 @@ Adobe distinguishes camera Embedded & Sidecar previews from rendered Standard/1:
 3. Implement immutable creative rendering only under the isolated-renderer plan. Current profile/lens choices remain shared app settings, while saved NR/demosaic are per photo; this slice does not invent per-photo profile persistence. Existing shared creative UI/snapshot behavior and full-renderer parity remain separate work.
 
 The user prioritizes developed RAW colours over camera-JPEG cold-open speed. Preparation and cache reuse are the intended speed path; a failed or missing developed frame must remain visibly unavailable rather than silently changing colour provenance.
+
+## Execution checkpoint — 12 October 2026
+
+- CHR-267 path-backed selected RAW reads and exact finished-cache reuse are published as `d991c124`, with evidence `8ca029e3`. Real source identity and lazy full reads are preserved; failed sources stay aligned.
+- CHR-268 Compare now retains at most two private full-resolution frames and serializes native loads; published implementation/evidence `b0a5bdb3`, publication record `8576d103`. Actual native fit/cycle/promote/100% checks pass on the existing 45.75 MP capture. Varied-camera parity and peak-memory/latency measurements remain open.
+- CHR-200 RAW preparation journals immutable source/settings, checkpoints each item, and resumes after verifying exact cache outputs. Published implementation/evidence `760a40a9`, publication record `a05521e9`; native renderer recovery and eviction checks pass. Full import/export restart recovery and measured foreground responsiveness remain open.
+- Current CHR-269 slice adds explicit full-resolution-source RAW face crops on demand, one transient decode per panel, bounded crop output, inspect/retry controls and mode/source guards. This does not add eye inference or prove portrait/lens-corrected box geometry; those validations remain open.
+
+The first two earlier memory boundaries now have published implementations; continue from the remaining creative-parity, geometry, labelled-analysis and native-performance requirements rather than repeating those completed slices.

@@ -4000,6 +4000,158 @@ pub struct FaceBox {
     pub score: f32,
 }
 
+/// Face coordinates and resolved file path for one transient, developed RAW detail request.
+#[derive(Clone, Debug)]
+pub struct RawFaceDetailBox {
+    pub face_id: i64,
+    pub x0: f32,
+    pub y0: f32,
+    pub x1: f32,
+    pub y1: f32,
+}
+
+#[derive(Debug)]
+pub struct RawFaceDetailSource {
+    pub path: String,
+    pub faces: Vec<RawFaceDetailBox>,
+}
+
+/// Resolve at most 128 face IDs to one online catalogued source. Reads use the catalog's
+/// separate reader connection and finish before any full-frame RAW decode starts.
+pub fn raw_face_detail_source(
+    state: &CatalogState,
+    requested_path: &str,
+    face_ids: &[i64],
+) -> Result<RawFaceDetailSource, String> {
+    if face_ids.is_empty() || face_ids.len() > 128 {
+        return Err("RAW face detail requires 1–128 face IDs".into());
+    }
+    let mut seen = std::collections::HashSet::with_capacity(face_ids.len());
+    let mut rows = Vec::with_capacity(face_ids.len());
+    {
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        for face_id in face_ids {
+            if !seen.insert(*face_id) {
+                return Err("duplicate RAW face ID".into());
+            }
+            let (x0, y0, x1, y1, rel_path, last_path, is_local): (f32, f32, f32, f32, String, String, i64) = conn.query_row(
+                "SELECT f.x0,f.y0,f.x1,f.y1,p.rel_path,v.last_path,v.is_local
+                 FROM photo_faces f JOIN photos p ON p.id=f.photo_id JOIN volumes v ON v.id=p.volume_id WHERE f.id=?1",
+                params![face_id],
+                |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?)),
+            ).map_err(|e| format!("face {face_id}: {e}"))?;
+            rows.push((*face_id, x0, y0, x1, y1, rel_path, last_path, is_local));
+        }
+    }
+    // Filesystem checks and canonicalization are intentionally outside the catalog lock.
+    let requested = Path::new(requested_path).canonicalize()
+        .map_err(|e| format!("resolve RAW face source: {e}"))?;
+    let mut faces = Vec::with_capacity(rows.len());
+    let mut resolved_path: Option<String> = None;
+    for (face_id, x0, y0, x1, y1, rel_path, last_path, is_local) in rows {
+        if ![x0, y0, x1, y1].iter().all(|v| v.is_finite())
+            || x0 < 0.0
+            || y0 < 0.0
+            || x1 > 1.0
+            || y1 > 1.0
+            || x1 <= x0
+            || y1 <= y0
+        {
+            return Err(format!("face {face_id} has invalid normalized coordinates"));
+        }
+        let online = is_local != 0 || Path::new(&last_path).is_dir();
+        if !online {
+            return Err("volume offline".into());
+        }
+        let path = abs_path(&last_path, is_local != 0, &rel_path);
+        let canonical = Path::new(&path)
+            .canonicalize()
+            .map_err(|e| format!("resolve face {face_id} source: {e}"))?;
+        if canonical != requested {
+            return Err("face IDs do not all belong to the requested RAW source".into());
+        }
+        if let Some(first) = &resolved_path {
+            if first != &path {
+                return Err("face IDs resolve to different source paths".into());
+            }
+        } else {
+            resolved_path = Some(path);
+        }
+        faces.push(RawFaceDetailBox {
+            face_id,
+            x0,
+            y0,
+            x1,
+            y1,
+        });
+    }
+    Ok(RawFaceDetailSource {
+        path: resolved_path.ok_or("no RAW face source")?,
+        faces,
+    })
+}
+
+/// Crop and encode sequentially from one transient developed full frame. Crops are never cached;
+/// each keeps source aspect ratio and is only downscaled when either dimension exceeds 2048.
+const RAW_FACE_DETAIL_MAX_BYTES: usize = 16 * 1024 * 1024;
+fn raw_face_detail_budget_allows(current: usize, next: usize) -> bool {
+    current.checked_add(next).is_some_and(|total| total <= RAW_FACE_DETAIL_MAX_BYTES)
+}
+
+pub fn encode_raw_face_details(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    faces: &[RawFaceDetailBox],
+) -> Result<Vec<(i64, u32, u32, Vec<u8>)>, String> {
+    let expected_len = (width as usize).checked_mul(height as usize).and_then(|n| n.checked_mul(4))
+        .ok_or("developed RAW RGBA dimensions overflow")?;
+    if width == 0 || height == 0 || rgba.len() != expected_len {
+        return Err("developed RAW RGBA dimensions do not match".into());
+    }
+    let mut result = Vec::with_capacity(faces.len());
+    let mut total = 0usize;
+    for face in faces {
+        let bw = (face.x1 - face.x0).max(0.01);
+        let bh = (face.y1 - face.y0).max(0.01);
+        let x0 = ((face.x0 - bw * 0.35).max(0.0) * width as f32) as u32;
+        let y0 = ((face.y0 - bh * 0.35).max(0.0) * height as f32) as u32;
+        let x1 = ((face.x1 + bw * 0.35).min(1.0) * width as f32) as u32;
+        let y1 = ((face.y1 + bh * 0.35).min(1.0) * height as f32) as u32;
+        let x0 = x0.min(width.saturating_sub(1));
+        let y0 = y0.min(height.saturating_sub(1));
+        let cw = x1.saturating_sub(x0).max(1).min(width - x0);
+        let ch = y1.saturating_sub(y0).max(1).min(height - y0);
+        let row_bytes = (cw as usize) * 4;
+        let mut crop_bytes = Vec::with_capacity(row_bytes * ch as usize);
+        for y in y0..y0 + ch {
+            let start = (y as usize * width as usize + x0 as usize) * 4;
+            crop_bytes.extend_from_slice(&rgba[start..start + row_bytes]);
+        }
+        let crop = image::RgbaImage::from_raw(cw, ch, crop_bytes).ok_or("RAW face crop dimensions do not match")?;
+        let scale = (2048.0 / cw.max(ch) as f32).min(1.0);
+        let (out_w, out_h) = (
+            ((cw as f32 * scale).round() as u32).max(1),
+            ((ch as f32 * scale).round() as u32).max(1),
+        );
+        let output = if out_w == cw && out_h == ch {
+            crop
+        } else {
+            image::imageops::resize(&crop, out_w, out_h, image::imageops::FilterType::Lanczos3)
+        };
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 88)
+            .encode_image(&image::DynamicImage::ImageRgba8(output))
+            .map_err(|e| format!("encode developed face {}: {e}", face.face_id))?;
+        if !raw_face_detail_budget_allows(total, jpeg.len()) {
+            return Err("RAW face detail output exceeds 16 MiB".into());
+        }
+        total += jpeg.len();
+        result.push((face.face_id, out_w, out_h, jpeg));
+    }
+    Ok(result)
+}
+
 #[tauri::command(async)]
 pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<FaceBox>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -4382,6 +4534,127 @@ fn face_crop_source(path: &str, raw_review_recipe_key: Option<&str>) -> Result<(
 fn face_review_crop_cache_key(proxy_identity: &str, face_id: i64, bbox: [f32; 4]) -> String {
     let bbox_key = bbox.iter().map(|value| format!("{:08x}", value.to_bits())).collect::<String>();
     format!("face-{face_id}-review-{:016x}.jpg", fnv1a_str(&format!("{proxy_identity}|{bbox_key}")))
+}
+
+#[cfg(test)]
+mod raw_face_detail_tests {
+    use super::{encode_raw_face_details, gen_id, raw_face_detail_budget_allows, raw_face_detail_source, CatalogState, RawFaceDetailBox, RAW_FACE_DETAIL_MAX_BYTES};
+    use rusqlite::{params, Connection};
+    use std::sync::{atomic::AtomicBool, Mutex};
+
+    fn source_fixture() -> (CatalogState, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("cs_raw_face_detail_{}_{}", std::process::id(), gen_id()));
+        let sub = root.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        for path in [root.join("same.NEF"), sub.join("same.NEF")] { std::fs::write(path, b"source").unwrap(); }
+        let db = || {
+            let conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch("CREATE TABLE volumes(id INTEGER PRIMARY KEY,last_path TEXT,is_local INTEGER);
+                CREATE TABLE photos(id INTEGER PRIMARY KEY,volume_id INTEGER,rel_path TEXT);
+                CREATE TABLE photo_faces(id INTEGER PRIMARY KEY,photo_id INTEGER,x0 REAL,y0 REAL,x1 REAL,y1 REAL);") .unwrap();
+            conn.execute("INSERT INTO volumes VALUES(1,?1,0)", params![root.to_string_lossy()]).unwrap();
+            conn.execute("INSERT INTO volumes VALUES(2,?1,0)", params![sub.to_string_lossy()]).unwrap();
+            conn.execute("INSERT INTO volumes VALUES(3,?1,0)", params![root.join("missing").to_string_lossy()]).unwrap();
+            conn.execute("INSERT INTO photos VALUES(1,1,'same.NEF'),(2,2,'same.NEF'),(3,3,'same.NEF')", []).unwrap();
+            conn.execute("INSERT INTO photo_faces VALUES(1,1,0.2,0.2,0.6,0.7),(2,2,0.2,0.2,0.6,0.7),(3,1,0.2,0.2,1.2,0.7),(4,3,0.2,0.2,0.6,0.7)", []).unwrap();
+            conn
+        };
+        let state = CatalogState {
+            conn: Mutex::new(db()), read_conn: Mutex::new(db()), cancel: AtomicBool::new(false),
+            hq_offline_active: AtomicBool::new(false), ai_worker: Mutex::new(None),
+        };
+        (state, root)
+    }
+
+    #[test]
+    fn developed_face_crop_uses_oriented_source_coordinates_and_only_downscales() {
+        let (w, h) = (80u32, 40u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        // A red target in the center and blue everywhere else makes the normalized crop
+        // geometry observable after encoding without a RAW fixture.
+        for pixel in rgba.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0, 0, 220, 255]);
+        }
+        for y in 12..28 {
+            for x in 30..50 {
+                let at = ((y * w + x) * 4) as usize;
+                rgba[at..at + 4].copy_from_slice(&[230, 20, 10, 255]);
+            }
+        }
+        let face = RawFaceDetailBox {
+            face_id: 9,
+            x0: 0.4,
+            y0: 0.35,
+            x1: 0.6,
+            y1: 0.65,
+        };
+        let crops = encode_raw_face_details(&rgba, w, h, &[face]).unwrap();
+        assert_eq!(crops.len(), 1);
+        assert_eq!(crops[0].0, 9);
+        assert_eq!((crops[0].1, crops[0].2), (27, 21));
+        let decoded = image::load_from_memory(&crops[0].3).unwrap().to_rgb8();
+        let center = decoded.get_pixel(decoded.width() / 2, decoded.height() / 2);
+        assert!(
+            center[0] > 180 && center[2] < 80,
+            "expected target crop, got {center:?}"
+        );
+    }
+
+    #[test]
+    fn portrait_face_boxes_use_post_orientation_dimensions() {
+        let (w, h) = (40u32, 80u32);
+        let rgba = vec![100u8; (w * h * 4) as usize];
+        let face = RawFaceDetailBox { face_id: 10, x0: 0.25, y0: 0.5, x1: 0.5, y1: 0.75 };
+        let crops = encode_raw_face_details(&rgba, w, h, &[face]).unwrap();
+        assert_eq!((crops[0].1, crops[0].2), (17, 34));
+    }
+
+    #[test]
+    fn developed_face_crops_cap_detail_size_and_aggregate_payload() {
+        let (w, h) = (3000u32, 3000u32);
+        let rgba = vec![127u8; (w * h * 4) as usize];
+        let face = RawFaceDetailBox {
+            face_id: 1,
+            x0: 0.0,
+            y0: 0.0,
+            x1: 1.0,
+            y1: 1.0,
+        };
+        let crops = encode_raw_face_details(&rgba, w, h, &[face]).unwrap();
+        assert!(crops[0].1 <= 2048 && crops[0].2 <= 2048);
+        assert!(
+            crops[0].1 < w && crops[0].2 < h,
+            "detail output must be downscaled, never claim 1:1"
+        );
+    }
+
+    #[test]
+    fn developed_face_response_budget_is_checked_before_append() {
+        assert!(raw_face_detail_budget_allows(RAW_FACE_DETAIL_MAX_BYTES - 10, 10));
+        assert!(!raw_face_detail_budget_allows(RAW_FACE_DETAIL_MAX_BYTES - 10, 11));
+        assert!(!raw_face_detail_budget_allows(usize::MAX, 1));
+    }
+
+    #[test]
+    fn face_ids_must_resolve_to_the_exact_source_not_just_the_same_basename() {
+        let (state, root) = source_fixture();
+        let requested = root.join("same.NEF").to_string_lossy().into_owned();
+        let error = raw_face_detail_source(&state, &requested, &[1, 2]).unwrap_err();
+        assert!(error.contains("do not all belong"));
+        assert_eq!(raw_face_detail_source(&state, &requested, &[1]).unwrap().faces.len(), 1);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn face_source_rejects_invalid_boxes_offline_volumes_and_unbounded_requests() {
+        let (state, root) = source_fixture();
+        let requested = root.join("same.NEF").to_string_lossy().into_owned();
+        assert!(raw_face_detail_source(&state, &requested, &[3]).unwrap_err().contains("invalid normalized"));
+        assert!(raw_face_detail_source(&state, &requested, &[4]).unwrap_err().contains("offline"));
+        let too_many = vec![1; 129];
+        assert!(raw_face_detail_source(&state, &requested, &too_many).unwrap_err().contains("1–128"));
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
 
 // ── Face embedding (AI stack Phase B, part 1) — ArcFace, resumable via `photo_faces.embedding IS

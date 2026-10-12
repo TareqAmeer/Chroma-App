@@ -36,8 +36,10 @@
     session.wrap?.remove();
     for (const url of session.urls || []) URL.revokeObjectURL(url);
     session.urls?.clear();
-    const queued = rawReviewQueue.findIndex((job) => job.kind === 'face-review' && job.ownerJobId === session.jobId);
-    if (queued >= 0) rawReviewQueue.splice(queued, 1)[0].reject(new Error('RAW face review superseded'));
+    for (let i = rawReviewQueue.length - 1; i >= 0; i--) {
+      if (rawReviewQueue[i].kind.startsWith('face-review') && rawReviewQueue[i].ownerJobId === session.jobId)
+        rawReviewQueue.splice(i, 1)[0].reject(new Error('RAW face review superseded'));
+    }
   }
   function queueRawReview(path, load, kind = 'quicklook', ownerJobId = null) {
     return new Promise((resolve, reject) => {
@@ -1820,7 +1822,12 @@
     .lib-face-closeup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(190px,40vw),1fr));gap:12px}
     .lib-face-closeup-item{margin:0;min-width:0;overflow:hidden;border:1px solid var(--bdr);border-radius:8px;background:var(--sur)}
     .lib-face-closeup-item img{display:block;width:100%;aspect-ratio:1;object-fit:cover;background:var(--sur);color:var(--mut)}
+    .lib-face-closeup-viewport{overflow:hidden}
+    .lib-face-closeup-item[data-inspecting="true"]{grid-column:1/-1}
+    .lib-face-closeup-item[data-inspecting="true"] .lib-face-closeup-viewport{overflow:auto;max-height:60vh}
+    .lib-face-closeup-item[data-inspecting="true"] img{width:auto;max-width:none;aspect-ratio:auto;object-fit:contain}
     .lib-face-closeup-item figcaption{padding:7px 9px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .lib-face-closeup-quality{white-space:normal;overflow-wrap:anywhere}
     .lib-pe-top{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;margin-bottom:12px}
     .lib-pe-group{margin-bottom:14px}
     .lib-pe-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}
@@ -7195,7 +7202,14 @@
   }
   // Review stores only a bounded developed display proxy; full caching remains explicit.
   async function cacheOneRaw(path, tier, resolvedSettings = null) {
-    const { profile, autoLens, lensOverride, lensOverrideFocal, demosaicAlgo, recipeKey, cacheNr } = resolvedSettings || await rawCacheSettings(path, tier);
+    const settings = resolvedSettings || await rawCacheSettings(path, tier);
+    const params = await rawNativeDecodeSettings(path, settings);
+    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { ...params, displayOnly: tier === 'review' });
+    rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
+    return result;
+  }
+  async function rawNativeDecodeSettings(path, settings) {
+    const { profile, autoLens, lensOverride, lensOverrideFocal, demosaicAlgo, recipeKey, cacheNr } = settings;
     const identT0 = performance.now(); const ident = await invoke('peek_raw_camera_path', { path }); rawPerf('cache-identify', path, { ms: performance.now() - identT0 });
     let mode = 'srgb', lutKey = '';
     if (profile && typeof window.chromasmithResolveRawLut === 'function') {
@@ -7204,10 +7218,7 @@
       const res = await window.chromasmithResolveRawLut(ident, profile, { path });
       if (res.mode === 'lut') { mode = 'lut'; lutKey = res.lutKey; }
     }
-    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { path, recipeKey, mode, lutKey, rawNr: cacheNr,
-      autoLens, demosaicAlgo, lensOverride, lensOverrideFocal, displayOnly: tier === 'review' });
-    rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
-    return result;
+    return { path, recipeKey, mode, lutKey, rawNr: cacheNr, autoLens, demosaicAlgo, lensOverride, lensOverrideFocal };
   }
 
   // ── Neighbour warm-up: after a photo has been open ~1.5s, prepare the NEXT photo in the
@@ -12420,8 +12431,10 @@
   // recipe-aware face-crop cache, while these returned crop bytes are never put in the legacy
   // face-id-only People avatar cache.
   function loadRawReviewFaceCrop(session, faceId, imgEl) {
+    if (session.mode === 'detail') { loadRawDetailFaceCrop(session, faceId, imgEl); return; }
+    const revision = session.modeRevision || 0;
     const isSessionCurrent = () => !session.cancelled && rawFaceReviewSession === session;
-    const isImageCurrent = () => isSessionCurrent() && imgEl.isConnected;
+    const isImageCurrent = () => isSessionCurrent() && imgEl.isConnected && session.mode !== 'detail' && (session.modeRevision || 0) === revision;
     imgEl.alt = 'Developed RAW face crop loading';
     if (!session.proxyPromise) {
       session.proxyPromise = (async () => {
@@ -12448,12 +12461,93 @@
       imgEl.src = url;
       imgEl.alt = 'Developed RAW face crop';
       imgEl.classList.add('loaded');
+      const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+      if (quality) quality.textContent = 'Fit preview';
     }).catch(() => {
       if (!isImageCurrent()) return;
       imgEl.alt = 'Developed RAW face crop unavailable';
       imgEl.classList.add('failed');
+      const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+      if (quality) quality.textContent = 'Fit preview unavailable';
     });
   }
+
+  // BEGIN RAW_FACE_DETAIL_HELPERS
+  function parseRawFaceDetail(buf, expectedFaceIds) {
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    if (bytes.byteLength < 4 || bytes.byteLength > 16 * 1024 * 1024 + 65540) throw new Error('Invalid RAW detail response size');
+    const size = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true);
+    if (!size || size > 65536 || 4 + size > bytes.byteLength) throw new Error('Invalid RAW detail header');
+    const info = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + size)));
+    if (!Number.isSafeInteger(info.sourceWidth) || !Number.isSafeInteger(info.sourceHeight) || info.sourceWidth < 1 || info.sourceHeight < 1 || !Array.isArray(info.crops) || info.crops.length !== expectedFaceIds.length) throw new Error('Invalid RAW detail geometry');
+    const expected = new Set(expectedFaceIds), seen = new Set();
+    let end = 0;
+    const crops = info.crops.map(crop => {
+      if (!expected.has(crop.faceId) || seen.has(crop.faceId) || !Number.isSafeInteger(crop.width) || !Number.isSafeInteger(crop.height) || crop.width < 1 || crop.height < 1 || crop.width > 2048 || crop.height > 2048 || !Number.isSafeInteger(crop.offset) || crop.offset !== end || !Number.isSafeInteger(crop.length) || crop.length < 4 || crop.offset + crop.length > bytes.byteLength - 4 - size) throw new Error('Invalid RAW face crop');
+      seen.add(crop.faceId); end = crop.offset + crop.length;
+      const jpeg = bytes.subarray(4 + size + crop.offset, 4 + size + end);
+      if (jpeg[0] !== 255 || jpeg[1] !== 216 || jpeg[jpeg.length - 2] !== 255 || jpeg[jpeg.length - 1] !== 217) throw new Error('Invalid RAW face JPEG');
+      return { ...crop, jpeg };
+    });
+    if (end !== bytes.byteLength - 4 - size) throw new Error('Unexpected RAW detail payload');
+    return { sourceWidth: info.sourceWidth, sourceHeight: info.sourceHeight, lensCorrectionApplied: info.lensCorrectionApplied === true, crops };
+  }
+  function loadRawDetailFaceCrop(session, faceId, imgEl) {
+    const revision = session.modeRevision;
+    const sessionCurrent = () => !session.cancelled && rawFaceReviewSession === session;
+    const imageCurrent = () => sessionCurrent() && session.mode === 'detail' && session.modeRevision === revision && imgEl.isConnected;
+    const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+    imgEl.alt = 'Full-resolution RAW face detail loading';
+    if (quality) quality.textContent = 'Detail loading';
+    if (!session.detailFaceIds.includes(faceId)) {
+      imgEl.alt = 'RAW detail unavailable for this face';
+      if (quality) quality.textContent = 'Fit preview only';
+      return;
+    }
+    if (!session.detailPromise) {
+      session.detailPromise = (async () => {
+        const settings = await rawCacheSettings(session.path, 'full');
+        const params = await rawNativeDecodeSettings(session.path, settings);
+        if (!sessionCurrent()) return null;
+        const buf = await queueRawReview(session.path,
+          () => session.cancelled ? null : invoke('catalog_raw_face_detail', { ...params, faceIds: session.detailFaceIds }),
+          'face-review-detail', session.jobId);
+        if (!buf || !sessionCurrent()) return null;
+        const info = parseRawFaceDetail(buf, session.detailFaceIds);
+        const results = new Map();
+        for (const crop of info.crops) {
+          const url = URL.createObjectURL(new Blob([crop.jpeg], { type: 'image/jpeg' }));
+          session.urls.add(url);
+          results.set(crop.faceId, { url, width: crop.width, height: crop.height, sourceWidth: info.sourceWidth, sourceHeight: info.sourceHeight, lensCorrectionApplied: info.lensCorrectionApplied === true });
+        }
+        return results;
+      })();
+    }
+    session.detailPromise.then(results => {
+      if (!imageCurrent()) return;
+      const crop = results?.get(faceId);
+      if (!crop) throw new Error('RAW detail unavailable');
+      imgEl.src = crop.url;
+      imgEl.style.objectFit = 'contain';
+      imgEl.alt = 'Developed RAW face detail from full-resolution source';
+      imgEl.classList.add('loaded');
+      const inspect = imgEl.closest('figure')?.querySelector('[data-inspect-face]');
+      if (inspect) inspect.disabled = false;
+      if (quality) {
+        quality.textContent = `Full-resolution source · ${crop.width} × ${crop.height} crop${crop.lensCorrectionApplied ? ' · Check face position' : ''}`;
+        quality.title = `Developed from ${crop.sourceWidth} × ${crop.sourceHeight} RAW pixels; large crops may be resized. Creative adjustments are excluded.${crop.lensCorrectionApplied ? ' Lens correction may shift detected face positions; inspect the crop.' : ''}`;
+      }
+    }).catch(() => {
+      if (!imageCurrent()) return;
+      session.detailFailed = true;
+      const retry = session.wrap?.querySelector('[data-raw-face-mode="detail"]');
+      if (retry) retry.textContent = 'Retry RAW detail';
+      imgEl.alt = 'Full-resolution RAW face detail unavailable';
+      imgEl.classList.add('failed');
+      if (quality) quality.textContent = 'Detail unavailable';
+    });
+  }
+  // END RAW_FACE_DETAIL_HELPERS
 
   // ── People editor for selected photos (grid right-click ▸ People…) ────────────────────────
   // Every face in the selection, grouped by person: rename a face, remove a wrong tag (remembered,
@@ -12465,7 +12559,7 @@
     retireRawFaceReviewSession();
     const reviewPath = closeups ? paths[0] : '';
     const reviewSession = closeups && RAW_EXT_RE.test(reviewPath)
-      ? { jobId: `raw-face-review-${++rawFaceReviewSessionId}`, path: reviewPath, cancelled: false, urls: new Set() }
+      ? { jobId: `raw-face-review-${++rawFaceReviewSessionId}`, path: reviewPath, mode: 'fit', modeRevision: 0, cancelled: false, urls: new Set(), detailFaceIds: [] }
       : null;
     rawFaceReviewSession = reviewSession;
     const MAX = 200;
@@ -12477,6 +12571,7 @@
       (fs || []).forEach((f) => faces.push(f));
     }
     if (closeups && reviewSession && (reviewSession.cancelled || rawFaceReviewSession !== reviewSession)) return;
+    if (reviewSession) reviewSession.detailFaceIds = faces.slice(0, 128).map(f => f.face_id);
     const wrap = document.createElement('div');
     wrap.id = 'lib-people-edit';
     if (reviewSession) reviewSession.wrap = wrap;
@@ -12490,7 +12585,7 @@
         groups.get(key).faces.push(f);
       });
       const tile = (f, i) => closeups
-        ? `<figure class="lib-face-closeup-item" data-face-id="${f.face_id}"><img alt="Face crop ${i + 1}${f.name ? `, ${esc(f.name)}` : ', unnamed'}"><figcaption>${esc(f.name || `Face ${i + 1} · unnamed`)}</figcaption></figure>`
+        ? `<figure class="lib-face-closeup-item" data-face-id="${f.face_id}"><div class="lib-face-closeup-viewport"><img alt="Face crop ${i + 1}${f.name ? `, ${esc(f.name)}` : ', unnamed'}"></div><figcaption>${esc(f.name || `Face ${i + 1} · unnamed`)}${reviewSession ? `<div class="lib-face-closeup-quality" style="font-size:11px;color:var(--mut);padding-top:3px">Fit preview</div>${reviewSession.mode === 'detail' ? '<button type="button" class="lib-btn" data-inspect-face disabled title="Inspect decoded crop pixels at their native display size">Inspect crop</button>' : ''}` : ''}</figcaption></figure>`
         : `<div class="lib-pe-face" data-face-id="${f.face_id}" title="Click to rename or remove">
             <img alt="">${f.auto_tagged ? '<span class="lib-pe-auto">Auto</span>' : ''}</div>`;
       const sections = closeups
@@ -12503,7 +12598,8 @@
         </div>`).join('');
       wrap.innerHTML = `<div class="lib-pe-card" role="dialog" aria-modal="true" aria-label="${closeups ? 'Face close-ups' : 'People in selected photos'}">
           <div class="lib-pe-top"><span>${closeups ? `Face close-ups — ${esc(baseName(paths[0]))}` : `People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}`}</span><button type="button" class="lib-btn" data-close aria-label="${closeups ? 'Close face close-ups' : 'Close people editor'}">Done</button></div>
-          ${closeups ? `<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.${reviewSession ? ' RAW crops use a developed fit preview; use the Editor for full-resolution detail.' : ''}</p>` : ''}
+          ${closeups ? `<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.${reviewSession ? ' Fit previews are quick; RAW detail develops the full-resolution source and may take longer. Creative adjustments are excluded; large crops may be resized.' : ''}</p>` : ''}
+          ${reviewSession && faces.length ? `<div style="display:flex;gap:8px;margin-bottom:14px"><button type="button" class="lib-btn" data-raw-face-mode="fit" aria-pressed="${reviewSession.mode === 'fit'}">Fit previews</button><button type="button" class="lib-btn" data-raw-face-mode="detail" aria-pressed="${reviewSession.mode === 'detail'}">RAW detail</button>${faces.length > 128 ? '<span class="mut">Detail shows the first 128 faces.</span>' : ''}</div>` : ''}
           ${faces.length ? sections : `<div class="mut" style="padding:20px 0">${closeups ? 'No faces have been scanned in this photo yet.' : 'No faces found in the selected photos.'}</div>`}
           ${paths.length > MAX ? `<div class="mut" style="font-size:11px">Showing the first ${MAX} photos.</div>` : ''}
         </div>`;
@@ -12517,6 +12613,25 @@
         const faceId = parseInt(el.dataset.faceId, 10), img = el.querySelector('img');
         if (!reviewSession) { loadFaceCrop(faceId, img); return; }
         loadRawReviewFaceCrop(reviewSession, faceId, img);
+      });
+      wrap.querySelectorAll('[data-raw-face-mode]').forEach(button => {
+        button.onclick = () => {
+          if (button.dataset.rawFaceMode === 'detail' && reviewSession.detailFailed) {
+            reviewSession.detailPromise = null;
+            reviewSession.detailFailed = false;
+          } else if (reviewSession.mode === button.dataset.rawFaceMode) return;
+          reviewSession.mode = button.dataset.rawFaceMode;
+          reviewSession.modeRevision++;
+          render();
+        };
+      });
+      wrap.querySelectorAll('[data-inspect-face]').forEach(button => {
+        button.onclick = () => {
+          const figure = button.closest('figure');
+          const inspecting = figure.dataset.inspecting !== 'true';
+          figure.dataset.inspecting = String(inspecting);
+          button.textContent = inspecting ? 'Fit crop' : 'Inspect crop';
+        };
       });
       wrap.querySelectorAll('[data-remove-person]').forEach((b) => {
         b.onclick = async () => {

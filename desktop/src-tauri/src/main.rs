@@ -221,6 +221,73 @@ fn run_raw_cache_development<R: Send>(display_only: bool, f: impl FnOnce() -> R 
     if display_only { on_interactive_pool(f) } else { f() }
 }
 
+/// Shared native RAW development used by full/review cache generation and transient detail crops.
+/// The caller chooses the foreground interactive pool; this function itself never persists or
+/// inserts frames into either cache.
+fn develop_raw_frame(
+    path: &str,
+    recipe_key: &str,
+    bytes: &[u8],
+    mode: &str,
+    lut_key: &str,
+    raw_nr: &str,
+    auto_lens: bool,
+    demosaic_algo: &str,
+    lens_override: &str,
+    lens_override_focal: f64,
+    want_hdr_companion: bool,
+) -> Result<(raw_decode::DecodedRaw, Vec<u8>, bool, Option<Vec<u8>>), String> {
+    let demosaic_algo = match demosaic_algo {
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo,
+        _ => "",
+    };
+    let lens_override = match (
+        lens_override.is_empty(),
+        lens_override_focal.is_finite() && lens_override_focal > 0.0,
+    ) {
+        (false, true) => Some((lens_override, lens_override_focal as f32)),
+        _ => None,
+    };
+    let nr = match raw_nr {
+        "off" => raw_decode::NrTier::Off,
+        "chroma" => raw_decode::NrTier::Chroma,
+        _ => raw_decode::NrTier::Fast,
+    };
+    let decoded =
+        raw_decode::decode_rw2_bytes(bytes, auto_lens, nr, demosaic_algo, false, lens_override)?;
+    let (effective_mode, _) = effective_dcp_mode(
+        mode,
+        &decoded.make,
+        (!lut_key.is_empty()).then_some(lut_key),
+    );
+    let mut hdr_clear = false;
+    let mut hdr_blob = None;
+    let rgba = if effective_mode == "lut" {
+        let guard = DCP_LUTS
+            .lock()
+            .map_err(|e| format!("DCP LUT cache lock poisoned: {e}"))?;
+        let lut = guard
+            .as_ref()
+            .and_then(|m| m.get(lut_key).cloned())
+            .ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
+        let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+        drop(guard);
+        let lut_input = lut_input_rgb16(lut_key, bytes, &decoded);
+        if want_hdr_companion {
+            let (rgba, e) = raw_decode::apply_lut_rgba_ext(&lut_input, &lut, n)?;
+            hdr_clear = !e.iter().any(|v| *v > 1.05);
+            hdr_blob = library::build_hdr_ext_blob(path, recipe_key, decoded.width, decoded.height, &e);
+            rgba
+        } else {
+            // Detail crops need the exact SDR body but no scene-linear companion allocation.
+            raw_decode::apply_lut_rgba(&lut_input, &lut, n)?
+        }
+    } else {
+        raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam)
+    };
+    Ok((decoded, rgba, hdr_clear, hdr_blob))
+}
+
 // The explicit RAW-cache action already pays the full decode cost. Keep that developed frame
 // in-process so reopening it in the same session does not decode the RAW again.
 struct RawEditorCacheEntry {
@@ -1179,11 +1246,24 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
 /// decode is used per photo; future opens use the lossless in-process pixels instead of paying
 /// the RAW demosaic cost again. The persistent PNG remains the restart fallback.
 #[tauri::command(async)]
-fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: String, raw_nr: String, auto_lens: bool,
-                    demosaic_algo: String, lens_override: String, lens_override_focal: f64,
-                    display_only: Option<bool>) -> Result<String, String> {
+fn cache_raw_decode(
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    display_only: Option<bool>,
+) -> Result<String, String> {
     let display_only = display_only.unwrap_or(false);
-    let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+    let file_name = Path::new(&path)
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("?")
+        .to_string();
     let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
     let mut stage_t = std::time::Instant::now();
     let ext = Path::new(&path)
@@ -1196,9 +1276,17 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
     }
     if library::decode_cache_exists(&path, &recipe_key)? {
         diag::stage("cache", &file_name, "already_cached_check", &mut stage_t);
-        let display_path = library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
-        diag::stage("cache", &file_name, "display_proxy_from_existing", &mut stage_t);
-        if display_only { return Ok(display_path); }
+        let display_path =
+            library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
+        diag::stage(
+            "cache",
+            &file_name,
+            "display_proxy_from_existing",
+            &mut stage_t,
+        );
+        if display_only {
+            return Ok(display_path);
+        }
         // CHR-120: this shortcut used to return without ever touching RAW_EDITOR_CACHE — so a
         // "Cache RAWs" batch action on a photo already cached from an earlier app launch (the
         // common case: the on-disk PNG persists across relaunches, RAW_EDITOR_CACHE does not)
@@ -1209,93 +1297,298 @@ fn cache_raw_decode(path: String, recipe_key: String, mode: String, lut_key: Str
         // cache from it, same shape as the fresh-decode path below; a failure here just means
         // the interactive open falls back to the PNG path as it always did, no regression.
         if let Ok(meta) = std::fs::metadata(&path) {
-            let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs()).unwrap_or(0);
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             // CHR-120: skip the PNG read+decode entirely when RAW_EDITOR_CACHE already holds
             // this exact (path, recipe, mtime, size) — this branch used to pay it every single
             // call regardless, so calling "Cache RAWs" twice on the same already-cached photo in
             // one session (or an interactive reopen right after a batch cache, which takes this
             // same shortcut) re-read and re-decoded a PNG it had JUST put in memory moments
             // earlier. Confirmed live via tools/diagnostics/raw_bench.py's "cached" scenario.
-            let already_in_process = RAW_EDITOR_CACHE.lock().ok()
-                .map(|g| g.iter().any(|e| e.path == path && e.recipe_key == recipe_key
-                    && e.mtime == mtime && e.size == meta.len()))
+            let already_in_process = RAW_EDITOR_CACHE
+                .lock()
+                .ok()
+                .map(|g| {
+                    g.iter().any(|e| {
+                        e.path == path
+                            && e.recipe_key == recipe_key
+                            && e.mtime == mtime
+                            && e.size == meta.len()
+                    })
+                })
                 .unwrap_or(false);
             if already_in_process {
-                diag::stage("cache", &file_name, "already_in_process_cache", &mut stage_t);
+                diag::stage(
+                    "cache",
+                    &file_name,
+                    "already_in_process_cache",
+                    &mut stage_t,
+                );
             } else if let Ok(rgba_img) = library::read_decode_cache_rgba(&path, &recipe_key) {
                 let (w, h) = (rgba_img.width(), rgba_img.height());
-                raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), w, h, std::sync::Arc::new(rgba_img.into_raw()));
-                diag::stage("cache", &file_name, "reread_cache_into_process_cache", &mut stage_t);
+                raw_editor_cache_insert(
+                    &path,
+                    &recipe_key,
+                    mtime,
+                    meta.len(),
+                    w,
+                    h,
+                    std::sync::Arc::new(rgba_img.into_raw()),
+                );
+                diag::stage(
+                    "cache",
+                    &file_name,
+                    "reread_cache_into_process_cache",
+                    &mut stage_t,
+                );
             }
         }
         return Ok("cached".into());
     }
     if display_only {
-        if let Ok(display_path) = library::get_display_decode_cache_path(path.clone(), recipe_key.clone(), 2560) {
+        if let Ok(display_path) =
+            library::get_display_decode_cache_path(path.clone(), recipe_key.clone(), 2560)
+        {
             return Ok(display_path);
         }
     }
-    let demosaic_algo = match demosaic_algo.as_str() { "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo.as_str(), _ => "" };
-    let lens_override = match (lens_override.is_empty(), lens_override_focal > 0.0) {
-        (false, true) => Some((lens_override.as_str(), lens_override_focal as f32)), _ => None,
-    };
     let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
     diag::stage("cache", &file_name, "read_file", &mut stage_t);
-    let nr = match raw_nr.as_str() {
-        "off" => raw_decode::NrTier::Off,
-        "chroma" => raw_decode::NrTier::Chroma,
-        _ => raw_decode::NrTier::Fast,
-    };
     // decode_rw2_bytes emits its own finer-grained RAW_DIAG stage= lines (demosaic_or_cache,
     // high_nr, false_color, hue_defringe, orientation, lens, native_nr — raw_decode.rs) under
     // op=decode; this coarser "decode_total" line below lets a consumer that only wants the
     // top-level breakdown skip summing those without losing them for one that wants the detail.
     let develop = || -> Result<(raw_decode::DecodedRaw, Vec<u8>, bool, Option<Vec<u8>>), String> {
-        let decoded = raw_decode::decode_rw2_bytes(&bytes, auto_lens, nr,
-            demosaic_algo, false, lens_override)?;
+        let result = develop_raw_frame(
+            &path,
+            &recipe_key,
+            &bytes,
+            &mode,
+            &lut_key,
+            &raw_nr,
+            auto_lens,
+            &demosaic_algo,
+            &lens_override,
+            lens_override_focal,
+            true,
+        )?;
         diag::stage("cache", &file_name, "decode_total", &mut stage_t);
-        let (effective_mode, _) = effective_dcp_mode(&mode, &decoded.make, (!lut_key.is_empty()).then_some(lut_key.as_str()));
-        let mut hdr_clear = false;
-        let mut hdr_blob: Option<Vec<u8>> = None;
-        let rgba = if effective_mode == "lut" {
-            let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
-            let lut = guard.as_ref().and_then(|m| m.get(&lut_key).cloned()).ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
-            let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
-            drop(guard);
-            // _ext variant: the batch frame is the SDR body either way, but the unquantized
-            // values tell us whether HDR preview could ever differ from it (hdr_headroom_clear).
-            let (rgba, e) = raw_decode::apply_lut_rgba_ext(&lut_input_rgb16(&lut_key, &bytes, &decoded), &lut, n)?;
-            hdr_clear = !e.iter().any(|v| *v > 1.05);
-            hdr_blob = library::build_hdr_ext_blob(&path, &recipe_key, decoded.width, decoded.height, &e);
-            rgba
-        } else { raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam) };
         diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
-        Ok((decoded, rgba, hdr_clear, hdr_blob))
+        Ok(result)
     };
     // Batch/full-cache work keeps its existing global-pool behavior. Only the explicitly
     // user-waiting display-only review decode and its full-frame color conversion are promoted.
     let (decoded, rgba, hdr_clear, hdr_blob) = run_raw_cache_development(display_only, develop)?;
-    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba).ok_or("decoded RGBA dimensions do not match")?;
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
+        .ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
     if display_only {
         // RAW review needs only a bounded display asset. Keep the developed pixels transient:
         // this branch must not write the full decode cache or warm RAW_EDITOR_CACHE.
-        return library::write_display_cache_from_rgba(&path, &recipe_key, decoded.width, decoded.height,
-            &rgba, 2560, &file_name, &mut stage_t);
+        return library::write_display_cache_from_rgba(
+            &path,
+            &recipe_key,
+            decoded.width,
+            decoded.height,
+            &rgba,
+            2560,
+            &file_name,
+            &mut stage_t,
+        );
     }
     let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
-    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs()).unwrap_or(0);
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let rgba = std::sync::Arc::new(rgba);
-    raw_editor_cache_insert(&path, &recipe_key, mtime, meta.len(), decoded.width, decoded.height, rgba.clone());
+    raw_editor_cache_insert(
+        &path,
+        &recipe_key,
+        mtime,
+        meta.len(),
+        decoded.width,
+        decoded.height,
+        rgba.clone(),
+    );
     diag::stage("cache", &file_name, "in_process_cache_insert", &mut stage_t);
     // Persistent fallback for the next launch (PNG) + the display-sized proxy — the in-process
     // cache above is the fast path. Same helper the interactive open uses (decode_raw_v2).
-    persist_decoded_rgba(&path, &recipe_key, decoded.width, decoded.height, &rgba, &file_name, &mut stage_t)?;
-    if hdr_clear { library::write_hdr_clear_marker(&path, &recipe_key); }
-    else if let Some(b) = hdr_blob.as_ref() { library::write_hdr_ext_blob(&path, &recipe_key, b); }
+    persist_decoded_rgba(
+        &path,
+        &recipe_key,
+        decoded.width,
+        decoded.height,
+        &rgba,
+        &file_name,
+        &mut stage_t,
+    )?;
+    if hdr_clear {
+        library::write_hdr_clear_marker(&path, &recipe_key);
+    } else if let Some(b) = hdr_blob.as_ref() {
+        library::write_hdr_ext_blob(&path, &recipe_key, b);
+    }
     Ok("written".into())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawFaceCropHeader {
+    face_id: i64,
+    width: u32,
+    height: u32,
+    offset: usize,
+    length: usize,
+}
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawFaceDetailHeader {
+    source_width: u32,
+    source_height: u32,
+    lens_correction_applied: bool,
+    crops: Vec<RawFaceCropHeader>,
+}
+
+/// Develop one full RAW once with the caller's explicit recipe settings, then return only bounded
+/// face JPEGs. Unlike cache_raw_decode, this path never writes a full-frame cache or editor frame.
+#[tauri::command(async)]
+async fn catalog_raw_face_detail(
+    app: tauri::AppHandle,
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    face_ids: Vec<i64>,
+) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        catalog_raw_face_detail_run(
+            app, path, recipe_key, mode, lut_key, raw_nr, auto_lens, demosaic_algo,
+            lens_override, lens_override_focal, face_ids,
+        )
+    })
+    .await
+    .map_err(|e| format!("catalog_raw_face_detail task panicked: {e}"))?
+}
+
+fn catalog_raw_face_detail_run(
+    app: tauri::AppHandle,
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    face_ids: Vec<i64>,
+) -> Result<tauri::ipc::Response, String> {
+    if recipe_key.trim().is_empty() {
+        return Err("RAW face detail recipe key is empty".into());
+    }
+    if !matches!(mode.as_str(), "srgb" | "lut") {
+        return Err("RAW face detail mode must be srgb or lut".into());
+    }
+    if !matches!(raw_nr.as_str(), "off" | "fast" | "chroma") {
+        return Err("unsupported RAW face detail NR tier".into());
+    }
+    if !lens_override_focal.is_finite() || lens_override_focal < 0.0 {
+        return Err("invalid RAW face detail focal length".into());
+    }
+    let state = app.state::<catalog::CatalogState>();
+    let source = catalog::raw_face_detail_source(&state, &path, &face_ids)?;
+    let ext = Path::new(&source.path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !formats::is_raw_ext(&ext) {
+        return Err("face detail source is not RAW".into());
+    }
+    let before =
+        std::fs::metadata(&source.path).map_err(|e| format!("stat RAW face source: {e}"))?;
+    let before_modified = before
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos());
+    let before_size = before.len();
+    let bytes = std::fs::read(&source.path).map_err(|e| format!("read RAW face source: {e}"))?;
+    if bytes.len() as u64 != before_size {
+        return Err("RAW source changed while reading".into());
+    }
+    let source_path = source.path.clone();
+    let recipe = recipe_key.clone();
+    let mode_for_decode = mode.clone();
+    let lut = lut_key.clone();
+    let nr = raw_nr.clone();
+    let algo = demosaic_algo.clone();
+    let lens = lens_override.clone();
+    let (decoded, rgba, _, _) = run_raw_cache_development(true, move || {
+        develop_raw_frame(
+            &source_path,
+            &recipe,
+            &bytes,
+            &mode_for_decode,
+            &lut,
+            &nr,
+            auto_lens,
+            &algo,
+            &lens,
+            lens_override_focal,
+            false,
+        )
+    })?;
+    let after =
+        std::fs::metadata(&source.path).map_err(|e| format!("restat RAW face source: {e}"))?;
+    let after_modified = after
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos());
+    if before_size != after.len() || before_modified != after_modified {
+        return Err("RAW source changed during face detail decode".into());
+    }
+    let crops =
+        catalog::encode_raw_face_details(&rgba, decoded.width, decoded.height, &source.faces)?;
+    let mut payload = Vec::new();
+    let mut descriptors = Vec::with_capacity(crops.len());
+    for (face_id, width, height, jpeg) in crops {
+        let offset = payload.len();
+        let length = jpeg.len();
+        payload.extend_from_slice(&jpeg);
+        descriptors.push(RawFaceCropHeader {
+            face_id,
+            width,
+            height,
+            offset,
+            length,
+        });
+    }
+    let header = serde_json::to_vec(&RawFaceDetailHeader {
+        source_width: decoded.width,
+        source_height: decoded.height,
+        lens_correction_applied: decoded.lens_applied,
+        crops: descriptors,
+    })
+    .map_err(|e| format!("serialize RAW face detail header: {e}"))?;
+    let header_len = u32::try_from(header.len()).map_err(|_| "RAW face detail header too large")?;
+    let mut response = Vec::with_capacity(4 + header.len() + payload.len());
+    response.extend_from_slice(&header_len.to_le_bytes());
+    response.extend_from_slice(&header);
+    response.extend_from_slice(&payload);
+    Ok(tauri::ipc::Response::new(response))
 }
 
 /// Returns the lossless in-process RAW cache populated by cache_raw_decode.
@@ -2879,6 +3172,7 @@ fn main() {
             dcp_store::read_dcp_file,
             decode_raw_v2,
             cache_raw_decode,
+            catalog_raw_face_detail,
             get_cached_raw_decode,
             decode_image_v1,
             merge_hdr_photos,

@@ -1907,3 +1907,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Published RAW preparation implementation as `f2e658f4`, native evidence as `760a40a983d021ac6d15b9917644f3a5a7c56979`; non-force push and exact remote `ls-remote` verified. Clean integration used the existing shared checkout, with no new worktree or dependency install.
 - Integration recovery/history tests pass (2+12); native journal 4/4 and actual Nikon RAW renderer restart/cache recovery PASS. Linear is In Review; broader import/export recovery, real responsiveness targets and the existing UI failures remain open.
+
+### CHR-269 — developed RAW face detail (12 October 2026)
+
+- Added explicit RAW detail in existing face close-ups, one queued transient full-resolution-source decode per panel, crop-pixel inspection/retry, mode/source guards and truthful fit/detail labels; `desktop/library-ui.js`, `test/library_raw_faces.mjs`. Saved NR/demosaic/profile/lens inputs share the existing native resolver; no embedded-JPEG display fallback.
+- Native `catalog_raw_face_detail` reuses RAW development/color math, snapshots face rows outside filesystem work, uses spawn_blocking plus the interactive pool, validates source identity, crops without a full-frame copy, omits HDR/cache writes, caps 128 faces/2048px/16MiB, and reports applied lens correction; `main.rs`, `catalog.rs`. Face boxes are not yet transformed for lens warps; representative portrait/eye accuracy remains open.
+- Focused native tests pass (16, one fixture test ignored by default); browser detail/stale/malformed/inspect/retry flow passes. Full UI gates: 21/33 pass, 879 unchanged structural findings and the same 12 known failures. Actual native RAW detail verification follows. Storage/formatting/integration safeguards and culling-plan checkpoints are recorded in AGENTS.md and docs/plans/large-library-raw-culling.md.
