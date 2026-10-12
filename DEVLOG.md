@@ -1896,3 +1896,9 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Published Compare source/action guards and native evidence to main as `b0a5bdb3bf47fc1b7d07d0244efbf9aca2919795`; non-force push and remote ref confirmed. All four integrated task patches match their feature counterparts; newer HDR companion work `897a21f9` is preserved.
 - Integrated production RAW regressions, real-card Survey/Compare and HDR densify pass; native display-cache tests pass 2/2 with the separate real-RAW unit ignored, and HDR companion passes 1/1. Actual native RAW Compare evidence remains scoped to BUILD `1.1012E` / `baeb2de7`; final Editor gates are 21/33 with unchanged 879 inventory findings. CHR-268 is In Review.
 
+
+### CHR-200 — durable RAW review preparation (12 October 2026)
+
+- Added a SQLite RAW review journal with immutable per-photo settings/source identity, short checkpoints, explicit cancel/interrupt/resume, exact proxy verification and completed-history retention; `desktop/src-tauri/src/raw_review_jobs.rs` and native command wiring.
+- Extended existing Jobs history with RAW resume, renderer restart reconciliation, source/settings conflict reporting and foreground-prioritized preparation; `desktop/library-ui.js`. Failed or evicted proxies can be rebuilt while valid prepared proxies are skipped.
+- Focused frontend recovery tests (2), existing RAW preparation browser flow and job-history tests (12) pass. Native journal tests and actual 45 MP RAW integration are being validated; full import/export durability and responsiveness targets remain open. Native helper: `scripts/verify-raw-review-jobs-native.mjs`.

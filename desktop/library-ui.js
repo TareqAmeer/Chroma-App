@@ -7243,10 +7243,28 @@
   // Warm the persistent full-resolution RAW cache without opening photos in the editor.
   let _cacheWarmCancel = null;
   let _rawReviewPrep = null;
-  async function prepareRawReviewPreviews(paths) {
+  let _rawReviewRecovery = null;
+  // BEGIN RAW_REVIEW_JOB_HELPERS
+  async function recoverRawReviewJobs() {
+    const jobs = await invoke('raw_review_jobs_list');
+    for (let job of jobs.slice(0, ACTIVITY_HISTORY_LIMIT).reverse()) {
+      if (_rawReviewPrep?.rawReviewJobId === job.id) continue;
+      if (job.status === 'running') {
+        await invoke('raw_review_jobs_interrupt', { id: job.id });
+        job = { ...job, status: 'interrupted' };
+      }
+      recordActivityHistory({ jobId: `raw-review-job-${job.id}`, rawReviewJobId: job.id,
+        label: job.label, stage: 'done', outcome: job.status, done: job.completed,
+        total: job.total, failedCount: job.failed, failed: job.failedItems || [], finishedAt: job.updatedAt * 1000, current: job.status === 'completed'
+          ? 'RAW review preparation completed' : 'Resume checks sources, settings and prepared previews before continuing' });
+    }
+    renderActivity();
+  }
+  async function prepareRawReviewPreviews(paths, resumeId = null) {
     if (_rawReviewPrep) return _rawReviewPrep.promise;
     const rawPaths = [...new Set((paths || []).filter((p) => RAW_EXT_RE.test(p)))];
-    if (!rawPaths.length) { toast('Select at least one RAW photo to prepare', false); return; }
+    if (!resumeId && !rawPaths.length) { toast('Select at least one RAW photo to prepare', false); return; }
+    if (rawPaths.length > 50000) { toast('Prepare up to 50,000 RAW photos at a time', false); return; }
     const record = { jobId: `raw-review-prep-${Date.now()}`, stage: 'working', done: 0, total: rawPaths.length,
       current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelled: false };
     record.cancel = () => {
@@ -7259,7 +7277,7 @@
     _rawReviewPrep = record;
     const update = (patch) => {
       Object.assign(record, patch);
-      const activityPatch = { jobId: record.jobId, stage: record.stage, done: record.done, total: record.total,
+      const activityPatch = { jobId: record.jobId, rawReviewJobId: record.rawReviewJobId || null, stage: record.stage, done: record.done, total: record.total,
         current: record.current, kind: 'raw-review-prep', label: 'Preparing RAW review previews',
         cancelFn: record.stage === 'done' ? null : record.cancel };
       if (record.outcome !== undefined) activityPatch.outcome = record.outcome;
@@ -7268,33 +7286,70 @@
     };
     update({});
     record.promise = (async () => {
-      let prepared = 0, failed = [];
+      let prepared = 0, failed = [], journal = null, interrupted = false;
       try {
-        for (let i = 0; i < rawPaths.length && !record.cancelled; i++) {
-          const path = rawPaths[i];
+        if (_rawReviewRecovery) await _rawReviewRecovery;
+        let items;
+        if (resumeId) {
+          const saved = await invoke('raw_review_jobs_get', { id: resumeId });
+          const expectedRecipeKeys = [];
+          for (const item of saved.items) expectedRecipeKeys.push({ index: item.index, recipeKey: (await rawCacheSettings(item.path, 'review')).recipeKey });
+          journal = await invoke('raw_review_jobs_resume', { id: resumeId, expectedRecipeKeys });
+          items = journal.items;
+        } else {
+          items = [];
+          for (const path of rawPaths) {
+            if (record.cancelled) return;
+            const settings = await rawCacheSettings(path, 'review');
+            items.push({ index: items.length, path, recipeKey: settings.recipeKey, settingsJson: JSON.stringify(settings), status: 'pending' });
+          }
+          if (record.cancelled) return;
+          if (!LIBTEST) journal = await invoke('raw_review_jobs_create', { label: 'Preparing RAW review previews', items: items.map(({ path, recipeKey, settingsJson }) => ({ path, recipeKey, settingsJson })) });
+          if (journal) items = journal.items;
+        }
+        if (journal) {
+          clearActiveActivity(record);
+          record.rawReviewJobId = journal.id;
+        }
+        prepared = items.filter(item => item.status === 'completed').length;
+        failed = items.filter(item => item.status === 'failed').map(item => `${baseName(item.path)}: ${item.error || 'Prepare this RAW again'}`);
+        update({ total: items.length, done: prepared + failed.length });
+        for (const item of items) {
+          if (record.cancelled) break;
+          if (item.status === 'completed' || item.status === 'failed') continue;
+          const path = item.path;
           update({ current: baseName(path) });
           let completed = false;
           try {
-            // Resolve per-photo settings just before enqueueing, and queue only this one item.
-            // The shared pump gives all Quick Look work priority and permits only one RAW review
-            // decode at a time. The native display-only cache survives cancellation.
-            const settings = await rawCacheSettings(path, 'review');
+            const settings = JSON.parse(item.settingsJson);
             if (record.cancelled) break;
+            if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'working' });
             const result = await queueRawReview(path, () => record.cancelled ? null : cacheOneRaw(path, 'review', settings), 'prep', record.jobId);
             if (result === null) break; // cancelled after dequeue but before native work dispatched
+            if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'completed' });
             prepared++;
             completed = true;
           } catch (error) {
-            if (!record.cancelled) failed.push(`${baseName(path)}: ${humanizeErr('prepare preview', error)}`);
+            if (!record.cancelled) {
+              const detail = humanizeErr('prepare preview', error);
+              if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'failed', error: detail });
+              failed.push(`${baseName(path)}: ${detail}`);
+            }
           }
           if (record.cancelled && !completed) break;
-          update({ done: i + 1, current: baseName(path) });
+          update({ done: prepared + failed.length, current: baseName(path) });
         }
+        if (journal) await invoke(record.cancelled ? 'raw_review_jobs_cancel' : 'raw_review_jobs_finish', { id: journal.id });
+      } catch (error) {
+        interrupted = !!journal;
+        failed.push(humanizeErr('RAW review preparation', error));
+        // Leave an interrupted journal recoverable if persistence or checkpointing failed.
+        if (journal) await invoke('raw_review_jobs_interrupt', { id: journal.id }).catch(() => {});
       } finally {
         const cancelled = record.cancelled;
-        const summary = cancelled ? `Preparation stopped — ${prepared} of ${rawPaths.length} ready` : `Prepared ${prepared} RAW review preview${prepared === 1 ? '' : 's'}`;
+        const summary = cancelled ? `Preparation stopped — ${prepared} of ${record.total} ready` : `Prepared ${prepared} RAW review preview${prepared === 1 ? '' : 's'}`;
         record.stage = 'done';
-        const outcome = cancelled ? 'cancelled' : failed.length ? (prepared ? 'partial' : 'failed') : 'completed';
+        const outcome = cancelled ? 'cancelled' : interrupted ? 'interrupted' : failed.length ? (prepared ? 'partial' : 'failed') : 'completed';
         update({ stage: 'done', outcome, done: record.done, current: summary, failed: failed.length ? failed : undefined });
         toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
         if (_rawReviewPrep === record) _rawReviewPrep = null;
@@ -7302,6 +7357,7 @@
     })();
     return record.promise;
   }
+  // END RAW_REVIEW_JOB_HELPERS
   async function cacheSelectedRaws(paths) {
     const rawPaths = paths.filter((p) => RAW_EXT_RE.test(p));
     if (!rawPaths.length) { toast('Select at least one RAW photo to cache', false); return; }
@@ -13565,7 +13621,7 @@
   function readActiveActivity() { try { const rows = JSON.parse(localStorage.getItem(ACTIVITY_ACTIVE_KEY) || '[]'); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === 'string') : []; } catch (e) { return []; } }
   function saveActiveActivity(rows) { try { localStorage.setItem(ACTIVITY_ACTIVE_KEY, JSON.stringify(rows)); } catch (e) {} }
   function persistActiveActivity(job) {
-    if (job.batchId) return; // SQLite recipe batches have their own authoritative restart recovery.
+    if (job.batchId || job.rawReviewJobId) return; // Native journals own restart recovery.
     const active = readActiveActivity();
     const id = String(job.jobId || job.id || job.kind || 'background-job');
     const row = { id, kind: String(job.kind || ''), label: String(job.label || job.kind || 'Background job'), done: Number(job.done || 0), total: Number(job.total || 0), lastProgressAt: Number.isFinite(job.lastProgressAt) ? job.lastProgressAt : Date.now(), recovery: normalizeCatalogRecovery(job.recovery) };
@@ -13579,9 +13635,9 @@
   }
   function recordActivityHistory(job) {
     const status = job.outcome === 'cancelled' || job.stage === 'cancelled' ? 'Cancelled' : job.outcome === 'interrupted' || job.stage === 'interrupted' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
-    const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
+    const id = job.rawReviewJobId ? `raw-review-job-${job.rawReviewJobId}` : String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
     const failedItems = Array.isArray(job.failed) ? job.failed.filter(item => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 240)) : [];
-    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery) };
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Number(job.finishedAt) || Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, rawReviewJobId: Number.isSafeInteger(job.rawReviewJobId) && job.rawReviewJobId > 0 ? job.rawReviewJobId : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery) };
     const existing = activityHistory.findIndex(item => item.id === id);
     if (existing >= 0) activityHistory.splice(existing, 1);
     activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
@@ -13620,6 +13676,7 @@
     return !!job && job.stage !== 'done' && Number.isFinite(job.lastProgressAt) && now - job.lastProgressAt > ACTIVITY_STALL_MS;
   }
   function activityRecoveryCopy(job) {
+    if(job.rawReviewJobId)return 'Cancel stops after the active RAW and preserves prepared previews. Resume checks sources and development settings, skips valid previews and rebuilds evicted previews.';
     if(job.batchId)return 'Cancelling a recipe batch keeps photos already applied and leaves remaining eligible photos available to resume.';
     if(job.kind==='import')return 'Cancel stops after the current file and preserves completed files in the destination. To continue after restarting, select the card and import again; existing files are checked for duplicates.';
     if(job.kind==='catalog')return 'Cancel preserves saved hashes, face detections and embeddings, CLIP results, and pet scans. Retry supported phases checks native markers and skips unchanged completed work; stack, thumbnail, focus, grouping, and auto-tag stages continue through a normal library scan.';
@@ -13776,6 +13833,13 @@
         if (row) resumeCatalogIndex(row);
       };
     });
+    el.querySelectorAll('[data-job-raw-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find(item => item.id === button.dataset.jobRawResumeId);
+        if (row?.rawReviewJobId) void prepareRawReviewPreviews([], row.rawReviewJobId);
+      };
+    });
     const pill = document.getElementById('lib-act-pill');
     if (pill) pill.onclick = (e) => { e.stopPropagation(); activity.expanded = !activity.expanded; renderActivity(); };
     // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
@@ -13835,7 +13899,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${activity.visible ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.rawReviewJobId && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-raw-resume-id="${esc(row.id)}">Resume RAW preparation</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 
@@ -13882,7 +13946,7 @@
     if (_activityClearTimer) { clearTimeout(_activityClearTimer); _activityClearTimer = null; }
     // Any real event landing — regardless of whether done/total actually moved — is proof the
     // pipeline is alive, so it always resets the stall clock and clears a stalled state.
-    activity = { ...activity, ...(activeId !== patch.jobId ? { batchId: null, failed: [], cancelFn: null, outcome: null, label: null, revealPath: null } : {}), kind, visible: true, ...patch };
+    activity = { ...activity, ...(activeId !== patch.jobId ? { batchId: null, rawReviewJobId: null, failed: [], cancelFn: null, outcome: null, label: null, revealPath: null } : {}), kind, visible: true, ...patch };
     _activityStalled = activityNoRecentProgress(activity);
     if (activity.stage === 'done') clearActiveActivity(activity);
     else persistActiveActivity(activity);
@@ -14118,6 +14182,7 @@
   if (LIBTEST) window.libtestRecoverInterruptedRecipeBatch = recoverInterruptedRecipeBatch;
   if (!LIBTEST || /[?&]libtestBatchRecovery=1/.test(location.search))
     setTimeout(() => recoverInterruptedRecipeBatch().catch(e => console.error('batch recovery', e)), 0);
+  if (!LIBTEST) _rawReviewRecovery = recoverRawReviewJobs().catch(e => console.error('RAW preparation recovery', e));
   window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
   window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };
 

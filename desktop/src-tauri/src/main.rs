@@ -80,6 +80,7 @@ mod smart_albums;
 mod catalog_backup;
 mod session;
 mod recipe_batch;
+mod raw_review_jobs;
 mod publish;
 mod lightroom_preset_import;
 mod geocode;
@@ -2857,6 +2858,9 @@ fn main() {
             lightroom_preset_import::preview_lightroom_xmp_preset,
             recipe_batch::recipe_batch_create, recipe_batch::recipe_batch_get, recipe_batch::recipe_batch_list,
             recipe_batch::recipe_batch_apply_item, recipe_batch::recipe_batch_cancel, recipe_batch::recipe_batch_resume, recipe_batch::recipe_batch_undo,
+            raw_review_jobs::raw_review_jobs_create, raw_review_jobs::raw_review_jobs_list, raw_review_jobs::raw_review_jobs_get,
+            raw_review_jobs::raw_review_jobs_checkpoint, raw_review_jobs::raw_review_jobs_cancel, raw_review_jobs::raw_review_jobs_interrupt, raw_review_jobs::raw_review_jobs_resume,
+            raw_review_jobs::raw_review_jobs_finish,
             publish::publish_collection_list,
             publish::publish_collection_create,
             publish::publish_collection_sync_photos,
