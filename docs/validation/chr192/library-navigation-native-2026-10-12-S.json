@@ -1,0 +1,383 @@
+{
+  "issue": "CHR-192",
+  "capturedAt": "2026-10-12T08:28:24.909Z",
+  "sourceCommit": "010635e70ac44197e1ba800db08c886205f8c21e",
+  "expectedBuild": "1.1012S",
+  "fixture": {
+    "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-050.png",
+    "sha256": "c33a2880d36fc6d42bab267dff82e835aadc1498455e0572757a1694fb5beb1d",
+    "bytes": 1222
+  },
+  "isolation": {
+    "catalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr192-20261012\\catalog",
+    "cacheDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr192-20261012\\cache",
+    "endpoint": "http://127.0.0.1:9223",
+    "nativeAppPid": 32304,
+    "nativeBackendCommit": "48cb8c306304f8d9829f46e732dddb464dde00cf",
+    "nativeBackendTree": "2e6aaec26386d0cbac22411cad487ec4338b2c79",
+    "webviewProfile": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\webview-profile"
+  },
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             "
+  },
+  "browser": {
+    "viewport": "1366x768",
+    "themes": [
+      {
+        "theme": "dark",
+        "host": "#lib-top-right",
+        "keyboardKey": "Space",
+        "opened": true,
+        "escapeFocusRestored": true,
+        "clickAwayClosed": true
+      },
+      {
+        "theme": "dark",
+        "host": "#fx-deskbar-tools",
+        "keyboardKey": "Enter",
+        "opened": true,
+        "escapeFocusRestored": true,
+        "clickAwayClosed": true
+      },
+      {
+        "theme": "light",
+        "host": "#lib-top-right",
+        "keyboardKey": "Space",
+        "opened": true,
+        "escapeFocusRestored": true,
+        "clickAwayClosed": true
+      },
+      {
+        "theme": "light",
+        "host": "#fx-deskbar-tools",
+        "keyboardKey": "Enter",
+        "opened": true,
+        "escapeFocusRestored": true,
+        "clickAwayClosed": true
+      }
+    ],
+    "nativeDecode": false,
+    "photoPointerDown": {
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-050.png",
+      "scrollTop": 1167.3333740234375,
+      "rectTop": 331.79168701171875,
+      "rectBottom": 496.36460876464844
+    }
+  },
+  "result": "PASS",
+  "runtime": {
+    "build": "1.1012S",
+    "url": "http://cs.localhost/index.html",
+    "catalogTotal": 72,
+    "viewport": {
+      "width": 1366,
+      "height": 768,
+      "devicePixelRatio": 1.0000000298023224
+    },
+    "fixtureIndexed": true,
+    "sessionPhotoCount": 72,
+    "sessionExtensions": [
+      ".png"
+    ]
+  },
+  "catalogRootsBefore": [
+    {
+      "id": 1,
+      "added": "1791780750081708700",
+      "volume": "local",
+      "path": "C:/Users/Tareq/Documents/github/Chroma-App/.worktrees/_shared-test-runtime/fixtures/chr192-navigation"
+    }
+  ],
+  "catalogBootstrap": {
+    "root": "C:\\/Users/Tareq/Documents/github/Chroma-App/.worktrees/_shared-test-runtime/fixtures/chr192-navigation",
+    "volumeId": 1,
+    "scan": {
+      "scanned": 72,
+      "added": 0,
+      "marked_absent": 0
+    },
+    "backgroundPaused": true
+  },
+  "galleryBeforeOpen": {
+    "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+    "offset": -117.35416793823242,
+    "folder": "Session",
+    "scrollTop": 1167.3333740234375,
+    "main": {
+      "width": 1136,
+      "height": 652,
+      "top": 88
+    },
+    "grid": {
+      "width": 1094,
+      "top": -932.21875,
+      "columns": "142.568px 142.573px 142.573px 142.568px 142.573px 142.573px 142.573px",
+      "firstCardWidth": 142.56771850585938,
+      "firstCardHeight": 164.5729217529297,
+      "cardCount": 72,
+      "firstPaths": [
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-001.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-002.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-003.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-004.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-005.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-006.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-007.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-008.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-009.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-010.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-011.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-012.png"
+      ],
+      "visiblePaths": [
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-037.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-038.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-039.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-040.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-041.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-042.png",
+        "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-043.png"
+      ]
+    }
+  },
+  "studio": {
+    "source": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-050.png",
+    "zoom": "225",
+    "title": "chart-050",
+    "header": {
+      "title": {
+        "x": 583.390625,
+        "y": 43.90104293823242,
+        "right": 638.890625,
+        "bottom": 59.50000190734863,
+        "width": 55.5,
+        "height": 15.598958969116211,
+        "scrollWidth": 56,
+        "visible": true,
+        "aria": null
+      },
+      "zoom": {
+        "x": 777.8646240234375,
+        "y": 48,
+        "right": 857.8646240234375,
+        "bottom": 72,
+        "width": 80,
+        "height": 24,
+        "scrollWidth": 80,
+        "visible": true,
+        "aria": "Zoom (%)"
+      },
+      "scope": {
+        "x": 335,
+        "y": 48.40104293823242,
+        "right": 416.4166717529297,
+        "bottom": 71.59896087646484,
+        "width": 81.41667175292969,
+        "height": 23.197917938232422,
+        "scrollWidth": 79,
+        "visible": true,
+        "aria": "Photo 1 of 1. Image affects this photo only. Basic adjustments follow the shared batch value unless overridden per photo. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets this photo open photos."
+      },
+      "jobs": {
+        "x": 1099.6771240234375,
+        "y": 44,
+        "right": 1142.8177490234375,
+        "bottom": 76,
+        "width": 43.140625,
+        "height": 32,
+        "scrollWidth": 41,
+        "visible": true,
+        "aria": "Recent background jobs, 2"
+      }
+    },
+    "titleCount": 1,
+    "zoomCount": 1,
+    "sourceSlots": 1,
+    "capClones": 0,
+    "rails": [
+      {
+        "text": "Look",
+        "aria": "Look"
+      },
+      {
+        "text": "Light",
+        "aria": "Light"
+      },
+      {
+        "text": "Colour",
+        "aria": "Colour"
+      },
+      {
+        "text": "Texture",
+        "aria": "Texture"
+      },
+      {
+        "text": "Crop",
+        "aria": "Crop"
+      },
+      {
+        "text": "Masks",
+        "aria": "Masks"
+      },
+      {
+        "text": "Versions & History",
+        "aria": "Versions & History"
+      },
+      {
+        "text": "Metadata",
+        "aria": "Metadata"
+      }
+    ]
+  },
+  "gallery": {
+    "root": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation",
+    "selectedFolder": "Session",
+    "anchorBefore": {
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+      "offset": -117.35416793823242,
+      "folder": "Session",
+      "scrollTop": 1167.3333740234375,
+      "main": {
+        "width": 1136,
+        "height": 652,
+        "top": 88
+      },
+      "grid": {
+        "width": 1094,
+        "top": -932.21875,
+        "columns": "142.568px 142.573px 142.573px 142.568px 142.573px 142.573px 142.573px",
+        "firstCardWidth": 142.56771850585938,
+        "firstCardHeight": 164.5729217529297,
+        "cardCount": 72,
+        "firstPaths": [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-001.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-002.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-003.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-004.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-005.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-006.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-007.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-008.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-009.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-010.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-011.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-012.png"
+        ],
+        "visiblePaths": [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-037.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-038.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-039.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-040.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-041.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-042.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-043.png"
+        ]
+      }
+    },
+    "roundTrip": {
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+      "offset": -117.35416793823242,
+      "folder": "Session",
+      "scrollTop": 1167.3333740234375,
+      "main": {
+        "width": 1136,
+        "height": 652,
+        "top": 88
+      },
+      "grid": {
+        "width": 1094,
+        "top": -932.21875,
+        "columns": "142.568px 142.573px 142.573px 142.568px 142.573px 142.573px 142.573px",
+        "firstCardWidth": 142.56771850585938,
+        "firstCardHeight": 164.5729217529297,
+        "cardCount": 72,
+        "firstPaths": [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-001.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-002.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-003.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-004.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-005.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-006.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-007.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-008.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-009.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-010.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-011.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-012.png"
+        ],
+        "visiblePaths": [
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-036.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-037.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-038.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-039.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-040.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-041.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-042.png",
+          "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-043.png"
+        ]
+      }
+    },
+    "scrollBefore": 1167.3333740234375,
+    "scrollAfter": 1167.3333740234375
+  },
+  "finalState": {
+    "source": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr192-navigation\\Session\\chart-050.png",
+    "zoom": "225",
+    "header": {
+      "title": {
+        "x": 583.390625,
+        "y": 43.90104293823242,
+        "right": 638.890625,
+        "bottom": 59.50000190734863,
+        "width": 55.5,
+        "height": 15.598958969116211,
+        "scrollWidth": 56,
+        "visible": true,
+        "aria": null
+      },
+      "zoom": {
+        "x": 777.8646240234375,
+        "y": 48,
+        "right": 857.8646240234375,
+        "bottom": 72,
+        "width": 80,
+        "height": 24,
+        "scrollWidth": 80,
+        "visible": true,
+        "aria": "Zoom (%)"
+      },
+      "scope": {
+        "x": 335,
+        "y": 48.40104293823242,
+        "right": 416.4166717529297,
+        "bottom": 71.59896087646484,
+        "width": 81.41667175292969,
+        "height": 23.197917938232422,
+        "scrollWidth": 79,
+        "visible": true,
+        "aria": "Photo 1 of 1. Image affects this photo only. Basic adjustments follow the shared batch value unless overridden per photo. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets this photo open photos."
+      },
+      "jobs": {
+        "x": 1099.6771240234375,
+        "y": 44,
+        "right": 1142.8177490234375,
+        "bottom": 76,
+        "width": 43.140625,
+        "height": 32,
+        "scrollWidth": 41,
+        "visible": true,
+        "aria": "Recent background jobs, 2"
+      }
+    },
+    "bodyLight": true,
+    "titleCount": 1,
+    "zoomCount": 1,
+    "jobsCount": 1,
+    "popoverCount": 1
+  },
+  "initialSourcePath": ""
+}
