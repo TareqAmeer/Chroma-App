@@ -29,6 +29,14 @@ if [ "$LEGACY" != "$APP" ] && [ -d "$LEGACY" ]; then
   "$LSREG" -u "$LEGACY" || true
   echo "Unregistered stale repo-local bundle: $LEGACY"
 fi
+# Sign with the stable local identity (see setup-signing-identity.sh) so macOS privacy grants
+# (external drive, Documents, Full Disk Access) survive rebuilds instead of re-prompting each time.
+SIGN_ID="Chromasmith Local Dev"
+if security find-identity -p codesigning | grep -q "$SIGN_ID"; then
+  codesign --force --deep --sign "$SIGN_ID" "$APP" && echo "Signed with '$SIGN_ID' (stable identity: privacy grants persist)."
+else
+  echo "NOTE: no stable signing identity — macOS will re-ask for drive/Documents access after each rebuild. Run desktop/setup-signing-identity.sh once." >&2
+fi
 "$LSREG" -f "$APP"
 
 # Prove the registered binary is the one just built (a build older than this script run = stale).
