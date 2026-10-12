@@ -299,7 +299,7 @@ fn fnv1a(parts: &[&str]) -> u64 {
 // rendering change also silently invalidated every cached EXIF read and every perceptual hash —
 // at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
 const THUMB_RENDER_VER: &str = "thumb-v4"; // v4: RAW thumbs prefer the embedded preview (CHR-143: Sony 160x120 thumb is 4:3, not the real 3:2). Earlier: bumped: key is now STABLE (path-only) — see cache_key
-const META_READER_VER: &str = "meta-v6";   // v6: GPS lat/lon + offline place name (v5: RW2-lens EXIF garbage-value fix)
+const META_READER_VER: &str = "meta-v7";   // v7: subsec (SubSecTimeOriginal) for same-second burst ordering. v6: GPS lat/lon + offline place name (v5: RW2-lens EXIF garbage-value fix)
 /// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
 /// invalidate every photo's cached EXIF read. See meta_cache_path.
 const VIDEO_META_VER: &str = "vmeta-v1";
@@ -1423,6 +1423,10 @@ pub struct PhotoMeta {
     pub shutter: Option<String>,
     pub aperture: Option<String>,
     pub focal_len: Option<String>,
+    /// EXIF SubSecTimeOriginal digits (e.g. "45" for 0.45s). `date` is whole-second, so photos
+    /// from one burst tie on it; the grid's date sort breaks those ties with this.
+    #[serde(default)]
+    pub subsec: Option<String>,
     /// Video only: clip length in seconds, and display dimensions. Read from the container header
     /// (catalog::video_track_info), NOT from a decode — so the grid's duration badge still renders
     /// for a clip AVFoundation cannot produce a poster frame for.
@@ -1500,6 +1504,7 @@ fn read_meta(path: &str) -> PhotoMeta {
                 .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
                 .or_else(|| crate::lens_correct::exif_lens_model_fallback_path(Path::new(path))),
             date: md.exif.date_time_original.clone(),
+            subsec: md.exif.sub_sec_time_original.clone(),
             iso: md.exif.iso_speed_ratings.map(|v| v as u32),
             shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
             aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
@@ -1535,6 +1540,7 @@ fn read_meta(path: &str) -> PhotoMeta {
             model,
             lens: s(exif::Tag::LensModel),
             date: s(exif::Tag::DateTimeOriginal),
+            subsec: s(exif::Tag::SubSecTimeOriginal),
             iso,
             shutter: s(exif::Tag::ExposureTime),
             aperture: s(exif::Tag::FNumber).map(|v| format!("f/{v}")),

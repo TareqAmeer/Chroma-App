@@ -6635,12 +6635,21 @@
   }
 
   // ── sort ────────────────────────────────────────────────────────────────────
+  // "YYYY:MM:DD HH:MM:SS" has whole-second resolution, so burst shots tie on it. Append the EXIF
+  // sub-second digits (left-aligned: "45" -> 0.45s) as a fixed-width fraction so the string
+  // compare orders same-second frames by when they were actually taken.
+  function dateSortKey(m) {
+    const date = m.date || '';
+    if (!date) return '';
+    const frac = String(m.subsec || '').replace(/\D/g, '').padEnd(9, '0').slice(0, 9);
+    return `${date}.${frac}`;
+  }
   function sortKeyOf(entry) {
     const sc = state.sidecars.get(entry.path) || { edited: false };
     const m = state.meta.get(entry.path) || {};
     switch (state.sortBy) {
       case 'mtime': return entry.mtime || 0;
-      case 'date': return m.date || '';
+      case 'date': return dateSortKey(m);
       case 'iso': return m.iso || 0;
       case 'shutter': return (m.shutter || '').startsWith('1/') ? -1 / parseFloat(m.shutter.slice(2) || '1') : parseFloat(m.shutter) || 0;
       case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
