@@ -7256,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012X';
+const BUILD='1.1012Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16231,7 +16231,8 @@ function mskAiBoxToggle(){
 // and prefers SAM 2.1 once it lands. No user-visible mode toggle, same as the RAW refine.
 let _sam2Token=null,_sam2Encoding=false;
 async function samEnsureEncoded(opts={}){
-  if(!window.__TAURI__||_samToken||_samEncoding)return;
+  const wantsSam2=opts.preferredBackend==='sam2_points';
+  if(!window.__TAURI__||_samEncoding||(wantsSam2?_sam2Token:_samToken))return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
   _samEncoding=true;
@@ -16243,25 +16244,30 @@ async function samEnsureEncoded(opts={}){
     const rgb=new Uint8Array(w*h*3);
     for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
     const token='sam-'+Date.now()+'-'+Math.random().toString(36).slice(2);
-    await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
+    if(!wantsSam2&&!_samToken)await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
     // The user may have switched photos while this awaited (a filmstrip click, an arrow key) —
     // re-check identity before caching the token, or a slow encode of the OUTGOING photo would
     // land after the switch and get used for the new one.
     const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
-    if(stillCurrent){_samToken=token;if(!opts.noBackgroundRefine)samEnsureEncoded2(img,rgb,w,h);} // fire-and-forget — NOT awaited, see doc comment above
+    if(stillCurrent){
+      if(!wantsSam2&&!_samToken)_samToken=token;
+      if(wantsSam2)await samEnsureEncoded2(img,rgb,w,h,{silent:true,noUpgrade:true,throwOnError:true});
+      else if(!opts.noBackgroundRefine)samEnsureEncoded2(img,rgb,w,h); // fire-and-forget — NOT awaited, see doc comment above
+    }else if(wantsSam2)throw new Error('Photo changed while preparing the requested SAM model');
   }catch(e){
     const msg='AI Select: could not prepare this photo — '+(e&&e.message||e);
+    if(opts.throwOnError)throw e;
     if(!opts.silent){log(msg,'err');_samLastError=msg;
       if(typeof toast==='function')toast(msg);
       if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();}
   }finally{_samEncoding=false;endActivity();}
 }
-async function samEnsureEncoded2(img,rgb,w,h){
+async function samEnsureEncoded2(img,rgb,w,h,opts={}){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
   const item=typeof curItem==='function'?curItem():null;
-  const endActivity=fxPhotoActivity(item&&item.img===img?item:null,'Improving AI Select…');
-  if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // show the spinner
+  const endActivity=opts.silent?()=>{}:fxPhotoActivity(item&&item.img===img?item:null,'Improving AI Select…');
+  if(!opts.silent&&fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // show the spinner
   try{
     const token='sam2-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
@@ -16273,13 +16279,14 @@ async function samEnsureEncoded2(img,rgb,w,h){
     // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
     // refine's "gets better without asking" UX rather than requiring a fresh stroke.
     const m=fxState.masks[mskSel];
-    if(m&&mskIsAI(m)&&m.aiPoints&&m.aiPoints.length)await samRunPoints(m);
+    if(!opts.noUpgrade&&m&&mskIsAI(m)&&m.aiPoints&&m.aiPoints.length)await samRunPoints(m);
   }catch(e){
+    if(opts.throwOnError)throw e;
     log('AI Select (background quality upgrade): '+(e&&e.message||e),'warn'); // non-fatal — EdgeSAM still works
   }finally{
     _sam2Encoding=false;
     endActivity();
-    if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // hide the spinner
+    if(!opts.silent&&fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // hide the spinner
   }
 }
 // Resubmits m.aiPoints (the FULL accumulated scribble point set, not just the latest stroke) and
@@ -16393,20 +16400,26 @@ async function samRunPoints(m,opts={}){
   const detachedRefinement=opts.detached?{feather:m.refineFeather,edge:m.refineEdge}:null;
   const endActivity=opts.detached?()=>{}:fxPhotoActivity(item,'Selecting subject…');
   try{
-    await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached});
+    await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached,preferredBackend:opts.preferredBackend,throwOnError:!!opts.preferredBackend});
     // A semantic-copy candidate is detached from live masks. If another encode was already
     // underway, wait for this photo's token instead of treating the in-flight flag as ready.
-    if(opts.detached&&_samEncoding&&!_samToken){
+    if(opts.detached&&(_samEncoding||opts.preferredBackend==='sam2_points'&&_sam2Encoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)){
       const deadline=Date.now()+30000;
-      while(_samEncoding&&!_samToken&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+      while((_samEncoding||opts.preferredBackend==='sam2_points'&&_sam2Encoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+    }
+    if(opts.detached&&opts.preferredBackend&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&!_samEncoding){
+      await samEnsureEncoded({silent:true,noBackgroundRefine:true,preferredBackend:opts.preferredBackend,throwOnError:true});
+      const deadline=Date.now()+30000;
+      while((opts.preferredBackend==='sam2_points'?_sam2Encoding:_samEncoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
     }
     if(opts.expectedItem&&curItem()!==opts.expectedItem)return{ok:false,error:'Photo changed during mask recomputation'};
-    if(!_samToken){
-      const msg='AI Select is not ready yet — try again in a moment';
+    const requiredSam2=opts.preferredBackend==='sam2_points';
+    if(requiredSam2?!_sam2Token:!_samToken){
+      const msg=opts.preferredBackend?'The saved '+(requiredSam2?'SAM 2.1':'EdgeSAM')+' backend is unavailable for this photo':'AI Select is not ready yet — try again in a moment';
       if(!opts.silent){toast(msg);_samLastError=msg;mskRebuild();}return{ok:false,error:msg};
     }
     const points=hasPoints?samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive})):null;
-    const useSam2=!aiBox&&!!_sam2Token;
+    const useSam2=!aiBox&&(opts.preferredBackend==='sam2_points'||(!opts.preferredBackend&&!!_sam2Token));
     const cmd=aiBox?'sam_box':(useSam2?'sam2_points':'sam_points');
     const payload=aiBox?{token:_samToken,rect:{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}}:{token:useSam2?_sam2Token:_samToken,points};
     const buf=await window.__TAURI__.core.invoke(cmd,payload);
@@ -17622,6 +17635,11 @@ function _mskPortableIsUnsupported(m){
 }
 function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));}
 async function _mskPortableReevaluate(m,target){
+  const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
+  const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';
+  const hasBox=!!(m&&m.aiBox&&_samNormalizeBox(m.aiBox));
+  if(savedBackend==='sam_box'&&!hasBox)return{ok:false,error:'Saved EdgeSAM box provenance cannot be replayed because this mask has no valid rectangle prompt'};
+  if(hasBox&&savedBackend&&savedBackend!=='sam_box')return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
   if(m.origin==='sky'){
     if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
     const refinement={feather:m.refineFeather,edge:m.refineEdge};
@@ -17633,13 +17651,15 @@ async function _mskPortableReevaluate(m,target){
     m.aiPoints=_skySeedPoints(m);
     _mskRecordAIProvenance(m,target.item,null,true);
     if(m.aiPoints.length){
-      const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item});
+      const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
       if(!result.ok&&/Photo changed/.test(result.error||''))return{ok:false,error:result.error};
+      if(!result.ok&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement is unavailable for this target ('+result.error+')'};
       if(!result.ok)return{ok:true,warning:'Sky heuristic regenerated for target; SAM refinement unavailable ('+result.error+')'};
     }
+    if(!m.aiPoints.length&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement could not run because no stable prompt points were regenerated'};
     return{ok:true,warning:m.aiPoints.length?'Sky selection regenerated and SAM-refined':'Sky heuristic regenerated; no stable SAM seed points'};
   }
-  const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item});
+  const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
 }
 async function mskCopyAndReevaluate(){

@@ -1,6 +1,12 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+## 2026-10-12 — CHR-247 preserve portable mask backend intent
+
+- `chromasmith-22.html` now re-evaluates portable prompted masks through their recorded EdgeSAM or SAM 2.1 backend, prepares the requested cold encoder without upgrading live masks, and preserves unknown legacy automatic selection. Contradictory rectangle/point provenance and unavailable known sky refinement fail the target without committing replacement pixels/provenance.
+- Extended `test/mask_ai_provenance.mjs` with production encoder/dispatch, warm-other-backend, cold-requested-backend, failure-preservation, prompt conflict and sky fallback checks. Focused provenance checks, portable-copy 12/12, fresh-dist browser copy/undo orchestration, HTML nesting and whitespace checks pass.
+- This JS-only slice uses existing commands and mocked model responses; no new models, native inference or labelled photographic quality result is claimed. Existing layout/style gates were unchanged and not rerun; the published CHR-193 full audit remains 21/33 passing with 879 inventory findings. Model revision/digest remain unknown. Broader CHR-247 parity criteria remain open.
+
 ## 2026-10-12 — CHR-193 counted, recoverable geometry copy
 
 - `chromasmith-22.html` now reviews the source, exact loaded-photo target count/names and geometry replacement warning before copying. Cancel and stale source/batch decisions preserve target geometry; membership and history lookup use linear-time maps/sets.

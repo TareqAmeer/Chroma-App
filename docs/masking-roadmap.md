@@ -2,6 +2,14 @@
 
 Tracks CHR-247 with CHR-274, CHR-253, CHR-258, CHR-273 and CHR-277. This is a staged plan, not a claim of competitor parity.
 
+12 October checkpoint: portable re-evaluation preserves a known recorded EdgeSAM/SAM 2.1
+backend instead of choosing whichever token is warm. Requested cold encoders are prepared
+silently; unavailable encoders and contradictory point/rectangle provenance fail the target
+without committing its candidate mask. Known SAM-refined sky intent also refuses a heuristic-only
+replacement when stable prompts cannot be regenerated. Legacy unknown intent retains automatic
+selection. Production-function fault injection and copy/undo browser checks pass; real-photo
+model quality and verified artifact revisions remain separate requirements.
+
 ## Delivery order
 
 1. **Composition correctness (CHR-247):** stable mask IDs and operand references; Add/Subtract/Intersect over complete selections; preserve operands through reorder, save/load, duplicate and undo. The effective-selection engine is published in `40e1e7c9` (feature `54b2ea04`): its isolated GPU composition/parity checks pass 13/13 and the export harness renders 35 fixtures/recipes without shader compile errors. This follow-up adds an accessible “Compose with…” operation/operand chooser for any other mask, validates the candidate graph before commit, offers explicit repair for missing/cyclic operands, and makes set/clear one-step undoable. Focused browser and graph tests cover arbitrary IDs, repair, cycle refusal, reorder, save and stale selection. Test range gates, soft weights, missing operands and cycles in the shared preview/export evaluator.
