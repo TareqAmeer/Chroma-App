@@ -7,6 +7,9 @@ Agent-generated changelog of completed features and architectural decisions.
 - Added `docs/validation/chr267/varied-raw-fixtures.md` for the existing Nikon Z 7 and a checksum-verified CC0 Canon EOS R5 original. One 40.6 MB canonical download fits the 49.453 GB pre-download workspace audit; no RAW binaries are tracked or duplicated.
 - Static syntax/whitespace checks pass. Native execution evidence is recorded after the isolated real-app run; this harness extension alone does not establish varied RAW presentation performance or recipe-colour parity.
 
+- Actual native BUILD `1.1012B` / frontend `2e4ee555` passes the corrected distinct Nikon/Canon source gate: six warm keyboard presentations 38.040–46.560 ms and fit-to-native detail 26.680/26.750 ms. Source identity/dimensions and two consecutive frame geometries are verified; executing harness hash is recorded separately. Evidence: `docs/validation/chr267/native-varied-perf-2026-10-12.json`, `.md` and native screenshot.
+- Preparation reached both full sources in 44.107 s outside timing, with initial disk/OS cache unspecified. Both sources used the same observed as-shot/fast-NR/default-demosaic/lens-off settings; no distinct-recipe or pixel/creative-parity, broad camera, Quick Look byte-bound or native peak-RSS claim. The shared profile was restored, owned test app closed, and workspace remained 49.511 GB. Broader CHR-267 RAW-first acceptance stays open.
+
 ## 2026-10-12 — CHR-247 preserve portable mask backend intent
 
 - `chromasmith-22.html` now re-evaluates portable prompted masks through their recorded EdgeSAM or SAM 2.1 backend, prepares the requested cold encoder without upgrading live masks, and preserves unknown legacy automatic selection. Contradictory rectangle/point provenance and unavailable known sky refinement fail the target without committing replacement pixels/provenance.

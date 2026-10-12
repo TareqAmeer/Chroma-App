@@ -1,0 +1,698 @@
+{
+  "issue": "CHR-267",
+  "capturedAt": "2026-10-12T09:50:57.615Z",
+  "nativeCommit": "2e4ee5556ca5703660dd03ca58f46b2a4a620f50",
+  "expectedBuild": "1.1012B",
+  "nativeProfile": "debug",
+  "harnessSha256": "1f0634c2cc729db8af9539225a479d5ada3151195293621f92c751a0f3cca3f7",
+  "fixture": {
+    "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\nikon-z7-2789.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "dataset": "A/B are hard-linked paths to two different real camera captures",
+    "licence": "CC0-1.0",
+    "source": "https://raw.pixls.us/getfile.php/2789/nice/Nikon%20-%20Z%207%20-%2012bit%2012bit%20compressed%20%283%3A2%29.NEF"
+  },
+  "fixtures": [
+    {
+      "label": "A",
+      "sourcePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\nikon-z7-2789.NEF",
+      "sourceSha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+      "sourceBytes": 51279219,
+      "licence": "CC0-1.0",
+      "source": "https://raw.pixls.us/getfile.php/2789/nice/Nikon%20-%20Z%207%20-%2012bit%2012bit%20compressed%20%283%3A2%29.NEF",
+      "width": 8256,
+      "height": 5504,
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "dimensionsSource": "CULL_RAW_WIDTH/HEIGHT"
+    },
+    {
+      "label": "B",
+      "sourcePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\canon-r5-4694.CR3",
+      "sourceSha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+      "sourceBytes": 40632406,
+      "licence": "CC0-1.0",
+      "source": "https://raw.pixls.us/getfile.php/4694/nice/Canon%20-%20EOS%20R5%20-%203%3A2.CR3",
+      "width": 8192,
+      "height": 5464,
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "dimensionsSource": "CULL_RAW_B_WIDTH/HEIGHT"
+    }
+  ],
+  "datasetMode": "varied-capture",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             ",
+    "logicalCpus": 12,
+    "memoryBytes": 34226311168
+  },
+  "cache": "Same-process warmed-cache resume; source-resolution cull cells were already decoded before this harness attached; initial disk/OS cache unspecified",
+  "measurementMode": {
+    "mode": "same-process-warmed-cache-resume",
+    "optIn": "CULL_RESUME_WARMED=1",
+    "importAndWarmSkipped": true
+  },
+  "isolation": {
+    "nativeCatalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr267-varied-20261012\\catalog",
+    "nativeCacheDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr267-varied-20261012\\cache",
+    "initialCatalogTotal": 2,
+    "initialCatalogPaths": [
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF"
+    ]
+  },
+  "preparation": {
+    "mode": "resumed-warm-cache",
+    "startedAt": null,
+    "elapsedMs": null
+  },
+  "samples": [
+    {
+      "run": 0,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 38.03999996185303,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "fixtureSha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+      "fixtureName": "B.CR3",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "sourceWidth": 8192,
+      "sourceHeight": 5464,
+      "decodedWidth": 8192,
+      "decodedHeight": 5464,
+      "scale": 0.05710102489019034,
+      "roi": [
+        8192,
+        5464
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        467.7708435058594,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 0,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 46.02999997138977,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "fixtureSha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+      "fixtureName": "A.NEF",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.056686046511627904,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        468,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 1,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 45.7150000333786,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "fixtureSha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+      "fixtureName": "B.CR3",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "sourceWidth": 8192,
+      "sourceHeight": 5464,
+      "decodedWidth": 8192,
+      "decodedHeight": 5464,
+      "scale": 0.05710102489019034,
+      "roi": [
+        8192,
+        5464
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        467.7708435058594,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 1,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 46.06499993801117,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "fixtureSha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+      "fixtureName": "A.NEF",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.056686046511627904,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        468,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 2,
+      "mode": "sharp",
+      "key": "ArrowRight",
+      "index": 1,
+      "ms": 46.4300000667572,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "fixtureSha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+      "fixtureName": "B.CR3",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "sourceWidth": 8192,
+      "sourceHeight": 5464,
+      "decodedWidth": 8192,
+      "decodedHeight": 5464,
+      "scale": 0.05710102489019034,
+      "roi": [
+        8192,
+        5464
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        467.7708435058594,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "run": 2,
+      "mode": "sharp",
+      "key": "ArrowLeft",
+      "index": 0,
+      "ms": 46.55999994277954,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "fixtureSha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+      "fixtureName": "A.NEF",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 0.056686046511627904,
+      "roi": [
+        8256,
+        5504
+      ],
+      "canvas": [
+        936,
+        624
+      ],
+      "css": [
+        468,
+        312
+      ],
+      "budgetMs": 100,
+      "pass": true
+    },
+    {
+      "mode": "native",
+      "key": null,
+      "index": 0,
+      "ms": 26.680000066757202,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "fixtureSha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+      "fixtureName": "A.NEF",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "sourceWidth": 8256,
+      "sourceHeight": 5504,
+      "decodedWidth": 8256,
+      "decodedHeight": 5504,
+      "scale": 1,
+      "roi": [
+        1092,
+        312
+      ],
+      "canvas": [
+        1871,
+        535
+      ],
+      "css": [
+        1092,
+        312
+      ],
+      "budgetMs": 500,
+      "pass": true
+    },
+    {
+      "mode": "native",
+      "key": null,
+      "index": 1,
+      "ms": 26.75,
+      "presented": true,
+      "fixturePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "fixtureSha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+      "fixtureName": "B.CR3",
+      "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "sourceWidth": 8192,
+      "sourceHeight": 5464,
+      "decodedWidth": 8192,
+      "decodedHeight": 5464,
+      "scale": 1,
+      "roi": [
+        1092,
+        312
+      ],
+      "canvas": [
+        1871,
+        535
+      ],
+      "css": [
+        1092,
+        312
+      ],
+      "photoSlot": "B",
+      "budgetMs": 500,
+      "pass": true
+    }
+  ],
+  "failures": [],
+  "diagnostics": {
+    "stages": [
+      {
+        "at": "2026-10-12T09:50:57.622Z",
+        "elapsedMs": 6,
+        "name": "runtime.evaluate.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.633Z",
+        "elapsedMs": 17,
+        "name": "runtime.evaluate.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.639Z",
+        "elapsedMs": 23,
+        "name": "initial.catalog.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.639Z",
+        "elapsedMs": 23,
+        "name": "resume.verify-cull-view.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.643Z",
+        "elapsedMs": 27,
+        "name": "resume.verify-cull-view.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.783Z",
+        "elapsedMs": 167,
+        "name": "idle-fit.ready"
+      },
+      {
+        "at": "2026-10-12T09:50:57.784Z",
+        "elapsedMs": 168,
+        "name": "sharp.0.1.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.826Z",
+        "elapsedMs": 210,
+        "name": "sharp.0.1.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.827Z",
+        "elapsedMs": 211,
+        "name": "sharp.0.0.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.877Z",
+        "elapsedMs": 261,
+        "name": "sharp.0.0.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.877Z",
+        "elapsedMs": 261,
+        "name": "sharp.1.1.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.927Z",
+        "elapsedMs": 311,
+        "name": "sharp.1.1.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.927Z",
+        "elapsedMs": 311,
+        "name": "sharp.1.0.start"
+      },
+      {
+        "at": "2026-10-12T09:50:57.977Z",
+        "elapsedMs": 361,
+        "name": "sharp.1.0.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:57.977Z",
+        "elapsedMs": 361,
+        "name": "sharp.2.1.start"
+      },
+      {
+        "at": "2026-10-12T09:50:58.027Z",
+        "elapsedMs": 411,
+        "name": "sharp.2.1.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:58.027Z",
+        "elapsedMs": 411,
+        "name": "sharp.2.0.start"
+      },
+      {
+        "at": "2026-10-12T09:50:58.077Z",
+        "elapsedMs": 461,
+        "name": "sharp.2.0.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:58.082Z",
+        "elapsedMs": 466,
+        "name": "native-detail.start"
+      },
+      {
+        "at": "2026-10-12T09:50:58.177Z",
+        "elapsedMs": 561,
+        "name": "native-detail.complete"
+      },
+      {
+        "at": "2026-10-12T09:50:58.269Z",
+        "elapsedMs": 653,
+        "name": "native-detail.B.start"
+      },
+      {
+        "at": "2026-10-12T09:50:58.365Z",
+        "elapsedMs": 749,
+        "name": "native-detail.B.complete"
+      }
+    ],
+    "events": [],
+    "target": {
+      "targetId": "28239B9871E9A37CADA0B5C216A9C5AD",
+      "type": "page",
+      "title": "CHRO-MA-SMITH",
+      "url": "http://cs.localhost/index.html",
+      "attached": true,
+      "canAccessOpener": false,
+      "browserContextId": "F136C6379DB260BB7DF8B30DAAE61E98",
+      "pid": 38516,
+      "browserSession": "browser-level CDP",
+      "pageSessionAttached": true
+    }
+  },
+  "runtime": {
+    "build": "1.1012B",
+    "url": "http://cs.localhost/index.html",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "viewport": [
+      1366,
+      672
+    ],
+    "dpr": 3,
+    "gpu": "ANGLE (AMD, AMD Radeon RX 7700 XT (0x0000747E) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "resume": {
+    "verifiedAt": "2026-10-12T09:50:57.643Z",
+    "currentView": "Library Cull",
+    "decodedSources": [
+      {
+        "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+        "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+        "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+        "cellName": "A.NEF",
+        "sourceWidth": 8256,
+        "sourceHeight": 5504,
+        "decodedWidth": 8256,
+        "decodedHeight": 5504,
+        "observedRawDecodeSettings": {
+          "profile": "__asshot",
+          "rawNr": "fast",
+          "demosaicAlgo": "",
+          "autoLens": false,
+          "lensOverride": false,
+          "fullCleanup": false
+        }
+      },
+      {
+        "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+        "sha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+        "imagePath": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+        "cellName": "B.CR3",
+        "sourceWidth": 8192,
+        "sourceHeight": 5464,
+        "decodedWidth": 8192,
+        "decodedHeight": 5464,
+        "observedRawDecodeSettings": {
+          "profile": "__asshot",
+          "rawNr": "fast",
+          "demosaicAlgo": "",
+          "autoLens": false,
+          "lensOverride": false,
+          "fullCleanup": false
+        }
+      }
+    ]
+  },
+  "nativeStages": [
+    {
+      "event": "display-cache-miss",
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "t": 2314.5049999952316,
+      "wall": 1791798115981
+    },
+    {
+      "event": "display-cache-miss",
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\A.NEF",
+      "t": 2379.3850001096725,
+      "wall": 1791798116046
+    },
+    {
+      "event": "display-cache-miss",
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "t": 2388.100000023842,
+      "wall": 1791798116055
+    },
+    {
+      "event": "display-cache-miss",
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "t": 40894.60500001907,
+      "wall": 1791798154562
+    },
+    {
+      "event": "display-cache-miss",
+      "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr267-cull-performance-varied\\B.CR3",
+      "t": 40927.06000006199,
+      "wall": 1791798154594
+    },
+    {
+      "event": "lfx-start",
+      "t": 41244.27500009537,
+      "wall": 1791798154911
+    },
+    {
+      "event": "lfx-snapshot-done",
+      "t": 41293.35000002384,
+      "wall": 1791798154960
+    },
+    {
+      "event": "lfx-arraybuffer",
+      "t": 41300.97000002861,
+      "wall": 1791798154968
+    },
+    {
+      "event": "loadRw2-enter",
+      "t": 41301.29000008106,
+      "wall": 1791798154968
+    },
+    {
+      "event": "native-open-begin",
+      "t": 41308.85500001907,
+      "wall": 1791798154976
+    },
+    {
+      "event": "native-lap: peek_raw_camera done at",
+      "t": 41347.765000104904,
+      "wall": 1791798155015
+    },
+    {
+      "event": "native-lap: RAW colour profile resolved (none) at",
+      "t": 41496.75499999523,
+      "wall": 1791798155164
+    },
+    {
+      "event": "native-fast-invoke",
+      "t": 41501.79000008106,
+      "wall": 1791798155169
+    },
+    {
+      "event": "native-lap: decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at",
+      "t": 58686.235000014305,
+      "wall": 1791798172353
+    },
+    {
+      "event": "loadRw2-opened",
+      "t": 58688.07000005245,
+      "wall": 1791798172355
+    },
+    {
+      "event": "loadRw2-imagedata",
+      "t": 58688.175000071526,
+      "wall": 1791798172355
+    },
+    {
+      "event": "native-open-begin",
+      "t": 59168.93000006676,
+      "wall": 1791798172836
+    },
+    {
+      "event": "native-lap: peek_raw_camera done at",
+      "t": 59197.235000014305,
+      "wall": 1791798172864
+    },
+    {
+      "event": "native-fast-invoke",
+      "t": 59201.485000014305,
+      "wall": 1791798172868
+    },
+    {
+      "event": "native-lap: decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at",
+      "t": 61812.30500006676,
+      "wall": 1791798175479
+    },
+    {
+      "event": "loadRw2-return",
+      "t": 61887.84500002861,
+      "wall": 1791798175555
+    },
+    {
+      "event": "lfx-arraybuffer",
+      "t": 61890.26000010967,
+      "wall": 1791798175557
+    },
+    {
+      "event": "loadRw2-enter",
+      "t": 61890.30500006676,
+      "wall": 1791798175557
+    },
+    {
+      "event": "native-open-begin",
+      "t": 61890.72000002861,
+      "wall": 1791798175558
+    },
+    {
+      "event": "native-lap: peek_raw_camera done at",
+      "t": 61917.93000006676,
+      "wall": 1791798175585
+    },
+    {
+      "event": "native-lap: RAW colour profile resolved (none) at",
+      "t": 62103.26000010967,
+      "wall": 1791798175770
+    },
+    {
+      "event": "native-fast-invoke",
+      "t": 62107.950000047684,
+      "wall": 1791798175775
+    },
+    {
+      "event": "native-lap: decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at",
+      "t": 82211.80000007153,
+      "wall": 1791798195879
+    },
+    {
+      "event": "loadRw2-opened",
+      "t": 82212.99500000477,
+      "wall": 1791798195880
+    },
+    {
+      "event": "loadRw2-imagedata",
+      "t": 82213.00499999523,
+      "wall": 1791798195880
+    },
+    {
+      "event": "native-open-begin",
+      "t": 82604.49500000477,
+      "wall": 1791798196271
+    },
+    {
+      "event": "native-lap: peek_raw_camera done at",
+      "t": 82628.45500004292,
+      "wall": 1791798196295
+    },
+    {
+      "event": "native-fast-invoke",
+      "t": 82632.52500009537,
+      "wall": 1791798196299
+    },
+    {
+      "event": "native-lap: decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at",
+      "t": 85073.57000005245,
+      "wall": 1791798198741
+    },
+    {
+      "event": "loadRw2-return",
+      "t": 85093.49500000477,
+      "wall": 1791798198760
+    },
+    {
+      "event": "lfx-pre-defaults",
+      "t": 85094.18000006676,
+      "wall": 1791798198761
+    },
+    {
+      "event": "lfx-pre-install",
+      "t": 85107.55000007153,
+      "wall": 1791798198775
+    },
+    {
+      "event": "lfx-installed",
+      "t": 85240.11500000954,
+      "wall": 1791798198907
+    }
+  ]
+}

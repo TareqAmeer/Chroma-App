@@ -6,7 +6,7 @@ The native gate uses hard links in `chr267-cull-performance-varied/`; RAW binari
 | Capture | Canonical file | Bytes | SHA-256 | Expected developed size |
 | --- | --- | ---: | --- | --- |
 | Nikon Z 7, sample 2789 | `nikon-z7-2789.NEF` | 51,279,219 | `e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e` | 8256 × 5504 |
-| Canon EOS R5, sample 4694, RAW without Dual Pixel | `canon-r5-4694.CR3` | 40,632,406 | `21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5` | 8192 × 5464, subject to native decode verification |
+| Canon EOS R5, sample 4694, RAW without Dual Pixel | `canon-r5-4694.CR3` | 40,632,406 | `21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5` | 8192 × 5464, verified native decode |
 
 The [primary repository](https://raw.pixls.us/) and its
 [metadata endpoint](https://raw.pixls.us/json/getrepository.php) list both samples under
