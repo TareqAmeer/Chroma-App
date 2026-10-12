@@ -1,6 +1,9 @@
 # 📖 DEVLOG
 Agent-generated changelog of completed features and architectural decisions.
 
+- Updated `docs/plans/large-library-raw-culling.md` with verified CHR-193/247/267/199/194 publication checkpoints and remaining evidence boundaries. The final workspace audit is 49.546 GB; no new checkout, dependencies or native build tree was created.
+- Recorded the bounded Luna/frozen-source verification workflow and corrected the stale manual-teeth preview blocker using current CHR-294 evidence. Durable geometry-only target persistence is the next safe implementation boundary.
+
 ## 2026-10-12 — CHR-194 offline source availability and durable edits
 
 - `desktop/library-ui.js` routes edits/mask saves from both offline cache tiers to the durable queue. Every open, including warm pixel-cache reuse, probes current original availability with zero-payload `read_file_head`; cached render readiness remains independent. Discard never marks a source online, and replay clears unavailable state only after a fresh successful probe with current-photo HUD guarding.
