@@ -4729,7 +4729,7 @@
   const REVEAL_EASE = { standard: 'cubic-bezier(.4,0,.2,1)', gentle: 'cubic-bezier(.25,.1,.25,1)', expo: 'cubic-bezier(.16,1,.3,1)', linear: 'linear' };
   // Defaults = the values tuned in the Reveal lab (2026-09-24). Durations come from the
   // --reveal-* tokens (design/tokens.json) so there is one source for them.
-  const REVEAL_DEFAULTS = { exit: 550, morph: 575, fill: 450, settle: 500, speedup: 3, ease: 'standard',
+  const REVEAL_DEFAULTS = { exit: 60, morph: 80, fill: 80, settle: 100, speedup: 3, ease: 'standard',
     waiting: 'pulse', pulse: 800, strength: 0.4, edge: 'hard', simulate: 0, from: 'inverse' };
   const revealTokenMs = (name, fallback) => {
     const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -4742,6 +4742,7 @@
     return { ...d, exit: revealTokenMs('--reveal-exit', d.exit), morph: revealTokenMs('--reveal-morph', d.morph),
       fill: revealTokenMs('--reveal-wipe', d.fill), settle: revealTokenMs('--reveal-sharpen', d.settle), ...saved };
   };
+  let _lastRevealAt = -1e9;
   const reveal = (() => {
     let host, snap, frame, lines;
     let token = null, phase = 'idle', gen = 0, rect = null, target = null, ready = false, lastAspect = 0;
@@ -4936,7 +4937,7 @@
       // aspect: the incoming photo's width/height (from its grid thumbnail — dimensions only,
       // never its pixels). opts.fromRect is the Reveal lab's stand-in "previous photo" shape.
       begin(path, aspect, opts = {}) {
-        if (!enabled()) { if (phase !== 'idle') reset(); perf('instant', path); return; }
+        if (!enabled() || opts.skip) { if (phase !== 'idle') reset(); perf('instant', path, { skip: !!opts.skip }); return; }
         if (token === path && phase !== 'idle') return; // the queued open of a path already revealing
         if (!ensure()) return;
         const cfg = revealCfg();
@@ -5075,8 +5076,13 @@
     // Reopening the photo already on screen (reload after an NR/lens toggle) doesn't replay it.
     if (path !== state.openedPath || reveal.phase() !== 'idle') {
       const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`);
-      reveal.begin(path, thumb?.naturalWidth && thumb?.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 0);
+      // Flipping (another open within 1.5s) or a photo already in memory: no transition — a cull
+      // wants the next photo NOW, and the animated hand-off was ~2s of the perceived open.
+      const flipping = performance.now() - _lastRevealAt < 1500;
+      reveal.begin(path, thumb?.naturalWidth && thumb?.naturalHeight ? thumb.naturalWidth / thumb.naturalHeight : 0,
+        { skip: flipping || imgCache.has(path) });
     }
+    _lastRevealAt = performance.now();
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
