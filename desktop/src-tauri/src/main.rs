@@ -1131,6 +1131,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     auto_lens.hash(&mut hasher);
     lens_override.map(|(l, f)| (l, f.to_bits())).hash(&mut hasher);
     let decode_key = hasher.finish();
+    let mut _st = std::time::Instant::now(); // per-stage RAW_DIAG op=v2 lines (CS_DIAG_RAW_STAGES=1)
     let decoded: std::sync::Arc<raw_decode::DecodedRaw> = {
         let cached = RAW_DECODE_CACHE
             .lock()
@@ -1160,6 +1161,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     // since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for linear16) and it needs to
     // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
     let lut_key = json["lutKey"].as_str();
+    diag::stage("v2", "-", "decode_or_cached", &mut _st);
     let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
     // docs/ROADMAP.md R1 (scene-referred), desktop path: JS asks for the extended-range companion
     // buffer only when it's actually going to use it (a real DCP LUT apply, not srgb/linear16 —
@@ -1193,6 +1195,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
         _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect(),
     };
     let body = film_negative_bw(body, effective_mode, &json);
+    diag::stage("v2", "-", "lut_apply", &mut _st);
     // HDR preview asked for the unquantized companion, but JS only uses it when some value is
     // measurably above white (chromasmith-22.html: any > 1.05). When none is, the RGBA8 body is
     // the whole story: drop the companion (JS then sees "no headroom", same as before) so the
@@ -1227,6 +1230,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
             }
         }
     }
+    diag::stage("v2", "-", "persist_prep", &mut _st);
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
     let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
     let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
@@ -1239,6 +1243,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     out.extend_from_slice(&has_ext.to_le_bytes());
     out.extend_from_slice(&body);
     out.extend_from_slice(&ext_bytes);
+    diag::stage("v2", "-", "response_build", &mut _st);
     Ok(tauri::ipc::Response::new(out))
 }
 
