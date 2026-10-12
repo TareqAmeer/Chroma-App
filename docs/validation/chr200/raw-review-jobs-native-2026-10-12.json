@@ -1,0 +1,151 @@
+{
+  "issue": "CHR-200",
+  "capturedAt": "2026-10-12T03:17:38.961Z",
+  "sourceCommit": "1f252412a52b76c1f4e992e3514cec8c8a72654b",
+  "expectedBuild": "1.1012H",
+  "fixture": {
+    "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\nikon-z7-2789.NEF",
+    "sha256": "e54a6c4264bf685214f538036fd9d39088e510b2bfedf288e568f0db1897880e",
+    "bytes": 51279219,
+    "decodedSize": {
+      "height": 1707,
+      "width": 2560
+    }
+  },
+  "isolation": {
+    "catalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr200-20261012\\catalog",
+    "cacheDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr200-20261012\\cache",
+    "endpoint": "http://127.0.0.1:9223"
+  },
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300",
+    "cpu": "AMD Ryzen 5 5600X 6-Core Processor             "
+  },
+  "stages": [
+    {
+      "name": "reuse-existing-exact-preparation",
+      "at": "2026-10-12T03:17:39.012Z"
+    },
+    {
+      "name": "cancel-after-checkpoint",
+      "at": "2026-10-12T03:17:39.040Z"
+    },
+    {
+      "name": "resume-then-renderer-recovery",
+      "at": "2026-10-12T03:17:39.043Z"
+    },
+    {
+      "name": "renderer-recovery-visible",
+      "at": "2026-10-12T03:17:48.490Z"
+    },
+    {
+      "name": "evict-exact-created-proxy-and-resume-pending",
+      "at": "2026-10-12T03:17:48.499Z"
+    },
+    {
+      "name": "complete",
+      "at": "2026-10-12T03:17:48.519Z"
+    }
+  ],
+  "result": "PASS",
+  "runtime": {
+    "build": "1.1012H",
+    "url": "http://cs.localhost/index.html",
+    "catalogTotal": 3,
+    "catalogEntries": [
+      {
+        "name": "A.NEF",
+        "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\A.NEF",
+        "is_dir": false,
+        "is_image": true,
+        "is_video": false,
+        "kind": "raw",
+        "mtime": 1791655932,
+        "captured": 1538214916,
+        "size": 51279219,
+        "missing": false,
+        "edited_ts": 0,
+        "id": 1,
+        "offline": false,
+        "volume": "This Mac",
+        "color_label": "",
+        "sharpness": 855.233691369606,
+        "blurry": false,
+        "faces_scanned": true,
+        "stack_n": 0,
+        "thumb_path": null,
+        "place": null
+      },
+      {
+        "name": "B.NEF",
+        "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\B.NEF",
+        "is_dir": false,
+        "is_image": true,
+        "is_video": false,
+        "kind": "raw",
+        "mtime": 1791655932,
+        "captured": 1538214916,
+        "size": 51279219,
+        "missing": false,
+        "edited_ts": 0,
+        "id": 2,
+        "offline": false,
+        "volume": "This Mac",
+        "color_label": "",
+        "sharpness": 855.233691369606,
+        "blurry": false,
+        "faces_scanned": true,
+        "stack_n": 0,
+        "thumb_path": null,
+        "place": null
+      },
+      {
+        "name": "C.NEF",
+        "path": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr267\\chr268-native-compare\\C.NEF",
+        "is_dir": false,
+        "is_image": true,
+        "is_video": false,
+        "kind": "raw",
+        "mtime": 1791655932,
+        "captured": 1538214916,
+        "size": 51279219,
+        "missing": false,
+        "edited_ts": 0,
+        "id": 3,
+        "offline": false,
+        "volume": "This Mac",
+        "color_label": "",
+        "sharpness": 855.233691369606,
+        "blurry": false,
+        "faces_scanned": true,
+        "stack_n": 0,
+        "thumb_path": null,
+        "place": null
+      }
+    ]
+  },
+  "displayProxy": {
+    "path": "C:\\Users\\Tareq\\AppData\\Local\\Chromasmith\\decode\\f0917104919000de.display-2560.jpg",
+    "bytes": 699099,
+    "width": 2560,
+    "height": 1707,
+    "sha256": "d73f9f69de9c6214a17868f8db5cd57d448177e70660343462157597679310bf",
+    "reusedExisting": true,
+    "cacheRoot": "C:\\Users\\Tareq\\AppData\\Local\\Chromasmith\\decode",
+    "taskCacheIsolated": false,
+    "cacheIsolationNote": "Native decode cache uses the platform LocalAppData cache root; CULL_NATIVE_CACHE_DIR does not redirect it."
+  },
+  "rendererRestart": {
+    "kind": "reload",
+    "nativeProcessRestarted": false,
+    "historyButton": true,
+    "recoveredStatus": "interrupted"
+  },
+  "jobs": {
+    "preparedId": 1,
+    "exactResumeStatus": "completed",
+    "evictedProxyStatus": "pending",
+    "changedRecipeStatus": "failed"
+  }
+}

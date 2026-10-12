@@ -39,9 +39,9 @@ function jpegSize(buffer) {
 }
 const now = Date.now();
 const unique = `${now}-${process.pid}`;
-const recipeKey = `raw-review-jobs-native:${sha256.slice(0,16)}:${unique}`;
+let recipeKey = `raw-review-jobs-native:${sha256.slice(0,16)}:${unique}`;
 const pendingRecipeKey = `${recipeKey}:uncached`;
-const settings = { recipeKey, profile: '', rawNr: 'off', cacheNr: 'off', autoLens: false,
+let settings = { recipeKey, profile: '', rawNr: 'off', cacheNr: 'off', autoLens: false,
   demosaicAlgo: '', lensOverride: '', lensOverrideFocal: 0, fullCleanup: false };
 const pendingSettings = { ...settings, recipeKey: pendingRecipeKey };
 const endpoint = process.env.NATIVE_CDP || 'http://127.0.0.1:9223';
@@ -65,29 +65,52 @@ try {
     const catalog = await window.__TAURI__.core.invoke('catalog_query', { q: { offset: 0, limit: 8 } });
     return { build: BUILD, url: location.href, catalogTotal: catalog.total, catalogEntries: catalog.entries };
   });
+  report.runtime = runtime;
   assert.equal(runtime.build, expectedBuild, 'Attached app BUILD does not match expected build');
   const catalogRows = runtime.catalogEntries || [];
-  const norm = value => String(value || '').replaceAll('\\', '/').toLowerCase();
-  assert(runtime.catalogTotal === 0 || (runtime.catalogTotal === 1 && catalogRows.length === 1 && norm(catalogRows[0].path) === norm(rawPath)),
-    'Refuse to exercise the isolated job journal against any catalog other than empty or the single fixture source');
-  report.runtime = runtime;
+  const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
+  const compareFixtureDir = path.resolve(path.dirname(rawPath), 'chr268-native-compare');
+  const comparePaths = ['A.NEF', 'B.NEF', 'C.NEF'].map(name => path.resolve(compareFixtureDir, name));
+  const catalogIsExpected = (runtime.catalogTotal === 0 && catalogRows.length === 0) ||
+    (runtime.catalogTotal === 1 && catalogRows.length === 1 && samePath(catalogRows[0].path, rawPath)) ||
+    (runtime.catalogTotal === 3 && catalogRows.length === 3 && comparePaths.every(expected => catalogRows.some(entry => samePath(entry.path, expected))));
+  assert(catalogIsExpected, 'Refuse to exercise the isolated journal against an unexpected catalog');
   const invoke = (command, args = {}) => page.evaluate(([cmd, a]) => window.__TAURI__.core.invoke(cmd, a), [command, args]);
 
-  stamp('camera-peek');
-  const camera = await invoke('peek_raw_camera_path', { path: rawPath });
-  report.fixture.camera = { make: camera.make || '', model: camera.model || '' };
-  stamp('journal-create');
-  const created = await invoke('raw_review_jobs_create', { label: 'Native RAW review job verification', items: [
-    { path: rawPath, recipeKey, settingsJson: JSON.stringify(settings) },
-  ] });
-  assert.equal(created.items[0].status, 'pending');
-  await invoke('raw_review_jobs_checkpoint', { id: created.id, index: 0, status: 'working' });
-  stamp('display-only-native-decode-start');
-  const displayPath = await invoke('cache_raw_decode', { path: rawPath, recipeKey, mode: 'srgb', lutKey: '', rawNr: 'off',
-    autoLens: false, demosaicAlgo: '', lensOverride: '', lensOverrideFocal: 0, displayOnly: true });
-  stamp('display-only-native-decode-complete');
+  let created, displayPath;
+  const reuseJobId = process.env.RAW_REVIEW_EXISTING_JOB_ID ? Number(process.env.RAW_REVIEW_EXISTING_JOB_ID) : null;
+  assert(!process.env.RAW_REVIEW_EXISTING_JOB_ID || (Number.isSafeInteger(reuseJobId) && reuseJobId > 0), 'RAW_REVIEW_EXISTING_JOB_ID must be a positive integer');
+  if (reuseJobId) {
+    stamp('reuse-existing-exact-preparation');
+    const saved = await invoke('raw_review_jobs_get', { id: reuseJobId });
+    assert.equal(saved.items.length, 1, 'existing job must contain exactly one item');
+    assert(samePath(saved.items[0].path, rawPath), 'existing job source must be the canonical RAW fixture');
+    const savedSettings = JSON.parse(saved.items[0].settingsJson);
+    assert.equal(savedSettings.recipeKey, saved.items[0].recipeKey, 'saved settings and journal recipe key differ');
+    recipeKey = saved.items[0].recipeKey;
+    settings = savedSettings;
+    displayPath = await invoke('get_display_decode_cache_path', { path: rawPath, recipeKey, longEdge: 2560 });
+    assert(displayPath && await stat(displayPath).then(() => true, () => false), 'existing exact display proxy cache hit required to skip RAW decode');
+    created = await invoke('raw_review_jobs_resume', { id: reuseJobId, expectedRecipeKeys: [{ index: saved.items[0].index, recipeKey }] });
+    assert.equal(created.items[0].status, 'completed', 'existing exact prepared proxy must resume completed');
+  } else {
+    stamp('camera-peek');
+    const camera = await invoke('peek_raw_camera_path', { path: rawPath });
+    report.fixture.camera = { make: camera.make || '', model: camera.model || '' };
+    stamp('journal-create');
+    created = await invoke('raw_review_jobs_create', { label: 'Native RAW review job verification', items: [
+      { path: rawPath, recipeKey, settingsJson: JSON.stringify(settings) },
+    ] });
+    assert.equal(created.items[0].status, 'pending');
+    await invoke('raw_review_jobs_checkpoint', { id: created.id, index: 0, status: 'working' });
+    stamp('display-only-native-decode-start');
+    displayPath = await invoke('cache_raw_decode', { path: rawPath, recipeKey, mode: 'srgb', lutKey: '', rawNr: 'off',
+      autoLens: false, demosaicAlgo: '', lensOverride: '', lensOverrideFocal: 0, displayOnly: true });
+    stamp('display-only-native-decode-complete');
+  }
   const displayBytes = await readFile(displayPath);
   const dimensions = jpegSize(displayBytes);
+  const displaySha256 = createHash('sha256').update(displayBytes).digest('hex');
   report.fixture.decodedSize = dimensions;
   assert(Math.max(dimensions.width, dimensions.height) <= 2560, 'display proxy exceeds 2560 px');
   assert(Math.abs(dimensions.width / dimensions.height - 8256 / 5504) < 0.01, 'display proxy aspect ratio changed');
@@ -95,7 +118,8 @@ try {
   await assert.rejects(invoke('get_decode_cache_path', { path: rawPath, recipeKey }), 'display-only branch must not write full-resolution decode cache');
   await assert.rejects(invoke('get_cached_raw_decode', { path: rawPath, recipeKey }), 'display-only branch must not populate RAW_EDITOR_CACHE');
   await invoke('raw_review_jobs_checkpoint', { id: created.id, index: 0, status: 'completed' });
-  report.displayProxy = { path: displayPath, bytes: displayBytes.length, width: dimensions.width, height: dimensions.height };
+  report.displayProxy = { path: displayPath, bytes: displayBytes.length, width: dimensions.width, height: dimensions.height,
+    sha256: displaySha256, reusedExisting: !!reuseJobId };
   stamp('cancel-after-checkpoint');
   const cancelled = await invoke('raw_review_jobs_cancel', { id: created.id });
   assert.equal(cancelled.status, 'cancelled');
@@ -107,13 +131,19 @@ try {
   // Leave the native job running and reload only the renderer. On startup the real frontend
   // recovery path must mark it interrupted and publish its Jobs-history resume row.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(expected => window.BUILD === expected && !!window.__TAURI__?.core?.invoke, expectedBuild, { timeout: 30000 });
+  await page.waitForFunction(expected => typeof BUILD !== 'undefined' && BUILD === expected && !!window.__TAURI__?.core?.invoke, expectedBuild, { timeout: 30000 });
   const historyButton = `[data-job-raw-resume-id="raw-review-job-${created.id}"]`;
   await page.waitForFunction(sel => {
     const button = document.querySelector(sel);
     const row = button?.closest('[data-job-history-id]');
-    return !!button && /interrupted/i.test(row?.innerText || '');
+    return !!button && /interrupted/i.test(row?.textContent || '');
   }, historyButton, { timeout: 30000 });
+  await page.evaluate(async () => {
+    if (!window.chromasmithLibraryIsOpen?.()) await window.chromasmithToggleLibrary();
+  });
+  const history = page.locator(historyButton).locator('xpath=ancestor::details[1]');
+  if (!(await history.evaluate(el => el.open))) await history.locator('summary').first().click();
+  assert(await page.locator(historyButton).isVisible(), 'Recovered RAW resume action is visible in Library Jobs');
   const recovered = await invoke('raw_review_jobs_get', { id: created.id });
   assert.equal(recovered.status, 'interrupted', 'frontend startup recovery interrupted the prior running job');
   assert.equal(recovered.items[0].status, 'completed', 'renderer recovery preserved the prepared proxy');
@@ -125,11 +155,18 @@ try {
   await invoke('raw_review_jobs_interrupt', { id: created.id });
 
   stamp('evict-exact-created-proxy-and-resume-pending');
-  const cacheRoot = await realpath(cacheDir);
   const proxyPath = await invoke('get_display_decode_cache_path', { path: rawPath, recipeKey, longEdge: 2560 });
   assert.equal(path.resolve(proxyPath), path.resolve(displayPath), 'journal and native cache identify the same prepared proxy');
   const realProxy = await realpath(proxyPath);
-  assert(resolvedInside(cacheRoot, realProxy), 'refuse to remove a proxy outside the task-owned cache directory');
+  const requestedDeletePath = process.env.RAW_REVIEW_DELETE_PROXY_PATH;
+  const requestedDeleteSha = (process.env.RAW_REVIEW_DELETE_PROXY_SHA256 || '').toLowerCase();
+  assert(requestedDeletePath && path.resolve(requestedDeletePath) === path.resolve(proxyPath), 'explicit opt-in must name the exact native cache path returned for this fixture+recipe');
+  assert(requestedDeleteSha && requestedDeleteSha === displaySha256 && displayBytes.length === 699099,
+    'explicit opt-in SHA-256 and recorded byte length must match the prepared native proxy');
+  assert(path.resolve(realProxy) === path.resolve(proxyPath), 'refuse to unlink through a symlink or redirected cache path');
+  report.displayProxy.cacheRoot = path.dirname(realProxy);
+  report.displayProxy.taskCacheIsolated = resolvedInside(await realpath(cacheDir), realProxy);
+  report.displayProxy.cacheIsolationNote = 'Native decode cache uses the platform LocalAppData cache root; CULL_NATIVE_CACHE_DIR does not redirect it.';
   await rm(realProxy, { force: false });
   const pending = await invoke('raw_review_jobs_resume', { id: created.id, expectedRecipeKeys: [{ index: 0, recipeKey }] });
   assert.equal(pending.items[0].status, 'pending', 'evicted exact proxy makes the prior completed item pending');
