@@ -9,6 +9,8 @@ Agent-generated changelog of completed features and architectural decisions.
 - Actual native candidate `32b715c7` / BUILD1.1012H passes Compare/Survey/Cull heading visibility and Gallery restoration in both themes at measured CSS1366×768/1440×900 (DPR≈1), using only two tiny PNG hardlinks. The photo pane is explicitly focused before Escape; no production shortcut fix or RAW-quality/performance claim. Native report/screenshots and scope notes are in `docs/validation/chr199/`.
 - Full Editor audit retains 21/33 passes, the same twelve failures and 879 inventory findings as the published baseline. The layout slice does not complete the original broader linked-pan/action/advisory acceptance criteria.
 
+- CHR-199 publication verified at `85144c9f8c8fd01b98ebeeaeb4141ed93c576472` by non-force push and matching remote main; final Library source blob equals native candidate `32b715c7`. Linear is In Review with the culling-space slice checked separately from original broader requirements.
+
 ## 2026-10-12 — CHR-267 varied RAW native gate
 
 - Extended `test/library_cull_perf_native.mjs` with an optional distinct second RAW, independent checksums/extensions/dimensions and focused source identity on each timing sample. Existing same-capture mode and the 44 MP qualification floor remain; sources use hard links in a separate varied fixture folder.
