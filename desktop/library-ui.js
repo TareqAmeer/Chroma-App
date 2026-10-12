@@ -5137,6 +5137,12 @@
     // HDR preview used to disable every cache (imgCache, display proxy, native/persistent frame)
     // for every RAW, so each open and every A->B->A revisit paid a full 3-5s native decode. The
     // companion only matters when a photo actually has headroom; ask native whether this one does.
+    // The neighbour warm-up of THIS very photo writes the frame + marker; the marker lookup below
+    // must run after it lands or the open decodes the photo a second time (measured, culling_bench).
+    if (hdrPreview && isRaw && _warmInflight && _warmInflight.path === path) {
+      _warmToken++;
+      const w0 = performance.now(); await _warmInflight.promise; rawPerf('open-waited-for-warm', path, { ms: performance.now() - w0 });
+    }
     if (hdrPreview && isRaw) {
       try {
         if (await invoke('hdr_headroom_clear', { path, recipeKey })) {
