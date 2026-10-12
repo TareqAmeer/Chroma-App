@@ -5334,7 +5334,10 @@
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
     } else if (isRaw && hdrPreview && !cached) {
-      displayOverlayPromise = showDisplayProvisional(path, recipeKey, true);
+      // HDR-preview opens never use the SDR proxy as the editor source, but its first paint may:
+      // a background-built (or batch-cached) 2560px proxy beats the camera JPEG for colour, and
+      // showDisplayProvisional falls back to the camera JPEG itself when no proxy exists.
+      displayOverlayPromise = showDisplayProvisional(path, recipeKey);
     }
     window.chromasmithEnsureFullQuality = null; // the previous photo's promotion hook must not outlive it
     document.getElementById('fx-zoom-wrap')?.classList.remove('lib-full-loading');
