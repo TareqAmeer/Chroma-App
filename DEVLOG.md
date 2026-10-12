@@ -1891,3 +1891,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 - Actual native BUILD `1.1012E` / frontend `baeb2de7` passed four real 8256×5504 RAW Compare checkpoints: fit, cycle, promote and linked 100% detail. Maximum retained private frames two, concurrent decode one; Editor state unchanged, no recorded page/detach errors. Three paths are hard links to one CC0 Nikon capture, not varied-camera evidence. Reports: `docs/validation/chr268/private-compare-native-2026-10-12.{json,md}`.
 - Final Editor gates passed 21/33; the same twelve failures remain and inventory is unchanged at 879 findings. Focused production RAW and real-card Survey/Compare regressions pass. Current native total RSS/latency, varied captures and creative/HDR parity remain open; user testing remains In Review after publication.
 
+### 2026-10-12 — CHR-268 publication
+
+- Published Compare source/action guards and native evidence to main as `b0a5bdb3bf47fc1b7d07d0244efbf9aca2919795`; non-force push and remote ref confirmed. All four integrated task patches match their feature counterparts; newer HDR companion work `897a21f9` is preserved.
+- Integrated production RAW regressions, real-card Survey/Compare and HDR densify pass; native display-cache tests pass 2/2 with the separate real-RAW unit ignored, and HDR companion passes 1/1. Actual native RAW Compare evidence remains scoped to BUILD `1.1012E` / `baeb2de7`; final Editor gates are 21/33 with unchanged 879 inventory findings. CHR-268 is In Review.
+
