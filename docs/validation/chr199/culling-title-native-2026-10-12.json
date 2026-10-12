@@ -1,0 +1,153 @@
+{
+  "issue": "CHR-199",
+  "capturedAt": "2026-10-12T10:10:58.478Z",
+  "sourceCommit": "32b715c7fb42722b5e3f08a5bd0f815beada2015",
+  "expectedBuild": "1.1012H",
+  "isolation": {
+    "nativeAppPid": 22464,
+    "catalogDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr199-20261012\\catalog",
+    "cacheDir": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\native\\chr199-20261012\\cache",
+    "endpoint": "http://127.0.0.1:9223"
+  },
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26300"
+  },
+  "measurements": [
+    {
+      "theme": "dark",
+      "requestedViewport": [
+        1366,
+        768
+      ],
+      "actualViewport": {
+        "width": 1366,
+        "height": 768,
+        "devicePixelRatio": 1.0000000298023224
+      },
+      "selection": {
+        "a": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\chart.png",
+        "b": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\portrait.png",
+        "foundCards": 2,
+        "selectedCards": 2
+      },
+      "compareHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "surveyHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "cullPickerHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "cullHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "heading": "Culling · 1–2 of 2",
+      "note": "Photo 1 focused · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits",
+      "galleryTitle": {
+        "count": 1,
+        "display": "flex",
+        "visible": true,
+        "text": "chr199-culling-space-fixture",
+        "width": 686.4010620117188,
+        "height": 78.07292175292969
+      },
+      "screenshot": "docs/validation/chr199/culling-title-native-2026-10-12-dark.png"
+    },
+    {
+      "theme": "light",
+      "requestedViewport": [
+        1440,
+        900
+      ],
+      "actualViewport": {
+        "width": 1440,
+        "height": 900,
+        "devicePixelRatio": 1.0000000298023224
+      },
+      "selection": {
+        "a": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\chart.png",
+        "b": "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\portrait.png",
+        "foundCards": 2,
+        "selectedCards": 2
+      },
+      "compareHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "surveyHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "cullPickerHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "cullHidden": {
+        "count": 1,
+        "display": "none",
+        "visible": false,
+        "width": 0,
+        "height": 0
+      },
+      "heading": "Culling · 1–2 of 2",
+      "note": "Photo 1 focused · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits",
+      "galleryTitle": {
+        "count": 1,
+        "display": "flex",
+        "visible": true,
+        "text": "chr199-culling-space-fixture",
+        "width": 686.4010620117188,
+        "height": 78.07292175292969
+      },
+      "screenshot": "docs/validation/chr199/culling-title-native-2026-10-12-light.png"
+    }
+  ],
+  "result": "PASS",
+  "runtime": {
+    "build": "1.1012H",
+    "url": "http://cs.localhost/index.html",
+    "viewport": [
+      1366,
+      672
+    ],
+    "total": 2,
+    "paths": [
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\chart.png",
+      "C:\\Users\\Tareq\\Documents\\github\\Chroma-App\\.worktrees\\_shared-test-runtime\\fixtures\\chr199-culling-space-fixture\\portrait.png"
+    ],
+    "nativeDecode": false
+  },
+  "catalogRoot": {
+    "id": 1,
+    "added": "1791799541645999200",
+    "volume": "local",
+    "path": "C:/Users/Tareq/Documents/github/Chroma-App/.worktrees/_shared-test-runtime/fixtures/chr199-culling-space-fixture"
+  }
+}
