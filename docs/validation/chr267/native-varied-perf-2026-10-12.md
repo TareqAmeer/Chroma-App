@@ -7,7 +7,7 @@ Canonical sources and licensing are in [varied-raw-fixtures.md](varied-raw-fixtu
 
 | Warm operation | Observed milliseconds | Budget | Result |
 | --- | ---: | ---: | --- |
-| Six keyboard focus/presentation transitions | 38.040–46.560; median 46.048 | <100 | PASS |
+| Six keyboard focus/presentation transitions | 38.040–46.560; median 46.047 | <100 | PASS |
 | Nikon fit → native detail | 26.680 | <500 | PASS |
 | Canon fit → native detail | 26.750 | <500 | PASS |
 
