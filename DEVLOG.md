@@ -1935,3 +1935,8 @@ CHR-285 release publication verified: v1.2.9 (build 12, web BUILD 1.1007C) targe
 
 - Actual native PNG navigation passed on 1.1012P with exact Session/chart-036 anchor and 1167.33px scroll restoration, source chart-050 and 225% zoom, both themes and Jobs keyboard/focus behavior.
 - Screenshot review found leftover caption-era unbounded title CSS overlapping the scope/zoom toolbar. Bounded the canonical title/status column, corrected zoom folding selectors and shortened visible scope copy while retaining the complete explanation in its title/ARIA description; chromasmith-22.html. Final visual verification follows this candidate.
+
+### CHR-192 — native timing and laptop header candidate
+
+- Expanded Gallery restoration to wait for the Library overlay width transition as well as the layout grid, then verify stable geometry before restoring the anchor. Strict normal-motion browser trace restores chart-036 at -104.89px and scrollTop 1162; temporary instrumentation was removed.
+- Native Q testing exposed these timing and header-folding limits; retained failed evidence rather than claiming a pass. The laptop header now uses the existing compact wordmark at widths below 1400px, keeping the logo and Gallery/Studio switch to free space for photo identity and zoom.

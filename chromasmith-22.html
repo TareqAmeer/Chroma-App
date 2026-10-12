@@ -1439,8 +1439,9 @@ body.deskx.cs-page-other #fx-page-title .fx-page-back{background:none;border:0;c
 body.deskx.cs-page-other #fx-page-title .fx-page-back:hover{color:var(--k-color-ink)}
 body.deskx.cs-page-other #fx-deskbar #fx-deskbar-left,body.sk2.deskx.cs-page-other #fx-deskbar #fx-deskbar-title,body.deskx.cs-page-other #fx-deskbar #fx-deskbar-right>:not(#fx-settings),body.deskx.cs-page-other #fx-deskbar #btn-fx-fullres,body.deskx.cs-page-other #fx-deskbar #btn-before{display:none!important}
 body.deskx.cs-page-other #cs-tog-studio.on{opacity:.55}
-/* Narrow windows: the wordmark text goes, the logo mark stays; the brand-width fit() re-measures it. */
-@media(max-width:1100px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
+/* At laptop widths, keep the logo mark and Gallery/Studio switch but drop the wordmark; fit() then
+   measures the compact brand so the deskbar can retain the photo identity and zoom controls. */
+@media(max-width:1400px){body.sk2.deskx #cs-brand-name .cs-bn-t{display:none}}
 body.sk2.deskx.fx-deskbar-fold2 #fx-deskbar #fx-deskbar-title #db-title-name{display:none!important}
 body.sk2.deskx.fx-deskbar-fold3 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider{width:48px!important;flex-basis:48px!important}
 body.sk2.deskx.fx-deskbar-fold4 #fx-deskbar #fx-deskbar-tools #fx-zoom-slider,body.sk2.deskx.fx-deskbar-fold4 #btn-fx-fullres{display:none!important}
@@ -7255,7 +7256,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012Q';
+const BUILD='1.1012R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

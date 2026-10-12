@@ -6183,29 +6183,55 @@
   function restoreGalleryScrollAnchor(folder, token) {
     const anchor = galleryScrollByFolder.get(folder);
     if (!anchor || !anchor.path) return;
-    const afterLayout = () => {
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const pendingLayoutAnimations = () => {
+      const layout = document.querySelector('.fx-layout');
+      const overlay = document.getElementById('lib-overlay');
+      const layoutAnimations = layout?.getAnimations?.({ subtree: false }) || [];
+      const overlayAnimations = overlay?.getAnimations?.({ subtree: false }) || [];
+      return [
+        ...layoutAnimations.filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns'),
+        ...overlayAnimations.filter(animation => animation.playState === 'running' && ['width', 'grid-template-columns', 'grid-template-rows'].includes(animation.transitionProperty)),
+      ];
+    };
+    const galleryGeometry = () => {
+      const main = document.getElementById('lib-main'), grid = document.getElementById('lib-grid'), overlay = document.getElementById('lib-overlay');
+      if (!main || !grid || !overlay) return '';
+      return [overlay.clientWidth, overlay.clientHeight, main.clientWidth, main.clientHeight, grid.clientWidth,
+        getComputedStyle(grid).gridTemplateColumns, main.scrollTop.toFixed(2)].join('|');
+    };
+    const waitForStableLayout = async () => {
+      let previous = '';
+      for (let frame = 0; frame < 12; frame++) {
+        if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return false;
+        const animations = pendingLayoutAnimations();
+        if (animations.length) await Promise.allSettled(animations.map(animation => animation.finished));
+        await nextFrame();
+        const current = galleryGeometry();
+        if (current && current === previous && pendingLayoutAnimations().length === 0) return true;
+        previous = current;
+      }
+      return false;
+    };
+    const afterLayout = async () => {
       if (token !== galleryScrollRestoreToken) return;
       if (!state.open || !state.expanded_view) return;
       if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
-      const layout = document.querySelector('.fx-layout');
-      const running = layout && layout.getAnimations ? layout.getAnimations({ subtree: false }).filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns') : [];
-      if (running.length) { Promise.allSettled(running.map(animation => animation.finished)).then(afterLayout); return; }
-      requestAnimationFrame(() => {
-        if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view) return;
-        if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
-        const latest = layout && layout.getAnimations ? layout.getAnimations({ subtree: false }).filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns') : [];
-        if (latest.length) { Promise.allSettled(latest.map(animation => animation.finished)).then(afterLayout); return; }
-        scrollLibraryToPath(anchor.path);
-        const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
-        const card = gridEl && gridEl.querySelector(`.lib-card[data-path="${CSS.escape(anchor.path)}"]`);
-        if (main && card) {
-          main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.viewportOffset;
-          galleryScrollByFolder.set(folder, captureGalleryScrollAnchor() || anchor);
-        }
-        galleryScrollTransitionPending = false;
-      });
+      if (!await waitForStableLayout()) {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+        return;
+      }
+      if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return;
+      scrollLibraryToPath(anchor.path);
+      const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+      const card = gridEl && gridEl.querySelector(`.lib-card[data-path="${CSS.escape(anchor.path)}"]`);
+      if (main && card) {
+        main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.viewportOffset;
+        galleryScrollByFolder.set(folder, captureGalleryScrollAnchor() || anchor);
+      }
+      galleryScrollTransitionPending = false;
     };
-    afterLayout();
+    afterLayout().catch(() => { if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false; });
   }
   function wireScrollPersist() {
     const libMain = document.getElementById('lib-main');
