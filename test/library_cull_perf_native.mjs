@@ -28,6 +28,7 @@ const bytesB = rawPathB === rawPath ? bytes : await readFile(rawPathB);
 const sha256B = rawPathB === rawPath ? sha256 : createHash('sha256').update(bytesB).digest('hex');
 const variedCaptureMode = rawPathB !== rawPath;
 if (variedCaptureMode) assert.notEqual(sha256B, sha256, 'CULL_RAW_PATH_B must be a genuinely different capture (different SHA-256)');
+const harnessSha256 = createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex');
 const expectedDimensions = (width, height, label, required) => {
   const w = width === undefined ? null : Number(width), h = height === undefined ? null : Number(height);
   if (required) assert(Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0, `${label} requires explicit integer source dimensions`);
@@ -65,7 +66,7 @@ const browser = await chromium.connectOverCDP(endpoint);
 const page = browser.contexts()[0].pages().find(p => !p.url().includes('devtools'));
 assert(page, 'native WebView page is missing');
 const report = {
-  issue: 'CHR-267', capturedAt: new Date().toISOString(), nativeCommit, expectedBuild, nativeProfile,
+  issue: 'CHR-267', capturedAt: new Date().toISOString(), nativeCommit, expectedBuild, nativeProfile, harnessSha256,
   fixture: { path: rawPath, sha256, bytes: (await stat(rawPath)).size,
     dataset: variedCaptureMode ? 'A/B are hard-linked paths to two different real camera captures' : 'Two hard-linked paths of one real camera capture; not two independent photographs',
     licence: process.env.CULL_RAW_LICENSE || 'unspecified', source: process.env.CULL_RAW_SOURCE || null },
@@ -199,7 +200,7 @@ try {
           const candidates = [it.path, it.rawFile?.path, it.file?.path, it.name, it.rawFile?.name, it.file?.name];
           return candidates.some(candidate => basename(candidate) === expectedName);
         });
-        const imagePath = image?.path || image?.rawFile?.path || image?.file?.path;
+        const imagePath = image?.path || image?.rawFile?.path || image?.rawFile?.__csSourcePath || image?.file?.path || image?.file?.__csSourcePath;
         if (normalized(imagePath) !== normalized(path)) throw Error(`${expectedName} decoded image belongs to ${imagePath}, expected ${path}`);
         const source = image?.fullImg || image?.img;
         const decodedWidth = source?.naturalWidth || source?.width || 0;
@@ -271,7 +272,7 @@ try {
         const stem = name.replace(/\.[^.]+$/, '');
         const image = images.find(it => [it.path, it.rawFile?.path, it.file?.path, it.name, it.rawFile?.name, it.file?.name]
           .some(value => normalized(String(value || '').split(/[\\/]/).at(-1)) === name || normalized(value) === stem));
-        const imagePath = image?.path || image?.rawFile?.path || image?.file?.path;
+        const imagePath = image?.path || image?.rawFile?.path || image?.rawFile?.__csSourcePath || image?.file?.path || image?.file?.__csSourcePath;
         if (normalized(imagePath) !== normalized(fixture.path)) return false;
         const source = image?.fullImg || image?.img;
         if ((source?.naturalWidth || source?.width || 0) !== fixture.width || (source?.naturalHeight || source?.height || 0) !== fixture.height) return false;
@@ -318,7 +319,7 @@ try {
         const stem = name?.replace(/\.[^.]+$/, '');
         const image = images.find(it => it.name === name || it.name === stem || it.rawFile?.name === name
           || it.file?.name === name || (it.path || '').split(/[\\/]/).at(-1) === name);
-        const imagePath = image?.path || image?.rawFile?.path || image?.file?.path;
+        const imagePath = image?.path || image?.rawFile?.path || image?.rawFile?.__csSourcePath || image?.file?.path || image?.file?.__csSourcePath;
         const source = image?.fullImg || image?.img;
         const decodedW = source?.naturalWidth || source?.width || 0, decodedH = source?.naturalHeight || source?.height || 0;
         valid &&= !!fixture && normalized(imagePath) === normalized(fixture.path)
