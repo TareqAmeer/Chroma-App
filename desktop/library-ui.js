@@ -3247,21 +3247,61 @@
       (forceFull || opts.fullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
       + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
-  async function showDisplayProvisional(path, recipeKey) {
+  let embeddedUrl = '';
+  async function showDisplayProvisional(path, recipeKey, embeddedOnly = false) {
     const myToken = ++provisionalToken;
     const el = ensureProvisionalEl();
     if (!el) return () => {};
     try {
+      // embeddedOnly: HDR-preview opens never use the SDR display proxy, but a cold open should
+      // still not sit blank for seconds — go straight to the camera JPEG stand-in below.
+      if (embeddedOnly) throw new Error('embedded-only');
       const img = await displayAssetImage(path, recipeKey);
       if (myToken !== provisionalToken) return () => {};
       if (myToken !== provisionalToken) return () => {};
       el.src = img.src;
+      el.style.cssText = '';
       el.classList.add('on');
       document.body.classList.add('lib-provisional-on');
       rawPerf('open-display-overlay', path, { width: img.naturalWidth, height: img.naturalHeight });
     } catch (e) {
       rawPerf('open-display-overlay-miss', path, { error: String(e) });
-      if (myToken === provisionalToken) {
+      // Cold open (nothing cached yet): the full RAW decode takes seconds, so put the camera's own
+      // embedded JPEG up at once — Lightroom's trick. It is a stand-in only (it can carry the
+      // camera's colour rendering, and the real develop replaces it when the decode lands).
+      // chromasmithEditorInstantPreview='0' turns it off.
+      let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+      let shown = false;
+      if (!off && myToken === provisionalToken && RAW_EXT_RE.test(path)) {
+        try {
+          const bytes = await invoke('get_quicklook_preview', { path });
+          if (myToken === provisionalToken) {
+            if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
+            embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+            el.src = embeddedUrl;
+            // Before the first render of a session #fx-zoom-wrap is still the default 300x150 (or
+            // the previous photo's box): fill the preview column instead so the stand-in is
+            // actually legible (object-fit:contain keeps the aspect).
+            try {
+              const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
+              if (zw && col) {
+                const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
+                const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
+                if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
+                  el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
+                }
+              }
+            } catch (_) {}
+            el.classList.add('on');
+            document.body.classList.add('lib-provisional-on');
+            rawPerf('open-embedded-overlay', path);
+            shown = true;
+          }
+        } catch (err) {
+          rawPerf('open-embedded-overlay-miss', path, { error: String(err) });
+        }
+      }
+      if (!shown && myToken === provisionalToken) {
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
       }
@@ -3271,6 +3311,7 @@
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
       }
+      if (embeddedUrl && myToken === provisionalToken) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; el.style.cssText = ''; }
     };
   }
   async function loadAssetImage(assetPath) {
@@ -5198,10 +5239,12 @@
       state.photoSourceModes.set(path, photoSourceMode);
     }
     let displayOverlayPromise = Promise.resolve(() => {});
-    // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT.
-    // They must never enter the Editor path: the first editor pixels always come from our
-    // batch-produced display proxy (or our full native decode), so culling and final render use
-    // the same colour pipeline.
+    // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT, so
+    // they are never the editor's real pixels: those always come from our batch-produced display
+    // proxy (or our full native decode). Exception (user decision, instant over colour accuracy
+    // while culling; supersedes CHR-120): on a cold open the camera JPEG is allowed as a
+    // PROVISIONAL stand-in overlay (#lib-provisional) until the real decode lands.
+    // localStorage chromasmithEditorInstantPreview='0' disables it.
     // CHR-164: every still (HEIC/JPEG/TIFF too, not just RAW) gets the native metadata read —
     // the browser-side EXIF parser can't read HEIC at all, so a HEIC's Info panel stayed empty.
     const rawMetaPromise = (isRaw || STILL_META_RE.test(path)) ? getMeta(path).catch(() => ({})) : Promise.resolve({});
@@ -5290,6 +5333,8 @@
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
+    } else if (isRaw && hdrPreview && !cached) {
+      displayOverlayPromise = showDisplayProvisional(path, recipeKey, true);
     }
     window.chromasmithEnsureFullQuality = null; // the previous photo's promotion hook must not outlive it
     document.getElementById('fx-zoom-wrap')?.classList.remove('lib-full-loading');
