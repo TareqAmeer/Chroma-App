@@ -985,13 +985,16 @@ pub(crate) fn write_hdr_clear_marker(path: &str, recipe_key: &str) {
 // ── HDR companion cache (`<stem>.hdrext`) ────────────────────────────────────────────────────
 // A RAW WITH real highlight headroom (some scene-linear value > 1.05) cannot use the plain frame
 // cache under HDR preview, because the unquantized companion lived only in the decode response.
-// Persisted here SPARSELY: the companion equals rgba8/255 everywhere the value is <= 1.0 (the
-// u8 body is round(clamp(v)*255)), so only pixels with a channel above 1.0 are stored, as f16 —
-// exactly the precision of the RGBA16F texture the renderer uploads it into. JS rebuilds the
-// dense buffer from the cached RGBA8 frame + this overlay (no second RAM copy in native).
-// Layout (LE): "CHX1" | stem u64 | w u32 | h u32 | count u32 | idx u32*count | f16 u16*3*count.
-const HDR_EXT_MAGIC: &[u8; 4] = b"CHX1";
-const HDR_EXT_HEADER: usize = 24;
+// The companion equals rgba8/255 wherever the value is <= 1.0 (the u8 body is round(clamp(v)*255)),
+// so only the EXCESS over white is persisted, and only for pixels whose excess is visible:
+// a channel above HDR_EXT_STORE_MIN (1.005 — 0.5% over white, ~1.3/255; measured on real RAWs this
+// is ~1.4M of 24M pixels where "above 1.0" was 18M and a 184MB file). Excess is a u8 per channel
+// scaled by the file's max excess (step <= 0.0002 for the real <=1.09 headroom seen). JS rebuilds
+// the dense buffer from the cached RGBA8 frame + this overlay (no second RAM copy in native).
+// Layout (LE): "CHX2" | stem u64 | w u32 | h u32 | count u32 | scale f32 | idx u32*count | u8*3*count.
+const HDR_EXT_MAGIC: &[u8; 4] = b"CHX2";
+const HDR_EXT_HEADER: usize = 28;
+const HDR_EXT_STORE_MIN: f32 = 1.005;
 
 fn hdr_ext_stem(path: &str, recipe_key: &str) -> Result<(PathBuf, u64), String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
@@ -1001,44 +1004,33 @@ fn hdr_ext_stem(path: &str, recipe_key: &str) -> Result<(PathBuf, u64), String> 
     Ok((decode_cache_dir().join(format!("{}.hdrext", png_key.trim_end_matches(".png"))), stem))
 }
 
-fn f32_to_f16_bits(v: f32) -> u16 {
-    let b = v.to_bits();
-    let sign = ((b >> 16) & 0x8000) as u16;
-    let exp = ((b >> 23) & 0xff) as i32 - 127 + 15;
-    let man = b & 0x007f_ffff;
-    if v.is_nan() { return sign | 0x7e00; }
-    if exp >= 31 { return sign | 0x7bff; } // clamp to the largest finite half
-    if exp <= 0 {
-        if exp < -10 { return sign; }
-        let m = (man | 0x0080_0000) >> (1 - exp);
-        return sign | ((m + 0x1000) >> 13) as u16;
-    }
-    let r = ((exp as u32) << 10) | (man >> 13);
-    let r = r + ((man >> 12) & 1); // round to nearest (carry may bump the exponent, which is correct)
-    sign | (r.min(0x7bff)) as u16
-}
-
 /// Sparse blob for `ext` (w*h*3 f32) or None when no value exceeds the 1.05 headroom threshold.
 pub(crate) fn build_hdr_ext_blob(path: &str, recipe_key: &str, w: u32, h: u32, ext: &[f32]) -> Option<Vec<u8>> {
     if ext.len() != (w as usize) * (h as usize) * 3 { return None; }
     if !ext.iter().any(|v| *v > 1.05) { return None; }
     let (_, stem) = hdr_ext_stem(path, recipe_key).ok()?;
+    let max_excess = ext.iter().fold(0f32, |m, v| m.max(*v - 1.0)).max(0.01);
     let mut idx: Vec<u32> = Vec::new();
-    let mut vals: Vec<u16> = Vec::new();
+    let mut vals: Vec<u8> = Vec::new();
     for (i, px) in ext.chunks_exact(3).enumerate() {
-        if px[0] > 1.0 || px[1] > 1.0 || px[2] > 1.0 {
+        if px[0] > HDR_EXT_STORE_MIN || px[1] > HDR_EXT_STORE_MIN || px[2] > HDR_EXT_STORE_MIN {
             idx.push(i as u32);
-            vals.extend(px.iter().map(|v| f32_to_f16_bits(*v)));
+            for v in px {
+                // 0 = "no excess, use the frame"; a stored 1 is the smallest real excess.
+                let e = ((*v - 1.0).max(0.0) / max_excess * 255.0).round() as u32;
+                vals.push(if *v > 1.0 { e.clamp(1, 255) as u8 } else { 0 });
+            }
         }
     }
-    let mut out = Vec::with_capacity(HDR_EXT_HEADER + idx.len() * 4 + vals.len() * 2);
+    let mut out = Vec::with_capacity(HDR_EXT_HEADER + idx.len() * 4 + vals.len());
     out.extend_from_slice(HDR_EXT_MAGIC);
     out.extend_from_slice(&stem.to_le_bytes());
     out.extend_from_slice(&w.to_le_bytes());
     out.extend_from_slice(&h.to_le_bytes());
     out.extend_from_slice(&(idx.len() as u32).to_le_bytes());
+    out.extend_from_slice(&max_excess.to_le_bytes());
     for i in &idx { out.extend_from_slice(&i.to_le_bytes()); }
-    for v in &vals { out.extend_from_slice(&v.to_le_bytes()); }
+    out.extend_from_slice(&vals);
     Some(out)
 }
 
@@ -1058,7 +1050,9 @@ fn validate_hdr_ext_blob(blob: &[u8], stem: u64, w: u32, h: u32) -> Result<usize
     if u64::from_le_bytes(blob[4..12].try_into().unwrap()) != stem { return Err("hdr companion key mismatch".into()); }
     if rd(12) != w || rd(16) != h { return Err("hdr companion size mismatch".into()); }
     let count = rd(20) as usize;
-    if blob.len() != HDR_EXT_HEADER + count * 10 { return Err("hdr companion truncated".into()); }
+    if blob.len() != HDR_EXT_HEADER + count * 7 { return Err("hdr companion truncated".into()); }
+    let scale = f32::from_le_bytes(blob[24..28].try_into().unwrap());
+    if !(scale.is_finite() && scale > 0.0 && scale < 64.0) { return Err("hdr companion scale invalid".into()); }
     let total = (w as usize) * (h as usize);
     for i in 0..count { if rd(HDR_EXT_HEADER + 4 * i) as usize >= total { return Err("hdr companion index out of range".into()); } }
     Ok(count)
@@ -4791,28 +4785,35 @@ mod hdr_clear_marker_tests {
     fn hdr_companion_round_trip_and_mismatch_rejection() {
         let (w, h) = (4u32, 2u32);
         let mut ext = vec![0.5f32; (w * h * 3) as usize];
-        ext[3 * 5] = 2.5; ext[3 * 5 + 1] = 1.25; ext[3 * 5 + 2] = 1.0; // pixel 5 has headroom
-        ext[3 * 1] = 1.02; // above 1.0 but under the 1.05 threshold; pixel 1 is stored too
+        ext[3 * 5] = 1.08; ext[3 * 5 + 1] = 1.02; ext[3 * 5 + 2] = 1.0; // pixel 5: headroom
+        ext[3 * 1] = 1.02; // pixel 1: visible excess, stored
+        ext[3 * 2] = 1.003; // pixel 2: under HDR_EXT_STORE_MIN, dropped
         let tmp = std::env::temp_dir().join(format!("hdrext_test_{}.rw2", std::process::id()));
         std::fs::write(&tmp, b"x").unwrap();
         let p = tmp.to_string_lossy().into_owned();
         let blob = build_hdr_ext_blob(&p, "rk", w, h, &ext).expect("headroom present");
         let (_, stem) = hdr_ext_stem(&p, "rk").unwrap();
         assert_eq!(validate_hdr_ext_blob(&blob, stem, w, h).unwrap(), 2);
-        let f16 = |o: usize| u16::from_le_bytes([blob[o], blob[o + 1]]);
-        assert_eq!(f16(HDR_EXT_HEADER + 8 + 6), 0x4100); // pixel 5 red = 2.5 in half precision
-        // stale key, wrong frame size, truncation, out-of-range index are all rejected
+        assert_eq!(&blob[0..4], b"CHX2");
+        assert_eq!(blob.len(), HDR_EXT_HEADER + 2 * 7);
+        // reconstruct pixel 5 red/green like the JS overlay does and bound the quantisation error
+        let scale = f32::from_le_bytes(blob[24..28].try_into().unwrap());
+        let vals = &blob[HDR_EXT_HEADER + 8..];
+        let recon = |q: u8| 1.0 + q as f32 / 255.0 * scale;
+        assert!((recon(vals[3]) - 1.08).abs() <= scale / 255.0);
+        assert!((recon(vals[4]) - 1.02).abs() <= scale / 255.0);
+        assert_eq!(vals[5], 0); // exactly-white channel falls back to the frame
+        // stale key, wrong frame size, truncation, out-of-range index, old format are rejected
         assert!(validate_hdr_ext_blob(&blob, stem ^ 1, w, h).is_err());
         assert!(validate_hdr_ext_blob(&blob, stem, w + 1, h).is_err());
         assert!(validate_hdr_ext_blob(&blob[..blob.len() - 1], stem, w, h).is_err());
         let mut bad = blob.clone(); bad[HDR_EXT_HEADER..HDR_EXT_HEADER + 4].copy_from_slice(&99u32.to_le_bytes());
         assert!(validate_hdr_ext_blob(&bad, stem, w, h).is_err());
+        let mut old = blob.clone(); old[3] = b'1';
+        assert!(validate_hdr_ext_blob(&old, stem, w, h).is_err());
         // no headroom -> nothing to persist
         assert!(build_hdr_ext_blob(&p, "rk", w, h, &vec![0.9f32; (w * h * 3) as usize]).is_none());
-        // a different recipe/mtime yields a different stem, so an old blob can never validate
         assert_ne!(hdr_ext_stem(&p, "other").unwrap().1, stem);
-        assert_eq!(f32_to_f16_bits(1.0), 0x3c00);
-        assert_eq!(f32_to_f16_bits(0.0), 0);
         let _ = std::fs::remove_file(&tmp);
     }
 }

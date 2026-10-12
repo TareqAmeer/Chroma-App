@@ -7,20 +7,25 @@ const a = src.indexOf('function hdrCompanionDensify');
 const b = src.indexOf('window.chromasmithHdrCompanionDensify');
 if (a < 0 || b < 0) { console.error('FAIL: hdrCompanionDensify not found'); process.exit(1); }
 const densify = new Function(src.slice(a, b) + '; return hdrCompanionDensify;')();
-const w = 4, h = 2, count = 2;
-const blob = new ArrayBuffer(24 + count * 10), dv = new DataView(blob);
-new Uint8Array(blob).set([0x43, 0x48, 0x58, 0x31]);
-dv.setUint32(12, w, true); dv.setUint32(16, h, true); dv.setUint32(20, count, true);
-dv.setUint32(24, 1, true); dv.setUint32(28, 5, true);                       // pixel indices
-[0x3c29, 0x3c00, 0x3c00, 0x4100, 0x3d00, 0x3c00].forEach((v, i) => dv.setUint16(32 + 2 * i, v, true)); // 1.04.., 2.5, 1.25
+const w = 4, h = 2, count = 2, scale = 0.08;
+const blob = new ArrayBuffer(28 + count * 7), dv = new DataView(blob);
+new Uint8Array(blob).set([0x43, 0x48, 0x58, 0x32]); // "CHX2"
+dv.setUint32(12, w, true); dv.setUint32(16, h, true); dv.setUint32(20, count, true); dv.setFloat32(24, scale, true);
+dv.setUint32(28, 1, true); dv.setUint32(32, 5, true);          // pixel indices
+[64, 0, 0, 255, 128, 0].forEach((v, i) => dv.setUint8(36 + i, v)); // pixel 1 R=1+64/255*scale; pixel 5 R=1+scale, G=1+128/255*scale, B from frame
 const px = new Uint8ClampedArray(w * h * 4).fill(128);
 const out = densify(blob, px, w, h);
 const fail = (m) => { console.error('FAIL: ' + m); process.exit(1); };
-if (Math.abs(out[0] - 128 / 255) > 1e-6) fail('non-overlaid pixel should be rgba/255');
-if (out[5 * 3] !== 2.5 || out[5 * 3 + 1] !== 1.25 || out[5 * 3 + 2] !== 1) fail('overlay pixel 5: ' + [...out.slice(15, 18)]);
-if (!(out[3] > 1.0 && out[3] < 1.05)) fail('overlay pixel 1 red: ' + out[3]);
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+if (!near(out[0], 128 / 255)) fail('non-overlaid pixel should be rgba/255');
+if (!near(out[3], 1 + 64 / 255 * scale)) fail('pixel 1 red: ' + out[3]);
+if (!near(out[4], 128 / 255)) fail('pixel 1 green (zero excess) must come from the frame');
+if (!near(out[15], 1 + scale) || !near(out[16], 1 + 128 / 255 * scale) || !near(out[17], 128 / 255)) fail('pixel 5: ' + [...out.slice(15, 18)]);
 for (const [name, args] of [['size', [blob, px, w + 1, h]], ['truncated', [blob.slice(0, 40), px, w, h]]]) {
   let threw = false; try { densify(...args); } catch { threw = true; }
   if (!threw) fail('mismatch not rejected: ' + name);
 }
+const old = blob.slice(0); new Uint8Array(old)[3] = 0x31;
+let threw = false; try { densify(old, px, w, h); } catch { threw = true; }
+if (!threw) fail('old CHX1 format not rejected');
 console.log('probe_hdr_companion_densify: PASS');

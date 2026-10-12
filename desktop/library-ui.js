@@ -5086,29 +5086,25 @@
     return true;
   };
   // Rebuilds the dense scene-linear buffer (w*h*3 f32) from the cached RGBA8 frame plus the sparse
-  // overlay native persisted (library.rs "HDR companion cache"): rgba8/255 everywhere (exact for
-  // values <= 1.0), overlaid with the stored f16 values for pixels that exceeded it.
-  // Layout (LE): "CHX1" | stem u64 | w u32 | h u32 | count u32 | idx u32*count | f16 u16*3*count.
+  // overlay native persisted (library.rs "HDR companion cache"): rgba8/255 everywhere, and for each
+  // stored pixel any channel with a non-zero excess byte becomes 1 + q/255*scale.
+  // Layout (LE): "CHX2" | stem u64 | w u32 | h u32 | count u32 | scale f32 | idx u32*count | u8*3*count.
   function hdrCompanionDensify(blob, px, w, h) {
     const dv = new DataView(blob);
+    if (dv.getUint32(0, true) !== 0x32584843) throw new Error('hdr companion format');
     if (dv.getUint32(12, true) !== w || dv.getUint32(16, true) !== h) throw new Error('hdr companion size mismatch');
-    const count = dv.getUint32(20, true);
-    if (blob.byteLength !== 24 + count * 10) throw new Error('hdr companion truncated');
+    const count = dv.getUint32(20, true), scale = dv.getFloat32(24, true);
+    if (blob.byteLength !== 28 + count * 7) throw new Error('hdr companion truncated');
     const dense = new Float32Array(w * h * 3);
     for (let i = 0, j = 0, k = 0; i < w * h; i++, j += 4, k += 3) {
       dense[k] = px[j] / 255; dense[k + 1] = px[j + 1] / 255; dense[k + 2] = px[j + 2] / 255;
     }
-    const idx = new Uint32Array(blob, 24, count);
-    const vals = new Uint16Array(blob, 24 + 4 * count, 3 * count);
-    const f16 = (v) => {
-      const e = (v >> 10) & 0x1f, m = v & 0x3ff, sg = (v & 0x8000) ? -1 : 1;
-      if (e === 0) return sg * m * 5.960464477539063e-8;
-      if (e === 31) return m ? NaN : sg * Infinity;
-      return sg * (1 + m / 1024) * Math.pow(2, e - 15);
-    };
+    const idx = new Uint32Array(blob, 28, count);
+    const vals = new Uint8Array(blob, 28 + 4 * count, 3 * count);
+    const step = scale / 255;
     for (let n = 0; n < count; n++) {
       const k = idx[n] * 3;
-      dense[k] = f16(vals[3 * n]); dense[k + 1] = f16(vals[3 * n + 1]); dense[k + 2] = f16(vals[3 * n + 2]);
+      for (let c = 0; c < 3; c++) { const q = vals[3 * n + c]; if (q) dense[k + c] = 1 + q * step; }
     }
     return dense;
   }
