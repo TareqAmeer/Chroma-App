@@ -3360,12 +3360,12 @@ ready(function(){
   var host=document.getElementById('fx-looks');if(!host)return;
   var timer=0,peek=null,saved,seq=0;
   function end(commit){clearTimeout(timer);seq++;if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
-    if(commit)return;try{fxState.lut=saved;FX.setLUT(saved);renderPreview();}catch(e){}}
+    if(commit)return;try{fxState.lut=saved;if(saved)FX.setLUT(saved);renderPreview();}catch(e){}}
   async function show(c){var v=c._lookJob&&c._lookJob.val;if(c.classList.contains('sel')){end();return;}
     var my=++seq,lut=null;
     try{if(v&&v.startsWith('p:')&&typeof presetLut==='function')lut=await presetLut(v.slice(2));else if(v!=='')return;}catch(e){return}
     if(my!==seq)return;if(!peek)saved=fxState.lut;else peek.classList.remove('sk2-peek');
-    peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;FX.setLUT(lut);renderPreview();}catch(e){}}
+    peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;if(lut)FX.setLUT(lut);renderPreview();}catch(e){}}
   window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
   window.sk2PeekEnd=end;
   host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
@@ -7267,7 +7267,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013L';
+const BUILD='1.1013M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
