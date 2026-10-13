@@ -7258,7 +7258,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1012B';
+const BUILD='1.1013A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -28508,6 +28508,7 @@ function viewMenuBuild(){
   h+=`<button class="fx-ovf-item" onclick="viewMenuClose();const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)"><span>Studio background…</span></button>`;
   h+=`<button class="fx-ovf-item${fxHistOn?' on':''}" onclick="viewMenuClose();toggleHist()"><span>Scope overlay</span>${chk}</button>`;
   h+=`<button class="fx-ovf-item${window.chromasmithPhotoTransitions!==false?' on':''}" onclick="photoTransitionsToggle()"><span>Photo transitions</span>${chk}</button>`;
+  if(window.__TAURI__)h+=`<button class="fx-ovf-item${window.chromasmithAutoPreviews!==false?' on':''}" onclick="autoPreviewsToggle()" title="Develops screen-size previews of your RAWs in the background while you are idle, so photos open faster. Turn off to save CPU."><span>Build previews in background</span>${chk}</button>`;
   if(window.sk2HistPinned)h+=`<button class="fx-ovf-item${sk2HistPinned()?' on':''}" onclick="sk2HistPinToggle();this.classList.toggle('on',sk2HistPinned())"><span>Pin histogram</span>${chk}</button>`;
   // Reveal lab is a tuning tool: only offered when asked for (?reveallab=1 or localStorage cs_reveal_lab=1).
   if(typeof window.chromasmithRevealLab==='function'&&(/[?&]reveallab=1/.test(location.search)||(()=>{try{return localStorage.getItem('cs_reveal_lab')==='1'}catch(e){return false}})()))h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
@@ -28763,6 +28764,15 @@ try{window.chromasmithPhotoTransitions=localStorage.getItem('chromasmithPhotoTra
 function photoTransitionsToggle(){
   window.chromasmithPhotoTransitions=!window.chromasmithPhotoTransitions;
   try{localStorage.setItem('chromasmithPhotoTransitions',window.chromasmithPhotoTransitions?'1':'0');}catch(e){}
+  viewMenuBuild();
+}
+// Idle background preview building (library-ui.js autoPreviewTick reads this same key each tick,
+// so a change here takes effect without a reload). Default on; '0' turns it off.
+try{window.chromasmithAutoPreviews=localStorage.getItem('chromasmithAutoPreviews')!=='0';}catch(e){window.chromasmithAutoPreviews=true;}
+function autoPreviewsToggle(){
+  window.chromasmithAutoPreviews=!window.chromasmithAutoPreviews;
+  try{localStorage.setItem('chromasmithAutoPreviews',window.chromasmithAutoPreviews?'1':'0');}catch(e){}
+  if(typeof toast==='function')toast('Background previews: '+(window.chromasmithAutoPreviews?'on':'off'),true);
   viewMenuBuild();
 }
 function viewMenuClose(){settingsClose();}
