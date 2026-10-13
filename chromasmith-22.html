@@ -7267,7 +7267,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013K';
+const BUILD='1.1013L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18460,10 +18460,23 @@ function mskAddMenu(ev){
   const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
-  const top=r.bottom+4,maxTop=innerHeight-d.offsetHeight-8;
-  d.style.top=Math.max(8,Math.min(top,maxTop))+'px';
-  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
+  _mskPlaceMenu(d,r);
   setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
+// Places a mask dropdown beside its trigger and keeps it on screen: it opens below the trigger when
+// that fits, otherwise on whichever side has more room, and gets its own scroll (max-height) when even
+// that side is too short — so a long menu like the mask settings one can always be scrolled.
+function _mskPlaceMenu(d,r){
+  const pad=8,gap=4;
+  const below=innerHeight-r.bottom-gap-pad,above=r.top-gap-pad;
+  const fitsBelow=d.offsetHeight<=below;
+  const room=Math.max(120,fitsBelow?below:Math.max(above,below));
+  d.style.maxHeight=room+'px';d.style.overflowY='auto';
+  const h=Math.min(d.offsetHeight,room);
+  let top=fitsBelow||below>=above?r.bottom+gap:r.top-gap-h;
+  top=Math.max(pad,Math.min(top,innerHeight-h-pad));
+  d.style.top=top+'px';
+  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
 }
 function mskMoreMenu(ev){
   ev.stopPropagation();
@@ -18501,8 +18514,7 @@ function mskMoreMenu(ev){
   const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
-  d.style.top=(r.bottom+4)+'px';
-  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
+  _mskPlaceMenu(d,r);
   setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
 }
 // Validate a proposed operand against a private copy so an invalid or cyclic choice never
