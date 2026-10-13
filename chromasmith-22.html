@@ -209,7 +209,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --k-variants-italics:primary;
   --k-variants-thumbnails:on;
   --k-variants-window-squares:tint;
-  --k-variants-value-readout:roll;
+  --k-variants-value-readout:plain;
   --k-variants-top-bar-state-only-controls:hide;
   --k-variants-icon-selected:slab;
   --k-variants-segmented:cell;
@@ -1908,7 +1908,7 @@ body.light{
   --k-variants-italics:primary;
   --k-variants-thumbnails:on;
   --k-variants-window-squares:tint;
-  --k-variants-value-readout:roll;
+  --k-variants-value-readout:plain;
   --k-variants-top-bar-state-only-controls:hide;
   --k-variants-icon-selected:slab;
   --k-variants-segmented:slab;
@@ -2789,6 +2789,8 @@ body.sk2 details.sk2-more>summary{cursor:pointer;color:var(--k-color-muted);font
 body.sk2 details.sk2-more>summary::-webkit-details-marker{display:none}
 body.sk2 details.sk2-more>summary::after{content:'+'}
 body.sk2 details.sk2-more[open]>summary::after{content:'–'}
+/* Metadata / Keywords / Tags / Versions & History already carry a chevron on the left, so no +/– on the right. */
+body.sk2 details.sk2-more.fx-info-part>summary::after{content:none}
 /* The histogram row opens a view, it doesn't add anything: chevron like every other collapsible
    section, not the "+" that read as "add a histogram". */
 body.sk2 details.sk2-hist>summary::after{content:'';width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(-45deg);transition:transform .14s}
@@ -4753,12 +4755,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <!-- INFO / METADATA -->
       <!-- CHR-203: Versions — the photo's saved alternatives (desktop virtual copies, stored in its
            sidecar), with compare / make current / rename / delete, and the way to undo history. -->
-      <div class="fx-ctrl" data-fxsec="versions">
-        <div class="fx-ctrl-title">Versions</div>
-        <div id="ver-list" class="ver-list"></div>
-        <div class="btn-row" style="margin-top:10px"><button class="btn bsec" id="btn-ver-new" onclick="verSaveNew()">Save as new version…</button><button class="btn bgh" onclick="if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover()">Edit history</button></div>
-        <div class="fx-hint" style="margin-top:12px;line-height:1.5">Save a named version as a checkpoint, then keep editing; <b>Compare</b> shows that saved edit against the current one, and <b>Make current</b> restores it. Session undo history clears when you close the photo. Versions survive restarts, and the original file is never changed. Duplicating the file is a separate copy on disk.</div>
-      </div>
       <div class="fx-ctrl" data-fxsec="info">
         <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
         <!-- Info is split into Metadata (open) / Keywords / Tags (auto tags + People & Pets).
@@ -4780,6 +4776,11 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <details class="sk2-more fx-info-part"><summary>Tags</summary>
         <div id="fx-autotags"></div>
         <div id="fx-people"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Versions &amp; History</summary>
+          <div id="ver-list" class="ver-list"></div>
+          <div class="btn-row" style="margin-top:10px"><button class="btn bsec" id="btn-ver-new" onclick="verSaveNew()">Save as new version…</button><button class="btn bgh" onclick="if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover()">Edit history</button></div>
+          <div class="fx-hint" style="margin-top:12px;line-height:1.5">Save a named version as a checkpoint, then keep editing; <b>Compare</b> shows that saved edit against the current one, and <b>Make current</b> restores it. Session undo history clears when you close the photo. Versions survive restarts, and the original file is never changed. Duplicating the file is a separate copy on disk.</div>
         </details>
       </div>
     </div>
@@ -7258,7 +7259,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013E';
+const BUILD='1.1013F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13858,7 +13859,7 @@ async function verSaveNew(){const api=window.chromasmithVersions;if(!api)return;
   const name=(await askTextModal('Save as new version','The current edit stays as it is; the new version starts as a copy of it.')||'').trim();if(!name)return;
   try{await api.add(name);toast(`Saved version "${name}"`,true);}catch(e){toast('Could not save the version — '+(e.message||e),false);}verRender();}
 async function verMakeCurrent(i){try{await window.chromasmithVersions.setActive(i);}catch(e){toast('Could not switch version — '+(e.message||e),false);}
-  setTimeout(()=>{if(typeof fxSection==='function')fxSection('versions');verRender();},800);} // reopening the photo closes the panel — bring Versions back
+  setTimeout(()=>{if(typeof fxSection==='function')fxSection('info');verRender();},800);} // reopening the photo closes the panel — bring Versions back
 async function verRename(i){const d=await window.chromasmithVersions.get();const v=d.versions[i];if(!v)return;
   const name=(await askTextModal('Rename version','',v.name)||'').trim();if(!name||name===v.name)return;
   try{await window.chromasmithVersions.rename(i,name);}catch(e){toast('Could not rename — '+(e.message||e),false);}verRender();}
@@ -29068,7 +29069,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['filmneg','Film Negative
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
-  ['versions','Versions'],['info','Metadata'],['diag','Diag']];
+  ['info','Metadata'],['diag','Diag']];
 FX_SECTIONS.forEach(x=>{if(CS_NAMES[x[0]])x[1]=CS_NAMES[x[0]];}); // CHR-196: one name per tool
 // A16: the card lookup is cached. This ran a querySelector per section on every rail and
 // section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
@@ -29582,7 +29583,7 @@ function fxInitEdges(){
   });
 }
 function fxSection(name,noSheet){
-  if(name==='versions'&&typeof verRender==='function')setTimeout(verRender,0); // CHR-203: fresh list each time it's shown
+  if(name==='info'&&typeof verRender==='function')setTimeout(verRender,0); // CHR-203: fresh list each time it's shown
   if(document.body.classList.contains('tools-open'))fxToolsClose();
   const dx=document.body.classList.contains('deskx');
   // A member key (e.g. fxSection('local') from the command palette) opens its stage and scrolls to it.
