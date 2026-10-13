@@ -3330,7 +3330,10 @@ ready(function(){
   var ids=['btn-gp-import','btn-lut-save','btn-lut-dl'],rows=[];
   ids.forEach(function(id){var b=document.getElementById(id),r=b&&b.closest('.btn-row');if(r&&rows.indexOf(r)<0)rows.push(r)});
   if(rows.length){var d=document.createElement('details');d.className='sk2-more';d.innerHTML='<summary title="Google Photos, saved LUTs, LUT chart">More</summary>';
-    rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});}
+    rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});
+    // Desktop: the Apply LUT row is placed under the Looks grid by fxDesktopReorderLooksPanel, which can run
+    // before this fold exists, so the fold follows that row here instead of staying at its build position.
+    var lutRow=document.getElementById('fx-apply-lut-row');if(lutRow)lutRow.insertAdjacentElement('afterend',d);}
   // Border ("frames") tool: one layer at a time — Inner | Outer word tabs over the same rows;
   // Film variation + Overlay fold under "More". Rows are only hidden/shown, never rebuilt.
   (function(){var ff=document.getElementById('ff-borders');if(!ff||ff.querySelector('.sk2-layers'))return;
@@ -7263,7 +7266,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013H';
+const BUILD='1.1013I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -30036,7 +30039,9 @@ function fxDesktopReorderLooksPanel(looksCard,title){
   // is created by the sk2 behaviour script, so it is looked up by its summary text and only moved if it exists.
   const moreFold=Array.from(looksCard.querySelectorAll('details.sk2-more')).find(d=>d.querySelector('summary')&&d.querySelector('summary').textContent.trim()==='More');
   const lutTail=[applyLutWrap,moreFold].filter(Boolean);
-  let tailAnchor=strengthRow||title;
+  // Strength is sticky to the bottom of the Looks scroll area, so the LUT tail goes after the tile grid
+  // (the end of the Looks section) and reads as sitting beneath it.
+  let tailAnchor=grid||strengthRow||title;
   lutTail.forEach(el=>{if(tailAnchor){tailAnchor.insertAdjacentElement('afterend',el);tailAnchor=el;}});
   place(rawRow);
   place(inputLabel);place(inputSel);place(inputChips);
