@@ -209,7 +209,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --k-variants-italics:primary;
   --k-variants-thumbnails:on;
   --k-variants-window-squares:tint;
-  --k-variants-value-readout:plain;
+  --k-variants-value-readout:roll;
   --k-variants-top-bar-state-only-controls:hide;
   --k-variants-icon-selected:slab;
   --k-variants-segmented:cell;
@@ -1908,7 +1908,7 @@ body.light{
   --k-variants-italics:primary;
   --k-variants-thumbnails:on;
   --k-variants-window-squares:tint;
-  --k-variants-value-readout:plain;
+  --k-variants-value-readout:roll;
   --k-variants-top-bar-state-only-controls:hide;
   --k-variants-icon-selected:slab;
   --k-variants-segmented:slab;
@@ -2220,11 +2220,13 @@ body{--k-menu-bg:#2c2c2a;--k-menu-fg:var(--k-color-ink);--k-menu-line:color-mix(
    CSS content and slid to its value, so the element's own text (which the app writes and parses,
    and which click-to-type edits) is untouched — it just renders transparent underneath. */
 .fx-val.k-roll{position:relative;color:transparent!important}
-.fx-val.k-roll>.k-roll-strip{position:absolute;inset:0;display:flex;justify-content:flex-end;align-items:center;overflow:hidden;pointer-events:none;color:var(--k-color-ink);line-height:1.2em}
+.fx-val.k-roll>.k-roll-strip{position:absolute;inset:0;display:flex;justify-content:flex-end;align-items:center;overflow:hidden;pointer-events:none;color:var(--k-color-ink);line-height:round(1.2em,1px)}
 .fx-row.fx-mod>.fx-val.k-roll>.k-roll-strip{color:var(--k-color-accent-a)}
-.k-roll-strip>i{display:block;font-style:normal;height:1.2em;overflow:hidden;clip-path:inset(.12em 0)} /* trims the sliver of the neighbouring digit that sub-pixel rounding leaves at the cell edge */
+/* Every digit row is a whole number of CSS px (round(), not 1.2em raw), and each roll step moves by exactly one such row, so a settled digit always sits on a row boundary instead of straddling two rows at fractional offsets. */
+.k-roll-strip{line-height:round(1.2em,1px)}
+.k-roll-strip>i{display:block;font-style:normal;height:round(1.2em,1px);overflow:hidden}
 .k-roll-strip>i::before{content:attr(data-c);display:block;white-space:pre}
-.k-roll-strip>i.k-num::before{content:"0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";transform:translateY(calc(var(--k-d,0) * -1.2em));
+.k-roll-strip>i.k-num::before{content:"0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9";transform:translateY(calc(var(--k-d,0) * -1 * round(1.2em,1px)));
   transition:transform var(--k-motion-duration) var(--k-motion-easing)}
 .k-roll-strip.k-snap>i.k-num::before{transition:none}
 .fx-val.k-roll:focus{color:var(--k-color-ink)!important}
@@ -7259,7 +7261,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013F';
+const BUILD='1.1013G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -30019,12 +30021,16 @@ function fxDesktopReorderLooksPanel(looksCard,title){
   [lutDz,saveDelRow,chartDlRow].forEach(el=>{if(el)applyLutWrap.appendChild(el);});
   let anchor=title;
   const place=(el)=>{if(el&&el!==anchor){anchor.insertAdjacentElement('afterend',el);anchor=el;}};
+  // Apply LUT and its More fold sit directly under the Looks title (the More fold is created by the
+  // sk2 behaviour script, so it is looked up by its summary text and only moved if it already exists).
+  place(applyLutWrap);
+  const moreFold=Array.from(looksCard.querySelectorAll('details.sk2-more')).find(d=>d.querySelector('summary')&&d.querySelector('summary').textContent.trim()==='More');
+  place(moreFold);
   place(rawRow);
   place(inputLabel);place(inputSel);place(inputChips);
   place(clipInfo);
   place(printLabel);place(printSel);place(printChips);place(legacyLutSel);
   place(hrLabel);place(hrSel);place(hrChips);
-  place(applyLutWrap);
   place(testchartBtn);
   // Preset is its own section: it sits after the Looks controls (so the Looks chevron visibly
   // governs only what's directly under it) and survives the Looks card collapse (CSS below).
