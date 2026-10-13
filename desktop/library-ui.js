@@ -4767,6 +4767,7 @@
   // a visible flash of the wrong image. Mirroring openBusy onto this global lets fxSelectImage
   // simply no-op while a library load owns the transition, rather than fighting over it.
   let openBusy = false, openPendingPath = null;
+  const bgFullDecodes = new Map(); // path|recipeKey -> in-flight full-resolution background decode
   const rawPerf = (event, path, extra = {}) => {
     if (!window.__rawPerfLog) window.__rawPerfLog = [];
     window.__rawPerfLog.push({ event, path, t: performance.now(), wall: Date.now(), ...extra });
@@ -5347,6 +5348,9 @@
     let diskCached = null;
     let fullAssetPath = null;
     let fullCachedEntry = null;
+    // A prepared display proxy exists but no full-resolution cache yet: edit on the proxy at once
+    // and decode the full frame in the background (Lightroom's Smart-Preview-then-full model).
+    let fullPendingDecode = false;
     let fullPromotionStarted = false;
     let deferEditorRender = false;
     let memoryHitDeferred = false;
@@ -5354,13 +5358,21 @@
     let deferredRecipeApply = null;
     const startFullPromotion = () => {
       const previewEntry = diskCached || (cached && cached.entry);
-      if (fullPromotionStarted || (!fullAssetPath && !fullCachedEntry) || !previewEntry || previewEntry.img.naturalWidth >= 4000) return;
+      if (fullPromotionStarted || (!fullAssetPath && !fullCachedEntry && !fullPendingDecode) || !previewEntry || previewEntry.img.naturalWidth >= 4000) return;
       fullPromotionStarted = true;
       window.chromasmithFullQualityReady = false;
       window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
       const promoteT0 = performance.now();
       const glowEl = document.getElementById('fx-zoom-wrap');
       const run = async () => {
+        // The first-edit hook also fires on the history push the open's own recipe restore makes,
+        // ~0.9s after every open — during a flip that would start a multi-second native decode for
+        // each photo passed. A decode that has to be developed waits until no open is running or
+        // queued, and is dropped if the photo is no longer the one on screen.
+        if (fullPendingDecode && !fullCachedEntry && isRaw && !hdrPreview) {
+          while (state.openedPath === path && (openBusy || openPendingPath)) await new Promise((r) => setTimeout(r, 150));
+          if (state.openedPath !== path) return;
+        }
         if (glowEl) glowEl.classList.add('lib-full-loading');
         window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'loading' });
         try {
@@ -5369,6 +5381,28 @@
           if (fullCachedEntry) {
             fullImg = fullCachedEntry.img;
             promotionSource = 'memory';
+          } else if (fullPendingDecode && isRaw && !hdrPreview) {
+            // No full cache yet: run the native decode now (it also warms the in-process cache and
+            // writes the persistent one), then take the frame from the in-process cache.
+            const bgT0 = performance.now();
+            const bgSettings = await rawCacheSettings(path, 'interactive');
+            // One native decode per photo+recipe: reopening a photo whose decode is still running
+            // (or a first-edit hook firing twice) joins it instead of starting a second one.
+            const bgKey = `${path}|${bgSettings.recipeKey}`;
+            let bgJob = bgFullDecodes.get(bgKey);
+            if (!bgJob) {
+              bgJob = cacheOneRaw(path, 'interactive', bgSettings).finally(() => bgFullDecodes.delete(bgKey));
+              bgFullDecodes.set(bgKey, bgJob);
+            }
+            await bgJob;
+            try {
+              fullImg = await loadNativeCachedImage(path, bgSettings.recipeKey);
+              promotionSource = 'background-decode';
+            } catch (_) {
+              fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey: bgSettings.recipeKey });
+              promotionSource = 'background-decode-asset';
+            }
+            rawPerf('open-full-quality-background-decode', path, { ms: performance.now() - bgT0 });
           } else if (isRaw && !hdrPreview) {
             try {
               const nativeT0 = performance.now();
@@ -5419,14 +5453,25 @@
       // usually already there. The settle delay keeps fast arrow-key culling from starting
       // (and throwing away) a 24MP load for every photo it passes.
       const ensureForThis = window.chromasmithEnsureFullQuality;
-      setTimeout(() => {
+      // state.openedPath only moves when a LATER open finishes, so while the next photo is still
+      // opening (or queued behind this one) this path still reads as "current". Treat a busy or
+      // pending open as "still flipping" and re-check, otherwise a photo already left behind
+      // starts a multi-second native decode that delays the one you settled on.
+      let settleTries = 0;
+      const settle = () => {
         if (state.openedPath !== path || window.chromasmithEnsureFullQuality !== ensureForThis) return;
-        const go = () => { if (state.openedPath === path && window.chromasmithEnsureFullQuality === ensureForThis) ensureForThis(); };
+        if ((openBusy || openPendingPath) && ++settleTries < 100) { setTimeout(settle, 300); return; }
+        const go = () => {
+          if (state.openedPath !== path || window.chromasmithEnsureFullQuality !== ensureForThis) return;
+          if (openBusy || openPendingPath) { setTimeout(settle, 300); return; }
+          ensureForThis();
+        };
         if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 500 }); else go();
-      }, 700);
+      };
+      setTimeout(settle, 700);
     };
     if (cached && isRaw && (!hdrPreview || hdrFromMemory) && cached.entry.img.naturalWidth < 4000) {
-      try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) {}
+      try { fullAssetPath = await invoke('get_decode_cache_path', { path, recipeKey }); } catch (_) { fullPendingDecode = true; }
     }
     if (cached && isRaw && (!hdrPreview || hdrFromMemory) && cached.entry.img.naturalWidth >= 4000) {
       fullCachedEntry = cached.entry;
@@ -5443,11 +5488,12 @@
         // These native calls have no ordering dependency. Keeping them serial added each IPC
         // round trip to cache-hit culling; overlap cache-path lookup, proxy decode, and metadata.
         const [fullPath, displayImg, m] = await Promise.all([
-          invoke('get_decode_cache_path', { path, recipeKey }),
+          invoke('get_decode_cache_path', { path, recipeKey }).catch(() => null),
           displayAssetImage(path, recipeKey),
           rawMetaPromise,
         ]);
         fullAssetPath = fullPath;
+        fullPendingDecode = !fullPath;
         const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
         diskCached = {
           img: displayImg, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
@@ -5455,7 +5501,7 @@
                    date: m.date, lens: m.lens, make: m.make, model: m.model },
         };
         rawPerf('open-cache-display-asset', path, { ms: performance.now() - displayT0, width: displayImg.naturalWidth, height: displayImg.naturalHeight });
-      } catch (_) { fullAssetPath = null; }
+      } catch (_) { fullAssetPath = null; fullPendingDecode = false; }
     }
     if (!diskCached && !cached && isRaw && (!hdrPreview || hdrCompanion)) {
       try {
@@ -5544,7 +5590,7 @@
     try {
       if (diskCached) {
         const loadKey = `${path}:diskcache:${recipeKey}`;
-        deferEditorRender = !!(fullAssetPath || fullCachedEntry) && diskCached.img.naturalWidth < 4000;
+        deferEditorRender = !!(fullAssetPath || fullCachedEntry || fullPendingDecode) && diskCached.img.naturalWidth < 4000;
         deferredDisplayRender = deferEditorRender;
         const installT0 = performance.now();
         installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
@@ -5718,7 +5764,9 @@
           } catch (e) { console.error('restore recipe', e); }
         };
         if (deferEditorRender) deferredRecipeApply = applyRecipe; else applyRecipe();
-      } else if (cached && typeof window.chromasmithApplyPristineDefault === 'function') {
+      } else if ((cached || diskCached) && typeof window.chromasmithApplyPristineDefault === 'function') {
+        // diskCached (display proxy) opens go through installFXImages() too, which never reverts the
+        // sliders: without this the previous photo's edit showed on every recipe-less proxy photo.
         // No saved recipe (e.g. right after "Reset edit"/⌘⇧R) AND this photo was served from
         // the in-memory `cached` branch above — that branch calls installFXImages() directly
         // instead of loadFXImages(), which is the ONLY place that normally reverts the live
@@ -5775,7 +5823,7 @@
         // full-resolution render or pass the export guard as if the original were available.
         window.chromasmithFullQualityReady = false;
         window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'unavailable' });
-      } else if (fullAssetPath || fullCachedEntry) {
+      } else if (fullAssetPath || fullCachedEntry || fullPendingDecode) {
         window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
         startFullPromotion();
       } else if (fxImages[0] && fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg) {
@@ -5819,7 +5867,7 @@
       // Every non-deferred path has rendered (and restored the recipe) by now; the deferred
       // display path signals from its own rAF above. The reveal ignores this for a stale path.
       if (!deferredDisplayRender) reveal.pixels(path);
-      if (fullAssetPath || fullCachedEntry) startFullPromotion();
+      if (fullAssetPath || fullCachedEntry || fullPendingDecode) startFullPromotion();
       rawPerf('open-mark-pre-loaded', path, { ms: performance.now() - openT0 });
       rawPerf('open-fully-loaded', path, { ms: performance.now() - openT0, source: cached ? 'memory' : (diskCached ? 'persistent-cache' : 'decode') });
       if (isRaw && state.openedPath === path) warmNeighbour(path);
