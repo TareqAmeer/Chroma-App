@@ -1628,15 +1628,19 @@ fn tree_unchanged_since_last_walk(conn: &Connection, root_id: i64, fresh: &[(Str
 /// Persists `fresh` as the new baseline for this root — wholesale replace, since a directory
 /// that vanished between scans must not linger as a stale "unchanged" signal.
 fn save_walked_dirs(conn: &Connection, root_id: i64, fresh: &[(String, u64)]) -> Result<(), String> {
-    conn.execute("DELETE FROM walked_dirs WHERE root_id = ?1", params![root_id]).map_err(|e| e.to_string())?;
-    for (rel, mtime) in fresh {
-        conn.execute(
-            "INSERT INTO walked_dirs (root_id, rel_dir, mtime) VALUES (?1, ?2, ?3)",
-            params![root_id, rel, *mtime as i64],
-        )
-        .map_err(|e| e.to_string())?;
+    // One transaction: ~45k autocommit INSERTs (one WAL commit each) used to run here under the
+    // writer lock; batched it is a fraction of a second.
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM walked_dirs WHERE root_id = ?1", params![root_id]).map_err(|e| e.to_string())?;
+    {
+        let mut ins = tx
+            .prepare("INSERT INTO walked_dirs (root_id, rel_dir, mtime) VALUES (?1, ?2, ?3)")
+            .map_err(|e| e.to_string())?;
+        for (rel, mtime) in fresh {
+            ins.execute(params![root_id, rel, *mtime as i64]).map_err(|e| e.to_string())?;
+        }
     }
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[derive(Serialize, Clone, Default)]
@@ -1674,31 +1678,75 @@ pub fn scan_run(
     progress: &mut dyn FnMut(ScanProgress),
     cancel: &AtomicBool,
 ) -> Result<ScanResult, String> {
-    // ⚠️ A monotonic counter, NOT a timestamp. `now_secs()` is second-resolution, so two scans
-    // triggered within the same second (a real possibility: app launch + an immediate
-    // `catalog_note_folder` call, or simply a fast test) would get the IDENTICAL scan_gen —
-    // and since "mark absent" is `WHERE scan_gen != <this run's value>`, a collision means the
-    // previous run's rows compare EQUAL and the deletion sweep silently marks nothing absent.
-    // `MAX(scan_gen)+1` is strictly increasing regardless of wall-clock granularity.
-    let scan_gen: i64 = conn
-        .query_row("SELECT COALESCE(MAX(scan_gen), 0) + 1 FROM photos", [], |r| r.get(0))
-        .map_err(|e| e.to_string())?;
+    scan_run_impl(&ConnSrc::Held(conn), only_volume_id, progress, cancel)
+}
+
+/// `scan_run` for the live app: takes `state.conn` only for the short DB steps and leaves it FREE
+/// during every filesystem walk. ⚠️ catalog_scan used to hold the writer Mutex for the whole walk
+/// + the whole 50k-row upsert (14-76 s over an exFAT drive); every other command needing `conn`
+/// then parked a tokio IPC worker on it, all workers filled, and unrelated IPC (get_meta,
+/// peek_raw_camera_path, plain opens) stalled with them. Never hold `conn` across filesystem IO.
+pub fn scan_run_scoped(
+    state: &CatalogState,
+    only_volume_id: Option<i64>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<ScanResult, String> {
+    // Two overlapping scans must not interleave their (now separately locked) apply steps.
+    // Only another scan waits here — it runs on a blocking-pool thread, never an IPC worker.
+    static SCAN_SERIAL: Mutex<()> = Mutex::new(());
+    let _serial = SCAN_SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    scan_run_impl(&ConnSrc::Locked(state), only_volume_id, progress, cancel)
+}
+
+enum ConnSrc<'a> {
+    Held(&'a Connection),
+    Locked(&'a CatalogState),
+}
+
+impl ConnSrc<'_> {
+    /// Runs `f` with the connection; for `Locked` the writer Mutex is held for `f` only.
+    fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T, String>) -> Result<T, String> {
+        match self {
+            ConnSrc::Held(c) => f(c),
+            ConnSrc::Locked(s) => {
+                let g = s.conn.lock().map_err(|e| e.to_string())?;
+                let t = std::time::Instant::now();
+                let r = f(&g);
+                let ms = t.elapsed().as_millis();
+                if ms >= 250 {
+                    crate::diag::log("info", format!("catalog scan: writer lock held {ms}ms in one step (steps >250ms starve IPC)"));
+                }
+                r
+            }
+        }
+    }
+}
+
+fn scan_run_impl(
+    src: &ConnSrc,
+    only_volume_id: Option<i64>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<ScanResult, String> {
     // Idempotent, cheap (a handful of roots, never thousands) — cleans up nested roots that
     // predate add_root_run's own dedupe, or that slipped through it. See its doc comment.
-    collapse_nested_roots(conn)?;
-    let mut roots_stmt = conn
-        .prepare(
-            "SELECT r.id, r.volume_id, r.rel_path, v.last_path
-             FROM roots r JOIN volumes v ON v.id = r.volume_id
-             WHERE (?1 IS NULL OR r.volume_id = ?1)",
-        )
-        .map_err(|e| e.to_string())?;
-    let roots: Vec<(i64, i64, String, String)> = roots_stmt
-        .query_map(params![only_volume_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    drop(roots_stmt);
+    let roots: Vec<(i64, i64, String, String)> = src.with(|conn| {
+        collapse_nested_roots(conn)?;
+        let mut roots_stmt = conn
+            .prepare(
+                "SELECT r.id, r.volume_id, r.rel_path, v.last_path
+                 FROM roots r JOIN volumes v ON v.id = r.volume_id
+                 WHERE (?1 IS NULL OR r.volume_id = ?1)",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = roots_stmt
+            .query_map(params![only_volume_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        Ok(rows)
+    })?;
 
     let mut result = ScanResult::default();
     for (root_id, volume_id, root_rel, mount_point) in &roots {
@@ -1717,15 +1765,21 @@ pub fn scan_run(
         // walk AND the mark-absent sweep below entirely (that sweep keys off scan_gen, which
         // only advances for rows the walk actually touches — running it without a walk would
         // wrongly mark every photo under this root absent).
-        let fresh_dirs = walk_dirs_and_sidecars_only(&mount, root_rel);
-        if tree_unchanged_since_last_walk(conn, *root_id, &fresh_dirs)? {
-            let unchanged_count: i64 = conn
-                .query_row(
+        let fresh_dirs = walk_dirs_and_sidecars_only(&mount, root_rel); // filesystem — no lock
+        let unchanged_count: Option<i64> = src.with(|conn| {
+            if !tree_unchanged_since_last_walk(conn, *root_id, &fresh_dirs)? {
+                return Ok(None);
+            }
+            Ok(Some(
+                conn.query_row(
                     "SELECT COUNT(*) FROM photos WHERE volume_id = ?1 AND (rel_dir = ?2 OR rel_dir LIKE ?3) AND present = 1",
                     params![volume_id, root_rel, format!("{root_rel}/%")],
                     |r| r.get(0),
                 )
-                .unwrap_or(0);
+                .unwrap_or(0),
+            ))
+        })?;
+        if let Some(unchanged_count) = unchanged_count {
             progress(ScanProgress { phase: "walk".into(), done: unchanged_count as usize, total: unchanged_count as usize, current: root_rel.clone() });
             result.scanned += unchanged_count as usize;
             continue;
@@ -1737,67 +1791,87 @@ pub fn scan_run(
         let mut walk_progress = |found: usize| {
             progress(ScanProgress { phase: "walk".into(), done: found, total: 0, current: root_rel.clone() });
         };
-        let files = walk_root(&mount, root_rel, &mut walk_progress);
+        let files = walk_root(&mount, root_rel, &mut walk_progress); // filesystem — no lock
         let total = files.len();
         progress(ScanProgress { phase: "walk".into(), done: 0, total, current: root_rel.clone() });
 
-        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-        for (i, f) in files.iter().enumerate() {
-            if i % 500 == 0 {
-                progress(ScanProgress { phase: "walk".into(), done: i, total, current: f.name.clone() });
-            }
-            let existed: bool = tx
-                .query_row(
-                    "SELECT 1 FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
-                    params![volume_id, f.rel_path],
-                    |_| Ok(true),
-                )
-                .unwrap_or(false);
-            tx.execute(
-                "INSERT INTO photos
-                    (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime,
-                     sidecar_mtime, scan_gen, added, present)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,1)
-                 ON CONFLICT(volume_id, rel_path) DO UPDATE SET
-                    size = excluded.size, mtime = excluded.mtime,
-                    sidecar_mtime = excluded.sidecar_mtime,
-                    scan_gen = excluded.scan_gen, present = 1",
-                params![
-                    volume_id,
-                    f.rel_path,
-                    f.rel_dir,
-                    f.name,
-                    f.name.to_lowercase(),
-                    f.ext,
-                    f.kind,
-                    f.size as i64,
-                    f.mtime as i64,
-                    f.sidecar_mtime as i64,
-                    scan_gen,
-                    now_secs() as i64,
-                ],
-            )
-            .map_err(|e| e.to_string())?;
-            if !existed {
-                result.added += 1;
-            }
+        // scan_gen is taken at apply-start (not before the walk): the only writer of `photos`
+        // rows is this function, and scans are serialized, so MAX+1 stays unique and consistent
+        // through the chunked upsert and the mark-absent sweep below.
+        let scan_gen: i64 = src.with(|conn| {
+            conn.query_row("SELECT COALESCE(MAX(scan_gen), 0) + 1 FROM photos", [], |r| r.get(0))
+                .map_err(|e| e.to_string())
+        })?;
+        // ⚠️ 500 rows per lock acquisition + own transaction, not one 50k-row transaction under
+        // one lock: the single-transaction upsert alone held `conn` for 8+ s on a 57k-photo
+        // library, which is the same IPC-stall class as the walk.
+        for (chunk_idx, chunk) in files.chunks(500).enumerate() {
+            progress(ScanProgress { phase: "walk".into(), done: chunk_idx * 500, total, current: chunk[0].name.clone() });
+            let added = src.with(|conn| {
+                let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+                let mut added = 0usize;
+                for f in chunk {
+                    let existed: bool = tx
+                        .query_row(
+                            "SELECT 1 FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+                            params![volume_id, f.rel_path],
+                            |_| Ok(true),
+                        )
+                        .unwrap_or(false);
+                    tx.execute(
+                        "INSERT INTO photos
+                            (volume_id, rel_path, rel_dir, name, name_lc, ext, kind, size, mtime,
+                             sidecar_mtime, scan_gen, added, present)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,1)
+                         ON CONFLICT(volume_id, rel_path) DO UPDATE SET
+                            size = excluded.size, mtime = excluded.mtime,
+                            sidecar_mtime = excluded.sidecar_mtime,
+                            scan_gen = excluded.scan_gen, present = 1",
+                        params![
+                            volume_id,
+                            f.rel_path,
+                            f.rel_dir,
+                            f.name,
+                            f.name.to_lowercase(),
+                            f.ext,
+                            f.kind,
+                            f.size as i64,
+                            f.mtime as i64,
+                            f.sidecar_mtime as i64,
+                            scan_gen,
+                            now_secs() as i64,
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    if !existed {
+                        added += 1;
+                    }
+                }
+                tx.commit().map_err(|e| e.to_string())?;
+                Ok(added)
+            })?;
+            result.added += added;
         }
         result.scanned += files.len();
 
         // Anything under this root NOT touched by this scan_gen is gone.
         let dir_prefix = format!("{root_rel}/%");
-        let changed = tx
-            .execute(
-                "UPDATE photos SET present = 0
-                 WHERE volume_id = ?1 AND (rel_dir = ?2 OR rel_dir LIKE ?3) AND scan_gen != ?4 AND present = 1",
-                params![volume_id, root_rel, dir_prefix, scan_gen],
-            )
-            .map_err(|e| e.to_string())?;
+        let changed = src.with(|conn| {
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            let changed = tx
+                .execute(
+                    "UPDATE photos SET present = 0
+                     WHERE volume_id = ?1 AND (rel_dir = ?2 OR rel_dir LIKE ?3) AND scan_gen != ?4 AND present = 1",
+                    params![volume_id, root_rel, dir_prefix, scan_gen],
+                )
+                .map_err(|e| e.to_string())?;
+            tx.commit().map_err(|e| e.to_string())?;
+            // Only reached after a REAL walk — the unchanged-tree branch above never gets here,
+            // which is correct: its own stored baseline is still accurate since nothing changed.
+            save_walked_dirs(conn, *root_id, &fresh_dirs)?;
+            Ok(changed)
+        })?;
         result.marked_absent += changed;
-        tx.commit().map_err(|e| e.to_string())?;
-        // Only reached after a REAL walk — the unchanged-tree branch above never gets here,
-        // which is correct: its own stored baseline is still accurate since nothing changed.
-        save_walked_dirs(conn, *root_id, &fresh_dirs)?;
     }
     progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
     Ok(result)
@@ -2649,10 +2723,7 @@ pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Resu
         // from the first row read to the final "mark absent" sweep — see its own doc comment on
         // why re-locking mid-walk would be a correctness risk, not just a perf one), but it's a
         // directory walk + stat, not a per-file content read, so it's the cheap phase here.
-        let result = {
-            let conn = state.conn.lock().map_err(|e| e.to_string())?;
-            scan_run(&conn, volume_id, &mut emit, &state.cancel)?
-        };
+        let result = scan_run_scoped(&state, volume_id, &mut emit, &state.cancel)?;
         // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
         // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
         // catalog, with no extra round trips from JS.
@@ -4154,7 +4225,7 @@ pub fn encode_raw_face_details(
 
 #[tauri::command(async)]
 pub fn catalog_photo_faces(state: tauri::State<CatalogState>, photo_id: i64) -> Result<Vec<FaceBox>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT x0, y0, x1, y1, score FROM photo_faces WHERE photo_id = ?1 ORDER BY score DESC")
         .map_err(|e| e.to_string())?;
@@ -4197,13 +4268,13 @@ pub struct PhotoFaceInfo {
 /// on a selection that isn't in the currently loaded grid page.
 #[tauri::command(async)]
 pub fn catalog_photo_ids_for_paths(state: tauri::State<CatalogState>, paths: Vec<String>) -> Result<Vec<i64>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     Ok(paths.iter().filter_map(|p| find_photo_by_abs_path(&conn, p)).collect())
 }
 
 #[tauri::command(async)]
 pub fn catalog_faces_for_path(state: tauri::State<CatalogState>, path: String, stack: Option<bool>) -> Result<Vec<PhotoFaceInfo>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     if stack.unwrap_or(false) { faces_for_stack_run(&conn, &path) } else { faces_for_path_run(&conn, &path) }
 }
 
@@ -4277,7 +4348,7 @@ fn faces_for_photo_id(conn: &Connection, photo_id: i64) -> Result<Vec<PhotoFaceI
 /// distinct from Ok(Some(false)), a real catalogued photo genuinely still pending a scan.
 #[tauri::command(async)]
 pub fn catalog_face_scan_status(state: tauri::State<CatalogState>, path: String) -> Result<Option<bool>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let Some(photo_id) = find_photo_by_abs_path(&conn, &path) else { return Ok(None) };
     let (mtime, faces_scanned_at, kind): (i64, Option<i64>, String) = conn
         .query_row(
@@ -5079,7 +5150,7 @@ pub fn catalog_set_person_cover(state: tauri::State<CatalogState>, person_id: i6
 /// A group's faces for the cover picker: confirmed first, then by detector score.
 #[tauri::command(async)]
 pub fn catalog_person_face_ids(state: tauri::State<CatalogState>, person_id: i64, limit: Option<i64>) -> Result<Vec<i64>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut st = conn
         .prepare("SELECT id FROM photo_faces WHERE person_id = ?1 ORDER BY (confirmed = 1) DESC, score DESC LIMIT ?2")
         .map_err(|e| e.to_string())?;
@@ -6424,7 +6495,7 @@ pub struct PersonNode {
 
 #[tauri::command(async)]
 pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNode>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
             "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id), p.auto, p.kind, p.ignored
@@ -7901,7 +7972,7 @@ fn dir_size_recursive(dir: &Path) -> u64 {
         .sum()
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct CacheUsage {
     /// Never-pruned tier — an unplugged drive's whole reason to be browsable offline, so this
     /// number is the one worth watching; it only ever grows until the user clears it by hand.
@@ -7927,14 +7998,61 @@ pub struct CacheUsage {
     pub budget_bytes: u64,
 }
 
-#[tauri::command(async)]
-pub fn cache_usage() -> CacheUsage {
+fn compute_cache_usage() -> CacheUsage {
     CacheUsage {
         offline_thumbs_bytes: dir_size_recursive(&thumb_dir()),
         decode_cache_bytes: dir_size_recursive(&crate::library::decode_cache_dir()),
         working_thumbs_bytes: dir_size_recursive(&crate::library::cache_dir()),
         hq_offline_bytes: dir_size_recursive(&hq_offline_dir()),
         budget_bytes: 30 * 1024 * 1024 * 1024,
+    }
+}
+
+static CACHE_USAGE_MEMO: Mutex<Option<(std::time::Instant, CacheUsage)>> = Mutex::new(None);
+static CACHE_USAGE_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// Drops the memo so the next `cache_usage` call re-walks (called after a tier is cleared).
+fn invalidate_cache_usage() {
+    *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// ⚠️ Four recursive stat walks over ~60k+ thumbnail/decode-cache files, each costing tens of
+/// seconds on a big library. This is a `command(async)` that runs on Tauri's CAPPED blocking pool
+/// (`max_blocking_threads(workers)` in main.rs), and the UI refreshes it on every folder open, so
+/// up to 3 concurrent walks parked most of that pool — live-sampled: every other IPC (get_meta,
+/// peek_raw_camera_path, get_display_decode_cache_path) queued behind them for 5-13 s. Now
+/// single-flight with a 90 s memo: a repeat call returns the memo (stale-while-revalidate, the
+/// refresh runs on ONE named background thread, never the pool); only the very first call walks
+/// inline, and concurrent callers during it get zeros rather than starting another walk.
+#[tauri::command(async)]
+pub fn cache_usage() -> CacheUsage {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(90);
+    let memo = CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match memo {
+        Some((at, v)) if at.elapsed() < TTL => v,
+        Some((_, v)) => {
+            if !CACHE_USAGE_BUSY.swap(true, Ordering::AcqRel) {
+                let spawned = std::thread::Builder::new().name("cs-cache-usage".into()).spawn(|| {
+                    crate::bgwork::mark_current_thread_background();
+                    let fresh = compute_cache_usage();
+                    *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), fresh));
+                    CACHE_USAGE_BUSY.store(false, Ordering::Release);
+                });
+                if spawned.is_err() {
+                    CACHE_USAGE_BUSY.store(false, Ordering::Release);
+                }
+            }
+            v
+        }
+        None => {
+            if CACHE_USAGE_BUSY.swap(true, Ordering::AcqRel) {
+                return CacheUsage { offline_thumbs_bytes: 0, decode_cache_bytes: 0, working_thumbs_bytes: 0, hq_offline_bytes: 0, budget_bytes: 30 * 1024 * 1024 * 1024 };
+            }
+            let fresh = compute_cache_usage();
+            *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), fresh.clone()));
+            CACHE_USAGE_BUSY.store(false, Ordering::Release);
+            fresh
+        }
     }
 }
 
@@ -7988,6 +8106,7 @@ pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Resu
             let _ = conn.execute("UPDATE photos SET thumb = 0", []);
         }
     }
+    invalidate_cache_usage();
     Ok(freed)
 }
 
@@ -8105,7 +8224,9 @@ pub fn clear_root_cache_run(conn: &Connection, root_id: i64) -> Result<u64, Stri
 #[tauri::command(async)]
 pub fn clear_root_cache(root_id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    clear_root_cache_run(&conn, root_id)
+    let freed = clear_root_cache_run(&conn, root_id);
+    invalidate_cache_usage();
+    freed
 }
 
 /// Extracts the raw bytes from a `library::get_thumbnail` response — that command returns a
@@ -10474,6 +10595,49 @@ mod tests {
         // the walk, which is the exact regression this test exists to catch.
         let mid_walk = walk_events.iter().filter(|(done, total)| *done > 0 && *total == 0).count();
         assert!(mid_walk >= 2, "expected >=2 in-progress walk events, got {walk_events:?}");
+    }
+
+    /// Regression: catalog_scan used to hold the writer `conn` Mutex across the whole filesystem
+    /// walk (stat/readdir over an exFAT drive: 14-76 s). Every other command that needed `conn`
+    /// parked a tokio IPC worker on that Mutex, all 8 workers filled, and unrelated IPC
+    /// (get_meta, peek_raw_camera_path, ...) stalled. The walk must run with `conn` FREE.
+    #[test]
+    fn scan_run_scoped_does_not_hold_the_writer_lock_during_the_walk() {
+        let dir = std::env::temp_dir().join(format!("cs_catalog_{}_{}", std::process::id(), gen_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("catalog.db");
+        let state = CatalogState {
+            conn: Mutex::new(open_and_migrate(&db_path).unwrap()),
+            read_conn: Mutex::new(open_and_migrate(&db_path).unwrap()),
+            cancel: AtomicBool::new(false),
+            hq_offline_active: AtomicBool::new(false),
+            ai_worker: Mutex::new(None),
+        };
+        let photos = scratch_photos_dir("scoped_walk_lock");
+        for i in 0..1200 {
+            std::fs::write(photos.join(format!("p{i:04}.jpg")), b"x").unwrap();
+        }
+        let root = add_root_run(&state.conn.lock().unwrap(), &photos.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        let mut mid_walk = 0usize;
+        let mut free_during_walk = 0usize;
+        let r = scan_run_scoped(&state, Some(root.volume_id), &mut |p| {
+            if p.phase == "walk" && p.done > 0 && p.total == 0 {
+                mid_walk += 1;
+                if state.conn.try_lock().is_ok() { free_during_walk += 1; }
+            }
+        }, &cancel).unwrap();
+        assert_eq!((r.scanned, r.added), (1200, 1200));
+        assert!(mid_walk >= 2, "walk progress never fired mid-walk ({mid_walk})");
+        assert_eq!(free_during_walk, mid_walk, "writer conn was locked during the filesystem walk in {} of {} mid-walk events", mid_walk - free_during_walk, mid_walk);
+        // Unchanged tree: second scan takes the directory-mtime skip, same totals, nothing marked absent.
+        let r2 = scan_run_scoped(&state, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!((r2.scanned, r2.added, r2.marked_absent), (1200, 0, 0));
+        // A deleted file is still marked absent through the scoped path.
+        std::fs::remove_file(photos.join("p0007.jpg")).unwrap();
+        std::fs::write(photos.join("new.jpg"), b"y").unwrap();
+        let r3 = scan_run_scoped(&state, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!((r3.scanned, r3.added, r3.marked_absent), (1200, 1, 1));
     }
 
     /// walk_root's sidecar lookup was rewritten from a per-file `stat` (sidecar_mtime_of on
@@ -13481,6 +13645,23 @@ mod tests {
     // which is exactly the kind of non-deterministic, environment-coupled test this project
     // avoids elsewhere (`prune_caches`, which walks the same real directories, has no direct
     // test either). `dir_size_recursive` is the one piece that's pure and worth pinning.
+
+    /// Regression: `cache_usage` used to walk four cache trees (60k+ files, tens of seconds) on
+    /// EVERY call from the capped blocking pool, so three concurrent UI refreshes parked the whole
+    /// pool and every other IPC queued behind them. A fresh memo must be returned without any walk.
+    #[test]
+    fn cache_usage_serves_a_fresh_memo_without_walking() {
+        *CACHE_USAGE_MEMO.lock().unwrap() = Some((
+            std::time::Instant::now(),
+            CacheUsage { offline_thumbs_bytes: 123, decode_cache_bytes: 456, working_thumbs_bytes: 789, hq_offline_bytes: 1, budget_bytes: 2 },
+        ));
+        let t = std::time::Instant::now();
+        let u = cache_usage();
+        assert_eq!((u.offline_thumbs_bytes, u.decode_cache_bytes, u.working_thumbs_bytes), (123, 456, 789), "memo not served");
+        assert!(t.elapsed() < std::time::Duration::from_millis(200), "cache_usage walked the trees despite a fresh memo");
+        invalidate_cache_usage();
+        assert!(CACHE_USAGE_MEMO.lock().unwrap().is_none());
+    }
 
     #[test]
     fn dir_size_recursive_sums_nested_files() {
