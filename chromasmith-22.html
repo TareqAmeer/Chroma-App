@@ -7267,7 +7267,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1013J';
+const BUILD='1.1013K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20086,14 +20086,9 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
       `<path class="msk-feather" d="${line(x1,y1)}"/>`+
       `<circle class="msk-handle" data-h="p0" cx="${x0}" cy="${y0}" r="0.012"/>`+
       `<circle class="msk-handle" data-h="p1" cx="${x1}" cy="${y1}" r="0.012"/>`;
-    // Fixed, generous half-width so the isolate dim/fill still reads as "this side vs that
-    // side" without the old geometry (W=3, ±8 extension) bleeding far outside the photo box —
-    // #fx-mask-overlay itself is now clipped to the photo rect (see CSS), so this only needs to
-    // cover the box, not flood past it.
-    const W=2;
-    const p0a=[x0+nx*W,y0+ny*W],p0b=[x0-nx*W,y0-ny*W],p1a=[x1+nx*W,y1+ny*W],p1b=[x1-nx*W,y1-ny*W];
-    const extA=[x0-ux*4+nx*W,y0-uy*4+ny*W],extB=[x0-ux*4-nx*W,y0-uy*4-ny*W];
-    shapeD=`M${extA[0]},${extA[1]} L${p1a[0]},${p1a[1]} L${p1b[0]},${p1b[1]} L${extB[0]},${extB[1]} Z`;
+    const H=5; // far enough to cover the 0..1 photo box from any guide-line position
+    const sideA=[x0+nx*H,y0+ny*H],sideB=[x0-nx*H,y0-ny*H];
+    shapeD=`M${sideA[0]},${sideA[1]} L${sideB[0]},${sideB[1]} L${sideB[0]-ux*H},${sideB[1]-uy*H} L${sideA[0]-ux*H},${sideA[1]-uy*H} Z`;
   }
   const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
   const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
