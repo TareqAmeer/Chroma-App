@@ -3293,6 +3293,7 @@ fn main() {
             catalog::catalog_root_identity,
             catalog::catalog_keep_root,
             catalog::catalog_scan,
+            catalog::catalog_sync_sidecars,
             catalog::catalog_scan_cancel,
             catalog::catalog_query,
             catalog::catalog_rename_preview,

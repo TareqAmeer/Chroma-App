@@ -13827,7 +13827,12 @@
         const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
         return scanPromise.then((scanned) => {
           if (scanned) { refreshCatalogCounts(); _catalogBgPending = true; }
-          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
+          // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
+          // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
+          // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
+          // the rest of the library is swept in the background by catalog_scan itself.
+          const syncP = LIBTEST ? Promise.resolve() : invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path }).catch(() => {});
+          return syncP.then(() => ({ volumeId: root.volume_id, relDir: root.requested_rel_path }));
         });
       })
       .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });

@@ -1553,58 +1553,57 @@ fn walk_root(volume_mount: &Path, root_rel: &str, on_found: &mut dyn FnMut(usize
     out
 }
 
-/// Enumerates every DIRECTORY under `root_rel` (mtime included) and every `.xmp` SIDECAR file
-/// (mtime included) — deliberately NOT the media files themselves — so a scan can detect "did
-/// anything change here" without the expensive per-photo stat walk_root does. Two things had to
-/// both be true for this to be a correct skip signal, not just a fast one, and both were checked
-/// empirically rather than assumed:
-///   1. Adding/removing/renaming a file bumps its PARENT DIRECTORY's mtime (verified on both
-///      APFS and this library's exFAT/fskit external drive) — so directories alone catch new,
-///      moved, and deleted photos.
-///   2. Rewriting an EXISTING file's content in place does NOT bump the parent directory's mtime
-///      (verified the same way) — and this app rates/labels photos by rewriting their `.xmp`
-///      sidecar in place, which is exactly the case (1) misses. Sidecars are cheap to include
-///      here because they're a small fraction of a real library (only rated/edited photos have
-///      one — zero exist on this library today) and `read_dir` already lists their names for
-///      free; only an actually-present sidecar costs an extra `stat`.
+/// Enumerates every DIRECTORY under `root_rel` (mtime included) — deliberately NOT the media
+/// files and NOT the `.xmp` sidecars — so a scan can detect "was anything added/removed/renamed"
+/// for the cost of one stat per directory (~130 on a 57k-photo library), not one per file.
+///   * Adding/removing/renaming a file bumps its PARENT DIRECTORY's mtime (verified on APFS and
+///     on this library's exFAT/fskit external drive) — so directories alone catch new, moved and
+///     deleted photos.
+///   * Rewriting an EXISTING `.xmp` in place does NOT bump the directory mtime, and that is how
+///     this app rates/labels photos. Those edits are caught by `sidecar_sweep_*` below instead.
+///     ⚠️ They used to be tracked here too (every sidecar stat'ed on every launch): on a 57k-photo
+///     library that was 44,783 sidecar stats ≈ 10 s of "Scanning" on every open even when nothing
+///     had changed, and any single changed sidecar failed the check and forced the full 57k walk.
 /// Mirrors walk_root's own stack-based DFS and hidden-name skip so the two agree on "the tree".
-fn walk_dirs_and_sidecars_only(volume_mount: &Path, root_rel: &str) -> Vec<(String, u64)> {
+fn walk_dirs_only(volume_mount: &Path, root_rel: &str) -> Vec<(String, u64)> {
     let root_abs = volume_mount.join(root_rel);
     let mut out = Vec::new();
     let mut stack = vec![root_abs.clone()];
     // ⚠️ Nanoseconds, not seconds — deliberately HIGHER precision than walk_root's own
-    // second-resolution `mtime`/`sidecar_mtime` columns elsewhere in this schema. Two operations
-    // landing in the same wall-clock SECOND is common (a scripted batch rating pass, or simply
-    // two `scan_run` calls close together, which is exactly what this repo's own
-    // `a_deleted_file_is_marked_absent_not_dropped` test does with no sleep between them) — at
-    // second resolution that collapses to "nothing changed" and the walk gets wrongly skipped.
-    // This tracking is a NEW, self-contained mechanism (the `walked_dirs` table), not read by
-    // anything that assumes second precision, so there's nothing else to keep in sync.
-    let stat_rel = |p: &Path, out: &mut Vec<(String, u64)>| {
-        let Ok(rel) = p.strip_prefix(volume_mount) else { return };
-        let Ok(meta) = std::fs::metadata(p) else { return };
-        let Some(mtime) = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_nanos() as u64) else { return };
-        // Canonical `/` separator, same as walk_root — this feeds `walked_dirs` and the
-        // `rel_dir LIKE '{root_rel}/%'` check in scan_run, both of which already assume `/`.
-        out.push((rel.to_string_lossy().replace('\\', "/"), mtime));
-    };
+    // second-resolution `mtime`/`sidecar_mtime` columns: two operations landing in the same
+    // wall-clock SECOND is common (a scripted batch, or two `scan_run` calls back to back as this
+    // repo's own tests do) and would collapse to "nothing changed".
     while let Some(dir) = stack.pop() {
-        stat_rel(&dir, &mut out);
+        if let Ok(rel) = dir.strip_prefix(volume_mount) {
+            if let Some(mtime) = std::fs::metadata(&dir)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_nanos() as u64)
+            {
+                // Canonical `/` separator, same as walk_root.
+                out.push((rel.to_string_lossy().replace('\\', "/"), mtime));
+            }
+        }
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for entry in rd.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            if entry.file_name().to_string_lossy().starts_with('.') {
                 continue;
             }
             let p = entry.path();
             if entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir()) {
                 stack.push(p);
-            } else if ext_lower(&p) == "xmp" {
-                stat_rel(&p, &mut out);
             }
         }
     }
     out
+}
+
+/// Legacy `walked_dirs` rows tracked `.xmp` sidecar files in the same column; they are filtered
+/// out of both sides of the comparison (and purged) so an old baseline still matches.
+fn is_xmp_rel(rel: &str) -> bool {
+    let b = rel.as_bytes();
+    b.len() >= 4 && b[b.len() - 4..].eq_ignore_ascii_case(b".xmp")
 }
 
 /// True if `walk_dirs_only`'s fresh result is IDENTICAL (same directories, same mtimes) to what
@@ -1613,16 +1612,18 @@ fn walk_dirs_and_sidecars_only(volume_mount: &Path, root_rel: &str) -> Vec<(Stri
 /// very first scan of any root always does the full walk, as it must.
 fn tree_unchanged_since_last_walk(conn: &Connection, root_id: i64, fresh: &[(String, u64)]) -> Result<bool, String> {
     let stored: std::collections::HashMap<String, u64> = conn
-        .prepare("SELECT rel_dir, mtime FROM walked_dirs WHERE root_id = ?1") // "rel_dir" also holds tracked .xmp sidecar paths — see walk_dirs_and_sidecars_only
+        .prepare("SELECT rel_dir, mtime FROM walked_dirs WHERE root_id = ?1")
         .map_err(|e| e.to_string())?
         .query_map(params![root_id], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64)))
         .map_err(|e| e.to_string())?
         .collect::<Result<_, _>>()
         .map_err(|e| e.to_string())?;
-    if stored.is_empty() || stored.len() != fresh.len() {
+    let stored_dirs = stored.iter().filter(|(k, _)| !is_xmp_rel(k)).count();
+    let fresh_dirs = fresh.iter().filter(|(k, _)| !is_xmp_rel(k)).count();
+    if stored_dirs == 0 || stored_dirs != fresh_dirs {
         return Ok(false);
     }
-    Ok(fresh.iter().all(|(rel, mtime)| stored.get(rel) == Some(mtime)))
+    Ok(fresh.iter().filter(|(k, _)| !is_xmp_rel(k)).all(|(rel, mtime)| stored.get(rel) == Some(mtime)))
 }
 
 /// Persists `fresh` as the new baseline for this root — wholesale replace, since a directory
@@ -1661,6 +1662,8 @@ fn photo_batch_current(paths: impl IntoIterator<Item = String>) -> String {
 
 #[derive(Serialize, Default)]
 pub struct ScanResult {
+    /// Roots that needed a real filesystem walk this pass (0 = every root was unchanged/skipped).
+    pub walked_roots: usize,
     pub scanned: usize,
     pub added: usize,
     pub marked_absent: usize,
@@ -1757,6 +1760,14 @@ fn scan_run_impl(
         if !mount.is_dir() {
             continue; // volume not mounted — nothing to scan, not an error
         }
+        // A root whose directory no longer exists (a deleted bench folder, a renamed top folder)
+        // used to have no stored baseline, so it counted as "never walked" and was re-walked —
+        // and surfaced as "Scanning" — on every launch. Skipped, NOT removed or marked absent:
+        // the catalog rows stay until the user removes the root.
+        if !mount.join(root_rel).is_dir() {
+            crate::diag::log("info", format!("SCAN_TIMING root={root_id} skipped: directory missing ({root_rel})"));
+            continue;
+        }
 
         // Directory-mtime pre-check: cheap (measured near-zero for ~80 directories vs ~9s for
         // ~30,000 files on a real external drive) and — unlike checking only the root's own
@@ -1765,11 +1776,16 @@ fn scan_run_impl(
         // walk AND the mark-absent sweep below entirely (that sweep keys off scan_gen, which
         // only advances for rows the walk actually touches — running it without a walk would
         // wrongly mark every photo under this root absent).
-        let fresh_dirs = walk_dirs_and_sidecars_only(&mount, root_rel); // filesystem — no lock
+        let t_dirs = std::time::Instant::now();
+        let fresh_dirs = walk_dirs_only(&mount, root_rel); // filesystem — no lock
+        let dirs_ms = t_dirs.elapsed().as_millis();
+        let t_check = std::time::Instant::now();
         let unchanged_count: Option<i64> = src.with(|conn| {
             if !tree_unchanged_since_last_walk(conn, *root_id, &fresh_dirs)? {
                 return Ok(None);
             }
+            // One-off migration: drop the legacy per-sidecar baseline rows (dead weight now).
+            let _ = conn.execute("DELETE FROM walked_dirs WHERE root_id = ?1 AND rel_dir LIKE '%.xmp'", params![root_id]);
             Ok(Some(
                 conn.query_row(
                     "SELECT COUNT(*) FROM photos WHERE volume_id = ?1 AND (rel_dir = ?2 OR rel_dir LIKE ?3) AND present = 1",
@@ -1779,8 +1795,10 @@ fn scan_run_impl(
                 .unwrap_or(0),
             ))
         })?;
+        crate::diag::log("info", format!("SCAN_TIMING root={root_id} dirs_walk_ms={dirs_ms} entries={} tree_check_ms={} unchanged={}", fresh_dirs.len(), t_check.elapsed().as_millis(), unchanged_count.is_some()));
         if let Some(unchanged_count) = unchanged_count {
-            progress(ScanProgress { phase: "walk".into(), done: unchanged_count as usize, total: unchanged_count as usize, current: root_rel.clone() });
+            // No "walk" progress event here: a sub-second directory check must not raise the
+            // "Scanning" pill. The closing "done" event below is still sent.
             result.scanned += unchanged_count as usize;
             continue;
         }
@@ -1791,8 +1809,12 @@ fn scan_run_impl(
         let mut walk_progress = |found: usize| {
             progress(ScanProgress { phase: "walk".into(), done: found, total: 0, current: root_rel.clone() });
         };
+        let t_walk = std::time::Instant::now();
+        result.walked_roots += 1;
         let files = walk_root(&mount, root_rel, &mut walk_progress); // filesystem — no lock
         let total = files.len();
+        crate::diag::log("info", format!("SCAN_TIMING root={root_id} full_walk_ms={} files={total}", t_walk.elapsed().as_millis()));
+        let t_apply = std::time::Instant::now();
         progress(ScanProgress { phase: "walk".into(), done: 0, total, current: root_rel.clone() });
 
         // scan_gen is taken at apply-start (not before the walk): the only writer of `photos`
@@ -1872,9 +1894,192 @@ fn scan_run_impl(
             Ok(changed)
         })?;
         result.marked_absent += changed;
+        crate::diag::log("info", format!("SCAN_TIMING root={root_id} apply_and_sweep_ms={} marked_absent={changed}", t_apply.elapsed().as_millis()));
     }
     progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
     Ok(result)
+}
+
+// ── Sidecar sweep: notice in-place .xmp rewrites without re-walking the library ──────────────
+//
+// A rating/label written by rewriting an existing `.xmp` does not move any directory mtime, so
+// the directory-only launch check cannot see it. `photos.sidecar_mtime` (written by walk_root)
+// is the baseline; this re-stats the sidecars of ONE directory at a time and updates only the
+// rows whose sidecar mtime differs, leaving `sidecar_run` (phase C) to re-parse exactly those.
+// Never holds the writer lock across filesystem IO; one directory per lock step.
+
+#[derive(Serialize, Clone, Default, Debug)]
+pub struct SidecarSweepResult {
+    pub dirs: usize,
+    pub changed: usize,
+}
+
+/// Directories already verified this session (volume_id, rel_dir) — shared by the lazy
+/// per-folder check and the background sweep so neither repeats the other's work. Only used by
+/// the live (`Locked`) paths; tests pass `None`.
+type VerifiedDirs = Mutex<std::collections::HashSet<(i64, String)>>;
+static VERIFIED_SIDECAR_DIRS: std::sync::LazyLock<VerifiedDirs> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
+
+/// Re-syncs `photos.sidecar_mtime` for the photos directly inside `rel_dir`. Returns rows changed.
+fn sidecar_sync_dir(src: &ConnSrc, volume_id: i64, mount: &Path, rel_dir: &str) -> Result<usize, String> {
+    // Filesystem — no lock. Same keying as walk_root: sidecar mtime by lowercase stem, seconds.
+    let mut xmp: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    if let Ok(rd) = std::fs::read_dir(mount.join(rel_dir)) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if ext_lower(&p) == "xmp" {
+                if let Some(stem) = p.file_stem() {
+                    xmp.insert(stem.to_string_lossy().to_lowercase(), sidecar_mtime_of(&p));
+                }
+            }
+        }
+    }
+    src.with(|conn| {
+        let rows: Vec<(i64, String, i64)> = conn
+            .prepare("SELECT id, name, sidecar_mtime FROM photos WHERE volume_id = ?1 AND rel_dir = ?2 AND present = 1")
+            .map_err(|e| e.to_string())?
+            .query_map(params![volume_id, rel_dir], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let diffs: Vec<(i64, i64)> = rows
+            .iter()
+            .filter_map(|(id, name, old)| {
+                let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+                let new = xmp.get(&stem).copied().unwrap_or(0) as i64;
+                (new != *old).then_some((*id, new))
+            })
+            .collect();
+        if diffs.is_empty() {
+            return Ok(0);
+        }
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, new) in &diffs {
+            tx.execute("UPDATE photos SET sidecar_mtime = ?1 WHERE id = ?2", params![new, id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(diffs.len())
+    })
+}
+
+/// Sidecar-syncs every directory recorded in `walked_dirs` for the roots of `only_volume_id`
+/// that is (a) under `only_under` when given and (b) not already verified. Stops at `budget`
+/// (lazy per-folder use) or on `cancel` / the user's pause (background use).
+fn sidecar_sweep_impl(
+    src: &ConnSrc,
+    only_volume_id: Option<i64>,
+    only_under: Option<(i64, &str)>,
+    verified: Option<&VerifiedDirs>,
+    budget: Option<std::time::Duration>,
+    cancel: &AtomicBool,
+) -> Result<SidecarSweepResult, String> {
+    let started = std::time::Instant::now();
+    let todo: Vec<(i64, PathBuf, String)> = src.with(|conn| {
+        let mut out = Vec::new();
+        let mut roots = conn
+            .prepare(
+                "SELECT r.id, r.volume_id, v.last_path FROM roots r JOIN volumes v ON v.id = r.volume_id
+                 WHERE (?1 IS NULL OR r.volume_id = ?1)",
+            )
+            .map_err(|e| e.to_string())?;
+        let roots: Vec<(i64, i64, String)> = roots
+            .query_map(params![only_volume_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let mut dirs_stmt = conn.prepare("SELECT rel_dir FROM walked_dirs WHERE root_id = ?1").map_err(|e| e.to_string())?;
+        for (root_id, volume_id, mount) in roots {
+            let dirs: Vec<String> = dirs_stmt
+                .query_map(params![root_id], |r| r.get(0))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<_, _>>()
+                .map_err(|e| e.to_string())?;
+            for d in dirs.into_iter().filter(|d| !is_xmp_rel(d)) {
+                if let Some((vid, under)) = only_under {
+                    if vid != volume_id || !(d == under || d.starts_with(&format!("{under}/"))) {
+                        continue;
+                    }
+                }
+                out.push((volume_id, PathBuf::from(&mount), d));
+            }
+        }
+        Ok(out)
+    })?;
+    let mut result = SidecarSweepResult::default();
+    for (volume_id, mount, rel_dir) in todo {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(b) = budget {
+            if started.elapsed() >= b {
+                break;
+            }
+        } else {
+            if bg_is_paused() {
+                break;
+            }
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
+        }
+        if let Some(v) = verified {
+            if v.lock().map(|g| g.contains(&(volume_id, rel_dir.clone()))).unwrap_or(false) {
+                continue;
+            }
+        }
+        if !mount.is_dir() {
+            continue;
+        }
+        result.changed += sidecar_sync_dir(src, volume_id, &mount, &rel_dir)?;
+        result.dirs += 1;
+        if let Some(v) = verified {
+            if let Ok(mut g) = v.lock() {
+                g.insert((volume_id, rel_dir));
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Test/offline entry: sweeps everything under a held connection (no session memo, no pacing).
+pub fn sidecar_sweep_run(conn: &Connection, only_volume_id: Option<i64>, cancel: &AtomicBool) -> Result<SidecarSweepResult, String> {
+    sidecar_sweep_impl(&ConnSrc::Held(conn), only_volume_id, None, None, None, cancel)
+}
+
+/// Live background sweep (whole library, one directory per writer-lock step, paused-aware).
+pub fn sidecar_sweep_scoped(state: &CatalogState, only_volume_id: Option<i64>, cancel: &AtomicBool) -> Result<SidecarSweepResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    sidecar_sweep_impl(&ConnSrc::Locked(state), only_volume_id, None, Some(&VERIFIED_SIDECAR_DIRS), None, cancel)
+}
+
+/// Lazy check for the folder the user just opened: that directory and its subdirectories, bounded
+/// by `budget` so a root with hundreds of folders cannot delay the grid.
+#[tauri::command]
+pub async fn catalog_sync_sidecars(app: tauri::AppHandle, volume_id: i64, rel_dir: String) -> Result<SidecarSweepResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        let cancel = AtomicBool::new(false);
+        let t = std::time::Instant::now();
+        let r = sidecar_sweep_impl(
+            &ConnSrc::Locked(&state),
+            Some(volume_id),
+            Some((volume_id, rel_dir.as_str())),
+            Some(&VERIFIED_SIDECAR_DIRS),
+            Some(std::time::Duration::from_millis(1500)),
+            &cancel,
+        )?;
+        crate::diag::log("info", format!("SCAN_TIMING lazy_sidecar_sync rel_dir={rel_dir} ms={} dirs={} changed={}", t.elapsed().as_millis(), r.dirs, r.changed));
+        if r.changed > 0 {
+            // Re-parse just the rows whose sidecar changed (phase C is keyed on mtime != parsed).
+            let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
+            sidecar_run_scoped(&state, &mut emit, &cancel)?;
+        }
+        Ok(r)
+    })
+    .await
+    .map_err(|e| format!("catalog_sync_sidecars task panicked: {e}"))?
 }
 
 // ── Scan phase B: EXIF metadata ─────────────────────────────────────────────────────────────
@@ -2723,7 +2928,9 @@ pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Resu
         // from the first row read to the final "mark absent" sweep — see its own doc comment on
         // why re-locking mid-walk would be a correctness risk, not just a perf one), but it's a
         // directory walk + stat, not a per-file content read, so it's the cheap phase here.
+        let t_scan = std::time::Instant::now();
         let result = scan_run_scoped(&state, volume_id, &mut emit, &state.cancel)?;
+        crate::diag::log("info", format!("SCAN_TIMING phase_A_total_ms={} scanned={}", t_scan.elapsed().as_millis(), result.scanned));
         // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
         // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
         // catalog, with no extra round trips from JS.
@@ -2740,8 +2947,34 @@ pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Resu
         // time. The _scoped versions re-lock per batch instead — see verify_run_scoped's doc
         // comment for the incident that made this worth auditing across every scan phase, not
         // just the one a user happened to report first.
-        metadata_run_scoped(&state, &mut emit, &state.cancel)?;
-        sidecar_run_scoped(&state, &mut emit, &state.cancel)?;
+        let t_b = std::time::Instant::now();
+        let mr = metadata_run_scoped(&state, &mut emit, &state.cancel)?;
+        let t_c = std::time::Instant::now();
+        let sr = sidecar_run_scoped(&state, &mut emit, &state.cancel)?;
+        crate::diag::log("info", format!("SCAN_TIMING phase_B_ms={} read={} phase_C_ms={} read={} catalog_scan_total_ms={}", (t_c - t_b).as_millis(), mr.read, t_c.elapsed().as_millis(), sr.read, t_scan.elapsed().as_millis()));
+        // Background: notice in-place sidecar rewrites (rating/label edits) library-wide without
+        // making this call — and so the pill — wait for ~45k sidecar stats. Single-flight.
+        static SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
+        if !SWEEP_RUNNING.swap(true, Ordering::AcqRel) {
+            let app2 = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                use tauri::{Emitter, Manager};
+                let st = app2.state::<CatalogState>();
+                let cancel = AtomicBool::new(false);
+                let t = std::time::Instant::now();
+                match sidecar_sweep_scoped(&st, volume_id, &cancel) {
+                    Ok(r) => {
+                        crate::diag::log("info", format!("SCAN_TIMING sidecar_sweep_ms={} dirs={} changed={} paused={}", t.elapsed().as_millis(), r.dirs, r.changed, bg_is_paused()));
+                        if r.changed > 0 {
+                            let mut emit = |p: ScanProgress| { let _ = app2.emit("catalog-scan", p); };
+                            let _ = sidecar_run_scoped(&st, &mut emit, &cancel);
+                        }
+                    }
+                    Err(e) => crate::diag::log("warn", format!("sidecar sweep failed: {e}")),
+                }
+                SWEEP_RUNNING.store(false, Ordering::Release);
+            });
+        }
         Ok(result)
     })
     .await
@@ -10248,8 +10481,70 @@ mod tests {
         // Rewrite the SAME .xmp file in place — no new file, no rename, directory mtime untouched.
         touch_mtime_now(&dir.join("a.xmp"));
         scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        // The launch scan is directory-only now; the sidecar sweep is what notices the rewrite.
+        sidecar_sweep_run(&conn, Some(root.volume_id), &cancel).unwrap();
         let sidecar_mtime_2: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE volume_id = ?1", params![root.volume_id], |r| r.get(0)).unwrap();
         assert!(sidecar_mtime_2 > sidecar_mtime_1, "an in-place sidecar rewrite must still be detected and re-synced, even though it doesn't change the parent directory's mtime");
+    }
+
+    /// Root cause of "reindexes on every launch": the launch check stat'ed every .xmp, so any
+    /// changed sidecar failed it and forced the full walk. A sidecar-only change must now (1) NOT
+    /// re-walk, (2) leave the legacy per-sidecar baseline rows purged, and (3) still be picked up
+    /// by the sweep, touching only the changed row.
+    #[test]
+    fn a_sidecar_only_change_does_not_trigger_a_full_walk_but_is_still_synced() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("sidecar_only");
+        std::fs::create_dir_all(dir.join("2026/08")).unwrap();
+        std::fs::write(dir.join("2026/08/a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("2026/08/b.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("2026/08/a.xmp"), b"<xmp/>").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        let r1 = scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        assert_eq!(r1.walked_roots, 1);
+        // Simulate a pre-fix baseline: sidecar rows stored in walked_dirs.
+        conn.execute("INSERT INTO walked_dirs (root_id, rel_dir, mtime) VALUES (?1, 'x/2026/08/a.xmp', 1)", params![root.id]).unwrap();
+        let before: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE name = 'a.jpg'", [], |r| r.get(0)).unwrap();
+
+        touch_mtime_now(&dir.join("2026/08/a.xmp"));
+        let mut events = Vec::new();
+        let r2 = scan_run(&conn, Some(root.volume_id), &mut |p| events.push(p.phase), &cancel).unwrap();
+        assert_eq!(r2.walked_roots, 0, "a sidecar-only change must not trigger the full library walk");
+        assert_eq!(r2.scanned, 2);
+        assert!(!events.iter().any(|p| p == "walk"), "an unchanged tree must not raise a walk/Scanning event: {events:?}");
+        let legacy: i64 = conn.query_row("SELECT COUNT(*) FROM walked_dirs WHERE rel_dir LIKE '%.xmp'", [], |r| r.get(0)).unwrap();
+        assert_eq!(legacy, 0, "legacy sidecar baseline rows must be purged");
+
+        let sw = sidecar_sweep_run(&conn, Some(root.volume_id), &cancel).unwrap();
+        assert_eq!(sw.changed, 1, "exactly the one rewritten sidecar's row is re-synced");
+        let after: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE name = 'a.jpg'", [], |r| r.get(0)).unwrap();
+        assert!(after > before);
+        let b_sc: i64 = conn.query_row("SELECT sidecar_mtime FROM photos WHERE name = 'b.jpg'", [], |r| r.get(0)).unwrap();
+        assert_eq!(b_sc, 0);
+        // And a second sweep finds nothing more.
+        assert_eq!(sidecar_sweep_run(&conn, Some(root.volume_id), &cancel).unwrap().changed, 0);
+    }
+
+    /// A root whose directory is gone (deleted bench folder) must be skipped quietly: no walk, no
+    /// progress events, no rows marked absent or deleted.
+    #[test]
+    fn a_root_whose_directory_no_longer_exists_is_skipped_not_rewalked() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("missing_root");
+        let sub = dir.join("bench");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("a.jpg"), b"x").unwrap();
+        let root = add_root_run(&conn, &sub.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        assert_eq!(scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap().walked_roots, 1);
+        std::fs::remove_dir_all(&sub).unwrap();
+        let mut events = Vec::new();
+        let r = scan_run(&conn, Some(root.volume_id), &mut |p| events.push(p.phase), &cancel).unwrap();
+        assert_eq!(r.walked_roots, 0);
+        assert!(!events.iter().any(|p| p == "walk"), "no Scanning event for a missing root: {events:?}");
+        let rows: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 1, "a missing root's rows are left untouched");
     }
 
     #[test]
