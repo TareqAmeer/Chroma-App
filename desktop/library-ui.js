@@ -13831,8 +13831,12 @@
           // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
           // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
           // the rest of the library is swept in the background by catalog_scan itself.
-          const syncP = LIBTEST ? Promise.resolve() : invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path }).catch(() => {});
-          return syncP.then(() => ({ volumeId: root.volume_id, relDir: root.requested_rel_path }));
+          // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
+          // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
+          // the catalog as soon as the sync lands and shows on the next render of that folder.
+          if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
+            .then((r) => { if (r && r.changed > 0) refreshCatalogCounts(); }).catch(() => {});
+          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
         });
       })
       .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });
