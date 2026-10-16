@@ -2816,7 +2816,8 @@ body.sk2.deskx #fx-toolrail .fx-rail-lb{text-align:center}
 body.sk2.deskx #fx-toolrail{gap:18px!important}
 body.sk2.deskx #fx-toolrail .fx-rail-btn{padding:8px 3px!important}
 body.sk2 #fx-toolrail .fx-rail-btn::before,body.sk2 #fx-toolrail .fx-rail-btn.enabled::before{display:block!important;background:color-mix(in srgb,var(--k-color-ink) 12%,transparent)!important;border:0!important;outline:0!important;left:12px!important;right:-4px!important;top:2px!important;bottom:2px!important;clip-path:inset(0 0 0 100%);transition:clip-path .28s cubic-bezier(.2,.7,.2,1)}
-body.sk2 #fx-toolrail .fx-rail-btn.edited::before{clip-path:inset(0)}
+/* Edited tools: the icon turns accent (no grey plate). */
+body.sk2 #fx-toolrail .fx-rail-btn.edited .fx-rail-ic,body.sk2 #fx-toolrail .fx-rail-btn.edited .fx-rail-ic svg{color:var(--k-color-accent-a)}
 body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited){color:var(--k-color-muted)}
 body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.edited):hover{color:var(--k-color-ink)}
 body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.on) .fx-rail-lb::after{content:none!important}
