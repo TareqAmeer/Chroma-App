@@ -2551,6 +2551,7 @@ body.sk2 #fx-looks-search{background:transparent;border:0;border-bottom:1px soli
 body.sk2 #fx-looks-search::-webkit-search-decoration,body.sk2 #fx-looks-search::-webkit-search-cancel-button,body.sk2 #fx-looks-search::-webkit-search-results-button,body.sk2 #fx-looks-search::-webkit-search-results-decoration{-webkit-appearance:none;display:none}
 body.sk2 #fx-looks-search:focus{border-bottom-color:var(--k-color-ink);outline:none}
 body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
+#in-lens-manual-focal{color:var(--k-color-ink,var(--txt));background:transparent;border:0;border-bottom:1px solid var(--bdr);border-radius:0;height:auto;padding:4px 0;font:inherit;-webkit-appearance:none;appearance:none} /* was black text on the slider's dark fill */
 /* No one-line descriptions under tool titles or in the Tools grid. */
 .cs-sub,.fx-sec-ds,body.mobile-fx #fx-tool-grid .fx-sec-ds{display:none!important}
 body.sk2 #fx-image-movable.fx-folded{border-bottom:0;padding-bottom:0;margin-bottom:0} /* empty wrapper above the search drew a stray divider */
@@ -7274,7 +7275,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016V';
+const BUILD='1.1016W';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
