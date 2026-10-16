@@ -1,0 +1,119 @@
+function bordersAny(P,b1t,b2t){return!!(b1t||b2t||(P.bordersEnabled&&((P.b1.type==='film'&&P.b1.thickness>0)||(P.b2.type==='film'&&P.b2.thickness>0))));}
+function filmLayerSize(P,L,w){return P.bordersEnabled&&L.type==='film'?Math.round(w*L.thickness/100):0;}
+function frameShuffle(){fxState.frameShuffle=Math.random()*100;fxUpdate();}
+/// After a restore: show the film rows for film layers, and remember a Source choice whose
+/// option list has not arrived yet (it fills from the manifest).
+function _borderUISync(){
+  for(const k of ['b1','b2']){const t=document.getElementById('sel-'+k+'-type');if(!t)continue;
+    const film=t.value==='film';document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+}
+function borderTypeChanged(){
+  for(const k of ['b1','b2']){const film=(document.getElementById('sel-'+k+'-type')||{}).value==='film';
+    document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+  fxUpdate();
+}
+// Bug C fix: borders were only drawn at export. Draw them in the preview too (onto a 2D
+// overlay canvas) so the toggle/colours/thickness are actually visible while editing.
+// Extended for the CANVAS matte: borders first, then canvasCompose around the result.
+function applyPreviewBorders(P,pw,ph){
+  // Appended into #fx-zoom-wrap (NOT the outer #fx-wrap) — that's the element _applyZoom()
+  // actually applies scale()/translate() to. Appending to #fx-wrap put this canvas outside
+  // the zoomed subtree entirely, so zoom worked (fxZoom/readout updated) but had zero visual
+  // effect whenever Borders/Canvas-matte was on and this overlay was the visible layer.
+  const wrap=document.getElementById('fx-zoom-wrap');
+  let bd=document.getElementById('fx-canvas-bd');
+  const{b1t,b2t}=borderLayerSizes(P,pw);
+  const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
+  const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
+  const bAny=bordersAny(P,b1t,b2t);
+  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
+  if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
+  // stage 1: bordered image (or the bare render when borders are off)
+  const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
+  let stage=baseStage;
+  if(bAny){
+    const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
+    stage=document.createElement('canvas');stage.width=tw;stage.height=th;
+    drawBorderLayers(stage.getContext('2d'),FX.cv,P,b1t,b2t,borderSeed(fxImages[fxCurIdx],P));
+  }
+  // stage 1b: film frame around the bordered image, BEFORE the matte — the frame is part of the
+  // photograph, the matte is the wall behind it.
+  const framed=filmFrameCompose(stage,P.filmFrame);
+  // stage 2: canvas matte around image+borders+frame
+  const fin=canvasCompose(framed,P.canvas);
+  bd.width=fin.width;bd.height=fin.height;
+  // fxLiveFit may have set both CSS dimensions on the previous photo while the layout was
+  // resizing. Clear those stale dimensions before showing a new-aspect result; the intrinsic
+  // canvas size plus height:auto must be the only sizing source for the composed image.
+  bd.style.width='';bd.style.height='';
+  bd.getContext('2d').drawImage(fin,0,0);
+  if(stage!==FX.cv)stage.width=stage.height=0;
+  if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
+  if(fin!==framed&&fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
+  FX.cv.style.display='none';if(redEyeCv)redEyeCv.style.display='none';bd.style.display='block';
+  // Where the photo itself sits inside the composited frame, so pointer handlers can undo it.
+  // canvasCompose centres the bordered stage, so the matte inset is half the size difference.
+  const inset=b1t+b2t;
+  _fxDisplayMap={el:bd,offX:Math.round((bd.width-(pw+2*inset))/2)+inset,
+                       offY:Math.round((bd.height-(ph+2*inset))/2)+inset,w:pw,h:ph};
+}
+
+// ═══════════════════════════
+// GEOMETRY: rotate / flip / straighten / crop  (non-destructive, re-editable)
+// ═══════════════════════════
+function defGeom(){return{rot:0,flipH:false,flipV:false,angle:0,crop:null};}
+// Geometry (rotate/flip/straighten/crop) is PER-PHOTO by default — each fxImages[] entry owns
+// its own geom object (see installFXImages/defGeom), so editing whichever photo you're
+// previewing only ever touches that photo. geomApplyToAll() below is the explicit, opt-in way
+// to copy the current photo's geometry onto the rest of a batch (mirrors mskCopyToAll's
+// pattern for masks).
+// Crop/Rotate Reset links only show once that section actually differs from its default geometry.
+function geomSyncResetVisibility(){
+  const g=(curItem()||{}).geom||defGeom();
+  const rotChanged=!!(g.rot||g.flipH||g.flipV);
+  const cropChanged=rotChanged||!!(g.angle||g.crop);
+  document.querySelector('.fx-ctrl[data-fxsec="crop"]')?.classList.toggle('fx-geom-changed',cropChanged);
+  document.querySelector('.fx-ctrl[data-fxsec="rotate"]')?.classList.toggle('fx-geom-changed',rotChanged);
+}
+function broadcastGeom(){geomSyncResetVisibility();if(typeof syncSectionEnabled==='function')syncSectionEnabled();}
+async function geomApplyToAll(){
+  if(_fxGeomBatchPending||fxImages.length<2)return;
+  const batch=fxImages,index=fxCurIdx,source=curItem(),epoch=_fxGeomBatchEpoch,sourceKey=_fxGeomBatchSourceKey(source);
+  if(!source||!source.geom)return;
+  const targets=batch.filter((_,i)=>i!==index),targetContext=targets.map(item=>({item,itemId:_fxGeomBatchItemId(item),sourceKey:_fxGeomBatchSourceKey(item)})),count=targets.length;
+  const sourceName=source.name||'Current photo';
+  const targetNames=targets.map(item=>item.name||'Unnamed photo').join(', ');
+  _fxGeomBatchPending=true;
+  try{
+    const ok=await confirmModal(`Copy geometry from “${sourceName}” to ${count} other loaded photo${count===1?'':'s'}?\n\nTargets: ${targetNames}\n\nThis overwrites their existing crop, rotation, flip, and straighten. One Undo restores these loaded photos.`,'Apply to '+count+' photos');
+    if(!ok)return;
+    // confirmModal is asynchronous. Never apply a stale decision after the user changes photo,
+    // reloads/replaces the batch, or otherwise changes which entries this action would target.
+    const currentBatchSet=new Set(batch);
+    if(epoch!==_fxGeomBatchEpoch||fxImages!==batch||fxCurIdx!==index||curItem()!==source||_fxGeomBatchSourceKey(source)!==sourceKey||batch.length!==targets.length+1||
+      targetContext.some(({item,sourceKey:key})=>!currentBatchSet.has(item)||_fxGeomBatchSourceKey(item)!==key))return;
+    const after=JSON.parse(JSON.stringify(source.geom));
+    const records=targets.map(item=>({itemId:_fxGeomBatchItemId(item),sourceKey:_fxGeomBatchSourceKey(item),
+      before:JSON.parse(JSON.stringify(item.geom||defGeom())),after:JSON.parse(JSON.stringify(after))}));
+    for(const item of targets)item.geom=JSON.parse(JSON.stringify(after));
+    if(typeof hapt==='function')hapt();
+    toast(`Applied geometry to ${count} other photo${count===1?'':'s'}`,true);
+    updateWork();renderPreview();buildLookGallery();
+    fxHistoryPush({force:true,label:`Geometry applied to ${count} photos`,geometryBatch:{epoch,items:records}});
+    log(`Geometry applied to ${count} other loaded photos`,'ok');
+  }finally{_fxGeomBatchPending=false;}
+}
+// Crop defaults to "As shot": keeping the camera's own frame is what almost every edit wants, and
+// a free crop is the deliberate choice rather than the accident. ⚠️ The <select> and `cropAR` are
+// SEPARATE state — setting only the dropdown would display "As shot" while cropping freely, so
+// this routes through cropSetAspect, which also re-reads the aspect from the photo now loaded
+// (it differs per photo, and resetGeomUI runs on every load/switch).
+function resetGeomUI(){
+  const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}
+  const sv=document.getElementById('vl-straighten');if(sv)sv.textContent='0°';
+  const ar=document.getElementById('sel-crop-ar');
+  if(ar){ar.value='shot';cropSetAspect('shot');}else{cropAR=0;}
+}
+function curItem(){return fxImages[fxCurIdx]||null;}

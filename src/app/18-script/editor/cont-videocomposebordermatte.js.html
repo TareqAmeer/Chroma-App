@@ -1,0 +1,281 @@
+function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas,framedCanvas){
+  const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,framedW,framedH,hasFrame,finalW,finalH,hasMatte}=dims;
+  let bordered=gradeCanvas;
+  if(borderedCanvas){
+    drawBorderLayers(borderedCanvas.getContext('2d'),gradeCanvas,P,b1t,b2t,dims.borderSeed||0);
+    bordered=borderedCanvas;
+  }
+  if(hasFrame&&framedCanvas){
+    // filmFrameCompose allocates its own canvas per call, which is exactly what a per-frame loop
+    // must not do — so blit its result into the pre-allocated one and let it be garbage in one
+    // step rather than accumulating a canvas per frame.
+    const framed=filmFrameCompose(bordered,dims.filmFrame);
+    const fx=framedCanvas.getContext('2d');
+    fx.clearRect(0,0,framedW,framedH);
+    fx.drawImage(framed,0,0);
+    if(framed!==bordered)framed.width=framed.height=0;
+    bordered=framedCanvas;
+  }
+  if(!hasMatte)return bordered;
+  const CV=P.canvas;
+  const fctx=finalCanvas.getContext('2d');
+  fctx.fillStyle=CV.bg||'#000000';fctx.fillRect(0,0,finalW,finalH);
+  if(CV.blur){
+    const t=_videoComposeBorderMatte._blurTmp||(_videoComposeBorderMatte._blurTmp=document.createElement('canvas'));
+    const tw=Math.max(1,Math.round(finalW/16)),th=Math.max(1,Math.round(finalH/16));
+    t.width=tw;t.height=th;const tx=t.getContext('2d');
+    const bw=bordered.width,bh=bordered.height;
+    const s=Math.max(tw/bw,th/bh);
+    tx.drawImage(bordered,(tw-bw*s)/2,(th-bh*s)/2,bw*s,bh*s);
+    fctx.imageSmoothingEnabled=true;fctx.drawImage(t,0,0,finalW,finalH);
+    fctx.fillStyle='rgba(0,0,0,.22)';fctx.fillRect(0,0,finalW,finalH);
+  }
+  const zoom=CV.zoom||1;
+  const bw=bordered.width,bh=bordered.height;
+  fctx.drawImage(bordered,(finalW-bw*zoom)/2,(finalH-bh*zoom)/2,bw*zoom,bh*zoom);
+  return finalCanvas;
+}
+// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget) unless
+// streaming (V3, desktop) is available. Reuses the stills export progress UI.
+// ⚠️ Never getPixels() here — FX.render() draws into FX.cv (a WebGL canvas), and every frame is
+// composited by drawImage(FX.cv,...) into a 2D canvas, a GPU-side blit with no CPU readback.
+async function fxVideoExportSmall(it){
+  if(!videoSupported()){toast('Video export needs a browser with WebCodecs support',false);return;}
+  const MB=await getMediabunny();
+  // Streaming (V3): desktop only, via the native stream_open/write/close commands (see
+  // desktop-native.js's chromasmithMakeVideoStreamTarget) — writes land on disk as they're
+  // encoded instead of accumulating in one ArrayBuffer, so the size/duration caps below are a
+  // BufferTarget-only limitation and lift entirely when streaming is available. Falls back to
+  // the capped in-memory BufferTarget on the browser/Pages build, unchanged from V2.
+  const canStream=typeof window.chromasmithMakeVideoStreamTarget==='function';
+  const resSel=(document.getElementById('sel-vid-resolution')||{}).value||'1080';
+  const resCap=resSel==='source'?Infinity:parseInt(resSel,10);
+  const CAP_LONG_EDGE=Math.min(canStream?Infinity:1080,resCap),CAP_DURATION_S=canStream?Infinity:30;
+  const srcW=it.img.width,srcH=it.img.height; // RAW sample dimensions — geometry (below) may change what's actually graded
+  // Geometry (A7): crop/rotate/flip/straighten, via the SAME applyGeomTo pipeline stills use
+  // (see geomCanvas) — the export loop used to bypass it entirely, silently ignoring the Crop
+  // tool for video. Constant across the whole clip, so run it once on a throwaway canvas just to
+  // learn the post-geometry dimensions; the real per-frame transform happens in the loop below.
+  const hasGeom=!!(it.geom&&(it.geom.rot||it.geom.flipH||it.geom.flipV||it.geom.angle||it.geom.crop));
+  let geomW=srcW,geomH=srcH;
+  if(hasGeom){
+    const probe=document.createElement('canvas');probe.width=srcW;probe.height=srcH;
+    const probed=applyGeomTo(probe,it.geom);
+    geomW=probed.width;geomH=probed.height;
+  }
+  const scale=Math.min(1,CAP_LONG_EDGE/Math.max(geomW,geomH));
+  // Even dimensions: a hard H.264/HEVC requirement (4:2:0 chroma subsampling needs whole chroma blocks).
+  const outW=Math.max(2,Math.round(geomW*scale/2)*2),outH=Math.max(2,Math.round(geomH*scale/2)*2);
+  const srcFps=it.fps||30;
+  const fpsSel=(document.getElementById('sel-vid-fps')||{}).value||'source';
+  // Frame-rate decimation only — never interpolates up past the source's own rate.
+  const fps=fpsSel==='source'?srcFps:Math.min(srcFps,parseInt(fpsSel,10));
+  // Trim (V4): export only [trimIn,trimOut], with output timestamps REBASED to start at 0 — same
+  // technique the audio pass already uses for negative AAC priming timestamps below. Frame
+  // indices below are on the CLIP's own (srcFps) grid; sampling itself is time-based (see the
+  // loop), which is what makes fps decimation just a different time step over the same window.
+  const trimF0=Math.max(0,Math.min(it.trimInFrame||0,it.frameCount-1));
+  const trimF1=Math.max(trimF0,Math.min(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1,it.frameCount-1));
+  const trimStartS=trimF0/srcFps,trimDurationS=(trimF1-trimF0+1)/srcFps;
+  const outFrameCount=Math.max(1,Math.round(trimDurationS*fps));
+  const totalFrames=Math.min(outFrameCount,Math.round(CAP_DURATION_S*fps)||outFrameCount);
+  if(totalFrames<outFrameCount)log(`Export capped to the first ${CAP_DURATION_S}s of the ${trimDurationS.toFixed(1)}s trimmed range (browser export limit — the desktop app removes this cap).`,'warn');
+  if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${geomW}×${geomH} source; the desktop app removes this cap).`,'warn');
+
+  // Quality (A6): bitrate scales off the SAME 20Mbps/1080p30 reference the export always used
+  // (so "High" at 1080p30 is byte-for-byte the same setting as before this control existed),
+  // adjusted for actual output area and frame rate, then multiplied by the quality tier. Film
+  // grain is pathological for H.264/HEVC at normal bitrates (it's exactly the high-frequency
+  // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default.
+  const qualitySel=(document.getElementById('sel-vid-quality')||{}).value||'high';
+  const qualityMult={draft:0.3,standard:0.6,high:1.0,max:1.8}[qualitySel]||1.0;
+  const BITRATE=Math.round(20_000_000*(outW*outH)/(1920*1080)*(fps/30)*qualityMult);
+  const codecSel=(document.getElementById('sel-vid-codec')||{}).value||'avc';
+  // HEVC falls back to AVC automatically: pass both, in preference order, to the same
+  // "first the browser can actually encode" probe the codec-detection already used.
+  const codec=await MB.getFirstEncodableVideoCodec(codecSel==='hevc'?['hevc','avc']:['avc'],{width:outW,height:outH,bitrate:BITRATE});
+  if(!codec){toast('No supported video encoder found in this browser',false);return;}
+  if(codecSel==='hevc'&&codec!=='hevc')log('HEVC isn\'t encodable in this browser — falling back to H.264.','info');
+
+  const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
+  fxExportCancel=false;
+  const cancelBtn=document.getElementById('btn-fx-cancel'),progBox=document.getElementById('fx-export-prog'),
+    progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
+  if(cancelBtn)cancelBtn.style.display='';
+  if(progBox)progBox.style.display='block';
+  const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;
+    // N3.2: same shared-activity mirror exportFX's setProg does — see that comment.
+    if(typeof window.libActivityJob==='function')window.libActivityJob('export',{label:'Exporting video',done:Math.round(frac*100),total:100,current:label,cancelFn:()=>{fxExportCancel=true;}});};
+
+  // Borders + canvas matte (A7): sizes are constant for the whole clip (percentage-of-width
+  // border thickness computed off the fixed graded size, matte aspect ratio likewise fixed), so
+  // compute them ONCE and pre-allocate every canvas the per-frame loop needs — mirrors the
+  // "allocate-only-when-used" treatment exportFX gives stills.
+  const P=getFXParams(it.adjustOverride||undefined);
+  const{b1t,b2t}=borderLayerSizes(P,outW);
+  await filmEdgeReady(P);
+  const borderedW=outW+2*(b1t+b2t),borderedH=outH+2*(b1t+b2t);
+  // Film frame sits between the borders and the matte, exactly as it does for stills. Its size is
+  // as invariant across the clip as the borders are, so it folds into this same precompute rather
+  // than being called per frame.
+  const frameSz=filmFrameOutSize(borderedW,borderedH,P.filmFrame);
+  const hasFrame=frameSz.h!==borderedH||frameSz.w!==borderedW||
+    !!(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none');
+  const framedW=frameSz.w,framedH=frameSz.h;
+  const hasMatte=!!(P.canvas&&P.canvas.enabled&&P.canvas.ar);
+  let finalW=framedW,finalH=framedH;
+  if(hasMatte){
+    const ar=P.canvas.ar;
+    const mw=framedW/framedH>ar?framedW:framedH*ar,mh=framedW/framedH>ar?framedW/ar:framedH;
+    finalW=Math.max(2,Math.round(mw/2)*2);finalH=Math.max(2,Math.round(mh/2)*2);
+  }else{finalW=Math.max(2,Math.round(framedW/2)*2);finalH=Math.max(2,Math.round(framedH/2)*2);}
+  const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,
+                     framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte,borderSeed:borderSeed(it,P)};
+
+  const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
+  const gradeCtx=gradeCanvas.getContext('2d');
+  const borderedCanvas=bordersAny(P,b1t,b2t)?Object.assign(document.createElement('canvas'),{width:borderedW,height:borderedH}):null;
+  const finalCanvas=hasMatte?Object.assign(document.createElement('canvas'),{width:finalW,height:finalH}):null;
+  const framedCanvas=hasFrame?Object.assign(document.createElement('canvas'),{width:framedW,height:framedH}):null;
+  // compCanvas is the ONE canvas object bound to CanvasSource below — mediabunny reads whatever
+  // is currently drawn on it at add() time, so every frame must end by drawing INTO this same
+  // object (fades need an off-canvas source to fade FROM, hence the two-stage draw below).
+  const compCanvas=document.createElement('canvas');compCanvas.width=finalW;compCanvas.height=finalH;
+  const compCtx=compCanvas.getContext('2d');
+  const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
+  const frameCtx=frameCanvas.getContext('2d');
+  const fadeInS=Math.max(0,parseFloat((document.getElementById('vid-fade-in')||{}).value)||0);
+  const fadeOutS=Math.max(0,parseFloat((document.getElementById('vid-fade-out')||{}).value)||0);
+  const outDurationS=totalFrames/fps;
+  const fname=`${it.name}_graded.mp4`;
+  let output=null,cancelled=false,streamTarget=null,videoExportFailed=false;
+  try{
+    const target=canStream?(streamTarget=await window.chromasmithMakeVideoStreamTarget(MB,fname)):new MB.BufferTarget();
+    output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
+    const videoSource=new MB.CanvasSource(compCanvas,{codec,bitrate:BITRATE});
+    output.addVideoTrack(videoSource,{frameRate:fps});
+    // Audio passthrough (V4): re-mux the ORIGINAL encoded packets unchanged — no decode, no
+    // re-encode, so there's no quality loss and no AudioEncoder dependency (which also sidesteps
+    // Safari only gaining AudioEncoder in Safari 26). AAC only for now — MP4's universal audio
+    // codec; PCM-in-MOV (some camera apps) is a real case but gets a clean "video only" export
+    // rather than a silent transcode path, matching the plan's explicit non-goal here. Mute (A5)
+    // simply skips adding the track — no re-encode needed either way.
+    let audioSource=null,audioCodec=null;
+    if(it._mbAudioTrack&&!fxVideoMuted){
+      audioCodec=await it._mbAudioTrack.getCodec().catch(()=>null);
+      if(audioCodec==='aac'){
+        audioSource=new MB.EncodedAudioPacketSource('aac');
+        output.addAudioTrack(audioSource);
+      }else if(audioCodec){
+        log(`Audio codec "${audioCodec}" isn't supported for passthrough — exporting video only.`,'warn');
+      }
+    }
+    await output.start();
+
+    for(let f=0;f<totalFrames;f++){
+      if(fxExportCancel){cancelled=true;break;}
+      const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
+      const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
+      let sample=null;
+      for await(const s of it._mbSampleSink.samples(srcTimeS)){sample=s;break;}
+      if(!sample)continue;
+      frameCtx.clearRect(0,0,srcW,srcH);
+      sample.draw(frameCtx,0,0,srcW,srcH);
+      sample.close();
+      const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
+      FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
+      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrameApprox}):undefined;
+      FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
+      gradeCtx.clearRect(0,0,outW,outH);
+      gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
+      // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
+      // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
+      // entirely when neither fade is configured (the common case).
+      let alpha=1;
+      if(fadeInS>0&&outTimeS<fadeInS)alpha=Math.min(alpha,outTimeS/fadeInS);
+      if(fadeOutS>0&&outTimeS>outDurationS-fadeOutS)alpha=Math.min(alpha,Math.max(0,(outDurationS-outTimeS)/fadeOutS));
+      if(alpha<1){
+        compCtx.fillStyle='#000';compCtx.fillRect(0,0,finalW,finalH);
+        compCtx.globalAlpha=alpha;compCtx.drawImage(composed,0,0);compCtx.globalAlpha=1;
+      }else if(composed!==compCanvas){
+        compCtx.clearRect(0,0,finalW,finalH);compCtx.drawImage(composed,0,0);
+      }
+      if(typeof applyWatermark==='function')applyWatermark(compCanvas);
+      await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
+      setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
+    }
+    // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
+    // add() call interleaving) — copies encoded packets straight through, windowed to the
+    // TRIMMED range and rebased to start at 0, same as the video timestamps above, so a trimmed
+    // export's audio and picture stay in sync.
+    if(audioSource&&!cancelled){
+      const audioMinT=trimStartS,audioMaxT=trimStartS+outDurationS;
+      const pktSink=new MB.EncodedPacketSink(it._mbAudioTrack);
+      const decoderConfig=await it._mbAudioTrack.getDecoderConfig().catch(()=>null);
+      // ⚠️ Real AAC streams routinely start at a NEGATIVE timestamp (encoder priming/pre-roll
+      // samples) — verified on a real iPhone clip: "Timestamps must be non-negative (got
+      // -0.044s)" on the very first packet. The standard remux fix (same one ffmpeg's
+      // `-avoid_negative_ts make_zero` does) is to shift the WHOLE stream so it starts at exactly
+      // 0, matching video's own timeline start — not clamp each packet independently, which would
+      // collapse several leading packets onto the same timestamp and confuse the muxer. When
+      // trimmed, the shift is audioMinT (plus any negative first-packet offset) rather than 0, so
+      // the kept window rebases the same way the video loop above does.
+      const firstPkt=await pktSink.getFirstPacket().catch(()=>null);
+      const negOffset=firstPkt&&firstPkt.timestamp<0?firstPkt.timestamp:0;
+      const tsOffset=audioMinT+negOffset;
+      let first=true;
+      // Include the packet straddling the in-point rather than dropping it (the standard NLE
+      // convention — MLT/ffmpeg -ss included-packet behaviour) so trimmed audio is never short.
+      let includeFromHere=false;
+      for await(const pkt of pktSink.packets()){
+        if(fxExportCancel){cancelled=true;break;}
+        const pktEnd=pkt.timestamp+(pkt.duration||0);
+        if(!includeFromHere){
+          if(pktEnd<=audioMinT)continue; // fully before the trim window — skip
+          includeFromHere=true;
+        }
+        if(pkt.timestamp>=audioMaxT)break;
+        const shifted=tsOffset!==0?pkt.clone({timestamp:Math.max(0,pkt.timestamp-tsOffset)}):pkt;
+        await audioSource.add(shifted,first?{decoderConfig}:undefined);
+        first=false;
+      }
+    }
+    if(cancelled){
+      await output.cancel();
+      if(streamTarget)await window.chromasmithCloseVideoStream(streamTarget,false); // delete the .part file
+      log('Video export cancelled','warn');
+    }else{
+      await output.finalize();
+      if(streamTarget){
+        const res=await window.chromasmithCloseVideoStream(streamTarget,true);
+        log(`Saved to ${res.path}`,'ok');
+      }else{
+        await saveFile(output.target.buffer,fname,'video/mp4');
+      }
+      toast('Video exported ✓',true);
+    }
+  }catch(e){
+    videoExportFailed=true;
+    log('Video export error: '+(e&&e.message||e),'err');console.error(e);
+    toast('Video export failed — see log',false);
+    if(output)try{await output.cancel();}catch(e2){}
+    if(streamTarget)try{await window.chromasmithCloseVideoStream(streamTarget,false);}catch(e2){}
+  }finally{
+    if(btn)btn.disabled=false;
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progBox)progBox.style.display='none';
+    fxExportCancel=false;
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'cancelled':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
+    // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
+    // whichever frame the transport bar is actually showing, same as exportFX's own final
+    // preview-refresh call (kept separately try/caught there for the same reason: a failure
+    // here must never be confused with a real export failure).
+    try{updateWork();renderPreview();}catch(e3){}
+  }
+}
+
+// ═══════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════

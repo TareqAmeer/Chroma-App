@@ -1,0 +1,175 @@
+function icon(n,sz){return _SVG(ICONS[n]||'',sz);}
+// Label per section, in rail / strip order.
+//
+// ⚠️ THIS LIST IS THE REGISTRY, NOT JUST AN ORDERING. `body.fx-single` (mobile AND the deskx
+// desktop shell) sets `.fx-ctrl{display:none}` and reveals only `.sec-active`, which nothing
+// but fxSection() — walking this array — ever sets. So a card that exists in the markup but
+// is missing here is INVISIBLE in both shells and shows up only in the plain-browser
+// two-column layout, where every card is painted at once. That is exactly what happened to
+// `retouch`: built, probed by test/probe_heal.mjs, and unreachable in the actual app for its
+// whole life. If you add a `data-fxsec` card, add it here in the same edit.
+//
+// Order follows the EDIT, not the order the features were built:
+//   Source (Image, Looks) > Light (Adjust) > Colour > Detail (Noise, Lens, Retouch) >
+//   Geometry (Crop) > Local (Masks) > Film > Frame > Output
+// Crop and Masks used to sit AFTER Borders and Canvas — i.e. you framed and matted the photo
+// before you cropped it. Film keeps the requested grain > halation > bloom > artifacts >
+// vignette order. Render order is unaffected by any of this; it is UI ordering only.
+const FX_SECTIONS=[['image','Image'],['looks','Looks'],['filmneg','Film Negative'],['adjust','Light'],
+  ['curves','Curves'],['hsl','Mixer'],['pointcolor','Point Color'],
+  ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
+  ['crop','Crop'],['rotate','Rotate'],['straighten','Straighten'],
+  ['local','Masks'],['redeye','Red Eye'],
+  ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
+  ['borders','Borders'],['canvas','Canvas'],
+  ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Presets'],['share','Sharing'],
+  ['info','Metadata'],['diag','Diag']];
+FX_SECTIONS.forEach(x=>{if(CS_NAMES[x[0]])x[1]=CS_NAMES[x[0]];}); // CHR-196: one name per tool
+// A16: the card lookup is cached. This ran a querySelector per section on every rail and
+// section-nav rebuild (and those rebuild on every layout change / window resize). The cards are
+// static markup — they are never added or removed at runtime — so one pass is enough.
+let _fxSectionCards=null;
+function _fxSectionCard(key){
+  if(!_fxSectionCards){
+    _fxSectionCards=new Map();
+    document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>_fxSectionCards.set(c.dataset.fxsec,c));
+  }
+  return _fxSectionCards.get(key)||null;
+}
+function _eachSection(cb){
+  const diagOn=document.body.classList.contains('diag-on');
+  FX_SECTIONS.forEach(([key,lb])=>{
+    if(key==='diag'&&!diagOn)return;
+    if(key==='image'&&window.__TAURI__)return; // folded into Looks on desktop — see fxDesktopFoldImageIntoLooks
+    if(!_fxSectionCard(key))return;
+    if(csWorkspaceLayoutGet().hiddenSections.includes(key))return;
+    cb(key,lb);
+  });
+}
+// deskx-only rail consolidation (DRK-style — shorter rail): several slider-only cards
+// share one rail button and stack in the panel under it. The underlying .fx-ctrl cards and
+// their internals are UNTOUCHED — fxSection just marks every member card sec-active together.
+// Not used outside deskx (buildSecNav/mobile and the older fx-deskb rail keep the full list).
+//
+// ⚠️ Stacking only suits cards you SCROLL. The three direct-manipulation tools — Crop, Masks
+// and Retouch — stay standalone on purpose: you reach them to click on the PHOTO, and burying
+// Retouch under "Detail" would put ten Noise sliders and the whole Lens/Transform card between
+// the rail button and the tool. Members are listed in FX_SECTIONS order for readability; the
+// button is emitted at whichever member buildToolRail reaches first, and the cards stack in
+// DOM order regardless of this array.
+// Swiss v2 (2026-09-28): the rail groups related stages. Each stage stacks its member cards in one
+// scrolling panel with sticky titles, and a sub-tab row (sk2SubTabs) jumps between them.
+// Crop and Retouch remain inside stages; Masks has a first-class destination so it no longer
+// requires scanning the Texture stage. Old nine-group layout: git tag pre-swiss-v2.
+const FX_GROUPS={look:{label:'Look',icon:'looks',members:['image','looks','filmneg']},
+  light:{label:'Light',icon:'adjust',members:['adjust','curves','hal','bloom']},
+  colour:{label:'Colour',icon:'hsl',members:['hsl','wheels','pointcolor']},
+  texture:{label:'Texture',icon:'grain',members:['grain','nr','deconv','lens','art','vig','retouch','redeye']},
+  masks:{label:'Masks',icon:'local',members:['local']},
+  output:{label:'Crop',icon:'crop',members:['crop','rotate','straighten','borders','canvas','export','wm','exppreset','style','share']}};
+const FX_GROUP_OF={};Object.entries(FX_GROUPS).forEach(([g,d])=>d.members.forEach(k=>FX_GROUP_OF[k]=g));
+// Desktop/web panel: the Looks card is two tools, not one — the preset library ("Looks", with its
+// count) and the source/print settings under it ("Input & Prints"). Split here, before the section
+// list is read, by moving the existing Input / Highlight response / Print nodes into their own card.
+// Phones get the same split: Input & Prints is its own tool there too, so the Looks sheet is only presets.
+function fxSplitLooksCard(){
+  const looks=document.querySelector('.fx-ctrl[data-fxsec="looks"]');if(!looks)return;
+  const existing=document.querySelector('.fx-ctrl[data-fxsec="inprint"]');
+  const ids=['sel-input','chips-input','sel-tonemap','chips-tonemap','fx-hdr-preview-row','sel-print','chips-print'];
+  const nodes=ids.map(i=>document.getElementById(i)).filter(Boolean);
+  const labels=[...looks.querySelectorAll(':scope > .fx-label')].filter(l=>['Input','Highlight response','Print'].includes(l.textContent.trim()));
+  const all=[...nodes,...labels].filter(n=>n.parentElement===looks||n.closest('.fx-ctrl')===looks);
+  if(!all.length)return;
+  all.sort((a,b)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
+  if(existing){all.forEach(n=>{existing.appendChild(n);}); // the desktop shell's Looks reorder pulls these back into the Looks card — move them out again
+    return;}
+  const card=document.createElement('div');card.className='fx-ctrl';card.dataset.fxsec='inprint';
+  const t=document.createElement('div');t.className='fx-ctrl-title';t.textContent='Input & Prints';card.appendChild(t);
+  all.forEach(n=>{card.appendChild(n);if(n.classList.contains('fx-label'))n.style.marginTop='10px';});
+  looks.insertAdjacentElement('afterend',card);
+  FX_SECTIONS.splice(FX_SECTIONS.findIndex(x=>x[0]==='looks')+1,0,['inprint','Input & Prints']);
+  FX_GROUPS.look.members.push('inprint');FX_GROUP_OF.inprint='look';
+}
+fxSplitLooksCard();
+_csWorkspaceDefaultSections=FX_SECTIONS.map(x=>x.slice());
+// deskx rail: draw a hairline BEFORE each of these, so the rail reads as bands rather than one
+// undifferentiated list. With the FX_SECTIONS order above that yields:
+//   [Image Looks] [Adjust] [Color] [Detail Retouch] [Crop] [Masks] [Film] [Frame] [Export Info]
+// Retouch deliberately has NO break before it — it rides in the Detail band with Noise+Lens.
+// Keys are whatever buildToolRail actually emits — i.e. group keys where a group exists
+// (FX_GROUPS above), section keys otherwise.
+// ⚠️ A key that is neither is silently never matched, so a stale entry here does not throw —
+// it just DROPS a hairline. After reordering FX_SECTIONS, count the separators in the live
+// rail rather than assuming this set still lines up.
+const RAIL_GROUP_BREAK=new Set(['light','colour','texture','output','info']);
+function _activeSec(){
+  const c=document.querySelector('.fx-ctrl.sec-active');if(!c)return null;
+  const key=c.dataset.fxsec;
+  return (_fxGrouped()&&FX_GROUP_OF[key])?FX_GROUP_OF[key]:key;
+}
+// Settings → View → "Every tool in the bar": the rail lists each tool as its own button
+// (scrolling) instead of the five grouped stages. Off = grouped (default).
+function fxRailFlat(){try{return localStorage.getItem('cs_rail_flat')==='1';}catch(e){return false;}}
+function _fxGrouped(){return document.body.classList.contains('deskx')&&!fxRailFlat();}
+function fxRailFlatToggle(){
+  const on=!fxRailFlat();
+  try{localStorage.setItem('cs_rail_flat',on?'1':'0');}catch(e){}
+  document.body.classList.toggle('rail-flat',on);
+  const cur=document.querySelector('.fx-ctrl.sec-active');
+  buildToolRail();
+  if(cur&&cur.dataset.fxsec)fxSection(cur.dataset.fxsec,true);
+  viewMenuBuild();
+}
+// Phone tool filters = the desktop rail's own groups (FX_GROUPS), so both apps sort tools the same way.
+const FX_MOBILE_CATS={all:null};
+Object.entries(FX_GROUPS).forEach(([g,d])=>{FX_MOBILE_CATS[g]=new Set(d.members);});
+const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
+let _fxMobileCat='all';
+const FX_MOBILE_DESC={looks:'Film looks.',inprint:'Source profile, highlight response and print stock.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
+  borders:'Film borders and frames.',canvas:'Add space around the photo.',style:'Save and reuse whole edits.'};
+function fxToolsOpen(){
+  if(!document.body.classList.contains('mobile-fx'))return;
+  document.querySelectorAll('#fx-tool-grid .fx-sec-btn').forEach(b=>{const d=b.querySelector('.fx-sec-ds');
+    if(d&&!d.textContent)d.textContent=(window.CS_SUB||{})[b.dataset.sec]||FX_MOBILE_DESC[b.dataset.sec]||'';});
+  document.body.classList.remove('sheet-open');
+  document.body.classList.add('tools-open');
+  {const nv=document.getElementById('fx-mobile-nav');if(nv){const h=nv.offsetHeight;if(h)document.body.style.setProperty('--mnav-h',h+'px');}}
+  document.getElementById('fx-nav-tools')?.classList.add('on');
+  document.getElementById('fx-nav-looks')?.classList.remove('on');document.getElementById('fx-nav-crop')?.classList.remove('on');
+  fxMobileFilter(_fxMobileCat);
+  fxLiveFit(360);
+  requestAnimationFrame(()=>renderPreview());
+}
+function fxToolsClose(){
+  document.body.classList.remove('tools-open');
+  document.getElementById('fx-nav-tools')?.classList.add('on');
+  fxLiveFit(360);
+  requestAnimationFrame(()=>renderPreview());
+}
+// Small icon beside each Light (Tone/Colour/Detail) slider name, same line style as the tool icons.
+const ADJ_ICONS={
+  exp:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+  con:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor"/>',
+  hi:'<circle cx="12" cy="12" r="8"/><path d="M4 12a8 8 0 0 1 16 0Z" fill="currentColor"/>',
+  sh:'<circle cx="12" cy="12" r="8"/><path d="M4 12a8 8 0 0 0 16 0Z" fill="currentColor"/>',
+  wh:'<rect x="5" y="5" width="14" height="14"/>',
+  bl:'<rect x="5" y="5" width="14" height="14" fill="currentColor"/>',
+  temp:'<path d="M10 4h4v10a4 4 0 1 1-4 0Z"/><path d="M12 10v7"/>',
+  tint:'<path d="M12 3l6 9a6 6 0 1 1-12 0Z"/>',
+  vib:'<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/>',
+  sat:'<circle cx="9" cy="10" r="5"/><circle cx="15" cy="10" r="5"/><circle cx="12" cy="15" r="5"/>',
+  clarity:'<path d="M12 3l9 9-9 9-9-9Z"/><path d="M12 8l4 4-4 4-4-4Z"/>',
+  texture:'<path d="M4 4h4v4H4ZM12 4h4v4h-4ZM8 8h4v4H8ZM16 8h4v4h-4ZM4 12h4v4H4ZM12 12h4v4h-4ZM8 16h4v4H8ZM16 16h4v4h-4Z"/>',
+  sharp:'<path d="M3 20 12 4l9 16Z"/>',
+  dehaze:'<path d="M4 8h16M6 12h12M8 16h8"/>',
+  skin:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'};
+function fxAddAdjIcons(){
+  Object.entries(ADJ_ICONS).forEach(([k,d])=>{
+    const sl=document.getElementById('sl-adj-'+k),lb=sl&&sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-label');
+    if(!lb||lb.querySelector('.fx-lic'))return;
+    const ic=document.createElement('span');ic.className='fx-lic';ic.setAttribute('aria-hidden','true');
+    ic.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square">'+d+'</svg>';
+    lb.insertBefore(ic,lb.firstChild);
+  });
+}
+document.addEventListener('DOMContentLoaded',fxAddAdjIcons);

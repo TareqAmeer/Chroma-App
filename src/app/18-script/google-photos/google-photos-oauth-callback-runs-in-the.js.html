@@ -1,0 +1,259 @@
+// ── Google Photos OAuth callback (runs in the SIGN-IN POPUP, not the app) ─────
+// This page is cross-origin isolated (coi-serviceworker sets COOP same-origin for
+// SharedArrayBuffer), which DISOWNS every popup — window.opener/postMessage can never reach
+// back, so Google's GIS popup library is unusable here. Instead gpAuth() opens a manual
+// implicit-flow popup that redirects back to THIS page with the token in the hash
+// (state=gpcb); this handler stores it in localStorage (which crosses COOP boundaries fine —
+// the opener listens for the storage event), then halts app boot in the popup.
+const _GP_CB=(()=>{try{
+  if(!/[#&]state=gpcb(&|$)/.test(location.hash))return false;
+  const p=new URLSearchParams(location.hash.slice(1));
+  localStorage.setItem('gpTokRelay',JSON.stringify({at:p.get('access_token')||'',err:p.get('error')||'',
+    exp:Date.now()+(parseInt(p.get('expires_in')||'3600',10)||3600)*1000,t:Date.now()}));
+  history.replaceState(null,'',location.pathname+location.search);
+  document.documentElement.innerHTML='<body style="background:#141414;color:#ddd;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Google Photos connected &#10003; — you can close this window.</body>';
+  setTimeout(()=>{try{window.close()}catch(e){}},150);
+  return true;
+}catch(e){return false}})();
+if(_GP_CB)throw new Error('gp-oauth-callback — not an error: halting app boot inside the sign-in popup');
+// ═══════════════════════════
+// COLOUR MATH
+// ═══════════════════════════
+const s2l=v=>{v=Math.max(0,Math.min(1,v));return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)};
+const l2s=v=>{v=Math.max(0,Math.min(1,v));return v<=.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-.055};
+function r2hsv(r,g,b){const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;const s=mx>0?d/mx:0,v=mx;if(d>0){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h/6+1)%1}return[h,s,v]}
+function hsv2r(h,s,v){const i=Math.floor(h*6)%6,f=h*6-Math.floor(h*6),p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][Math.max(0,Math.min(5,i))]}
+const sat=(r,g,b)=>{const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0};
+const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
+function gm(v,c,w){return Math.exp(-Math.pow(v-c,2)/(2*w*w))}
+function contrast(v,c,p=.18){const e=1e-9;return v<=p?p*Math.pow(Math.max(v/p,e),1-c*.25):1-(1-p)*Math.pow(Math.max((1-v)/(1-p),e),1-c*.25)}
+function applyHSL(r,g,b,hA,sA,lA){
+  const[h,s,v]=r2hsv(r,g,b),C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  let dh=0,ds=0,dv=0;
+  // Band half-width .10 (36°) — wide enough that adjacent bands always overlap with margin, even
+  // across the widest 60° center-to-center gaps (Yellow-Green, Green-Aqua, Blue-Purple). At the
+  // old .075 (27°) half-width those gaps left ~6-18° dead zones with ZERO response from any band
+  // — exactly where common real-world hues sit (olive/dry-grass green ≈85-90°, sitting between
+  // Yellow's and Green's reach), which read as the mixer slider silently doing nothing.
+  for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.10,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
+  return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
+}
+// POINT COLOR — unlike the 8 fixed Color Mixer bands above, each point is centered on an EXACT
+// hue/saturation picked from the photo (the eyedropper), with its own adjustable Range (how wide
+// a neighborhood of similar colors it grabs) instead of a fixed band width. Same weighted-kernel
+// shape as applyHSL for a consistent feel, just re-centered per point and range-driven per point.
+function pcWeight(h,s,pt){
+  let df=Math.abs(h-pt.h);if(df>.5)df=1-df;
+  const hHalf=0.03+(pt.range||0)/100*0.22;     // range 0-100 -> ±10.8°..90° hue half-width
+  const sHalf=0.15+(pt.range||0)/100*0.55;     // wider range also tolerates more saturation drift
+  // Smoothness reshapes the existing compact selection kernel without changing its footprint.
+  // 50 keeps the shipped quadratic falloff exactly; lower values tighten the transition and
+  // higher values soften it. Missing values on older point-color records retain the old result.
+  const smooth=Math.max(0,Math.min(100,pt.smoothness==null?50:pt.smoothness));
+  const edgePower=Math.pow(2,(50-smooth)/50);
+  const wh=Math.pow(Math.max(0,1-Math.pow(df/hHalf,2)),edgePower);
+  const ws=Math.pow(Math.max(0,1-Math.pow((s-pt.s)/sHalf,2)),edgePower);
+  return wh*ws*Math.min(1,s*3);
+}
+function applyPointColors(r,g,b,points){
+  if(!points||!points.length)return[r,g,b];
+  const[h,s,v]=r2hsv(r,g,b);
+  let dh=0,ds=0,dv=0;
+  for(const pt of points){
+    const w=pcWeight(h,s,pt);if(w<=0)continue;
+    dh+=w*(pt.hue||0)*0.45/360;ds+=w*((pt.sat||0)/100)*.55;dv+=w*((pt.lum||0)/100)*.11;
+  }
+  return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
+}
+// Color Grading (3-way) — equiluminant hue/sat rotation + independent luminance
+// offset. The chroma "tint" is a triad of cosines spaced 120° apart, which sums to
+// zero by construction (cos θ + cos(θ−120°) + cos(θ+120°) ≡ 0) — i.e. it is
+// PROVABLY luminance-neutral: rotating hue/raising sat can never shift overall
+// brightness, only the explicit `l` term can. This fully decouples (h,s) from l,
+// so deriveXMP's inverse is an exact closed-form projection (no joint nonlinear
+// solve, no cross-talk — contrast with the old hsv2r-based tint, whose mean shifts
+// with hue and silently leaked into the fitted Luminance values). Zones weighted by
+// CURRENT (post-tone, pre-CG) luminance lv0. cg={shadow,mid,high}{h,s,l},
+// h:0-360 s:0-100 l:-100..100. CG_ZONES centers/widths shared with the deriver.
+const CG_K=0.6,CG_ZONES=[['shadow',.20,.18],['mid',.50,.20],['high',.82,.16]];
+function cgTint(hueDeg,satPct){
+  const th=hueDeg*Math.PI/180,m=(satPct/100)*CG_K*.5;
+  return[m*Math.cos(th),m*Math.cos(th-2*Math.PI/3),m*Math.cos(th+2*Math.PI/3)];
+}
+function applyCG(R,G,B,lv0,cg){
+  if(!cg)return[R,G,B];
+  for(const[zn,zc,zw] of CG_ZONES){const z=cg[zn];if(!z)continue;const w=gm(lv0,zc,zw);
+    if(z.s){const[tr,tg,tb]=cgTint(z.h||0,z.s);R+=w*tr;G+=w*tg;B+=w*tb}
+    if(z.l){const lo=w*(z.l/100)*.5;R+=lo;G+=lo;B+=lo}}
+  return[Math.max(0,Math.min(1,R)),Math.max(0,Math.min(1,G)),Math.max(0,Math.min(1,B))];
+}
+// Tone-only stage (exposure/contrast/shadows/highlights/whites/blacks) — split out
+// of applyGrade so deriveXMP can replay EXACTLY this stage (with its own derived
+// Exposure/Highlights/Shadows numbers) to get the same `graded(src)` baseline that
+// HSL/CG actually receive as input — measuring color/lum deltas against raw src
+// would misattribute the global tonal shift as a per-band/per-zone color effect.
+function applyTone(r,g,b,s){
+  let R=s2l(r),G=s2l(g),B=s2l(b);const es=Math.pow(2,s.exposure*.75);
+  R=Math.min(1,R*es);G=Math.min(1,G*es);B=Math.min(1,B*es);
+  const c=s.contrast/100;R=contrast(R,c);G=contrast(G,c);B=contrast(B,c);
+  R=l2s(R);G=l2s(G);B=l2s(B);
+  const lv=lum(R,G,B),adj=(s.shadows/200)*.30*gm(lv,.22,.18)+(s.highlights/200)*.33*gm(lv,.82,.14)+(s.whites/200)*.18*gm(lv,.92,.10)+(s.blacks/200)*.20*gm(lv,.08,.10);
+  return[Math.max(0,Math.min(1,R+adj)),Math.max(0,Math.min(1,G+adj)),Math.max(0,Math.min(1,B+adj))];
+}
+function applyGrade(r,g,b,s){
+  let[R,G,B]=applyTone(r,g,b,s);
+  const lv0=lum(R,G,B);
+  [R,G,B]=applyHSL(R,G,B,s.hue,s.sat,s.lum);
+  return applyCG(R,G,B,lv0,s.cg);
+}
+
+// ═══════════════════════════
+// LUT OPS
+// ═══════════════════════════
+const SZ=33,S2=SZ*SZ;
+const li=(r,g,b)=>(r*S2+g*SZ+b)*3;
+function sampleLUT(lut,r,g,b){
+  const sc=SZ-1,ri=r*sc,gi=g*sc,bi=b*sc;
+  const r0=Math.min(ri|0,sc-1),g0=Math.min(gi|0,sc-1),b0=Math.min(bi|0,sc-1);
+  const rf=ri-r0,gf=gi-g0,bf=bi-b0;
+  let or=0,og=0,ob=0;
+  for(let dr=0;dr<2;dr++)for(let dg=0;dg<2;dg++)for(let db=0;db<2;db++){
+    const w=(dr?rf:1-rf)*(dg?gf:1-gf)*(db?bf:1-bf),i=li(r0+dr,g0+dg,b0+db);
+    or+=lut[i]*w;og+=lut[i+1]*w;ob+=lut[i+2]*w;
+  }return[or,og,ob];
+}
+function writeCube(lut,title){
+  const L=[`TITLE "${title}"`,`#LUMIXPHOTOSTYLE STD`,`LUT_3D_SIZE ${SZ}`,``];
+  for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);L.push(`${lut[i].toFixed(6)} ${lut[i+1].toFixed(6)} ${lut[i+2].toFixed(6)}`)}
+  return L.join('\n');
+}
+// Trilinear sample of an arbitrary-size N³ LUT stored R-fastest ((r*N+g)*N+b)*3.
+function sampleLUTn(src,N,r,g,b){
+  const sc=N-1,ri=r*sc,gi=g*sc,bi=b*sc;
+  const r0=Math.min(ri|0,sc-1),g0=Math.min(gi|0,sc-1),b0=Math.min(bi|0,sc-1);
+  const rf=ri-r0,gf=gi-g0,bf=bi-b0;let or=0,og=0,ob=0;
+  for(let dr=0;dr<2;dr++)for(let dg=0;dg<2;dg++)for(let db=0;db<2;db++){
+    const w=(dr?rf:1-rf)*(dg?gf:1-gf)*(db?bf:1-bf),i=(((r0+dr)*N+(g0+dg))*N+(b0+db))*3;
+    or+=src[i]*w;og+=src[i+1]*w;ob+=src[i+2]*w;
+  }return[or,og,ob];
+}
+// Parse a .cube into our 33³ li-layout LUT. Robust to: any LUT_3D_SIZE (resampled to 33³
+// via trilinear interp), DOMAIN_MIN/DOMAIN_MAX lines, leading/trailing whitespace, blank
+// lines, CRLF, and any non-numeric metadata line (e.g. a stray header). Previously this
+// assumed exactly 33³ and only stripped #/TITLE/LUT_* — so a 17³ or 65³ LUT mapped into the
+// wrong cells (silent corruption) and DOMAIN_MIN/MAX rows were parsed as data → NaN/shift.
+function parseCube(txt){
+  let size=0;const data=[];
+  for(const raw of txt.split(/\r?\n/)){
+    const l=raw.trim();
+    if(!l||l[0]==='#')continue;
+    const up=l.toUpperCase();
+    if(up.startsWith('LUT_3D_SIZE')){const v=parseInt(l.split(/\s+/)[1]);if(v>1)size=v;continue;}
+    if(up.startsWith('TITLE')||up.startsWith('DOMAIN_')||up.startsWith('LUT_'))continue;
+    const p=l.split(/\s+/);if(p.length<3)continue;
+    const r=parseFloat(p[0]),g=parseFloat(p[1]),b=parseFloat(p[2]);
+    if(!isFinite(r)||!isFinite(g)||!isFinite(b))continue; // skip any non-numeric line
+    data.push(r,g,b);
+  }
+  const N=size>0?size:Math.max(2,Math.round(Math.cbrt(data.length/3)));
+  if(data.length<N*N*N*3)return identLUT(); // truncated/garbage → safe passthrough
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  if(N===SZ){ // exact: cube file order is R-fastest, identical to li(r,g,b)
+    let n=0;for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);lut[i]=data[n++];lut[i+1]=data[n++];lut[i+2]=data[n++]}
+    return lut;
+  }
+  // other size: pack into an N³ source (R-fastest) then resample to 33³
+  const src=new Float32Array(N*N*N*3);
+  let n=0;for(let b=0;b<N;b++)for(let g=0;g<N;g++)for(let r=0;r<N;r++){const i=((r*N+g)*N+b)*3;src[i]=data[n++];src[i+1]=data[n++];src[i+2]=data[n++]}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[or,og,ob]=sampleLUTn(src,N,r/32,g/32,b/32),i=li(r,g,b);lut[i]=or;lut[i+1]=og;lut[i+2]=ob}
+  return lut;
+}
+function identLUT(){const l=new Float32Array(SZ*SZ*SZ*3);for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const i=li(r,g,b);l[i]=r/32;l[i+1]=g/32;l[i+2]=b/32}return l}
+function applyLUTtoPx(px,lut){
+  const o=new Uint8ClampedArray(px.length);
+  for(let i=0;i<px.length;i+=4){const[r2,g2,b2]=sampleLUT(lut,px[i]/255,px[i+1]/255,px[i+2]/255);o[i]=r2*255+.5|0;o[i+1]=g2*255+.5|0;o[i+2]=b2*255+.5|0;o[i+3]=px[i+3]}
+  return o;
+}
+
+// ═══════════════════════════
+// XMP PARSER
+// ═══════════════════════════
+function parseXMP(txt){
+  const g=(a,d=0)=>{const m=txt.match(new RegExp(`crs:${a}\\s*=\\s*"([^"]+)"`));return m?parseFloat(m[1]):d};
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],hue={},sat={},lum_={};
+  C.forEach(c=>{hue[c]=g(`HueAdjustment${c}`);sat[c]=g(`SaturationAdjustment${c}`);lum_[c]=g(`LuminanceAdjustment${c}`)});
+  const cg={shadow:{h:g('ColorGradeShadowHue'),s:g('ColorGradeShadowSat'),l:g('ColorGradeShadowLum')},mid:{h:g('ColorGradeMidtoneHue'),s:g('ColorGradeMidtoneSat'),l:g('ColorGradeMidtoneLum')},high:{h:g('ColorGradeHighlightHue'),s:g('ColorGradeHighlightSat'),l:g('ColorGradeHighlightLum')}};
+  return{exposure:g('Exposure2012'),contrast:g('Contrast2012'),highlights:g('Highlights2012'),shadows:g('Shadows2012'),whites:g('Whites2012'),blacks:g('Blacks2012'),vibrance:g('Vibrance'),saturation:g('Saturation'),hue,sat,lum:lum_,cg};
+}
+
+// ═══════════════════════════
+// IMG LOADING
+// ═══════════════════════════
+// Decode via <img> + object URL. Every modern browser auto-applies EXIF orientation when
+// decoding an <img> (CSS image-orientation:from-image is the default), and WebGL honors
+// UNPACK_FLIP_Y_WEBGL for <img> sources. A createImageBitmap version was tried and REVERTED:
+// browsers IGNORE UNPACK_FLIP_Y for ImageBitmap uploads (and Safari ignores
+// imageOrientation:'from-image'), so both the preview and the export came out rotated/flipped.
+// Object URL instead of FileReader dataURL avoids the ~33% base64 memory overhead on big photos.
+// HEIC/HEIF is decoded by the ENGINE, not by this app, and the engines disagree: WKWebView (the
+// desktop shell and iOS) hands it to ImageIO and it just works, while Chromium — i.e. the Pages
+// web build — cannot decode it at all and fails with a bare "could not be decoded".
+//
+// ⚠️ Verified rather than assumed, because a bare decode error is indistinguishable from a
+// corrupt file and would send someone hunting for a bad photo: Chromium's createImageBitmap AND
+// <img> both reject a real iPhone HEIC (test/probe_heic.mjs), and macOS ImageIO decodes the same
+// files fine. So the message has to name the FORMAT and the surface, not just say "failed".
+const HEIC_RE=/\.(heic|heif)$/i;
+function loadImg(file){return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file);const i=new Image();
+  i.onload=()=>{URL.revokeObjectURL(url);res(i)};
+  i.onerror=()=>{
+    URL.revokeObjectURL(url);
+    if(HEIC_RE.test(file.name||'')||/heic|heif/i.test(file.type||'')){
+      rej(new Error('HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and '
+        +'the iPhone app both open it — or convert to JPEG first.'));
+    }else rej(new Error('could not be decoded (unsupported or damaged image)'));
+  };
+  i.src=url;
+})}
+// A bare "could not be decoded" is indistinguishable from a corrupt file and sends people
+// hunting for a bad photo — same reasoning as loadImg's HEIC branch above, extended to every
+// format only the desktop app's Rust decoders (still_decode.rs, RUST_ONLY_RE) or LibRaw's
+// missing ARRIRAW support can't reach from a browser. Name the format AND the surface that opens
+// it, never just "unsupported".
+function unsupportedFormatMessage(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  if(RUST_ONLY_RE.test(name))
+    return `${name}: .${ext.toUpperCase()} opens in the CHRO-MA-SMITH desktop app — no browser can decode it.`;
+  if(!window.__TAURI__&&ext==='ari')
+    return `${name}: ARRIRAW (.ARI) opens in the CHRO-MA-SMITH desktop app — the web build's RAW decoder (LibRaw) doesn't support it.`;
+  if(HEIC_RE.test(name))
+    return `${name}: HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and the iPhone app both open it — or convert to JPEG first.`;
+  return `${name}: not a photo or video format CHRO-MA-SMITH can open.`;
+}
+function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
+function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
+
+// ═══════════════════════════
+// EMPIRICAL MATCH
+// ═══════════════════════════
+async function buildCorrLUT(srcPx,dstPx,w,h,pfId,p0=10,p1=75){
+  const N=w*h,acc=new Float64Array(SZ*SZ*SZ*3),cnt=new Int32Array(SZ*SZ*SZ);
+  for(let i=0;i<N;i++){const p=i*4,sr=Math.min(srcPx[p]/255*32+.5|0,32),sg=Math.min(srcPx[p+1]/255*32+.5|0,32),sb=Math.min(srcPx[p+2]/255*32+.5|0,32);const idx=sr*S2+sg*SZ+sb;acc[idx*3]+=dstPx[p]/255;acc[idx*3+1]+=dstPx[p+1]/255;acc[idx*3+2]+=dstPx[p+2]/255;cnt[idx]++}
+  const lut=new Float32Array(SZ*SZ*SZ*3),pop=new Uint8Array(SZ*SZ*SZ);let pc=0;
+  for(let i=0;i<SZ*SZ*SZ;i++){if(cnt[i]>0){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i];pop[i]=1;pc++}}
+  log(`Populated ${pc}/${SZ*SZ*SZ} cells`);setP(pfId,(p0+p1)/2);await yd();
+  await propFill(lut,pop,pfId,(p0+p1)/2,p1);
+  for(let i=0;i<SZ*SZ*SZ;i++){if(pop[i]===1){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i]}}
+  return lut;
+}
+async function propFill(lut,pop,pfId,p0,p1){
+  const f=new Uint8Array(pop);let ch=true,it=0;
+  while(ch&&it<SZ*2){ch=false;it++;const tf=[];
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(f[idx])continue;let sr=0,sg=0,sb=0,c=0;
+      for(const[dr,dg,db] of[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]]){const nr=r+dr,ng=g+dg,nb=b+db;if(nr<0||nr>=SZ||ng<0||ng>=SZ||nb<0||nb>=SZ)continue;const ni=nr*S2+ng*SZ+nb;if(f[ni]){sr+=lut[ni*3];sg+=lut[ni*3+1];sb+=lut[ni*3+2];c++}}
+      if(c>0){tf.push(idx,sr/c,sg/c,sb/c);ch=true}}
+    for(let i=0;i<tf.length;i+=4){const idx=tf[i];lut[idx*3]=tf[i+1];lut[idx*3+1]=tf[i+2];lut[idx*3+2]=tf[i+3];f[idx]=1}
+    if(it%4===0){setP(pfId,p0+(p1-p0)*(it/(SZ*2)));await yd()}}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(!f[idx]){lut[idx*3]=r/32;lut[idx*3+1]=g/32;lut[idx*3+2]=b/32}}
+}

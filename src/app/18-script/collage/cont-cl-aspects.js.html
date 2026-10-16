@@ -1,0 +1,256 @@
+const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9],['2:1 carousel',2,1],['3:1 carousel',3,1]];
+const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
+const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],mode:'grid',freeItems:[],freeSel:-1,bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,capDate:false,capCam:false,capLook:false,font:'',capColor:'',titleColor:'',edits:true,oneLook:false,preset:'',dpi:300,sel:-1,frameW:0,frameH:0,inited:false};
+const _leaf=()=>({leaf:true,size:1});
+function _row(){return{dir:'row',size:1,children:[].slice.call(arguments)};}
+function _col(){return{dir:'col',size:1,children:[].slice.call(arguments)};}
+function clLeafCount(n){return n.leaf?1:n.children.reduce((a,c)=>a+clLeafCount(c),0);}
+function clClone(n){return n.leaf?{leaf:true,size:n.size}:{dir:n.dir,size:n.size,children:n.children.map(clClone)};}
+function clTemplates(n){
+  const L=_leaf;
+  if(n<=1)return[L()];
+  const mk=k=>Array.from({length:n},k);
+  const rowAll=()=>_row.apply(null,mk(L)), colAll=()=>_col.apply(null,mk(L)); // always offer horizontal strip + vertical stack
+  let extra=[];
+  if(n===2)extra=[_row(Object.assign(L(),{size:1.5}),L())];
+  else if(n===3)extra=[_col(L(),_row(L(),L())),_col(_row(L(),L()),L()),_row(L(),_col(L(),L())),_row(_col(L(),L()),L())];
+  else if(n===4)extra=[_col(_row(L(),L()),_row(L(),L())),_row(L(),_col(L(),L(),L())),_col(L(),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()))];
+  else if(n===5)extra=[_col(_row(L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L(),L())),_col(L(),_row(L(),L(),L(),L())),_row(L(),_col(L(),L(),L(),L()))];
+  else if(n===6)extra=[_col(_row(L(),L(),L()),_row(L(),L(),L())),_row(_col(L(),L()),_col(L(),L()),_col(L(),L())),_col(_row(L(),L()),_row(L(),L()),_row(L(),L()))];
+  else{const cols=Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols);let rem=n;const rws=[];
+    for(let r=0;r<rows;r++){const cs=[];for(let c=0;c<cols&&rem>0;c++){cs.push(L());rem--;}rws.push(_row.apply(null,cs));}extra=[_col.apply(null,rws)];}
+  // CHR-216: the user's saved layouts for this photo count come last (marked in clRebuildShapes).
+  return[rowAll(),colAll()].concat(extra,clSavedLayouts().filter(x=>x.n===n).map(x=>Object.assign(clClone(x.tree),{_saved:x.name})));
+}
+// CHR-216: saved collage layouts — the tree (with any divider moves) plus the look of the page
+// (aspect, background, spacing, margin, corners, frame, title placement). localStorage, like Styles.
+const _CL_SAVED_KEY='chromasmith-collage-layouts-v1';
+function clSavedLayouts(){try{return JSON.parse(localStorage.getItem(_CL_SAVED_KEY)||'[]')}catch(e){return[]}}
+async function clSaveLayout(){
+  if(!CL.tree){toast('Pick a layout first');return;}
+  const name=(await askTextModal('Save layout','Saved layouts appear at the end of the list whenever you have the same number of photos.')||'').trim();if(!name)return;
+  const list=clSavedLayouts().filter(x=>x.name!==name);
+  list.push({name,n:clLeafCount(CL.tree),tree:clClone(CL.tree),opts:{aspect:CL.aspect[0],bg:CL.bg,inner:CL.inner,outer:CL.outer,radius:CL.radius,frame:CL.frame,titlePos:CL.titlePos,titleSize:CL.titleSize,capSize:CL.capSize}});
+  try{localStorage.setItem(_CL_SAVED_KEY,JSON.stringify(list));}catch(e){toast('Could not save layout',false);return;}
+  CL.templates=clTemplates(CL.photos.length);CL.templateIdx=CL.templates.length-1;clRebuildShapes();toast(`Layout "${name}" saved`,true);
+}
+function clDeleteLayout(name){try{localStorage.setItem(_CL_SAVED_KEY,JSON.stringify(clSavedLayouts().filter(x=>x.name!==name)));}catch(e){}
+  CL.templates=clTemplates(CL.photos.length);if(CL.templateIdx>=CL.templates.length)CL.templateIdx=0;clRebuildShapes();}
+function clApplySavedOpts(name){const x=clSavedLayouts().find(y=>y.name===name);if(!x||!x.opts)return;const o=x.opts;
+  ['bg','inner','outer','radius','titleSize','capSize'].forEach(k=>{if(o[k]!=null){CL[k]=o[k];const el=document.getElementById('cl-'+k);if(el)el.value=o[k];const v=document.getElementById('cl-'+k+'-v');if(v)v.textContent=o[k];}});
+  if(o.frame){CL.frame=o.frame;const f=document.getElementById('cl-frame-sel');if(f)f.value=o.frame;}
+  if(o.titlePos){CL.titlePos=o.titlePos;const t=document.getElementById('cl-titlepos');if(t)t.value=o.titlePos;}
+  const a=CL_ASPECTS.find(z=>z[0]===o.aspect);if(a){CL.aspect=a;const s=document.getElementById('cl-aspect');if(s)s.value=o.aspect;}
+}
+function clLayoutRects(node,x,y,w,h,gap,divs){
+  if(node.leaf)return[{x,y,w,h}];
+  const ch=node.children,total=ch.reduce((a,c)=>a+c.size,0);let out=[];
+  if(node.dir==='row'){const avail=w-gap*(ch.length-1);let cx=x;
+    ch.forEach((c,i)=>{const cw=avail*c.size/total;out=out.concat(clLayoutRects(c,cx,y,cw,h,gap,divs));
+      if(divs&&i<ch.length-1)divs.push({axis:'v',x:cx+cw+gap/2,y,len:h,parent:node,i,avail,total});cx+=cw+gap;});
+  }else{const avail=h-gap*(ch.length-1);let cy=y;
+    ch.forEach((c,i)=>{const chh=avail*c.size/total;out=out.concat(clLayoutRects(c,x,cy,w,chh,gap,divs));
+      if(divs&&i<ch.length-1)divs.push({axis:'h',x,y:cy+chh+gap/2,len:w,parent:node,i,avail,total});cy+=chh+gap;});}
+  return out;
+}
+function clInit(){
+  if(!CL.inited){
+    const as=document.getElementById('cl-aspect');
+    as.innerHTML=CL_ASPECTS.map(a=>`<option value="${a[0]}">${a[0]}</option>`).join('');
+    const sw=document.getElementById('cl-swatches');sw.innerHTML='';
+    CL_SWATCHES.forEach(c=>{const b=document.createElement('button');b.style.background=c;b.title=c;b.onclick=()=>clSet('bg',c);sw.appendChild(b);});
+    window.addEventListener('resize',()=>{if(document.getElementById('panel-collage').classList.contains('active'))clRenderFrame();});
+    CL.inited=true;
+  }
+  clRebuildShapes();clRenderFrame();applyClLayout();
+  // CHR-214: edits made in Effects since the last visit are re-applied to linked photos
+  try{const n=fxImages.filter(it=>it&&it.kind!=='video').length,pb=document.getElementById('cl-pull');
+    if(pb)pb.textContent=n?`Add photos from Effects (${n})`:'Add photos from Effects';clRegrade(false);}catch(e){}
+}
+// mobile: pinned stage + section strip (mirrors the FX editor)
+const CL_SECTIONS=[['photos','image','Photos'],['canvas','vig','Size'],['layout','borders','Layout'],['style','bloom','Style'],['text','rename','Text'],['sel','adjust','Photo'],['export','export','Export']];
+function clBuildNav(){
+  const nav=document.getElementById('cl-secnav');if(!nav)return;nav.innerHTML='';
+  CL_SECTIONS.forEach(([key,ic,lb])=>{
+    if(key==='sel'&&CL.sel<0)return;
+    const b=document.createElement('button');b.className='cl-sec-btn';b.dataset.sec=key;
+    b.innerHTML=`<span class="cl-sec-ic">${icon(ic,18)}</span><span class="cl-sec-lb">${lb}</span>`;
+    b.onclick=()=>clSection(key);nav.appendChild(b);
+  });
+  const cur=document.querySelector('.cl-controls .fx-ctrl.cl-sec-active');
+  clSection(cur&&cur.dataset.clsec!=='sel'?cur.dataset.clsec:'photos');
+}
+function clSection(name){
+  const card=document.querySelector(`.cl-controls .fx-ctrl[data-clsec="${name}"]`);if(!card)return;
+  document.querySelectorAll('.cl-controls .fx-ctrl.cl-sec-active').forEach(c=>c.classList.remove('cl-sec-active'));
+  card.classList.add('cl-sec-active');
+  document.querySelectorAll('#cl-secnav .cl-sec-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
+  const sc=document.querySelector('.cl-controls');if(sc)sc.scrollTop=0;
+}
+let _mqCl=window.matchMedia('(max-width:700px)'),_clMqWired=false;
+function applyClLayout(){
+  const on=_mqCl.matches&&document.getElementById('panel-collage').classList.contains('active');
+  document.body.classList.toggle('mobile-cl',on);
+  document.documentElement.classList.toggle('mobile-cl',on); // see html.mobile-fx/mobile-cl CSS comment
+  if(on){clBuildNav();clRenderFrame();}
+  if(!_clMqWired){_clMqWired=true;_mqCl.addEventListener('change',applyClLayout);window.addEventListener('orientationchange',()=>setTimeout(applyClLayout,120));}
+}
+function clAddFiles(files){
+  const arr=[].slice.call(files).filter(f=>f.type&&f.type.indexOf('image/')===0);if(!arr.length)return;
+  let pending=arr.length;
+  const done=()=>{if(--pending===0){clPhotosChanged();if(CL.oneLook&&CL.edits)clRegrade(true);}};
+  arr.forEach(f=>{const url=URL.createObjectURL(f),img=new Image();
+    img.onload=()=>{const p={img,url,name:f.name,orig:{img,url},mtime:f.lastModified||0,exif:null};CL.photos.push(p);
+      // Date / camera for the automatic caption info. Empty-safe: no EXIF just means no text.
+      try{f.slice(0,262144).arrayBuffer().then(b=>{if(typeof readExifTags==='function')p.exif=readExifTags(new Uint8Array(b))||{};clRenderFrame();}).catch(()=>{});}catch(e){}
+      done();};
+    img.onerror=done;img.src=url;});
+}
+// CHR-214: edited photos. A collage photo can be linked to a photo loaded in Effects (p.item);
+// its look/grade is rendered through the same processToCanvas the export uses and shown instead
+// of the original. "Apply one look to all cells" additionally grades photos that were added
+// straight into Collage with the look currently set in Effects. p.orig always keeps the untouched source.
+function clImgToUrl(src,type){return new Promise(res=>{const c=document.createElement('canvas');c.width=src.naturalWidth||src.width;c.height=src.naturalHeight||src.height;
+  c.getContext('2d').drawImage(src,0,0);c.toBlob(b=>res(b?URL.createObjectURL(b):null),type||'image/jpeg',.93);});}
+function clLoadImg(url){return new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>rej(new Error('image decode failed'));im.src=url;});}
+function clRevokePhoto(p){if(p.url&&p.url!==(p.orig&&p.orig.url))URL.revokeObjectURL(p.url);if(p.orig&&p.orig.url)URL.revokeObjectURL(p.orig.url);}
+async function clGradeOne(p){
+  const it=p.item&&fxImages.indexOf(p.item)>=0?p.item:null;
+  if(p.item&&!it)p.item=null; // the Effects photo was closed: keep what we have as a plain photo
+  if(!(CL.edits&&(it||CL.oneLook))){ // show the original
+    if(p.url!==p.orig.url){if(p.url)URL.revokeObjectURL(p.url);}
+    if(!p.orig.url)p.orig.url=await clImgToUrl(p.orig.img);
+    p.img=p.orig.img;p.url=p.orig.url;return;}
+  const src0=it?geomCanvas(it):p.orig.img;
+  const sm=fxState.masks;fxState.masks=(it&&it.masks)||[];let P;
+  try{P=getFXParams(it&&!CL.oneLook?(it.adjustOverride||undefined):undefined);}finally{fxState.masks=sm;}
+  const iw0=src0.naturalWidth||src0.width,ih0=src0.naturalHeight||src0.height,k=Math.min(1,2600/Math.max(iw0,ih0));
+  let src=src0,iw=iw0,ih=ih0;
+  if(k<1){iw=Math.max(1,Math.round(iw0*k));ih=Math.max(1,Math.round(ih0*k));src=document.createElement('canvas');src.width=iw;src.height=ih;src.getContext('2d').drawImage(src0,0,0,iw,ih);}
+  const proc=await processToCanvas(P,src,iw,ih,()=>{});
+  const url=await new Promise(res=>proc.toBlob(b=>res(b?URL.createObjectURL(b):null),'image/jpeg',.93));
+  proc.width=proc.height=0;if(!url)throw new Error('toBlob failed');
+  const im=await clLoadImg(url);
+  if(p.url&&p.url!==(p.orig&&p.orig.url))URL.revokeObjectURL(p.url);
+  p.img=im;p.url=url;
+}
+function clEditSig(){try{return JSON.stringify([CL.edits,CL.oneLook,getUISnapshot(),fxImages.map(it=>[it.adjustOverride,it.geom,it.masks&&it.masks.length])]);}catch(e){return String(Math.random());}}
+let _clGradeTok=0;
+async function clRegrade(force){
+  if(!CL.photos.length)return;
+  const sig=clEditSig();if(!force&&sig===CL._sig)return;
+  if(!CL.photos.some(p=>p.item||CL.oneLook)&&!CL.photos.some(p=>p.url!==(p.orig&&p.orig.url)))return;
+  const tok=++_clGradeTok;CL._sig=sig;let used=false;
+  for(const p of CL.photos.slice()){
+    if(tok!==_clGradeTok)return;
+    try{await clGradeOne(p);used=true;}catch(e){log('Collage: could not apply edits to '+(p.name||'a photo')+' — '+e.message,'warn');}
+  }
+  if(tok!==_clGradeTok)return;
+  if(used&&fxImages.length){try{updateWork();renderPreview();}catch(e){}}
+  clRenderTray();clRenderFrame();
+}
+function clAddFromEditor(){
+  const its=fxImages.filter(it=>it&&it.kind!=='video'&&it.img);
+  if(!its.length){toast('Open photos in Effects first');return;}
+  let n=0;
+  its.forEach(it=>{if(CL.photos.some(p=>p.item===it))return;
+    const img=it.img;
+    CL.photos.push({img,url:null,name:it.name||'photo',orig:{img,url:null},item:it,exif:it.exif||null,mtime:it.mtime||0});n++;});
+  if(!n){toast('Those photos are already in the collage');return;}
+  (async()=>{
+    for(const p of CL.photos){if(!p.url&&!p.orig.url){try{p.orig.url=await clImgToUrl(p.orig.img);p.url=p.orig.url;p.orig.img=p.img=await clLoadImg(p.url);}catch(e){}}}
+    clPhotosChanged();await clRegrade(true);
+    log(`Collage: added ${n} photo(s) from Effects${CL.edits?' with their edits':''}`,'ok');
+  })();
+}
+function clSetEdits(v){CL.edits=!!v;clRegrade(true);}
+function clSetOneLook(v){CL.oneLook=!!v;clRegrade(true);}
+function clLookName(){const s=document.getElementById('sel-lut');if(!s||!s.value)return'';const o=s.options[s.selectedIndex];return o?String(o.textContent||'').trim():'';}
+function clDropFiles(e){e.preventDefault();dzl(document.getElementById('cl-dz'));if(e.dataTransfer&&e.dataTransfer.files)clAddFiles(e.dataTransfer.files);}
+function clPhotosChanged(){
+  const n=Math.max(1,CL.photos.length);
+  CL.templates=clTemplates(n);
+  if(CL.templateIdx>=CL.templates.length)CL.templateIdx=0;
+  clSetTemplate(CL.templateIdx,false);
+  clRenderTray();clRebuildShapes();
+  const has=CL.photos.length>0;
+  document.getElementById('cl-empty').style.display=has?'none':'flex';
+  document.getElementById('cl-frame').style.display=has?'block':'none';
+  document.getElementById('cl-dz').classList.toggle('hot',!has);
+}
+function clSetTemplate(idx,reset){
+  CL.templateIdx=idx;CL.tree=clClone(CL.templates[idx]);
+  const lc=clLeafCount(CL.tree);
+  if(reset||!CL.assign.length){CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<CL.photos.length?i:null);}
+  else{while(CL.assign.length<lc)CL.assign.push(CL.assign.length<CL.photos.length?CL.assign.length:null);CL.assign.length=lc;}
+  CL.cells=[];for(let i=0;i<lc;i++)CL.cells.push({scale:1,ox:0,oy:0});
+  CL.sel=-1;clHideCellPanel();clMarkShapes();clRenderFrame();
+}
+function clRebuildShapes(){
+  const host=document.getElementById('cl-shapes');if(!host)return;host.innerHTML='';
+  const hint=document.getElementById('cl-shape-hint');
+  if(!CL.photos.length){if(hint)hint.textContent='Add photos to see layout options.';return;}
+  if(hint)hint.textContent=CL.photos.length+' photo'+(CL.photos.length>1?'s':'')+' — pick an arrangement.';
+  CL.templates.forEach((t,i)=>{
+    const rects=clLayoutRects(clClone(t),0,0,100,100,3,null);
+    const svg='<svg viewBox="0 0 100 100">'+rects.map(r=>`<rect x="${r.x}" y="${r.y}" width="${Math.max(0,r.w)}" height="${Math.max(0,r.h)}" rx="2" fill="currentColor" opacity=".5"/>`).join('')+'</svg>';
+    const b=document.createElement('div');b.className='cl-shape'+(i===CL.templateIdx?' on':'');b.style.color=t._saved?'var(--acc)':'var(--mut)';b.innerHTML=svg;
+    if(t._saved){b.title=t._saved+' — saved layout (right-click to delete)';b.oncontextmenu=e=>{e.preventDefault();confirmModal(`Delete saved layout "${t._saved}"?`,'Delete').then(ok=>{if(ok)clDeleteLayout(t._saved);});};}
+    b.onclick=()=>{if(t._saved)clApplySavedOpts(t._saved);clSetTemplate(i,false);};host.appendChild(b);
+  });
+}
+function clMarkShapes(){document.querySelectorAll('#cl-shapes .cl-shape').forEach((el,i)=>el.classList.toggle('on',i===CL.templateIdx));}
+function clRenderTray(){
+  const tray=document.getElementById('cl-tray');if(!tray)return;tray.innerHTML='';
+  CL.photos.forEach((p,i)=>{
+    const t=document.createElement('div');t.className='cl-thumb';t.draggable=true;t.setAttribute('role','button');t.tabIndex=0;t.setAttribute('aria-label',`Add ${p.name||'photo'} to scrapbook`);
+    t.innerHTML=`<img src="${p.url}" alt=""><div class="cl-thumb-x" title="Remove">${icon('close',12)}</div>`;
+    t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain','photo:'+i);e.dataTransfer.effectAllowed='copy';});
+    t.addEventListener('click',e=>{if(e.target.closest('.cl-thumb-x'))return;if(CL.mode==='freeform')clFreeAddPhoto(i);});
+    t.addEventListener('keydown',e=>{if(CL.mode==='freeform'&&(e.key==='Enter'||e.key===' ')){e.preventDefault();clFreeAddPhoto(i);}});
+    t.querySelector('.cl-thumb-x').onclick=e=>{e.stopPropagation();clRemovePhoto(i);};
+    tray.appendChild(t);
+  });
+}
+function clRemovePhoto(i){
+  const selectedPhoto=CL.freeItems[CL.freeSel]?.photo;
+  clRevokePhoto(CL.photos[i]);CL.photos.splice(i,1);
+  CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
+  CL.freeItems=CL.freeItems.filter(a=>a.photo!==i).map(a=>({...a,photo:a.photo>i?a.photo-1:a.photo}));
+  CL.freeSel=selectedPhoto==null||selectedPhoto===i?-1:CL.freeItems.findIndex(a=>a.photo===(selectedPhoto>i?selectedPhoto-1:selectedPhoto));
+  clPhotosChanged();
+}
+// CHR-215: one place decides where the title band goes and how big text is, in units of the
+// frame's short side — so the on-screen frame and the exported file always match.
+function clTextGeom(W,H){
+  const base=Math.min(W,H),outer=CL.outer/1000*base;
+  const tPx=CL.title.trim()?CL.titleSize/1000*base:0,band=tPx?tPx*1.9:0;
+  return{base,outer,tPx,band,capPx:CL.capSize/1000*base,
+    lx:outer,ly:outer+(CL.titlePos==='top'?band:0),lw:W-2*outer,lh:H-2*outer-band,
+    ty:CL.titlePos==='top'?outer:H-outer-band};
+}
+function clTextColor(){if(CL.titleColor)return CL.titleColor;const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
+  const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
+// CHR-217: per-cell photo frames. Returns the photo's inset inside its cell (px) and the mat
+// colour; "print" is the instant-print shape (thick bottom, where its caption is written).
+function clFrameInset(w,h){
+  const m=Math.min(w,h);
+  if(CL.frame==='keyline'){const k=Math.max(2,m*0.015);return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='mat'){const k=m*0.05;return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='print'){const k=m*0.055;return{t:k,r:k,b:k*3.6,l:k,col:'#fbfaf6'};}
+  if(CL.frame==='deckle'){const k=m*0.07;return{t:k,r:k,b:k,l:k,col:'#f6f1e6',deckle:true};}
+  if(CL.frame==='shadow')return{t:0,r:0,b:0,l:0,col:'#ffffff',round:true,heavy:true};
+  return null;
+}
+// CHR-217: deckled paper edge. One deterministic outline (fractions of the cell, so the preview
+// polygon and the exported path are the same shape at any size); seeded per cell.
+function clDeckPts(w,h,seed){
+  const m=Math.min(w,h),amp=m*0.014,nx=Math.max(8,Math.round(w/m*46)),ny=Math.max(8,Math.round(h/m*46));
+  let a=(seed*2654435761+12345)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};
+  const j=()=>rnd()*amp,pts=[];
+  for(let i=0;i<nx;i++)pts.push([w*i/nx,j()]);
+  for(let i=0;i<ny;i++)pts.push([w-j(),h*i/ny]);
+  for(let i=0;i<nx;i++)pts.push([w-w*i/nx,h-j()]);
+  for(let i=0;i<ny;i++)pts.push([j(),h-h*i/ny]);
+  return pts;
+}

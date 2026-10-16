@@ -1,0 +1,252 @@
+function installFXImages(entries,loadKey,opts){
+  opts=opts||{};
+  if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
+
+  if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo
+
+  if(!entries.length)return;
+  // A new photo invalidates any cached AI-select embedding (it belongs to the OUTGOING image) —
+  // the next tap/AI-mask-add re-encodes lazily rather than eagerly here, so opening a photo you
+  // never use AI Select on never pays the encode cost.
+  samInvalidate();mskAiTapMode=false;
+  _fxGeomBatchEpoch++;
+  fxImages=entries;
+  setTimeout(()=>{if(typeof csInstallHint==='function')csInstallHint();},4000);
+  // Phones open on the looks: Chromasmith is a film-look app first, tools second.
+  setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();if(document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('sheet-open')&&!document.body.classList.contains('tools-open'))fxSection('looks');},300);
+  if(cropMode)cropExit();
+  fxImages.forEach(it=>{it.geom=defGeom();if(it.adjustOverride===undefined)it.adjustOverride=null;});
+  fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
+  fxCurIdx=0;fxExportScope='all';
+  fxImg=fxImages[0].img;updateWork();
+  resetGeomUI();
+  const n=fxImages.length;
+  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
+  document.getElementById('fx-fname').value=fxImages[0].name;
+  fxDeskbarTitle(fxImages[0].name,fxDimsFmt(fxImages[0].name,fxImages[0].img,fxImages[0].ext));
+  // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
+  // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
+  // clicking the same photo again (to compare after an export, or just re-selecting it) is now
+  // common; resetting to v1.0 every time made every export reuse the same "_v1.0" filename, so
+  // the OS/browser's own duplicate-download naming ("(1)", "(2)"...) silently replaced the
+  // intended "_v1.1"/"_v1.2" scheme. Key on name+size+lastModified so a real edit-then-reload
+  // of the same file (same bytes) still counts as "the same photo".
+  const isNewPhoto=loadKey!==_fxLoadKey;
+  if(isNewPhoto){fxVersion=1.0;_fxLoadKey=loadKey;}
+  document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+  // "All FX" (grain/halation/bloom/borders) is shared/global UI state ON PURPOSE while
+  // switching between photos WITHIN one already-loaded batch (fxSelectImage) — that's what
+  // lets one Adjust/Grain/etc. edit apply to every photo in a batch identically. But loading a
+  // genuinely different photo (a fresh loadFXImages call — reported as "All FX stays stuck on
+  // the new image") should start clean, same as geometry/zoom/history above: turning on All FX
+  // for one photo shouldn't silently paint every future unrelated photo you open. A caller that
+  // then restores a saved per-photo recipe (openInEditor's applyUISnapshot) runs AFTER this and
+  // correctly reapplies that specific photo's own toggle state, recipe or not.
+  if(isNewPhoto){
+    _ALLFX.forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);if(tg)tg.classList.remove('on');
+      const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.add('ff-off');} // off = shown dimmed, never hidden
+    });
+    if(typeof syncAllFxBtn==='function')syncAllFxBtn();
+  }
+  const btn=document.getElementById('btn-fx-export');btn.disabled=false;
+  document.getElementById('fx-preview-tools').style.display='flex';
+  document.getElementById('fx-zoom-ctrl').style.display='flex';
+  fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');
+  // Seed history with a BASELINE snapshot of the just-loaded (RAW-defaults-applied, no user
+  // edits yet) state immediately — previously fxHistory started empty and only got its first
+  // entry on the user's FIRST edit (fxUpdate->fxHistoryPush), so fxHistory[0] was "state right
+  // after edit #1", not the pristine default. fxResetAll() applied fxHistory[0] believing it
+  // was the baseline, so a single edit followed by Reset was a silent no-op (that field's own
+  // value was already baked into "history[0]"), and fxResetAll() also early-returned entirely
+  // when fxHistory was still empty (the exact single-edit-then-reset case). Recipe restoration
+  // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
+  // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
+  // not back to whatever was last saved.
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
+  if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
+  // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
+  // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
+  // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
+  // click. fxImages[0] gets the array the baseline snapshot/recipe-restore below already
+  // produced (so a saved single-photo recipe's masks land correctly); every OTHER photo in a
+  // freshly loaded batch starts with its own independent empty array — previously ALL photos
+  // in a batch shared the exact same fxState.masks array by reference, so painting/adjusting a
+  // mask on photo 1 silently appeared on every other photo too ("masks transfer from one image
+  // to the next"). mskCopyToAll() is the explicit, opt-in way to actually share a mask set
+  // across a batch now.
+  fxImages[0].masks=fxState.masks;
+  for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
+  if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
+  if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
+  if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
+  if(!opts.deferRender){renderPreview();buildLookGallery();buildFilmstrip();}
+  else {
+    const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,500));
+    idle(()=>{buildLookGallery();buildFilmstrip();},{timeout:1000});
+  }
+  syncExportScopeUI();
+  if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
+  if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
+  showExif(fxImages[0].exif||{});
+  log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
+}
+// A ~2560px long-edge copy of a full-resolution canvas for fit-view editing; null if the source is
+// already about that size. naturalWidth/Height are defined so size checks treat it like an image.
+function fxDisplayTierCanvas(full){
+  const fw=full.naturalWidth||full.width,fh=full.naturalHeight||full.height;
+  if(!fw||!fh||Math.max(fw,fh)<=3000)return null;
+  const k=2560/Math.max(fw,fh),c=document.createElement('canvas');
+  c.width=Math.round(fw*k);c.height=Math.round(fh*k);
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(full,0,0,c.width,c.height);
+  Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  return c;
+}
+function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
+async function loadFXImages(fileList,opts){
+  opts=opts||{};
+  const privateEntries=!!opts.privateEntries;
+  if(!privateEntries){
+    if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
+    fxRememberPrevious();
+  }
+  if(!privateEntries)window.__pm&&window.__pm('lfx-start');
+  if(!privateEntries)fxPhotoActivityInvalidate();
+  // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
+  // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
+  // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
+  // filename extension whenever the MIME is missing/unhelpful.
+  // IMG_EXT_RE/RUST_ONLY_RE come from the FORMAT REGISTRY near loadTiff — see that comment.
+  // Video files are routed to their own decode path (loadFXVideoFile) below, alongside the
+  // per-file try/catch loop images already use — a video mixed into `files` would hit loadImg()
+  // and fail as "not a valid image". Gated on videoSupported() so a browser without WebCodecs
+  // (or Capacitor/iOS) gets a clear per-file error instead of a silent no-op.
+  const videoFiles=videoSupported()?[...fileList].filter(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name)):[];
+  // RUST_ONLY_RE files (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL) are ACCEPTED here on every platform —
+  // desktop decodes them via decode_image_v1; web/iOS instead throws unsupportedFormatMessage()
+  // from inside the decode loop below, which flows through the same per-file catch/_loadFailCount
+  // as every other decode failure, rather than being filtered out here and silently dropped.
+  const openable=f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f)||RUST_ONLY_RE.test(f.name);
+  const files=[...fileList].filter(openable);
+  const nonImageNonVideo=[...fileList].filter(f=>!openable(f)&&!videoFiles.includes(f)&&!(f.type.startsWith('video/')||VID_EXT_RE.test(f.name)));
+  if(privateEntries&&(videoFiles.length||nonImageNonVideo.length))throw new Error('Compare supports still photos only.');
+  // Declared here (not down by the decode loop, where it used to live) so the partition above
+  // can add to the same count — one "N file(s) failed" toast covers both unsupported-format
+  // rejections and genuine decode failures, instead of two separate toasts firing.
+  let _loadFailCount=0;
+  if(!privateEntries)for(const f of nonImageNonVideo){log(unsupportedFormatMessage(f.name),'err');_loadFailCount++}
+  if(!files.length&&!videoFiles.length){
+    if(nonImageNonVideo.length&&typeof toast==='function')toast(`${nonImageNonVideo.length} file(s) couldn't be opened — see log`,false);
+    return;
+  }
+  if(!videoSupported()&&[...fileList].some(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name))){
+    log('Video grading needs a browser with WebCodecs support (desktop Chrome, or the desktop app) — not available here.','err');
+  }
+  // Hoisted above the decode loop (only depends on `files`, not `entries`) so a genuinely NEW
+  // photo can be detected BEFORE applyRawDefaults() runs below. Previously that detection only
+  // happened afterward, inside installFXImages — so applyRawDefaults()'s "only fill a slider
+  // still at 0" check saw whatever the PREVIOUS photo had left every slider/toggle at, not this
+  // photo's true defaults (e.g. Color NR silently inheriting the last photo's value instead of
+  // its own 25 default), and rail icons (tg-adjust/tg-curves/tg-hsl/tg-local/tg-art/tg-vig/
+  // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
+  // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
+  const loadKey=[...files,...videoFiles].map(fxFileLoadKey).sort().join('|');
+  if(!privateEntries&&loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
+  if(!privateEntries)window.__pm&&window.__pm('lfx-snapshot-done');
+  const entries=[];
+  for(const file of videoFiles){
+    fxDeskbarTitle(file.name,'Opening video…',true);
+    try{
+      entries.push(await loadFXVideoFile(file));
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)}
+  }
+  for(const file of files){
+    if(!privateEntries)fxDeskbarTitle(file.name,'Opening photo…',true);
+    try{
+      // A by-path RAW (desktop Library open) carries only its header: that's all the sniff needs,
+      // and the native decode reads the file itself. Anything else reads the whole file as before.
+      let bytes=file.__csHead?file.__csHead:new Uint8Array(await file.arrayBuffer());
+      if(!privateEntries)window.__pm&&window.__pm('lfx-arraybuffer');
+      let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
+      // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
+      // route it through the normal image path instead of the RAW decoder, which would
+      // correctly-but-uselessly reject it as "no decoder". Most commonly a Google Photos
+      // Picker import handing back the JPEG twin of an iPhone ProRAW/RAW+JPEG pair.
+      const sniffedKind=isRw2File(file)?sniffRealImageKind(bytes):null;
+      if(sniffedKind&&file.__csHead)bytes=new Uint8Array(await file.arrayBuffer()); // not really RAW: the image path needs every byte
+      if(sniffedKind){
+        ext=sniffedKind;
+        if(!privateEntries)log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
+      }
+      if(isTiffFile(file)){
+        const{canvas,dpi,icc,tiffMeta}=await loadTiff(file);
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc,tiffMeta}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately; tiffMeta → Save to Lightroom's real-TIFF re-encode
+        continue;
+      }
+      if(isRw2File(file)&&!sniffedKind){
+        // Not DNG: ProRAW/linear DNGs are already demosaiced, so halfSize saves nothing — measured slower
+        // on a 48MP iPhone DNG, and it came back at a wrong 1920px size.
+        const webHalf=!privateEntries&&!window.__TAURI__&&!file.__csSourcePath&&!/\.dng$/i.test(file.name);
+        const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf,privateEntry:privateEntries});
+        // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
+        // on EVERY open path — library-ui's get_meta refines this later on library opens.
+        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',photoStyle:meta.photoStyle,lensStatusUnknown:!!meta.lensStatusUnknown}:undefined;
+        // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
+        // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
+        // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
+        const work=!privateEntries&&file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
+        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
+        entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        continue;
+      }
+      // EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL — desktop-only (still_decode.rs). RUST_ONLY_RE files are
+      // included in `files` on every platform (see the FORMAT REGISTRY / openable() above), so
+      // web/iOS reaches this branch too: without window.chromasmithDecodeStill it throws the same
+      // named message loadFXImages already shows for a format no surface can open at all, instead
+      // of a bare "could not be decoded".
+      if(RUST_ONLY_RE.test(file.name)){
+        if(typeof window.chromasmithDecodeStill!=='function')throw new Error(unsupportedFormatMessage(file.name));
+        const{canvas,dpi,note}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength}); // bytes:null → no PNG/JPEG meta splice on export
+        continue;
+      }
+      // ROADMAP.md F6: .ico is otherwise browser-native (FMT_STILL_NATIVE/IMG_EXT_RE, plain
+      // <img>), which only ever shows the ONE frame the browser's own ICO decoder picks. Desktop
+      // routes it through the same Rust decode as RUST_ONLY_RE instead, purely so a multi-frame
+      // icon can offer a frame picker (see fxIcoFramePicker below) — this is additive: an ICO
+      // that only has one frame renders identically either way, and web/iOS (no
+      // chromasmithDecodeStill) falls straight through to the existing <img> path below.
+      if(ext==='ico'&&typeof window.chromasmithDecodeStill==='function'){
+        const{canvas,dpi,note,frameCount}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength,icoFrameCount:frameCount,icoFrame:0,_icoBytes:bytes});
+        continue;
+      }
+      const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
+      const exif=['jpg','jpeg','heic','heif','png','webp','tif','tiff'].includes(ext)?readExifTags(bytes):{};
+      const img=await loadImg(file);
+      // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
+      // row in the metadata panel at all — only photos opened via the desktop Library set it.
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
+    }catch(e){if(privateEntries)throw e;log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
+  }
+  if(privateEntries)return entries;
+  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
+  if(!entries.length){const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false);else fxDeskbarTitle('', '', false);log('No images loaded','err');return}
+  // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
+  // now) — was previously inline per-RW2-entry, before any render had happened; moving it
+  // after the render here would apply the defaults a frame too late, requiring a manual
+  // slider nudge before they'd visibly take effect.
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-defaults');
+  if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-install');
+  installFXImages(entries,loadKey);
+  if(typeof csFirstEditPhotoOpened==='function')csFirstEditPhotoOpened();
+  if(!privateEntries)window.__pm&&window.__pm('lfx-installed');
+  return entries[0]; // callers that must know THEIR photo (not a stale/other one) is what's installed compare against fxImages[0]
+}
+// Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
+// "White glow" halation switch accordingly. The user can still toggle it afterward.

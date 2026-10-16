@@ -1,0 +1,253 @@
+async function exportResample(cv,settings){
+  const longEdge=settings&&settings.size!=null?settings.size:(parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0);
+  const level=settings&&settings.sharp!=null?settings.sharp:(parseInt((document.getElementById('sel-exp-sharp')||{}).value||'0',10)||0);
+  if(!longEdge&&!level)return cv;
+  const w0=cv.width,h0=cv.height;
+  let out=exportResize(cv,longEdge);
+  if(out!==cv)cv.width=cv.height=0;
+  // Sharpening a full-resolution frame is a ~25M-pixel loop. It runs in the pixel worker now
+  // (exportSharpen), so the UI keeps painting — but it still takes real time, so still say so.
+  if(level&&!longEdge&&w0*h0>16e6)log('Sharpening at full resolution — this takes a few seconds','info');
+  out=await exportSharpen(out,level);
+  if(out.width!==w0||out.height!==h0)log(`Resized ${w0}×${h0} → ${out.width}×${out.height}`,'info');
+  return out;
+}
+// ══ FRAME OVERLAY ("Load frame…") ═════════════════════════════════════════════════════════
+// Lays a user-supplied frame PNG over the bordered photo, between the border layers and the
+// canvas matte. Drawn to COVER (cropped, never stretched). The real-scan film frames are border
+// layers now (see REAL-SCAN FILM FRAMES) — the old procedural sprocket/roll/instant styles and
+// the bundled ragged-carrier plate were removed.
+const FILM_FRAMES={none:{label:'None'},custom:{label:'Load frame…',kind:'plate',src:null}};
+const _framePlates=new Map();   // url -> HTMLImageElement, decoded once
+function _framePlate(url){
+  if(!url)return null;
+  const hit=_framePlates.get(url);
+  if(hit)return hit.complete&&hit.naturalWidth?hit:null;
+  const img=new Image();
+  img.onload=()=>{if(typeof renderPreview==='function')renderPreview();};  // repaint once it lands
+  img.src=url;
+  _framePlates.set(url,img);
+  return null;
+}
+/// Overlays never grow the canvas; kept as a function because the video path pre-sizes with it.
+function filmFrameOutSize(w,h,FR){
+  return{w,h,reb:0};
+}
+/// Returns a NEW canvas, or `src` untouched when off or the plate has not decoded yet.
+function filmFrameCompose(src,FR){
+  if(!FR||!FR.style||FR.style==='none')return src;
+  const spec=FILM_FRAMES[FR.style];
+  if(!spec||spec.kind!=='plate')return src;
+  const plate=_framePlate(FR.customUrl);
+  if(!plate)return src;
+  const sw=src.width,sh=src.height;
+  const out=document.createElement('canvas');out.width=sw;out.height=sh;
+  const x=out.getContext('2d');
+  x.drawImage(src,0,0);
+  const sc=Math.max(sw/plate.naturalWidth,sh/plate.naturalHeight);
+  const pw=plate.naturalWidth*sc,ph=plate.naturalHeight*sc;
+  x.drawImage(plate,(sw-pw)/2,(sh-ph)/2,pw,ph);
+  return out;
+}
+function canvasCompose(src,CV){
+  if(!CV||!CV.enabled||!CV.ar)return src;
+  const sw=src.width,sh=src.height,ar=CV.ar,zoom=CV.zoom||1;
+  const outW=Math.round(sw/sh>ar?sw:sh*ar),outH=Math.round(sw/sh>ar?sw/ar:sh);
+  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  const x=out.getContext('2d');
+  x.fillStyle=CV.bg||'#000000';x.fillRect(0,0,outW,outH);
+  if(CV.blur){
+    // blur = draw a cover-fit copy at 1/16 scale then upscale with smoothing — reliable on
+    // every browser (ctx.filter blur is not trustworthy on iOS), and resolution-independent
+    // so the preview blur matches the export blur.
+    // blurAmt 0..100 → downscale 1..48 (0 = the background photo sharp). bgImg = a different
+    // photo the user picked for the background (session-only, not saved in the recipe).
+    const bsrc=CV.bgImg||src,bw=bsrc.naturalWidth||bsrc.width,bh=bsrc.naturalHeight||bsrc.height;
+    const div=1+(CV.blurAmt==null?60:CV.blurAmt)/100*47;
+    const t=document.createElement('canvas');
+    const tw=Math.max(1,Math.round(outW/div)),th=Math.max(1,Math.round(outH/div));
+    t.width=tw;t.height=th;const tx=t.getContext('2d');
+    const s=Math.max(tw/bw,th/bh);
+    tx.drawImage(bsrc,(tw-bw*s)/2,(th-bh*s)/2,bw*s,bh*s);
+    x.imageSmoothingEnabled=true;
+    x.drawImage(t,0,0,outW,outH);
+    x.fillStyle='rgba(0,0,0,.22)';x.fillRect(0,0,outW,outH); // slight dim so the photo pops
+    t.width=t.height=0;
+  }
+  x.drawImage(src,(outW-sw*zoom)/2,(outH-sh*zoom)/2,sw*zoom,sh*zoom);
+  return out;
+}
+// ══ REAL-SCAN FILM FRAMES ══════════════════════════════════════════════════════════════════
+// Border layers can be a plain colour band or a film frame built from real scanned film edges
+// (vendor/frames/film/, packed by tools/scripts/pack_borders.py). Each strip is one straightened edge:
+// rows run from the frame's outer side to past its ragged inner edge, and its two ends carry the
+// scan's real corners. A side of any length is assembled from REAL sections only — ends kept,
+// middle filled with sections whose edge depth matches where the previous one stopped, joined
+// with long cross-fades — so any aspect ratio works and nothing is ever stretched.
+const FILM_EDGE={manifest:null,loading:null,imgs:new Map(),tint:new Map(),rings:new Map()};
+function filmEdgeManifest(){
+  if(FILM_EDGE.manifest)return Promise.resolve(FILM_EDGE.manifest);
+  if(!FILM_EDGE.loading)FILM_EDGE.loading=fetch('vendor/frames/film/manifest.json',{cache:'force-cache'})
+    .then(r=>r.json()).then(m=>{FILM_EDGE.manifest=m;_filmEdgeFillSources(m);return m;})
+    .catch(e=>{FILM_EDGE.loading=null;log('Film frames failed to load: '+e.message,'warn');return null;});
+  return FILM_EDGE.loading;
+}
+// Scan count is written here by tools/scripts/pack_borders.py so the Source list exists synchronously —
+// a saved "Scan 12" choice restored before the manifest arrives would otherwise be lost.
+const FILM_EDGE_SCANS=55;
+function _filmEdgeFillSources(m){
+  const n=m?m.scans.length:FILM_EDGE_SCANS;
+  for(const k of ['b1','b2']){const sel=document.getElementById('sel-'+k+'-src');if(!sel||sel.options.length>1)continue;
+    for(let i=1;i<=n;i++){const o=document.createElement('option');o.value=String(i);o.textContent='Scan '+i;sel.appendChild(o);}}
+}
+_filmEdgeFillSources(null);
+function _filmEdgeImg(file){
+  let im=FILM_EDGE.imgs.get(file);
+  if(!im){im=new Image();im.decoding='async';
+    im._ready=new Promise(ok=>{im.onload=()=>{ok(im);if(typeof renderPreview==='function')renderPreview();};im.onerror=()=>ok(null);});
+    im.src='vendor/frames/film/'+file;FILM_EDGE.imgs.set(file,im);}
+  return im;
+}
+function _filmEdgePool(m,L){
+  const scans=L.src&&L.src!=='all'?m.scans.filter(s=>String(s.id)===String(L.src)):m.scans;
+  const pool=[];for(const s of (scans.length?scans:m.scans))for(const st of s.strips)pool.push({st,scan:s});
+  return pool;
+}
+/// Await every strip a layer set could use — export calls this so a frame is never silently
+/// dropped because a strip had not decoded yet (the old plate path's failure mode).
+async function filmEdgeReady(P){
+  const layers=[P.b1,P.b2].filter(L=>L&&L.type==='film'&&L.thickness>0);
+  if(!P.bordersEnabled||!layers.length)return;
+  const m=await filmEdgeManifest();if(!m)return;
+  const need=new Set();for(const L of layers)for(const{st}of _filmEdgePool(m,L))need.add(st.file);
+  await Promise.all([...need].map(f=>_filmEdgeImg(f)._ready));
+}
+function _filmEdgeTinted(st,color){
+  const key=st.file+'|'+color;let c=FILM_EDGE.tint.get(key);if(c)return c;
+  const im=_filmEdgeImg(st.file);if(!im.complete||!im.naturalWidth)return null;
+  c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
+  const x=c.getContext('2d');x.drawImage(im,0,0);
+  const d=x.getImageData(0,0,c.width,c.height),p=d.data;
+  const t=[1,3,5].map(i=>parseInt((color||'#0a0a0b').substr(i,2),16)||0);
+  // texture sits on top of the chosen tone: dense black stays the tone, dust/scratches lift it
+  for(let i=0;i<p.length;i+=4){const v=p[i]/255*90;p[i]=Math.min(255,t[0]+v);p[i+1]=Math.min(255,t[1]+v);p[i+2]=Math.min(255,t[2]+v);}
+  x.putImageData(d,0,0);
+  if(!st.prof){   // per-column edge depth, for matching joins
+    const W=c.width,H=c.height,a=new Float32Array(W);
+    for(let y=0;y<H;y++)for(let u=0;u<W;u++)a[u]+=p[(y*W+u)*4+3];
+    const sm=new Float32Array(W);for(let u=0;u<W;u++){let s=0,n=0;for(let k=-6;k<=6;k++){const q=a[u+k];if(q!==undefined){s+=q;n++;}}sm[u]=s/n/255;}
+    st.prof=sm;
+  }
+  if(FILM_EDGE.tint.size>400)FILM_EDGE.tint.clear();
+  FILM_EDGE.tint.set(key,c);return c;
+}
+function _filmRng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+/// One side of length L px at band thickness t px, as a canvas whose row 0 is the outer edge.
+function _filmEdgeSide(item,L,t,color,R){
+  const st=item.st,sc=item.scan,src=_filmEdgeTinted(st,color);if(!src)return null;
+  const band=Math.max(1,st.band*(sc.scale||1)),k=t/band,sw=src.width;
+  const sy=Math.min(st.h-2,Math.max(0,st.top+(sc.offset||0)*st.band)),shh=st.h-sy;
+  const H=Math.max(2,Math.round(shh*k));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(L));c.height=H;const x=c.getContext('2d');
+  const end=Math.min(sw*k*.25,Math.max((st.corner||0)*k*1.6,t*2.5)),endS=end/k;
+  const midS0=endS,midLen=Math.max(1,sw-2*endS),fade=Math.max(12,t*3);
+  const flip=R()<.5;x.save();if(flip){x.translate(c.width,0);x.scale(-1,1);}
+  const tmp=document.createElement('canvas');tmp.height=H;const tx=tmp.getContext('2d');
+  const feather=(w,left,right)=>{tx.globalCompositeOperation='destination-in';const g=tx.createLinearGradient(0,0,w,0),f=Math.min(.45,fade/w);
+    g.addColorStop(0,left?'rgba(0,0,0,0)':'#000');g.addColorStop(f,'#000');g.addColorStop(1-f,'#000');g.addColorStop(1,right?'rgba(0,0,0,0)':'#000');
+    tx.fillStyle=g;tx.fillRect(0,0,w,H);tx.globalCompositeOperation='source-over';};
+  let pos=end-fade,cur=st.prof[Math.round(endS)]||0;
+  const segMax=Math.max(midLen*.6,40);
+  while(pos<c.width-end){
+    const segS=Math.min(midLen,Math.max(Math.min(segMax,midLen)*(0.5+R()*.5),3*fade/k));let s0=midS0,bd=1e9;
+    for(let q=0;q<40;q++){const c0=midS0+R()*Math.max(0,midLen-segS),e=Math.abs((st.prof[Math.round(c0+fade/k/2)]||0)-cur);if(e<bd){bd=e;s0=c0;}}
+    cur=st.prof[Math.round(s0+segS-fade/k/2)]||cur;const w=Math.max(2,Math.round(segS*k));
+    tmp.width=w;tx.drawImage(src,s0,sy,segS,shh,0,0,w,H);feather(w,true,true);
+    x.drawImage(tmp,Math.round(pos),0);pos+=Math.max(w-fade,fade*.5,4);   // always advance
+  }
+  for(const[s0,dx,first]of[[0,0,true],[sw-endS,c.width-end,false]]){const w=Math.max(2,Math.round(end));tmp.width=w;
+    tx.drawImage(src,s0,sy,endS,shh,0,0,w,H);feather(w,!first,first);x.drawImage(tmp,Math.round(dx),0);}
+  x.restore();tmp.width=tmp.height=0;return c;
+}
+/// The film ring for one layer: a transparent W×H canvas whose film band, t px thick, hugs the
+/// outer edge on all four sides. Cached — video export redraws it every frame otherwise.
+function _filmRing(W,H,t,L,seed){
+  const m=FILM_EDGE.manifest;if(!m){filmEdgeManifest().then(()=>{if(typeof renderPreview==='function')renderPreview();});return null;}
+  const key=[W,H,t,L.color,L.src,L.grain,seed].join('|');const hit=FILM_EDGE.rings.get(key);if(hit)return hit;
+  const pool=_filmEdgePool(m,L);if(!pool.length)return null;
+  const R=_filmRng(Math.floor(seed*1e6)^0x5f3759df);
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+  for(const[s,len]of[[0,W],[1,H],[2,W],[3,H]]){
+    const side=_filmEdgeSide(pool[Math.floor(R()*pool.length)],len,t,L.color,R);
+    if(!side){c.width=c.height=0;return null;}   // a strip still decoding — caller retries on load
+    x.save();
+    if(s===1){x.translate(W,0);x.rotate(Math.PI/2);}else if(s===2){x.translate(W,H);x.rotate(Math.PI);}else if(s===3){x.translate(0,H);x.rotate(-Math.PI/2);}
+    x.drawImage(side,0,0);x.restore();side.width=side.height=0;
+  }
+  if(L.grain>0)_layerGrain(x,W,H,L.grain,R,'source-atop');
+  if(FILM_EDGE.rings.size>12){for(const v of FILM_EDGE.rings.values())v.width=v.height=0;FILM_EDGE.rings.clear();}
+  FILM_EDGE.rings.set(key,c);return c;
+}
+/// Seeded grain on a layer. `op` source-atop keeps it on the frame's own pixels.
+function _layerGrain(x,W,H,amt,R,op){
+  const n=document.createElement('canvas');n.width=n.height=256;const nx=n.getContext('2d');
+  const d=nx.createImageData(256,256),p=d.data;
+  for(let i=0;i<p.length;i+=4){const v=R()*255;p[i]=p[i+1]=p[i+2]=v;p[i+3]=255;}
+  nx.putImageData(d,0,0);
+  x.save();x.globalCompositeOperation=op||'source-over';x.globalAlpha=Math.min(1,amt/100)*0.35;
+  x.fillStyle=x.createPattern(n,'repeat');x.fillRect(0,0,W,H);x.restore();n.width=n.height=0;
+}
+/// Faint light bleed from the photo's highlights into a film layer's pixels.
+function _filmGlow(x,ring,photo,px,py,pw,ph,amt){
+  const W=ring.width,H=ring.height,s=64/Math.max(pw,ph);
+  const sm=document.createElement('canvas');sm.width=Math.max(2,Math.round(pw*s));sm.height=Math.max(2,Math.round(ph*s));
+  const sx=sm.getContext('2d');sx.drawImage(photo,0,0,sm.width,sm.height);
+  const d=sx.getImageData(0,0,sm.width,sm.height),p=d.data;
+  for(let i=0;i<p.length;i+=4){const l=(p[i]*.3+p[i+1]*.59+p[i+2]*.11)/255,k=Math.max(0,(l-0.55)/0.45);p[i]*=k;p[i+1]*=k;p[i+2]*=k;}
+  sx.putImageData(d,0,0);
+  // pad + shrink again so the light falls off softly past the photo's edge instead of stopping
+  // in a hard rectangle (ctx.filter blur is not trustworthy on iOS, see canvasCompose)
+  const pad=Math.round(Math.max(sm.width,sm.height)*0.25),pc=document.createElement('canvas');
+  pc.width=Math.max(2,Math.round((sm.width+2*pad)/4));pc.height=Math.max(2,Math.round((sm.height+2*pad)/4));
+  const pcx=pc.getContext('2d');pcx.imageSmoothingEnabled=true;pcx.drawImage(sm,pad/4,pad/4,sm.width/4,sm.height/4);
+  const g=document.createElement('canvas');g.width=W;g.height=H;const gx=g.getContext('2d');
+  gx.imageSmoothingEnabled=true;gx.imageSmoothingQuality='high';
+  const sx2=pw/sm.width,ox=px-pad*sx2,oy=py-pad*(ph/sm.height);
+  gx.drawImage(pc,ox,oy,pw+2*pad*sx2,ph+2*pad*(ph/sm.height));   // upscaled = blurred, reaching into the frame
+  pc.width=pc.height=0;
+  gx.globalCompositeOperation='destination-in';gx.drawImage(ring,0,0);
+  x.save();x.globalCompositeOperation='screen';x.globalAlpha=Math.min(1,amt/100);x.drawImage(g,0,0);x.restore();
+  sm.width=sm.height=g.width=g.height=0;
+}
+/// Per-photo variation: stable for a photo (name+size), shifted by the Shuffle button.
+function borderSeed(it,P){
+  const nm=(it&&(it.name||(it.file&&it.file.name)))||'',sz=(it&&it.file&&it.file.size)||0;
+  return fxClipSeed(nm,sz,0)/100+(P.frameShuffle||0);
+}
+/// Draws `src` with both border layers into ctx `x` (size src + 2*(b1t+b2t)). Shared by preview,
+/// still export and video so they can never disagree.
+function drawBorderLayers(x,src,P,b1t,b2t,seed){
+  const sw=src.width,sh=src.height,tw=sw+2*(b1t+b2t),th=sh+2*(b1t+b2t);
+  const L1=P.b1,L2=P.b2;
+  // b1t/b2t are PLAIN bands only (film layers add no canvas — see borderLayerSizes)
+  x.fillStyle=L2.color;x.fillRect(0,0,tw,th);
+  x.fillStyle=L1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
+  x.drawImage(src,b1t+b2t,b1t+b2t,sw,sh);
+  const R=_filmRng(Math.floor(seed*7919e3));
+  if(b1t>0&&L1.grain>0){x.save();x.beginPath();x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.rect(b1t+b2t,b1t+b2t,sw,sh);x.clip('evenodd');_layerGrain(x,tw,th,L1.grain,R,'overlay');x.restore();}
+  if(b2t>0&&L2.grain>0){x.save();x.beginPath();x.rect(0,0,tw,th);x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.clip('evenodd');_layerGrain(x,tw,th,L2.grain,R,'overlay');x.restore();}
+  // Film layers are laid ONTO the picture: inner over the photo, outer over photo + inner band.
+  // Position slides the frame in (+) or out (-) by up to its own width; the canvas clips it.
+  const film=(L,rx,ry,rw,rh,sd)=>{const t=filmLayerSize(P,L,sw);if(!t)return;
+    const off=Math.round(t*(L.pos||0)/100),X=rx+off,Y=ry+off,W=rw-2*off,H=rh-2*off;if(W<4*t||H<4*t)return;
+    const ring=_filmRing(W,H,t,L,sd);if(!ring)return;
+    x.save();x.beginPath();x.rect(rx,ry,rw,rh);x.clip();x.drawImage(ring,X,Y);
+    if(L.glow>0){x.translate(X,Y);_filmGlow(x,ring,src,b1t+b2t-X,b1t+b2t-Y,sw,sh,L.glow);}
+    x.restore();};
+  if(L1.type==='film')film(L1,b1t+b2t,b1t+b2t,sw,sh,seed);
+  if(L2.type==='film')film(L2,b2t,b2t,tw-2*b2t,th-2*b2t,seed+0.5);
+}
+function borderLayerSizes(P,w){
+  const t=L=>P.bordersEnabled&&L.type!=='film'?Math.round(w*L.thickness/100):0;
+  return{b1t:t(P.b1),b2t:t(P.b2)};
+}

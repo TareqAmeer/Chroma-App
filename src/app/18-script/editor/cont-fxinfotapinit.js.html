@@ -1,0 +1,240 @@
+function _fxInfoTapInit(){
+  const pop=document.createElement('div');pop.id='fx-info-pop';pop.hidden=true;
+  document.body.appendChild(pop);
+  let hideTimer=null;
+  const hide=()=>{pop.hidden=true;clearTimeout(hideTimer);};
+  document.addEventListener('click',e=>{
+    // "How this works" <details> hints open the same bubble instead of expanding inline, so
+    // every info affordance behaves as one popup pattern.
+    const hint=e.target.closest&&e.target.closest('.fx-hint-x>summary');
+    const btn=hint?(hint.querySelector('.fx-info-i')||hint):(e.target.closest&&e.target.closest('.fx-info-i'));
+    if(!btn||(!hint&&btn.style.pointerEvents==='none')){hide();return;}
+    const text=hint?(hint.parentElement.querySelector('p')||{}).textContent:btn.getAttribute('title');
+    if(!text){hide();return;}
+    e.preventDefault();e.stopPropagation();
+    pop.textContent=text;pop.hidden=false;
+    const r=btn.getBoundingClientRect();
+    const pw=Math.min(260,window.innerWidth-16);
+    pop.style.maxWidth=pw+'px';
+    // Measure after content/width are set so offsetWidth/Height reflect this bubble's text.
+    let left=r.left;let top=r.bottom+6;
+    if(left+pop.offsetWidth>window.innerWidth-8)left=window.innerWidth-8-pop.offsetWidth;
+    if(left<8)left=8;
+    if(top+pop.offsetHeight>window.innerHeight-8)top=r.top-6-pop.offsetHeight;
+    pop.style.left=left+'px';pop.style.top=top+'px';
+    clearTimeout(hideTimer);hideTimer=setTimeout(hide,6000);
+  },true);
+  document.addEventListener('scroll',hide,true);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')hide();});
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',_fxInfoTapInit);
+// Keyboard Shortcuts panel (Help menu / Cmd+/ / bare "?") — every shortcut below is real and
+// already wired elsewhere (desktop-native.js's menu-* wiring, library-ui.js's grid keydown
+// handler, or an on-page oninput/onclick); this is purely a discoverability surface, not new
+// behavior. Grouped to match the new Photo/View menus.
+// Mac shortcut glyphs -> Windows/Linux wording ("⇧⌘Z" -> "Ctrl+Shift+Z"). Keydown handlers already accept
+// ctrlKey everywhere; only the LABELS were mac-only. Native desktop reports the real OS via CS_PLATFORM,
+// a plain browser falls back to navigator.platform.
+function _kbdFix(s){
+  const mac=(window.CS_PLATFORM?window.CS_PLATFORM.os==='macos':/Mac|iPhone|iPad/.test(navigator.platform||''));
+  if(mac||!s||s.indexOf('⌘')<0&&s.indexOf('⇧')<0&&s.indexOf('⌥')<0)return s;
+  return s.replace(/⇧⌘|⌘⇧/g,'Ctrl+Shift+').replace(/⌘/g,'Ctrl+').replace(/⇧/g,'Shift+').replace(/⌥/g,'Alt+');
+}
+function _kbdSweep(root){
+  root=root||document;
+  root.querySelectorAll('[title*="⌘"],[aria-label*="⌘"]').forEach(e=>{
+    ['title','aria-label'].forEach(a=>{const v=e.getAttribute(a);if(v)e.setAttribute(a,_kbdFix(v));});
+  });
+  root.querySelectorAll('kbd').forEach(e=>{if(e.textContent.indexOf('⌘')>=0)e.textContent=_kbdFix(e.textContent);});
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('DOMContentLoaded',()=>_kbdSweep());
+  window.addEventListener('cs-platform-ready',()=>_kbdSweep());
+}
+// CHR-266: the registry is the single source of truth for editable app shortcuts. Contexts
+// intentionally overlap for actions usable in both Library and Editor; conflict checks run only
+// when two bindings share a context. CmdOrCtrl is resolved by the browser/platform.
+const CS_SHORTCUTS_KEY='chromasmith-shortcuts-v1',CS_SHORTCUTS_PREF='chromasmith-shortcuts-single-disabled-v1';
+const csShortcutDefs=[
+  ['editor.open','Open photo(s)','File','editor','CmdOrCtrl+O'],['editor.export','Export','File','editor','CmdOrCtrl+E'],
+  ['editor.undo','Undo','Edit','editor','CmdOrCtrl+Z'],['editor.redo','Redo','Edit','editor','CmdOrCtrl+Shift+Z'],
+  ['editor.copy','Copy edit settings','Edit','editor,library','CmdOrCtrl+Shift+C'],['editor.paste','Paste edit settings','Edit','editor,library','CmdOrCtrl+Shift+V'],
+  ['editor.rotate-left','Rotate left','Photo','editor','CmdOrCtrl+BracketLeft'],['editor.rotate-right','Rotate right','Photo','editor','CmdOrCtrl+BracketRight'],
+  ['editor.zoom-in','Zoom in','View','editor','CmdOrCtrl+Plus'],['editor.zoom-out','Zoom out','View','editor','CmdOrCtrl+Minus'],['editor.zoom-fit','Zoom to fit','View','editor','CmdOrCtrl+0'],['editor.zoom-100','Zoom to 100%','View','editor','CmdOrCtrl+1'],['editor.split','Toggle before / after split','View','editor','CmdOrCtrl+Backslash'],['editor.histogram','Toggle histogram','View','editor','CmdOrCtrl+H'],['editor.focus-mode','Focus mode (hide panels and bars)','View','editor','Shift+F'],
+  ['editor.search','Command palette','Help','editor','CmdOrCtrl+K'],['editor.shortcuts','Keyboard shortcuts guide','Help','editor','CmdOrCtrl+Slash'],['editor.settings','Settings','Help','editor','CmdOrCtrl+Comma'],
+  ['editor.save-session','Save session','File','editor',null],['editor.load-session','Load session','File','editor',null],['editor.reset-edit','Reset edit','Photo','editor',null],['editor.flip-h','Flip horizontally','Photo','editor',null],['editor.flip-v','Flip vertically','Photo','editor',null],['editor.auto-enhance','Auto enhance','Photo','editor',null],['editor.wb-eyedrop','White balance eyedropper','Photo','editor',null],['editor.reshuffle-artifacts','Reshuffle film artifacts','Photo','editor',null],['editor.next-tool','Next tool section','Tools','editor',null],['editor.previous-tool','Previous tool section','Tools','editor',null],['editor.guide','Open guide','Help','editor',null],['editor.whatsnew',"What's new",'Help','editor',null],['editor.tour','Welcome tour','Help','editor',null],['library.expand','Toggle expanded Library','View','library',null],
+  ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.compare-previous','Hold to compare to previous step','View','editor','Shift+Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
+  ['editor.crop','Crop tool (toggle)','Tools','editor','C'],['editor.mask-erase','Hold Alt/Option to temporarily erase the mask brush','Tools','editor','Alt'],['editor.loupe','Toggle loupe','View','editor','1'],['editor.mask-overlay','Masks: cycle overlay','Tools','editor','O'],['editor.crop-grid','Cycle crop grid overlay','Tools','editor','Shift+G'],
+   ['library.toggle','Toggle Library','Navigation','editor,library','CmdOrCtrl+L'],['library.reject','Reject selected photo','Photo','library','X'],['library.pick','Pick selected photo','Photo','library','P'],['library.clear-flag','Clear selected photo flag','Photo','library','U'],
+   ['library.color-red','Set red colour label','Photo','library','Alt+1'],['library.color-yellow','Set yellow colour label','Photo','library','Alt+2'],['library.color-green','Set green colour label','Photo','library','Alt+3'],['library.color-blue','Set blue colour label','Photo','library','Alt+4'],['library.color-purple','Set purple colour label','Photo','library','Alt+5'],['library.color-clear','Clear colour label','Photo','library','Alt+0'],
+  ['library.rate-0','Rate selected photo 0 stars','Photo','library','0'],['library.rate-1','Rate selected photo 1 star','Photo','library','1'],['library.rate-2','Rate selected photo 2 stars','Photo','library','2'],['library.rate-3','Rate selected photo 3 stars','Photo','library','3'],['library.rate-4','Rate selected photo 4 stars','Photo','library','4'],['library.rate-5','Rate selected photo 5 stars','Photo','library','5'],
+  ['library.open','Open selected photo','Photo','library','Enter'],['library.quicklook','Quick Look selected photo','Photo','library','Space'],['library.next','Next photo','Photo','library','ArrowRight'],['library.previous','Previous photo','Photo','library','ArrowLeft'],['library.open-recent','Open Recent','File','editor,library','CmdOrCtrl+Shift+O']
+].map(([id,label,group,contexts,defaultBinding])=>({id,label,group,contexts:contexts.split(','),defaultBinding,held:id==='editor.mask-erase'}));
+const csShortcutHandlers=Object.create(null);
+function csShortcutBinding(id){try{const x=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');return Object.prototype.hasOwnProperty.call(x,id)?x[id]:csShortcutDefs.find(a=>a.id===id)?.defaultBinding||null;}catch(_){return csShortcutDefs.find(a=>a.id===id)?.defaultBinding||null;}}
+function csShortcutParse(binding){if(!binding||typeof binding!=='string')return null;const parts=binding.split('+').map(x=>x.trim()),key=parts.pop(),allowed=['Cmd','Ctrl','CmdOrCtrl','Shift','Alt'];if(!key||parts.some(x=>!allowed.includes(x))||new Set(parts).size!==parts.length)return null;const modifierOnly=parts.length===0&&allowed.includes(key);if(modifierOnly&&key==='CmdOrCtrl')return null;if(!modifierOnly&&allowed.includes(key))return null;const mac=/Mac|iPhone|iPad/.test(navigator.platform),either=parts.includes('CmdOrCtrl');return{key,modifierOnly,meta:parts.includes('Cmd')||(either&&mac),ctrl:parts.includes('Ctrl')||(either&&!mac),shift:parts.includes('Shift')||key==='Plus',alt:parts.includes('Alt')};}
+function csShortcutKeyId(k){return({BracketLeft:'[',BracketRight:']',Backslash:'\\',Slash:'/',Plus:'+',Minus:'-',Comma:','})[k]||String(k).toLowerCase();}
+function csShortcutSameBinding(a,b){const x=csShortcutParse(a),y=csShortcutParse(b);return!!x&&!!y&&csShortcutKeyId(x.key)===csShortcutKeyId(y.key)&&x.meta===y.meta&&x.ctrl===y.ctrl&&x.shift===y.shift&&x.alt===y.alt;}
+function csShortcutMatch(e,b){const x=csShortcutParse(b);if(!x)return false;if(x.modifierOnly){const other={Cmd:['ctrlKey','shiftKey','altKey'],Ctrl:['metaKey','shiftKey','altKey'],Shift:['metaKey','ctrlKey','altKey'],Alt:['metaKey','ctrlKey','shiftKey']}[x.key];return e.key===x.key&&other.every(k=>!e[k]);}return csShortcutKeyId(e.key)===csShortcutKeyId(x.key)&&!!e.metaKey===x.meta&&!!e.ctrlKey===x.ctrl&&!!e.shiftKey===x.shift&&!!e.altKey===x.alt;}
+function csShortcutLabel(b){return b?String(b).replace('CmdOrCtrl',/Mac|iPhone|iPad/.test(navigator.platform)?'⌘':'Ctrl').replaceAll('BracketLeft','[').replaceAll('BracketRight',']').replaceAll('Backslash','\\').replaceAll('Slash','/').replaceAll('Comma',',').replaceAll('Plus','+').replaceAll('Minus','−').replaceAll('Shift','⇧').replaceAll('Alt','⌥').replaceAll('Ctrl','Ctrl').replaceAll('Cmd','⌘'):'Unassigned';}
+function csShortcutContextsOverlap(a,b){return a.some(c=>b.includes(c)||(c==='editor'&&b.includes('library'))||(c==='library'&&b.includes('editor')));}
+function csShortcutConflict(id,binding){const def=csShortcutDefs.find(x=>x.id===id),parsed=csShortcutParse(binding);if(!def||!parsed)return null;for(const other of csShortcutDefs){if(other.id===id||!csShortcutContextsOverlap(other.contexts,def.contexts))continue;const old=csShortcutParse(csShortcutBinding(other.id));if(old&&csShortcutKeyId(old.key)===csShortcutKeyId(parsed.key)&&old.meta===parsed.meta&&old.ctrl===parsed.ctrl&&old.shift===parsed.shift&&old.alt===parsed.alt)return other;}return null;}
+function csShortcutUnassign(id){if(!csShortcutDefs.some(x=>x.id===id))throw Error('Unknown shortcut action');let all={};try{all=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');}catch(_){}all[id]=null;localStorage.setItem(CS_SHORTCUTS_KEY,JSON.stringify(all));}
+function csShortcutSet(id,binding){const def=csShortcutDefs.find(x=>x.id===id);if(!def)throw Error('Unknown shortcut action');if(binding){const parsed=csShortcutParse(binding);if(!parsed||(parsed.modifierOnly&&!def.held)||(def.held&&!parsed.modifierOnly))throw Error('Invalid shortcut');const isDefault=csShortcutSameBinding(binding,def.defaultBinding);if(!isDefault&&(parsed.meta||parsed.ctrl)&&'qwrtnpsdfgok01h+-'.includes(csShortcutKeyId(parsed.key)))throw Error('That shortcut is reserved by your browser or operating system');if(!isDefault){const c=csShortcutConflict(id,binding);if(c)throw Error(`Already assigned to ${c.label}`);}}
+  let all={};try{all=JSON.parse(localStorage.getItem(CS_SHORTCUTS_KEY)||'{}');}catch(_){}if(!binding||csShortcutSameBinding(binding,def.defaultBinding))delete all[id];else all[id]=binding;localStorage.setItem(CS_SHORTCUTS_KEY,JSON.stringify(all));}
+function csShortcutRegister(id,handler){if(csShortcutDefs.some(x=>x.id===id)&&typeof handler==='function')csShortcutHandlers[id]=handler;}
+function csColorLabelsEnabled(){return typeof window.chromasmithColorLabelsEnabled==='function'?window.chromasmithColorLabelsEnabled():localStorage.getItem('chromasmith_color_labels_enabled')!=='0';}
+function csNativeActivationKey(e){return(e.key==='Enter'||e.key===' ')&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey&&!e.altKey;}
+function csNativeActivationTarget(target){const el=target&&target.nodeType===1?target:(target&&target.parentElement);return!!(el&&el.closest&&el.closest('button,a[href],input,textarea,select,summary,label,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="switch"],[role="tab"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'));}
+function csShortcutCapture(e){if(window.__csShortcutCapturing)return;if(window.MobileUI&&window.MobileUI.dialog)return;const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;if(csNativeActivationKey(e)&&csNativeActivationTarget(t))return;if(e.isComposing||e.key==='Process')return;const singleDisabled=localStorage.getItem(CS_SHORTCUTS_PREF)==='1',libraryOpen=!!(window.chromasmithLibraryIsOpen&&window.chromasmithLibraryIsOpen()),libraryFull=libraryOpen&&!!(document.getElementById('lib-overlay')&&document.getElementById('lib-overlay').classList.contains('full')),contextActive=a=>a.contexts.some(c=>c==='editor'&&!libraryFull||c==='library'&&libraryOpen);for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!csShortcutMatch(e,csShortcutBinding(a.id)))continue;const b=csShortcutParse(csShortcutBinding(a.id));if(singleDisabled&&!b.meta&&!b.ctrl&&!b.alt)continue;if(!contextActive(a))continue;let result;try{result=csShortcutHandlers[a.id](e);}catch(err){console.error('shortcut '+a.id,err);}if(result===false)continue;e.preventDefault();e.stopImmediatePropagation();return;}for(const a of csShortcutDefs){if(a.id.startsWith('library.color-')&&!csColorLabelsEnabled())continue;if(a.held||!csShortcutHandlers[a.id]||!contextActive(a))continue;if(a.defaultBinding!==csShortcutBinding(a.id)&&csShortcutMatch(e,a.defaultBinding)){e.preventDefault();e.stopImmediatePropagation();return;}}}
+const csShortcutHeldActive=new Set();
+function csShortcutHeldCapture(e,phase){
+  const ending=phase==='end';
+  if(!ending&&(window.__csShortcutCapturing||window.MobileUI&&window.MobileUI.dialog||e.repeat))return;
+  const t=e.target;if(!ending&&t&&t.closest&&t.closest('input,textarea,select,[contenteditable]:not([contenteditable=\"false\"])'))return;
+  const libraryOpen=!!(window.chromasmithLibraryIsOpen&&window.chromasmithLibraryIsOpen()),libraryFull=libraryOpen&&!!(document.getElementById('lib-overlay')&&document.getElementById('lib-overlay').classList.contains('full'));
+  for(const a of csShortcutDefs){if(!a.held||!csShortcutHandlers[a.id]||(ending?!csShortcutHeldActive.has(a.id):!csShortcutMatch(e,csShortcutBinding(a.id))))continue;if(!ending&&!a.contexts.some(c=>c==='editor'&&!libraryFull||c==='library'&&libraryOpen))continue;let result;try{result=csShortcutHandlers[a.id]({phase,originalEvent:e});}catch(err){console.error('shortcut '+a.id,err);}if(ending)csShortcutHeldActive.delete(a.id);else if(result!==false)csShortcutHeldActive.add(a.id);if(result!==false){e.preventDefault();e.stopImmediatePropagation();}return;}
+}
+window.addEventListener('blur',()=>{for(const id of csShortcutHeldActive){try{csShortcutHandlers[id]({phase:'end'});}catch(_){}}csShortcutHeldActive.clear();});
+document.addEventListener('keydown',e=>csShortcutHeldCapture(e,'start'),true);document.addEventListener('keyup',e=>csShortcutHeldCapture(e,'end'),true);
+document.addEventListener('keydown',csShortcutCapture,true);
+window.chromasmithRegisterShortcut=csShortcutRegister;
+window.chromasmithShortcutRegistry={actions:()=>csShortcutDefs.filter(a=>!(a.id.startsWith("library.color-")&&!csColorLabelsEnabled())).map(a=>({...a,binding:csShortcutBinding(a.id)})),set:csShortcutSet,conflict:csShortcutConflict,unassign:csShortcutUnassign,label:csShortcutLabel,binding:csShortcutBinding,export:()=>JSON.stringify({version:1,bindings:Object.fromEntries(csShortcutDefs.map(a=>[a.id,csShortcutBinding(a.id)]))},null,2),import(raw){const data=JSON.parse(raw);if(!data||data.version!==1||!data.bindings||typeof data.bindings!=='object'||Array.isArray(data.bindings))throw Error('Unsupported shortcut file');for(const [id,b] of Object.entries(data.bindings)){if(!csShortcutDefs.some(a=>a.id===id))throw Error(`Unknown shortcut action: ${id}`);if(b!==null&&(!csShortcutParse(b)))throw Error(`Invalid shortcut for ${id}`);}const before=localStorage.getItem(CS_SHORTCUTS_KEY);try{localStorage.removeItem(CS_SHORTCUTS_KEY);for(const [id,b] of Object.entries(data.bindings))csShortcutSet(id,b);return true;}catch(e){if(before==null)localStorage.removeItem(CS_SHORTCUTS_KEY);else localStorage.setItem(CS_SHORTCUTS_KEY,before);throw e;}},disableSingles(on){localStorage.setItem(CS_SHORTCUTS_PREF,on?'1':'0');}};
+let csShortcutCompareHeld=false;
+function csShortcutReleaseCompare(){if(!csShortcutCompareHeld)return;csShortcutCompareHeld=false;if(typeof fxCompare!=='undefined'&&fxCompare){fxCompare=false;renderPreview();}}
+document.addEventListener('keyup',e=>{if(e.key===' '&&csShortcutCompareHeld){e.preventDefault();e.stopImmediatePropagation();csShortcutReleaseCompare();}},true);
+window.addEventListener('blur',csShortcutReleaseCompare);
+function shortcutsHtml(){
+  const rows=window.chromasmithShortcutRegistry.actions().map(a=>`<div data-shortcut-row data-search="${a.label.toLowerCase()} ${a.group.toLowerCase()} ${csShortcutLabel(csShortcutBinding(a.id)).toLowerCase()}" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:13px"><span>${a.label}<small style="display:block;color:var(--mut)">${a.group}</small></span><span style="display:flex;align-items:center;gap:6px"><kbd data-binding="${a.id}" style="font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--bdr);border-radius:4px;padding:3px 6px;white-space:nowrap">${csShortcutLabel(csShortcutBinding(a.id))}</kbd><button type="button" data-rebind="${a.id}" class="btn bgh" style="padding:3px 7px">Change</button><button type="button" data-reset="${a.id}" class="btn bgh" style="padding:3px 7px">Reset</button></span></div>`).join('');
+  return `<label style="display:block;margin:0 0 10px">Search shortcuts <input id="cs-shortcut-search" type="search" placeholder="Search actions" style="width:100%"></label><label style="display:block;margin-bottom:10px"><input id="cs-shortcut-single" type="checkbox"> Disable single-key shortcuts</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"><button id="cs-shortcut-reset" class="btn bgh">Reset all</button><button id="cs-shortcut-export" class="btn bgh">Export keymap file</button><button id="cs-shortcut-import" class="btn bgh">Import keymap file</button></div><textarea id="cs-shortcut-data" aria-label="Shortcut import or export data" placeholder="Exported shortcut JSON appears here" style="width:100%;min-height:64px;display:none"></textarea><div id="cs-shortcut-list">${rows}</div><p style="font-size:11px;color:var(--mut)">Changes are saved on this device. Browser and operating-system shortcuts keep their normal behavior.</p>`;
+}
+function csShortcutShowConflict(btn,id,binding,other,msg){
+  const row=btn.closest('[data-shortcut-row]');if(!row)return;
+  row.querySelectorAll('.cs-sc-msg').forEach(x=>x.remove());
+  const box=document.createElement('div');box.className='cs-sc-msg';box.setAttribute('role','alert');
+  box.style.cssText='flex-basis:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--txt);background:var(--sur2);border:1px solid var(--bdr-pill);border-radius:var(--r-sm);padding:6px 8px';
+  const t=document.createElement('span');t.textContent=other?`${csShortcutLabel(binding)} is already used by "${other.label}".`:msg;box.appendChild(t);
+  const bt=document.createElement('span');bt.style.cssText='display:flex;gap:6px';
+  if(other){const r=document.createElement('button');r.type='button';r.className='btn bgh';r.dataset.reassign=id;r.textContent='Reassign here';r.onclick=()=>{csShortcutUnassign(other.id);csShortcutSet(id,binding);csOpenShortcuts();};bt.appendChild(r);}
+  const c=document.createElement('button');c.type='button';c.className='btn bgh';c.dataset.keep=id;c.textContent='Keep current';c.onclick=()=>csOpenShortcuts();bt.appendChild(c);
+  box.appendChild(bt);row.appendChild(box);
+  const first=box.querySelector('button');if(first)first.focus();
+}
+function csOpenShortcuts(){_csModal('Keyboard Shortcuts',shortcutsHtml());const ov=document.getElementById('cs-modal-ov'),q=ov.querySelector('#cs-shortcut-search'),box=ov.querySelector('#cs-shortcut-data');ov.querySelector('#cs-shortcut-single').checked=localStorage.getItem(CS_SHORTCUTS_PREF)==='1';q.oninput=()=>ov.querySelectorAll('[data-shortcut-row]').forEach(r=>r.style.display=r.dataset.search.includes(q.value.toLowerCase())?'flex':'none');ov.querySelector('#cs-shortcut-reset').onclick=()=>{localStorage.removeItem(CS_SHORTCUTS_KEY);csOpenShortcuts();};ov.querySelector('#cs-shortcut-export').onclick=()=>{const data=window.chromasmithShortcutRegistry.export();box.style.display='block';box.value=data;box.focus();box.select();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='chromasmith-shortcuts.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};ov.querySelector('#cs-shortcut-import').onclick=()=>{box.style.display='block';const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{if(!input.files||!input.files[0])return;try{window.chromasmithShortcutRegistry.import(await input.files[0].text());csOpenShortcuts();}catch(e){alert(e.message);}};input.click();};ov.querySelector('#cs-shortcut-single').onchange=e=>window.chromasmithShortcutRegistry.disableSingles(e.target.checked);ov.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>{csShortcutSet(btn.dataset.reset,null);csOpenShortcuts();});ov.querySelectorAll('[data-rebind]').forEach(btn=>btn.onclick=()=>{const id=btn.dataset.rebind;btn.textContent='Press keys…';let done=false;const cleanup=()=>{if(done)return;done=true;window.__csShortcutCapturing=false;document.removeEventListener('keydown',capture,true);window.removeEventListener('blur',cleanup);window.__csShortcutCancelCapture=null;};const capture=e=>{e.preventDefault();e.stopPropagation();if(['Shift','Control','Alt','Meta'].includes(e.key)){if(!csShortcutDefs.find(x=>x.id===id)?.held)return;const lone=e.key==='Control'?'Ctrl':e.key==='Meta'?'Cmd':e.key;try{csShortcutSet(id,lone);cleanup();csOpenShortcuts();}catch(err){cleanup();btn.textContent='Change';csShortcutShowConflict(btn,id,lone,null,err.message);}return;}if(e.key==='Escape'){cleanup();csOpenShortcuts();return;}const parts=[];if(e.metaKey)parts.push('Cmd');else if(e.ctrlKey)parts.push('Ctrl');if(e.altKey)parts.push('Alt');if(e.shiftKey)parts.push('Shift');const key=e.key===' '?'Space':e.key==='+'?'Plus':e.key==='-'?'Minus':e.key===','?'Comma':e.key.length===1?e.key.toUpperCase():e.key;parts.push(key);const nb=parts.join('+'),clash=csShortcutConflict(id,nb);if(clash){cleanup();btn.textContent='Change';csShortcutShowConflict(btn,id,nb,clash);return;}try{csShortcutSet(id,nb);cleanup();csOpenShortcuts();}catch(err){cleanup();btn.textContent='Change';csShortcutShowConflict(btn,id,nb,null,err.message);}};window.__csShortcutCapturing=true;window.__csShortcutCancelCapture=cleanup;window.addEventListener('blur',cleanup);document.addEventListener('keydown',capture,true);});}
+window.addEventListener('chromasmith-color-label-visibility',()=>{if(document.querySelector('#cs-modal-ov #cs-shortcut-list'))csOpenShortcuts();});
+// First-run start card and event-driven first-edit guide. Use the existing photo picker and
+// Gallery rather than creating another import path; the steps advance on a loaded image, applied
+// look, visible original comparison, and successful export. The welcome card is replayable from
+// Help, while each guide step can be skipped.
+const _TOUR_KEY='chromasmith-tour-seen-v1';
+const _FIRST_EDIT_GUIDE_KEY='chromasmith-first-edit-guide-v1';
+const _FIRST_EDIT_STAGE_KEY='chromasmith-first-edit-stage-v1';
+function tourHtml(){
+  const browseLabel=window.chromasmithToggleLibrary?'Browse a folder':window.chromasmithOpenGallery?'Browse the Gallery':'';
+  const sampleCredit='Sample photo by Tareq Ameer'; // credited in design/prototypes/splash-v2/index.html
+  return `<p style="margin:0 0 14px;color:var(--mut);font-size:13px">Start with one photo. Your edits stay on this device; connecting Google Photos is optional and separate.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px">
+      <button type="button" class="btn bpri" data-tour-action="open">Open a photo</button>
+      ${browseLabel?`<button type="button" class="btn bgh" data-tour-action="folder">${browseLabel}</button>`:''}
+      <button type="button" class="btn bgh" data-tour-action="sample">Try a sample</button>
+    </div>
+    <p style="margin:8px 0 14px;color:var(--mut);font-size:11px">${sampleCredit}. The sample opens as a separate copy; exporting it never overwrites the bundled image.</p>
+    <div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn bgh" data-tour-action="guide">Guide my first edit</button>
+      <button type="button" class="btn bgh" data-tour-action="advanced">Show advanced tools</button>
+      <button type="button" class="btn bgh" data-tour-action="close">Skip for now</button>
+    </div>
+    <p style="margin:10px 0 0;color:var(--mut);font-size:11px">The Guide and ⌘K explain tools any time. Match &amp; Refine, Color Copy, and Collage stay hidden until you choose to show them.</p>`;
+}
+function tourBind(){
+  const ov=document.getElementById('cs-modal-ov');if(!ov)return;
+  const close=()=>ov.__csClose?ov.__csClose():ov.remove();
+  ov.querySelector('[data-tour-action="open"]').onclick=()=>{close();fxPickPhotos();};
+  ov.querySelector('[data-tour-action="sample"]').onclick=()=>csTourTrySample();
+  const folder=ov.querySelector('[data-tour-action="folder"]');
+  if(folder)folder.onclick=()=>csTourBrowseFolder();
+  ov.querySelector('[data-tour-action="guide"]').onclick=()=>{
+    try{localStorage.setItem(_FIRST_EDIT_GUIDE_KEY,'1');localStorage.removeItem(_FIRST_EDIT_STAGE_KEY);}catch(e){}
+    close();csFirstEditBegin();
+  };
+  ov.querySelector('[data-tour-action="advanced"]').onclick=()=>{close();csShowAdvancedTabs(true);};
+  ov.querySelector('[data-tour-action="close"]').onclick=()=>{close();csFirstEditSkip();};
+}
+async function csTourTrySample(){
+  const ov=document.getElementById('cs-modal-ov');if(ov){if(ov.__csClose)ov.__csClose(false);else ov.remove();}
+    try{
+      const url=new URL('vendor/splash/dog-sitting.webp',document.baseURI);
+      const response=await fetch(url);if(!response.ok)throw new Error(`Sample photo could not be loaded (${response.status})`);
+      const blob=await response.blob();const sample=new File([blob],'Chromasmith sample.webp',{type:blob.type||'image/webp',lastModified:0});
+      const loaded=await loadFXImages([sample]);if(!loaded)throw new Error('The sample photo did not open.');
+      // The welcome can be opened over the full Gallery. Reveal the loaded photo
+      // through its public toggle so Gallery state and layout stay in sync.
+      if(window.chromasmithLibraryIsOpen?.()&&typeof window.chromasmithToggleLibrary==='function')await window.chromasmithToggleLibrary();
+      switchTab('fx');
+    }catch(e){if(typeof toast==='function')toast(`Could not open the sample photo — ${e.message||e}`,false);}
+}
+async function csTourBrowseFolder(){
+  const ov=document.getElementById('cs-modal-ov');if(ov){if(ov.__csClose)ov.__csClose(false);else ov.remove();}
+  if(typeof window.chromasmithOpenGallery==='function'){window.chromasmithOpenGallery();return;}
+  if(typeof window.chromasmithToggleLibrary!=='function'){if(typeof toast==='function')toast('Folder browsing is available in the desktop Gallery. Open a photo here instead.');return;}
+  try{
+    if(!window.chromasmithLibraryIsOpen||!window.chromasmithLibraryIsOpen())await window.chromasmithToggleLibrary();
+    requestAnimationFrame(()=>{
+      const empty=document.getElementById('lib-empty-addfolder');
+      const choose=empty||document.getElementById('lib-pick');if(choose)choose.click();
+    });
+  }catch(e){if(typeof toast==='function')toast(`Could not open the Gallery — ${e.message||e}`,false);}
+}
+function csFirstEditSkip(){try{localStorage.setItem(_FIRST_EDIT_STAGE_KEY,'skipped');}catch(e){}}
+function csFirstEditStage(){try{return localStorage.getItem(_FIRST_EDIT_STAGE_KEY)||'';}catch(e){return ''}}
+function csFirstEditSetStage(stage){try{localStorage.setItem(_FIRST_EDIT_STAGE_KEY,stage);}catch(e){}}
+function csFirstEditGuideEnabled(){try{return localStorage.getItem('chromasmith-newuser-v2')==='1'||localStorage.getItem(_FIRST_EDIT_GUIDE_KEY)==='1';}catch(e){return false}}
+function csFirstEditBegin(){if(fxImages&&fxImages.length){csFirstEditPhotoOpened();return;}
+  _csModal('Your first edit',`<p style="margin:0 0 14px;color:var(--mut);font-size:13px">Open a local photo or try the included sample. You can cancel either action and come back whenever you are ready.</p><div class="btn-row"><button type="button" class="btn bpri" data-guide-open>Open a photo</button><button type="button" class="btn bgh" data-guide-sample>Try a sample</button><button type="button" class="btn bgh" data-guide-skip>Skip guide</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');ov.querySelector('[data-guide-open]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();fxPickPhotos();};ov.querySelector('[data-guide-sample]').onclick=()=>csTourTrySample();ov.querySelector('[data-guide-skip]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();csFirstEditSkip();};
+}
+function csFirstEditCoach(stage){
+  const copy={
+    look:['Choose a film look','Open <b>Looks</b> and choose a film look. The look is an editable starting point; your source photo stays unchanged.','Show looks'],
+    compare:['Compare with the original','Press and hold <b>Show original</b> (or hold Space) to compare the unedited photo.','Show original'],
+    export:['Export your edit','Open <b>Output</b> and export a copy. On desktop the success message includes <b>Show in Finder/Explorer</b>; in a browser, the file goes to your browser downloads.','Show output options']
+  }[stage];
+  if(!copy)return;
+  const [title,body,action]=copy;
+  _csModal(`First edit · ${stage==='look'?'1':stage==='compare'?'2':'3'} of 3`,
+    `<p style="margin:0 0 14px;font-size:13px;color:var(--mut)">${body}</p><div class="btn-row" style="justify-content:flex-end;gap:8px"><button type="button" class="btn bgh" data-guide-skip>Skip guide</button><button type="button" class="btn bpri" data-guide-action>${action}</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  ov.querySelector('[data-guide-skip]').onclick=()=>{ov.__csClose?ov.__csClose():ov.remove();csFirstEditSkip();};
+  ov.querySelector('[data-guide-action]').onclick=()=>{
+    if(ov.__csClose)ov.__csClose(false);else ov.remove();
+    if(stage==='look'){switchTab('fx');fxSection('looks');}
+    else if(stage==='compare')csFirstEditCompareDemo();
+    else{switchTab('fx');if(document.body.classList.contains('sk2')&&typeof sk2ExportOpen==='function')sk2ExportOpen();else fxSection('export');}
+  };
+}
+function csFirstEditPhotoOpened(){
+  if(!csFirstEditGuideEnabled()||csFirstEditStage()==='skipped'||csFirstEditStage()==='complete')return;
+  csFirstEditSetStage('look');csFirstEditCoach('look');
+}
+function csFirstEditLookApplied(){if(csFirstEditGuideEnabled()&&csFirstEditStage()==='look'){csFirstEditSetStage('compare');csFirstEditCoach('compare');}}
+function csFirstEditCompareShown(){
+  if(!csFirstEditGuideEnabled()||csFirstEditStage()!=='compare')return;
+  csFirstEditSetStage('export');setTimeout(()=>csFirstEditCoach('export'),250);
+}
+function csFirstEditCompareDemo(){
+  if(!fxImages.length){csFirstEditSetStage('look');csFirstEditCoach('look');return;}
+  fxCompare=true;renderPreview();setTimeout(()=>{if(fxCompare){fxCompare=false;renderPreview();}},1400);
+}
+function csFirstEditFinish(){if(csFirstEditStage()!=='export')return false;csFirstEditSetStage('complete');return true;}
+function tourMaybeShow(){
+  try{
+    if(localStorage.getItem(_TOUR_KEY))return;
+    if(typeof fxImages!=='undefined'&&fxImages&&fxImages.length)return; // already mid-session, not a new user
+    localStorage.setItem(_TOUR_KEY,'1');localStorage.setItem('chromasmith-newuser-v2','1');
+    document.body.classList.add('cs-adv-hidden');
+  }catch(e){return;}
+  _csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());
+  tourBind();
+}
+window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());tourBind();}; // manual replay (Help menu / palette) — bypasses the once-only flag
+window.chromasmithShowShortcuts=csOpenShortcuts;

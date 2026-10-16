@@ -1,0 +1,257 @@
+// ── Export: upload into the app-created "Chromasmith" album ───────────────────
+function gpSaveEnabled(){try{return localStorage.getItem('gpSaveExports')==='1'}catch(e){return false}}
+function gpToggleSave(){
+  try{localStorage.setItem('gpSaveExports',gpSaveEnabled()?'0':'1')}catch(e){}
+  gpUpdateUI();
+  if(gpSaveEnabled()&&!gpConnected())gpAuth().catch(e=>log('Google Photos: '+(e&&e.message||e),'warn'));
+}
+async function gpAlbumId(){
+  let id=null;try{id=localStorage.getItem('gpAlbumId')}catch(e){}
+  if(id)return id;
+  const j=await(await gpFetch('https://photoslibrary.googleapis.com/v1/albums',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({album:{title:'Chromasmith'}})})).json();
+  try{localStorage.setItem('gpAlbumId',j.id)}catch(e){}
+  return j.id;
+}
+async function gpUploadItems(items,onProg){ // items: [{content:Uint8Array,fname,mime}] → returns #created
+  let albumId=await gpAlbumId();
+  const toks=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i];
+    if(onProg)onProg('Uploading to Google Photos '+(i+1)+'/'+items.length+'…');
+    const r=await gpFetch('https://photoslibrary.googleapis.com/v1/uploads',{method:'POST',
+      headers:{'Content-Type':'application/octet-stream','X-Goog-Upload-Content-Type':it.mime,'X-Goog-Upload-Protocol':'raw'},
+      body:it.content});
+    toks.push({tok:await r.text(),fname:it.fname});
+  }
+  let created=0;
+  for(let i=0;i<toks.length;i+=50){ // batchCreate caps at 50 items per call
+    const newItems=toks.slice(i,i+50).map(t=>({simpleMediaItem:{uploadToken:t.tok,fileName:t.fname}}));
+    const create=aid=>gpFetch('https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({albumId:aid,newMediaItems:newItems})});
+    let r;
+    try{r=await create(albumId)}
+    catch(e){ // cached album deleted on photos.google.com → recreate once and retry
+      if(!/album|invalid|not.?found/i.test(e&&e.message||''))throw e;
+      try{localStorage.removeItem('gpAlbumId')}catch(_){}
+      albumId=await gpAlbumId();r=await create(albumId);
+    }
+    const j=await r.json();
+    (j.newMediaItemResults||[]).forEach(x=>{
+      const bad=x.status&&x.status.code&&x.status.code!==0;
+      if(bad)log('Google Photos rejected an item: '+(x.status.message||'unknown error'),'warn');else created++;
+    });
+  }
+  return created;
+}
+function gpUpdateUI(){
+  const c=document.getElementById('btn-gp-connect');
+  if(c){c.className='btn '+(gpConnected()?'bsec':'bgh');c.innerHTML=''+(gpConnected()?'Connected ✓':'Connect');}
+  const s=document.getElementById('tg-gp-save');
+  if(s)s.classList.toggle('on',gpSaveEnabled());
+}
+gpUpdateUI();
+
+// ═══════════════════════════
+// LIGHTROOM CLOUD BROWSER ("Connect Lightroom")
+// ═══════════════════════════
+// Desktop-only (see #lr-section's inline style + the deskx CSS override) — needs the same
+// native OS-browser + loopback-redirect OAuth flow as Google Photos above (adobe_oauth_loopback
+// in main.rs is a thin copy of google_oauth_loopback; RFC 8252 loopback redirect_uris are
+// provider-agnostic). Reuses askTextModal/pkceVerifier/pkceChallenge as-is — those helpers were
+// already generic, not Google-specific.
+// ⚠️ Unlike Google Cloud Console's self-serve "Testing" mode, Adobe's Lightroom Partner APIs
+// (the lr_partner_apis/lr_partner_rendition_apis scopes below) have historically required
+// Adobe's own partner approval on top of just creating a project.
+// ⚠️ Adobe's "Native App" OAuth credential type (what a Lightroom-API project actually issues)
+// does NOT use an HTTP loopback redirect like Google's "Desktop app" client type — it redirects
+// to a registered CUSTOM URL SCHEME instead (adobe+<id>://adobeid/<client-id>). macOS routes that
+// through Launch Services exactly like a file-open, which main.rs's RunEvent::Opened handler
+// picks up (see PendingOAuth there) via tauri-plugin-deep-link's scheme registration
+// (tauri.conf.json's plugins.deep-link.desktop.schemes). LR_REDIRECT_URI below is the EXACT
+// string Adobe's console shows for THIS integration — it's fixed per-project, not something we
+// construct; a different Adobe project would need this updated to match.
+const LR_IMS_AUTH='https://ims-na1.adobelogin.com/ims/authorize/v2';
+const LR_IMS_TOKEN='https://ims-na1.adobelogin.com/ims/token/v3';
+const LR_API='https://lr.adobe.io/v2';
+const LR_SCOPES='openid,AdobeID,lr_partner_apis,lr_partner_rendition_apis,offline_access';
+const LR_REDIRECT_URI='adobe+5e575447f1fc4a4228c93a157e8422d9f310dd31://adobeid/d89cbea4405644259449bd17670da630';
+function lrClientId(){try{return(localStorage.getItem('lrClientId')||'').trim()}catch(e){return''}}
+async function lrAskClientId(force){
+  let cid=lrClientId();
+  if(cid&&!force)return cid;
+  const msg='Paste your Adobe API client ID (Developer Console → your project → Credentials).\n\nMust have the Lightroom APIs added — these require Adobe partner approval beyond a self-serve project (Adobe Developer Console → your project → Add API → Lightroom APIs). See Guide → "Can I browse my Lightroom cloud photos?". Note: LR_REDIRECT_URI in this file is fixed to ONE specific Adobe integration — a different client ID from a DIFFERENT Adobe project needs that constant updated to match, not just the ID pasted here.';
+  const picked=await askTextModal('Adobe API Client ID',msg,cid||'');
+  cid=(picked||'').trim();
+  if(cid){try{localStorage.setItem('lrClientId',cid)}catch(e){}}
+  return cid;
+}
+function lrTok(){try{const t=JSON.parse(sessionStorage.getItem('lrTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t}catch(e){}return null}
+function lrConnected(){return!!lrTok()}
+// Opens the system browser at Adobe's consent screen, then waits for the custom-scheme callback
+// (see the comment above LR_REDIRECT_URI) via a live event listener — registered BEFORE the
+// browser opens, so unlike PendingOpen's cold-launch file-handoff case there's no listener-not-
+// attached-yet race to guard against here (the callback can only arrive after the user finishes
+// an interactive sign-in in the browser, well after this function has already set up its
+// listener). client_secret retry logic mirrors gpAuthNative's — see that function's comments.
+async function lrAuthNative(cid){
+  const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
+  const authUrl=LR_IMS_AUTH+'?'+new URLSearchParams({
+    client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
+    scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
+  const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
+  const callbackPromise=new Promise((resolve,reject)=>{
+    let unlisten=null;
+    const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
+    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>{
+      clearTimeout(timeout);if(unlisten)unlisten();resolve(e.payload);
+    }).then(un=>{unlisten=un;});
+  });
+  try{await invoke('open_url_native',{url:authUrl})}
+  catch(e){throw new Error('Could not open the sign-in page: '+(e&&e.message||e))}
+  const callbackUrl=await callbackPromise;
+  let params;
+  try{params=new URL(callbackUrl).searchParams}
+  catch(e){throw new Error('Lightroom sign-in failed: could not parse the callback URL')}
+  if(params.get('error'))throw new Error('Lightroom sign-in failed: '+params.get('error'));
+  const code=params.get('code');
+  if(!code)throw new Error('Lightroom sign-in failed: no authorization code returned');
+  const exchange=async(secret)=>{
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri:LR_REDIRECT_URI};
+    if(secret)body.client_secret=secret;
+    // http_native, not fetch(): Adobe's IMS token endpoint doesn't answer the CORS preflight
+    // for the tauri:// origin, so WKWebView fetch() dies with its generic "Load failed" — the
+    // exact failure mode download_url_native already fixes for Google Photos. Native HTTP has
+    // no CORS; non-2xx comes back as data (status+body) so the secret-retry logic below still
+    // sees Adobe's JSON error_description.
+    const r=await invoke('http_native',{method:'POST',url:LR_IMS_TOKEN,
+      headers:[['Content-Type','application/x-www-form-urlencoded']],
+      body:new URLSearchParams(body).toString()});
+    let json={};try{json=JSON.parse(r.body)}catch(e){}
+    return{ok:r.status>=200&&r.status<300,json,status:r.status};
+  };
+  let secret='';try{secret=(localStorage.getItem('lrClientSecret')||'').trim()}catch(e){}
+  let res2=await exchange(secret);
+  const needsSecret=!res2.ok&&/client_secret/i.test(res2.json.error_description||res2.json.error||'')&&!secret;
+  if(needsSecret){
+    const picked=await askTextModal('Adobe client secret',
+      'Adobe also needs this API client\'s secret for the sign-in exchange (Developer Console → your project → Credentials → "Client secret"). It stays on this device.','');
+    secret=(picked||'').trim();
+    if(secret){try{localStorage.setItem('lrClientSecret',secret)}catch(e){}res2=await exchange(secret);}
+  }
+  const tokJson=res2.json;
+  if(!res2.ok||!tokJson.access_token)throw new Error('Lightroom token exchange failed: '+(tokJson.error_description||tokJson.error||res2.status));
+  const tok={at:tokJson.access_token,exp:Date.now()+(tokJson.expires_in||3600)*1000,cid};
+  try{sessionStorage.setItem('lrTok',JSON.stringify(tok))}catch(e){}
+  return tok;
+}
+async function lrAuth(){
+  const cached=lrTok();if(cached)return cached;
+  // The panel itself is only ever visible under body.deskx (native shell, or the ?deskx=1 test
+  // flag which CAN be set in a plain browser — see the flag's own comment) — guard here too so
+  // clicking Connect there fails with a clean message instead of a raw TypeError on the missing
+  // window.__TAURI__ bridge, same reasoning as gpAuth's window.__TAURI__ check.
+  if(!window.__TAURI__)throw new Error('Lightroom cloud browsing is desktop-app only');
+  const cid=await lrAskClientId();
+  if(!cid)throw new Error('No Adobe client ID set');
+  return lrAuthNative(cid);
+}
+// Lightroom's API prefixes every JSON response with `while (1) {}` (JSON-hijacking protection,
+// documented Adobe behavior) — must be stripped before parsing, or JSON.parse throws on every
+// single call.
+async function lrApiGet(path){
+  const tok=await lrAuth();
+  // Native HTTP (see exchange() above): lr.adobe.io also rejects the tauri:// CORS preflight.
+  const r=await window.__TAURI__.core.invoke('http_native',{method:'GET',url:LR_API+path,
+    headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid]],body:null});
+  const text=r.body.replace(/^while\s*\(1\)\s*\{\s*\}\s*/,'');
+  const ok=r.status>=200&&r.status<300;
+  let json;try{json=JSON.parse(text)}catch(e){throw new Error('Lightroom API returned unparsable data (status '+r.status+')')}
+  if(!ok)throw new Error('Lightroom API error: '+(json.message||r.status));
+  return json;
+}
+let lrCatalogId=null;
+// Ensures token + catalog id — the shared precondition for every cloud call.
+async function lrEnsureCatalog(){
+  await lrAuth();
+  if(lrCatalogId)return lrCatalogId;
+  // GET /v2/catalog (singular) is the documented way to get the user's cloud catalog — the
+  // /account response does NOT carry a catalog object (the old `account.catalog.id` read
+  // always came back undefined → "No Lightroom catalog found" even on a working account).
+  const cat=await lrApiGet('/catalog');
+  lrCatalogId=cat&&cat.id;
+  if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
+  return lrCatalogId;
+}
+async function lrConnectToggle(){
+  if(lrConnected()){
+    try{sessionStorage.removeItem('lrTok')}catch(e){}
+    lrCatalogId=null;
+    lrUpdateUI();toast('Lightroom disconnected',true);
+    return;
+  }
+  try{
+    await lrEnsureCatalog();
+    lrUpdateUI();toast('Lightroom connected ✓',true);
+  }catch(e){
+    log('Lightroom connect failed: '+(e&&e.message||e),'err');
+    toast('Lightroom connect failed — see log');
+    throw e;
+  }
+}
+async function lrListAlbums(){
+  await lrEnsureCatalog();
+  const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums?subtype=collection`);
+  return (data.resources||[]).map(a=>({id:a.id,name:(a.payload&&a.payload.name)||a.id}));
+}
+async function lrListAssets(albumId){
+  await lrEnsureCatalog();
+  // Paginated (links.next) — a single limit=100 page silently truncated big albums. Capped at
+  // 5 pages (500 assets) to bound the sidebar-click cost; links.next.href is relative to /v2.
+  let path=`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=100&embed=asset`;
+  const out=[];
+  for(let page=0;page<5&&path;page++){
+    const data=await lrApiGet(path);
+    (data.resources||[]).map(r=>r.asset).filter(Boolean).forEach(a=>out.push({
+      id:a.id,
+      name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
+      captured:(a.payload&&a.payload.captureDate)||'',
+      meta:lrAssetMeta(a.payload||{})
+    }));
+    const next=data.links&&data.links.next&&data.links.next.href;
+    path=next?('/'+String(next).replace(/^\/?(v2\/)?/,'')):null;
+  }
+  return out;
+}
+// Defensive metadata pull from a Lightroom asset payload — the shape varies by import source,
+// so read every place a field commonly lives and take the first hit. Used to fill the metadata
+// panel while a soft 2048 preview is showing (the 2048 rendition carries no EXIF); the RAW
+// master and the full-size JPEG both carry real EXIF, so this is a fallback, not the main path.
+function lrAssetMeta(p){
+  const src=p.importSource||{},dev=p.develop||{},xmp=p.xmp||{},x=xmp.tiff||xmp.exif||{};
+  const num=(v)=>typeof v==='number'?v:(parseFloat(v)||0);
+  const iso=src.iso||x.ISOSpeedRatings||x.ISO;
+  const fnum=src.fNumber||x.FNumber||x.ApertureValue;
+  const exp=src.exposureTime||x.ExposureTime;
+  const foc=src.focalLength||x.FocalLength;
+  return {
+    make:src.cameraMake||x.Make||'',
+    model:src.cameraModel||src.camera||x.Model||'',
+    lens:src.lens||src.lensModel||x.Lens||x.LensModel||'',
+    iso:iso?('ISO '+iso):'',
+    aperture:fnum?('f/'+num(fnum)):'',
+    shutter:exp?(num(exp)<1?('1/'+Math.round(1/num(exp))):(num(exp)+'s')):'',
+    focalLen:foc?(Math.round(num(foc))+'mm'):'',
+    date:p.captureDate||''
+  };
+}
+// Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
+// headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
+async function lrRenditionBlob(assetId,type){
+  const tok=await lrAuth();
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf],{type:'image/jpeg'});
+}
+// The untouched ORIGINAL (for these assets, the RW2) via the master endpoint. ⚠️ Adobe's
+// partner API commonly returns 403 here on non-elevated tiers (documented limitation) — the
+// caller surfaces that as "original download not permitted, use Edited full-size instead".

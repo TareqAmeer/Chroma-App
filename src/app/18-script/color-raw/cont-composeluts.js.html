@@ -1,0 +1,262 @@
+async function composeLUTs(corr,base,pfId,p0=78,p1=100){
+  const fin=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[br,bg,bb]=sampleLUT(base,r/32,g/32,b/32),[cr,cg,cb]=sampleLUT(corr,br,bg,bb),i=li(r,g,b);fin[i]=Math.max(0,Math.min(1,cr));fin[i+1]=Math.max(0,Math.min(1,cg));fin[i+2]=Math.max(0,Math.min(1,cb))}
+  if(r%8===7){setP(pfId,p0+(p1-p0)*(r/32));await yd()}}
+  setP(pfId,p1);return fin;
+}
+
+// ═══════════════════════════
+// CHANGE ANALYSIS
+// ═══════════════════════════
+function analyzeChanges(oldLUT,newLUT){
+  const B=[];
+  const npts=[[.1,.1,.1],[.25,.25,.25],[.5,.5,.5],[.75,.75,.75]];
+  let dl=0;npts.forEach(([r,g,b])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);dl+=lum(nr,ng,nb)-lum(or,og,ob)});dl=dl/npts.length*255;
+  if(Math.abs(dl)>1.5)B.push(`Overall brightness ${dl>0?'increased':'decreased'} by ${Math.abs(dl).toFixed(0)} levels`);
+  const[or0,og0,ob0]=sampleLUT(oldLUT,0,0,0),[nr0,ng0,nb0]=sampleLUT(newLUT,0,0,0);const bl=(lum(nr0,ng0,nb0)-lum(or0,og0,ob0))*255;
+  if(Math.abs(bl)>2)B.push(`Black point ${bl>0?'lifted — shadows more faded':'deepened'} by ${Math.abs(bl).toFixed(0)} levels`);
+  const[or1,og1,ob1]=sampleLUT(oldLUT,1,1,1),[nr1,ng1,nb1]=sampleLUT(newLUT,1,1,1);const hl=(lum(nr1,ng1,nb1)-lum(or1,og1,ob1))*255;
+  if(Math.abs(hl)>2)B.push(`Highlights ${hl<0?'pulled down':'boosted'} by ${Math.abs(hl).toFixed(0)} levels`);
+  [[.15,.15,.15,'Shadows'],[.5,.5,.5,'Midtones']].forEach(([r,g,b,nm])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);const sw=((nr-nb)-(or-ob))*255;if(Math.abs(sw)>2)B.push(`${nm} ${sw>0?'warmed':'cooled'} by ${Math.abs(sw).toFixed(0)} levels`)});
+  // Per-color HSL (matching LR's 8 HSL band names)
+  [['Red',1,.30,.25],['Orange',1,.55,.20],['Yellow',.90,.90,.15],['Green',.20,.80,.20],
+   ['Aqua',.10,.75,.75],['Blue',.15,.35,.85],['Purple',.55,.20,.80],['Magenta',.85,.20,.85]
+  ].forEach(([nm,r,g,b])=>{
+    const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);
+    const[oh,os,ov]=r2hsv(or,og,ob),[nh,ns,nv]=r2hsv(nr,ng,nb);
+    let dh=nh-oh;if(dh>.5)dh-=1;if(dh<-.5)dh+=1;
+    const dh_=Math.round(dh*360),ds_=Math.round((ns-os)*100),dl_=Math.round((lum(nr,ng,nb)-lum(or,og,ob))*100);
+    const p=[];
+    if(Math.abs(dh_)>=3)p.push(`H ${dh_>0?'+':''}${dh_}°`);
+    if(Math.abs(ds_)>=3)p.push(`S ${ds_>0?'+':''}${ds_}%`);
+    if(Math.abs(dl_)>=2)p.push(`L ${dl_>0?'+':''}${dl_}`);
+    if(p.length)B.push(`${nm}: ${p.join(' · ')}`);
+  });
+  return B.length>0?B:['Minimal changes across all test points'];
+}
+
+// ═══════════════════════════
+// XMP DERIVATION
+// ═══════════════════════════
+// Weighted-least-squares solve for small NxN systems (Gauss-Jordan, partial pivot,
+// multiple RHS at once). Needed because the HSL hue-bands / CG luminance-zones are
+// OVERLAPPING basis functions — naive per-band weighted averages are biased
+// estimators when bands overlap (cross-talk), and that bias gets amplified ~10-20x
+// by the small Luminance scale LS[k]. A proper regression removes the cross-talk.
+function solveLinSys(A,bs){
+  const n=A.length,k=bs.length;
+  const M=A.map((row,i)=>row.concat(bs.map(b=>b[i])));
+  for(let col=0;col<n;col++){
+    let piv=col;for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[piv][col]))piv=r;
+    if(piv!==col){const t=M[col];M[col]=M[piv];M[piv]=t}
+    const d=M[col][col]||1e-12;
+    for(let c=col;c<n+k;c++)M[col][c]/=d;
+    for(let r=0;r<n;r++){if(r===col)continue;const f=M[r][col];if(f===0)continue;for(let c=col;c<n+k;c++)M[r][c]-=f*M[col][c]}
+  }
+  const sols=[];for(let j=0;j<k;j++){const v=new Array(n);for(let i=0;i<n;i++)v[i]=M[i][n+j];sols.push(v)}
+  return sols;
+}
+async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
+  const N=w*h,clm=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // ── A. LIGHT: single luminance tone curve (lum(src) -> lum(achieved)) ──
+  const NB=18,step=255/NB,acc=new Float64Array(NB),cnt=new Int32Array(NB);
+  for(let i=0;i<N;i++){const p=i*4;const sl=lum(srcPx[p],srcPx[p+1],srcPx[p+2]),dl=lum(dstPx[p],dstPx[p+1],dstPx[p+2]),bin=Math.min(NB-1,sl/step|0);acc[bin]+=dl;cnt[bin]++}
+  const xs=[],ys=[];for(let i=0;i<NB;i++){xs.push(Math.round(i*step+step/2));ys.push(cnt[i]>8?acc[i]/cnt[i]:xs[xs.length-1])}
+  for(let i=1;i<ys.length;i++)if(ys[i]<ys[i-1])ys[i]=ys[i-1];
+  const sm=ys.map((y,i)=>(ys[Math.max(0,i-1)]+2*y+ys[Math.min(NB-1,i+1)])/4);
+  const lc=[];for(let i=0;i<13;i++){const si=Math.min(NB-1,Math.round(i*(NB-1)/12));lc.push([Math.min(255,Math.round(xs[si])),Math.max(0,Math.min(255,Math.round(sm[si])))])}
+  lc[0][0]=0;lc[12][0]=255;for(let i=1;i<lc.length;i++)if(lc[i][0]<=lc[i-1][0])lc[i][0]=lc[i-1][0]+1;
+  const mi=lc[6][0],mo=lc[6][1],expE=Math.round((Math.log2(mo/Math.max(mi,1)))*4)/4;
+  const hiE=Math.round((lc[12][1]-lc[12][0])/255*-80),shE=Math.round((lc[1][1]-lc[1][0])/255*80);
+  setP(pfId,90);await yd();
+  // ── Precompute graded(src): replay the SAME tone-only stage (exposure/shadows/
+  // highlights, the numbers just derived above) that the emitted XMP's sliders will
+  // apply — and that parseXMP->applyGrade actually feeds into HSL/Color-Grading.
+  // Measuring deltas against raw src (instead of this) would misattribute the global
+  // tonal shift as a per-band/per-zone color or luminance effect — exactly the bug
+  // that produced a uniform positive bias across every fitted Luminance value.
+  const toneS={exposure:expE,contrast:0,shadows:clm(shE,-100,100),highlights:clm(hiE,-100,100),whites:0,blacks:0};
+  const gR=new Float32Array(N),gG=new Float32Array(N),gB=new Float32Array(N),gLv=new Float32Array(N);
+  for(let i=0;i<N;i++){const p=i*4,[tr,tg,tb]=applyTone(srcPx[p]/255,srcPx[p+1]/255,srcPx[p+2]/255,toneS);gR[i]=tr;gG[i]=tg;gB[i]=tb;gLv[i]=lum(tr,tg,tb)}
+  // ── B. NEUTRAL CAST: Color Grading 3-way — closed-form inverse of the equiluminant
+  // cosine-triad tint (see cgTint). The forward model is LINEAR in the per-zone RGB
+  // delta Dz=(Dr,Dg,Db): achieved = graded + Σ_z w_z(lv0)·Dz. Solve that 3x3 weighted
+  // least-squares system directly (3 RHS = ΔR,ΔG,ΔB; same normal-equations machinery
+  // as before removes cross-talk between overlapping zones), then decompose Dz EXACTLY
+  // — no fitting needed for the decomposition itself:
+  //   • l = mean(Dr,Dg,Db): the cosine triad is zero-mean by construction, so the
+  //     explicit `lo` term is the ONLY thing that can move the mean — no chroma/lum
+  //     coupling, unlike the old hsv2r tint whose mean drifted with hue.
+  //   • (h,s) from the now-zero-mean chroma vector (Dz − l·[1,1,1]) by projecting onto
+  //     the cosine basis: a = m·cos θ, b = m·cos(θ−120°) ⇒ closed-form θ, m via the
+  //     standard two-component projection (atan2/hypot), since cos(θ−120°) expands to
+  //     −½cos θ + (√3/2)sin θ.
+  const ZN=CG_ZONES.length,SQ3=Math.sqrt(3);
+  const Acg=Array.from({length:ZN},()=>new Array(ZN).fill(0));
+  const bR=new Array(ZN).fill(0),bG=new Array(ZN).fill(0),bB=new Array(ZN).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i];
+    if(sat(r,g,b)>=.08)continue;
+    const lv0=gLv[i],wz=CG_ZONES.map(z=>gm(lv0,z[1],z[2]));
+    const dR=dstPx[p]/255-r,dG=dstPx[p+1]/255-g,dB=dstPx[p+2]/255-b;
+    for(let zi=0;zi<ZN;zi++){for(let zj=0;zj<ZN;zj++)Acg[zi][zj]+=wz[zi]*wz[zj];
+      bR[zi]+=wz[zi]*dR;bG[zi]+=wz[zi]*dG;bB[zi]+=wz[zi]*dB}}
+  for(let zi=0;zi<ZN;zi++)Acg[zi][zi]+=1e-6;
+  const[Dr,Dg,Db]=solveLinSys(Acg,[bR,bG,bB]);
+  const cg={};
+  for(let zi=0;zi<ZN;zi++){const zn=CG_ZONES[zi][0],mean=(Dr[zi]+Dg[zi]+Db[zi])/3;
+    const a=Dr[zi]-mean,b=Dg[zi]-mean;                       // chroma comps; c=−(a+b) exactly
+    const sinPart=(2*b+a)/SQ3,m=Math.sqrt(a*a+sinPart*sinPart);
+    const hueDeg=(Math.atan2(sinPart,a)*180/Math.PI%360+360)%360;
+    cg[zn]={h:Math.round(hueDeg)%360,s:clm(Math.round(m/(CG_K*.5)*100),0,100),l:clm(Math.round(mean/.5*100),-100,100)};}
+  // ── C/D. RESIDUAL HSL: subtract castEffect (mirrors applyCG with the just-fit cg
+  // and graded-luminance zone weights), then weighted least-squares over 8 bands.
+  // Same cross-talk issue as CG (band kernels overlap by design — see applyHSL), and
+  // here too a biased per-band average would get amplified by the small LS[k] divisor.
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  const NHB=C.length;
+  const Ahsl=Array.from({length:NHB},()=>new Array(NHB).fill(0));
+  const bH=new Array(NHB).fill(0),bS=new Array(NHB).fill(0),bV=new Array(NHB).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i],ssat=sat(r,g,b);
+    if(ssat<.08)continue;
+    const lv0=gLv[i];let R=dstPx[p]/255,G=dstPx[p+1]/255,B=dstPx[p+2]/255;
+    for(const[zn,zc,zw] of CG_ZONES){const wz=gm(lv0,zc,zw),zz=cg[zn];
+      if(zz.s){const[tr,tg,tb]=cgTint(zz.h,zz.s);R-=wz*tr;G-=wz*tg;B-=wz*tb}
+      if(zz.l){const lo=wz*zz.l/100*.5;R-=lo;G-=lo;B-=lo}}
+    R=clm(R,0,1);G=clm(G,0,1);B=clm(B,0,1);
+    const[sh,ssv,sv]=r2hsv(r,g,b),[dh2,dsv,dvv]=r2hsv(R,G,B);
+    let dHue=dh2-sh;if(dHue>.5)dHue-=1;if(dHue<-.5)dHue+=1;const dSat=dsv-ssv,dVal=dvv-sv;
+    const wk=new Array(NHB);
+    for(let k=0;k<NHB;k++){let df=Math.abs(sh-CE[k]);if(df>.5)df=1-df;wk[k]=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,ssv*3)}
+    for(let ki=0;ki<NHB;ki++){for(let kj=0;kj<NHB;kj++)Ahsl[ki][kj]+=wk[ki]*wk[kj];
+      bH[ki]+=wk[ki]*dHue;bS[ki]+=wk[ki]*dSat;bV[ki]+=wk[ki]*dVal}}
+  for(let ki=0;ki<NHB;ki++)Ahsl[ki][ki]+=1e-6;
+  const[betaH,betaS,betaV]=solveLinSys(Ahsl,[bH,bS,bV]);
+  const hA=[],sA=[],lA=[];
+  for(let k=0;k<NHB;k++){hA.push(clm(Math.round(betaH[k]*360),-100,100));sA.push(clm(Math.round(betaS[k]/.55*100),-100,100));lA.push(clm(Math.round(betaV[k]/LS[k]*100),-100,100))}
+  setP(pfId,95);await yd();
+  // ── E. EMIT ──
+  const uid=Array.from({length:32},()=>'0123456789ABCDEF'[Math.random()*16|0]).join('');
+  const seq=pts=>pts.map(([x,y])=>`\n     <rdf:li>${x}, ${y}</rdf:li>`).join('');
+  const hslStr=C.map((c,i)=>`crs:HueAdjustment${c}="${hA[i]}" crs:SaturationAdjustment${c}="${sA[i]}" crs:LuminanceAdjustment${c}="${lA[i]}"`).join('\n    ');
+  const Z=cg.shadow,M=cg.mid,Hi=cg.high;
+  const cgStr=`crs:ColorGradeShadowHue="${Z.h}" crs:ColorGradeShadowSat="${Z.s}" crs:ColorGradeShadowLum="${Z.l}"\n    crs:ColorGradeMidtoneHue="${M.h}" crs:ColorGradeMidtoneSat="${M.s}" crs:ColorGradeMidtoneLum="${M.l}"\n    crs:ColorGradeHighlightHue="${Hi.h}" crs:ColorGradeHighlightSat="${Hi.s}" crs:ColorGradeHighlightLum="${Hi.l}"\n    crs:ColorGradeGlobalHue="0" crs:ColorGradeGlobalSat="0" crs:ColorGradeGlobalLum="0" crs:ColorGradeBlending="50"`;
+  const xmp=`<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal" crs:UUID="${uid}" crs:SupportsAmount2="True" crs:SupportsColor="True"
+    crs:SupportsHighDynamicRange="True" crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True" crs:SupportsOutputReferred="True"
+    crs:Version="16.0" crs:ProcessVersion="11.0" crs:WhiteBalance="As Shot"
+    crs:Exposure2012="${expE>0?'+':''}${expE}"
+    crs:Contrast2012="0" crs:Highlights2012="${hiE>0?'+':''}${Math.min(100,Math.max(-100,hiE))}"
+    crs:Shadows2012="${shE>0?'+':''}${Math.min(100,Math.max(-100,shE))}"
+    crs:Whites2012="0" crs:Blacks2012="0" crs:Vibrance="0" crs:Saturation="0"
+    ${hslStr}
+    ${cgStr}
+    crs:ToneCurveName2012="Custom" crs:HasSettings="True">
+   <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">${name}</rdf:li></rdf:Alt></crs:Name>
+   <crs:Group><rdf:Alt><rdf:li xml:lang="x-default">User Presets</rdf:li></rdf:Alt></crs:Group>
+   <crs:ToneCurvePV2012><rdf:Seq>${seq(lc)}\n    </rdf:Seq></crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Blue>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>`;
+  setP(pfId,100);return xmp;
+}
+
+// ═══════════════════════════
+// COLOUR COPY (histogram match)
+// ═══════════════════════════
+function histMatch(srcPx,refPx,sN,rN){
+  const sH=[[],[],[]], rH=[[],[],[]], SZ3=SZ*SZ*SZ;
+  for(let c=0;c<3;c++){sH[c]=new Float64Array(256);rH[c]=new Float64Array(256)}
+  for(let i=0;i<sN;i++){const p=i*4;for(let c=0;c<3;c++)sH[c][srcPx[p+c]]++}
+  for(let i=0;i<rN;i++){const p=i*4;for(let c=0;c<3;c++)rH[c][refPx[p+c]]++}
+  const maps=sH.map((sh,ci)=>{
+    const rh=rH[ci];
+    const scdf=new Float64Array(256),rcdf=new Float64Array(256);
+    let ss=0,rs=0;for(let i=0;i<256;i++){ss+=sh[i];scdf[i]=ss/sN;rs+=rh[i];rcdf[i]=rs/rN}
+    const map=new Uint8Array(256);
+    for(let s=0;s<256;s++){let best=0,bd=2;for(let r=0;r<256;r++){const d=Math.abs(scdf[s]-rcdf[r]);if(d<bd){bd=d;best=r}}map[s]=best}
+    return map;
+  });
+  const lut=new Float32Array(SZ3*3);
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b);
+    lut[i]=maps[0][Math.min(255,Math.round(r/32*255))]/255;
+    lut[i+1]=maps[1][Math.min(255,Math.round(g/32*255))]/255;
+    lut[i+2]=maps[2][Math.min(255,Math.round(b/32*255))]/255;
+  }
+  return lut;
+}
+// CHR-220: blend the matched LUT back toward identity. Weight per lattice point =
+// strength × (shadow/mid/high amount, smoothly by the INPUT colour's luma) × (1 − skin weight).
+// Skin = warm hue, moderate saturation, mid lightness (the usual YCbCr-style box, softened).
+function cpAdjustLUT(lut,o){
+  if(o.str>=1&&o.sh>=1&&o.md>=1&&o.hl>=1&&!o.skin)return lut;
+  const out=new Float32Array(lut.length),ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b),R=r/(SZ-1),G=g/(SZ-1),B=b/(SZ-1),Y=0.2126*R+0.7152*G+0.0722*B;
+    const wS=1-ss(0.15,0.45,Y),wH=ss(0.55,0.85,Y),wM=Math.max(0,1-wS-wH);
+    let w=o.str*(wS*o.sh+wM*o.md+wH*o.hl);
+    if(o.skin){const mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx>0?(mx-mn)/mx:0;
+      let hue=0;if(mx>mn){if(mx===R)hue=60*(((G-B)/(mx-mn))%6);else if(mx===G)hue=60*((B-R)/(mx-mn)+2);else hue=60*((R-G)/(mx-mn)+4);}if(hue<0)hue+=360;
+      const hw=hue<=50?1-ss(30,50,hue):(hue>=345?1:0);
+      const sk=hw*ss(0.08,0.2,sat)*(1-ss(0.6,0.8,sat))*ss(0.15,0.3,Y)*(1-ss(0.85,0.97,Y));
+      w*=1-0.9*sk;}
+    for(let c=0;c<3;c++){const id=c===0?R:c===1?G:B;out[i+c]=id+(lut[i+c]-id)*w;}
+  }
+  return out;
+}
+function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.value)/100:1;};
+  return{str:v('cp-str'),sh:v('cp-sh'),md:v('cp-md'),hl:v('cp-hl'),skin:!!(document.getElementById('cp-skin')||{}).checked};}
+// CHR-223: small live preview of the match. The base histogram LUT is cached per photo pair;
+// slider moves only re-run cpAdjustLUT + the 640px apply, which is fast enough to track a drag.
+let _cpPrev=null,_cpSplit=0.5;
+// CHR-222 first slice: collect stable colour correspondences for the current image pair. The
+// automatic histogram LUT remains the exact default path; the paired control points are explicit
+// session data until a validated sparse-point LUT interpolation is selected for a later slice.
+let _cpPoints=[],_cpPending=null,_cpPairSrcFile=null,_cpPairRefFile=null;
+function cpPairPick(which,e){
+  if(!_cpPrev||!_cpPrev.s||!_cpPrev.r)return;
+  const cv=which==='source'?document.getElementById('cp-prev-before'):document.getElementById('cp-prev-ref');
+  const frame=which==='source'?_cpPrev.s:_cpPrev.r,rect=cv.getBoundingClientRect();
+  if(!rect.width||!rect.height)return;
+  const x=Math.max(0,Math.min(frame.w-1,Math.floor((e.clientX-rect.left)*frame.w/rect.width)));
+  const y=Math.max(0,Math.min(frame.h-1,Math.floor((e.clientY-rect.top)*frame.h/rect.height)));
+  const rgb=cpSampleAverage(frame,x,y),sample={x:(x+.5)/frame.w,y:(y+.5)/frame.h,rgb};
+  if(which==='source'){
+    _cpPending=sample;
+    document.getElementById('cp-pairs-hint').textContent='Source pinned. Now click the matching colour in the reference.';
+  }else if(!_cpPending){
+    document.getElementById('cp-pairs-hint').textContent='Choose a colour from the source photo first.';
+    return;
+  }else{
+    _cpPoints.push({source:_cpPending,reference:sample});_cpPending=null;
+    document.getElementById('cp-pairs-hint').textContent='Pair saved. Click another source colour to add one.';
+  }
+  cpPairsRender();
+  if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}
+}
+function cpSampleAverage(frame,x,y){
+  const {px,w,h}=frame;let r=0,g=0,b=0,n=0;
+  for(let yy=Math.max(0,y-2);yy<=Math.min(h-1,y+2);yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(w-1,x+2);xx++){
+    const i=(yy*w+xx)*4;r+=px[i];g+=px[i+1];b+=px[i+2];n++;
+  }
+  return[Math.round(r/n),Math.round(g/n),Math.round(b/n)];
+}
+function cpPairsRender(){
+  const box=document.getElementById('cp-pairs'),list=document.getElementById('cp-pairs-list');if(!box||!list)return;
+  box.style.display=(_cpPoints.length||_cpPending)?'block':'none';list.innerHTML='';
+  _cpPoints.forEach((p,i)=>{
+    const item=document.createElement('span');item.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:11px';
+    const swatch=(rgb)=>{const s=document.createElement('i');s.style.cssText=`width:15px;height:15px;border-radius:50%;background:rgb(${rgb.join(',')});border:1px solid rgba(128,128,128,.5)`;s.title=`RGB ${rgb.join(', ')}`;return s;};
+    item.append(`Pair ${i+1}`,swatch(p.source.rgb),document.createTextNode('→'),swatch(p.reference.rgb));
+    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}};item.appendChild(rm);list.appendChild(item);
+  });
+}
+// CHR-222: sparse pairs -> smooth LUT correction. The automatic LUT stays the default; with pairs
+// we add a Gaussian-weighted residual field (sigma 0.16 in RGB, ridge lambda so it fades to zero away
+// from the pins), iterated 3x so each pinned source colour lands close to its reference colour.

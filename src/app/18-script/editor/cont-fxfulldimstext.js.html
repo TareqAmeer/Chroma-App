@@ -1,0 +1,260 @@
+function fxFullDimsText(it){
+  const f=(it&&(it.fullImg||it.img))||null;
+  const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
+  return w&&h?`${w}×${h}`:'';
+}
+// Header shows what's loaded right now (proxy until the full decode is in, then the full size);
+// the table's Dimensions row is always the full size. Both are re-synced on every preview render
+// so a background full-quality promotion updates them instead of leaving stale numbers behind.
+// CHR-194: called by library-ui.js's autosave. "saved" is only ever set after the sidecar write
+// resolved — never optimistically. st: pending | saving | saved | queued | error | ''.
+window.chromasmithSaveState=function(st,onRetry){
+  const el=document.getElementById('cs-save-state');if(!el)return;
+  clearTimeout(el._t);el.className=st==='error'?'err':'';el.hidden=!st;el.textContent='';
+  const T={pending:'Edited',saving:'Saving…',saved:'Saved locally',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
+  el.textContent=T[st]||'';el.title=st==='saved'?'Edit written to the photo\'s sidecar — safe to close':'';
+  if(st==='error'&&onRetry){const b=document.createElement('button');b.type='button';b.textContent='Retry';b.onclick=onRetry;el.appendChild(b);}
+};
+let _csPhotoSourceMode='',_csPhotoRenderMode='';
+window.chromasmithSourceRenderUpdate=function(update={}){
+  if(update.source!==undefined)_csPhotoSourceMode=update.source;
+  if(update.render!==undefined)_csPhotoRenderMode=update.render;
+  const el=document.getElementById('cs-source-render-state');if(!el)return;
+  const sourceText={checking:'Checking source…',original:'Original available',offlineCache:'Offline full-quality cache',offlinePreview:'Reduced-quality offline preview',missing:'Source unavailable'}[_csPhotoSourceMode]||'';
+  const renderText={checking:'Loading preview…',preview:'Preview · full resolution on demand',loading:'Loading full resolution…',full:'Full resolution ready',unavailable:'Full resolution unavailable'}[_csPhotoRenderMode]||'';
+  if(!sourceText&&!renderText){el.hidden=true;el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
+  const visible=[sourceText,renderText].filter(Boolean).join(' · ');
+  const sourceDetail={checking:'Checking whether the original or an offline cached copy can be used.',original:'The original photo source was readable when this photo opened.',offlineCache:'The original is unavailable; editing is using a full-quality offline cached copy.',offlinePreview:'The original and full-quality offline cache are unavailable. This is a reduced-quality preview; reconnect the source drive and reopen for full-resolution editing.',missing:'The source could not be read. Reconnect the drive and reopen the photo.'}[_csPhotoSourceMode]||'';
+  const renderDetail={checking:'The editor is loading the first preview.',preview:'The visible image is a fast preview. Full-resolution pixels load when needed.',loading:'The full-resolution image is being loaded and rendered.',full:'The full-resolution image is ready for detailed edits and export.',unavailable:'Full-resolution pixels are unavailable from this source.'}[_csPhotoRenderMode]||'';
+  const detail=[sourceDetail,renderDetail].filter(Boolean).join(' ');
+  if(el.textContent!==visible)el.textContent=visible;
+  if(el.title!==detail)el.title=detail;
+  if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
+  el.dataset.source=_csPhotoSourceMode;el.dataset.render=_csPhotoRenderMode;el.hidden=false;
+};
+function fxRefreshDims(){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
+  const s=document.getElementById('db-title-status');
+  if(s&&!s.classList.contains('spin')){const t=fxDimsFmt(it.name,it.img,it.ext);if(t&&s.textContent!==t)s.textContent=t;}
+  const d=document.getElementById('fx-exif-dims');
+  if(d){const t=fxFullDimsText(it);if(t&&d.textContent!==t)d.textContent=t;}
+}
+function showExif(exif){
+  const el=document.getElementById('fx-exif');if(!el)return;
+  if(typeof fxRenderPeoplePanel==='function')fxRenderPeoplePanel();
+  if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();
+  // ⚠️ A video has no EXIF, so this used to return early and the Info panel showed nothing at all
+  // for a clip — no duration, codec, frame rate or colour space, even though the demuxer had all
+  // of it. Video gets its own block built from the item's own probe data.
+  const _it=fxImages[fxCurIdx]||fxImages[0]||{};
+  if(_it.kind==='video'){el.innerHTML=_videoInfoRows(_it);return;}
+  if(!exif||!Object.keys(exif).filter(k=>exif[k]).length){el.innerHTML='';return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chip=(lb,val)=>val?`<div class="fx-exif-chip"><span class="fx-exif-chip-lb">${lb}</span><span>${esc(val)}</span></div>`:'';
+  // exif.iso already carries its own "ISO " prefix (set wherever it's parsed, e.g. EXIF tag
+  // 0x8827) because other call sites show it standalone with no separate label. This chip strip
+  // ALSO has its own "ISO" label, so passing the prefixed string through printed "ISO ISO 400".
+  // Strip it here rather than at every producer, since those other bare-display call sites are
+  // exactly why the prefix belongs on the value in the first place.
+  const isoVal=exif.iso?String(exif.iso).replace(/^ISO\s*/i,''):'';
+  const chips=[chip('ISO',isoVal),chip('Aperture',exif.aperture),chip('Shutter',exif.shutter),chip('Focal',exif.focalLen)].filter(Boolean);
+  const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
+  // DRK-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
+  // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
+  // attached by the loaders / library opener; missing ones simply don't render.
+  const it=fxImages[fxCurIdx]||fxImages[0]||{};
+  const dims=fxFullDimsText(it);
+  const fmtDate=d=>{if(!d)return'';const m=String(d).match(/^(\d{4})[:-](\d{2})[:-](\d{2})/);
+    if(!m)return d;const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${MO[parseInt(m[2],10)-1]||m[2]} ${parseInt(m[3],10)}, ${m[1]}`;};
+  const fmtSize=b=>b?(b>=1048576?(b/1048576).toFixed(1)+' MB':Math.round(b/1024)+' KB'):'';
+  let make=exif.make||'',model=exif.model||'';
+  if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
+  el.innerHTML=
+    row('Date',fmtDate(exif.date))+row('Dimensions',dims).replace('class="fx-exif-val"','class="fx-exif-val" id="fx-exif-dims"')+
+    (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
+    row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')+row('Size',fmtSize(it.fileSize))+
+    row('File Format',it.ext?it.ext.toUpperCase():'')+
+    row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model)+
+    _icoFrameRow(it);
+}
+// ROADMAP.md F6 — minimal ICO/CUR frame picker: a numeric stepper, shown ONLY when the loaded
+// icon actually has more than one directory entry (icoFrameCount set by the RUST_ONLY_RE-style
+// desktop-only load path above). Deliberately small — a dropdown/stepper, not a filmstrip — this
+// format is a rare edit target, not a primary workflow.
+function _icoFrameRow(it){
+  if(!it||!(it.icoFrameCount>1))return'';
+  const n=it.icoFrameCount;
+  return `<div class="fx-exif-row"><span class="fx-exif-lb">Frame</span><span class="fx-exif-val">`+
+    `<input type="number" min="0" max="${n-1}" value="${it.icoFrame||0}" style="width:3em" `+
+    `onchange="fxSetIcoFrame(this.value)"> of ${n}</span></div>`;
+}
+// Re-decodes the CURRENT photo's stashed ICO bytes at a different directory entry and swaps the
+// canvas in place — mirrors the initial decode in loadFXImages exactly (same
+// window.chromasmithDecodeStill call), so a chosen frame renders through the identical path.
+async function fxSetIcoFrame(v){
+  const it=fxImages[fxCurIdx];
+  if(!it||!it._icoBytes||typeof window.chromasmithDecodeStill!=='function')return;
+  const n=Math.max(0,Math.min(it.icoFrameCount-1,parseInt(v,10)||0));
+  try{
+    const{canvas}=await window.chromasmithDecodeStill(it._icoBytes,'ico',n);
+    it.img=canvas;it.icoFrame=n;
+    fxImg=it.img;updateWork();renderPreview();
+  }catch(e){log(`Could not switch ICO frame: ${errStr(e)}`,'err')}
+}
+// The Basic Adjustments panel (exposure/contrast/.../skin) is the one FX section that can be
+// made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,
+// halation, bloom, etc.) still applies to the whole batch automatically. `adjValsOverride`, when
+// given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
+// it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
+// own Adjust values instead of whichever photo happens to be previewed at export time.
+// ══ MATCH SERIES TO A REFERENCE ═══════════════════════════════════════════════════════════
+// Batch editing shares one fxState across every photo, which is right for a LOOK and wrong for
+// exposure and white-balance drift: a set walked through changing light has each frame metered
+// slightly differently, so one shared exposure leaves half the shoot too dark. This solves a
+// per-photo offset instead, and writes it into that photo's own `adjustOverride` — the exact
+// mechanism the manual "make this photo independent" toggle already uses, so nothing downstream
+// (render, export, session, XMP) needs to know this feature exists.
+//
+// ⚠️ Deliberately only exposure + white balance. Contrast, saturation and the look are what the
+// user CHOSE; matching those too would flatten a set to one frame's interpretation and undo the
+// grade. Drift is a capture problem, not a taste problem.
+const MATCH_STAT_PX=160;   // longest edge for the statistics pass — a match is a global average,
+                           // and sampling more pixels costs time without moving the numbers
+/// Robust per-channel statistics for one photo, measured on the SOURCE pixels (pre-grade), since
+/// the offsets have to be independent of whatever look is currently applied.
+function _matchStats(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const sc=Math.min(1,MATCH_STAT_PX/Math.max(w0,h0));
+  const w=Math.max(1,Math.round(w0*sc)),h=Math.max(1,Math.round(h0*sc));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data;
+  // Trimmed means: a bright sky or a black frame edge would otherwise drag the average and make
+  // the correction chase the background rather than the subject. Collect, sort, drop the tails.
+  const R=[],G=[],B=[],L=[];
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+    R.push(r);G.push(g);B.push(b);L.push(0.2126*r+0.7152*g+0.0722*b);
+  }
+  const trimmed=(a)=>{
+    a.sort((p,q)=>p-q);
+    const lo=Math.floor(a.length*0.10),hi=Math.ceil(a.length*0.90);
+    let s=0,n=0;for(let i=lo;i<hi;i++){s+=a[i];n++;}
+    return n?s/n:0.5;
+  };
+  return{r:trimmed(R),g:trimmed(G),b:trimmed(B),lum:Math.max(1e-4,trimmed(L))};
+}
+/// Solves the exposure/temp/tint offsets that carry `tgt` onto `ref`.
+///
+/// ⚠️ Exposure is solved in STOPS (a log ratio), not as a linear difference: the slider is
+/// exposure-compensation, so a photo half as bright needs +1 stop regardless of where it sits on
+/// the scale. A linear delta would over-correct the shadows and under-correct the highlights.
+function _matchOffsets(ref,tgt){
+  const stops=Math.log2(ref.lum/Math.max(1e-4,tgt.lum));
+  // White balance from the channel ratios AFTER equalising brightness, or an exposure difference
+  // would masquerade as a colour cast.
+  const norm=(s)=>({r:s.r/Math.max(1e-4,s.lum),g:s.g/Math.max(1e-4,s.lum),b:s.b/Math.max(1e-4,s.lum)});
+  const nr=norm(ref),nt=norm(tgt);
+  // Temp moves blue against red; tint moves green against the other two — the same axes the
+  // Temp/Tint sliders drive, so the solved numbers land on the controls the user already reads.
+  const temp=((nr.r-nr.b)-(nt.r-nt.b))*100;
+  const tint=((nr.g-(nr.r+nr.b)/2)-(nt.g-(nt.r+nt.b)/2))*100;
+  const clamp=(v,l)=>Math.max(-l,Math.min(l,v));
+  // The exposure slider is ±5 stops over ±100 (see getFXParams' /20), so stops*20 is the slider
+  // value. Capped well short of the rail: a solved correction bigger than ~2 stops means the two
+  // frames are not the same scene, and silently pushing the slider to 100 would look like a bug.
+  return{exp:Math.round(clamp(stops*20,40)),temp:Math.round(clamp(temp,40)),tint:Math.round(clamp(tint,40))};
+}
+/// Matches every loaded photo to `refIdx`, writing per-photo adjustOverride values.
+// CHR-178: reference photo window. A pinned image floats over the editor (draggable, resizable)
+// so a photo can be graded by eye toward another — any file on disk, the Library photo passed
+// in by library-ui.js, or a snapshot of the current graded preview (handy before switching to
+// the next photo in a batch). Session-only by design: the object URL dies with the page.
+let _fxRefUrl=null;
+function fxRefShow(url,label){
+  if(_fxRefUrl&&_fxRefUrl!==url)URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=url;
+  let w=document.getElementById('fx-ref-win');
+  if(!w){
+    w=document.createElement('div');w.id='fx-ref-win';
+    w.innerHTML='<div class="ref-bar"><span></span><button class="btn bgh ref-match" title="Nudge this photo\'s exposure and white balance toward the reference">Match to this</button><button class="btn-icon" title="Change reference">'+icon('folder',14)+'</button><button class="btn-icon" title="Close reference">'+icon('close',14)+'</button></div><img alt="Reference photo">';
+    const[bMatch,bChange,bClose]=w.querySelectorAll('button');
+    bMatch.onclick=()=>fxRefMatchCurrent();bChange.onclick=()=>fxRefPickFile();bClose.onclick=()=>fxRefClose();
+    const bar=w.querySelector('.ref-bar');
+    bar.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
+      const mv=ev=>{w.style.left=Math.max(0,Math.min(innerWidth-60,ev.clientX-dx))+'px';w.style.top=Math.max(0,Math.min(innerHeight-30,ev.clientY-dy))+'px';};
+      const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);};addEventListener('pointermove',mv);addEventListener('pointerup',up);});
+    const wrap=document.getElementById('fx-wrap'),r=wrap?wrap.getBoundingClientRect():{right:innerWidth,top:80};
+    w.style.left=Math.max(8,r.right-336)+'px';w.style.top=(r.top+16)+'px';
+    document.body.appendChild(w);
+  }
+  {const im=w.querySelector('img');im.onerror=()=>{fxRefClose();toast('Can\'t preview that file as a reference (RAW?) — open it and use "Pin this photo as edited"',false);};im.src=url;}w.querySelector('.ref-bar span').textContent=label||'Reference';w.style.display='flex';
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.add('on');
+}
+function fxRefClose(){const w=document.getElementById('fx-ref-win');if(w)w.remove();if(_fxRefUrl){URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=null;}
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.remove('on');}
+// "Match to this": solves the exposure / temp / tint offsets that carry what the CURRENT photo
+// looks like now (rendered preview) onto the reference, with the same _matchStats/_matchOffsets the
+// series match uses, and writes them into this photo's own adjust values. Repeating it converges.
+function fxRefMatchCurrent(){
+  const w=document.getElementById('fx-ref-win'),ref=w&&w.querySelector('img'),it=curItem();
+  if(!ref||!ref.complete||!ref.naturalWidth){toast('The reference is still loading',false);return;}
+  if(!it||!it.img||it.kind==='video'||!FX||!FX.cv||!FX.cv.width){toast('Open a photo to match first',false);return;}
+  renderPreview();
+  let cur=it.img;try{const{px,w,h}=FX.getPixels();if(px&&w&&h){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(px.buffer,px.byteOffset,px.length),w,h),0,0);cur=c;}}catch(e){}
+  let cs=_matchStats(cur);if(cs.lum<=0.001){cs=_matchStats(it.img);} // blank read-back: fall back to the source
+  const off=_matchOffsets(_matchStats(ref),cs);
+  const base=it.adjustOverride||domAdjustVals(),cl=v=>Math.max(-100,Math.min(100,v));
+  const v={...base,exp:cl((base.exp||0)+off.exp),temp:cl((base.temp||0)+off.temp),tint:cl((base.tint||0)+off.tint)};
+  it.adjustOverride=v;applyAdjustVals(v);
+  {const tg=document.getElementById("tg-adjust");if(tg&&!tg.classList.contains("on"))toggleFX("adjust");} // Tone must be on for exposure/temp to apply
+  updateWork();renderPreview();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(off.exp||off.temp||off.tint?`Matched toward the reference (exposure ${off.exp>=0?'+':''}${off.exp}, temp ${off.temp>=0?'+':''}${off.temp}, tint ${off.tint>=0?'+':''}${off.tint})`:'Already close to the reference',true);
+  return off;
+}
+function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
+function fxRefSnapshot(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width){toast('Open a photo first');return;}
+  renderPreview();cv.toBlob(b=>{if(!b){toast('Could not capture the preview');return;}
+    const it=curItem();fxRefShow(URL.createObjectURL(b),(it&&it.name?it.name+' — ':'')+'as edited');},'image/jpeg',0.92);
+}
+window.chromasmithSetReference=(blob,label)=>fxRefShow(URL.createObjectURL(blob),label);
+function fxRefMenu(btn){
+  if(document.getElementById('fx-ref-win')){fxRefClose();return;}
+  const r=btn.getBoundingClientRect();
+  const m=document.createElement('div');m.className='cs-ctx';
+  m.style.cssText=`position:fixed;left:${r.left}px;top:${r.bottom+6}px;z-index:9999;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;min-width:200px;box-shadow:var(--lift-2)`;
+  [['Pin this photo as edited',fxRefSnapshot],['Choose a photo…',fxRefPickFile]].forEach(([t,fn])=>{const it=document.createElement('div');it.className='cs-ctx-it';it.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer';it.textContent=t;it.onclick=()=>{m.remove();fn();};m.appendChild(it);});
+  document.body.appendChild(m);setTimeout(()=>document.addEventListener('click',()=>m.remove(),{once:true}),0);
+}
+async function matchSeriesToReference(refIdx){
+  if(fxImages.length<2){toast('Load a set of photos first');return;}
+  refIdx=(refIdx==null)?fxCurIdx:refIdx;
+  const ref=fxImages[refIdx];
+  if(!ref||!ref.img){toast('Reference photo is not loaded');return;}
+  const base=domAdjustVals();                 // the shared grade every photo starts from
+  const refStat=_matchStats(ref.img);
+  let changed=0;
+  for(let i=0;i<fxImages.length;i++){
+    const it=fxImages[i];
+    if(!it||!it.img||it.kind==='video')continue;
+    if(i===refIdx){it.adjustOverride=null;continue;}   // the reference itself follows the batch
+    const off=_matchOffsets(refStat,_matchStats(it.img));
+    // Offsets ride ON TOP of the shared grade rather than replacing it — the look stays, only the
+    // capture drift is corrected.
+    const v={...base};
+    v.exp=Math.max(-100,Math.min(100,(base.exp||0)+off.exp));
+    v.temp=Math.max(-100,Math.min(100,(base.temp||0)+off.temp));
+    v.tint=Math.max(-100,Math.min(100,(base.tint||0)+off.tint));
+    it.adjustOverride=v;
+    if(off.exp||off.temp||off.tint)changed++;
+  }
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(`Matched ${changed} photo(s) to ${ref.name}`,true);
+  log(`Match series: ${changed} photo(s) adjusted to reference "${ref.name}"`,'ok');
+}
+/// Undoes it: every photo goes back to following the shared batch values.

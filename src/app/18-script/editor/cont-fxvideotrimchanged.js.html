@@ -1,0 +1,49 @@
+function fxVideoTrimChanged(){
+  const it=curItem();if(!it||it.kind!=='video')return;
+  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
+  let a=+trimIn.value,b=+trimOut.value;
+  if(a>b){[a,b]=[b,a];trimIn.value=a;trimOut.value=b;}
+  trimIn.max=b;trimOut.min=a;
+  it.trimInFrame=a;it.trimOutFrame=b;
+  const full=a===0&&b>=it.frameCount-1;
+  document.getElementById('vid-trim-lb').textContent=full?'full clip':`${fxVideoTimeLabel(a,it.fps)}–${fxVideoTimeLabel(b,it.fps)}`;
+  // Visual range fill on the scrub track — a background gradient from 0..a (dimmed, outside the
+  // trim) / a..b (normal, the playable/exported range) / b..end (dimmed again).
+  const scrub=document.getElementById('vid-scrub');
+  if(scrub){
+    const max=Math.max(1,+scrub.max||it.frameCount-1);
+    const p0=a/max*100,p1=b/max*100;
+    scrub.style.background=full?'':`linear-gradient(to right, var(--sur) 0%, var(--sur) ${p0}%, var(--acc) ${p0}%, var(--acc) ${p1}%, var(--sur) ${p1}%, var(--sur) 100%)`;
+  }
+}
+// Capture Frame (V2): exports the CURRENTLY DISPLAYED frame through the exact same full-res
+// still export path a photo uses (processToCanvas → toBlob) — the video already owns its own
+// full-res source canvas (it.img, kept current by fxVideoSeekTo), so this is just "export it
+// like a photo, once." getPixels() inside processToCanvas is fine here: it's a single still,
+// not the per-frame-in-a-loop pattern the video export path itself must avoid.
+async function fxVideoCaptureFrame(){
+  const it=curItem();
+  if(!it||it.kind!=='video'){toast('No video loaded',false);return;}
+  const P=getFXParams(it.adjustOverride||undefined);
+  const src=geomCanvas(it);
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  const proc=await processToCanvas(P,src,iw,ih);
+  const blob=await new Promise((resolve,reject)=>proc.toBlob(b=>b?resolve(b):reject(new Error('toBlob failed')),'image/png'));
+  await saveFile(blob,`${it.name}_frame${it.curFrame||0}.png`,'image/png');
+  toast('Frame captured ✓',true);
+}
+// Build the photo picker's accept list from the FORMAT REGISTRY (near loadTiff) rather than
+// hand-writing extensions in the HTML, which is exactly how the old accept="image/*,.tif,.tiff,
+// .rw2,.raw" went stale — it listed 2 of 8 RAW extensions the app already accepted, so the file
+// picker greyed out formats loadFXImages would happily open. RUST_ONLY_RE formats are listed on
+// EVERY platform, including web — better to accept-and-explain (unsupportedFormatMessage) than to
+// grey a file out, matching loadFXImages' own openable() policy. Video is appended separately,
+// only when this browser can actually grade it — never advertise a type the drop/pick path
+// would just reject.
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('in-fx-img');
+  if(!inp)return;
+  const exts=FMT_ALL.map(e=>'.'+e);
+  if(videoSupported())exts.push('video/*','.mp4','.mov','.m4v');
+  inp.setAttribute('accept',['image/*',...exts].join(','));
+});

@@ -92,3 +92,6 @@ Decision: skip a full ES-module rewrite (little user benefit, high silent-breaka
 - `tools/scripts/app-uses.mjs <name> [--lines] [--all]` — definitions + callers by file, so an agent sees blast radius before editing.
 - `test/unit/` (`npm run unit:test`, in `npm test`) — no-browser tests for OKLab/OKLCH and ProPhoto->sRGB, using `extract.mjs` to lift functions out of the app. Add more pure helpers the same way; masks already have `npm run mask:test`.
 - Only consider real modules for color/RAW maths and masks, and only if these tests make it cheap.
+
+### Domain layout fix (2026-10-16)
+Sections were first filed by header text, which misplaced mixed runs (e.g. shader code under a Google Photos comment). Now: sections over 450 lines are cut further at column-0 declarations outside template literals (`cont-<identifier>` parts), and each part is filed by the first identifier it declares, then by header. Folders: renderer, color-raw, masks, subjects-ai, collage, google-photos, export-io, history-presets, shell-ui, editor (catch-all). 146 parts in `src/app`.

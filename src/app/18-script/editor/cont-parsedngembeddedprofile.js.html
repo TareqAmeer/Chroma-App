@@ -1,0 +1,369 @@
+function parseDngEmbeddedProfile(bytes){
+  try{
+    const d=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    const le=d.getUint16(0,false)===0x4949;
+    if(!le&&d.getUint16(0,false)!==0x4D4D)return null;
+    if(d.getUint16(2,le)!==42)return null;
+    const TS={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8,13:4,16:8};
+    const tags={},seen=new Set();let orient=null,gainBytes=null,truncated=false;
+    const walk=off=>{
+      if(!off||seen.has(off)||off+2>d.byteLength)return;
+      seen.add(off);
+      const n=d.getUint16(off,le);
+      for(let i=0;i<n;i++){
+        const e=off+2+i*12;if(e+12>d.byteLength)return;
+        const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),cnt=d.getUint32(e+4,le);
+        const sz=(TS[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,le):e+8;
+        if(tag===330){for(let k=0;k<cnt&&k<8;k++)walk(d.getUint32((cnt>1?ptr:e+8)+4*k,le));continue;}
+        if(tag===274&&orient==null){orient=d.getUint16(e+8,le);continue;} // IFD0 Orientation (the decoders rotate by it; the gain map is in unrotated coords)
+        if(tag===52525&&typ===7&&!gainBytes){if(ptr+sz<=d.byteLength)gainBytes=new Uint8Array(bytes.buffer,bytes.byteOffset+ptr,cnt);else truncated=true;continue;} // ProfileGainTableMap (DNG 1.6)
+        if(!(tag>=50721&&tag<=51109)||cnt>2000000)continue;
+        if(ptr+sz>d.byteLength){truncated=true;continue;} // caller passed only the file's head — see desktop-native.js's chromasmithResolveRawLut
+        let v;
+        if(typ===10){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,le),b=d.getInt32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===5){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getUint32(ptr+8*j,le),b=d.getUint32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===11){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat32(ptr+4*j,le);}
+        else if(typ===12){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat64(ptr+8*j,le);}
+        else if(typ===3){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint16(ptr+2*j,le);}
+        else if(typ===4){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint32(ptr+4*j,le);}
+        else continue;
+        if(!tags[tag])tags[tag]=v;
+      }
+      if(off+2+n*12+4<=d.byteLength)walk(d.getUint32(off+2+n*12,le));
+    };
+    walk(d.getUint32(4,le));
+    const inv3=m=>{const[a,b,c,dd,e,f,g,h,i]=m,A=e*i-f*h,B=f*g-dd*i,C=dd*h-e*g,det=a*A+b*B+c*C;
+      if(!isFinite(det)||Math.abs(det)<1e-9)return null;
+      return[A/det,(c*h-b*i)/det,(b*f-c*e)/det,B/det,(a*i-c*g)/det,(c*dd-a*f)/det,C/det,(b*g-a*h)/det,(a*e-b*dd)/det];};
+    const mul3=(x,y)=>{const r=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++)r[3*i+j]=x[3*i]*y[j]+x[3*i+1]*y[3+j]+x[3*i+2]*y[6+j];return r;};
+    let fm=null;
+    const F=tags[50965]||tags[50964],C=tags[50722]||tags[50721];
+    if(F&&F.length>=9&&F.slice(0,9).every(isFinite))fm=Array.from(F.slice(0,9));
+    else if(C&&C.length>=9&&C.slice(0,9).every(isFinite)){
+      const A=inv3(Array.from(C.slice(0,9)));if(!A)return null;
+      const BR=[1.0478112,0.0228866,-0.0501270,0.0295424,0.9904844,-0.0170491,-0.0092345,0.0150436,0.7521316];
+      const M=mul3(BR,A),Mi=inv3(M);if(!Mi)return null;
+      const W=[0.9642,1,0.8249],sc=[0,1,2].map(i=>Mi[3*i]*W[0]+Mi[3*i+1]*W[1]+Mi[3*i+2]*W[2]);
+      fm=[0,1,2].flatMap(i=>[M[3*i]*sc[0],M[3*i+1]*sc[1],M[3*i+2]*sc[2]]);
+    }
+    if(!fm||!fm.every(isFinite))return null;
+    let dims,look,enc=0;
+    if(tags[50981]&&tags[50982]&&tags[50981].length>=3&&tags[50982].length>=tags[50981][0]*tags[50981][1]*tags[50981][2]*3){
+      dims=tags[50981];look=tags[50982];enc=tags[51108]?tags[51108][0]:0;
+    }else if(tags[50937]&&(tags[50939]||tags[50938])&&tags[50937].length>=3&&(tags[50939]||tags[50938]).length>=Math.max(1,tags[50937][2])*tags[50937][0]*tags[50937][1]*3){
+      dims=[tags[50937][0],tags[50937][1],Math.max(1,tags[50937][2])];look=tags[50939]||tags[50938];enc=tags[51107]?tags[51107][0]:0;
+    }else{dims=[1,2,2];look=new Float64Array([0,1,1,0,1,1,0,1,1,0,1,1]);} // identity: 0° hue, ×1 sat, ×1 val
+    const tone=tags[50940]&&tags[50940].length>=4&&tags[50940].length%2===0?tags[50940]:new Float64Array([0,0,1,1]);
+    const out={fm,tone,dims,look,enc,baseOff:(tags[50730]?tags[50730][0]:0)+(tags[51109]?tags[51109][0]:0)}; // DNG BaselineExposure (+ profile offset)
+    // CHR-162: iPhone ProRAW (and other DNG 1.6+ writers) store scene-linear data several stops
+    // under the intended render and carry a ProfileGainTableMap — a spatially varying local
+    // tone map (gains up to ~10x in shadows on a real iPhone 14 Pro file). Ignoring it rendered
+    // those files ~40 L* too dark and muddy. It's per-pixel/spatial so it can't live in the 3D
+    // LUT; applyDngGainMap applies it to the linear camera RGB before the LUT.
+    const gm=gainBytes&&parseDngGainTableMap(gainBytes);
+    if(gm){gm.orient=orient||1;out.gainMap=gm;}
+    if(truncated)out.truncated=true;
+    return out;
+  }catch(e){return null;}
+}
+// DNG 1.6 ProfileGainTableMap, always big-endian: MapPointsV/H (u32), MapSpacingV/H,
+// MapOriginV/H (f64, in 0..1 image-relative units), MapPointsN (u32), MapInputWeights[5] (f32:
+// R,G,B,min,max), optional Gamma (f32, DNG 1.7 version 2), then f32 gains [V][H][N].
+function parseDngGainTableMap(b){
+  if(!b||b.length<60)return null;
+  const d=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  const pv=d.getUint32(0,false),ph=d.getUint32(4,false),sv=d.getFloat64(8,false),sh=d.getFloat64(16,false),
+        ov=d.getFloat64(24,false),oh=d.getFloat64(32,false),n=d.getUint32(40,false);
+  const wt=[0,1,2,3,4].map(i=>d.getFloat32(44+4*i,false));
+  const cells=pv*ph*n;if(!pv||!ph||!n||cells>8e6)return null;
+  let off=64,gamma=1;
+  if(b.length===68+4*cells){gamma=d.getFloat32(64,false);off=68;}
+  else if(b.length!==64+4*cells)return null;
+  if(!(gamma>0)||![sv,sh,ov,oh].every(isFinite))gamma=1;
+  const table=new Float32Array(cells);
+  for(let i=0;i<cells;i++)table[i]=d.getFloat32(off+4*i,false);
+  return{pv,ph,sv,sh,ov,oh,n,wt,gamma,table};
+}
+// Camera RGB (white-balanced, 0..1) -> linear ProPhoto at the profile's exposure: the space the
+// gain map's input weights are defined in (same fm/XYZ2PP/exposure bakeDcpLUT uses).
+function dngGainInputMatrix(dcp,fit){
+  const e=Math.pow(2,(fit?fit.ev:0)+dcp.baseOff),f=dcp.fm,sc=[fit?fit.gr:1,1,fit?fit.gb:1],M=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)M[3*i+j]=e*sc[j]*(XYZ2PP[3*i]*f[j]+XYZ2PP[3*i+1]*f[3+j]+XYZ2PP[3*i+2]*f[6+j]);
+  return M;
+}
+// In place: multiply each pixel of an ORIENTED interleaved linear u16 RGB buffer by the gain
+// map's gain for its (unrotated) position and weighted input level. Mirrored in Rust by
+// raw_decode.rs's apply_dng_gain_map — keep the two identical.
+function applyDngGainMap(u16,w,h,gm,M){
+  const{pv,ph,sv,sh,ov,oh,n,wt,gamma,table,orient}=gm,NM=n-1,k=1/65535;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const X=(x+0.5)/w,Y=(y+0.5)/h;let u,v; // u: horizontal, v: vertical, in the stored (unrotated) image
+    if(orient===3){u=1-X;v=1-Y;}else if(orient===6){u=Y;v=1-X;}else if(orient===8){u=1-Y;v=X;}else{u=X;v=Y;}
+    const i=3*(y*w+x),r=u16[i]*k,g=u16[i+1]*k,b=u16[i+2]*k;
+    const R=M[0]*r+M[1]*g+M[2]*b,G=M[3]*r+M[4]*g+M[5]*b,B=M[6]*r+M[7]*g+M[8]*b;
+    let t=wt[0]*R+wt[1]*G+wt[2]*B+wt[3]*Math.min(R,G,B)+wt[4]*Math.max(R,G,B);
+    t=Math.min(Math.max(t,0),1);if(gamma!==1)t=Math.pow(t,gamma);
+    const fv=Math.min(Math.max((v-ov)/sv,0),pv-1),fh=Math.min(Math.max((u-oh)/sh,0),ph-1),fn=t*NM;
+    const v0=Math.min(fv|0,Math.max(pv-2,0)),h0=Math.min(fh|0,Math.max(ph-2,0)),n0=Math.min(fn|0,Math.max(NM-1,0));
+    const v1=Math.min(v0+1,pv-1),h1=Math.min(h0+1,ph-1),n1=Math.min(n0+1,NM);
+    const av=fv-v0,ah=fh-h0,an=fn-n0;
+    const q=(vv,hh)=>{const o=(vv*ph+hh)*n;return table[o+n0]*(1-an)+table[o+n1]*an;};
+    const gain=(q(v0,h0)*(1-ah)+q(v0,h1)*ah)*(1-av)+(q(v1,h0)*(1-ah)+q(v1,h1)*ah)*av;
+    for(let c=0;c<3;c++){const o=u16[i+c]*gain;u16[i+c]=o>65535?65535:o+0.5;}
+  }
+  return u16;
+}
+// libraw's wasm imports a SHARED WebAssembly.Memory, so it needs shared memory — not cross-origin isolation as such.
+// Browsers only offer that via crossOriginIsolated, but the Android WebView never reports isolated (it ignores the
+// COOP/COEP the shell sends) while still creating shared wasm memory fine, so the isolation check blocked every RAW
+// there. On Android only (iOS is left as it was), feature-detect the thing the decoder actually uses.
+function rawSharedMemoryOk(){
+  if(self.crossOriginIsolated)return true;
+  if(!capAndroid())return false;
+  try{new WebAssembly.Memory({initial:1,maximum:1,shared:true});return true;}catch(e){return false;}
+}
+async function loadRw2(file,opts){
+  // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
+  // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
+  // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
+  const half=!!(opts&&opts.half)&&!window.__TAURI__;
+  const filmSource=!!(opts&&opts.filmSource);
+  const privateEntry=!!(opts&&opts.privateEntry);
+  const rawDecodeSettings=file&&file.__csRawDecodeSettings||null;
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-enter');
+  if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
+  let profile=rawDecodeSettings&&Object.prototype.hasOwnProperty.call(rawDecodeSettings,'profile')?rawDecodeSettings.profile:rawProfile();
+  const LibRaw=await getLibRaw();
+  // By-path RAW (desktop Library open, see library-ui's makePathRawFile): the native shim reads
+  // the file itself, so no bytes are loaded here; the rare paths below that need them (embedded
+  // DNG profile, sRGB fallback) fetch them on demand.
+  const srcPath=(window.__TAURI__&&file.__csSourcePath)||null;
+  const bytes=srcPath?new Uint8Array(0):new Uint8Array(await file.arrayBuffer());
+  let bytesCopy=srcPath?null:bytes.slice(); // raw.open() transfers (detaches) `bytes`; kept for the embedded-profile parse / sRGB fallback re-decode
+  const fullBytes=async()=>bytesCopy||(bytesCopy=new Uint8Array(await file.arrayBuffer()));
+  const t0=performance.now();
+  const raw=new LibRaw();
+  let m,img;
+  const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1,filmSource}; // linear 16-bit camera RGB (DCP input space)
+  const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
+  try{
+    await withRawDecodeTimeout(raw,async()=>{
+      const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
+      if(srcPath)openSettings.sourcePath=srcPath;
+      if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      if(privateEntry)openSettings.privateEntry=true;
+      await raw.open(bytes,openSettings);
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
+      m=await raw.metadata();
+      // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
+      if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
+      if(profile)profile=rawProfileFor(m,profile);
+      img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
+    });
+  }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+  finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
+  // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
+  // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+  // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
+  // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
+  // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
+  // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
+  // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
+  let embDcp=null;
+  // CHR-162: skipped when the native shell already developed the pixels (img.rgba — a bundled,
+  // Adobe-on-disk or embedded-DNG profile LUT applied in Rust): parsing needs the whole file
+  // (75MB for an iPhone ProRAW, over IPC), and the sRGB fallback below would then throw that
+  // develop away and decode the RAW a second time.
+  if(profile&&!img.rgba&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
+  if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+    profile=null;
+    const raw2=new LibRaw();
+    try{
+      await withRawDecodeTimeout(raw2,async()=>{
+        const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
+        if(srcPath)fallbackSettings.sourcePath=srcPath;
+        if(privateEntry)fallbackSettings.privateEntry=true;
+        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
+        img=await raw2.imageData();
+      });
+    }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+    finally{try{raw2.worker.terminate()}catch(_){}}
+    if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+  }
+  // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
+  // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
+  // green) until the user notices and finds the toggle themselves. Desktop-only for now
+  // (m.photoStyle comes from NativeLibRawShim.metadata(); the browser/wasm libraw path never
+  // sets it — no makernote parsing there, and per CLAUDE.md desktop is the maintained RAW
+  // target). Only touches the select's DOM value; no explicit re-render needed here — every
+  // render call reads `sel-input`'s live value via getFXParams() (`input:(document.getElementById
+  // ('sel-input')||{}).value`), so the FIRST render of this photo picks it up like any other
+  // control the user had already set before opening the file.
+  // ⚠️ Known limitation, not fixed here: `sel-input` is ONE global control shared across a
+  // whole batch (CLAUDE.md — Effects/adjustments apply to every loaded photo identically). In a
+  // mixed V-Log/Standard batch, whichever V-Log file loads LAST wins for every photo — this only
+  // ever sets 'vlog', never back — since a real fix needs the same per-photo `adjustOverride`
+  // machinery `matchSeriesToReference` already uses, which is out of scope for this first pass.
+  if(!privateEntry&&m&&m.photoStyle===17){
+    const selInput=document.getElementById('sel-input');
+    if(selInput&&selInput.value!=='vlog'){
+      selInput.value='vlog';
+      if(typeof log==='function')log('V-Log source detected (Panasonic PhotoStyle) — Input profile set to V-Log (Lumix)','info');
+    }
+  }
+  const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
+  if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
+  let rgba,c,dt,hrOut,sceneLinear;
+  // ⚠️ hrOut/sceneLinear are declared HERE, not with `const` inside the branches below, and
+  // this is load-bearing, not stylistic: the `if(typeof hrOut!=='undefined')` stash check
+  // further down used to sit OUTSIDE the `else if(profile){}` block that declared `hrOut` with
+  // `const` — block-scoped consts stop existing entirely once their `{}` closes, so `typeof
+  // hrOut` there was *always* "undefined" regardless of whether the branch ran (verified with a
+  // standalone Node repro of the exact same shape before touching this file). The browser/wasm
+  // DCP path's `_hdrHeadroom` stash has therefore never actually fired. Declaring both here and
+  // assigning (not declaring) them in each branch fixes that for real, and is what let this
+  // session's new `sceneLinear` stash (ROADMAP.md R1) actually reach the code that reads it.
+  // Covers the linearization loop, DCP LUT fetch/bake/apply and the canvas writes — the RW2
+  // bytes are already decoded at this point (the worker is already freed in the finally above),
+  // but a bad/missing DCP profile, a corrupt profile file, or a canvas failure here previously
+  // threw an unwrapped error straight out of loadRw2 with no context. Wrapping it lets the
+  // per-file catch in loadFXImages (and its batch-summary toast) report something legible.
+  try{
+    if(img.rgba){
+      rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
+      // ROADMAP.md R1: desktop's own extended-range companion, threaded all the way from
+      // main.rs's decode_raw_v2/denoise_raw_high through NativeLibRawShim.imageData()/refine().
+      // undefined when Rust didn't send one (no DCP applied, or no measured headroom) — same
+      // "absent means nothing to preserve" convention the browser path below already uses.
+      sceneLinear=img.sceneLinear;
+    }else if(profile){
+      if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
+      // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
+      // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
+      // rawler decode, 3% residual). The DCP constants are calibrated on TRUE linear data, so
+      // in the browser (no native shell) linearize first: v' = (v/gain)^(1/0.634). The desktop
+      // shell's NativeLibRawShim already returns true-linear data — skip there.
+      if(!window.__TAURI__){
+        const GAIN=[1.219,1.215,1.193],PW=1/0.634;
+        // Per-channel 65536-entry tables: identical output to the per-sample Math.pow (Uint16Array
+        // store truncates the same value), but ~72M pow calls on a 24MP frame become 196K.
+        const T=GAIN.map(g=>{const t=new Uint16Array(65536);for(let v=0;v<65536;v++)t[v]=Math.min(Math.pow((v/65535)/g,PW)*65535,65535);return t;});
+        const lin=new Uint16Array(rgb.length),T0=T[0],T1=T[1],T2=T[2];
+        for(let i=0;i<rgb.length;i+=3){lin[i]=T0[rgb[i]];lin[i+1]=T1[rgb[i+1]];lin[i+2]=T2[rgb[i+2]];}
+        rgb=lin;
+      }
+      const camPrefix=cameraDcpPrefix(m.make,m.model);
+      // Widening RAW_FILE_EXT_RE made this the COMMON case for any camera outside the 2 bundled
+      // here (Panasonic DC-S9, Sony DSC-RX100M5) — the web build only ever ships those two DCP
+      // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
+      let lut;
+      if(!camPrefix&&embDcp){
+        if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
+        const fit=dcpFit(m.iso_speed,null);
+        lut=await _cpuRun('bakeDcpLUT',[{...embDcp,gainMap:undefined},fit]);
+        // CHR-162: the file's own local tone map (iPhone ProRAW) — spatial, so applied to the
+        // linear pixels (in place — this decode's own buffer) before the LUT rather than baked into it.
+        if(embDcp.gainMap)applyDngGainMap(rgb,w,h,embDcp.gainMap,dngGainInputMatrix(embDcp,fit));
+      }else
+      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the CHRO-MA-SMITH desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
+      if(!lut)lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
+      hrOut=new Uint8ClampedArray(w*h);
+      // ROADMAP.md R1: the real scene-linear buffer — see applyDcpLUT's own comment. Always
+      // computed (the loop already runs regardless; this is one more write per channel, not a
+      // second pass) and stashed below exactly like hrOut already is, so setImage can upload it
+      // as a float texture when real headroom is present instead of the always-8-bit canvas.
+      sceneLinear=new Float32Array(w*h*3);
+      rgba=applyDcpLUT(rgb,w,h,lut,hrOut,sceneLinear);
+    }else{
+      // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
+      rgba=new Uint8ClampedArray(w*h*4);
+      for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
+    }
+    dt=Math.round(performance.now()-t0);
+    c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+    if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
+    // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
+    // `img:c`, and this way the headroom data survives that indirection with zero extra
+    // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`
+    // for the same reason). A cheap presence flag avoids scanning w*h bytes just to decide
+    // whether to show the HDR toggle.
+    if(!privateEntry&&typeof hrOut!=='undefined'){
+      // Full scan, not sparse sampling — a bright sky strip is a small fraction of the frame and
+      // a stride could miss it entirely, which would hide the HDR toggle on a photo that
+      // genuinely has headroom. A single pass over a Uint8ClampedArray is cheap regardless.
+      let any=false;for(let i=0;i<hrOut.length;i++){if(hrOut[i]>12){any=true;break;}}
+      c._hdrHeadroom={data:hrOut,w,h};
+      c._hdrHeadroomPresent=any;
+    }
+    // ROADMAP.md R1: an INDEPENDENT check, not nested inside hrOut's — the desktop `img.rgba`
+    // path (Rust) can carry `sceneLinear` without this function ever computing `hrOut` at all
+    // (that's a browser/applyDcpLUT-only byte-headroom encoding used solely for gain-map HEIC
+    // export), so nesting this inside `hrOut`'s presence would silently never fire on desktop.
+    if(!privateEntry&&typeof sceneLinear!=='undefined'){
+      // A f32 scan, not the hrOut byte-threshold trick above — real values in this buffer ARE
+      // the linear-ish sRGB-encoded quantity itself, so "any pixel measurably above white"
+      // is a direct, honest presence test rather than a re-derived proxy.
+      let any=false;for(let i=0;i<sceneLinear.length;i++){if(sceneLinear[i]>1.05){any=true;break;}}
+      c._sceneLinear={data:sceneLinear,w,h};
+      c._sceneLinearPresent=any;
+    }
+  }catch(e){throw new Error('RW2 color processing failed: '+errStr(e))}
+  if(!privateEntry)log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
+  // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
+  // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
+  // NativeLibRawShim.open()). If that quality gap actually matters here (native NR is on),
+  // silently re-decode the SAME bytes at full quality in the background and swap the pixels
+  // into THIS canvas once it lands — fire-and-forget, matched back by object identity (`c`) so
+  // a since-closed/replaced photo is a safe no-op instead of corrupting the wrong image.
+  if(window.__TAURI__&&typeof raw.refine==='function'){
+    const applyRefinement=(refined)=>{
+      if(!refined)return; // this decode didn't need refining (NR was off)
+      const owner=privateEntry?null:fxImages.find(it=>it.img===c||it.fullImg===c);
+      if(!privateEntry&&!owner)return; // user switched photos while refine was running
+      let rgba2;
+      if(refined.rgba){rgba2=refined.data;}
+      else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
+        for(let i=0,j=0;i<refined.width*refined.height;i++){const s=i*ch2;rgba2[j++]=rgb2[s]>>8;rgba2[j++]=ch2>1?rgb2[s+1]>>8:rgb2[s]>>8;rgba2[j++]=ch2>2?rgb2[s+2]>>8:rgb2[s]>>8;rgba2[j++]=255;}}
+      // Defensive resize (fast and refined decodes are the same resolution today — see
+      // raw_decode.rs's decode_rw2_bytes — but putImageData does NOT resize its target canvas,
+      // so if that ever changes again this stays correct instead of silently clipping).
+      if(c.width!==refined.width||c.height!==refined.height){c.width=refined.width;c.height=refined.height;}
+      c.getContext('2d').putImageData(new ImageData(rgba2,refined.width,refined.height),0,0);
+      // ROADMAP.md R1: keep _sceneLinear in sync with whichever pixels are actually on the
+      // canvas now — same "absent means delete the stale one" rule as chromasmithDenoiseHigh's
+      // own refresh, so a refine that DIDN'T carry extended data (e.g. NR ran but the fast pass
+      // is being effectively kept) can't leave a mismatched stash from the earlier fast decode.
+      if(!privateEntry&&refined.sceneLinear){
+        let any=false;for(let i=0;i<refined.sceneLinear.length;i++){if(refined.sceneLinear[i]>1.05){any=true;break;}}
+        c._sceneLinear={data:refined.sceneLinear,w:refined.width,h:refined.height};
+        c._sceneLinearPresent=any;
+      }else{
+        delete c._sceneLinear;delete c._sceneLinearPresent;
+      }
+      if(!privateEntry&&owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
+      if(!privateEntry&&typeof updateWork==='function')updateWork();
+      if(!privateEntry&&typeof renderPreview==='function')renderPreview();
+      // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).
+      if(!privateEntry){window.__pm&&window.__pm('refine-applied');log('RAW refined (noise reduction applied)','info');}
+    };
+    const refinement=raw.refine().then(applyRefinement).catch(e=>{
+      if(privateEntry)throw e;
+      console.error('RAW background refine failed',e);
+      log(`RAW background refine failed for ${file.name}: ${errStr(e)}`,'warn');
+      if(typeof toast==='function')toast(`Noise reduction refine failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
+    });
+    if(privateEntry)await refinement;
+  }
+  if(privateEntry&&typeof raw.releaseDecodeBuffers==='function')raw.releaseDecodeBuffers();
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-return');
+  return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
+}
+// Installs already-decoded entries as the active fxImages and renders — the second half of
+// loadFXImages, split out so a caller with an ALREADY-DECODED entry (the desktop Library's
+// image cache — see chromasmithInstallCachedImage in library-ui.js) can skip the expensive
+// decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely on a cache hit, instead
+// of re-running the whole file→canvas pipeline just to redisplay the same photo.
+// entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
+// genuinely different photo" string loadFXImages computes from file name+size+lastModified.

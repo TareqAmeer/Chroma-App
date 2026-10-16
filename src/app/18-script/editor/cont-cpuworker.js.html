@@ -1,0 +1,279 @@
+let _cpuWorker,_cpuJobSeq=0;
+const _cpuJobs=new Map();
+function _cpuFns(){return{bakeDcpLUT,unsharpRGBA};} // the only functions the worker exposes
+function _cpuGetWorker(){
+  if(_cpuWorker!==undefined)return _cpuWorker;      // null = permanently unavailable
+  _cpuWorker=null;
+  try{
+    const fns=_cpuFns(),names=Object.keys(fns);
+    const src=[
+      'const XYZ2PP='+JSON.stringify(XYZ2PP)+';',
+      'const PP2SRGB='+JSON.stringify(PP2SRGB)+';',
+      srgbG.toString(),
+      ...names.map(n=>fns[n].toString()),
+      'const FNS={'+names.join(',')+'};',
+      // Transfer the result back rather than structured-cloning it: a 65³ LUT is 3.3MB and a
+      // 24MP sharpen result is ~96MB, and copying those twice would give back much of what
+      // moving the work off-thread just bought.
+      'const bufOf=r=>r&&r.buffer?[r.buffer]:(r&&r.data&&r.data.buffer?[r.data.buffer]:[]);',
+      'onmessage=e=>{const{id,fn,args}=e.data;'
+        +'try{const r=FNS[fn](...args);postMessage({id,ok:true,r},bufOf(r));}'
+        +'catch(err){postMessage({id,ok:false,e:String(err&&err.message||err)});}};'
+    ].join('\n');
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+    w.onmessage=e=>{
+      const job=_cpuJobs.get(e.data.id);if(!job)return;
+      _cpuJobs.delete(e.data.id);
+      e.data.ok?job.res(e.data.r):job.rej(new Error(e.data.e));
+    };
+    // A worker that dies mid-job must not leave every caller awaiting forever.
+    w.onerror=()=>{_cpuJobs.forEach(j=>j.rej(new Error('pixel worker failed')));_cpuJobs.clear();_cpuWorker=null;};
+    _cpuWorker=w;
+  }catch(e){_cpuWorker=null;}
+  return _cpuWorker;
+}
+// `transfer` lists ArrayBuffers to hand over zero-copy. Anything transferred is DETACHED here
+// afterwards, so never pass a buffer this thread still needs to read.
+function _cpuRun(fnName,args,transfer){
+  const w=_cpuGetWorker();
+  if(!w)return Promise.resolve().then(()=>_cpuFns()[fnName](...args)); // same code, main thread
+  return new Promise((res,rej)=>{
+    const id=++_cpuJobSeq;
+    _cpuJobs.set(id,{res,rej});
+    try{w.postMessage({id,fn:fnName,args},transfer||[]);}
+    catch(e){_cpuJobs.delete(id);rej(e);}
+  });
+}
+// Bake the DCP transform into a 65^3 LUT. Pipeline order and clamping semantics mirror the
+// Adobe DNG SDK as implemented by RawTherapee's rtengine/dcp.cc (verified against its source):
+// camera RGB → ForwardMatrix → XYZ(D50) → linear ProPhoto → exposure (2^(ev+BaselineExposure
+// Offset)) → LookTable (HSV deltas; TABLE-INDEX clamps only, values stay extended-range) →
+// hue-preserving Adobe RGBTone tone curve (curve on max & min channel, median interpolated —
+// NOT per-channel; per-channel application over-darkens/over-saturates mixed colors, worst in
+// shadows) → ProPhoto→sRGB → gamma. NO black subtraction anywhere: the DCPs carry
+// DefaultBlackRender=None (the profile forbids it; the ToneCurve has its own shadow toe), and
+// black levels are fully handled at raw decode. Values are floored at 0 but NOT ceiled at 1
+// until the final output stage, so bright saturated colors keep their hue through the curve.
+function bakeDcpLUT(dcp,fit,N){
+  N=N||65;
+  const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
+  const expo=Math.pow(2,fit.ev+dcp.baseOff);
+  const TN=4096,toneL=new Float32Array(TN); // dense tone curve (sampled via RGBTone below)
+  {const p=dcp.tone,np2=p.length/2;
+   for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
+     const x0=p[2*(j-1)],y0=p[2*(j-1)+1],x1=p[2*j],y1=p[2*j+1];
+     toneL[i]=x1>x0?y0+(y1-y0)*(x-x0)/(x1-x0):y0;}}
+  const tone=v=>toneL[Math.round(Math.min(Math.max(v,0),1)*(TN-1))];
+  const out=new Float32Array(N*N*N*3);
+  let o=0;
+  for(let bi=0;bi<N;bi++)for(let gi=0;gi<N;gi++)for(let ri=0;ri<N;ri++){
+    const cr=ri/(N-1)*fit.gr,cg=gi/(N-1),cb=bi/(N-1)*fit.gb;
+    // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure (floor 0, no ceiling)
+    const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
+          Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
+          Z=dcp.fm[6]*cr+dcp.fm[7]*cg+dcp.fm[8]*cb;
+    let r=Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),
+        g=Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),
+        b=Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0);
+    // RGB→HSV
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;
+    let h=0;if(c>1e-12){if(mx===r)h=((g-b)/c%6+6)%6;else if(mx===g)h=(b-r)/c+2;else h=(r-g)/c+4;h*=60;}
+    let s=mx>1e-12?c/mx:0,v=mx;
+    // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1). venc/vi clamps are
+    // TABLE-INDEX bounds only — v itself stays extended-range for the v*dv product below.
+    const venc=Math.min(dcp.enc===1?srgbG(v):v,1);
+    const hi=h/360*nh,si=s*(ns-1),vi=venc*(nv-1);
+    const h0=Math.floor(hi)%nh,h1=(h0+1)%nh,hf=hi-Math.floor(hi);
+    const s0=Math.min(Math.floor(si),ns-2),sf=si-s0,s1=s0+1;
+    const v0=Math.min(Math.floor(vi),nv-2),vf=vi-v0,v1=v0+1;
+    const idx=(vv,hh,ss)=>3*((vv*nh+hh)*ns+ss); // data layout: [val][hue][sat]
+    let dh=0,ds=1,dv=1;
+    for(let k=0;k<3;k++){
+      const c00=tbl[idx(v0,h0,s0)+k]*(1-hf)+tbl[idx(v0,h1,s0)+k]*hf,
+            c01=tbl[idx(v0,h0,s1)+k]*(1-hf)+tbl[idx(v0,h1,s1)+k]*hf,
+            c10=tbl[idx(v1,h0,s0)+k]*(1-hf)+tbl[idx(v1,h1,s0)+k]*hf,
+            c11=tbl[idx(v1,h0,s1)+k]*(1-hf)+tbl[idx(v1,h1,s1)+k]*hf,
+            cc=(c00*(1-sf)+c01*sf)*(1-vf)+(c10*(1-sf)+c11*sf)*vf;
+      if(k===0)dh=cc;else if(k===1)ds=cc;else dv=cc;
+    }
+    h=(h+dh%360+360)%360;s=Math.min(Math.max(s*ds,0),1);v=Math.max(v*dv,0); // s is a ratio (≤1 by definition); v stays extended
+    // HSV→RGB
+    const hh=h/60,i6=Math.floor(hh)%6,f=hh-Math.floor(hh),
+          p2=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));
+    if(i6===0){r=v;g=t;b=p2}else if(i6===1){r=q;g=v;b=p2}else if(i6===2){r=p2;g=v;b=t}
+    else if(i6===3){r=p2;g=q;b=v}else if(i6===4){r=t;g=p2;b=v}else{r=v;g=p2;b=q}
+    // Hue-preserving Adobe RGBTone (DNG SDK / RawTherapee AdobeToneCurve): apply the curve to
+    // the max and min channels, interpolate the median between them at its original ratio.
+    {
+      let tr,tg,tb;
+      if(r>=g){
+        if(g>b){ // r >= g > b
+          tr=tone(r);tb=tone(b);tg=r>b?tb+(tr-tb)*(g-b)/(r-b):tr;
+        }else if(b>r){ // b > r >= g
+          tb=tone(b);tg=tone(g);tr=b>g?tg+(tb-tg)*(r-g)/(b-g):tb;
+        }else{ // r >= b >= g
+          tr=tone(r);tg=tone(g);tb=r>g?tg+(tr-tg)*(b-g)/(r-g):tr;
+        }
+      }else{
+        if(r>b){ // g > r > b
+          tg=tone(g);tb=tone(b);tr=g>b?tb+(tg-tb)*(r-b)/(g-b):tg;
+        }else if(b>g){ // b > g > r
+          tb=tone(b);tr=tone(r);tg=b>r?tr+(tb-tr)*(g-r)/(b-r):tb;
+        }else{ // g >= b >= r
+          tg=tone(g);tr=tone(r);tb=g>r?tr+(tg-tr)*(b-r)/(g-r):tg;
+        }
+      }
+      r=tr;g=tg;b=tb;
+    }
+    // ProPhoto → sRGB + gamma. ⚠️ ROADMAP.md's R1 (scene-referred): the upper clamp here USED
+    // TO throw away exactly the highlight headroom that made this whole feature a no-op for RAW
+    // files — a real window/sky in a RAW file can genuinely bake to sr/sg/sb well above 1.0
+    // (extended-range ProPhoto values), and this was the exact point that discarded it before
+    // applyDcpLUT or the GPU ever got a chance to see it. Floor only (0), no ceiling — srgbG
+    // already extrapolates its own gamma curve correctly for x>1 (`Math.max(x,0)` inside it,
+    // no upper bound), so gr2/gg2/gb2 below can now genuinely exceed 1.0. The sky-gate residual
+    // right after this is unaffected: it self-gates to ~0 for any value already this bright
+    // (`1-ss(0.90,0.985,v2)`→0 as v2→1), verified by inspection, not just assumed — see its own
+    // comment.
+    const sr=Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),
+          sg=Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),
+          sb=Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0);
+    let gr2=srgbG(sr),gg2=srgbG(sg),gb2=srgbG(sb);
+    // Residual cool-highlight lift (fitted vs Lightroom, tools/calib/dcp_residual_tone.py +
+    // dcp_sky_gate.json): after everything above, LR still renders bright SATURATED COOL
+    // regions (blue sky most visibly) ~6-8/255 brighter and slightly less saturated. The
+    // residual is hue/sat/value-gated, NOT a global tone shift — skin (warm hue), water
+    // (same hue as sky but low sat) and shadows (low v) all sit outside the gates and are
+    // untouched (verified: gate patches byte-identical, sky diff +7.4 → +0.7). Applied in
+    // final sRGB-gamma space (the space the residual was measured in).
+    {
+      const mx2=Math.max(gr2,gg2,gb2),mn2=Math.min(gr2,gg2,gb2),c2=mx2-mn2;
+      let h2=0;if(c2>1e-12){if(mx2===gr2)h2=((gg2-gb2)/c2%6+6)%6;else if(mx2===gg2)h2=(gb2-gr2)/c2+2;else h2=(gr2-gg2)/c2+4;h2*=60;}
+      let s2=mx2>1e-12?c2/mx2:0,v2=mx2;
+      const ss=(a,b2,x)=>{const t=Math.min(Math.max((x-a)/Math.max(b2-a,1e-9),0),1);return t*t*(3-2*t)};
+      const dhh=Math.abs(((h2-215)+180)%360-180);
+      const ghRaw=Math.min(Math.max(1-dhh/161.39,0),1), gh=ghRaw*ghRaw*(3-2*ghRaw);
+      // fit.sky: this residual is fitted ONLY against the DC-S9 (see dcpFit above) — folded
+      // into the gate itself (rather than an `if(fit.sky)` wrapper around the whole block) so
+      // the block's own math is untouched and a disabled camera takes the identical `gate<=0`
+      // no-op path every other hue/sat/value combination already takes.
+      const gate=fit.sky?gh*ss(0.10,0.4986,s2)*(ss(0.45,0.62,v2)*(1-ss(0.90,0.985,v2))):0;
+      if(gate>0){
+        v2=Math.min(Math.max(v2+0.05322*gate,0),1);
+        s2=Math.min(Math.max(s2-0.02173*gate,0),1);
+        const hh2=h2/60,i7=Math.floor(hh2)%6,f2=hh2-Math.floor(hh2),
+              pp=v2*(1-s2),qq=v2*(1-s2*f2),tt=v2*(1-s2*(1-f2));
+        if(i7===0){gr2=v2;gg2=tt;gb2=pp}else if(i7===1){gr2=qq;gg2=v2;gb2=pp}else if(i7===2){gr2=pp;gg2=v2;gb2=tt}
+        else if(i7===3){gr2=pp;gg2=qq;gb2=v2}else if(i7===4){gr2=tt;gg2=pp;gb2=v2}else{gr2=v2;gg2=pp;gb2=qq}
+      }
+    }
+    out[o++]=gr2;out[o++]=gg2;out[o++]=gb2;
+  }
+  return{n:N,data:out};
+}
+const _dcpCache={},_dcpLutCache={};
+// cameraPrefix: the vendor/dcp/ filename prefix (see cameraDcpPrefix), REQUIRED now — a photo
+// with no matching bundled camera profile must never silently fall back to the Panasonic
+// files (that was the original bug: every camera got the DC-S9 profile applied to it).
+// source: 'bundled' (default, fetch() from vendor/dcp/ — unchanged) or one of dcp_store.rs's own
+// source strings ('user-camera'/'system-camera'/'adobe-standard', ROADMAP.md's F1) — a real
+// Adobe Camera Raw / DNG Converter profile already installed on this machine, read in place via
+// Tauri IPC instead of fetch(). Bundled always wins when it matches (resolveDcpSource never
+// returns a disk source unless the bundled 2-camera table already missed), so this is additive.
+async function getDcpLUT(cameraPrefix,name,iso,source){
+  if(!cameraPrefix)throw new Error('no bundled DCP profile for this camera');
+  source=source||'bundled';
+  const cacheKey=source+':'+cameraPrefix+'|'+name;
+  const key=cacheKey+'@'+(iso||200);
+  if(_dcpLutCache[key])return _dcpLutCache[key];
+  if(!_dcpCache[cacheKey]){
+    let buf;
+    if(source==='bundled'){
+      let r;
+      try{
+        r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
+        if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
+          r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
+        }
+      }catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+      if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
+      try{buf=await r.arrayBuffer();}catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+    }else{
+      // Same "this camera doesn't have that specific style — fall back to Standard" retry the
+      // bundled fetch() path above does, for parity on the Camera/ tree (multiple real styles
+      // per camera, same as vendor/dcp/). Adobe Standard's flat tree only ever has 'Standard'
+      // (see resolveDcpSource/dcp_store.rs's DcpProfileSet.styles), so the retry there is a
+      // guaranteed no-op — harmless, not worth special-casing out.
+      try{
+        const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:name});
+        buf=new Uint8Array(bytes).buffer;
+      }catch(e){
+        if(name==='Standard')throw new Error('Failed to load installed camera profile: '+errStr(e));
+        try{
+          const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:'Standard'});
+          buf=new Uint8Array(bytes).buffer;
+        }catch(e2){throw new Error('Failed to load installed camera profile: '+errStr(e2))}
+      }
+    }
+    _dcpCache[cacheKey]=parseDCP(buf,cameraPrefix+' Camera '+name+'.dcp');
+  }
+  // Off the main thread (see _cpuRun): 274,625 iterations of the DNG pipeline froze the UI for
+  // the whole bake on every RAW load / profile change. parseDCP's output is plain arrays and
+  // numbers, so it structured-clones into the worker as-is; nothing is transferred, because
+  // _dcpCache keeps the parsed profile for the next profile switch.
+  const lut=await _cpuRun('bakeDcpLUT',[_dcpCache[cacheKey],dcpFit(iso,cameraPrefix)]);
+  _dcpLutCache[key]=lut;return lut;
+}
+// HDR from RAW (ROADMAP 13/14's replacement — see gainmap.rs's own header): CIRAWFilter was
+// measured directly against a real RW2 and does nothing for this camera's files (its own
+// extendedDynamicRangeAmount reads back identical at 0 and 1), so the source of a RAW's HDR
+// headroom has to be OUR decode, not Core Image's RAW pipeline. It's already computed here and
+// already thrown away: CLAUDE.md §7 records the DCP LookTable as "TABLE-INDEX clamps only, values
+// extended-range" — the trilinear-sampled c00..c11 below can genuinely exceed 1.0 before the
+// `+0.5` write clamps it to 255. HR_MAX_STOPS caps how much of that gets carried into the export.
+const HR_MAX_STOPS=2; // 4x — beyond this a photo's own highlights are noise, not real detail
+// sRGB OETF (gamma ENCODE). Needed because Core Image gamma-DECODES an untagged 8-bit PNG on
+// load before any filter sees it — measured directly (desktop's gainmap_from_map_probe.rs): a
+// raw linear byte of 128/255 (intended 2.506x at 2 stops) wrote back reading only 1.647x, which
+// matches the sRGB EOTF almost exactly. Encoding here cancels that decode out on the Rust side.
+function _srgbEncode(v){return v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;}
+function hrByteForHeadroom(maxV){
+  if(maxV<=1)return 0;
+  const norm=Math.min(1,Math.log2(maxV)/HR_MAX_STOPS);
+  return Math.round(255*_srgbEncode(norm));
+}
+function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, linear camera space
+  // extOut (ROADMAP.md R1, optional Float32Array(w*h*3)): the SAME per-pixel `v` this loop
+  // already computes, before `rgba`'s *255+quantize-and-clamp throws away anything above 1.0.
+  // This is the actual fix for "scene-referred only pays when the source has headroom" — RAW
+  // yes, an 8-bit JPEG mostly not: `v` genuinely exceeds 1.0 for a real blown sky/window once
+  // bakeDcpLUT's own upper clamp was removed (see that function's comment), and until this
+  // point in the pipeline that headroom was being computed and then unconditionally discarded.
+  const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
+  const sc=NM/65535;
+  for(let i=0,j=0;i<w*h;i++){
+    const fr=u16[3*i]*sc,fg=u16[3*i+1]*sc,fb=u16[3*i+2]*sc;
+    const r0=Math.min(fr|0,NM-1),g0=Math.min(fg|0,NM-1),b0=Math.min(fb|0,NM-1);
+    const rf=fr-r0,gf=fg-g0,bf=fb-b0;
+    let maxV=0;
+    for(let k=0;k<3;k++){
+      const q=(rr,gg,bb)=>L[3*((bb*N+gg)*N+rr)+k]; // baked order: b outer, g, r inner
+      const c00=q(r0,g0,b0)*(1-rf)+q(r0+1,g0,b0)*rf, c10=q(r0,g0+1,b0)*(1-rf)+q(r0+1,g0+1,b0)*rf,
+            c01=q(r0,g0,b0+1)*(1-rf)+q(r0+1,g0,b0+1)*rf, c11=q(r0,g0+1,b0+1)*(1-rf)+q(r0+1,g0+1,b0+1)*rf;
+      const v=(c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf;
+      if(hrOut&&v>maxV)maxV=v;
+      if(extOut)extOut[3*i+k]=v;
+      rgba[j+k]=255*v+0.5;
+    }
+    // ⚠️ Computed for free in the SAME loop that already runs for every RAW load, never a
+    // second pass — the headroom map costs nothing extra unless hrOut is actually supplied.
+    if(hrOut)hrOut[i]=hrByteForHeadroom(maxV);
+    rgba[j+3]=255;j+=4;
+  }
+  return rgba;
+}
+
+// Camera profile carried INSIDE a DNG (iPhone/Pixel/Samsung/converted files): a DCP-shaped object
+// for bakeDcpLUT built from the file's own tags — ForwardMatrix, else ColorMatrix inverted and
+// adapted D65→D50 — plus its ProfileToneCurve and Look/HueSatMap table when present. Returns null
+// for anything that isn't a DNG carrying a usable matrix (caller falls back to LibRaw sRGB).
