@@ -190,7 +190,9 @@ function curveSetMode(mode){
   document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-curve-param-mode',mode==='param');
   const genericLb=document.querySelector('.fx-ctrl[data-fxsec="curves"] > .fx-ctrl-title .fx-ctrl-title-reset-lb');
   if(genericLb)genericLb.textContent=mode==='param'?'Reset':'All';
-  curveChanged();
+  // Switching view is not an edit: redraw only, never turn Curves on (that happens on a real change).
+  drawCurveEditor();
+  if(document.getElementById('tg-curves')?.classList.contains('on')){bakeCurves();fxUpdate();}
 }
 // Header "All" reset for Curves covers both editing modes at once, so switching modes never
 // leaves stale state in the one not currently shown.
@@ -227,7 +229,7 @@ function _crvInit(){
       return;
     }
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
-    _crvDrag=hit;cv.setPointerCapture(e.pointerId);_crvEnsureOn();
+    _crvDrag=hit;cv.setPointerCapture(e.pointerId);
     // Touch users cannot double-click a canvas point. A short hold removes only interior
     // points; any movement turns the same pointer into the existing drag gesture instead.
     if(e.pointerType==='touch'&&hit>0&&hit<pts.length-1){

@@ -37,7 +37,12 @@ function _ffAutoEnable(e){
 }
 document.addEventListener('input',_ffAutoEnable,true);
 document.addEventListener('change',_ffAutoEnable,true);
-document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
+// Buttons that only pick a view/mode/band or arm a tool (curve mode/channel, HSL band, mask preview,
+// eyedroppers, brush/heal toggles, reset) are not edits: pressing them must NOT switch the section on.
+// The edit itself (a drag, a pick, a slider move) enables it through its own change.
+const _FF_VIEW_ONLY_SEL='.hsl-hist-zone,.hsl-chip,.crv-chip,.crv-mode-chip,.phone-reset,.fx-btn-primary';
+const _FF_VIEW_ONLY_FN=/^\s*(?:window\.)?(mskSetPreviewMode|mskAddMenu|pcEyedropper|wbEyedropper|fnPickBase|healToggle|healEraseToggle|healDustToggle|redeyeToggle|chromasmithInpaint)/;
+document.addEventListener('pointerdown',(e)=>{const b=e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle');if(!b)return;if(b.matches(_FF_VIEW_ONLY_SEL)||_FF_VIEW_ONLY_FN.test(b.getAttribute('onclick')||''))return;_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
     'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{

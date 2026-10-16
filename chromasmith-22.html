@@ -3113,7 +3113,7 @@ new MutationObserver(apply).observe(b,{attributes:true,attributeFilter:['class']
 // Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
 const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Exposure & Tone',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
   pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
-  retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate & Flip',straighten:'Transform',borders:'Borders',canvas:'Canvas',
+  retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate',straighten:'Transform',borders:'Borders',canvas:'Canvas',
   versions:'Versions & History',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
 // Everyday words and old names that should find each tool in the command palette (⌘K).
 const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
@@ -7270,7 +7270,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016P';
+const BUILD='1.1016Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13678,7 +13678,12 @@ function _ffAutoEnable(e){
 }
 document.addEventListener('input',_ffAutoEnable,true);
 document.addEventListener('change',_ffAutoEnable,true);
-document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
+// Buttons that only pick a view/mode/band or arm a tool (curve mode/channel, HSL band, mask preview,
+// eyedroppers, brush/heal toggles, reset) are not edits: pressing them must NOT switch the section on.
+// The edit itself (a drag, a pick, a slider move) enables it through its own change.
+const _FF_VIEW_ONLY_SEL='.hsl-hist-zone,.hsl-chip,.crv-chip,.crv-mode-chip,.phone-reset,.fx-btn-primary';
+const _FF_VIEW_ONLY_FN=/^\s*(?:window\.)?(mskSetPreviewMode|mskAddMenu|pcEyedropper|wbEyedropper|fnPickBase|healToggle|healEraseToggle|healDustToggle|redeyeToggle|chromasmithInpaint)/;
+document.addEventListener('pointerdown',(e)=>{const b=e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle');if(!b)return;if(b.matches(_FF_VIEW_ONLY_SEL)||_FF_VIEW_ONLY_FN.test(b.getAttribute('onclick')||''))return;_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
     'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
@@ -14034,7 +14039,9 @@ function curveSetMode(mode){
   document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-curve-param-mode',mode==='param');
   const genericLb=document.querySelector('.fx-ctrl[data-fxsec="curves"] > .fx-ctrl-title .fx-ctrl-title-reset-lb');
   if(genericLb)genericLb.textContent=mode==='param'?'Reset':'All';
-  curveChanged();
+  // Switching view is not an edit: redraw only, never turn Curves on (that happens on a real change).
+  drawCurveEditor();
+  if(document.getElementById('tg-curves')?.classList.contains('on')){bakeCurves();fxUpdate();}
 }
 // Header "All" reset for Curves covers both editing modes at once, so switching modes never
 // leaves stale state in the one not currently shown.
@@ -14071,7 +14078,7 @@ function _crvInit(){
       return;
     }
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
-    _crvDrag=hit;cv.setPointerCapture(e.pointerId);_crvEnsureOn();
+    _crvDrag=hit;cv.setPointerCapture(e.pointerId);
     // Touch users cannot double-click a canvas point. A short hold removes only interior
     // points; any movement turns the same pointer into the existing drag gesture instead.
     if(e.pointerType==='touch'&&hit>0&&hit<pts.length-1){
