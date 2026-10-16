@@ -694,6 +694,7 @@
         return Promise.resolve(bytes);
       }
       case 'catalog_face_preview': return Promise.resolve(png);
+      case 'catalog_face_box': return Promise.resolve([0.35, 0.3, 0.6, 0.6]);
       case 'catalog_person_face_ids': return Promise.resolve([]);
       case 'catalog_set_person_cover': return Promise.resolve(null);
       case 'ingest_cancel': return Promise.resolve(false);

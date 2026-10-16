@@ -4732,6 +4732,21 @@ pub async fn catalog_face_preview(app: tauri::AppHandle, face_id: i64) -> Result
     .map_err(|e| format!("catalog_face_preview task panicked: {e}"))?
 }
 
+/// Normalised (0..1) box of one face on its photo. The review-grid Space preview outlines it so
+/// you can tell WHICH face/pet in a busy photo the tile you are confirming refers to.
+#[tauri::command]
+pub fn catalog_face_box(app: tauri::AppHandle, face_id: i64) -> Result<[f32; 4], String> {
+    use tauri::Manager;
+    let state = app.state::<CatalogState>();
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT x0, y0, x1, y1 FROM photo_faces WHERE id = ?1",
+        params![face_id],
+        |r| Ok([r.get::<_, f32>(0)?, r.get::<_, f32>(1)?, r.get::<_, f32>(2)?, r.get::<_, f32>(3)?]),
+    )
+    .map_err(|e| format!("face {face_id}: {e}"))
+}
+
 fn face_crop_run(state: &CatalogState, face_id: i64, raw_review_recipe_key: Option<&str>) -> Result<tauri::ipc::Response, String> {
     let (photo_id, x0, y0, x1, y1): (i64, f32, f32, f32, f32) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;

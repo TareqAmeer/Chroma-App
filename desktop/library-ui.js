@@ -694,6 +694,7 @@
         return Promise.resolve(bytes);
       }
       case 'catalog_face_preview': return Promise.resolve(png);
+      case 'catalog_face_box': return Promise.resolve([0.35, 0.3, 0.6, 0.6]);
       case 'catalog_person_face_ids': return Promise.resolve([]);
       case 'catalog_set_person_cover': return Promise.resolve(null);
       case 'ingest_cancel': return Promise.resolve(false);
@@ -13328,6 +13329,7 @@
       </div>
       <div id="lib-review-pv" style="display:none;position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.92);align-items:center;justify-content:center;cursor:zoom-out">
         <img alt="" style="max-width:94%;max-height:94%;object-fit:contain">
+        <div id="lib-review-pv-box" style="display:none;position:absolute;pointer-events:none;border:3px solid var(--acc,#e8451c);box-shadow:0 0 0 9999px rgba(0,0,0,.5);box-sizing:border-box"></div>
       </div>`;
     document.body.appendChild(el);
     el.querySelector('#lib-review-close').onclick = closeReviewFaces;
@@ -13415,22 +13417,47 @@
     const cells = [...document.querySelectorAll('#lib-review-grid .lib-review-face')];
     if (b) b.textContent = cells.some((c) => !reviewState.deselected.has(parseInt(c.dataset.faceId, 10))) ? 'Unselect all' : 'Select all';
   }
+  // Outline of the face being confirmed, laid over the full-photo preview (the dim around it makes the
+  // subject obvious in a busy frame). `box` is the normalised [x0,y0,x1,y1] from catalog_face_box.
+  function reviewPlacePvBox() {
+    const pv = document.getElementById('lib-review-pv');
+    const img = pv && pv.querySelector('img'), bx = document.getElementById('lib-review-pv-box');
+    if (!pv || !img || !bx) return;
+    const box = pv._faceBox;
+    if (!box || !img.naturalWidth || pv.style.display === 'none') { bx.style.display = 'none'; return; }
+    const pr = pv.getBoundingClientRect(), ir = img.getBoundingClientRect();
+    const pad = 0.04 * Math.max(box[2] - box[0], box[3] - box[1]);
+    const x0 = Math.max(0, box[0] - pad), y0 = Math.max(0, box[1] - pad), x1 = Math.min(1, box[2] + pad), y1 = Math.min(1, box[3] + pad);
+    Object.assign(bx.style, {
+      display: 'block',
+      left: (ir.left - pr.left + x0 * ir.width) + 'px', top: (ir.top - pr.top + y0 * ir.height) + 'px',
+      width: ((x1 - x0) * ir.width) + 'px', height: ((y1 - y0) * ir.height) + 'px',
+    });
+  }
+  window.addEventListener('resize', reviewPlacePvBox);
   function reviewPreview(faceId) {
     const pv = document.getElementById('lib-review-pv');
     const img = pv.querySelector('img');
     img.removeAttribute('src');
+    pv._faceBox = null;
+    reviewPlacePvBox();
     pv.style.display = 'flex';
     pv.dataset.faceId = faceId;
+    invoke('catalog_face_box', { faceId }).then((b) => {
+      if (pv.dataset.faceId !== String(faceId)) return;
+      pv._faceBox = b; reviewPlacePvBox();
+    }).catch(() => {});
     invoke('catalog_face_preview', { faceId }).then((buf) => {
       if (pv.dataset.faceId !== String(faceId)) return;
       const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      img.onload = () => URL.revokeObjectURL(url);
+      img.onload = () => { URL.revokeObjectURL(url); reviewPlacePvBox(); };
       img.src = url;
     }).catch((err) => { reviewClosePreview(); toast(humanizeErr('preview this photo', err), 'err'); });
   }
   function reviewClosePreview() {
     const pv = document.getElementById('lib-review-pv');
-    if (pv) { pv.style.display = 'none'; delete pv.dataset.faceId; }
+    if (pv) { pv.style.display = 'none'; delete pv.dataset.faceId; pv._faceBox = null; }
+    const bx = document.getElementById('lib-review-pv-box'); if (bx) bx.style.display = 'none';
   }
   function reviewRenderCurrent() {
     const c = reviewState.clusters[reviewState.idx];
