@@ -40,7 +40,7 @@ if (htmlChanged) { // html is the edited side -> refresh src/app
   const wasClean = Object.fromEntries(Object.keys(f).map(n => [n, clean(`${DIR}/${n}`)]));
   for (const p of files) if (!(p.slice(DIR.length + 1) in f)) git(['update-index', '--force-remove', '--', p]);
   for (const [n, c] of Object.entries(f)) put(`${DIR}/${n}`, c);
-  for (const [n, c] of Object.entries(f)) if (wasClean[n]) fs.writeFileSync(`${DIR}/${n}`, c);
+  for (const [n, c] of Object.entries(f)) if (wasClean[n]) { fs.mkdirSync(`${DIR}/${n}`.replace(/\/[^/]*$/, ''), { recursive: true }); fs.writeFileSync(`${DIR}/${n}`, c); }
   console.log('app-sync: html edited -> src/app refreshed');
 } else { // src edited -> rebuild html
   const wasClean = clean(TARGET);

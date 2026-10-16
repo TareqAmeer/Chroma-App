@@ -10,5 +10,5 @@ const OUT = oi > 0 ? path.resolve(process.argv[oi + 1]) : path.join(root, DIR);
 const { files } = splitText(fs.readFileSync(path.join(root, TARGET), 'utf8'));
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
-for (const [n, c] of Object.entries(files)) fs.writeFileSync(path.join(OUT, n), c);
+for (const [n, c] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(OUT, n)), { recursive: true }); fs.writeFileSync(path.join(OUT, n), c); }
 console.log(Object.keys(files).length - 1, 'segments ->', path.relative(root, OUT));
