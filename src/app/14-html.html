@@ -1,0 +1,1611 @@
+<div id="status-cap"></div>
+<!-- Page bar (Swiss). Only shows where the Studio's own top bar doesn't: the Match, Colour Copy, Collage and Guide
+     pages on a phone. Wider windows use the desktop bar (body.deskx hides this), and the phone Studio has its own.
+     It replaced the old logo header + tab strip, which also flashed for a moment while this large file parsed. -->
+<header id="cs-pagebar">
+  <button type="button" class="pb-back" onclick="switchTab('fx')" title="Back to the Studio">← Studio</button>
+  <span class="pb-title" id="pb-title"></span>
+  <div class="hdr-right">
+    <button class="hdr-btn" id="hdr-help" onclick="chromasmithShowTour()" title="Quick start: how to open, edit and export a photo" aria-label="Quick start"><span class="hdr-ic" style="font-weight:600;font-size:15px;line-height:1">?</span></button>
+    <button class="hdr-btn" onclick="toggleTheme()" title="Switch light / dark theme"><span class="theme-ic hdr-ic"></span></button>
+    <button class="hdr-btn" id="hdr-about" onclick="csAbout()" title="About CHRO-MA-SMITH"><span class="hdr-ic" id="hdr-info"></span></button>
+  </div>
+</header>
+<main>
+<!-- MATCH & REFINE -->
+<div class="panel" id="panel-match">
+  <div class="card" id="setup-card">
+    <div class="ctitle">Step 1 — drop images to start</div>
+    <div class="dg2">
+      <div class="dz" id="dz-before" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'before')">
+        <input type="file" accept="image/*" onchange="fi(event,'before')">
+        <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Before / Original</div>
+        <div class="dz-sb">Ungraded flat image</div><div class="dz-fn" id="fn-before"></div>
+      </div>
+      <div class="dz" id="dz-target" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'target')">
+        <input type="file" accept="image/*" onchange="fi(event,'target')">
+        <div class="dz-ic" data-ic="compare"></div><div class="dz-lb">After / Target</div>
+        <div class="dz-sb">Graded Lightroom result</div><div class="dz-fn" id="fn-target"></div>
+      </div>
+    </div>
+    <div class="div-sep">Optional starting point</div>
+    <div class="dz opt-dz" id="dz-start" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'start')">
+      <input type="file" accept=".cube,.xmp" onchange="fi(event,'start')">
+      <div class="dz-ic" data-ic="looks"></div><div class="dz-lb">Starting LUT (.cube) or Preset (.xmp)</div>
+      <div class="dz-sb">Optional — helps bootstrap the look</div><div class="dz-fn" id="fn-start"></div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="match-name" value="my_look" placeholder="my_look">
+    </div>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-start" disabled onclick="startMatch()">Generate LUT &amp; XMP</button>
+    </div>
+    <div class="pb" id="pb-s"><div class="pf" id="pf-s"></div></div>
+  </div>
+  <div id="step-history"></div>
+</div>
+<!-- COLOUR COPY -->
+<div class="panel" id="panel-copy">
+  <div class="card">
+    <div class="ctitle">Color Copy — match tones from a reference image</div>
+    <div class="dg2">
+      <div class="dz" id="dz-cp-src" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-src')">
+        <input type="file" accept="image/*" onchange="fi(event,'cp-src')">
+        <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Source image</div>
+        <div class="dz-sb">Photo to apply the grade to</div><div class="dz-fn" id="fn-cp-src"></div>
+      </div>
+      <div class="dz" id="dz-cp-ref" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'cp-ref')">
+        <input type="file" accept="image/*" onchange="fi(event,'cp-ref')">
+        <div class="dz-ic" data-ic="compare"></div><div class="dz-lb">Reference image</div>
+        <div class="dz-sb">Photo with the look you want to copy</div><div class="dz-fn" id="fn-cp-ref"></div>
+      </div>
+    </div>
+    <!-- CHR-221: extra references (blended with the main one) and a reference taken from a video frame -->
+    <div id="cp-refx" style="margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px">
+      <div class="vlb" style="margin-bottom:6px">More references (blended into one target look)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <label class="btn bgh" style="cursor:pointer;padding:3px 9px">Add photos<input type="file" accept="image/*" multiple id="cp-refx-in" style="display:none" onchange="cpRefExtraAdd([...this.files]);this.value=''"></label>
+        <label class="btn bgh" style="cursor:pointer;padding:3px 9px" title="Use a frame of a video as a reference">Video frame<input type="file" accept="video/*" id="cp-refvid-in" style="display:none" onchange="cpRefFromVideo(this.files[0],+document.getElementById('cp-refvid-at').value);this.value=''"></label>
+        <span class="vlb">at</span><input class="vinput" type="number" min="0" max="100" value="50" id="cp-refvid-at" style="width:56px"><span class="vlb">%</span>
+      </div>
+      <div id="cp-refx-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px"></div>
+    </div>
+    <!-- CHR-223: live preview — drag the line: left is your photo as shot, right is the match -->
+    <div id="cp-prev" style="display:none;margin:10px 0;gap:10px;align-items:flex-start">
+      <div style="position:relative;flex:0 1 auto;max-width:72%;cursor:crosshair;touch-action:none" id="cp-prev-wrap">
+        <canvas id="cp-prev-after" style="display:block;max-width:100%;max-height:340px;width:auto;height:auto"></canvas>
+        <canvas id="cp-prev-before" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+        <div id="cp-prev-line" style="position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6);pointer-events:none"></div>
+      </div>
+      <div style="flex:0 1 200px;min-width:0"><div class="vlb" style="margin-bottom:4px">Reference — click a target colour</div><canvas id="cp-prev-ref" style="display:block;max-width:100%;max-height:200px;width:auto;height:auto;cursor:crosshair"></canvas></div>
+    </div>
+    <div id="cp-pairs" style="display:none;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <strong style="font-size:12px">Pinned colour pairs · this photo pair</strong>
+        <button type="button" class="btn bgh" id="cp-pairs-clear" onclick="cpPairsClear()" style="padding:3px 8px">Clear</button>
+      </div>
+      <div id="cp-pairs-hint" style="font-size:11px;color:var(--mut)">Click a colour in your photo, then its match in the reference. Pairs steer the automatic match: a smooth correction is fitted around each pinned colour.</div>
+      <div id="cp-pairs-stat" style="font-size:11px;margin-top:5px"></div>
+      <div id="cp-pairs-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:7px"></div>
+    </div>
+    <div class="vrow">
+      <div class="vlb">Name</div>
+      <input class="vinput" id="cp-name" value="colour_copy" placeholder="colour_copy">
+      <div class="vlb" id="cp-ver" style="color:var(--acc)">v1.0</div>
+    </div>
+    <!-- CHR-220: how much of the match to apply, per tonal range, and keep skin tones out of it -->
+    <div class="vrow"><div class="vlb">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-str" oninput="document.getElementById('cp-str-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-str-v">100</div></div>
+    <div class="vrow"><div class="vlb">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-sh" oninput="document.getElementById('cp-sh-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-sh-v">100</div></div>
+    <div class="vrow"><div class="vlb">Midtones</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-md" oninput="document.getElementById('cp-md-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-md-v">100</div></div>
+    <div class="vrow"><div class="vlb">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="cp-hl" oninput="document.getElementById('cp-hl-v').textContent=this.value;cpPreviewUpdate()"><div class="vlb" id="cp-hl-v">100</div></div>
+    <label class="vrow" style="cursor:pointer;gap:8px"><input type="checkbox" id="cp-skin" onchange="cpPreviewUpdate()"> Protect skin tones</label>
+    <div class="btn-row">
+      <button class="btn bpri" id="btn-cp" disabled onclick="runColourCopy('lut')">Download .cube LUT</button>
+      <button class="btn bsec" id="btn-cp-xmp" disabled onclick="runColourCopy('xmp')">Download .xmp Preset</button>
+      <button class="btn bsec" id="btn-cp-sliders" disabled onclick="cpUseSliders()" title="Express the match as ordinary Tone sliders (exposure, contrast, temperature, tint, saturation) and apply them in the editor, so you can fine-tune each one">Match with sliders</button>
+      <button class="btn bsec" id="btn-cp-look" disabled onclick="runColourCopy('look')" title="Save the match as a look in the editor's LUT library and apply it — then fine-tune with the look's Strength and every other slider">Use in editor</button>
+      <button class="btn bpri" id="btn-cp-batch" hidden disabled onclick="runColourCopy('batch')">Apply match to selected photos</button>
+      <div id="cp-batch-targets" hidden role="status" aria-live="polite" style="flex-basis:100%;font-size:11px;color:var(--mut)"></div>
+    </div>
+    <div class="pb" id="pb-cp"><div class="pf" id="pf-cp"></div></div>
+    <div id="cp-fit" style="display:none;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:12px" role="status" aria-live="polite"></div>
+    <div class="sum-box" id="cp-sum" style="display:none">
+      <div class="sum-title">Grade characteristics copied</div>
+      <ul class="sum-list" id="cp-sum-list"></ul>
+    </div>
+  </div>
+</div>
+<!-- EFFECTS & EXPORT -->
+<div class="panel active" id="panel-fx">
+  <!-- DESKTOP persistent quick-access bar -->
+  <div id="fx-deskbar">
+    <!-- 2026-09-10 (3.1.9/3.1.10): #fx-deskbar-left/-right exist so body.deskx can lay the bar
+         out as a real 3-column grid (1fr auto 1fr — Editor (Developer) View.dc.html's own
+         .topbar) instead of one flex row with the title absolutely centred on top of it. The
+         centred title only ever LOOKED right by coincidence, whenever the two side clusters
+         happened to weigh about the same — shrinking the left cluster and moving Export/All FX
+         (this file's own history: 045993e removed 6 always-visible buttons, 6627253 removed 4
+         more) made the actual overlap LESS likely, but never addressed the root cause, and
+         editor_responsive_qa.mjs's OVERLAP check still failed it at plain 1440×900 with nothing
+         narrow or unusual about the window. Grid columns can't overlap by construction, so this
+         fixes the class of bug, not just today's specific collision. -->
+    <div id="fx-deskbar-left">
+      <button class="fx-db fx-db-icon" id="db-lib-btn" style="display:none" onclick="window.chromasmithToggleLibrary&&window.chromasmithToggleLibrary()" title="Photo gallery (L)"><span class="fx-db-ic" id="db-lib-ic"></span></button>
+      <!-- 3.1.1: undo/redo used to be two bare .fx-db buttons, reading as unaligned with the rest
+           of the bar's filled-tile buttons — wrapped in a bordered pill matching the wireframe's
+           own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
+           corners, a hairline divider between the two. -->
+      <div class="fx-undogrp">
+        <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
+        <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+      </div>
+      <div style="position:relative;display:inline-flex" id="db-history-wrap">
+        <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit history and exported versions" aria-label="Edit history and exported versions" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
+      </div>
+      <span class="fx-batch-scope" id="fx-batch-scope" role="status" aria-live="polite" aria-atomic="true" style="display:none"></span>
+    </div>
+    <!-- "Reset all edits" moved into the ⋯ overflow menu (ovfBuild()) — the one genuinely rare,
+         semi-destructive action in the always-visible cluster; Undo/Redo already cover the
+         common "I changed my mind" case. -->
+    <div id="fx-deskbar-title"><span id="db-title-name"></span><span id="db-title-status" role="status" aria-live="polite" aria-atomic="true"></span><span id="cs-save-state" role="status" aria-live="polite" hidden></span><span id="cs-source-render-state" role="status" aria-live="polite" aria-atomic="true" hidden></span></div>
+    <div id="fx-deskbar-right">
+      <div id="fx-deskbar-tools"></div>
+      <button class="fx-db" id="btn-second-display" onclick="fxSecondDisplayOpen()" title="Show this photo on another display" aria-label="Show on another display" style="display:none">Second display</button>
+      <button class="fx-db js-allfx" onclick="enableAll()" title="All FX: one click adds film grain, glow and borders. Use the ▾ to choose which effects and how strong."><span class="fx-db-ic" id="db-allfx"></span><span class="fx-db-lb">All FX</span></button><button class="fx-db js-allfx-cfg" onclick="allFxSettings()" title="Choose what All FX applies — effects, strengths and look" aria-label="All FX settings">▾</button>
+      <!-- Shown only for a Lightroom "Edit In" handoff session (library-ui.js sets
+           window.chromasmithEditInPath and un-hides this) — writes the render straight back over
+           the file Lightroom handed us instead of the normal share-sheet save. -->
+      <button class="fx-db fx-db-pri" id="db-save-lr" style="display:none" onclick="chromasmithSaveToLightroom()" title="Save back to the file Lightroom handed off — Lightroom will re-import and sync it"><span class="fx-db-ic" id="db-export-lr"></span>Save to Lightroom</button>
+      <button class="fx-db fx-db-pri" id="btn-export-db" onclick="exportFX()" title="Export at full resolution"><span class="fx-db-ic" id="db-export"></span><span class="fx-db-lb">Export</span></button>
+      <!-- 2026-09-09: Tools + View + ⋯ merged into ONE settings menu, docked last (far right) —
+           matches the Library top bar's own …zoom → flags → All FX → Export → gear order. Each
+           inner div below is still built/owned by its original function (toolsBuild/viewMenuBuild/
+           ovfBuild) — only the trigger button and outer dropdown are new; see settingsBuild(). -->
+      <div id="fx-settings">
+        <button class="fx-db fx-db-icon" onclick="settingsToggle(event)" title="Settings" aria-label="Settings — transform, edit settings, view, appearance"><span class="fx-db-ic" id="db-settings"></span></button>
+        <!-- 2026-09-10: two-column drill-down (the approved design) — #fx-settings-cats lists
+             the categories, #fx-settings-page holds all five content panes stacked but only the
+             ACTIVE one visible (settingsShowCat()). Each pane is still filled by its own
+             pre-existing function exactly as before (toolsBuild/viewMenuBuild/ovfBuild/
+             settingsSplitBuild/settingsHistoryBuild) — split-view and edit history still render
+             the same "submenu, not a floating popover" content described below, just inside a
+             selected pane instead of concatenated into one long scroll. -->
+        <div id="fx-settings-menu">
+          <div id="fx-settings-cats"></div>
+          <div id="fx-settings-page">
+            <div id="fx-tools-menu" class="fx-settings-pane"></div>
+            <div id="fx-view-menu" class="fx-settings-pane"></div>
+            <div id="fx-performance-menu" class="fx-settings-pane"></div>
+            <div id="fx-appearance-menu" class="fx-settings-pane"></div>
+            <!-- Split-view and edit history used to be a topbar icon each, opening a floating
+                 popover anchored to that specific button (#fx-split-popover/#fx-timeline-popover,
+                 still there for web/mobile mode — see the body.deskx hide rules near
+                 .fx-zoom-ctrl). On desktop they render inline here instead — no separate floating
+                 layer or viewport-clamping to get right, since this pane already scrolls. -->
+            <div id="fx-settings-split-list" class="fx-settings-pane"></div>
+            <div id="fx-settings-history-list" class="fx-settings-pane"></div>
+            <div id="fx-overflow-menu" class="fx-settings-pane"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fx-layout">
+    <!-- DESKTOP tool rail (one tool at a time) -->
+    <div id="fx-toolrail"></div>
+    <!-- Drag handles + hidden-rail restore. Only ever visible under deskx (CSS above); they are
+         inert markup in every other layout. -->
+    <button class="fx-edge" id="fx-panel-resizer" title="Drag to resize the tool panel" aria-label="Resize tool panel"></button>
+    <button class="fx-edge" id="fx-rail-resizer" title="Drag to narrow or hide the tool bar" aria-label="Resize tool bar"></button>
+    <button id="cs-focus-exit" type="button" onclick="csFocusToggle()" aria-label="Exit focus mode" title="Exit focus mode">Exit focus</button>
+    <button id="fx-rail-show" onclick="railMode('labels')" title="Show the tool bar" aria-label="Show the tool bar"></button>
+    <div class="fx-panel">
+      <!-- tap OR drag-down to close — both handled by the pointer logic (no onclick: a
+           click also fires after a spring-back drag and would wrongly close the sheet) -->
+      <div id="fx-sheet-handle" title="Close"><div class="fx-sheet-bar"></div></div>
+      <!-- Image Input: on the desktop (Tauri) app this whole card is folded into the Looks card
+           at boot by fxDesktopFoldImageIntoLooks() below, because photos are loaded from the
+           native Library there, not by dragging onto this panel — a dedicated tab for it stood
+           out as dead weight. Left as its own tab on web/mobile, where drag/drop IS how a photo
+           gets in. The wrapper div (id="fx-image-movable") is what gets relocated; #dz-fx-img
+           itself (and its file input, used by fxPickPhotos/"+") always stays put right here. -->
+      <div class="fx-ctrl" data-fxsec="image">
+        <div class="ctitle" style="margin-bottom:10px">Open a photo</div>
+        <div class="dz" id="dz-fx-img" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-img')">
+          <input type="file" id="in-fx-img" accept="image/*" multiple onchange="fi(event,'fx-img')">
+          <div class="dz-ic" data-ic="image"></div><div class="dz-lb">Drop a photo here, or click to browse</div><div class="dz-fn" id="fn-fx-img"></div>
+        </div>
+        <div id="fx-image-movable">
+        <div class="fx-row" id="row-raw-profile" style="margin-top:8px"><div class="fx-label">RAW profile</div>
+          <select class="fx-select" id="sel-dcp" onchange="setRawProfile(this.value)"></select>
+        </div>
+        <!-- Clip info — video only, hidden for photos (see fxSyncVideoUI/fxUpdateClipInfoUI).
+             Informational for V0 (no override controls yet — see CLAUDE.md §12 / the video plan's
+             B1″ probeClip design for the intended per-row overrides in a later phase). Flags a
+             clip the app can't yet grade correctly (HDR/VFR) instead of silently producing wrong
+             output that reads as "the LUTs are broken". -->
+        <div id="fx-clip-info" style="display:none;margin-top:8px;font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.6"></div>
+        <div class="dz opt-dz" style="margin-top:8px" id="dz-fx-lut" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'fx-lut')">
+          <input type="file" accept=".cube,image/*,.tif,.tiff" onchange="fi(event,'fx-lut')">
+          <div class="dz-ic" data-ic="looks"></div><div class="dz-lb">Apply LUT (.cube or processed LUT chart)</div><div class="dz-fn" id="fn-fx-lut"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <!-- "Load Test Photo" (a 4800x6400 calibration chart) lived here, in the first panel of
+               the editor, as the second thing after the drop zone. It is a calibration fixture,
+               not a photo anyone edits — it now appears only under diag-on, with the rest of the
+               developer surface. loadTestPhoto() itself is unchanged and still reachable there. -->
+          <button class="btn bgh diag-only" onclick="loadTestPhoto()" title="Loads the built-in calibration chart">Load test chart</button>
+          <!-- 3.4.4: hidden on desktop only (fxDesktopFoldImageIntoLooks, below, sets its own
+               display:none the same way it folds this whole card into Looks) — that's the "Looks
+               panel" the item refers to. Untouched on web/mobile, where it's still a real,
+               working import path (see the Guide's "Can I use Google Photos?" FAQ) and photos
+               come from the OS Library on desktop anyway, not this drop zone. -->
+          <button class="btn bgh" id="btn-gp-import" onclick="gpImportClick()" title="Pick photos from your Google Photos library — selection happens in Google's own picker (one-time free setup: see Guide)">Google Photos…</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
+          <button class="btn bgh" id="btn-lut-del" disabled onclick="deleteLUTFromLibrary()">Delete</button>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" onclick="downloadLutChart()" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above">LUT chart</button>
+          <button class="btn bgh" id="btn-lut-dl" disabled onclick="if(lastUploadedLUT)dl(writeCube(lastUploadedLUT.lut,lastUploadedLUT.name),lastUploadedLUT.name+'.cube')">Download .cube</button>
+        </div>
+        </div>
+      </div>
+      <!-- LOOKS GALLERY + PRESET -->
+      <div class="fx-ctrl" data-fxsec="looks">
+        <!-- This header folds only the input/print settings below it; the preset grid has its own
+             "Preset" header and stays visible, so the title names what it actually folds. -->
+        <div class="fx-ctrl-title">Looks</div>
+        <!-- 3.4.9: matches the wireframe's .presetbox (Editor (Developer) View.dc.html:317-341)
+             — a dedicated collapse toggle for JUST the preset filter+grid, independent of the
+             panel-level section collapse every .fx-ctrl already gets (fxSecToggle, further down
+             this file). The wireframe's own .presetbox-body also wraps the Apply-LUT row, but
+             that row was already deliberately relocated out to its own section for 3.4.3 — not
+             re-nested here, since undoing an already-verified fix wasn't part of this item. -->
+        <div id="fx-looks-ctrl" style="display:none;margin-top:10px">
+          <div class="fx-label fx-preset-head" id="fx-preset-head" style="margin-bottom:4px;cursor:pointer;display:flex;align-items:center;justify-content:space-between" title="Collapse/expand presets">
+            <span>Preset</span>
+            <span class="fx-preset-chev" id="fx-preset-chev"></span>
+          </div>
+          <div id="fx-preset-body">
+            <input class="vinput" id="fx-looks-search" type="search" placeholder="Search looks…" autocomplete="off"
+                   oninput="fxLookSearchChanged(this.value)" style="width:100%;margin-bottom:6px"
+                   title="Filter the looks by name — matches letters in order, so &quot;p800&quot; finds Portra 800.">
+            <div class="btn-row chip-tap" id="fx-looks-cats" style="margin-bottom:8px"></div>
+            <div class="looks-grid" id="fx-looks" tabindex="0"></div>
+          </div>
+        </div>
+        <div class="fx-label" style="margin:14px 0 4px">Input</div>
+        <select class="fx-select" id="sel-input" onchange="fxUpdate()" style="display:none"><option value="">Standard (sRGB/Rec.709)</option><option value="vlog">V-Log (Lumix)</option></select>
+        <div class="btn-row chip-tap" id="chips-input" title="Source encoding. Pick V-Log for Lumix V-Log stills/frames — converts to Rec.709 BEFORE the film look, so any Rec.709 LUT applies correctly on top."></div>
+        <div class="fx-label" style="margin:10px 0 4px">Highlight response</div>
+        <select class="fx-select" id="sel-tonemap" onchange="fxUpdate()" style="display:none"><option value="">Standard (BT.2390)</option><option value="agx">AgX (filmic)</option><option value="native">Film stock (native)</option></select>
+        <div class="btn-row chip-tap" id="chips-tonemap" title="Only visible once real RAW highlight headroom survives to the render (a blown sky or window shot RAW) — otherwise there's nothing above white to roll off and both options render identically. AgX is a stronger filmic look with more shoulder compression; BT.2390 is a gentler broadcast-standard knee."></div>
+        <div class="fx-row" id="fx-hdr-preview-row" style="display:none" title="Loads floating-point highlight data for this RAW so the Highlight response controls can use real headroom. Off keeps normal SDR editing fast; it never changes the RAW's colour profile.">
+          <div class="fx-label">HDR preview</div><div class="fx-toggle" id="tg-hdr-preview" onclick="fxHdrPreviewChanged()"></div>
+        </div>
+        <div class="fx-label" style="margin:10px 0 4px">Print</div>
+        <select class="fx-select" id="sel-print" onchange="selectPrint(this.value)" style="display:none"><option value="">None</option><option value="kodak_print">Kodak Print</option><option value="fuji_print">Fuji Print</option></select>
+        <div class="btn-row chip-tap" id="chips-print" title="Dehancer-style print profile applied AFTER the film look (Kodak or Fuji print)."></div>
+        <select class="fx-select" id="sel-lut" onchange="selectLUT(this.value)" style="display:none"><option value="">None</option></select>
+        <div class="fx-row" id="row-lut-mix" style="display:none;margin-top:8px"><div class="fx-label">Strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-lut-mix" oninput="fxUpdate()" title="Blends the look LUT with the unfiltered image — 100 is the full look, lower values fade it toward the original."><div class="fx-val" id="vl-lut-mix">100</div></div>
+      </div>
+      <!-- FILM NEGATIVE (CHR-262): converts a scanned / camera-copied negative to a positive BEFORE
+           looks, grain and crop. Same operator as desktop/src-tauri/src/film_negative.rs, run in the
+           shared FX shader (fnConv) so preview, 1:1 loupe, full and tiled export agree. -->
+      <div class="fx-ctrl" data-fxsec="filmneg">
+        <div class="fx-ctrl-title">Film Negative <div class="fx-toggle" id="tg-filmneg" onclick="toggleFX('filmneg')"></div></div>
+        <div class="fx-fields ff-off" id="ff-filmneg">
+          <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Inverts a negative using the RawTherapee method: each channel is raised to a negative power, anchored on the colour of the unexposed film base (the clear rebate between frames). Pick the rebate first. Auto balance assumes the picked base is the rebate and that the scene averages neutral, and reports when it cannot trust the result.</p></details>
+          <div class="fx-row" title="Colour negative: the orange mask is cancelled per channel. Black and white: one exponent for all channels and a neutral result."><div class="fx-label">Type</div><select class="fx-select" id="sel-fneg-mode" onchange="fxUpdate()"><option value="colour">Colour negative</option><option value="bw">Black and white</option></select></div>
+          <div class="btn-row" style="margin:4px 0 8px">
+            <button class="btn bgh" id="btn-fneg-pick" onclick="fnPickBase()" title="Click an unexposed film-base area (the clear rebate). The colour is averaged from the original image, so crop, rotation and zoom do not matter.">Pick film base</button>
+            <button class="btn bgh" id="btn-fneg-auto" onclick="fnAutoBalance()" title="Sets the red and blue ratios so the converted scene averages neutral. Needs a picked film base; it will not guess one.">Auto balance</button>
+          </div>
+          <div class="fx-hint" id="fneg-status" role="status" style="margin:0 0 8px">No film base picked.</div>
+          <div class="fx-row" title="Reference exponent (green). Higher gives more contrast. RawTherapee default 1.5."><div class="fx-label">Exponent</div><input class="fx-slider" type="range" min="0.5" max="4" step="0.01" value="1.5" id="sl-fneg-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-exp">1.5</div></div>
+          <div class="fx-row" title="Red exponent relative to green. RawTherapee default 1.36."><div class="fx-label">Red ratio</div><input class="fx-slider" type="range" min="0.3" max="3" step="0.01" value="1.36" id="sl-fneg-red" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-red">1.36</div></div>
+          <div class="fx-row" title="Blue exponent relative to green. RawTherapee default 0.86."><div class="fx-label">Blue ratio</div><input class="fx-slider" type="range" min="0.3" max="3" step="0.01" value="0.86" id="sl-fneg-blue" oninput="fxUpdate()"><div class="fx-val" id="vl-fneg-blue">0.86</div></div>
+          <div class="btn-row" style="margin:8px 0 0">
+            <button class="btn bgh" id="btn-fneg-roll" onclick="fnApplyBaseToRoll()" title="Copies this photo's film base and exponents onto every open photo, and flags photos whose own base differs.">Apply base to all selected photos</button>
+          </div>
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-br">
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-bg">
+          <input type="range" hidden min="0" max="1" step="0.0001" value="0" id="sl-fneg-bb">
+          <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-bx">
+          <input type="range" hidden min="-1" max="1" step="0.00001" value="-1" id="sl-fneg-by">
+          <input type="range" hidden min="0" max="1" step="1" value="0" id="sl-fneg-domain">
+          <input type="range" hidden min="0" max="4503599627370495" step="1" value="0" id="sl-fneg-source">
+        </div>
+      </div>
+      <!-- BASIC ADJUSTMENTS -->
+      <div class="fx-ctrl" data-fxsec="adjust">
+        <div class="fx-ctrl-title">Tone <div class="fx-toggle" id="tg-adjust" onclick="toggleFX('adjust')"></div></div>
+        <div class="btn-row" id="adj-scope-row" style="display:none;margin-bottom:8px">
+          <button class="btn bgh" id="btn-adj-scope" onclick="adjToggleScope()" title="By default Tone adjustments apply to every loaded photo. Click to make THIS photo's adjustments independent (e.g. nudge just its exposure), or click again to sync it back to the shared value.">This photo only</button>
+        </div>
+        <div class="fx-fields ff-off" id="ff-adjust">
+          <div class="btn-row" style="margin:0 0 8px">
+            <button class="btn bgh" onclick="autoEnhance()" title="One-click levels and white balance from the image histogram">Auto-enhance</button>
+          </div>
+          <div class="fx-row"><div class="fx-label">Exposure</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-exp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-exp">0</div></div>
+          <div class="fx-row"><div class="fx-label">Contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-con">0</div></div>
+          <div class="fx-row"><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-hi" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hi">0</div></div>
+          <div class="fx-row"><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sh">0</div></div>
+          <div class="fx-row"><div class="fx-label">Whites</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wh">0</div></div>
+          <div class="fx-row"><div class="fx-label">Blacks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-bl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-bl">0</div></div>
+          <div class="fx-sub">Colour</div>
+          <div class="fx-row"><div class="fx-label">Temp</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-temp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-temp">0</div></div>
+          <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
+          <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
+          <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
+          <div class="fx-sub">Multiscale detail contrast</div>
+          <div class="fx-row" title="Contrast in the finest source detail band (approximately 1–2 pixels). Zero leaves the image unchanged."><div class="fx-label">Fine</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-1" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-1">0</div></div>
+          <div class="fx-row" title="Contrast in the small-detail band (approximately 2–4 source pixels). Zero leaves the image unchanged."><div class="fx-label">Small</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-2" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-2">0</div></div>
+          <div class="fx-row" title="Contrast in the medium-detail band (approximately 4–8 source pixels). Zero leaves the image unchanged."><div class="fx-label">Medium</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-3" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-3">0</div></div>
+          <div class="fx-row" title="Contrast in the low-frequency residual around the renderer's working-value midpoint (0.5). Zero leaves the image unchanged."><div class="fx-label">Residual</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-res" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-res">0</div></div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
+          </div>
+        </div>
+      </div>
+      <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
+           tacked-on sub-section (matches the Lens Correction card's pattern: a plain title, no
+           enable toggle — it's driven by the sliders being >0, same as Lens). -->
+      <div class="fx-ctrl" data-fxsec="nr">
+        <div class="fx-ctrl-title">Noise Reduction <div class="fx-toggle on" id="tg-nr" onclick="toggleFX('nr')"></div></div>
+        <div class="fx-fields" id="ff-nr">
+        <div class="fx-row" id="row-raw-nr">
+          <div class="fx-label">RAW Noise Reduction <button class="fx-info-i" title="Off: untouched decode. Fast (default): the native Rust-side shadow + chroma-wavelet denoise on linear RAW data, before any tone curve — a few seconds, applies automatically. High: additionally runs a neural (RawNIND UtNet2) denoiser, 25–90s at 24MP — never automatic; press &quot;Denoise now&quot; below, or it runs once at export if selected. Requires reopening this photo (or Denoise now) to take effect. Desktop/RAW only.">i</button></div>
+          <select id="sel-raw-nr" onchange="fxRawNrChanged(this.value)" style="display:none"><option value="off">Off</option><option value="fast" selected>Fast</option><option value="high">High</option></select>
+          <div class="seg" id="seg-raw-nr" style="flex:1"></div>
+        </div>
+        <div class="fx-row" id="fx-raw-cleanup-row" style="display:none" title="RAW opens with only the chroma-noise cleanup applied, so it is ready quickly. Turn this on to also apply shadow noise reduction, false-colour suppression and hue defringe while you edit (reloads this photo, a few seconds longer). Export always applies them, whichever way this is set.">
+          <div class="fx-label">Full cleanup while editing</div><div class="fx-toggle" id="tg-raw-full-cleanup" onclick="fxRawFullCleanupChanged()"></div>
+        </div>
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-nr-high-strength" style="display:none">
+            <div class="fx-label">High Strength <button class="fx-info-i" title="Real-photo review (5 ISO 12800 shots vs DxO PureRAW) found full strength can soften fine hair/fur strands more than DxO does, even though flat-area noise removal is comparable or better — lower this if High is smoothing detail you want to keep. Changing it re-arms Denoise now / re-applies at next export.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-nr-high-strength" oninput="fxRawNrHighStrengthChanged(this.value)"><div class="fx-val" id="vl-nr-high-strength">70</div>
+          </div>
+          <div class="fx-row" id="row-nr-high" style="display:none">
+            <button class="btn bgh" id="btn-denoise-now" onclick="fxDenoiseNowClicked()" style="flex:1">Denoise now</button>
+            <button class="btn" id="btn-denoise-cancel" onclick="fxDenoiseCancelClicked()" style="display:none;margin-left:6px">Cancel</button>
+          </div>
+          <div id="row-nr-high-progress" style="display:none;margin:2px 0 4px">
+            <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width var(--dur-1)"></div></div>
+          </div>
+        </div>
+        <div class="fx-row" id="row-raw-demosaic">
+          <div class="fx-label">RAW demosaic <button class="fx-info-i" title="Choose the decode-time method for this photo. AHD, VNG and MHC support Bayer sensors. Markesteijn 1-pass and 3-pass support standard X-Trans layouts. An incompatible choice is rejected by the decoder. Requires reopening this photo to take effect. Desktop only.">i</button></div><select class="fx-select" id="sel-demosaic-algo" onchange="fxDemosaicAlgoChanged(this.value)" aria-label="RAW demosaic method"><option value="">Standard (PPG)</option><option value="ahd">AHD (Bayer)</option><option value="vng">VNG (Bayer)</option><option value="mhc">MHC (Bayer)</option><option value="markesteijn1">Markesteijn 1-pass (X-Trans)</option><option value="markesteijn3">Markesteijn 3-pass (X-Trans)</option></select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
+        <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
+        <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div class="fx-row nr-gated" id="row-nr-con"><div class="fx-label" title="Higher = retain more local luminance contrast while reducing noise">Contrast</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-con" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-con">0</div></div>
+        <div class="fx-row nr-gated" id="row-nr-color-detail"><div class="fx-label" title="Higher values preserve fine colour edges; lower values smooth chroma more strongly">Color Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-color-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-color-detail">50</div></div>
+        <div class="fx-row nr-gated" id="row-nr-smooth"><div class="fx-label" title="Higher values use a wider chroma-smoothing radius">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-smooth" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-smooth">50</div></div>
+        <div class="fx-row" title="Capture sharpening — RAW photos default to 40 on load/reset (moved here so it survives Reset independently of the general Adjust sliders)."><div class="fx-label">Sharpen</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp">0</div></div>
+        <div class="fx-row" title="Source-pixel radius for the sharpening halo. The default 1.0 preserves today's sharpening exactly."><div class="fx-label">Sharpen Radius</div><input class="fx-slider" type="range" min="0.5" max="3" step="0.1" value="1" id="sl-adj-sharp-radius" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-radius">1</div></div>
+        <div class="fx-row" title="Balances edge-only sharpening at lower values against fine texture at higher values. The default 50 preserves today's sharpening exactly."><div class="fx-label">Sharpen Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-adj-sharp-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-detail">50</div></div>
+        <div class="fx-row" title="Protect smooth areas from sharpening. Hold Alt to preview white sharpened edges and black protected areas."><div class="fx-label">Sharpen Mask</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp-mask" oninput="fxUpdate()" aria-label="Sharpen Mask; hold Alt to preview"><div class="fx-val" id="vl-adj-sharp-mask">0</div></div>
+        <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        </div>
+      </div>
+      <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
+           Gaussian PSF and inverts it with a few iterations of damped Richardson-Lucy, unlike
+           the unsharp-mask Sharpen above which only boosts existing edge contrast. Master toggle
+           defaults to on (matches the pre-existing Amount>0-driven behavior byte-for-byte for
+           anyone who already had it dialed in); getFXParams() zeroes Amount when switched off,
+           same mechanism the Amount>0 gate in render() already used, so render()/the shader
+           needed no change. -->
+      <div class="fx-ctrl" data-fxsec="deconv">
+        <div class="fx-ctrl-title">Deconvolution <div class="fx-toggle on" id="tg-deconv" onclick="toggleFX('deconv')"></div></div>
+        <div class="fx-fields" id="ff-deconv">
+        <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Recovers real detail lost to lens/sensor blur (Richardson-Lucy),
+          instead of just boosting edge contrast like Sharpen. Push Amount too far and you'll
+          see ringing (dark/light halos) at hard edges — that's the real algorithm, not a bug.</p></details>
+        <div class="fx-row" title="Blend between the original and the deconvolved result."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-deconv-amt" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-amt">0</div></div>
+        <div class="fx-row" title="Size of the assumed lens/sensor blur (Gaussian PSF) to invert."><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-deconv-rad" oninput="fxUpdate()"><div class="fx-val" id="vl-deconv-rad">20</div></div>
+        </div>
+      </div>
+      <!-- TONE CURVES -->
+      <div class="fx-ctrl" data-fxsec="curves">
+        <div class="fx-ctrl-title">Tone Curves <div class="fx-toggle" id="tg-curves" onclick="toggleFX('curves')"></div></div>
+        <div class="fx-fields ff-off" id="ff-curves">
+          <div class="btn-row" id="curve-mode-chips">
+            <button class="btn bgh crv-mode-chip on" data-mode="point" onclick="curveSetMode('point')">Point</button>
+            <button class="btn bgh crv-mode-chip" data-mode="param" onclick="curveSetMode('param')">Parametric</button>
+          </div>
+          <div id="curve-point-block">
+            <div class="btn-row" id="curve-chips" style="margin-top:6px">
+              <button class="btn bgh crv-chip on" data-ch="m" onclick="curveSetCh('m')">RGB</button>
+              <button class="btn bgh crv-chip" data-ch="r" onclick="curveSetCh('r')">R</button>
+              <button class="btn bgh crv-chip" data-ch="g" onclick="curveSetCh('g')">G</button>
+              <button class="btn bgh crv-chip" data-ch="b" onclick="curveSetCh('b')">B</button>
+            </div>
+            <div style="max-width:280px;margin-top:8px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px">
+              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+            </div>
+            <canvas id="cv-curve" style="width:100%;max-width:280px;aspect-ratio:1;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.12);border-radius:8px;touch-action:none;cursor:crosshair;margin-top:2px"></canvas>
+            <div class="fx-hint" style="margin-top:5px">Touch: tap the curve to add a point, drag to shape it, or press and hold an interior point to remove it. Drag outside the curve to scroll.</div>
+            <div style="max-width:280px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:var(--mut);padding:0 1px;margin-bottom:4px">
+              <span>Blacks</span><span>Midtones</span><span>Whites</span>
+            </div>
+          </div>
+          <div id="curve-param-block" style="display:none;margin-top:6px">
+            <div class="fx-row" title="Lifts/lowers the darkest tones."><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-s" oninput="paramCurveChanged('s',this.value);document.getElementById('vl-crv-s').textContent=this.value"><div class="fx-val" id="vl-crv-s">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the low-midtones."><div class="fx-label">Darks</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-d" oninput="paramCurveChanged('d',this.value);document.getElementById('vl-crv-d').textContent=this.value"><div class="fx-val" id="vl-crv-d">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the high-midtones."><div class="fx-label">Lights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-l" oninput="paramCurveChanged('l',this.value);document.getElementById('vl-crv-l').textContent=this.value"><div class="fx-val" id="vl-crv-l">0</div></div>
+            <div class="fx-row" title="Lifts/lowers the brightest tones."><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-crv-h" oninput="paramCurveChanged('h',this.value);document.getElementById('vl-crv-h').textContent=this.value"><div class="fx-val" id="vl-crv-h">0</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- HSL COLOR MIXER -->
+      <div class="fx-ctrl" data-fxsec="hsl">
+        <div class="fx-ctrl-title">Color Mixer <div class="fx-toggle" id="tg-hsl" onclick="toggleFX('hsl')"></div></div>
+        <div class="fx-fields ff-off" id="ff-hsl">
+          <div id="hsl-hist" style="margin-bottom:6px" aria-label="Color distribution"></div>
+          <div id="hsl-chips" style="margin-bottom:8px" aria-label="Color bands"></div>
+          <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-h" oninput="hslSlider('hue',this.value)"><div class="fx-val" id="vl-hsl-h">0</div></div>
+          <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-s" oninput="hslSlider('sat',this.value)"><div class="fx-val" id="vl-hsl-s">0</div></div>
+          <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-hsl-l" oninput="hslSlider('lum',this.value)"><div class="fx-val" id="vl-hsl-l">0</div></div>
+        </div>
+      </div>
+      <!-- COLOUR WHEELS (ROADMAP R11) — 3-way lift/gamma/gain grading, ASC-CDL -->
+      <div class="fx-ctrl" data-fxsec="wheels">
+        <div class="fx-ctrl-title">Colour Wheels <div class="fx-toggle" id="tg-wheels" onclick="toggleFX('wheels')"></div></div>
+        <div class="fx-fields ff-off" id="ff-wheels">
+          <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag each wheel off-centre to tint that tonal region; the slider underneath is an independent brightness for the same region. Double-click a wheel to reset it.</p></details>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between;margin-top:6px">
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-lift" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Shadows (Lift)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-lift-l" oninput="wheelLumChanged('lift',this.value);document.getElementById('vl-wheel-lift-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-lift-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gamma" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Midtones (Gamma)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-gamma-l" oninput="wheelLumChanged('gamma',this.value);document.getElementById('vl-wheel-gamma-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gamma-l">0</div>
+            </div>
+            <div style="flex:1;min-width:84px;text-align:center">
+              <canvas id="cv-wheel-gain" style="width:100%;max-width:96px;aspect-ratio:1;border-radius:50%;touch-action:none;cursor:crosshair"></canvas>
+              <div style="font-family:var(--sans);font-size:var(--fs-1);color:var(--mut);margin-top:4px">Highlights (Gain)</div>
+              <input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-wheel-gain-l" oninput="wheelLumChanged('gain',this.value);document.getElementById('vl-wheel-gain-l').textContent=this.value" style="width:100%;margin-top:4px">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--mut)" id="vl-wheel-gain-l">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- POINT COLOR -->
+      <div class="fx-ctrl" data-fxsec="pointcolor">
+        <div class="fx-ctrl-title">Point Color <div class="fx-toggle" id="tg-pointcolor" onclick="toggleFX('pointcolor')"></div></div>
+        <div class="fx-fields ff-off" id="ff-pointcolor">
+          <div class="btn-row" style="align-items:center;gap:6px">
+            <button class="btn bgh" id="btn-pc-eye" onclick="pcEyedropper()" style="flex:1">Pick from photo</button>
+            <button class="fx-info-i" title="Click a colour in the photo to target it precisely, then dial in how far the selection spreads with Range.">i</button>
+          </div>
+          <div class="btn-row" id="pc-list" style="flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+          <!-- Removed rather than converted to a second tooltip: this restated, word for word in
+               substance, the "Pick from photo" button's own adjacent .fx-info-i above — an
+               explanation duplicated onto the SAME row two different ways. pc-empty-hint's only
+               other job (display:none/block toggled by pcSlider et al.) still no-ops safely via
+               getElementById returning null. -->
+          <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-h" oninput="pcSlider('hue',this.value)"><div class="fx-val" id="vl-pc-h">0</div></div>
+            <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
+            <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
+            <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
+            <div class="fx-row" title="How gradually the adjustment fades toward the edge of the selected color range"><div class="fx-label">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-pc-sm" oninput="pcSlider('smoothness',this.value)"><div class="fx-val" id="vl-pc-sm">50</div></div>
+            <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh" onclick="pcDelete()">Delete point</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- LOCAL ADJUSTMENTS -->
+      <div class="fx-ctrl" data-fxsec="local">
+        <div class="fx-ctrl-title">Masks <div class="fx-toggle" id="tg-local" onclick="toggleFX('local')"></div></div>
+        <div class="fx-fields ff-off" id="ff-local">
+          <!-- Was 8 peer buttons in one row ("+ Radial + Linear + Brush + Sky + Skin + Color
+               Range + Luminance Range + AI Select") — reads as a list, not a control, and the
+               row wrapped to 3 lines once Skin/AI Select showed on desktop. One trigger, one
+               grouped menu (mskAddMenu), built on the exact same .msk-more-menu/.msk-more-it
+               popover the mask row's own "⋯" menu already uses — no new component, no new CSS
+               beyond the group-header label. The #btn-msk-add-skin/#btn-msk-add-ai elements this
+               replaced are gone, along with the `body.deskx …!important` CSS rule that only
+               existed to show them — mskAddMenu checks `body.deskx` itself to decide whether the
+               Skin/AI Select ENTRIES belong in the menu, the same condition that rule used, so
+               they still appear in exactly the same contexts (including ?deskx=1 for testing). -->
+          <div class="btn-row">
+            <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
+          </div>
+          <div class="fx-row"><div class="fx-label">Show on photo</div>
+            <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')">Overlay</button><button data-v="isolate" onclick="mskSetPreviewMode('isolate')">Isolate</button><button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off" onclick="mskSetPreviewMode('off')">Off</button></div>
+          </div>
+          <!-- Overlay/Isolate are drawn in JS from the mask SHAPE only; Selection is rendered by
+               the shader and is the effective weight. For a gated mask those differ a lot, and
+               without saying so the three modes look like three contradictory answers. -->
+          <div id="msk-prevmode-hint" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px"></div>
+          <div class="fx-row" id="msk-selview-opacity-row" style="display:none">
+            <div class="fx-label">Overlay opacity</div>
+            <input class="fx-slider" type="range" min="10" max="100" step="1" value="75" id="sl-msk-selview-opacity" oninput="mskSelViewOpacityInput(this.value)">
+            <div class="fx-val" id="vl-msk-selview-opacity">75</div>
+          </div>
+          <div class="fx-row" id="msk-selview-outline-row" style="display:none">
+            <div class="fx-label">Edge only</div>
+            <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
+          </div>
+          <div class="fx-row" id="msk-selview-style-row" style="display:none">
+            <div class="fx-label">Selection display</div>
+            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
+              <option value="legacy">Colour overlay</option><option value="photo">On image</option><option value="bw">White on black</option>
+            </select>
+          </div>
+          <div class="fx-row" id="msk-selview-color-row" style="display:none">
+            <div class="fx-label">Overlay colour</div>
+            <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
+          </div>
+          <div class="fx-row" id="msk-selview-always-row" style="display:none">
+            <div class="fx-label">Always show selection</div>
+            <input type="checkbox" id="ck-msk-selview-always" onchange="mskSelViewAlwaysInput(this.checked)">
+          </div>
+          <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
+          <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <!-- LENS CORRECTION -->
+      <div class="fx-ctrl" data-fxsec="lens">
+        <div class="fx-ctrl-title">Lens Correction <div class="fx-toggle" id="tg-lens-auto" onclick="this.classList.toggle('on');fxLensAutoToggled()"></div></div>
+        <div class="fx-row" id="row-lens-auto">
+          <div class="fx-label">Auto (lens profile) <button class="fx-info-i" title="Desktop only: looks up this exact camera+lens+focal-length in a bundled lens-profile database (lensfun) and geometrically corrects distortion automatically on next RAW load. Falls back to the manual sliders below when no profile match exists.">i</button></div>
+        </div>
+        <div id="lens-auto-status" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);line-height:1.5;margin:2px 0 8px"></div>
+        <!-- Manual/adapted lenses (TTArtisan and similar mechanical-only optics) write NO lens
+             EXIF at all, so auto-detection has nothing to recover — this lets you pick a lens
+             directly from the bundled lensfun database instead. Desktop only; hidden elsewhere.
+             Grouped in a dashed .fx-cond-block (matches the wireframe's disclosure grouping)
+             rather than the wireframe's literal <details> — visibility here is STATE-driven
+             (fxLensAutoToggled/fxLensManualChanged toggle each row's own display), not a manual
+             expand/collapse, so a <details> element would fight that existing logic. -->
+        <div class="fx-cond-block">
+          <div class="fx-row" id="row-lens-manual" style="display:none" title="Overrides EXIF auto-detection with a lens you pick directly — for manual/adapted lenses that write no lens EXIF at all. Picking one also turns Auto on.">
+            <div class="fx-label">Manual lens</div>
+            <select class="fx-select" id="sel-lens-manual" onchange="fxLensManualChanged()" style="flex:1"><option value="">None (auto-detect)</option></select>
+          </div>
+          <div class="fx-row" id="row-lens-manual-focal" style="display:none" title="Focal length in mm — required for distortion correction. Auto-filled for fixed (prime) lenses.">
+            <div class="fx-label">Focal length (mm)</div>
+            <input class="fx-slider" type="number" min="1" max="2000" step="0.1" id="in-lens-manual-focal" oninput="fxLensManualFocalChanged()" style="max-width:80px;flex:0 0 auto">
+          </div>
+        </div>
+        <div class="fx-row" title="Straightens bowed lines. Positive fixes barrel distortion (lines bow outward), negative fixes pincushion (lines bow inward)."><div class="fx-label">Distortion</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-dist" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-dist">0</div></div>
+        <div class="fx-row" title="Brightens the corners to counteract lens vignetting."><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-vig">0</div></div>
+        <div class="fx-row" title="Corrects red/blue fringing near high-contrast edges, worst in the corners."><div class="fx-label">Chromatic Aberration</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ca" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ca">0</div></div>
+        <div class="fx-row" title="Removes purple/green color fringes on high-contrast edges — the local fringing that survives the geometric CA correction above, or that a fast lens makes wide open. Gated on edges, so flat purple or green subjects are left alone."><div class="fx-label">Defringe</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-lens-defr" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-defr">0</div></div>
+      </div>
+      <!-- CROP & ROTATE -->
+      <div class="fx-ctrl" data-fxsec="crop">
+        <div class="fx-ctrl-title" title="Crop applies to every loaded image">Crop <div class="fx-toggle-lb fx-geom-reset" onclick="geomReset()" style="font-size:12px;color:var(--mut);cursor:pointer;font-family:var(--sans)">Reset</div></div>
+        <div class="fx-sub" style="border-top:none;padding-top:0;margin-top:0">Aspect ratio</div>
+        <div class="fx-row" style="display:none"><div class="fx-label">Aspect</div>
+          <!-- A list of tap chips, not a dropdown — same convention as the Input/Print profile
+               chips above (selectToChips) and the Canvas ratio chips (cvBuildChips): the <select>
+               stays the one source of truth (still dispatches its own onchange, still restorable
+               from a session/snapshot) and is just visually replaced. Panel redesign (FR1/R6
+               precedent): the proposal's checklist-style .rlist is a genuine picker-widget swap,
+               not a markup move, so it's deferred (tracked as R7) — this keeps the existing,
+               already-correct chip mechanism and only regroups it under an "Aspect ratio" heading. -->
+          <select class="fx-select" id="sel-crop-ar" onchange="cropSetAspect(this.value);if(!cropMode&&curItem()){cropEnter();if(cropAR){cropN=cropDefaultForAR();positionCropRect();}}" style="display:none">
+            <option value="shot">As shot</option>
+            <option value="0">Free</option>
+            <option value="custom">Custom</option>
+            <option value="1">1:1 Square</option>
+            <option value="1.5">3:2</option>
+            <option value="1.3333">4:3</option>
+            <option value="1.25">5:4</option>
+            <option value="1.4">7:5</option>
+            <option value="1.7778">16:9 Widescreen</option>
+            <option value="0.7071">1.414:1 ISO A4</option>
+            <option value="1.2941">11:8.5 US Letter</option>
+          </select>
+        </div>
+        <div class="btn-row chip-tap" id="crop-ar-chips" style="margin-bottom:2px"></div>
+        <div class="fx-row" title="Swap the picked aspect ratio between portrait and landscape (e.g. 3:2 ↔ 2:3) — the chip list above only lists one orientation each.">
+          <div class="fx-label">Orientation</div>
+          <div class="crop-orient" role="group" aria-label="Orientation"><button class="btn bgh" id="btn-crop-orient-h" aria-pressed="true" title="Horizontal" aria-label="Horizontal" onclick="cropSetOrientation(true)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.0" y="6.5" width="18" height="11" rx="2"/></svg></button><button class="btn bgh" id="btn-crop-orient-v" aria-pressed="false" title="Vertical" aria-label="Vertical" onclick="cropSetOrientation(false)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6.5" y="3.0" width="11" height="18" rx="2"/></svg></button></div>
+        </div>
+        <div class="fx-row" id="crop-custom-row" style="display:none">
+          <div class="fx-label">Custom</div>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-w" style="width:56px" oninput="cropCustomChanged()">
+          <span style="color:var(--mut)">:</span>
+          <input class="fx-select" type="number" min="1" step="1" value="10" id="crop-custom-h" style="width:56px" oninput="cropCustomChanged()">
+        </div>
+        <div class="fx-row"><div class="fx-label">Grid</div>
+          <select class="fx-select" id="sel-crop-grid" onchange="cropSetGrid(this.value)">
+            <option value="3x3">3×3 (Rule of thirds)</option>
+            <option value="4x4">4×4</option>
+            <option value="9x9">9×9</option>
+            <option value="golden">Golden ratio</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec" id="btn-crop" onclick="cropToggle()">Crop</button>
+        </div>
+      </div>
+      <!-- ROTATE & FLIP — split out of Crop into its own tool -->
+      <div class="fx-ctrl" data-fxsec="rotate">
+        <div class="fx-ctrl-title">Rotate &amp; Flip <div class="fx-toggle-lb fx-geom-reset" onclick="geomResetRotate()" style="font-size:12px;color:var(--mut);cursor:pointer">Reset</div></div>
+        <div class="btn-row" style="justify-content:center;gap:14px">
+          <button class="btn-icon" onclick="geomRotate(-90)" title="Rotate left" data-ic="rotateLeft"></button>
+          <button class="btn-icon" onclick="geomRotate(90)" title="Rotate right" data-ic="rotateRight"></button>
+          <button class="btn-icon" onclick="geomFlip('h')" title="Flip horizontal" data-ic="flipH"></button>
+          <button class="btn-icon" onclick="geomFlip('v')" title="Flip vertical" data-ic="flipV"></button>
+        </div>
+        <div class="btn-row" id="btn-geom-apply-all-row" style="display:none;margin-top:8px">
+          <button class="btn bgh" id="btn-geom-apply-all" onclick="geomApplyToAll()" title="Copies this photo's crop/rotate/flip/straighten onto every other loaded photo, overwriting theirs">Apply to all photos</button>
+        </div>
+      </div>
+      <!-- STRAIGHTEN — split out of Crop into its own tool -->
+      <div class="fx-ctrl" data-fxsec="straighten">
+        <div class="fx-ctrl-title">Transform</div>
+        <div class="fx-row"><div class="fx-label">Straighten</div><input class="fx-slider" type="range" min="-45" max="45" step="0.1" value="0" id="sl-straighten" oninput="geomStraightenSlider(this.value)"><div class="fx-val" id="vl-straighten">0°</div></div>
+        <div class="btn-row fx-level-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="autoHorizon()" title="Finds the dominant horizontal or vertical line and levels it. Says so plainly when there isn't one.">Auto level</button>
+          <button class="btn bgh" id="btn-ah-roi" onclick="ahRoiArm()" title="Constrains where Auto level looks for a line — useful when a stronger false line elsewhere in the frame (a wave, a shoreline fragment) keeps outscoring the real horizon.">Set region…</button>
+          <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
+        </div>
+        <div class="fx-sub">Perspective</div>
+        <div class="fx-row" title="Corrects converging verticals while preserving perspective spacing."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
+        <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
+        <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
+        <div class="fx-row" title="Scales the perspective-corrected photo to hide empty frame edges."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
+      </div>
+      <!-- GRAIN -->
+      <div class="fx-ctrl" data-fxsec="grain">
+        <div class="fx-ctrl-title">Film Grain <div class="fx-toggle" id="tg-grain" onclick="toggleFX('grain')"></div></div>
+        <div class="fx-fields ff-off" id="ff-grain">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-grain-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-grain-a">30</div></div>
+          <div class="fx-row" title="Fine-tune the grain clump size on top of the film format (5 = format-accurate)."><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" value="3" id="sl-grain-sz" oninput="fxUpdate()"><div class="fx-val" id="vl-grain-sz">3</div></div>
+          <div class="fx-row" title="Dehancer film-format grain: smaller formats are coarser/stronger, 65mm is the finest & weakest."><div class="fx-label">Film format</div>
+            <select class="fx-select" id="sel-grain-fmt" onchange="fxUpdate()">
+              <option value="8mm">8mm — coarse</option>
+              <option value="16mm">16mm</option>
+              <option value="35mm">35mm — standard</option>
+              <option value="65mm" selected>65mm — fine</option>
+            </select>
+          </div>
+          <!-- VIDEO ONLY (fxSyncVideoUI shows/hides this row). 0 = grain frozen to the screen
+               (looks fake/stuck), 100 = every frame independently reseeded (looks like digital
+               boil at high Amount). See CLAUDE.md §12: real film grain differs frame to frame at
+               similar intensity — neither extreme is what real stock looks like. -->
+          <div class="fx-row" id="row-grain-motion" style="display:none" title="0 = grain frozen to the screen. 100 = fully independent every frame (can boil at high Amount). Real film sits in between.">
+            <div class="fx-label">Grain motion</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-grain-motion" oninput="fxVideoGrainMotionChanged(this.value)"><div class="fx-val" id="vl-grain-motion">75</div>
+          </div>
+          <!-- VIDEO ONLY, same row group. A projector gate never holds a frame perfectly still and
+               the lamp never repeats an exposure exactly; without these a clip reads as digital
+               however good the grain is. Both default OFF so nothing changes unless asked for. -->
+          <div class="fx-row" id="row-gate-weave" style="display:none" title="Sub-pixel frame-to-frame wobble, the way a projector gate holds film. A little goes a long way — past about 30 it reads as a shaky camera rather than a projector.">
+            <div class="fx-label">Gate weave</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-gate-weave" oninput="fxUpdate()"><div class="fx-val" id="vl-gate-weave">0</div>
+          </div>
+          <div class="fx-row" id="row-film-breath" style="display:none" title="Per-frame exposure flicker, the way a projector lamp and shutter never deliver exactly the same light twice.">
+            <div class="fx-label">Film breath</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-film-breath" oninput="fxUpdate()"><div class="fx-val" id="vl-film-breath">0</div>
+          </div>
+        </div>
+      </div>
+      <!-- FILM ARTIFACTS -->
+      <div class="fx-ctrl" data-fxsec="art">
+        <div class="fx-ctrl-title" title="Placement is seeded — export matches preview; Reshuffle re-rolls it">Film Artifacts <div class="fx-toggle" id="tg-art" onclick="toggleFX('art')"></div></div>
+        <div class="fx-fields ff-off" id="ff-art">
+          <div class="fx-row" title="Random dust specks and the odd hair — mostly light (dust on the negative prints white)."><div class="fx-label">Dust</div><input class="fx-slider" type="range" min="0" max="100" value="30" id="sl-art-du" oninput="fxUpdate()"><div class="fx-val" id="vl-art-du">30</div></div>
+          <div class="btn-row chip-tap" id="chips-dustmode" style="margin-bottom:2px" title="Dust speck color — Both is the real-film mix (mostly light specks); Black/White forces one color."></div>
+          <div class="fx-row" title="Thin vertical emulsion scratches with a gentle wobble."><div class="fx-label">Scratches</div><input class="fx-slider" type="range" min="0" max="100" value="20" id="sl-art-sc" oninput="fxUpdate()"><div class="fx-val" id="vl-art-sc">20</div></div>
+          <div class="fx-row" title="A warm light leak flooding in from one edge."><div class="fx-label">Light leak</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-art-lk" oninput="fxUpdate()"><div class="fx-val" id="vl-art-lk">0</div></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="artReshuffle()" title="Re-roll the random dust/scratch/leak placement">Re-roll</button></div>
+        </div>
+      </div>
+      <!-- HALATION -->
+      <div class="fx-ctrl" data-fxsec="hal">
+        <div class="fx-ctrl-title" title="Warm film glow — turn on White glow for B&amp;W photos">Halation <div class="fx-toggle" id="tg-hal" onclick="toggleFX('hal')"></div></div>
+        <div class="fx-fields ff-off" id="ff-hal">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="70" id="sl-hal-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-hal-a">70</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="40" value="6" id="sl-hal-r" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-r">8</div></div>
+          <div class="fx-row"><div class="fx-label">Shadow protect <button class="fx-info-i" title="Keeps dark areas (eyes, nostrils, deep shadows) from flooding red. 0 = full film behavior.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-hal-p" oninput="fxUpdate()"><div class="fx-val" id="vl-hal-p">0</div></div>
+          <div class="fx-row"><div class="fx-label">White glow <button class="fx-info-i" title="Neutral white halation instead of the warm film glow — best for black-and-white photos (auto-enabled when a B&amp;W photo is loaded).">i</button></div><div class="fx-toggle" id="tg-hal-white" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row"><div class="fx-label">No remjet <button class="fx-info-i" title="Film with no anti-halation backing (remjet) — much stronger, bloomier halos with a yellow→orange→red edge, calibrated to Dehancer's no-remjet look.">i</button></div><div class="fx-toggle" id="tg-hal-noremjet" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+          <div class="fx-row"><div class="fx-label">Extreme <button class="fx-info-i" title="Extreme halation — the no-remjet glow pushed ≈5–6× stronger for a heavy, stylised bloom. Implies No remjet.">i</button></div><div class="fx-toggle" id="tg-hal-extreme" onclick="this.classList.toggle('on');fxUpdate()"></div></div>
+        </div>
+      </div>
+      <!-- BLOOM -->
+      <div class="fx-ctrl" data-fxsec="bloom">
+        <div class="fx-ctrl-title" title="Color derived from source light">Bloom <div class="fx-toggle" id="tg-bloom" onclick="toggleFX('bloom')"></div></div>
+        <div class="fx-fields ff-off" id="ff-bloom">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="40" id="sl-bloom-a" oninput="fxUpdate();_fxAmtTouched=true"><div class="fx-val" id="vl-bloom-a">40</div></div>
+          <div class="fx-row"><div class="fx-label">Threshold</div><input class="fx-slider" type="range" min="2" max="60" value="10" id="sl-bloom-th" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-th">10</div></div>
+          <div class="fx-row"><div class="fx-label">Radius</div><input class="fx-slider" type="range" min="2" max="50" value="12" id="sl-bloom-r" oninput="fxUpdate()"><div class="fx-val" id="vl-bloom-r">12</div></div>
+        </div>
+      </div>
+      <!-- VIGNETTE -->
+      <div class="fx-ctrl" data-fxsec="vig">
+        <div class="fx-ctrl-title">Effects <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
+        <div class="fx-fields ff-off" id="ff-vig">
+          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
+          <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
+          <div class="fx-row" title="Adds or removes fine surface detail (radius-1 high-pass) — positive adds crunchy texture/grain-like detail, negative softens it. Distinct from Clarity's wider midtone-structure move."><div class="fx-label">Texture</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-texture" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-texture">0</div></div>
+          <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
+        </div>
+      </div>
+      <!-- BORDERS -->
+      <div class="fx-ctrl" data-fxsec="borders">
+        <div class="fx-ctrl-title">Border <div class="fx-toggle" id="tg-borders" onclick="toggleFX('borders')"></div></div>
+        <div class="fx-fields ff-off" id="ff-borders">
+        <div class="fx-row"><div class="fx-label">Inner type</div>
+          <select class="fx-select" id="sel-b1-type" onchange="borderTypeChanged()" style="flex:1"><option value="plain">Plain colour</option><option value="film">Film frame</option></select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Inner colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
+        <div class="fx-row"><div class="fx-label">Inner size</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
+        <div class="fx-row"><div class="fx-label">Inner grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-g">0</div></div>
+        <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Source</div>
+          <select class="fx-select" id="sel-b1-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
+        </div>
+        <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Position</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="0" id="sl-b1-pos" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-pos">0</div></div>
+        <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Edge glow</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-glow" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-glow">0</div></div>
+        <div class="fx-row" style="margin-top:6px"><div class="fx-label">Outer type</div>
+          <select class="fx-select" id="sel-b2-type" onchange="borderTypeChanged()" style="flex:1"><option value="plain">Plain colour</option><option value="film">Film frame</option></select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
+        <div class="fx-row"><div class="fx-label">Outer size</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
+        <div class="fx-row"><div class="fx-label">Outer grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-g">0</div></div>
+        <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Source</div>
+          <select class="fx-select" id="sel-b2-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
+        </div>
+        <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Position</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="0" id="sl-b2-pos" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-pos">0</div></div>
+        <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Edge glow</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-glow" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-glow">0</div></div>
+        <div class="fx-row"><div class="fx-label">Film variation</div><button class="fx-btn" id="btn-frame-shuffle" type="button" onclick="frameShuffle()" style="flex:1">Shuffle</button></div>
+        <div class="fx-row"><div class="fx-label">Overlay <button class="fx-info-i" title="Load frame… lays any frame PNG you have over the photo, on top of the border layers.">i</button></div>
+          <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)" style="flex:1">
+            <option value="none">None</option>
+            <option value="custom">Load frame…</option>
+          </select>
+        </div>
+        </div>
+      </div>
+      <!-- RETOUCH (heal / clone) -->
+      <div class="fx-ctrl" data-fxsec="retouch">
+        <div class="fx-ctrl-title">Retouch <div class="fx-toggle" id="tg-retouch" onclick="toggleFX('retouch')"></div></div>
+        <div class="fx-fields ff-off" id="ff-retouch">
+        <div class="fx-row" style="align-items:flex-start"><div class="fx-label">Mode <button class="fx-info-i" type="button" title="Heal blends the copied area into the surrounding colour. Clone copies it exactly.">i</button></div>
+          <select class="fx-select" id="sel-heal-mode" style="display:none" onchange="healControlInput();healControlCommit()"><option value="heal" data-short="Heal">Heal (blend color)</option><option value="clone" data-short="Clone">Clone (copy exactly)</option></select>
+          <div class="seg" id="seg-heal-mode" style="flex:1"></div>
+        </div>
+        <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-size">4%</div></div>
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-feather">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
+        <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
+             filled/primary treatment and its own full-width row — panel redesign, feedback
+             "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
+             button was wrong. Undo spot is cut per that same review (RT1): tracked separately
+             as R1 (editor_ux_spec.json) since a real per-spot delete needs new interaction
+             design, not a layout change — ⌘Z still undoes a spot in the meantime. -->
+        <div class="btn-row" style="margin-top:2px">
+          <button class="btn fx-btn-primary" id="btn-heal-paint" onclick="healToggle()" style="flex:1">Retouch</button>
+          <button class="btn bgh" id="btn-heal-erase" onclick="healEraseToggle()" aria-pressed="false" title="Erase intersected repair operations; hold the brush erase shortcut for temporary erase">Erase repairs</button>
+        </div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.</div>
+        <div id="heal-list" role="listbox" aria-label="Retouch spots" style="display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:132px;overflow:auto"></div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-del" style="flex:1" onclick="healDeleteSel()" disabled>Delete spot</button><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
+        <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-dust" style="flex:1" onclick="healDustToggle()" aria-pressed="false" title="Preview-only overlay that highlights dust and small blemishes. Never exported.">Visualise spots</button></div>
+        <div class="fx-row" id="row-heal-dust" style="display:none"><div class="fx-label">Sensitivity</div><input class="fx-slider" type="range" min="1" max="100" step="1" value="40" id="sl-heal-dust" oninput="healDustRender()"><div class="fx-val" id="vl-heal-dust">40</div></div>
+        <div style="margin-top:12px"><div class="fx-label">Local AI erase</div><p style="font-size:11px;line-height:1.5">Desktop · optional 28 MB model · photos stay local. Review candidates before keeping a repair.</p><div class="fx-row"><label class="fx-label" for="sl-inpaint-size">Brush size</label><input class="fx-slider" id="sl-inpaint-size" type="range" min="0.2" max="8" step="0.2" value="1"></div><div class="btn-row"><button class="btn bgh" id="btn-inpaint-draw" onclick="window.chromasmithInpaintDraw?chromasmithInpaintDraw():toast('Local AI erase requires the desktop app')">Brush object to erase</button><button class="btn bgh" id="btn-inpaint-generate" onclick="window.chromasmithInpaintGenerate&&chromasmithInpaintGenerate()" disabled>Generate candidates</button></div><div id="inpaint-accepted" aria-label="Accepted erase repairs"></div></div>
+        </div>
+      </div>
+      <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
+      <div class="fx-ctrl" data-fxsec="redeye">
+        <div class="fx-ctrl-title">Red Eye</div>
+        <div class="fx-fields" id="ff-redeye">
+          <div class="fx-row"><div class="fx-label">Eye mode</div><select class="fx-select" id="sel-redeye-mode" onchange="redeyeModeChanged()"><option value="human">Human — red</option><option value="white">Pet — white</option><option value="green">Pet — green</option><option value="yellow">Pet — yellow</option></select></div>
+          <div class="fx-row"><div class="fx-label">Pupil size</div><input class="fx-slider" type="range" min="10" max="90" value="60" id="sl-redeye-size" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-size">60%</div></div>
+          <div class="fx-row"><div class="fx-label">Darken</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-redeye-dark" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-dark">75%</div></div>
+          <div class="btn-row" style="margin-top:2px"><button class="btn fx-btn-primary" id="btn-redeye-add" onclick="redeyeToggle()" style="flex:1">Add eye correction</button></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-redeye-auto" onclick="redeyeFixAll()" style="flex:1">Detect and fix all human eyes</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="redeye-count">No eye corrections — drag a circle over the eye.</div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="redeyeUndoLast()">Undo last</button><button class="btn bgh" style="flex:1" onclick="redeyeClear()">Clear all</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);margin-top:6px">Auto-detect uses face eye landmarks and proposes red pupils for review. Pet modes are placed manually.</div>
+        </div>
+      </div>
+      <!-- CANVAS (aspect-ratio matte around image + borders) -->
+      <div class="fx-ctrl" data-fxsec="canvas">
+        <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
+        <div class="fx-fields ff-off" id="ff-canvas">
+          <div class="btn-row" id="cv-ar-chips" style="flex-wrap:wrap;gap:4px"></div>
+          <div class="fx-row" title="1 = photo fits the canvas exactly; smaller = more matte around it; bigger = crops into the frame."><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="50" max="150" value="100" id="sl-canvas-z" oninput="fxUpdate();document.getElementById('vl-canvas-z').textContent=this.value+'%'"><div class="fx-val" id="vl-canvas-z">100%</div></div>
+          <div class="fx-row" style="margin-top:6px"><div class="fx-label">Background</div>
+            <div class="btn-row" id="cv-bg-swatches" style="gap:4px;flex-wrap:wrap;margin-top:0"></div>
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Custom</div><input type="color" class="fx-color" id="cl-canvas-bg" value="#000000" oninput="cvSetBg(this.value)"></div>
+          <div id="cv-blur-row" style="display:none">
+            <div class="fx-row" style="margin-top:4px"><div class="fx-label">Background photo</div>
+              <span id="cv-bgphoto-lb" style="color:var(--mut);font-size:12px;margin-left:auto;margin-right:8px">This photo</span>
+              <button class="btn bgh" onclick="cvPickBgPhoto()">Choose…</button>
+              <button class="btn bgh" id="cv-bgphoto-clear" onclick="cvClearBgPhoto()" style="display:none">Use this photo</button></div>
+            <div class="fx-row"><div class="fx-label">Blur</div><input class="fx-slider" type="range" min="0" max="100" value="60" id="sl-canvas-blur" oninput="fxState.canvas.blurAmt=+this.value;document.getElementById('vl-canvas-blur').textContent=this.value;fxUpdate()"><div class="fx-val" id="vl-canvas-blur">60</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- DIAGNOSTICS -->
+      <div class="fx-ctrl fx-diag" data-fxsec="diag">
+        <div class="fx-ctrl-title" title="Isolate a single shader pass to debug the match">Diagnostics</div>
+        <div class="fx-row"><div class="fx-label">View</div>
+          <select class="fx-select" id="sel-debug" onchange="fxUpdate()">
+            <option value="0">Final image</option>
+            <option value="1">Halation glow (raw)</option>
+            <option value="3">Halation glow (gained)</option>
+            <option value="2">Bloom glow (raw)</option>
+          </select>
+        </div>
+      </div>
+      <!-- EXPORT -->
+      <!-- EXPORT — split into several titled/collapsible cards (all still reached through the
+           one "Export" rail icon, via FX_GROUPS.export below, exactly the same one-rail-button
+           many-stacked-cards pattern Color/Detail/Film/Frame already use) instead of one long
+           scroll mixing output settings, the watermark, export presets, Styles and Google Photos
+           sharing with no real separation between them. -->
+      <div class="fx-ctrl" data-fxsec="export">
+        <div class="fx-ctrl-title">Output</div>
+        <!-- Plain export choices (set the size/quality/format controls below — those stay editable). -->
+        <div id="exp-plain" class="exp-plain"></div>
+        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
+        <div id="exp-last" style="font-size:12px;color:var(--mut);margin:-4px 0 8px" hidden></div>
+        <div class="vrow">
+          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
+          <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
+          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
+        </div>
+        <div class="fx-row" style="margin-top:8px" title="What happens when a file with the same name is already in the destination. Overwrite needs the desktop app; a browser's download folder always adds a number."><div class="fx-label">If file exists</div>
+          <select class="fx-select" id="sel-exp-collide" onchange="expCollideSet(this.value)">
+            <option value="suffix">Add a number</option>
+            <option value="skip">Skip it</option>
+            <option value="overwrite">Overwrite it</option>
+          </select>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
+        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
+          <select class="fx-select" id="sel-exp-fmt">
+            <option value="auto">Auto (match source)</option>
+            <option value="jpg">JPG</option>
+            <option value="png">PNG (lossless)</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+        <!-- Resize + output sharpening. These belong together: any downscale throws away the
+             detail the sharpening was judged on, so resampling without re-sharpening always
+             looks soft. Full size + Off is the default and leaves the export byte-identical. -->
+        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
+          <select class="fx-select" id="sel-exp-size">
+            <option value="0">Full size</option>
+            <option value="4096">4096 px</option>
+            <option value="2560">2560 px</option>
+            <option value="2048">2048 px</option>
+            <option value="1600">1600 px</option>
+            <option value="1080">1080 px (social)</option>
+          </select>
+        </div>
+        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+          <select class="fx-select" id="sel-exp-sharp">
+            <option value="0">Off</option>
+            <option value="1">Low</option>
+            <option value="2">Standard</option>
+            <option value="3">High</option>
+          </select>
+        </div>
+        <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
+             map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
+             fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
+        <div class="fx-row" id="fx-hdr-row" style="display:none"
+             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
+            <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
+          </div>
+        </div>
+        <div class="fx-sub">Export</div>
+        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
+          <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
+          <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
+        </label>
+        <div class="fx-row" id="fx-exportdir-row" style="display:none" title="Where exported photos are saved">
+          <div class="fx-label">Save to</div>
+          <button class="btn bgh" id="fx-exportdir-btn" type="button" onclick="fxChooseExportDir()" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Downloads</button>
+          <button class="btn bgh" id="fx-exportdir-reset" type="button" onclick="fxChooseExportDir(true)" style="display:none" aria-label="Reset to Downloads" title="Reset to Downloads">×</button>
+        </div>
+        <div id="fx-export-scope-row" style="margin-top:0;display:none">
+          <div class="fx-label" style="width:auto;margin-bottom:4px" id="fx-export-scope-lb">Export scope</div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:nowrap">
+            <button class="btn bsec" id="btn-scope-all" onclick="setExportScope('all')" style="flex:1;padding-left:6px;padding-right:6px">All photos</button>
+            <button class="btn bgh" id="btn-scope-cur" onclick="setExportScope('current')" style="flex:1;padding-left:6px;padding-right:6px">Current photo</button>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn bpri" id="btn-fx-export" disabled onclick="exportFX()">Export</button>
+          <button class="btn bgh" id="btn-fx-cancel" onclick="fxExportCancel=true" style="display:none">Cancel</button>
+        </div>
+        <div id="fx-export-prog" style="display:none;margin-top:8px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--mut);margin-bottom:4px" id="fx-export-prog-txt"></div>
+          <div style="height:4px;background:var(--bdr);border-radius:2px;overflow:hidden"><div id="fx-export-prog-bar" style="height:100%;width:0;background:var(--acc);transition:width var(--dur-1)"></div></div>
+          <!-- Per-photo status list — only populated (see setExportPhotoStatus) for a >1-photo
+               export, so a partial/mixed-result batch is visible at a glance instead of a single
+               bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
+          <div id="fx-export-photolist" style="display:none;margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mono);font-size:10px"></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage">Save session</button>
+          <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings">Load session</button>
+        </div>
+      </div>
+      <!-- WATERMARK — split out of the old single Export card. -->
+      <div class="fx-ctrl" data-fxsec="wm">
+        <div class="fx-ctrl-title">Watermark <div class="fx-toggle" id="tg-exp-wm" onclick="this.classList.toggle('on');document.getElementById('exp-wm-row').style.display=this.classList.contains('on')?'block':'none'"></div></div>
+        <div id="exp-wm-row" style="display:none">
+          <div class="vrow" style="margin-top:4px" title="Draws a translucent text watermark into the bottom-right corner of the exported file only — never the on-screen preview.">
+            <input class="vinput" id="exp-wm-text" value="" placeholder="© Your Name" style="flex:1">
+          </div>
+          <div class="fx-row" style="margin-top:4px"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" value="55" id="sl-exp-wm-op" oninput="document.getElementById('vl-exp-wm-op').textContent=this.value"><div class="fx-val" id="vl-exp-wm-op">55</div></div>
+        </div>
+      </div>
+      <!-- EXPORT PRESETS — just the four Output controls (format/quality/resize/sharpen),
+           saved/recalled by name — distinct from Styles (the full edit recipe) below and from
+           Save session above (one auto-restored slot). The common case this exists for: "small
+           JPG for the web" vs "full-res PNG for print" as one click instead of four each time. -->
+      <div class="fx-ctrl" data-fxsec="exppreset">
+        <div class="fx-ctrl-title">Export Presets</div>
+        <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
+          <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
+            <option value="">— none —</option>
+          </select>
+        </div>
+        <div class="btn-row" style="margin-top:4px">
+          <button class="btn bgh" onclick="exportPresetSaveCurrent()" title="Save the current Quality/Format/Resize/Sharpening as a named preset">Save preset…</button>
+          <button class="btn bgh" id="btn-exp-preset-del" onclick="exportPresetDeleteCurrent()" disabled title="Delete the selected preset">Delete</button>
+          <button class="btn bgh" onclick="presetsManagerOpen('export')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
+          <button class="btn bgh" onclick="exportMultiPresetOpen()" title="Export the same photos once per chosen preset — e.g. full-size archive + small web copy — in one go">Export several…</button>
+        </div>
+      </div>
+      <!-- STYLES: named, reusable, re-editable recipes (curves/HSL/masks/grain/halation/bloom/
+           adjust/etc — everything a LUT preset does NOT capture, since a LUT is a baked 3D
+           lookup table). Distinct from Export Presets above (those four output controls only) and
+           from Save session (one auto-restored slot); a Style is a permanent, named, list entry
+           you apply on demand to ANY photo, and can export/import as a .json to share between
+           devices. Modelled on darktable's Styles (a saved history-stack, separate from
+           per-module presets). -->
+      <div class="fx-ctrl" data-fxsec="style">
+        <div class="fx-ctrl-title">Presets</div>
+        <div class="fx-row" id="row-preset-str" style="display:none"><div class="fx-label">Preset strength</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-preset-str" oninput="presetStrength(+this.value)" onchange="fxHistoryPush()"><div class="fx-val" id="vl-preset-str">100</div></div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn bgh" onclick="styleSaveCurrent()" title="Choose settings for a named, reusable Style; crop and retouch are opt-in">Save as Style…</button>
+          <button class="btn bgh" onclick="styleExportBundle()" title="Export all Styles, folders and favorites as one portable JSON bundle">Export bundle…</button>
+          <button class="btn bgh" onclick="styleImportClick()" title="Import a Style .json exported from CHRO-MA-SMITH">Import…</button>
+          <button class="btn bgh" onclick="presetsManagerOpen('styles')" title="Rename, delete and review all Looks, Edit Styles and Export Recipes in one place">Manage…</button>
+        </div>
+        <div id="style-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+        <input type="file" id="style-import-input" accept="application/json,.json,.xmp,.lrtemplate" style="display:none" onchange="styleImportFile(this.files[0])">
+      </div>
+      <!-- SHARING — Google Photos today; Lightroom cloud browsing moved into the desktop LIBRARY
+           sidebar instead (see library-ui.js's Cloud section + window.lrCloud), so the old
+           cramped Export-panel widget (#lr-section: Connect button + album dropdown + 72px grid)
+           stays gone, not revived here. -->
+      <div class="fx-ctrl" data-fxsec="share">
+        <div class="fx-ctrl-title">Sharing</div>
+        <div class="fx-label" style="width:auto;margin-bottom:6px" title="Optional &amp; off by default. Needs your own free Google OAuth client ID — see Guide → “Can I use Google Photos?”. Uploads land in a “Chromasmith” album and count against your Google storage.">Google Photos</div>
+        <!-- Was a button reading "Upload exports: Off" — the state was baked into its own
+             label rather than shown the way every other on/off control in the app is. Real
+             .fx-toggle switch instead, matching e.g. "Sparkle-optimized RAW". -->
+        <div class="fx-row" title="Also upload every export to a &quot;Chromasmith&quot; album in your Google Photos"><div class="fx-label">Upload exports to Google Photos</div><div class="fx-toggle" id="tg-gp-save" onclick="gpToggleSave()"></div></div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn bgh" id="btn-gp-connect" onclick="gpConnectToggle()" title="Sign in to Google Photos (lasts ~1 hour)">Connect</button>
+          <button class="btn bgh" onclick="gpAskClientId(true)" title="Set or change your Google OAuth client ID" style="flex:0 0 auto;padding-left:8px;padding-right:8px">ID…</button>
+        </div>
+      </div>
+      <!-- INFO / METADATA -->
+      <!-- CHR-203: Versions — the photo's saved alternatives (desktop virtual copies, stored in its
+           sidecar), with compare / make current / rename / delete, and the way to undo history. -->
+      <div class="fx-ctrl" data-fxsec="info">
+        <div class="fx-ctrl-title">Preview Info &amp; Metadata</div>
+        <!-- Info is split into Metadata (open) / Keywords / Tags (auto tags + People & Pets).
+        <!-- People & Pets (people-pets wireframes screen I) — deliberately lives HERE, not as
+             its own rail section: it's a fact about the photo, not a grading control, same
+             reasoning as EXIF sitting right below it. `fx-people` is populated by
+             fxRenderPeoplePanel(), called from showExif()'s one choke point. -->
+        <details class="sk2-more fx-info-part" open><summary>Metadata</summary>
+        <div id="fx-exif"></div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--mut);line-height:1.6;margin-top:8px" id="fx-info"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Keywords</summary>
+        <!-- Keywords: same per-photo sidecar tags the Library's own Get Info popover edits
+             (get_sidecar/set_keywords, desktop/library-ui.js) — this Info TAB had no way to see
+             or edit them at all while a photo was open in the Editor. fxRenderKeywordsPanel()
+             populates this, called from the same showExif() choke point as People & Pets. -->
+        <div id="fx-keywords"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Tags</summary>
+        <div id="fx-autotags"></div>
+        <div id="fx-people"></div>
+        </details>
+        <details class="sk2-more fx-info-part"><summary>Versions &amp; History</summary>
+          <div id="ver-list" class="ver-list"></div>
+          <div class="btn-row" style="margin-top:10px"><button class="btn bsec" id="btn-ver-new" onclick="verSaveNew()">Save as new version…</button><button class="btn bgh" onclick="if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover()">Edit history</button></div>
+          <div class="fx-hint" style="margin-top:12px;line-height:1.5">Save a named version as a checkpoint, then keep editing; <b>Compare</b> shows that saved edit against the current one, and <b>Make current</b> restores it. Session undo history clears when you close the photo. Versions survive restarts, and the original file is never changed. Duplicating the file is a separate copy on disk.</div>
+        </details>
+      </div>
+    </div>
+    <!-- PREVIEW -->
+    <div class="fx-preview-col">
+      <div class="fx-canvas-wrap" id="fx-wrap">
+        <div class="fx-no-img" id="fx-no-img">
+          <!-- The build stamp used to sit here too — under the wordmark, on the empty state, as
+               the third line a first-time user read. It is in About now. `＋` was U+FF0B FULLWIDTH
+               PLUS, a CJK-width glyph standing in for an icon while ICONS.plus already existed. -->
+          <button id="fx-add-btn" onclick="fxPickPhotos()" title="Add photos" aria-label="Add photos"></button>
+          <div class="ni-add-lb">Open a photo</div>
+          <a href="#" class="ni-guide" onclick="switchTab('guide');return false">How it works</a>
+          <div class="ni-hint">Click the button, or drag a photo anywhere onto this window. Your original is never changed · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none;cursor:pointer" title="Pick photos from your Google Photos library">Google Photos…</a></div>
+        </div>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas"></canvas><canvas id="fx-canvas-redeye" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas-dust" style="display:none;position:absolute;top:0;left:0;pointer-events:none;z-index:2"></canvas><svg id="fx-heal-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:4"></svg><svg id="fx-redeye-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:3"></svg><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+          <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
+               CSS transform as the canvas — glued to it by the compositor during zoom/pan with
+               no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
+               behind the transform (the "zooming moves the mask" bug). See mskOverlayBox(). -->
+          <svg id="fx-mask-overlay" viewBox="0 0 1 1" preserveAspectRatio="none"></svg>
+          <!-- Auto-level's manual ROI box (item 7/16) — same "fractional 0..1 viewBox riding the
+               canvas's own CSS transform" trick fx-mask-overlay uses, for the same reason: no
+               per-event JS repositioning needed during zoom/pan. Preview-only, never rendered
+               into an export or the mask overlay itself. -->
+          <svg id="fx-ahroi-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none">
+            <rect id="fx-ahroi-rect" x="0" y="0" width="1" height="1" fill="rgba(255,180,60,.12)" stroke="rgba(255,180,60,.9)" stroke-width="0.004" vector-effect="non-scaling-stroke"/>
+          </svg>
+          <canvas id="msk-paint-overlay"></canvas>
+          <!-- Rule-of-thirds + SMPTE safe-area guides, toggled by fxVideoGuidesToggle(). Pure
+               overlay — never rendered into a preview snapshot or an export. Lives inside
+               fx-zoom-wrap for the same reason the mask overlay does: it must ride the exact
+               CSS transform zoom/pan applies, with no per-event JS repositioning. -->
+          <svg id="fx-guides-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--z-raise)">
+            <line x1="33.33" y1="0" x2="33.33" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="66.67" y1="0" x2="66.67" y2="100" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="0" y1="33.33" x2="100" y2="33.33" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="0" y1="66.67" x2="100" y2="66.67" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="50" y1="46" x2="50" y2="54" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <line x1="46" y1="50" x2="54" y2="50" stroke="rgba(255,255,255,.5)" stroke-width="0.15"/>
+            <!-- SMPTE action-safe 93% / title-safe 90% -->
+            <rect x="3.5" y="3.5" width="93" height="93" fill="none" stroke="rgba(255,210,80,.55)" stroke-width="0.15"/>
+            <rect x="5" y="5" width="90" height="90" fill="none" stroke="rgba(255,210,80,.35)" stroke-width="0.15"/>
+          </svg>
+          <svg id="fx-grid-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--z-raise)"></svg>
+        </div>
+        <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
+        <canvas id="fx-hist"></canvas>
+        <div id="fx-crop-overlay"></div>
+        <div id="msk-brush-cursor"></div>
+        <!-- 3.1.7/3.1.12: dropped the "Fit" text button — zoomFit() survives on the slider's
+             double-click instead of a dedicated button.
+             2026-09-09: restyled to match the Library top bar's own zoom row (desktop/
+             library-ui.js .lib-zoomrow — minus icon / slider / plus icon) instead of a bare
+             slider, so the two views read as one app. The Library's own row never shows a
+             number at all; the Editor keeps one (real zoom % matters for grading work) but only
+             while the value is actually changing — see .fx-zoom-ctrl #fx-zoom-pct's CSS, driven
+             by the same .active class the slider's mousedown already set. 1:1 view and full-res
+             preview moved into the settings menu's View section (viewMenuBuild()) — they're
+             occasional preview-quality toggles, not zoom controls, and were what pushed this
+             whole cluster wide enough to collide with the centred title. Kept in the DOM here
+             (just hidden under body.deskx) rather than removed: #fx-zoom-ctrl is the SAME node
+             relocatePreviewTools() moves between this floating over-canvas spot (web/mobile) and
+             the deskbar (desktop) — hiding, not deleting, keeps the web/mobile version unchanged. -->
+        <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
+          <button class="zc-ic" id="btn-zoom-out" onclick="zoomBy(1/1.15)" title="Zoom out"><span class="fx-db-ic" id="ic-zoom-out"></span></button>
+          <input type="range" class="fx-slider" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)"
+            onmousedown="document.getElementById('fx-zoom-ctrl').classList.add('active')"
+            ondblclick="zoomFit()" title="Drag to zoom · double-click to fit the whole image">
+          <button class="zc-ic" id="btn-zoom-in" onclick="zoomBy(1.15)" title="Zoom in"><span class="fx-db-ic" id="ic-zoom-in"></span></button>
+          <span id="fx-zoom-pct" title="Scroll to zoom · drag to pan · double-click to fit">100%</span>
+          <button id="btn-loupe" onclick="toggleLoupe()" title="True 1:1 view — renders a native-resolution crop through the full pipeline so grain &amp; halation appear at real export scale">1:1</button>
+          <!-- 2026-09-10: "zc-ic" alone has no background/border/color of its own — relies
+               entirely on the parent ".fx-zoom-ctrl button" rule for its actual look, which
+               isn't there once relocatePreviewTools() parks this in the left cluster under
+               deskx. Added "db-btn" alongside it for that reset (matches its new neighbour, Show
+               original); zc-ic's own 28px sizing still wins by source order so web/mobile mode
+               (where it stays inside .fx-zoom-ctrl, sized like its zoom-cluster siblings) is
+               visually unchanged. -->
+          <button id="btn-fx-fullres" class="zc-ic db-btn" onclick="fxFullResPreviewToggle()" title="Full resolution — renders the whole preview at full source resolution instead of the usual capped size. Costs more GPU time; drops to the capped size automatically while dragging a slider"><span class="fx-db-ic" id="ic-fullres"></span></button>
+          <button id="btn-flag-red" class="flag-btn flag-btn-red" onclick="fxToggleFlag('Red')" title="Reject (Gallery)" style="margin-left:4px;display:none"></button>
+          <button id="btn-flag-green" class="flag-btn flag-btn-green" onclick="fxToggleFlag('Green')" title="Green flag (Gallery)" style="display:none"></button>
+          <select id="btn-color-label" aria-label="Colour label" title="Colour label (Gallery)" onchange="fxSetColorLabel(this.value)" style="display:none">
+            <option value="">No colour</option><option value="Red">Red</option><option value="Yellow">Yellow</option>
+            <option value="Green">Green</option><option value="Blue">Blue</option><option value="Purple">Purple</option>
+          </select>
+          <button id="btn-favorite" class="flag-btn flag-btn-fav" onclick="fxToggleFavorite()" title="Favorite (Gallery)" style="display:none"></button>
+        </div>
+        <div class="btn-row fx-mini-row" id="fx-preview-tools" style="justify-content:center;margin-top:8px;display:none">
+          <button class="db-btn" id="btn-editor-bg" onclick="const r=this.getBoundingClientRect();editorBgOpenMenu(r.left,r.bottom+6)" title="Studio background colour (also right-click the empty area around the photo)" style="padding:0;min-width:28px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center"><span style="display:block;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#000 50%,#fff 50%);border:1px solid var(--bdr)"></span></button>
+          <button class="db-btn" id="btn-before" title="Press and hold to see the original"><span class="fx-db-ic" id="ic-before"></span></button>
+          <button class="db-btn" id="btn-split" onclick="toggleSplit()" title="Split before/after view"><span class="fx-db-ic" id="ic-split"></span></button>
+          <button class="db-btn" id="btn-fx-ref" onclick="fxRefMenu(this)" title="Reference photo — pin a photo beside the one you're editing to grade toward it"><span class="fx-db-ic" id="ic-fxref"></span></button>
+          <div style="position:relative;display:inline-flex">
+            <button class="db-btn db-btn-narrow" id="btn-split-menu" onclick="fxToggleSplitMenu(event)" title="Choose what the split's before-side compares against"><span class="fx-db-ic" id="ic-splitmenu"></span></button>
+            <div id="fx-split-popover" style="display:none;position:absolute;top:100%;left:0;margin-top:6px;min-width:210px;max-height:320px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:4px;z-index:var(--z-dropdown);box-shadow:none"></div>
+          </div>
+          <div style="position:relative;display:inline-flex">
+            <button class="db-btn" id="btn-history" onclick="fxToggleTimelinePopover()" title="Edit history and exported versions" aria-label="Edit history and exported versions"><span class="fx-db-ic" id="ic-timeline"></span></button>
+            <div id="fx-timeline-popover" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;width:260px;max-height:360px;overflow-y:auto;background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:8px;z-index:var(--z-dropdown);box-shadow:none"></div>
+          </div>
+          <button class="db-btn" id="btn-hist" onclick="toggleHist()" title="Toggle scope overlay"><span class="fx-db-ic" id="ic-scope"></span></button>
+          <!-- Gamut warning's own toggle button lived here (3.1.6: "gamut button should be
+               removed but can be enabled from the View menu bar") — removed; toggleGamutWarn()
+               is now reached from the View menu only (viewMenuBuild()) and safely no-ops the
+               button-highlight step when #btn-gamut-warn doesn't exist. -->
+          <select id="sel-scope-mode" onchange="fxScopeModeChanged(this.value)" title="Scope type" style="display:none;font-size:10px">
+            <option value="hist">Histogram</option><option value="wave">Waveform</option>
+            <option value="parade">RGB Parade</option><option value="vector">Vectorscope</option>
+          </select>
+        </div>
+      </div>
+      <div id="fx-filmstrip" title="Click a photo to preview it"></div>
+      <!-- VIDEO TRANSPORT — scrub/trim/loop/frame-step + playback + export settings. Shown only
+           for kind:'video' (fxSyncVideoUI). Scrubbing snaps to the nearest sync sample DURING the
+           drag (instant — no decode wait) and seeks to the exact frame on release, since exact-
+           frame seeks can cost real time on a long GOP. Playback deliberately does NOT chase
+           real-time at high resolution (see fxVideoPlayTick's own comment) — it may drop frames;
+           export re-decodes every frame so it never does. Trim is used both at export AND to
+           bound loop playback (fxVideoPlayTick). Keyboard: Space play/pause, ←/→ step a frame,
+           Shift+←/→ step a second, I/O set trim in/out at the playhead, Home/End jump to trim
+           in/out — see the video branch in the global keydown handler. -->
+      <div id="fx-transport" style="display:none;margin-top:8px;padding:8px;background:var(--sur2);border-radius:8px">
+        <div class="fx-row" style="align-items:center;gap:8px">
+          <button class="btn-icon" onclick="fxVideoStep(-1)" title="Previous frame (←)" data-ic="stepBack"></button>
+          <button class="btn-icon" id="btn-vid-play" onclick="fxVideoPlayToggle()" title="Play/pause (Space)" data-ic="play"></button>
+          <button class="btn-icon" onclick="fxVideoStep(1)" title="Next frame (→)" data-ic="stepFwd"></button>
+          <button class="btn-icon" id="btn-vid-loop" onclick="fxVideoLoopToggle()" title="Loop playback within the trim range" data-ic="loop"></button>
+          <button class="btn-icon" id="btn-vid-mute" onclick="fxVideoMuteToggle()" title="Mute (playback + export)" data-ic="volume"></button>
+          <span id="vid-time" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:78px">00:00:00:00</span>
+          <input type="range" id="vid-scrub" min="0" max="0" value="0" step="1" style="flex:1"
+            oninput="fxVideoScrubInput(this.value)" onchange="fxVideoScrubCommit(this.value)">
+          <span id="vid-time-total" style="font-family:var(--mono);font-size:11px;color:var(--mut);min-width:78px;text-align:right">00:00:00:00</span>
+          <span id="vid-fps-readout" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:56px;text-align:right" title="Actual playback frame rate — may be below the clip's real fps if the grade is too heavy to keep up live">—</span>
+        </div>
+        <!-- Thumbnail strip (B3): filled in lazily by fxVideoBuildThumbs — evenly-spaced low-res
+             frames give a rough map of the clip under the scrubber, Premiere/Resolve-style. -->
+        <div id="vid-thumbstrip" style="display:flex;gap:1px;height:28px;margin-top:4px;border-radius:4px;overflow:hidden;background:var(--bg)"></div>
+        <div class="fx-row" style="align-items:center;gap:8px;margin-top:6px" title="Trim in/out — used at export and to bound loop playback">
+          <div class="fx-label" style="width:auto">Trim</div>
+          <input type="range" id="vid-trim-in" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
+          <input type="range" id="vid-trim-out" min="0" max="0" value="0" step="1" style="flex:1" oninput="fxVideoTrimChanged()">
+          <span id="vid-trim-lb" style="font-family:var(--mono);font-size:10px;color:var(--mut);min-width:90px;text-align:right">full clip</span>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('in')" title="Set trim-in at the playhead (I)">Set In</button>
+          <button class="btn bgh" onclick="fxVideoSetTrimAtPlayhead('out')" title="Set trim-out at the playhead (O)">Set Out</button>
+          <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself.">Capture frame</button>
+          <button class="btn bgh" id="btn-vid-guides" onclick="fxVideoGuidesToggle()" title="Rule-of-thirds + safe-area guides over the preview">Guides</button>
+        </div>
+        <!-- Fades: picture only (see fxVideoExportSmall's own comment) — passthrough audio can't
+             be faded without a decode/re-encode pass, which is out of scope. -->
+        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Fade in</span>
+            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds (picture only)">
+            <span style="font-size:10px;color:var(--mut)">s</span>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Fade out</span>
+            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds (picture only)">
+            <span style="font-size:10px;color:var(--mut)">s</span>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Preview</span>
+            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
+              <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
+            </select>
+          </div>
+        </div>
+        <!-- Export settings: quality controls bitrate, resolution/fps cap the encode (never
+             upscale/interpolate), codec is probed at export time and silently falls back to H.264
+             if HEVC isn't encodable in this browser. All read directly by fxVideoExportSmall. -->
+        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Quality</span>
+            <select id="sel-vid-quality" title="Encode bitrate — higher survives film grain better, at a larger file">
+              <option value="draft">Draft</option><option value="standard">Standard</option>
+              <option value="high" selected>High</option><option value="max">Maximum</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Resolution</span>
+            <select id="sel-vid-resolution" title="Caps the export's long edge — never upscales past the source">
+              <option value="source">Source</option><option value="2160">4K</option>
+              <option value="1080" selected>1080p</option><option value="720">720p</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Codec</span>
+            <select id="sel-vid-codec" title="HEVC falls back to H.264 automatically if this browser can't encode it">
+              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
+            </select>
+          </div>
+          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
+            <span style="font-size:10px;color:var(--mut)">Frame rate</span>
+            <select id="sel-vid-fps" title="Decimates toward the target — never interpolates up">
+              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <!-- "Apply crop" used to be a second button here, duplicating the panel's own "Crop"
+           button (which becomes "Apply crop" itself once crop mode is active — see cropToggle).
+           One less button doing the same thing; Cancel still needs its own control. -->
+      <div class="btn-row" id="fx-crop-tools" style="justify-content:center;margin-top:8px;display:none">
+        <button class="btn bgh" onclick="cropCancel()">Cancel</button>
+        <button class="btn bpri" id="btn-crop-apply2" onclick="cropToggle()">Apply crop</button>
+      </div>
+      <div id="fx-mcap" aria-live="polite"></div>
+      <!-- PERSISTENT ACTION BAR (mobile) -->
+      <div id="fx-actionbar">
+        <button class="fx-act fx-act-home" onclick="fxMobileBack()" title="Back" aria-label="Back"><span class="fx-act-ic" data-mic="chevleft"></span><span class="fx-act-logo" aria-hidden="true"><svg viewBox="18 18 64 62"><rect x="21" y="21" width="48" height="44" fill="var(--k-color-ink)"/><rect x="36" y="32" width="43" height="45" fill="var(--k-color-accent-a)"/><rect x="36" y="32" width="33" height="33" fill="#b0200e"/></svg></span></button>
+        <div class="vtog" role="group" aria-label="View"><button type="button" onclick="fxMobileBack()" aria-label="Gallery">gallery</button><button type="button" class="on" aria-pressed="true" aria-label="Studio">studio</button></div>
+        <button class="fx-act" onclick="fxPickPhotos()" title="Open photo" aria-label="Open photo"><span class="fx-act-ic" data-mic="plus"></span></button>
+        <button class="fx-act" onclick="fxUndo()" title="Undo" aria-label="Undo"><span class="fx-act-ic" data-mic="undo"></span></button>
+        <button class="fx-act" onclick="fxRedo()" title="Redo" aria-label="Redo"><span class="fx-act-ic" data-mic="redo"></span></button>
+        <button class="fx-act" onclick="fxMoreMenu()" title="Settings" aria-label="Settings"><span class="fx-act-ic" data-mic="settings"></span></button>
+      </div>
+      <div id="fx-quicknav" aria-label="Quick tools">
+        <!-- No "More" here: the Tools tab below opens the same full grid. -->
+        <button class="js-allfx" onclick="enableAll()" title="All FX (long-press for settings)"><span data-mic="enableAll"></span>All FX</button>
+        <button class="js-prevfx" onclick="fxApplyPrevious()" title="Apply the settings from the last photo you edited"><span data-mic="paste"></span>Previous</button>
+        <button data-sec="looks" onclick="fxSection('looks')"><span data-mic="view"></span>Looks</button>
+        <button data-sec="adjust" onclick="fxSection('adjust')"><span data-mic="adjust"></span>Light</button>
+        <button data-sec="curves" onclick="fxSection('curves')"><span data-mic="curves"></span>Curves</button>
+        <button data-sec="hsl" onclick="fxSection('hsl')"><span data-mic="hsl"></span>Mixer</button>
+        <button data-sec="crop" onclick="fxSection('crop')"><span data-mic="crop"></span>Crop</button>
+      </div>
+      <!-- HORIZONTAL SECTION STRIP (mobile) -->
+      <div id="fx-secnav"></div>
+      <!-- One-handed-reach export: the primary #fx-actionbar (with the same Export button) is
+           top-anchored on mobile so its height can be reserved before the photo lays out — see
+           fxPreviewMaxH(). Reordering that bar risked breaking that calc, so this is a separate,
+           purely additive bottom-pinned duplicate for thumb reach, guarded on the same disabled
+           state as the real button rather than duplicating exportFX()'s own guards. -->
+      <button id="fx-fab-export" onclick="if(!this.disabled)exportFX()" title="Export at full resolution"><span class="fx-act-ic">↧</span></button>
+    </div>
+    <div id="fx-mobile-nav" aria-label="Editor navigation">
+      <div class="fx-nav-tabs" role="tablist"><button id="fx-nav-looks" role="tab" onclick="fxToolsClose();fxSection('looks')"><span class="fx-nav-ic" data-mic="looks" aria-hidden="true"></span><span>Looks</span></button>
+      <button id="fx-nav-tools" role="tab" onclick="document.body.classList.contains('tools-open')?fxToolsClose():fxToolsOpen()"><span class="fx-nav-ic" data-mic="tools" aria-hidden="true"></span><span>Tools</span></button>
+      <button id="fx-nav-crop" role="tab" onclick="fxToolsClose();fxSection('crop')"><span class="fx-nav-ic" data-mic="crop" aria-hidden="true"></span><span>Crop</span></button></div>
+      <button id="fx-nav-export" onclick="fxMobileExportSheet()"><span class="fx-nav-ic" data-mic="export" aria-hidden="true"></span><span>Export</span></button>
+    </div>
+  </div>
+</div>
+<!-- GUIDE -->
+<div class="panel" id="panel-guide">
+  <div class="guide">
+    <h1>CHRO-MA-SMITH — Guide</h1>
+    <p class="lede">Film looks, grain, halation and colour grading for your photos, with a photo gallery built in. Everything runs on your own device — nothing is uploaded, and every edit, LUT and export is processed locally.</p>
+
+    <div class="toc">
+      <a href="#g-start">Getting started</a>
+      <a href="#g-gallery">Gallery</a>
+      <a href="#g-studio">Studio</a>
+      <a href="#g-preview">Preview &amp; compare</a>
+      <a href="#g-export">Export</a>
+      <a href="#g-match">Match &amp; Refine</a>
+      <a href="#g-copy">Color Copy</a>
+      <a href="#g-collage">Collage</a>
+      <a href="#g-faq">FAQ</a>
+    </div>
+
+    <h2 id="g-start">Getting started</h2>
+    <div class="gcard">
+      <p>CHRO-MA-SMITH has two main views, switched with the <b>gallery | studio</b> toggle in the top-left corner (desktop app):</p>
+      <ul>
+        <li><b>Gallery</b> — browse, search, flag and organise the photos in your folders. Double-click a photo to edit it.</li>
+        <li><b>Studio</b> — edit one photo: apply a film look, adjust light and colour, add grain and glow, crop, then export.</li>
+      </ul>
+      <p>Three more tools live in the <b>⋯</b> menu: <b>Match &amp; Refine</b> (build a LUT from a before/after pair), <b>Color Copy</b> (copy one photo's colour onto another) and <b>Collage</b>.</p>
+      <p>In the browser version, drop a photo anywhere on the window or click <b>Open photo</b>. Supported: JPEG, PNG, TIFF, HEIC, WebP and camera RAW files. The desktop app also opens EXR, HDR, JPEG XL and more, and decodes RAW natively.</p>
+      <div class="gnote">Press <kbd>?</kbd> at any time for the full list of keyboard shortcuts.</div>
+    </div>
+
+    <h2 id="g-gallery">Gallery</h2>
+    <div class="gcard">
+      <ul>
+        <li><b>Folders &amp; collections</b> — add the folders you keep photos in; they stay indexed in the background. Smart collections (Favourites, Picked, Rejected, Edited) and dates sit in the sidebar.</li>
+        <li><b>Culling</b> — <kbd>P</kbd> picks, <kbd>X</kbd> rejects, <kbd>U</kbd> clears the flag, and the heart marks a favourite. Arrow keys move between photos.</li>
+        <li><b>Search &amp; filters</b> — search by name, or filter by camera, lens, ISO, flag and auto tags (dog, beach, sky, food…). People &amp; Pets groups photos by face.</li>
+        <li><b>Get Info</b> — right-click a photo for its details, keywords and tags.</li>
+      </ul>
+    </div>
+
+    <h2 id="g-studio">Studio</h2>
+    <p>The tool rail on the right groups every tool into six stages. Each stage opens with its tools folded; click a name in the row under the stage title to jump to a tool and open it. A tool with a square around it in the rail has been edited.</p>
+
+    <h3>Look</h3>
+    <ul>
+      <li><b>Preset</b> — 113 film looks (C41 still, cinema, reversal, instant, black &amp; white and more). Hover a look to preview it on your photo, click to apply, and set its <b>Strength</b>.</li>
+      <li><b>Input &amp; print</b> — set Input to <b>V-Log (Lumix)</b> for V-Log stills so a normal Rec.709 look applies correctly. <b>Highlight response</b> and <b>Print</b> change how bright areas roll off.</li>
+      <li><b>Apply LUT / LUT chart</b> — drop your own <code>.cube</code>, or use the LUT chart to turn any Lightroom preset into one (see the note below).</li>
+      <li><b>All FX</b> (top bar) — applies your chosen effects in one click. The ▾ beside it picks which effects, their strengths and the look.</li>
+    </ul>
+    <div class="gnote"><b>Turning a Lightroom preset into a <code>.cube</code>:</b> download the <b>LUT chart</b>, apply your preset to it in Lightroom, export it (sRGB, full size), then drop the export on <b>Apply LUT</b>. The result is ready to download (Lumix&nbsp;Lab-compatible) or save. A LUT carries global colour and tone only — not masks, sharpening or grain.</div>
+
+    <h3>Light</h3>
+    <ul>
+      <li><b>Histogram</b> — live levels with shadow/highlight clipping warnings; click a clip marker to show clipped areas on the photo.</li>
+      <li><b>Basic</b> — exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance and saturation. The <b>eyedropper</b> sets white balance from something neutral; <b>Auto</b> sets levels and white balance for you.</li>
+      <li><b>Curves</b> — master and per-channel point curves. Click to add a point, drag to shape, double-click to remove.</li>
+      <li><b>Halation</b> — the red-orange glow real film gives bright edges. <b>Shadow protect</b> stops dark details inside bright areas flooding red.</li>
+      <li><b>Bloom</b> — soft highlight glow.</li>
+    </ul>
+
+    <h3>Colour</h3>
+    <ul>
+      <li><b>Mixer</b> — shift the hue, saturation and luminance of eight colour bands independently.</li>
+      <li><b>Wheels</b> — tint shadows, midtones and highlights.</li>
+      <li><b>Point colour</b> — pick one exact colour in the photo and change only that.</li>
+    </ul>
+
+    <h3>Texture</h3>
+    <ul>
+      <li><b>Noise, Sharpen, Lens</b> — noise reduction, sharpening and lens correction.</li>
+      <li><b>Masks</b> — radial, linear, brush and AI masks (subject, sky, skin) with their own exposure, colour and tone. <b>Show on photo</b> draws the selection; <kbd>O</kbd> cycles its modes.</li>
+      <li><b>Grain</b> — film grain, shown at its true export size in the 1:1 view.</li>
+      <li><b>Artifacts</b> — dust, hairs, scratches and light leaks; <b>Reshuffle</b> re-rolls their placement.</li>
+      <li><b>Effects</b> — vignette, clarity, texture and dehaze. <b>Retouch</b> removes spots and blemishes.</li>
+    </ul>
+
+    <h3>Skin Tone mask (even out an uneven tan)</h3>
+    <ul>
+      <li>Most colour controls shift every tone by the same amount, so a patchy tan stays patchy. <b>Uniformity</b> pulls the selected skin <i>toward one target</i>: areas far from it move a lot, areas already close barely move.</li>
+      <li>Add a <b>+ Skin</b> mask and click a mid-tone patch of skin. Move the shape so it covers the person you mean — colour alone can't tell skin from sand or wood. Use <b>+ Brush</b> or <b>− Subtract</b> for anything the shape can't isolate.</li>
+      <li>Set <b>Show on photo</b> to <b>Selection</b>, then <b>shift-click</b> each different kind of skin (matte, shaded, paler, pinker) until it all reads red. A patch that is only weakly selected barely moves.</li>
+      <li>Keep <b>Feather</b> low so colour, not position, decides how much each area moves.</li>
+      <li><b>Target</b>: <b>Match pick</b> evens out the tone you clicked, <b>Swatch</b> offers the Monk Skin Tone scale, <b>Custom</b> takes any colour. <b>Preserve modeling</b> keeps the natural shading — start high.</li>
+    </ul>
+
+    <h3>Output</h3>
+    <ul>
+      <li><b>Crop</b> — aspect presets, rotate, flip and <b>Straighten</b> (fine steps near level). <b>Auto level</b> finds the horizon; <b>Set region…</b> tells it where to look. Pick a <b>Grid</b> to see it on the photo.</li>
+      <li><b>Border</b> — two stackable frames (inner and outer), including film-edge styles.</li>
+      <li><b>Canvas</b> — mats the photo onto an aspect-ratio canvas (4:5 stops Instagram cropping a 2:3 photo), on a colour or a blurred copy of the photo.</li>
+    </ul>
+
+    <h3>Info</h3>
+    <p><b>Metadata</b> (camera, lens, exposure, size) opens first. <b>Keywords</b> and <b>Tags</b> (auto tags plus People &amp; Pets) sit below it.</p>
+    <div class="gnote">Typeface: <b>Gramatika</b>. Icons after <b>Lucide</b> (ISC). RAW decoding by <b>LibRaw</b>; MP4 handling by <b>Mediabunny</b> (MPL-2.0). Skin tone swatches use the <b>Monk Skin Tone scale</b> (Ellis Monk / Google, 2023), CC BY 4.0. Halation and bloom are calibrated against Dehancer's film-emulation reference.</div>
+
+    <h2 id="g-preview">Preview &amp; compare</h2>
+    <div class="gcard">
+      <ul>
+        <li><b>Scroll / pinch</b> to zoom, <b>drag</b> to pan, <b>double-click</b> to fit. The zoom slider and the photo's name, flags and heart are in the top bar; a copy sits under the photo until you zoom.</li>
+        <li><b>Show original</b> (eye icon, or hold <kbd>Space</kbd>) shows the photo without your look while held — the photo stays exactly in place.</li>
+        <li><b>Undo / Redo</b> (<kbd>⌘Z</kbd> / <kbd>⌘Y</kbd>). Hold Undo for the full edit and export history.</li>
+        <li><b>True 1:1 view</b> (settings → View) renders a native-resolution crop, so grain and halation appear at their real export size.</li>
+      </ul>
+    </div>
+
+    <h2 id="g-export">Export</h2>
+    <div class="gcard">
+      <ul>
+        <li><b>Export</b> (top right) opens the export sheet: pick a size (full size down to 1080 social) and a format (match source, JPG, PNG, WebP). <b>More</b> has quality, file name, the destination folder, watermark, export presets, Styles and sharing.</li>
+        <li>Exports always render at full resolution, not preview size. Your original is never changed.</li>
+        <li><b>Presets</b> save a whole edit to reuse on other photos; <b>Copy / Paste edit settings</b> is in the settings menu.</li>
+      </ul>
+    </div>
+
+    <h2 id="g-match">Match &amp; Refine tab</h2>
+    <div class="gcard">
+      <p>Builds a LUT from an example. Best when you have the same photo before and after grading (e.g. a flat export and the Lightroom result).</p>
+      <ul>
+        <li><b>Before / Original</b> — the ungraded flat image.</li>
+        <li><b>After / Target</b> — the graded result you want to reproduce.</li>
+        <li><b>Starting LUT / Preset</b> (optional) — a <code>.cube</code> or <code>.xmp</code> to bootstrap the fit.</li>
+        <li><b>Name</b> auto-fills from the target filename.</li>
+        <li><b>Generate LUT &amp; XMP</b> — produces a downloadable <code>.cube</code> (plus an <code>.xmp</code>) and adds it to history with a per-color summary of what changed.</li>
+      </ul>
+      <div class="gnote">A LUT captures <b>global color &amp; tone only</b> — it can't reproduce sharpening, noise reduction, grain, or local masks. The output <code>.cube</code> is Lumix&nbsp;Lab-ready.</div>
+    </div>
+
+    <h2 id="g-copy">Color Copy tab</h2>
+    <div class="gcard">
+      <p>Transfers the overall color and tone of one photo onto another — no before/after pair needed.</p>
+      <ul>
+        <li><b>Source image</b> — the photo to grade.</li>
+        <li><b>Reference image</b> — the photo whose look you want.</li>
+        <li><b>Download .cube LUT</b> / <b>Download .xmp Preset</b> — export the matched grade, with a summary of the characteristics copied.</li>
+      </ul>
+      <p>This is a per-channel histogram match — great for a quick mood transfer, looser than a true Match &amp; Refine fit.</p>
+    </div>
+
+    <h2 id="g-collage">Collage</h2>
+    <div class="gcard">
+      <p>Combine several photos into one image: <b>Add photos</b>, pick a canvas aspect and a layout, set spacing, margin, corner rounding and background, then <b>Export collage</b>. <b>Shuffle</b> re-orders the photos.</p>
+    </div>
+
+    <h2 id="g-faq">FAQ</h2>
+    <div class="gcard">
+      <div class="faq-q">Are my photos uploaded anywhere?</div>
+      <div class="faq-a">No. All decoding, grading and exporting runs on your device. The app works fully offline. The one exception is the optional <b>Google Photos</b> connection below — and only when you use it.</div>
+
+      <div class="faq-q">Can I use Google Photos?</div>
+      <div class="faq-a">Yes — optional and off by default. <b>Google Photos…</b> (Look → More) opens Google's own picker so you can filter and select photos from your library, and <b>Upload exports</b> (Export → More) mirrors every export into a “Chromasmith” album. It needs a one-time free setup at <code>console.cloud.google.com</code>, and the steps differ slightly depending on whether you're using the browser/GitHub Pages build or the desktop app:
+      <br><br><b>1)</b> create a project, <b>2)</b> enable the <b>Google Photos Picker API</b> and <b>Photos Library API</b> (APIs &amp; Services → Library), <b>3)</b> configure the OAuth consent screen (External → stay in <b>Testing</b>, add your own Gmail as a test user), then:
+      <br><br><u>Browser / GitHub Pages:</u> create <b>Credentials → OAuth client ID → Web application</b> and add this app's address to BOTH lists — <i>Authorized JavaScript origins</i> gets the origin (e.g. <code>https://yourname.github.io</code>) and <i>Authorized redirect URIs</i> gets the full page URL (e.g. <code>https://yourname.github.io/Chroma-App/chromasmith-22.html</code>).
+      <br><br><u>Desktop app:</u> create <b>Credentials → OAuth client ID → Desktop app</b> instead — no origins or redirect URIs to register at all; sign-in opens your system's default browser and completes over a local loopback connection (127.0.0.1), then hands control back to the app.
+      <br><br>Either way, paste the client ID when the app asks (change it later via <b>ID…</b>). Notes: selection happens in Google's picker — the API no longer allows apps to browse your library directly; uploads count against your Google storage; sign-in lasts about an hour (the app re-prompts automatically); on the browser build, allow pop-ups for this site.</div>
+
+      <div class="faq-q">Can I edit a photo in CHRO-MA-SMITH from inside Lightroom?</div>
+      <div class="faq-a">Desktop app only. <b>Lightroom Classic:</b> Preferences → External Editing → Additional External Editor → choose Chromasmith (16-bit TIFF, sRGB recommended — the pipeline is sRGB/Rec.709). Then right-click a photo → <b>Edit In → Chromasmith</b>. <b>Lightroom (cloud/CC):</b> right-click a photo → <b>Edit In</b> → pick Chromasmith the first time (same TIFF handoff). Either way, edit as normal — a new <b>Save to Lightroom</b> button appears next to the regular Export button while a handoff photo is open. Use it to write straight back over the file Lightroom gave you (Lightroom re-imports and syncs the result automatically); the normal Export button is still there too, unchanged, for a regular local export of the same photo.</div>
+
+      <div class="faq-q">Can I browse my Lightroom cloud photos?</div>
+      <div class="faq-a">Desktop app only, and it needs your own Adobe API client (Adobe Developer Console → create a project → Add API → <b>Lightroom Services</b> → OAuth credential type <b>Native App</b>). Unlike Google Cloud Console's self-serve testing mode, Adobe's Lightroom Partner APIs have historically needed Adobe's own approval on top of just creating a project — it may not work immediately even with a real client ID. A Native App credential redirects through a custom URL scheme (not a plain localhost port like Google's), which is fixed per-project — if you create your own Adobe integration rather than using an existing one, the app's redirect URI constant needs updating to match yours. Once connected (<b>Lightroom → Connect</b>), pick an album from the dropdown and click a thumbnail to pull that photo straight into the studio.</div>
+
+      <div class="faq-q">My RW2 / RAW colors don't match Lightroom.</div>
+      <div class="faq-a">First check what's showing your comparison — macOS Preview shows the camera's embedded JPEG (warmer/darker), not the real RAW render. Also pick the matching <b>RAW profile</b>. The remaining difference is usually just Lightroom's default noise reduction and sharpening, which a LUT can't carry.</div>
+
+      <div class="faq-q">A <code>.cube</code> looks wrong in the Lumix Lab app.</div>
+      <div class="faq-a">Lumix needs a <code>#LUMIXPHOTOSTYLE STD</code> tag; without it the camera assumes V-Log and the colors go off. Every <b>Download .cube</b> from CHRO-MA-SMITH already includes it.</div>
+
+      <div class="faq-q">Why is my grain bigger in the preview than the export?</div>
+      <div class="faq-a">The normal preview is downscaled, so effects look larger relative to the image. Use the <b>1:1</b> button to see grain &amp; halation at true export scale.</div>
+
+      <div class="faq-q">A preset looks broken on the LUT chart but fine on photos.</div>
+      <div class="faq-a">Some captured LUTs have garbage in fully-saturated corners that real photos rarely hit. Always sanity-check a captured preset on the <b>LUT chart</b>, which spans the whole color cube.</div>
+
+      <div class="faq-q">Will my edits be kept?</div>
+      <div class="faq-a">In the desktop app every edit is saved with the photo automatically. In the browser, use <b>Save session</b> or a <b>Style</b>; saved LUTs live in the browser too, and Safari may clear them after ~7 days of disuse, so keep a <code>.cube</code> copy of anything important.</div>
+
+      <div class="faq-q">It looks like an old version.</div>
+      <div class="faq-a">The version is shown in <b>⋯ → About CHRO-MA-SMITH</b>. In the browser, hard-refresh to clear the cached page; on the desktop, download the latest release.</div>
+    </div>
+  </div>
+</div>
+<!-- COLLAGE -->
+<div class="panel" id="panel-collage">
+  <div class="cl-layout">
+    <div id="cl-secnav"></div>
+    <div class="cl-controls">
+      <div class="fx-ctrl" data-clsec="photos">
+        <div class="ctitle" style="margin-bottom:10px">Photos</div>
+        <div class="dz hot" id="cl-dz" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="clDropFiles(event)">
+          <input type="file" accept="image/*" multiple onchange="clAddFiles(this.files);this.value=''">
+          <div class="dz-ic">＋</div><div class="dz-lb">Add photos</div>
+        </div>
+        <div class="cl-tray" id="cl-tray"></div>
+        <!-- CHR-214: pull the photos open in Effects, with their edits -->
+        <div class="btn-row" style="margin-top:8px"><button class="btn bsec" id="cl-pull" onclick="clAddFromEditor()" title="Add the photos open in Effects, shown with their look and adjustments">Add photos from Effects</button></div>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-edits" checked onchange="clSetEdits(this.checked)"> Show edits (look &amp; adjustments)</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px" title="Grade every cell, including photos added here, with the look currently set in Effects"><input type="checkbox" id="cl-onelook" onchange="clSetOneLook(this.checked)"> Apply one look to all cells</label>
+        <!-- Was a standing .fx-hint sentence — collapsed into the same tooltip/details pattern
+             every other long explanation in the panel redesign already uses (see .fx-info-i /
+             .fx-hint-x's own CSS comment). id="cl-tray-hint" kept on the <details> itself so
+             existing show/hide-by-id callers (if any) keep working unchanged. -->
+        <details class="fx-hint-x" id="cl-tray-hint"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Add photos, then pick a layout. Drag a photo onto a slot to place it; drag between slots to swap.</p></details>
+      </div>
+      <div class="fx-ctrl" data-clsec="canvas">
+        <div class="ctitle" style="margin-bottom:10px">Canvas size</div>
+        <div class="fx-row"><div class="fx-label">Aspect</div>
+          <select class="fx-select" id="cl-aspect" onchange="clSetAspect(this.value)"></select>
+        </div>
+      </div>
+      <div class="fx-ctrl" data-clsec="layout">
+        <div class="ctitle" style="margin-bottom:10px">Layout</div>
+        <div class="cl-mode-row" role="group" aria-label="Collage arrangement mode"><button class="btn bpri" id="cl-mode-grid" aria-pressed="true" onclick="clSetMode('grid')">Grid</button><button class="btn bsec" id="cl-mode-free" aria-pressed="false" onclick="clSetMode('freeform')">Scrapbook</button></div>
+        <div class="fx-hint" id="cl-free-hint" style="display:none">Drag photos to place them; overlap order follows the layer buttons. Drag the corner to resize.</div>
+        <div class="cl-shapes" id="cl-shapes"></div>
+        <div class="btn-row" id="cl-save-layout" style="margin-top:6px"><button class="btn bgh" onclick="clSaveLayout()" title="Save this arrangement (including dragged dividers) and the page style, to reuse with the same number of photos">Save layout…</button></div>
+        <!-- NOT converted to an info tooltip like its siblings — clRebuildShapes() rewrites this
+             element's textContent with a live photo count ("3 photos — pick an arrangement."),
+             so it's a status readout, not standing explanatory prose. -->
+        <div class="fx-hint" id="cl-shape-hint">Pick how many photos and the arrangement.</div>
+      </div>
+      <div class="fx-ctrl" data-clsec="style">
+        <div class="ctitle" style="margin-bottom:10px">Borders &amp; background</div>
+        <div class="fx-row"><div class="fx-label">Background</div>
+          <input type="color" class="fx-color" id="cl-bg" value="#ffffff" oninput="clSet('bg',this.value)">
+          <div class="cl-swatches" id="cl-swatches"></div>
+        </div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Spacing</div><input class="fx-slider" type="range" min="0" max="60" value="8" id="cl-inner" oninput="clSet('inner',+this.value)"><div class="fx-val" id="cl-inner-v">8</div></div>
+        <div class="fx-row"><div class="fx-label">Outer margin</div><input class="fx-slider" type="range" min="0" max="80" value="0" id="cl-outer" oninput="clSet('outer',+this.value)"><div class="fx-val" id="cl-outer-v">0</div></div>
+        <div class="fx-row"><div class="fx-label">Photo frame</div><select class="fx-select" id="cl-frame-sel" onchange="CL.frame=this.value;clRenderFrame()"><option value="none">None</option><option value="keyline">Thin border</option><option value="mat">Paper mat</option><option value="print">Instant print</option><option value="deckle">Deckled paper</option><option value="shadow">Drop shadow</option></select></div>
+        <div class="fx-row"><div class="fx-label">Corner round</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="cl-radius" oninput="clSet('radius',+this.value)"><div class="fx-val" id="cl-radius-v">0</div></div>
+      </div>
+      <div class="fx-ctrl" data-clsec="text">
+        <div class="ctitle" style="margin-bottom:10px">Title &amp; captions</div>
+        <div class="fx-row"><div class="fx-label">Title</div><input class="vinput" id="cl-title" type="text" placeholder="None" oninput="CL.title=this.value;clRenderFrame()"></div>
+        <div class="fx-row"><div class="fx-label">Position</div><select class="fx-select" id="cl-titlepos" onchange="CL.titlePos=this.value;clRenderFrame()"><option value="bottom">Bottom</option><option value="top">Top</option></select></div>
+        <div class="fx-row"><div class="fx-label">Title size</div><input class="fx-slider" type="range" min="20" max="120" value="45" id="cl-titleSize" oninput="clSet('titleSize',+this.value)"><div class="fx-val" id="cl-titleSize-v">45</div></div>
+        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Caption size</div><input class="fx-slider" type="range" min="12" max="70" value="28" id="cl-capSize" oninput="clSet('capSize',+this.value)"><div class="fx-val" id="cl-capSize-v">28</div></div>
+        <div class="fx-row"><div class="fx-label">Font</div><select class="fx-select" id="cl-font" onchange="CL.font=this.value;clRenderFrame()"><option value="">Default</option><option value="Georgia, 'Times New Roman', serif">Serif</option><option value="'Courier New', Courier, monospace">Typewriter</option><option value="'Trebuchet MS', Verdana, sans-serif">Humanist</option><option value="Impact, 'Arial Narrow', sans-serif">Poster</option><option value="'Brush Script MT', 'Segoe Script', cursive">Script</option></select></div>
+        <div class="fx-row"><div class="fx-label">Title colour</div><input type="color" class="fx-color" id="cl-titlecolor" value="#111111" oninput="CL.titleColor=this.value;clRenderFrame()"><button class="btn bgh" onclick="CL.titleColor='';clRenderFrame()" title="Pick black or white to suit the background">Auto</button></div>
+        <div class="fx-row"><div class="fx-label">Caption colour</div><input type="color" class="fx-color" id="cl-capcolor" value="#ffffff" oninput="CL.capColor=this.value;clRenderFrame()"><button class="btn bgh" onclick="CL.capColor='';clRenderFrame()" title="White over the photo, dark on a print border">Auto</button></div>
+        <div class="fx-sub">Automatic captions</div>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capAuto" onchange="CL.capAuto=this.checked;clRenderFrame()"> File name</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capDate" onchange="CL.capDate=this.checked;clRenderFrame()"> Date</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capCam" onchange="CL.capCam=this.checked;clRenderFrame()"> Camera</label>
+        <label class="fx-row" style="cursor:pointer;gap:8px"><input type="checkbox" id="cl-capLook" onchange="CL.capLook=this.checked;clRenderFrame()"> Film look</label>
+        <div class="fx-hint">Select a photo to write its own caption.</div>
+      </div>
+      <div class="fx-ctrl" id="cl-cellpanel" data-clsec="sel">
+        <div class="ctitle" style="margin-bottom:10px">Selected photo</div>
+        <div class="fx-row" id="cl-zoom-row"><div class="fx-label">Zoom</div><input class="fx-slider" type="range" min="100" max="400" value="100" id="cl-zoom" oninput="clCellZoom(+this.value)"><div class="fx-val" id="cl-zoom-v">100</div></div>
+        <div class="cl-free-controls" id="cl-free-controls">
+          <div class="fx-row"><div class="fx-label">Rotation</div><input class="fx-slider" type="range" min="-180" max="180" value="0" id="cl-free-rotation" oninput="clFreeRotate(+this.value)"><div class="fx-val" id="cl-free-rotation-v">0°</div></div>
+          <div class="btn-row"><button class="btn bgh" id="cl-free-forward" onclick="clFreeLayer(1)">Bring forward</button><button class="btn bgh" id="cl-free-back" onclick="clFreeLayer(-1)">Send backward</button></div>
+        </div>
+        <div class="fx-row" id="cl-caption-row"><div class="fx-label">Caption</div><input class="vinput" id="cl-caption" type="text" placeholder="None" oninput="clSetCaption(this.value)"></div>
+        <details class="fx-hint-x"><summary><span class="fx-info-i" style="pointer-events:none">i</span> How this works</summary><p>Drag inside the photo to reposition it. Scroll over a photo to zoom.</p></details>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bsec" onclick="clReplaceSelected()">Replace</button>
+          <button class="btn bgh" onclick="clCellReset()">Reset</button>
+          <button class="btn bgh" onclick="clCellClear()">Clear slot</button>
+        </div>
+      </div>
+      <div class="fx-ctrl" data-clsec="export">
+        <div class="ctitle" style="margin-bottom:10px">Export</div>
+        <!-- CHR-218: exact-size presets; "Custom" keeps the long-side picker below -->
+        <div class="fx-row"><div class="fx-label">Size preset</div>
+          <select class="fx-select" id="cl-preset" onchange="clSetPreset(this.value)">
+            <option value="">Custom (long side)</option>
+            <optgroup label="Social (px)"><option value="px:1080x1080">Instagram square 1080 x 1080</option><option value="px:1080x1350">Instagram portrait 1080 x 1350</option><option value="px:1080x1920">Story / Reel 1080 x 1920</option><option value="px:1920x1080">Landscape 1920 x 1080</option><option value="px:2160x1080">Carousel 2 panels 2160 x 1080</option></optgroup>
+            <optgroup label="Print (inches)"><option value="in:6x4">6 x 4 in</option><option value="in:4x6">4 x 6 in</option><option value="in:8x10">8 x 10 in</option><option value="in:10x8">10 x 8 in</option><option value="in:8x8">8 x 8 in</option><option value="in:6x8">6 x 8 in</option><option value="in:12x18">12 x 18 in</option><option value="in:18x12">18 x 12 in</option></optgroup>
+          </select></div>
+        <div class="fx-row" id="cl-dpi-row" style="display:none"><div class="fx-label">Print DPI</div>
+          <select class="fx-select" id="cl-dpi" onchange="CL.dpi=+this.value;clSyncPresetNote()"><option value="150">150</option><option value="240">240</option><option value="300" selected>300</option><option value="600">600</option></select></div>
+        <div class="fx-hint" id="cl-preset-note" style="display:none"></div>
+        <div class="fx-row" id="cl-res-row"><div class="fx-label">Long side</div>
+          <select class="fx-select" id="cl-res">
+            <option value="1600">1600 px</option>
+            <option value="2400" selected>2400 px</option>
+            <option value="3200">3200 px</option>
+            <option value="4000">4000 px (large)</option>
+          </select>
+        </div>
+        <div class="fx-row"><div class="fx-label">Format</div><select class="fx-select" id="cl-fmt"><option value="jpg">JPEG</option><option value="png">PNG</option></select></div>
+        <div class="fx-row"><div class="fx-label">JPEG quality</div><input class="fx-slider" type="range" min="60" max="100" value="95" id="cl-q" oninput="document.getElementById('cl-q-v').textContent=this.value"><div class="fx-val" id="cl-q-v">95</div></div>
+        <label class="fx-row" style="cursor:pointer;gap:8px" title="For wide canvases (2:1, 3:1…): saves equal square-ish panels that line up when swiped on Instagram"><input type="checkbox" id="cl-split"> Split into carousel panels</label>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn bpri" id="cl-export" onclick="clExport()">Export collage</button>
+          <button class="btn bgh" onclick="clShuffle()" title="Randomly redistribute photos into the slots">Shuffle</button>
+        </div>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn bgh" onclick="clReset()">Start over</button>
+        </div>
+        <div class="fx-hint" style="margin-top:10px">Book uses the assigned photos and current page style to create a multi-page print preview.</div>
+        <div class="fx-row"><div class="fx-label">Photos per page</div><select class="fx-select" id="cl-book-size"><option value="1">1 photo</option><option value="2">2 photos</option><option value="4" selected>4 photos</option></select></div>
+        <div class="btn-row"><button class="btn bsec" id="cl-book-build" onclick="clBookBuild()">Build book pages</button></div>
+      </div>
+    </div>
+    <div class="cl-stage" id="cl-stage">
+      <div class="cl-empty" id="cl-empty">Add photos to begin your collage</div>
+      <div id="cl-frame"></div>
+      <section class="cl-book-review" id="cl-book-review" aria-label="Book page preview">
+        <div class="cl-book-head"><strong id="cl-book-count">Book preview</strong><button class="btn bgh" type="button" onclick="clBookClose()">Back to collage</button><button class="btn bpri" type="button" onclick="clBookPrint()">Print / Save PDF</button></div>
+        <div class="cl-book-setup" aria-label="Print page setup">
+          <label for="cl-book-paper">Paper <select class="fx-select" id="cl-book-paper" onchange="clBookApplyPageSetup()"><option value="photo">Photo size · 8 in long edge</option><option value="a4">A4 · auto orientation</option><option value="letter">US Letter · auto orientation</option><option value="square">Square · 8 × 8 in</option></select></label>
+          <label for="cl-book-margin">Margins <select class="fx-select" id="cl-book-margin" onchange="clBookApplyPageSetup()"><option value="0">Borderless</option><option value="0.25" selected>0.25 in</option><option value="0.5">0.5 in</option></select></label>
+          <span class="fx-hint">Photo pages fit inside the selected paper area.</span>
+        </div>
+        <div class="fx-hint">Move pages with the arrows. Print creates one page per spread using this paper size and margin.</div>
+        <div class="cl-book-pages" id="cl-book-pages"></div>
+      </section>
+    </div>
+  </div>
+</div>
+</main>
+<div id="log-area"></div>

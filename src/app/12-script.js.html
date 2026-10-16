@@ -1,0 +1,28 @@
+<script>
+// Desktop: let clicks around the splash fall through to the desktop while it's up (the window is
+// transparent and full-size, so otherwise it silently swallows every click). hideBootSplash()
+// turns this off again before the app is revealed.
+// Tauri has no per-region click-through, so poll the cursor: ignore the mouse only while it's
+// OUTSIDE the card, so clicks on the card itself are swallowed (never reach the desktop or the app).
+// Every call is guarded; any failure stops polling and leaves the window NOT click-through.
+(function(){
+  const T=window.__TAURI__;if(!T||!T.window||typeof T.window.cursorPosition!=='function')return;
+  let win;try{win=T.window.getCurrentWindow();}catch(e){return;}
+  const card=document.querySelector('#boot-splash .bs');
+  if(card)['pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu','wheel'].forEach(t=>card.addEventListener(t,e=>{e.preventDefault();e.stopPropagation();},{capture:true,passive:false}));
+  let ignoring=null,busy=false;
+  const set=v=>{if(ignoring===v)return;ignoring=v;win.setIgnoreCursorEvents(v).catch(()=>window._bootCursorStop&&window._bootCursorStop());};
+  window._bootCursorStop=function(){if(window._bootCursorTimer){clearInterval(window._bootCursorTimer);window._bootCursorTimer=null;}ignoring=null;try{win.setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}};
+  window._bootCursorTimer=setInterval(async()=>{
+    if(busy||!window._bootCursorTimer)return;busy=true;
+    try{
+      const [c,o,sf]=await Promise.all([T.window.cursorPosition(),win.innerPosition(),win.scaleFactor()]);
+      if(!window._bootCursorTimer)return;
+      const el=document.querySelector('#boot-splash .bs');if(!el){window._bootCursorStop();return;}
+      const r=el.getBoundingClientRect(),x=(c.x-o.x)/sf,y=(c.y-o.y)/sf;
+      set(!(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom));
+    }catch(e){window._bootCursorStop&&window._bootCursorStop();}
+    finally{busy=false;}
+  },40);
+})();
+</script>

@@ -1,0 +1,51 @@
+<script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
+(function(){
+function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
+ready(function(){
+  // "More": fold the Image card's secondary button rows (Google Photos, library save/delete, LUT chart/.cube)
+  var ids=['btn-gp-import','btn-lut-save','btn-lut-dl'],rows=[];
+  ids.forEach(function(id){var b=document.getElementById(id),r=b&&b.closest('.btn-row');if(r&&rows.indexOf(r)<0)rows.push(r)});
+  if(rows.length){var d=document.createElement('details');d.className='sk2-more';d.innerHTML='<summary title="Google Photos, saved LUTs, LUT chart">More</summary>';
+    rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});
+    // Desktop: the Apply LUT row is placed under the Looks grid by fxDesktopReorderLooksPanel, which can run
+    // before this fold exists, so the fold follows that row here instead of staying at its build position.
+    var lutRow=document.getElementById('fx-apply-lut-row');if(lutRow)lutRow.insertAdjacentElement('afterend',d);}
+  // Border ("frames") tool: one layer at a time — Inner | Outer word tabs over the same rows;
+  // Film variation + Overlay fold under "More". Rows are only hidden/shown, never rebuilt.
+  (function(){var ff=document.getElementById('ff-borders');if(!ff||ff.querySelector('.sk2-layers'))return;
+    var rows=[].slice.call(ff.querySelectorAll(':scope>.fx-row'));
+    rows.forEach(function(r){var id=(r.querySelector('[id]')||{}).id||'',fr=r.getAttribute('data-film-row');
+      var L=fr||(/(^|-)b1(-|$)/.test(id)?'b1':/(^|-)b2(-|$)/.test(id)?'b2':'');if(L)r.setAttribute('data-layer',L);
+      var lb=r.querySelector('.fx-label');if(L&&lb&&lb.firstChild&&lb.firstChild.nodeType===3)lb.firstChild.textContent=lb.firstChild.textContent.replace(/^(Inner|Outer) /,'').replace(/^./,function(c){return c.toUpperCase()});});
+    var tabs=document.createElement('div');tabs.className='btn-row chip-tap sk2-layers';tabs.setAttribute('role','tablist');
+    tabs.innerHTML='<button type="button" role="tab" aria-selected="true" class="btn bgh on" data-l="b1">Inner</button><button type="button" role="tab" aria-selected="false" class="btn bgh" data-l="b2">Outer</button>';
+    ff.insertBefore(tabs,ff.firstChild);ff.setAttribute('data-sk2-layer','b1');
+    tabs.onclick=function(e){var b=e.target.closest('button[data-l]');if(!b)return;ff.setAttribute('data-sk2-layer',b.dataset.l);
+      tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b);x.setAttribute('aria-selected',String(x===b))});};
+    var more=document.createElement('details');more.className='sk2-more';more.innerHTML='<summary>More</summary>';
+    rows.filter(function(r){return !r.hasAttribute('data-layer')}).forEach(function(r){more.appendChild(r)});
+    ff.appendChild(more);})();
+  // "?" opens the keyboard shortcuts sheet
+  document.addEventListener('keydown',function(e){if(e.key!=='?'||e.metaKey||e.ctrlKey)return;var t=e.target;
+    if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
+    if(window.chromasmithShowShortcuts){e.preventDefault();window.chromasmithShowShortcuts();}});
+  // Hover a look (~200ms) or arrow-key onto it to preview it on the photo; leaving / Escape
+  // restores the chosen one, a click or Enter commits. Only the renderer's LUT is swapped
+  // (FX.setLUT + fxState.lut) — no history entry, no film defaults, nothing saved.
+  var host=document.getElementById('fx-looks');if(!host)return;
+  var timer=0,peek=null,saved,seq=0;
+  function end(commit){clearTimeout(timer);seq++;if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
+    if(commit)return;try{fxState.lut=saved;if(saved)FX.setLUT(saved);renderPreview();}catch(e){}}
+  async function show(c){var v=c._lookJob&&c._lookJob.val;if(c.classList.contains('sel')){end();return;}
+    var my=++seq,lut=null;
+    try{if(v&&v.startsWith('p:')&&typeof presetLut==='function')lut=await presetLut(v.slice(2));else if(v!=='')return;}catch(e){return}
+    if(my!==seq)return;if(!peek)saved=fxState.lut;else peek.classList.remove('sk2-peek');
+    peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;if(lut)FX.setLUT(lut);renderPreview();}catch(e){}}
+  window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
+  window.sk2PeekEnd=end;
+  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
+    clearTimeout(timer);timer=setTimeout(function(){if(c.matches(':hover'))show(c)},200);});
+  host.addEventListener('pointerleave',function(){end()});
+  host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
+  host.addEventListener('click',function(){end(true)},true);
+});})();</script>

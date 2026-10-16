@@ -1,0 +1,25 @@
+<script>
+/* Touch slider detent + tick, and double-tap a slider's label to reset it. */
+(function(){
+  var coarse=matchMedia('(pointer:coarse)').matches;
+  // Landscape and foldable layouts are supported; never force portrait.
+  var lastTick=0;
+  document.addEventListener('input',function(e){
+    var sl=e.target;if(!coarse||!sl||sl.type!=='range'||!sl.classList.contains('fx-slider')||sl._snapping)return;
+    var min=+sl.min,max=+sl.max,def=parseFloat(sl.defaultValue),v=+sl.value;
+    if(isFinite(def)&&def>min&&def<max&&Math.abs(v-def)<=(max-min)*0.015&&v!==def){sl._snapping=true;sl.value=def;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._snapping=false;}
+    var now=Date.now(),step=(max-min)/40;
+    if(now-lastTick>45&&Math.abs(v-(sl._lastTick==null?v:sl._lastTick))>=step){lastTick=now;sl._lastTick=v;try{if(typeof hapt==='function')hapt('LIGHT');if(navigator.vibrate&&(!window.MobileUI||MobileUI.pref('haptics',true)))navigator.vibrate(4);}catch(_){}}
+    if(sl._lastTick==null)sl._lastTick=v;
+  },true);
+  document.addEventListener('dblclick',function(e){
+    var lb=e.target.closest&&e.target.closest('.fx-row > .fx-label');if(!lb)return;
+    var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
+    var base=(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault&&_fxPristineDefault.sliders)||{};
+    var key=sl.id.replace(/^sl-/,''),d=base[key]!==undefined?base[key]:sl.defaultValue;
+    if(String(sl.value)===String(d))return;
+    e.preventDefault();sl.value=d;sl.dispatchEvent(new Event('input',{bubbles:true}));
+    try{if(typeof hapt==='function')hapt('MEDIUM');}catch(_){}
+  });
+})();
+</script>

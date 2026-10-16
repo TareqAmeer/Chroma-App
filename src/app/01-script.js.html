@@ -1,0 +1,6 @@
+<script>if(window.__TAURI__)document.documentElement.classList.add('cs-boot-tauri');
+/* Web load gate: this file is ~17MB, so the browser paints the editor's markup while it is still parsing, before
+   applyFxLayout() has arranged it (a phone showed the raw control list for about a second). Keep it unpainted until
+   parsing ends, then show it already laid out. */
+else{document.documentElement.classList.add('cs-boot-web');var _csBootOff=function(){document.documentElement.classList.remove('cs-boot-web')};
+  document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){requestAnimationFrame(_csBootOff)})});setTimeout(_csBootOff,8000)}</script>

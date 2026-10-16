@@ -10,6 +10,9 @@
 # gate note. Fixing this is the point: a real gate that fails the commit, not a checklist step.
 set -e
 
+# Two-way sync chromasmith-22.html <-> src/app (index-based; docs/plans/refactor-plan.md Phase 1).
+node tools/scripts/app-sync.mjs || exit 1
+
 # 2026-09-23: all wireframe/token gates below temporarily disabled (Tareq's explicit call) —
 # an upcoming stretch of changes is expected to intentionally diverge from the wireframes, so
 # the fidelity/token-drift gates would just block every commit. Re-enable by deleting this

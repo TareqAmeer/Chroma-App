@@ -1,0 +1,211 @@
+<script>
+// ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
+// ONE bar for the whole boot sequence, not a series of per-phase bars that each restart from 0 —
+// that restart-on-phase-change look (confirmed live: "the loading bar reaches the end and then
+// restarts again") is exactly what this replaces. Each boot phase owns a fixed SLICE of the 0-100
+// range, in the order they actually occur (walk -> subfolders -> metadata -> sidecar -> cache ->
+// paint); within a slice the bar advances by that phase's own done/total, or — when the total
+// isn't known yet (an in-progress walk) — by the same asymptotic trickle as before, just scaled
+// into that phase's slice instead of the whole bar. A hard monotonic guard (never display a
+// SMALLER percentage than already shown) means even an out-of-order or repeated event can't make
+// the bar visibly regress. The bar reaching 100% is therefore the SAME moment the library becomes
+// usable — 'paint' is the last slice and its own total is real mounted-card count, so filling it
+// means every visible card actually has pixels (see firstPaintReady, library-ui.js).
+// Weighted by measured wall time on a real 50k library: sidecars (getSidecarsBatch) are the longest
+// pre-paint step, so they get the widest slice — the trickle there keeps lighting bars.
+window._bootSlices={walk:[0,8],subfolders:[8,14],metadata:[14,30],sidecar:[30,60],cache:[60,70],paint:[70,100]};
+window._bootShownPct=0;window._bootMarks=[];
+window._bootTrickleRAF=null;window._bootTrickleT0=0;window._bootTrickleKey=null;
+function _bootPaintPct(pct){
+  const bar=document.getElementById('boot-splash-bar');if(!bar)return;
+  pct=Math.max(0,Math.min(100,pct));
+  if(pct<window._bootShownPct)return; // monotonic guard — never regress the bar
+  if(Math.floor(pct/100*11+1e-4)>Math.floor(window._bootShownPct/100*11+1e-4))window._bootMarks.push(['bar',Math.round(performance.now()),Math.round(pct)]); // boot timeline, read by test/probe_boot_splash_progress.mjs
+  window._bootShownPct=pct;
+  const splash=document.querySelector('#boot-splash>div');if(splash)splash.style.setProperty('--boot-pct',Math.round(pct)+'%');
+  const percent=document.getElementById('boot-splash-percent');if(percent){percent.textContent=Math.round(pct)+'%';percent.dataset.t=percent.textContent;}
+  const wg=document.getElementById('boot-splash-wedge');if(wg){const n=Math.floor(pct/100*11+1e-4);[...wg.children].forEach((c,i)=>{c.style.background=i>=n?'':i===10?'#ff3b1f':`rgb(${242-i*20},${240-i*20},${234-i*20})`;});}
+  bar.style.width=pct.toFixed(1)+'%';
+}
+window.bootProgressSet=function(phase,done,total){
+  const slice=window._bootSlices[phase];
+  if(!slice){ // a post-boot/background phase (thumb/focus/hash/faces/...) — no slice, no-op
+    return;
+  }
+  const [lo,hi]=slice;
+  if(window._bootLastMarkPhase!==phase){window._bootLastMarkPhase=phase;window._bootMarks.push([phase,Math.round(performance.now())]);}
+  const st=document.getElementById('boot-splash-stage');if(st&&window._bootStageLabelFor)st.textContent=window._bootStageLabelFor(phase);
+  if(total>0){
+    if(window._bootTrickleRAF){clearInterval(window._bootTrickleRAF);window._bootTrickleRAF=null;window._bootTrickleKey=null;}
+    _bootPaintPct(lo+(hi-lo)*Math.min(1,done/total));
+    return;
+  }
+  // Total genuinely unknown yet — trickle asymptotically toward the TOP of this phase's own
+  // slice (never past it, never claiming a later phase's territory) rather than sweeping the
+  // whole bar. Restarts its own clock on a phase change, same as before, but the DISPLAYED
+  // percentage still can't regress because of the monotonic guard above — so the visible bar
+  // itself never jumps backward, even though the trickle math resets underneath.
+  if(window._bootTrickleKey!==phase){window._bootTrickleKey=phase;window._bootTrickleT0=performance.now();}
+  const bar=document.getElementById('boot-splash-bar');if(!bar)return;
+  bar.style.transition='none';
+  if(window._bootTrickleRAF)return;
+  // Timer, not rAF: WKWebView can pause rAF for this transparent splash window (see hideBootSplash).
+  const step=()=>{
+    const [l,h]=window._bootSlices[window._bootTrickleKey]||slice;
+    _bootPaintPct(l+(h-l)*0.92*(1-Math.exp(-(performance.now()-window._bootTrickleT0)/2200)));
+  };
+  window._bootTrickleRAF=setInterval(step,120);step();
+};
+window.bootTrickleStop=function(){
+  if(window._bootTrickleRAF){clearInterval(window._bootTrickleRAF);window._bootTrickleRAF=null;}
+  window._bootTrickleKey=null;
+  const bar=document.getElementById('boot-splash-bar');if(bar)bar.style.transition='width .2s ease';
+};
+window.bootProgressSet('walk',0,0); // matches the static label above ("Checking your library…") from t=0
+// Web/iOS builds: no multi-stage boot to hide, so drop the splash the instant this parses
+// (right after the element above — no waiting on DOMContentLoaded) rather than leaving it
+// covering the page indefinitely. desktop-native.js overrides this by calling
+// hideBootSplash() itself once deskx has actually settled; if that file never runs (i.e. this
+// ISN'T the Tauri shell), this inline fallback is what removes the splash.
+window.hideBootSplash=function(){
+  // Boot often finishes from cache in one step, so the strip never got to fill: run it up to
+  // 100% (bounded ~0.7s) before the real hide, so the splash always ends full.
+  const s0=document.getElementById('boot-splash');
+  if(s0&&!window._bootFilling&&window._bootShownPct<100){
+    window._bootFilling=true;
+    if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();
+    const from=window._bootShownPct,t0=performance.now(),dur=Math.max(250,700*(100-from)/100);
+    const st=document.getElementById('boot-splash-stage');if(st)st.textContent='Ready';
+    let done=false;const fin=()=>{if(done)return;done=true;_bootPaintPct(100);window._bootFilling=false;window._bootFilled=true;window.hideBootSplash();};
+    const tick=(t)=>{if(done)return;const k=Math.min(1,(t-t0)/dur);_bootPaintPct(from+(100-from)*k);if(k<1)requestAnimationFrame(tick);else setTimeout(fin,250);};
+    requestAnimationFrame(tick);setTimeout(fin,dur+600);
+    return;
+  }
+  if(window._bootFilling)return;
+  if(window._bootCursorStop)window._bootCursorStop();
+  try{if(window.__TAURI__&&window.__TAURI__.window)window.__TAURI__.window.getCurrentWindow().setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}
+  document.documentElement.classList.remove('cs-boot-tauri');
+  const s=document.getElementById('boot-splash');
+  if(window._bootSplashWatchdog){clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=null;}
+  if(typeof window.bootTrickleStop==='function')window.bootTrickleStop();
+  if(!s)return;
+  // ⚠️ Don't start the opacity fade in this same tick. Removing cs-boot-tauri above reveals the
+  // real DOM (editor+Library, now correctly toggled), but the browser hasn't necessarily laid out
+  // or painted that corrected state YET — style/class changes only take effect at the next paint,
+  // and toggleLibrary/toggleExpandedView additionally queue a requestAnimationFrame(resize) of
+  // their own (desktop/library-ui.js) for the dock-width layout to settle. Starting the fade
+  // immediately let a stale/mid-layout frame (a flash of the plain editor) bleed through the
+  // splash's own opacity transition. Two rAFs guarantee at least one full layout+paint cycle has
+  // completed — invisibly, since the splash is still fully opaque on top — before the fade (and
+  // therefore any visibility of what's underneath) begins.
+  const html=document.documentElement;
+  // ⚠️ Never depend on rAF alone: WKWebView can pause rAF for this transparent window (it stayed
+  // stuck on the splash with the app held at opacity:0 after bf22824). A timer reveals regardless.
+  html.classList.add('cs-reveal-hold');
+  let revealed=false;
+  const reveal=(via)=>{
+    if(revealed)return;revealed=true;
+    console.log('[boot] splash reveal via '+via);
+    window._bootMarks.push(['reveal',Math.round(performance.now())]);
+    html.classList.add('cs-reveal-go');
+    html.classList.remove('cs-reveal-hold');
+    s.classList.add('out');
+    setTimeout(()=>{s.remove();html.classList.remove('cs-reveal-go');},600);
+  };
+  requestAnimationFrame(()=>requestAnimationFrame(()=>reveal('raf')));
+  setTimeout(()=>reveal('timeout'),150);
+};
+// Only the REAL Tauri shell (desktop-native.js, gated on window.__TAURI__) takes over hiding
+// this — including the "?deskx=1" plain-browser testing mode, which never loads that script and
+// would otherwise leave the splash on screen forever.
+// ⚠️ Removed synchronously, not via hideBootSplash(): its two-rAF fade never runs while the tab
+// is hidden (rAF is paused), so a web page opened or reloaded in the background kept the desktop
+// splash on top of the working app. The web/iOS builds have no multi-stage boot to cover.
+if(!window.__TAURI__){const s=document.getElementById('boot-splash');if(s)s.remove();window.hideBootSplash();}
+// Safety net, now a RESETTABLE watchdog rather than one flat deadline. A flat timeout defeats
+// the whole point of showing indexing progress: a real first-time scan of a large library can
+// legitimately take longer than any single fixed number picked in advance, so a flat deadline
+// either hides the splash mid-scan (the original "app looks ready but isn't" bug this exists to
+// fix) or has to be set so generously it stops protecting against a genuinely stuck launch at
+// all. library-ui.js's catalog-scan listener calls bumpBootSplashWatchdog() on every progress
+// event it receives, pushing the deadline forward — so the splash stays up for as long as real,
+// visible progress keeps arriving, and only force-hides if progress genuinely STALLS for the
+// grace period (an unexpected exception, a folder-picker dialog that never resolves, anything).
+// ⚠️ On timeout, force the Library into its fully-expanded state BEFORE hiding anything — see
+// window.chromasmithForceLibraryReady's doc comment (library-ui.js) for the bug this closes: a
+// large library's startup chain can legitimately still be running when this fires, and hiding the
+// splash without forcing the visual end state first is exactly what left the bare editor showing.
+// ⚠️ The give-up path used to be VISUALLY IDENTICAL to a real, settled launch — hideBootSplash()
+// ran the same way either way, so a stalled boot and a healthy one were indistinguishable on
+// screen, and this is a large part of why 12 prior fixes "felt like no progress": there was no
+// way to tell a launch that quietly gave up from one that actually finished. On fire, this now
+// stamps a small dismissible banner naming the stage the splash was stuck on and how long it had
+// been stalled, so a genuine hang (a stale external-volume stat, a writer-lock convoy, a panic
+// inside a Tauri spawn_blocking call that leaves the invoke promise unsettled forever — all real,
+// not hypothetical, see the plan doc) becomes diagnosable instead of invisible. Still reveals the
+// Library either way — never traps the user behind the splash.
+window._bootSplashArmedAt=performance.now();
+window.showBootStallBanner=function(phase,elapsedMs){
+  const label=(window._bootStageLabelFor&&window._bootStageLabelFor(phase))||phase||'startup';
+  const secs=Math.round(elapsedMs/1000);
+  let b=document.getElementById('boot-stall-banner');
+  if(!b){
+    b=document.createElement('div');
+    b.id='boot-stall-banner';
+    b.style.cssText='position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:var(--z-splash);'
+      +'background:#3a2a12;color:#f0ece2;border:1px solid rgba(212,144,58,.4);border-radius:8px;'
+      +'padding:8px 14px;font-size:12px;font-family:var(--sans);display:flex;'
+      +'align-items:center;gap:10px;box-shadow:none';
+    document.body.appendChild(b);
+  }
+  const msg=document.createElement('span');
+  msg.textContent=`Still preparing ${label.toLowerCase()} — stalled ${secs}s. The gallery is open; this is still running in the background.`;
+  const close=document.createElement('button');
+  close.textContent='Dismiss';
+  close.style.cssText='background:none;border:1px solid rgba(240,236,226,.35);color:inherit;'
+    +'border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer';
+  close.onclick=()=>b.remove();
+  b.innerHTML='';b.appendChild(msg);b.appendChild(close);
+  console.warn(`[boot] watchdog fired: stalled on "${phase}" after ${secs}s`);
+};
+// ⚠️ E7 (test/editor_ux_spec.json) root-caused 2026-09-10: chromasmithForceLibraryReady() (this
+// watchdog's fallback) racing the wireframe-diff harness's own load/settle window force-flipped
+// the Library into full-view takeover (body.lib-full, hides #fx-deskbar) mid-run — intermittent
+// light-theme white-text findings were really that takeover, not a CSS bug. Widening the grace
+// 10000ms→16000ms only made the race rarer (editor_wireframe_diff.mjs still carried a 6x retry
+// after the widen, and its own comment called the fix a mitigation, not a close). The watchdog
+// exists to catch a REAL stalled boot for a real user; the `?libtest=1` harness (same LIBTEST
+// detection as desktop/library-ui.js) resolves its mocked boot synchronously and never
+// legitimately stalls, so there is nothing for this safety valve to catch in that mode — only a
+// race to lose. The guard lives HERE, inside the function, not at the one call site below:
+// library-ui.js:8328's catalog-scan progress listener also calls bumpBootSplashWatchdog()
+// directly (re-arming it on every progress event, by design, for a real boot) and is not gated on
+// LIBTEST itself, so a guard only at the initial call below would still let that later call
+// re-arm and fire it. Verified no test relies on the watchdog actually FIRING under ?libtest=1:
+// every reference to it in test/*.mjs documents working around its unwanted firing
+// (editor_wireframe_diff.mjs, editor_wireframe_inventory.mjs, editor_responsive_qa.mjs,
+// editor_wireframe_behaviour.mjs, library_dock_states.mjs), and library_perf.mjs's boot-readiness
+// assertions key off firstPaintReady()/hideBootSplash() resolving through the real boot path.
+window.bumpBootSplashWatchdog=function(graceMs){
+  if(!window.__TAURI__ && /[?&]libtest=1/.test(location.search)){
+    if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);
+    return;
+  }
+  if(window._bootSplashWatchdog)clearTimeout(window._bootSplashWatchdog);window._bootSplashWatchdog=setTimeout(()=>{
+  const elapsed=performance.now()-(window._bootSplashArmedAt||performance.now());
+  window._bootMarks&&window._bootMarks.push(['watchdog',Math.round(performance.now())]);
+  if(typeof window.chromasmithForceLibraryReady==='function'){try{window.chromasmithForceLibraryReady();}catch(e){}}
+  window.hideBootSplash();
+  // ⚠️ Banner call removed on the user's explicit instruction ("the notification at the top of
+  // the app is useless so best to hide it moving forward") — it fired repeatedly during the
+  // background-indexing contention this same session introduced and gave no actionable
+  // information beyond "something is slow," which the Indexing panel already communicates better.
+  // showBootStallBanner (above) is left defined, unused, in case a more useful version of this
+  // is wanted later; console.warn still logs the stall for anyone actually debugging.
+  console.warn(`[boot] watchdog fired: stalled on "${window._bootLastPhase||'walk'}" after ${Math.round(elapsed/1000)}s`);
+},graceMs||8000);};
+// The watchdog guards the desktop library scan (Tauri). The Android shell has no splash to hide and no scan
+// to report progress (their splash is already removed above), so it could only ever fire spuriously there: it logged
+// a "stalled on walk" warning on every cold start. Android only: the iOS shell is deliberately left as it was.
+if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android'))window.bumpBootSplashWatchdog(16000); // initial grace period before any progress event has arrived yet
+</script>

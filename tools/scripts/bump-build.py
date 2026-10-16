@@ -28,3 +28,19 @@ blob = sh("git", "hash-object", "-w", "--stdin", inp=patch(staged.decode("utf-8"
 mode = sh("git", "ls-files", "-s", F).split()[0].decode()
 sh("git", "update-index", "--cacheinfo", "%s,%s,%s" % (mode, blob, F))
 print("BUILD ->", new)
+
+# Keep src/app/ (docs/plans/refactor-plan.md) in step: patch the staged + working segment that holds the stamp.
+import glob, os
+for seg in sorted(glob.glob("src/app/*-script.js.html")):
+    try:
+        staged_seg = sh("git", "show", ":" + seg).decode("utf-8")
+    except subprocess.CalledProcessError:
+        continue
+    if not RE.search(staged_seg):
+        continue
+    blob = sh("git", "hash-object", "-w", "--stdin", inp=patch(staged_seg).encode("utf-8")).decode().strip()
+    mode = sh("git", "ls-files", "-s", seg).split()[0].decode()
+    sh("git", "update-index", "--cacheinfo", "%s,%s,%s" % (mode, blob, seg))
+    w = open(seg, encoding="utf-8", newline="").read()
+    open(seg, "w", encoding="utf-8", newline="").write(patch(w))
+    break

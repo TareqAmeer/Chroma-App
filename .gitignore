@@ -138,5 +138,3 @@ _local/
 # Promo video work stays local until the video is final
 promo/
 
-# Phase 1 split output (docs/plans/refactor-plan.md) - not source of truth yet
-src/app/

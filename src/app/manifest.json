@@ -1,0 +1,204 @@
+{
+ "target": "chromasmith-22.html",
+ "join": "\n",
+ "parts": [
+  "00-html.html",
+  "01-script.js.html",
+  "02-html.html",
+  "03-script.js.html",
+  "04-html.html",
+  "05-script.js.html",
+  "06-script.js.html",
+  "07-script.js.html",
+  "08-script.js.html",
+  "09-script.js.html",
+  "10-script.js.html",
+  "11-html.html",
+  "12-script.js.html",
+  "13-script.js.html",
+  "14-html.html",
+  "15-script.js.html",
+  "16-script.js.html",
+  "17-script.js.html",
+  "18-script.js.html",
+  "19-script.js.html",
+  "20-html.html",
+  "21-script.js.html",
+  "22-script.js.html",
+  "23-script.js.html",
+  "24-script.js.html",
+  "25-script.js.html",
+  "26-script.js.html",
+  "27-html.html"
+ ],
+ "info": [
+  {
+   "file": "00-html.html",
+   "kind": "html",
+   "firstLine": 1,
+   "lines": 29
+  },
+  {
+   "file": "01-script.js.html",
+   "kind": "script",
+   "firstLine": 30,
+   "lines": 6
+  },
+  {
+   "file": "02-html.html",
+   "kind": "html",
+   "firstLine": 36,
+   "lines": 3
+  },
+  {
+   "file": "03-script.js.html",
+   "kind": "script",
+   "firstLine": 39,
+   "lines": 1
+  },
+  {
+   "file": "04-html.html",
+   "kind": "html",
+   "firstLine": 40,
+   "lines": 3039
+  },
+  {
+   "file": "05-script.js.html",
+   "kind": "script",
+   "firstLine": 3079,
+   "lines": 11
+  },
+  {
+   "file": "06-script.js.html",
+   "kind": "script",
+   "firstLine": 3090,
+   "lines": 19
+  },
+  {
+   "file": "07-script.js.html",
+   "kind": "script",
+   "firstLine": 3109,
+   "lines": 90
+  },
+  {
+   "file": "08-script.js.html",
+   "kind": "script",
+   "firstLine": 3199,
+   "lines": 127
+  },
+  {
+   "file": "09-script.js.html",
+   "kind": "script",
+   "firstLine": 3326,
+   "lines": 51
+  },
+  {
+   "file": "10-script.js.html",
+   "kind": "script",
+   "firstLine": 3377,
+   "lines": 82
+  },
+  {
+   "file": "11-html.html",
+   "kind": "html",
+   "firstLine": 3459,
+   "lines": 46
+  },
+  {
+   "file": "12-script.js.html",
+   "kind": "script",
+   "firstLine": 3505,
+   "lines": 28
+  },
+  {
+   "file": "13-script.js.html",
+   "kind": "script",
+   "firstLine": 3533,
+   "lines": 211
+  },
+  {
+   "file": "14-html.html",
+   "kind": "html",
+   "firstLine": 3744,
+   "lines": 1611
+  },
+  {
+   "file": "15-script.js.html",
+   "kind": "script",
+   "firstLine": 5355,
+   "lines": 5
+  },
+  {
+   "file": "16-script.js.html",
+   "kind": "script",
+   "firstLine": 5360,
+   "lines": 1651
+  },
+  {
+   "file": "17-script.js.html",
+   "kind": "script",
+   "firstLine": 7011,
+   "lines": 256
+  },
+  {
+   "file": "18-script.js.html",
+   "kind": "script",
+   "firstLine": 7267,
+   "lines": 24542
+  },
+  {
+   "file": "19-script.js.html",
+   "kind": "script",
+   "firstLine": 31809,
+   "lines": 145
+  },
+  {
+   "file": "20-html.html",
+   "kind": "html",
+   "firstLine": 31954,
+   "lines": 1
+  },
+  {
+   "file": "21-script.js.html",
+   "kind": "script",
+   "firstLine": 31955,
+   "lines": 25
+  },
+  {
+   "file": "22-script.js.html",
+   "kind": "script",
+   "firstLine": 31980,
+   "lines": 29
+  },
+  {
+   "file": "23-script.js.html",
+   "kind": "script",
+   "firstLine": 32009,
+   "lines": 145
+  },
+  {
+   "file": "24-script.js.html",
+   "kind": "script",
+   "firstLine": 32154,
+   "lines": 1
+  },
+  {
+   "file": "25-script.js.html",
+   "kind": "script",
+   "firstLine": 32155,
+   "lines": 1
+  },
+  {
+   "file": "26-script.js.html",
+   "kind": "script",
+   "firstLine": 32156,
+   "lines": 1
+  },
+  {
+   "file": "27-html.html",
+   "kind": "html",
+   "firstLine": 32157,
+   "lines": 3
+  }
+ ]
+}
