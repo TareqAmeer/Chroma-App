@@ -50,7 +50,7 @@
     "perf:test": "node test/perf_bench.mjs",
     "perf:baseline": "node test/perf_bench.mjs --baseline",
     "scorecard": "node tools/scripts/run-python.mjs tools/calib/export_scorecard.py",
-    "test": "npm run lint:ai && npm run lint:src && npm run lint:formats && npm run tokens:gates && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test && npm run editor:gates",
+    "test": "npm run lint:ai && npm run lint:src && npm run unit:test && npm run lint:formats && npm run tokens:gates && npm run export:test && npm run scorecard && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test && npm run editor:gates",
     "test:ui": "npm run lint:ai && npm run lint:formats && npm run lint:library-content && npm run tokens:gates && npm run wireframe:test && npm run library:responsive-test && npm run mask:test && npm run perf:test && npm run ui:test && npm run lib:test && npm run editor:gates",
     "lib:test": "node test/library_photo_activity.mjs && node test/library_scroll_anchor.mjs && node test/library_save_state_race.mjs && node test/library_unified_view.mjs && node test/library_perf.mjs && node test/reveal_timing.mjs && npm run library:batch-test",
     "save-state:test": "node test/library_save_state_race.mjs",
@@ -119,7 +119,9 @@
     "app:split": "node tools/scripts/app-split.mjs",
     "app:build": "node tools/scripts/app-build.mjs",
     "app:roundtrip": "node tools/scripts/app-split.mjs && node tools/scripts/app-build.mjs --check",
-    "lint:src": "node test/lint_src_layout.mjs"
+    "lint:src": "node test/lint_src_layout.mjs",
+    "unit:test": "node --test test/unit/",
+    "app:uses": "node tools/scripts/app-uses.mjs"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",

@@ -86,3 +86,9 @@ Script segments over 2,000 lines are cut at every column-0 `// ── ` section 
 - Phase 3: `desktop/library-ui.js` -> `src/library-ui/` (66 parts, max 1.4k lines) via the same two-way sync.
 - Phase 4: `catalog.rs` -> `src/catalog/` (31 parts), `library.rs` -> `src/library/`, `main.rs` -> `src/main-rs/`. The generated `.rs` files still compile unchanged (byte-identical), so no Cargo/visibility risk. NOT done: true Rust `mod` split; `src/catalog/keyword-tree.part` is still 4.2k lines.
 - Phase 5: `test/lint_src_layout.mjs` (`npm run lint:src`, part of `npm test`) + `.github/workflows/src-layout.yml` enforce byte-exact round trip and per-part line ceilings. NOT done: grouping the 115 npm scripts.
+
+## Agent-ergonomics follow-up (2026-10-16)
+Decision: skip a full ES-module rewrite (little user benefit, high silent-breakage risk). Instead:
+- `tools/scripts/app-uses.mjs <name> [--lines] [--all]` — definitions + callers by file, so an agent sees blast radius before editing.
+- `test/unit/` (`npm run unit:test`, in `npm test`) — no-browser tests for OKLab/OKLCH and ProPhoto->sRGB, using `extract.mjs` to lift functions out of the app. Add more pure helpers the same way; masks already have `npm run mask:test`.
+- Only consider real modules for color/RAW maths and masks, and only if these tests make it cheap.
