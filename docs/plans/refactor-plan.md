@@ -77,3 +77,6 @@ Completeness is defined by scans of the running repo, not this list:
 - `tools/scripts/bump-build.py` stamps BUILD in both the html and the segment that holds it.
 - Because the html stays committed and tests/builds keep reading it, nothing else had to change (156 test files, build-ios.sh, build-desktop.sh, token generator, hooks).
 - Limit: html -> src re-split only produces the 28-segment layout. Once Phase 2 cuts block 13 into finer files, direct html edits to moved code can no longer be mapped back, so Phase 2 must first make `src/app` the only edit surface (edit hook that rejects direct html edits, build-tokens retargeted at its segment).
+
+### Phase 1b (2026-10-16): done
+Script segments over 2,000 lines are cut at every column-0 `// ── ` section header into files named `NN-script--<header-slug>.js.html` (the 24.5k-line block is now ~108 files, largest 2,120 lines). Cuts are pure text, derived from content alone, so the html<->src sync stays lossless in both directions. Chunks are text slices, not modules: a file may start mid-function, and Phase 2 still has to turn them into real modules with explicit dependencies using `docs/plans/app-map.json`.
