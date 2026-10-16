@@ -4479,7 +4479,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <div class="fx-ctrl" data-fxsec="vig">
         <div class="fx-ctrl-title">Effects <div class="fx-toggle" id="tg-vig" onclick="toggleFX('vig')"></div></div>
         <div class="fx-fields ff-off" id="ff-vig">
-          <div class="fx-row"><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">50</div></div>
+          <div class="fx-row"><div class="fx-label">Vignette</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-vig" oninput="fxUpdate()"><div class="fx-val" id="vl-vig">0</div></div>
           <div class="fx-row"><div class="fx-label">Clarity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-clarity" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-clarity">0</div></div>
           <div class="fx-row" title="Adds or removes fine surface detail (radius-1 high-pass) — positive adds crunchy texture/grain-like detail, negative softens it. Distinct from Clarity's wider midtone-structure move."><div class="fx-label">Texture</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-texture" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-texture">0</div></div>
           <div class="fx-row" title="Cuts atmospheric haze in the distance — extra contrast/black-point/saturation, but only where the image reads BRIGHT and DESATURATED (a hazy sky or ridge), so foreground color is left alone. Negative values add haze back in."><div class="fx-label">Dehaze</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-dehaze" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-dehaze">0</div></div>
@@ -7272,7 +7272,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016T';
+const BUILD='1.1016U';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
