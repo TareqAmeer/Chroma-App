@@ -71,14 +71,9 @@ Completeness is defined by scans of the running repo, not this list:
 - Concurrent sessions touching the same files — do each module move in a single commit and push immediately.
 - Flaky gates (`export_harness` blank render, `video_harness`) — rerun before blaming the refactor (see docs/testing.md).
 
-## Phase 1 status (2026-10-16)
-Done: `tools/scripts/app-split.mjs` cuts `chromasmith-22.html` into 28 segments under `src/app/` (markup chunks + one file per `<script>` block) and `tools/scripts/app-build.mjs` rebuilds it; `npm run app:roundtrip` proves the rebuild is byte-identical. `src/app/` is gitignored for now.
-
-Deliberately NOT done: flipping the source of truth. These writers edit `chromasmith-22.html` in place and must be re-pointed first, or `src/` will drift on every commit:
-- `.claude/hooks/bump-build-stamp.*` and `tools/scripts/bump-build.py` (BUILD stamp, patches the index blob)
-- `tools/scripts/build-tokens.mjs` (generates the `TOKENS:` blocks)
-- `.claude/hooks/block-full-html-read.sh`, `token-lint-on-edit.sh`, `tools/githooks/pre-commit`
-- `build-ios.sh`, `build-desktop.sh`, and any `test/` file that greps or patches the big file
-- other agents/sessions that edit the big file concurrently
-
-Flip sequence: (1) make each writer operate on the segment that holds its markers, (2) commit `src/app/`, (3) make `chromasmith-22.html` generated with a pre-commit `app-build --check`, (4) update CLAUDE.md contract rules.
+## Phase 1 status (2026-10-16): DONE
+- `src/app/` (28 segments + `manifest.json`) is committed; `npm run app:roundtrip` proves split -> build is byte-identical.
+- Two-way sync, no flag day: `tools/githooks/pre-commit` runs `tools/scripts/app-sync.mjs` on the INDEX (never stages other sessions' unstaged edits). Edit `chromasmith-22.html` directly (as today) and the commit refreshes `src/app/`; edit a `src/app/` segment and the commit rebuilds `chromasmith-22.html`; edit both inconsistently and the commit is blocked with instructions. Verified in a scratch clone for all three cases.
+- `tools/scripts/bump-build.py` stamps BUILD in both the html and the segment that holds it.
+- Because the html stays committed and tests/builds keep reading it, nothing else had to change (156 test files, build-ios.sh, build-desktop.sh, token generator, hooks).
+- Limit: html -> src re-split only produces the 28-segment layout. Once Phase 2 cuts block 13 into finer files, direct html edits to moved code can no longer be mapped back, so Phase 2 must first make `src/app` the only edit surface (edit hook that rejects direct html edits, build-tokens retargeted at its segment).
