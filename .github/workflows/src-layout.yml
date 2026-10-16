@@ -1,0 +1,19 @@
+name: Source layout guard
+
+# src/app, src/library-ui, src/catalog, src/library, src/main-rs must rebuild their generated targets
+# byte-for-byte, and no part may exceed its size ceiling (docs/plans/refactor-plan.md).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  src-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test/lint_src_layout.mjs

@@ -80,3 +80,9 @@ Completeness is defined by scans of the running repo, not this list:
 
 ### Phase 1b (2026-10-16): done
 Script segments over 2,000 lines are cut at every column-0 `// ── ` section header into files named `NN-script--<header-slug>.js.html` (the 24.5k-line block is now ~108 files, largest 2,120 lines). Cuts are pure text, derived from content alone, so the html<->src sync stays lossless in both directions. Chunks are text slices, not modules: a file may start mid-function, and Phase 2 still has to turn them into real modules with explicit dependencies using `docs/plans/app-map.json`.
+
+## Status of Phases 2-5 (2026-10-16)
+- Phase 2 (web app): the big script's section files live in domain folders under `src/app/18-script/` (masks, subjects-ai, color-raw, export-io, history-presets, shell-ui, editor). Layout only: still one shared global scope, no behaviour change. NOT done: real modules with explicit dependencies (needs a hand-reviewed pass per domain using `app-map.json`, with `export_harness` after each).
+- Phase 3: `desktop/library-ui.js` -> `src/library-ui/` (66 parts, max 1.4k lines) via the same two-way sync.
+- Phase 4: `catalog.rs` -> `src/catalog/` (31 parts), `library.rs` -> `src/library/`, `main.rs` -> `src/main-rs/`. The generated `.rs` files still compile unchanged (byte-identical), so no Cargo/visibility risk. NOT done: true Rust `mod` split; `src/catalog/keyword-tree.part` is still 4.2k lines.
+- Phase 5: `test/lint_src_layout.mjs` (`npm run lint:src`, part of `npm test`) + `.github/workflows/src-layout.yml` enforce byte-exact round trip and per-part line ceilings. NOT done: grouping the 115 npm scripts.

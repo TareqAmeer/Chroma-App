@@ -32,6 +32,7 @@ and the hard-won lessons from building it.
 9. **Linear ticket workflow.** When starting work on a Linear ticket, move it to "In Progress". When
    done, move it to "In Review" (the team's ready-for-review status) and comment on it with the work committed and pushed to main
    (commit hashes + one line each).
+10. **Source layout.** `chromasmith-22.html`, `desktop/library-ui.js` and the big `desktop/src-tauri/src/{catalog,library,main}.rs` are also kept as small section files under `src/{app,library-ui,catalog,library,main-rs}/`. Edit either side; the pre-commit hook (`tools/scripts/app-sync.mjs`) syncs the other, and blocks if both changed inconsistently. `npm run lint:src` checks it. Plan + status: [docs/plans/refactor-plan.md](docs/plans/refactor-plan.md).
 8. **Plans must define completeness from the running app, not a hand-typed list.** A plan that says
    "cover every X" names the scan that lists every X and makes that scan its done-criterion; it
    covers themes, every width, every resizer min/default/max and every state, and gets a
