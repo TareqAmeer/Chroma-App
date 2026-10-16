@@ -119,7 +119,8 @@ function lookActions(){
   $('#phone-look-strength')?.toggleAttribute('disabled',!val);
 }
 function setupLooks(){
-  const looks=$('#fx-looks');if(!looks||$('#phone-look-actions'))return;
+  const looks=$('#fx-looks');if(window.__TAURI__){document.body.classList.add('phone-looks-search');return;} // desktop: search always visible, no magnifier/phone action row
+  if(!looks||$('#phone-look-actions'))return;
   // Search stays hidden behind a magnifier at the start of the category chips.
   const cats=$('#fx-looks-cats'),search=$('#fx-looks-search');
   if(cats&&search&&!$('#phone-looks-bar')){const bar=document.createElement('div');bar.id='phone-looks-bar';cats.before(bar);
