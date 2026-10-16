@@ -357,3 +357,12 @@ body.sk2.mobile-fx #fx-actionbar .vtog,#mlib .vtog{display:flex}
    hit-testing instead: touches on the line fall through (the panel scrolls), the 22px square still drags. */
 body.mobile-fx input[type=range].fx-slider{pointer-events:none}
 body.mobile-fx input[type=range].fx-slider::-webkit-slider-thumb{pointer-events:auto}
+/* Quick tools bar: ten buttons, scrolls sideways instead of squeezing. */
+body.sk2.mobile-fx #fx-quicknav{justify-content:flex-start;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+body.sk2.mobile-fx #fx-quicknav::-webkit-scrollbar{display:none}
+body.sk2.mobile-fx #fx-quicknav button{flex:0 0 auto;min-width:64px;padding:0 6px;white-space:nowrap}
+/* Quick bar swipe-to-resize needs vertical touches delivered to JS, not the sideways scroller. */
+body.sk2.mobile-fx #fx-quicknav{overflow-y:hidden;touch-action:pan-x}
+/* Thin (text-only) strip: every button, including All FX and Previous, is the same plain label. */
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button{display:flex!important;visibility:visible!important;opacity:1!important;align-items:center;justify-content:center;flex:0 0 auto;min-width:64px;color:var(--k-color-muted)}
+body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button>span{display:none!important}

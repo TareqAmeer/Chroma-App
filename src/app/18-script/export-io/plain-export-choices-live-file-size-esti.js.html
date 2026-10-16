@@ -215,15 +215,8 @@ function buildSecNav(){          // mobile categorized tool grid
     b.onclick=()=>fxSection(key);
     grid.appendChild(b);
   });
-  // Phone quick bar (All FX / Previous / Light / …): the rest of the tools follow, reached by
-  // scrolling the bar sideways — same list and order as the Tools grid.
+  // Phone quick bar: fixed set in the markup (All FX, Previous, Light, Color Mixer, Rotate, Borders, Grain, Halation, Bloom, Canvas); every other tool lives in the Tools grid.
   const qn=document.getElementById('fx-quicknav');
-  if(qn)_eachSection((key,lb)=>{
-    if(key==='image'||key==='looks'||key==='info'||key==='diag'||FX_MOBILE_HIDE.has(key))return;
-    if(qn.querySelector('[data-sec="'+key+'"]'))return;
-    const q=document.createElement('button');q.dataset.sec=key;q.title=lb;
-    q.innerHTML=`<span>${icon(key,22)}</span>${lb}`;q.onclick=()=>fxSection(key);qn.appendChild(q);
-  });
   fxReorderable(qn);fxReorderable(grid);
   // No Close button: tapping Tools again or pulling the panel down closes it.
   fxMobileFilter(_fxMobileCat);
