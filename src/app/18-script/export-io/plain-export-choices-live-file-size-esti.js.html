@@ -400,7 +400,8 @@ function fxSection(name,noSheet){
   document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
   const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
   // Phones open straight to the controls: a tool picked from the bar should never land folded.
-  cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
+  // Desktop: Input & Prints and Film Negative stay folded when their stage opens (a sub-tab click opens them).
+  cards.forEach(c=>{if(!mob&&(c.dataset.fxsec==='inprint'||c.dataset.fxsec==='filmneg'))return;if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
   if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
   if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
   if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
