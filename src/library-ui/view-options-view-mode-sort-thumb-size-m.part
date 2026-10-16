@@ -1,0 +1,68 @@
+  // ── view options: view mode, sort, thumb size, metadata display, source ─────────────────
+  const viewSeg = overlay.querySelector('#lib-viewmode-seg');
+  const listViewBtn = viewSeg.querySelector('[data-v="list"]');
+  // HANDOVER §3.12: renderGrid's own isList = viewMode==='list' && !docked (the docked 340px
+  // strip really can't show a table) is correct — the bug was the BUTTON claiming an effect it
+  // can't have. Disable it while docked instead of leaving it clickable-but-inert.
+  function syncListViewAvailability() {
+    const docked = document.body.classList.contains('deskx') && !overlay.classList.contains('full') && !state.unified_view;
+    listViewBtn.disabled = docked;
+    listViewBtn.title = docked ? 'List view (unavailable while docked — expand the Gallery first)' : 'List view';
+  }
+  function syncViewSeg() { viewSeg.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === state.viewMode)); syncListViewAvailability(); try { syncViewMenuChecks(); } catch {} }
+  viewSeg.querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      if (b.disabled) return;
+    if (state.viewMode === 'compare' || state.viewMode === 'survey') exitCompareMode();
+      state.viewMode = b.dataset.v; localStorage.setItem('chromasmith_lib_view', state.viewMode); syncViewSeg(); renderGrid();
+    };
+  });
+  // Compare moved out of the topbar segmented toggle into the gear's View menu (see the "C"
+  // keyboard shortcut, still wired the same way elsewhere) — a real feature, just not one of
+  // the two everyday view modes.
+  overlay.querySelector('#lib-compare-btn')?.addEventListener('click', () => enterCompareMode());
+  overlay.querySelector('#lib-survey-btn')?.addEventListener('click', () => enterSurveyMode());
+  overlay.querySelector('#lib-preview-btn')?.addEventListener('click', () => { if (window.settingsClose) settingsClose(); openPhotoPreview(); });
+  // 'compare' was never a persisted-view default before this session — a stale localStorage
+  // value from a crash mid-compare should fall back to grid on next load, not silently retry
+  // entering compare with no selection.
+  if (state.viewMode === 'compare' || state.viewMode === 'survey') state.viewMode = 'grid';
+  syncViewSeg();
+
+  const thumbSlider = overlay.querySelector('#lib-thumbsize');
+  thumbSlider.value = state.thumbSize;
+  thumbSlider.oninput = (e) => {
+    state.thumbSize = parseInt(e.target.value, 10);
+    localStorage.setItem('chromasmith_lib_thumbsize', state.thumbSize);
+    if (grid) grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
+  };
+  // The zoomOut/zoomIn icons flanking the slider were pure decoration — no element, no handler —
+  // so clicking them did nothing (only dragging the slider itself worked). Step by the slider's
+  // own `step` (10px), clamp to its min/max, then dispatch a real 'input' event so the existing
+  // handler above stays the single source of truth instead of duplicating its body here.
+  const thumbStep = parseInt(thumbSlider.step, 10) || 10;
+  function nudgeThumbSize(dir) {
+    const min = parseInt(thumbSlider.min, 10), max = parseInt(thumbSlider.max, 10);
+    const next = Math.max(min, Math.min(max, parseInt(thumbSlider.value, 10) + dir * thumbStep));
+    if (next === parseInt(thumbSlider.value, 10)) return;
+    thumbSlider.value = next;
+    thumbSlider.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const zoomOutBtn = overlay.querySelector('#lib-zoom-out'), zoomInBtn = overlay.querySelector('#lib-zoom-in');
+  if (zoomOutBtn) zoomOutBtn.onclick = () => nudgeThumbSize(-1);
+  if (zoomInBtn) zoomInBtn.onclick = () => nudgeThumbSize(1);
+
+  const viewsSel = overlay.querySelector('#lib-views');
+  if (viewsSel) { viewsSel.onchange = onViewsChange; renderViewsMenu(); }
+  const sortSel = overlay.querySelector('#lib-sort');
+  sortSel.value = state.sortBy;
+  sortSel.onchange = (e) => { state.sortBy = e.target.value; localStorage.setItem('chromasmith_lib_sort', state.sortBy); renderGrid(); };
+  // #13: the standalone #lib-sort-dir button is gone — direction is now the sort menu's own
+  // Newest/Oldest radio pair (wired below, near syncSortMenuSel). This function is what's left:
+  // the list-view column-header click handler (further down) still needs a way to flip
+  // direction on a second click of the active column, with no DOM button behind it any more.
+  function toggleSortDir() {
+    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+    localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+    syncSortMenuSel(); renderGrid();
+  }

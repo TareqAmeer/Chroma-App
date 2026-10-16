@@ -1,0 +1,36 @@
+  // ── C3: Google-Photos-synced badge ────────────────────────────────────────────────────
+  window.chromasmithRecordSynced = async (paths) => {
+    if (!Array.isArray(paths)) return;
+    // Was a serial await-in-loop (one invoke per path, awaited one at a time) — batched for the
+    // same reason as runDupeDetection above, and this one was strictly worse than parallel since
+    // it wasn't even concurrent.
+    try { await invoke('registry_set_many', { name: 'gphotos', present: paths, absent: [] }); }
+    catch (e) { console.error('registry_set_many(gphotos)', e); }
+    paths.forEach((p) => state.syncedPaths.add(p));
+    renderCollectionCounts();
+    renderGrid();
+  };
+  // Loads the synced-paths registry once and intersects with the current folder's entries so
+  // the ☁ badge/filter know which of THIS folder's photos are already synced. Mirrors the
+  // sidecar-fetch pattern (a single background invoke, not per-path).
+  async function loadSyncedForFolder(entries, openToken) {
+    try {
+      const list = await invoke('list_collection', { name: 'gphotos' });
+      if (state._openToken !== openToken || state.source !== 'folder') return;
+      const known = new Set((list || []).map((e) => e.path));
+      entries.forEach((e) => { if (known.has(e.path)) state.syncedPaths.add(e.path); });
+      renderGrid();
+    } catch (e) { /* best-effort */ }
+  }
+  async function markFolderSyncedIfGphotosDownloads(path, entries) {
+    try {
+      const gDir = await gphotosDownloadsDir();
+      if (!gDir || path !== gDir) return;
+      // Files living in the Google Photos import-download folder are by definition already
+      // mirrored there — mark every photo in it as synced on open.
+      // Same batching fix as runDupeDetection's own comment — one call for the whole folder.
+      await invoke('registry_set_many', { name: 'gphotos', present: entries.map((e) => e.path), absent: [] }).catch(() => {});
+      entries.forEach((e) => state.syncedPaths.add(e.path));
+      renderCollectionCounts();
+    } catch (e) { /* best-effort */ }
+  }

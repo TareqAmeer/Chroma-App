@@ -1,0 +1,300 @@
+// ── Per-root cache usage/clearing ───────────────────────────────────────────────────────────
+//
+// The global `cache_usage`/`clear_cache_tier` above cover the common case, but a user with
+// several catalogued roots (an old archive volume plus a current one, say) has no way to see
+// or clear just ONE root's share. Scoped to the offline-thumbnail tier only — it's the one
+// tier a photo's `id` cleanly attributes to a specific root (sharded `thumbs/<id%256>/<id>.jpg`,
+// stat'd per-file rather than walked, which is actually CHEAPER than the global version's
+// directory walk once a root is a small fraction of the whole tier). The decode cache and
+// working-thumbnail tier are NOT split per-root: both are keyed by opaque hashed cache keys
+// with no root column to filter on, and both are self-managing LRU caches anyway — global
+// clearing already covers the practical need for those two.
+
+#[derive(Serialize)]
+pub struct RootCacheUsage {
+    pub root_id: i64,
+    pub volume_label: String,
+    pub rel_path: String,
+    pub abs_path: String,
+    pub photo_count: u64,
+    pub offline_thumbs_bytes: u64,
+    pub kind: String,
+}
+
+/// Present, thumbnailed photo ids under a root — shared by the usage computation and the
+/// clear action below so they can never disagree about what "under this root" means.
+/// `rel_path = ""` (a root registered at a volume's own top level) matches every photo on that
+/// volume; otherwise a photo qualifies when its `rel_dir` IS the root or sits BENEATH it
+/// (`rel_dir LIKE root||'/%'`) — the same prefix convention `scan_run`'s own "mark absent on
+/// this subtree" query already uses.
+fn thumb_photo_ids_under_root(conn: &Connection, volume_id: i64, rel_path: &str) -> Result<Vec<i64>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id FROM photos
+             WHERE volume_id = ?1 AND present = 1 AND thumb = 1
+               AND (?2 = '' OR rel_dir = ?2 OR rel_dir LIKE ?2 || '/%')",
+        )
+        .map_err(|e| e.to_string())?;
+    let ids = stmt
+        .query_map(params![volume_id, rel_path], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<i64>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(ids)
+}
+
+pub fn cache_usage_by_root_run(conn: &Connection) -> Result<Vec<RootCacheUsage>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.id, v.label, r.rel_path, v.last_path, v.is_local, r.volume_id, r.kind
+             FROM roots r JOIN volumes v ON v.id = r.volume_id
+             ORDER BY v.label, r.rel_path",
+        )
+        .map_err(|e| e.to_string())?;
+    let roots: Vec<(i64, String, String, String, i64, i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let mut out = Vec::with_capacity(roots.len());
+    for (root_id, volume_label, rel_path, last_path, is_local, volume_id, kind) in roots {
+        let ids = thumb_photo_ids_under_root(conn, volume_id, &rel_path)?;
+        let offline_thumbs_bytes: u64 = ids.iter().map(|id| std::fs::metadata(offline_thumb_path(*id)).map(|m| m.len()).unwrap_or(0)).sum();
+        out.push(RootCacheUsage {
+            root_id,
+            volume_label,
+            abs_path: abs_path(&last_path, is_local != 0, &rel_path),
+            rel_path,
+            photo_count: ids.len() as u64,
+            offline_thumbs_bytes,
+            kind,
+        });
+    }
+    Ok(out)
+}
+
+#[tauri::command(async)]
+pub fn catalog_root_cache_usage(state: tauri::State<CatalogState>) -> Result<Vec<RootCacheUsage>, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    cache_usage_by_root_run(&conn)
+}
+
+/// Clears just this root's share of the offline-thumbnail tier (see the module doc comment on
+/// why only that tier is root-scoped) and resets `thumb = 0` on exactly the rows it touched —
+/// same reasoning as the global `clear_cache_tier`, just narrowed to one root's ids instead of
+/// every present row.
+pub fn clear_root_cache_run(conn: &Connection, root_id: i64) -> Result<u64, String> {
+    let (volume_id, rel_path): (i64, String) = conn
+        .query_row("SELECT volume_id, rel_path FROM roots WHERE id = ?1", params![root_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?;
+    let ids = thumb_photo_ids_under_root(conn, volume_id, &rel_path)?;
+    let mut freed = 0u64;
+    for id in &ids {
+        let p = offline_thumb_path(*id);
+        if let Ok(meta) = std::fs::metadata(&p) {
+            freed += meta.len();
+        }
+        let _ = std::fs::remove_file(&p);
+    }
+    if !ids.is_empty() {
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for id in &ids {
+            tx.execute("UPDATE photos SET thumb = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+    Ok(freed)
+}
+
+#[tauri::command(async)]
+pub fn clear_root_cache(root_id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let freed = clear_root_cache_run(&conn, root_id);
+    invalidate_cache_usage();
+    freed
+}
+
+/// Extracts the raw bytes from a `library::get_thumbnail` response — that command returns a
+/// `tauri::ipc::Response` wrapping `InvokeResponseBody::Raw(Vec<u8>)` for a real photo, never
+/// `Json`, so the `Json` arm here is unreachable in practice; kept explicit rather than an
+/// `unwrap` so a future change to that function's response shape fails loudly instead of
+/// panicking a background scan thread.
+/// ⚠️ Deliberately NOT the same decode as the grid's `get_thumbnail` (360px, speed-first, LRU-
+/// evictable) — this is the offline REFERENCE tier's own 800px, never-pruned generation, via
+/// `library::offline_reference_bytes`. They used to share one function; bumping the offline
+/// tier's resolution without also bumping the grid's would have meant either paying 800px decode
+/// cost for every grid scroll, or reusing a still-360px source and never actually reaching 800px.
+fn thumbnail_bytes_for(path: &str) -> Result<Vec<u8>, String> {
+    crate::library::offline_reference_bytes(path)
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct ThumbResult {
+    pub generated: usize,
+    /// True if this batch was full (32 items) — the JS-side pacer uses this to decide whether to
+    /// schedule another paced call or stop, without a second query.
+    #[serde(default)]
+    pub has_more: bool,
+    /// Photos still needing an offline preview AFTER this batch — the real backlog, so the
+    /// Indexing panel can show "2,808 of 57,288" instead of a per-batch "0 of 32" that looks
+    /// frozen for hours while steadily working.
+    #[serde(default)]
+    pub remaining: u64,
+}
+
+/// Same chunked/resumable/offline-safe shape as the other phases. Video is excluded from the
+/// candidate set entirely (not just skipped on failure) — there is no still-frame decoder for
+/// it here at all (CLAUDE.md's own note: the `image` crate can't read MP4, and a real video
+/// thumbnail needs the WebView's own mediabunny pipeline), so attempting it every scan would be
+/// pure waste rather than a retryable transient failure.
+///
+/// ⚠️ Does exactly ONE batch (`ThumbResult.has_more` tells the caller whether to call again),
+/// not a `loop` that drains the whole backlog before returning. The candidate set is already
+/// correctly filtered to `thumb = 0` — an ordinary relaunch with nothing new does zero work, as
+/// intended — but a genuinely large first-time import (thousands of new files) used to run this
+/// as one unbroken invoke() burning every rayon thread for as long as it took to clear the whole
+/// backlog (measured: ~11 minutes for ~27,000 newly-added RAWs), competing with the interactive
+/// grid and everything else for the entire duration. One batch per call lets `catalog_thumbnails`
+/// (below) be re-invoked with a real pacing delay between calls instead, so this phase's own
+/// existence never monopolizes the CPU continuously, regardless of how large the backlog is.
+// ⚠️ A SMALLER, SEPARATE pool for full-image-decode batch work (thumbnail generation, focus
+// scoring below) — not the global rayon pool every other `.par_iter()` in this file uses.
+// main.rs's global pool is already capped to `cores-2` for the app as a whole (see its own
+// comment: a live 57k-photo run showed the main thread stuck in `pthread_cond_wait` for a full
+// 3s window from total core saturation). That cap alone doesn't stop ONE batch's `.par_iter()`
+// here from still using every one of those `cores-2` threads simultaneously for as long as a
+// batch of real decodes takes — confirmed live: on a cold thumbnail cache, this batch pass
+// running concurrently with the interactive Library grid's own per-card `get_thumbnail_fast`/
+// `get_thumbnail_or_offline` (dispatched onto Tauri's separate tokio worker pool, so they don't
+// even touch THIS pool, but still compete for the same finite physical cores) left the on-screen
+// grid's visible cards without a single thumbnail for 50+ seconds. Halving the already-reduced
+// budget again is what actually leaves headroom: `cores-2` real cores earmarked for tokio's
+// interactive dispatch + the main UI thread, this pool gets at most half of the REMAINING
+// capacity so a bulk pass can never re-saturate everything by itself.
+fn decode_batch_pool() -> &'static rayon::ThreadPool {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| {
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        let workers = (cores.saturating_sub(2) / 2).max(1);
+        rayon::ThreadPoolBuilder::new().num_threads(workers).build().expect("decode batch pool")
+    })
+}
+
+/// The candidate predicate, in ONE place — `thumbnail_select_batch` and
+/// `thumbnail_remaining` must never disagree, or the progress readout drifts from the work.
+/// `thumb_long_edge = -1` is the "attempted and failed, do not auto-retry" sentinel (see
+/// `thumbnail_commit_batch`) — without excluding it here, a single undecodable file blocks the
+/// ENTIRE queue forever: with no ORDER BY, `LIMIT 32` kept re-selecting the exact same doomed
+/// rows on every call, `generated` stayed 0, and `remaining` never moved. Measured live on the
+/// real library: 32 iPhone ProRAW DNGs, one call every 200ms, zero progress for over an hour.
+const THUMB_CANDIDATE_WHERE: &str =
+    "p.present = 1 AND p.kind != 'video' AND p.thumb_long_edge >= 0 AND p.thumb_long_edge < 800";
+
+/// Phase A — pick the next batch. Pure SQL, no decoding: safe to run under a SHORT read lock.
+fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, String> {
+    let sql = format!(
+        "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
+         FROM photos p JOIN volumes v ON v.id = p.volume_id
+         WHERE {THUMB_CANDIDATE_WHERE}
+         ORDER BY p.id
+         LIMIT 32"
+    );
+    let rows: Vec<(i64, Option<String>, i64)> = conn
+        .prepare(&sql)
+        .map_err(|e| e.to_string())?
+        .query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let rel_path: String = r.get(1)?;
+            let last_path: String = r.get(2)?;
+            let is_local: i64 = r.get(3)?;
+            let mtime: i64 = r.get(4)?;
+            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect())
+}
+
+/// How many photos still need an offline preview — the REAL backlog, for honest progress.
+/// The old code reported `total: batch_len` (always 32), which is why an hour of steady work
+/// read as a frozen "0 of 32" with no way to tell it was advancing at all.
+fn thumbnail_remaining(conn: &Connection) -> u64 {
+    let sql = format!("SELECT COUNT(*) FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE {THUMB_CANDIDATE_WHERE}");
+    conn.query_row(&sql, [], |r| r.get::<_, i64>(0)).map(|n| n as u64).unwrap_or(0)
+}
+
+/// Phase B — the expensive part. Takes NO database handle by construction, so it is impossible
+/// to accidentally hold the catalog lock across it (which is exactly what made the whole app
+/// unresponsive: `thumbnail_run` used to run this entire 32-photo `par_iter` inside the writer
+/// lock, blocking every UI read and every other phase for the duration).
+fn thumbnail_decode_batch(batch: &[(i64, String, i64)]) -> Vec<(i64, Result<Vec<u8>, String>, i64)> {
+    decode_batch_pool()
+        .install(|| batch.par_iter().map(|(id, abs, mtime)| (*id, thumbnail_bytes_for(abs), *mtime)).collect())
+}
+
+/// Phase C — write the results. Short write lock: file writes plus one small transaction.
+/// ⚠️ A decode FAILURE now sets `thumb_long_edge = -1` — see THUMB_CANDIDATE_WHERE's doc comment
+/// for the infinite-stall this closes. It does NOT touch `thumb`/`thumb_mtime`, so a previously-
+/// working lower-res offline copy (there almost always is one — this tier only ever runs as an
+/// UPGRADE pass) keeps being served exactly as before; only the 800px upgrade attempt stops. The
+/// real error is logged (not silently discarded via `.ok()`, which is how this went unnoticed
+/// live) so a genuinely fixable decode bug — like the DNG one this shipped alongside — is visible
+/// the first time it happens, not only after someone notices progress stalled.
+fn thumbnail_commit_batch(conn: &Connection, generated: &[(i64, Result<Vec<u8>, String>, i64)]) -> Result<usize, String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut n = 0usize;
+    for (id, result, mtime) in generated {
+        let bytes = match result {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("[bg] thumbnail id={id}: permanently skipping (decode failed): {e}");
+                tx.execute("UPDATE photos SET thumb_long_edge = -1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+                continue;
+            }
+        };
+        if std::fs::write(offline_thumb_path(*id), bytes).is_err() {
+            eprintln!("[bg] thumbnail id={id}: permanently skipping (disk write failed)");
+            tx.execute("UPDATE photos SET thumb_long_edge = -1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+            continue;
+        }
+        // thumb_mtime records the mtime this thumbnail was generated AGAINST — get_thumbnail_or_
+        // offline's fast path only trusts this file when the live source still matches it.
+        tx.execute("UPDATE photos SET thumb = 1, thumb_mtime = ?2, thumb_long_edge = 800 WHERE id = ?1", params![id, mtime]).map_err(|e| e.to_string())?;
+        n += 1;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(n)
+}
+
+/// Single-connection wrapper over the three phases above — used by the tests (and any caller
+/// that legitimately already holds one connection for the whole operation). ⚠️ The Tauri command
+/// `catalog_thumbnails` deliberately does NOT use this: it drives the same three phases with
+/// SEPARATE short-lived locks so the decode never runs under the catalog lock.
+pub fn thumbnail_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ThumbResult, String> {
+    let mut result = ThumbResult::default();
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(result);
+    }
+    let batch = thumbnail_select_batch(conn)?;
+    if batch.is_empty() {
+        progress(ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+        return Ok(result);
+    }
+    let batch_len = batch.len();
+    let remaining = thumbnail_remaining(conn);
+    progress(ScanProgress { phase: "thumb".into(), done: 0, total: remaining as usize, current: String::new() });
+    let generated = thumbnail_decode_batch(&batch);
+    result.generated = thumbnail_commit_batch(conn, &generated)?;
+    result.remaining = remaining.saturating_sub(result.generated as u64);
+    // A full batch means there MAY be more (this pass alone can't tell without another SELECT,
+    // and a cheap over-estimate here just costs one extra empty call from the JS-side pacer,
+    // which is harmless) — an under-full batch means the candidate set is exhausted.
+    result.has_more = batch_len == 32;
+    progress(ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
+    Ok(result)
+}

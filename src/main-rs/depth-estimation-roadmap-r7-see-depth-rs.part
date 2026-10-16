@@ -1,0 +1,51 @@
+// ── Depth estimation (ROADMAP R7) — see depth.rs for the model, the licensing verification and
+// the honest caveat on I/O contract verification. Framed request/response, same idiom as
+// faceparse_run above: caller sends a decoded RGB8 photo (downsampled to a working size on the JS
+// side, the same "photo already resized before it reaches Rust" convention faceparse_run and
+// sam_encode use) + width/height; response is one width*height byte depth map (0=far, 255=near).
+/// Returns any embedded depth/matte maps carried by the selected HEIC/JPEG. Unlike `depth_run`,
+/// this reads the camera's own auxiliary data and never falls back to inferred depth.
+#[tauri::command(async)]
+fn extract_embedded_auxiliary(path: String) -> Result<Vec<auxiliary::AuxiliaryMap>, String> {
+    if path.trim().is_empty() { return Err("extract_embedded_auxiliary: empty path".into()); }
+    auxiliary::extract(&path)
+}
+
+#[tauri::command(async)]
+fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("depth_run: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let map = depth::estimate(payload, w, h)?;
+    #[derive(serde::Serialize)]
+    struct Header { width: u32, height: u32 }
+    let header = Header { width: w, height: h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("depth_run header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + map.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&map);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command(async)]
+fn inpaint_start(request: tauri::ipc::Request) -> Result<inpaint::Report, String> {
+    let (json,payload)=parse_framed(request.body())?;
+    let w=u32::try_from(json["width"].as_u64().ok_or("missing width")?).map_err(|_|"invalid width")?;
+    let h=u32::try_from(json["height"].as_u64().ok_or("missing height")?).map_err(|_|"invalid height")?;
+    let n=(w as usize).checked_mul(h as usize).ok_or("image dimensions overflow")?;
+    if n==0 || n>100_000_000 || payload.len()!=n*5{return Err("Expected full-resolution RGBA source plus binary mask".into());}
+    let source=PathBuf::from(json["sourcePath"].as_str().ok_or("missing source path")?);
+    let mut rgb=Vec::with_capacity(n*3);for pixel in payload[..n*4].chunks_exact(4){rgb.extend_from_slice(&pixel[..3]);}
+    inpaint::start(source,rgb,payload[n*4..].to_vec(),w,h)
+}
+#[tauri::command(async)]
+fn inpaint_export_bundle(source_path:String,patches:Vec<inpaint::PatchRef>,destination:String,recipe:String)->Result<String,String>{
+    let source=PathBuf::from(&source_path);let copied=inpaint::export_bundle_files(&source,&patches,Path::new(&destination))?;
+    let existing=canon::sidecar_path_for(&source);if existing.exists(){std::fs::copy(existing,canon::sidecar_path_for(&copied)).map_err(|e|e.to_string())?;}
+    let sc=library::get_sidecar(source_path);library::set_sidecar_run(copied.to_string_lossy().into_owned(),sc.rating,sc.label,true,Some(recipe),Some(sc.favorite),None)?;
+    Ok(copied.parent().unwrap().to_string_lossy().into_owned())
+}

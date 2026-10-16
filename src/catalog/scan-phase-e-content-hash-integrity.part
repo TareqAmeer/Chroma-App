@@ -1,0 +1,172 @@
+// ── Scan phase E: content-hash integrity ────────────────────────────────────────────────────
+//
+// The single most-requested photo-library feature that isn't duplicate/missing-file detection
+// (per this project's own research into what other tools' users actually ask for): silent
+// corruption — a file that is present and opens fine but has quietly bit-rotted. Lightroom
+// warns about missing photos but never about corrupted-but-present ones.
+//
+// `hashed_at` stores the file's `mtime` AT THE TIME the hash was computed — same convention as
+// `meta_mtime`/`sidecar_parsed_mtime` elsewhere in this schema — NOT a wall-clock timestamp
+// despite the name (kept for schema-compat with the original design; the semantics are the
+// resumability marker, exactly like its siblings). This is what lets `hash_run` double as
+// "hash it for the first time" AND "the file legitimately changed since we last hashed it, so
+// re-baseline" in one query, and what lets `verify_run` tell the two apart later.
+
+#[derive(Serialize, Clone, Default)]
+pub struct HashResult {
+    pub hashed: usize,
+}
+
+fn blake3_hex(path: &str) -> Option<String> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut hasher = blake3::Hasher::new();
+    hasher.update_reader(file).ok()?;
+    Some(hasher.finalize().to_hex().to_string())
+}
+
+/// Same chunked/resumable/offline-safe shape as metadata_run and sidecar_run. Resumable via
+/// `content_hash IS NULL OR hashed_at != mtime` — a photo hashed once and never modified since
+/// costs nothing on a re-run; one whose mtime changed (a legitimate edit) gets re-baselined
+/// rather than left pointing at a hash of its old content.
+pub fn hash_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HashResult, String> {
+    let mut result = HashResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND (p.content_hash IS NULL OR p.hashed_at != p.mtime)
+                 LIMIT 64", // smaller batch than metadata/sidecar — each unit of work is a full-file read
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "hash".into(), done: result.hashed, total: result.hashed + batch.len(), current: String::new() });
+
+        let hashed: Vec<(i64, i64, Option<String>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| (*id, *mtime, blake3_hex(abs)))
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, hash) in &hashed {
+            let Some(hash) = hash else { continue }; // unreadable right now — leave unhashed, retried next pass
+            tx.execute("UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3", params![hash, mtime, id])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        let succeeded = hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        result.hashed += succeeded;
+        if succeeded == 0 {
+            let examples = batch.iter().take(3).map(|(_, path, _)| path.as_str()).collect::<Vec<_>>().join(", ");
+            return Err(format!("hash made no progress: {} pending file(s) are unreadable (examples: {})", hashed.len(), examples));
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.hashed, total: result.hashed, current: String::new() });
+    Ok(result)
+}
+
+/// Same content-hash baseline sweep as `hash_run` above, but re-locks `state.conn` fresh EACH
+/// batch instead of holding one guard across the whole (potentially very long, first-import)
+/// operation — see `verify_run_scoped`'s doc comment for the exact class of bug this avoids
+/// (this function's inner batch logic was already correctly rayon-parallelized and chunk-
+/// committed; only the OUTER lock scope needed fixing, unlike verify_run which needed both).
+pub fn hash_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<HashResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = HashResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND (p.content_hash IS NULL OR p.hashed_at != p.mtime)
+                     LIMIT 64"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "hash".into(), done: result.hashed, total: result.hashed + batch.len(), current: String::new() });
+        pacer.start_chunk();
+
+        let hashed: Vec<(i64, i64, Option<String>)> = batch.par_iter().map(|(id, abs, mtime)| (*id, *mtime, blake3_hex(abs))).collect();
+
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, mtime, hash) in &hashed {
+                let Some(hash) = hash else { continue }; // unreadable right now — leave unhashed, retried next pass
+                tx.execute("UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3", params![hash, mtime, id])
+                    .map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        let succeeded = hashed.iter().filter(|(_, _, h)| h.is_some()).count();
+        result.hashed += succeeded;
+        if succeeded == 0 {
+            let examples = batch.iter().take(3).map(|(_, path, _)| path.as_str()).collect::<Vec<_>>().join(", ");
+            return Err(format!("hash made no progress: {} pending file(s) are unreadable (examples: {})", hashed.len(), examples));
+        }
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.hashed, total: result.hashed, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_hash(app: tauri::AppHandle) -> Result<HashResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        hash_run_scoped(&state, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_hash task panicked: {e}"))?
+}

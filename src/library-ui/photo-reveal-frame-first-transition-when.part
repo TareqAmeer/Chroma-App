@@ -1,0 +1,299 @@
+  // ── Photo reveal: frame-first transition when a photo opens in the Editor ──────────────────
+  // Sequence (reference: adambricker.com): the old photo's bottom edge rises while it fades,
+  // inside a 1px frame that stays put → only then the empty frame morphs to the new photo's
+  // shape → the new photo fills the frame top to bottom → the frame fades to nothing.
+  // Ownership rules (the previous attempt broke each of these):
+  //  • The reveal owns VISIBILITY of the real editor pixels: body.lib-reveal-hold hides the whole
+  //    #fx-zoom-wrap (canvas, #lib-provisional, mask overlays) until the fill. It never touches
+  //    that element's transform (the zoom) — only opacity/clip-path/mask during the fill.
+  //  • It never makes the load wait: the opener only calls begin()/pixels()/cancel(), nothing is
+  //    awaited. Pixels that are ready early just speed the remaining animation up.
+  //  • Every call carries the path as a token; calls for any other path are ignored, so a
+  //    superseded open (fast arrow-key culling) can never fill the new frame with the old photo.
+  // Timings are tuned live through the Reveal lab (settings menu) and stored in localStorage
+  // until they are locked into design/tokens.json.
+  const REVEAL_LS = 'chromasmithRevealLab';
+  const REVEAL_EASE = { standard: 'cubic-bezier(.4,0,.2,1)', gentle: 'cubic-bezier(.25,.1,.25,1)', expo: 'cubic-bezier(.16,1,.3,1)', linear: 'linear' };
+  // Defaults = the values tuned in the Reveal lab (2026-09-24). Durations come from the
+  // --reveal-* tokens (design/tokens.json) so there is one source for them.
+  const REVEAL_DEFAULTS = { exit: 60, morph: 80, fill: 80, settle: 100, speedup: 3, ease: 'standard',
+    waiting: 'pulse', pulse: 800, strength: 0.4, edge: 'hard', simulate: 0, from: 'inverse' };
+  const revealTokenMs = (name, fallback) => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return /ms$/.test(v) ? parseFloat(v) : fallback;
+  };
+  const revealCfg = () => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(REVEAL_LS) || '{}') || {}; } catch (_) {}
+    const d = REVEAL_DEFAULTS;
+    return { ...d, exit: revealTokenMs('--reveal-exit', d.exit), morph: revealTokenMs('--reveal-morph', d.morph),
+      fill: revealTokenMs('--reveal-wipe', d.fill), settle: revealTokenMs('--reveal-sharpen', d.settle), ...saved };
+  };
+  let _lastRevealAt = -1e9;
+  const reveal = (() => {
+    let host, snap, frame, lines;
+    let token = null, phase = 'idle', gen = 0, rect = null, target = null, ready = false, lastAspect = 0;
+    let anims = [], morphAnim = null, morphFrom = null, pulseAnim = null, watchdog = 0, softRaf = 0;
+    const perf = (event, path, extra = {}) => rawPerf(`reveal-${event}`, path || '', extra);
+    const enabled = () => window.chromasmithPhotoTransitions !== false &&
+      !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const wrapEl = () => document.getElementById('fx-wrap');
+    const zoomEl = () => document.getElementById('fx-zoom-wrap');
+    const hasPhoto = () => { try { return !!(FX && FX.w); } catch (_) { return false; } };
+    const ensure = () => {
+      if (host && host.isConnected) return host;
+      const wrap = wrapEl(); if (!wrap) return null;
+      host = document.createElement('div'); host.id = 'fx-reveal';
+      host.innerHTML = '<canvas class="fx-reveal-snap"></canvas><div class="fx-reveal-frame">' +
+        '<i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i><i class="fx-reveal-line"></i></div>';
+      wrap.appendChild(host);
+      // The editor's box can still be settling when begin() predicts the frame (library docking,
+      // panels). Re-predict on every resize so the frame always matches where the photo will land.
+      if (window.ResizeObserver) new ResizeObserver(() => {
+        if (!lastAspect || (phase !== 'morphing' && phase !== 'waiting')) return;
+        const nt = fitRect(lastAspect); if (!nt || (target && same(nt, target))) return;
+        const cur = liveRect(); stopAnims(); if (cur) setFrame(cur); target = nt; morph();
+      }).observe(wrap);
+      snap = host.querySelector('.fx-reveal-snap'); frame = host.querySelector('.fx-reveal-frame');
+      lines = [...host.querySelectorAll('.fx-reveal-line')];
+      return host;
+    };
+    const round = (r) => r && { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
+    const relRect = (el) => {
+      const wrap = wrapEl(); if (!wrap || !el) return null;
+      const a = wrap.getBoundingClientRect(), b = el.getBoundingClientRect();
+      return b.width > 1 && b.height > 1 && a.width > 1 ? round({ x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height }) : null;
+    };
+    // Where renderPreview will put a photo of this aspect: #fx-wrap's content box (the fixed
+    // canvas inset is padding — fxWrapInner), capped by fxPreviewMaxH, centred by the wrap's
+    // flexbox. Large photos always hit the fit cap, so the aspect alone is enough; fill()
+    // reconciles against the real canvas rect for the rare exception (framing, tiny images).
+    const fitRect = (aspect) => {
+      const wrap = wrapEl(); if (!wrap || !aspect || typeof fxWrapInner !== 'function') return null;
+      const inner = fxWrapInner(); if (inner.w < 2 || inner.h < 2) return null;
+      const cs = getComputedStyle(wrap);
+      const maxH = typeof fxPreviewMaxH === 'function' ? Math.min(inner.h, fxPreviewMaxH()) : inner.h;
+      const k = typeof FX_FIT === 'number' ? FX_FIT : 1; // a photo opens at fit zoom, which leaves a margin
+      const w = Math.min(inner.w, maxH * aspect) * k, h = w / aspect;
+      return round({ x: (parseFloat(cs.paddingLeft) || 0) + (inner.w - w) / 2, y: (parseFloat(cs.paddingTop) || 0) + (inner.h - h) / 2, w, h });
+    };
+    // The frame is four 1px lines; each is scaled only ALONG its length, so the hairline stays
+    // exactly 1px while translate+scale animate on the compositor.
+    const lineTf = (r) => [
+      `translate(${r.x}px,${r.y}px) scale(${r.w},1)`,
+      `translate(${r.x}px,${r.y + r.h - 1}px) scale(${r.w},1)`,
+      `translate(${r.x}px,${r.y}px) scale(1,${r.h})`,
+      `translate(${r.x + r.w - 1}px,${r.y}px) scale(1,${r.h})`,
+    ];
+    const setFrame = (r) => { rect = r; if (!r) return; lineTf(r).forEach((t, i) => { lines[i].style.transform = t; }); };
+    const lerpRect = (a, b, t) => round({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: a.w + (b.w - a.w) * t, h: a.h + (b.h - a.h) * t });
+    const same = (a, b) => a && b && Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1 && Math.abs(a.w - b.w) <= 1 && Math.abs(a.h - b.h) <= 1;
+    const rate = (cfg) => (ready ? Math.max(1, +cfg.speedup || 1) : 1);
+    // Test step mode (libtest only): every reveal animation starts paused so a test can set
+    // its time and finish() it deterministically, independent of how long the page's own
+    // main-thread work takes in a software-GL browser.
+    const track = (a) => { anims.push(a); if (LIBTEST && window.__revealStep) a.pause(); return a; };
+    // Current frame rect even mid-morph, so an interrupted morph continues from where it is.
+    const liveRect = () => {
+      if (morphAnim && morphFrom && target) {
+        const p = morphAnim.effect && morphAnim.effect.getComputedTiming().progress;
+        if (p != null) return lerpRect(morphFrom, target, p);
+      }
+      return rect;
+    };
+    const clearZoomStyles = () => {
+      const z = zoomEl(); if (!z) return;
+      z.style.clipPath = ''; z.style.webkitMaskImage = ''; z.style.maskImage = ''; z.style.opacity = '';
+    };
+    const stopAnims = () => {
+      gen++;
+      if (softRaf) { cancelAnimationFrame(softRaf); softRaf = 0; }
+      anims.splice(0).forEach((a) => { try { a.cancel(); } catch (_) {} });
+      if (pulseAnim) { try { pulseAnim.cancel(); } catch (_) {} pulseAnim = null; }
+      morphAnim = null;
+    };
+    // Top-down edge. 'out' = visible region shrinks upward (bottom edge rises); 'in' = visible
+    // region grows downward. Hard edge = clip-path on the compositor; soft edge = a gradient mask
+    // driven from a timing-only animation's eased progress (so easing + speed-up still apply).
+    const sweep = (el, dir, cfg, duration, extraFrames, done) => {
+      const g = gen, easing = REVEAL_EASE[cfg.ease] || REVEAL_EASE.standard;
+      if (cfg.edge === 'soft') {
+        const a = track(el.animate(extraFrames || [{}, {}], { duration, easing, fill: 'forwards' }));
+        const band = 18;
+        const paint = () => {
+          if (g !== gen) return;
+          const p = a.effect.getComputedTiming().progress ?? 1;
+          const edge = (dir === 'in' ? p : 1 - p) * (100 + band);
+          const m = `linear-gradient(to bottom,#000 ${edge - band}%,transparent ${edge}%)`;
+          el.style.webkitMaskImage = m; el.style.maskImage = m;
+          if (a.playState !== 'finished') softRaf = requestAnimationFrame(paint);
+        };
+        paint();
+        a.onfinish = () => { if (g === gen) done(); };
+        return a;
+      }
+      const from = dir === 'in' ? 'inset(0 0 100% 0)' : 'inset(0 0 0 0)', to = dir === 'in' ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)';
+      const frames = [{ clipPath: from, ...(extraFrames ? extraFrames[0] : {}) }, { clipPath: to, ...(extraFrames ? extraFrames[1] : {}) }];
+      const a = track(el.animate(frames, { duration, easing, fill: 'forwards' }));
+      a.onfinish = () => { if (g === gen) done(); };
+      return a;
+    };
+    const reset = () => {
+      stopAnims();
+      clearTimeout(watchdog); watchdog = 0;
+      document.body.classList.remove('lib-reveal-hold');
+      clearZoomStyles();
+      if (snap) { snap.style.display = 'none'; snap.style.webkitMaskImage = ''; snap.style.maskImage = ''; }
+      if (frame) frame.style.opacity = '0';
+      if (host) host.classList.remove('on');
+      phase = 'idle'; token = null; ready = false; target = null; morphFrom = null;
+    };
+    const settle = () => {
+      phase = 'settling';
+      const cfg = revealCfg(), g = gen;
+      const a = track(frame.animate([{ opacity: +cfg.strength }, { opacity: 0 }], { duration: +cfg.settle, easing: REVEAL_EASE[cfg.ease], fill: 'forwards' }));
+      a.onfinish = () => { if (g === gen) { const p = token; reset(); perf('done', p); } };
+    };
+    const doFill = () => {
+      const cfg = revealCfg(), z = zoomEl();
+      if (!z) { reset(); return; }
+      perf('fill', token, { edge: cfg.edge });
+      // Set the first frame of the sweep BEFORE lifting the hold, in the same task, so the
+      // canvas can never flash fully visible for a frame.
+      if (cfg.edge === 'soft') { const m = 'linear-gradient(to bottom,#000 -18%,transparent 0%)'; z.style.webkitMaskImage = m; z.style.maskImage = m; }
+      else z.style.clipPath = 'inset(0 0 100% 0)';
+      document.body.classList.remove('lib-reveal-hold');
+      sweep(z, 'in', cfg, +cfg.fill, null, () => {
+        anims.splice(0).forEach((a) => { try { a.cancel(); } catch (_) {} });
+        clearZoomStyles(); settle();
+      });
+    };
+    const fill = () => {
+      if (phase === 'filling' || phase === 'settling') return;
+      phase = 'filling';
+      if (pulseAnim) { try { pulseAnim.cancel(); } catch (_) {} pulseAnim = null; }
+      const cfg = revealCfg(), g = gen;
+      frame.style.opacity = String(+cfg.strength);
+      const real = relRect(zoomEl());
+      if (!real) { doFill(); return; }
+      if (!rect) { setFrame(real); doFill(); return; }
+      if (same(rect, real)) { setFrame(real); doFill(); return; }
+      // Framing/borders or a small image made the real canvas differ from the predicted shape:
+      // glide the frame onto it before filling, never fill outside the frame.
+      const from = lineTf(rect), to = lineTf(real);
+      const glide = lines.map((l, i) => track(l.animate([{ transform: from[i] }, { transform: to[i] }], { duration: 160, easing: REVEAL_EASE[cfg.ease], fill: 'forwards' })));
+      setFrame(real);
+      glide[0].onfinish = () => { if (g === gen) doFill(); };
+    };
+    const waitOrFill = () => {
+      morphAnim = null;
+      if (ready) { fill(); return; }
+      phase = 'waiting';
+      const cfg = revealCfg();
+      perf('waiting', token, { mode: cfg.waiting });
+      if (cfg.waiting === 'pulse') {
+        const s = +cfg.strength;
+        pulseAnim = frame.animate([{ opacity: s }, { opacity: s * 0.3 }], { duration: +cfg.pulse, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+      }
+    };
+    const morph = () => {
+      phase = 'morphing';
+      const cfg = revealCfg(), g = gen;
+      if (snap) snap.style.display = 'none';
+      if (!target) { waitOrFill(); return; }
+      if (!rect) { // nothing on screen before (first open / editor was hidden): draw the frame in place
+        setFrame(target);
+        const a = track(frame.animate([{ opacity: 0 }, { opacity: +cfg.strength }], { duration: 200, fill: 'forwards' }));
+        frame.style.opacity = String(+cfg.strength);
+        a.onfinish = () => { if (g === gen) waitOrFill(); };
+        return;
+      }
+      if (same(rect, target)) { setFrame(target); waitOrFill(); return; }
+      const from = lineTf(rect), to = lineTf(target), easing = REVEAL_EASE[cfg.ease] || REVEAL_EASE.standard;
+      const duration = +cfg.morph / rate(cfg);
+      morphFrom = rect;
+      const list = lines.map((l, i) => track(l.animate([{ transform: from[i] }, { transform: to[i] }], { duration, easing, fill: 'forwards' })));
+      morphAnim = list[0];
+      setFrame(target); // resting value underneath the running animations
+      perf('morph', token, { ms: duration });
+      list[0].onfinish = () => { if (g === gen) waitOrFill(); };
+    };
+    return {
+      phase: () => phase,
+      token: () => token,
+      // aspect: the incoming photo's width/height (from its grid thumbnail — dimensions only,
+      // never its pixels). opts.fromRect is the Reveal lab's stand-in "previous photo" shape.
+      begin(path, aspect, opts = {}) {
+        if (!enabled() || opts.skip) { if (phase !== 'idle') reset(); perf('instant', path, { skip: !!opts.skip }); return; }
+        if (token === path && phase !== 'idle') return; // the queued open of a path already revealing
+        if (!ensure()) return;
+        const cfg = revealCfg();
+        // Anything still animating ends where it is. The pixels on screen right now are the
+        // "old photo": the canvas when idle / mid-fill, nothing when the frame was still empty.
+        const canvasVisible = phase === 'idle' || phase === 'filling' || phase === 'settling';
+        const startRect = liveRect();
+        stopAnims();
+        clearZoomStyles();
+        clearTimeout(watchdog);
+        token = path; ready = false; phase = 'exiting';
+        lastAspect = opts.targetRect ? 0 : (aspect || 0);
+        target = opts.targetRect || (aspect ? fitRect(aspect) : null);
+        const cv = document.getElementById('fx-canvas'), zoomRect = relRect(zoomEl());
+        const photoRect = opts.fromRect || zoomRect;
+        let snapped = false;
+        if (canvasVisible && hasPhoto() && cv && cv.width && photoRect) {
+          try {
+            snap.width = cv.width; snap.height = cv.height;
+            const ctx = snap.getContext('2d');
+            if (opts.fromRect) { // cover-crop the current photo into the stand-in shape
+              const ar = photoRect.w / photoRect.h, car = cv.width / cv.height;
+              let sw = cv.width, sh = cv.height; if (car > ar) sw = sh * ar; else sh = sw / ar;
+              snap.width = Math.round(sw); snap.height = Math.round(sh);
+              ctx.drawImage(cv, (cv.width - sw) / 2, (cv.height - sh) / 2, sw, sh, 0, 0, snap.width, snap.height);
+            } else ctx.drawImage(cv, 0, 0);
+            snap.style.cssText = `display:block;left:${photoRect.x}px;top:${photoRect.y}px;width:${photoRect.w}px;height:${photoRect.h}px`;
+            snapped = true;
+          } catch (_) {}
+        }
+        if (!snapped) snap.style.display = 'none';
+        document.body.classList.add('lib-reveal-hold');
+        host.classList.add('on');
+        rect = snapped ? photoRect : (canvasVisible ? null : startRect);
+        if (rect) { setFrame(rect); frame.style.opacity = String(+cfg.strength); } else frame.style.opacity = '0';
+        watchdog = setTimeout(() => { if (token === path) { perf('watchdog', path); reset(); } }, 15000 + (+cfg.simulate || 0) * 1000);
+        perf('begin', path, { aspect: aspect || 0, snapped });
+        if (!snapped) { morph(); return; }
+        const g = gen;
+        sweep(snap, 'out', cfg, +cfg.exit, [{ opacity: 1 }, { opacity: 0 }], () => { if (g === gen) morph(); });
+      },
+      // The new photo's pixels are rendered in the canvas (called after the open's final render).
+      pixels(path) {
+        if (path !== token || phase === 'idle' || ready) return;
+        const g = gen;
+        // Two frames: let any render the recipe restore scheduled land before revealing.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (g !== gen || path !== token || ready) return;
+          ready = true;
+          const cfg = revealCfg(), r = rate(cfg);
+          perf('pixels', path, { phase });
+          if (r > 1) anims.forEach((a) => { try { a.updatePlaybackRate ? a.updatePlaybackRate(r) : (a.playbackRate = r); } catch (_) {} });
+          if (phase === 'waiting') fill();
+        }));
+      },
+      cancel(path) { if (path != null && path !== token) return; if (phase !== 'idle') { perf('cancel', token); reset(); } },
+      // Reveal lab: replay the whole transition on the photo already open, with no decode.
+      replay() {
+        if (!hasPhoto()) return false;
+        if (phase !== 'idle') reset();
+        const cfg = revealCfg(), cur = relRect(zoomEl());
+        if (!cur) return false;
+        const asp = cur.w / cur.h;
+        const fromAsp = cfg.from === 'square' ? 1 : cfg.from === 'wide' ? 16 / 9 : cfg.from === 'same' ? asp : 1 / asp;
+        const tok = `__replay__${Date.now()}`;
+        this.begin(tok, asp, { fromRect: fitRect(fromAsp) || cur, targetRect: cur });
+        setTimeout(() => this.pixels(tok), Math.max(0, +cfg.simulate || 0) * 1000);
+        return true;
+      },
+    };
+  })();
+  if (LIBTEST) window.__chromasmithReveal = reveal;

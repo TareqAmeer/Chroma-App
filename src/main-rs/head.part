@@ -1,0 +1,140 @@
+// Chromasmith desktop shell — a thin native wrapper around the single-file web app
+// (chromasmith-22.html, staged into dist/ unmodified by build-desktop.sh). No app logic
+// lives here: this only wires OS-level integration (native menu bar, file dialogs) on top.
+// The frontend listens for the "menu-*" events emitted below (see desktop-native.js) and
+// calls the SAME JS functions the on-screen buttons already call — no duplicated logic.
+//
+// Windows only: a plain Rust binary defaults to the console subsystem, which pops up a
+// terminal window alongside the app on every launch (harmless on macOS/Linux, where the
+// GUI subsystem is the only one). `windows_subsystem = "windows"` switches to the GUI
+// subsystem instead — kept debug-only-console via cfg_attr so `cargo tauri dev`/`cargo run`
+// still show println!/log output in a console, matching Tauri's own project-template default.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{Emitter, Manager};
+
+// DEV-ITERATION MODE: read dist/ straight off disk on every request instead of embedding it
+// into the binary at compile time. include_dir!'s compile-time byte-literal embedding of the
+// ~7MB dist/ folder made every JS/HTML-only tweak force an 10+ minute full Rust rebuild — far
+// too slow while the native RAW pipeline is still being iterated on. Resolved once at startup
+// (see DIST_DIR_RESOLVED/dist_dir below, set from .setup()) instead of a compile-time constant:
+// prefers the bundled "dist" resource (declared in tauri.conf.json's bundle.resources, same
+// pattern as the onnxruntime dylib below) so a packaged .app is portable to any Mac, and falls
+// back to $CARGO_MANIFEST_DIR/../dist for `cargo tauri dev` (CARGO_MANIFEST_DIR is
+// desktop/src-tauri; the real staged output — build-desktop.mjs's target, matching
+// tauri.conf.json's own `build.frontendDist: "../dist"` — lives one level up, at desktop/dist,
+// NOT desktop/src-tauri/dist). This was wrong (missing the `../`) for who knows how long without
+// being noticed: this app's actual mac dev-iteration loop is `npm run preview`
+// (test/preview_server.mjs), not `cargo tauri dev` — see build-desktop.sh's own comment on why —
+// so the dev_fallback branch here almost never actually ran; `install-app.sh` builds a real
+// release bundle instead, where the CORRECT "bundled" branch above is what gets exercised. Found
+// live, the hard way, the first time this port actually ran `cargo tauri dev` on Windows: it
+// 404'd on literally every asset, including index.html itself.
+static DIST_DIR_RESOLVED: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+fn dist_dir() -> PathBuf {
+    DIST_DIR_RESOLVED
+        .get()
+        .cloned()
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist"))
+}
+
+mod platform;
+mod lens_correct;
+mod formats;
+mod still_decode;
+mod canon;
+mod library;
+mod trash_undo;
+mod raw_decode;
+mod arcface;
+mod clip;
+mod dino;
+mod faceparse;
+mod petdetect;
+mod depth;
+mod inpaint_alpha;
+mod inpaint;
+mod auxiliary;
+mod scrfd;
+mod sam;
+mod rawdenoise;
+mod film_negative;
+mod tiff_meta;
+#[cfg(target_os = "macos")]
+mod gainmap;
+mod gainmap_uhdr;
+#[cfg(target_os = "macos")]
+mod fastthumb;
+#[cfg(windows)]
+mod winthumb;
+#[cfg(target_os = "macos")]
+mod videothumb;
+#[cfg(windows)]
+mod winvideothumb;
+mod subject;
+mod ingest;
+mod catalog;
+mod smart_albums;
+mod catalog_backup;
+mod session;
+mod recipe_batch;
+mod raw_review_jobs;
+mod publish;
+mod lightroom_preset_import;
+mod geocode;
+mod dcp_store;
+mod diag;
+mod merge;
+mod bgwork;
+
+/// Minimal percent-decoder for request paths (e.g. "%20" -> " "). No crate needed for this.
+// The bundled DCP profiles (vendor/dcp/) only cover cameras we actually have .dcp files for
+// (Panasonic DC-S9, Sony DSC-RX100M5 — see vendor/dcp/*.dcp). Applying one to a DIFFERENT
+// sensor's data wouldn't error — it would just silently produce wrong colors (a much worse
+// failure mode than not opening at all). JS already picks the file by detected camera
+// (peek_raw_camera + getDcpLUT's cameraPrefix), so this is a defense-in-depth backstop, not the
+// primary gate — the actual profile BYTES only ever come from the bundled `vendor/dcp/` files or
+// dcp_store.rs's own independently traversal-hardened resolver, never from this check. Downgrade
+// an unsupported/mismatched "lut" request to the plain linear16 body instead.
+// Used identically by decode_raw_v2 and denoise_raw_high — one definition, not two that can
+// silently drift apart.
+//
+// ⚠️ docs/ROADMAP.md's F1 (Adobe on-disk DCP resolver): a fixed 2-brand allowlist (`["panasonic",
+// "sony"]`) can't scale to the 393 cameras `dcp_store.rs` can now resolve profiles for. Replaced
+// with a POSITIVE assertion instead: `lut_key` (the `dcp:<prefix>:<style>` cache key JS is
+// requesting) must itself start with a case-insensitive match of the file's OWN decoded make —
+// i.e. a Sony-decoded file can only apply a "dcp:Sony …" key, regardless of which specific model
+// JS resolved. This scales to any brand while still catching the class of bug it exists for
+// (applying one camera's colour matrix to a different camera's pixels).
+fn effective_dcp_mode<'a>(mode: &'a str, make: &str, lut_key: Option<&str>) -> (&'a str, u32) {
+    let make_lower = make.trim().to_lowercase();
+    let has_dcp_support = !make_lower.is_empty()
+        && lut_key
+            .and_then(|k| k.strip_prefix("dcp:"))
+            .is_some_and(|prefix_and_style| prefix_and_style.to_lowercase().starts_with(&make_lower));
+    let effective_mode = if mode == "lut" && !has_dcp_support { "linear16" } else { mode };
+    let used_lut = if effective_mode == "lut" { 1u32 } else { 0u32 };
+    (effective_mode, used_lut)
+}
+
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(hex) = std::str::from_utf8(&bytes[i + 1..i + 3]) {
+                if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                    out.push(byte);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}

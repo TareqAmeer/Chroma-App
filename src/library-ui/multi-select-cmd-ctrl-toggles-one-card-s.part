@@ -1,0 +1,137 @@
+  // ── multi-select: cmd/ctrl toggles one card, shift range-selects from the last-clicked
+  // anchor (over the currently-shown/filtered order), plain click opens (and clears selection
+  // — matches the existing single-click-opens behaviour so nothing regresses for the common
+  // case). Right-click selects the card under the cursor if it isn't already selected, then
+  // opens a context menu that applies rating/flag/open actions to the whole selection. ──────
+  let selectAnchor = -1;
+  function updateCardSelClasses() {
+    grid.querySelectorAll('.lib-card').forEach((c) => c.classList.toggle('multi', state.selected.has(c.dataset.path)));
+    if (typeof syncSelCount === 'function') syncSelCount();
+    // Real bug found while capturing lib-batchbar (S6d chunk C): this ran on every click-driven
+    // selection change but never called renderBatchBar(), which only fired from a full
+    // renderGridTail(). So ⌘/shift-clicking to build a multi-selection never showed the batch
+    // bar until something else forced a full grid re-render (scroll, filter change) — the bar
+    // the user actually needs right after selecting silently didn't appear.
+    renderBatchBar();
+    if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+  }
+  // Single click opens the editor immediately (no double-click needed). ⌘/Ctrl-click instead
+  // multi-selects WITHOUT opening, building up a batch; ⌘/Ctrl-double-click opens that whole
+  // batch selection in the editor. Shift-click range-selects (also without opening), extending
+  // from the last ⌘-click/shift-click anchor — same anchor plain single-click opens don't move.
+  // Tap vs physical click (CHR-154). macOS tap-to-click synthesises an ordinary mouseDown/Up
+  // pair, and WebKit stamps EVERY mousedown with webkitForce = WEBKIT_FORCE_AT_MOUSE_DOWN (1) —
+  // so the old "peak force >= 1 means press" test read every tap as a press and opened the photo.
+  // What actually differs: a physical click on a Force Touch trackpad streams NSEvent pressure
+  // events, which WebKit surfaces as `webkitmouseforcechanged`; a tap never touches the
+  // actuator, so it produces none. So: pressure events seen during this gesture → 'press';
+  // none, on a machine that has shown us pressure events before → 'tap'; never seen any (mouse,
+  // older trackpad, Chromium/libtest) → null, and callers use the click-again-to-open fallback.
+  // Listeners are document-level capture so every grid (local, filmstrip, cloud) shares them.
+  let _gesturePressure = false, _forceSensorSeen = false, _peakForce = 0;
+  function trackForce(e) { const f = e && e.webkitForce; if (typeof f === 'number' && f > _peakForce) _peakForce = f; }
+  document.addEventListener('mousedown', () => { _gesturePressure = false; _peakForce = 0; }, true);
+  document.addEventListener('webkitmouseforcechanged', (e) => { _gesturePressure = true; _forceSensorSeen = true; trackForce(e); }, true);
+  function classifyPress(e) {
+    const pressed = _gesturePressure;
+    _gesturePressure = false; _peakForce = 0;
+    if (pressed) return 'press';
+    return _forceSensorSeen ? 'tap' : null;
+  }
+  // Selection model (both grids): light tap selects, firm press opens. Where Force Touch isn't
+  // available, degrade to "click selects; clicking the already-sole-selected card opens"
+  // (double-click always opens). shift/cmd extend multi-select and never open.
+  function handleCardClick(e, entry, idx, shown) {
+    if (e.shiftKey && selectAnchor >= 0) {
+      const [lo, hi] = [selectAnchor, idx].sort((a, b) => a - b);
+      state.selected.clear();
+      for (let i = lo; i <= hi; i++) state.selected.add(shown[i].path);
+      updateCardSelClasses();
+      return;
+    }
+    if (e.metaKey || e.ctrlKey) {
+      if (state.selected.has(entry.path)) state.selected.delete(entry.path); else state.selected.add(entry.path);
+      selectAnchor = idx;
+      updateCardSelClasses();
+      return;
+    }
+    const openIt = () => {
+      if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
+      state.selected.clear(); updateCardSelClasses();
+      openInEditor(entry.path);
+    };
+    const selectIt = () => {
+      state.selected.clear(); state.selected.add(entry.path);
+      selectAnchor = idx; state._kbCursor = entry.path; updateCardSelClasses();
+    };
+    const cls = classifyPress(e);
+    if (cls === 'press') { openIt(); return; }
+    if (cls === 'tap') { selectIt(); return; }
+    // No force sensor: click-to-select, click-the-selected-again to open.
+    if (state.selected.size === 1 && state.selected.has(entry.path)) openIt(); else selectIt();
+  }
+  // Plain double-click on a single (non-multi-selected) card is just a second single-click —
+  // already opened by handleCardClick, nothing further to do here. ⌘/Ctrl-double-click opens
+  // the CURRENT multi-selection as a batch (mirrors the context menu's "Open N photos").
+  async function handleCardDblClick(e, entry) {
+    // Plain double-click always opens (shortcut regardless of Force Touch); the single-image
+    // case falls through to openInEditor below.
+    if (!(e.metaKey || e.ctrlKey) && state.selected.size <= 1) {
+      if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; }
+      openInEditor(entry.path); return;
+    }
+    // The two `click` events a double-click also fires each ran handleCardClick with the SAME
+    // modifier held, which toggles this exact entry in/out of state.selected an ODD number of
+    // times overall relative to before the gesture started — so whether this card ends up IN
+    // the selection by the time dblclick fires depends on whether it was already selected
+    // beforehand (a real, confirmed bug: double-clicking a card NOT already in the multi-
+    // selection silently toggled it back OUT right before opening, excluding it from its own
+    // batch open). Always re-add it here so the card you double-click is unconditionally part
+    // of what opens, regardless of that toggle parity.
+    state.selected.add(entry.path);
+    const paths = Array.from(state.selected);
+    if (paths.length <= 1) { if (entry.missing) { toast('This photo is no longer at ' + entry.path, false); return; } openInEditor(paths[0] || entry.path); return; }
+    await openPathsInEditor(paths);
+    state.selected.clear();
+    updateCardSelClasses();
+  }
+
+  // Shared read for a batch-open/export: reads every path, logs+returns any that failed
+  // instead of just console.error-ing them so a shrunk batch is never silently swallowed.
+  // ⚠️ `files.okPaths` carries the paths that actually survived, in the SAME order as `files` —
+  // a batch export/edit zips fxImages[i] back against paths[i] to restore per-photo crop/masks
+  // (see the "Export N photos" context-menu item below); indexing the ORIGINAL `paths` array
+  // there instead desyncs the moment any one photo fails to read (a missing/locked file mid-
+  // selection), silently applying photo A's crop/masks to photo B's render — or, with several
+  // failures compounding, exporting nothing recognizable at all.
+  async function readPathsAsFiles(paths, options = {}) {
+    const files = []; const failed = []; const okPaths = [];
+    const pathBackedRaw = !!(options && options.pathBackedRaw && window.__TAURI__);
+    for (const p of paths) {
+      try {
+        let file = null;
+        if (pathBackedRaw && RAW_EXT_RE.test(p)) {
+          try {
+            const head = await invoke('read_file_head', { path: p, len: 262144 });
+            const buffer = head instanceof ArrayBuffer ? head
+              : ArrayBuffer.isView(head) ? head.buffer.slice(head.byteOffset, head.byteOffset + head.byteLength) : null;
+            if (buffer && buffer.byteLength >= 9) {
+              const sourceSize = Number(new DataView(buffer).getBigUint64(0, true));
+              const headLength = buffer.byteLength - 8;
+              if (Number.isSafeInteger(sourceSize) && sourceSize > 0 && headLength > 0 && headLength <= sourceSize) {
+                file = makePathRawFile(p, new Uint8Array(buffer, 8), sourceSize, mimeFromName(p));
+              }
+            }
+          } catch (_) { /* A failed/invalid head falls back to the original full-file read below. */ }
+        }
+        if (!file) {
+          const buf = await invoke('read_file_bytes', { path: p });
+          file = new File([buf], baseName(p), { type: mimeFromName(p) });
+        }
+        files.push(file); okPaths.push(p);
+      } catch (e) { console.error('read_file_bytes', p, e); failed.push(p); }
+    }
+    if (failed.length) toast(`Could not read ${failed.length} of ${paths.length} photo(s)`, false);
+    files.okPaths = okPaths;
+    return files;
+  }

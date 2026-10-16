@@ -1,0 +1,13 @@
+  // ── base64<->JSON helpers for the edit-recipe sidecar payload (unicode-safe) ─────────────
+  function snapshotToB64(snap) { return btoa(unescape(encodeURIComponent(JSON.stringify(snap)))); }
+  function snapshotFromB64(b64) { return JSON.parse(decodeURIComponent(escape(atob(b64)))); }
+  function mergePhotoMaskRecipeSnapshot(snapshot, masks) {
+    // Snapshot categories belong to the target photo. Replace only its local mask list.
+    return { ...(snapshot && typeof snapshot === 'object' ? snapshot : {}), masks: masks.map(m => m) };
+  }
+  function canonicalRecipeValue(value) {
+    if (Array.isArray(value)) return value.map(canonicalRecipeValue);
+    if (!value || typeof value !== 'object') return value;
+    return Object.keys(value).sort().reduce((out, key) => { out[key] = canonicalRecipeValue(value[key]); return out; }, {});
+  }
+  function sameRecipeValue(a, b) { return JSON.stringify(canonicalRecipeValue(a)) === JSON.stringify(canonicalRecipeValue(b)); }

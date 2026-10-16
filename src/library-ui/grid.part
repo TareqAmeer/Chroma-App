@@ -1,0 +1,41 @@
+  // ── grid ────────────────────────────────────────────────────────────────────
+  async function getSidecar(path) {
+    if (state.sidecars.has(path)) return state.sidecars.get(path);
+    const sc = await invoke('get_sidecar', { path }).catch(() => ({ rating: 0, label: '', edited: false, recipe: '' }));
+    state.sidecars.set(path, sc);
+    return sc;
+  }
+  async function getMeta(path) {
+    if (state.meta.has(path)) return state.meta.get(path);
+    const m = await invoke('get_meta', { path }).catch(() => ({ camera: null, lens: null, date: null, iso: null }));
+    state.meta.set(path, m);
+    return m;
+  }
+  // Batched IPC: openFolder used to fire one get_sidecar/get_meta invoke() PER FILE via
+  // Promise.all — N Tauri IPC round trips just to open a folder, regardless of how cheap any
+  // single call is. get_sidecar_batch/get_meta_batch (library.rs) take the whole path list in
+  // one call and run the per-file work in parallel on the Rust side. Falls back to the original
+  // per-path path (still cached individually) if the batch command itself fails, so one bad
+  // call can't lose the whole folder.
+  async function getSidecarsBatch(paths) {
+    const need = paths.filter((p) => !state.sidecars.has(p));
+    if (!need.length) return;
+    try {
+      const scs = await invoke('get_sidecar_batch', { paths: need });
+      need.forEach((p, i) => state.sidecars.set(p, scs[i] || { rating: 0, label: '', edited: false, recipe: '' }));
+    } catch (e) {
+      console.warn('get_sidecar_batch failed, falling back to per-file', e);
+      await Promise.all(need.map((p) => getSidecar(p)));
+    }
+  }
+  async function getMetaBatch(paths) {
+    const need = paths.filter((p) => !state.meta.has(p));
+    if (!need.length) return;
+    try {
+      const ms = await invoke('get_meta_batch', { paths: need });
+      need.forEach((p, i) => state.meta.set(p, ms[i] || { camera: null, lens: null, date: null, iso: null }));
+    } catch (e) {
+      console.warn('get_meta_batch failed, falling back to per-file', e);
+      await Promise.all(need.map((p) => getMeta(p).catch(() => ({}))));
+    }
+  }

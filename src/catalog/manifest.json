@@ -1,0 +1,194 @@
+{
+ "target": "desktop/src-tauri/src/catalog.rs",
+ "join": "\n",
+ "parts": [
+  "head.part",
+  "storage-location.part",
+  "connection-migrations.part",
+  "volume-identity.part",
+  "roots.part",
+  "scan-phase-a-walk-stat-upsert-deletion-t.part",
+  "sidecar-sweep-notice-in-place-xmp-rewrit.part",
+  "scan-phase-b-exif-metadata.part",
+  "video-capture-date.part",
+  "scan-phase-c-sidecar-contents.part",
+  "scan-phase-e-content-hash-integrity.part",
+  "face-detection-ai-stack-phase-a-see-scrf.part",
+  "pet-detection-people-pets-wireframes-scr.part",
+  "face-embedding-ai-stack-phase-b-part-1-a.part",
+  "clustering-ai-stack-phase-b-part-2-phase.part",
+  "find-more-of-this-person-suggestions.part",
+  "google-photos-import-takeout.part",
+  "portable-people-pets-sidecar-people-pets.part",
+  "natural-language-search-ai-stack-phase-d.part",
+  "query.part",
+  "date-browser.part",
+  "scan-phase-d-offline-thumbnails.part",
+  "cache-budget.part",
+  "per-root-cache-usage-clearing.part",
+  "guaranteed-offline-tier-hq-offline.part",
+  "focus-sharpness-out-of-focus-review.part",
+  "offline-edit-queue-n1a.part",
+  "rebuild.part",
+  "delete.part",
+  "stacking.part",
+  "keyword-tree.part"
+ ],
+ "info": [
+  {
+   "file": "head.part",
+   "firstLine": 1,
+   "lines": 42
+  },
+  {
+   "file": "storage-location.part",
+   "firstLine": 43,
+   "lines": 119
+  },
+  {
+   "file": "connection-migrations.part",
+   "firstLine": 162,
+   "lines": 785
+  },
+  {
+   "file": "volume-identity.part",
+   "firstLine": 947,
+   "lines": 220
+  },
+  {
+   "file": "roots.part",
+   "firstLine": 1167,
+   "lines": 252
+  },
+  {
+   "file": "scan-phase-a-walk-stat-upsert-deletion-t.part",
+   "firstLine": 1419,
+   "lines": 484
+  },
+  {
+   "file": "sidecar-sweep-notice-in-place-xmp-rewrit.part",
+   "firstLine": 1903,
+   "lines": 182
+  },
+  {
+   "file": "scan-phase-b-exif-metadata.part",
+   "firstLine": 2085,
+   "lines": 92
+  },
+  {
+   "file": "video-capture-date.part",
+   "firstLine": 2177,
+   "lines": 442
+  },
+  {
+   "file": "scan-phase-c-sidecar-contents.part",
+   "firstLine": 2619,
+   "lines": 365
+  },
+  {
+   "file": "scan-phase-e-content-hash-integrity.part",
+   "firstLine": 2984,
+   "lines": 173
+  },
+  {
+   "file": "face-detection-ai-stack-phase-a-see-scrf.part",
+   "firstLine": 3157,
+   "lines": 511
+  },
+  {
+   "file": "pet-detection-people-pets-wireframes-scr.part",
+   "firstLine": 3668,
+   "lines": 1296
+  },
+  {
+   "file": "face-embedding-ai-stack-phase-b-part-1-a.part",
+   "firstLine": 4964,
+   "lines": 193
+  },
+  {
+   "file": "clustering-ai-stack-phase-b-part-2-phase.part",
+   "firstLine": 5157,
+   "lines": 549
+  },
+  {
+   "file": "find-more-of-this-person-suggestions.part",
+   "firstLine": 5706,
+   "lines": 271
+  },
+  {
+   "file": "google-photos-import-takeout.part",
+   "firstLine": 5977,
+   "lines": 467
+  },
+  {
+   "file": "portable-people-pets-sidecar-people-pets.part",
+   "firstLine": 6444,
+   "lines": 315
+  },
+  {
+   "file": "natural-language-search-ai-stack-phase-d.part",
+   "firstLine": 6759,
+   "lines": 743
+  },
+  {
+   "file": "query.part",
+   "firstLine": 7502,
+   "lines": 594
+  },
+  {
+   "file": "date-browser.part",
+   "firstLine": 8096,
+   "lines": 65
+  },
+  {
+   "file": "scan-phase-d-offline-thumbnails.part",
+   "firstLine": 8161,
+   "lines": 30
+  },
+  {
+   "file": "cache-budget.part",
+   "firstLine": 8191,
+   "lines": 155
+  },
+  {
+   "file": "per-root-cache-usage-clearing.part",
+   "firstLine": 8346,
+   "lines": 301
+  },
+  {
+   "file": "guaranteed-offline-tier-hq-offline.part",
+   "firstLine": 8647,
+   "lines": 407
+  },
+  {
+   "file": "focus-sharpness-out-of-focus-review.part",
+   "firstLine": 9054,
+   "lines": 232
+  },
+  {
+   "file": "offline-edit-queue-n1a.part",
+   "firstLine": 9286,
+   "lines": 172
+  },
+  {
+   "file": "rebuild.part",
+   "firstLine": 9458,
+   "lines": 61
+  },
+  {
+   "file": "delete.part",
+   "firstLine": 9519,
+   "lines": 13
+  },
+  {
+   "file": "stacking.part",
+   "firstLine": 9532,
+   "lines": 642
+  },
+  {
+   "file": "keyword-tree.part",
+   "firstLine": 10174,
+   "lines": 4238
+  }
+ ]
+}

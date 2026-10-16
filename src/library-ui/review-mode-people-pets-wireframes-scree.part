@@ -1,0 +1,756 @@
+  // ── Review mode (people-pets wireframes screen C) ──────────────────────────────────────────
+  // One unnamed cluster at a time, full-viewport, keyboard-driven — the answer to CLAUDE.md
+  // failures #2/#3/#6/#7: unclustered/unnamed faces were computed then thrown away, there was no
+  // confirm/reject step, and naming was one person at a time through a right-click modal.
+  // `suggest` = "Find more of <person>" mode: the same grid, but each page is a batch of
+  // look-alike faces for one named person — keep = add to them, deselect = "not them" (remembered).
+  const reviewState = { clusters: [], idx: 0, deselected: new Set(), suggest: null };
+  function reviewEl() {
+    let el = document.getElementById('lib-review');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'lib-review';
+    el.innerHTML = `
+      <div class="lib-review-top">
+        <span>Review faces</span>
+        <span id="lib-review-pos" style="margin-left:6px"></span>
+        <span style="margin-left:auto;cursor:pointer" id="lib-review-close">Esc to exit</span>
+      </div>
+      <div class="lib-review-body">
+        <div class="lib-review-grid" id="lib-review-grid"></div>
+        <div class="lib-review-foot">
+          <input id="lib-review-name" placeholder="Name this person or pet…" list="lib-review-names" autocomplete="off">
+          <datalist id="lib-review-names"></datalist>
+          <span class="lib-btn" id="lib-review-confirm">Name &amp; next</span>
+          <span class="lib-btn" id="lib-review-ignore">Ignore</span>
+          <span class="lib-btn" id="lib-review-skip">Skip</span>
+          <span class="lib-btn" id="lib-review-none" style="margin-left:auto">Unselect all</span>
+          <span class="lib-btn" id="lib-review-back">← Back</span>
+        </div>
+        <div style="padding:0 18px 4px;display:flex;gap:14px;flex-wrap:wrap">
+          <span class="lib-review-kbd">↵</span><span class="mut" style="font-size:11px">Name &amp; next</span>
+          <span class="lib-review-kbd">X</span><span class="mut" style="font-size:11px">Ignore</span>
+          <span class="lib-review-kbd">Click</span><span class="mut" style="font-size:11px">Toggle face (excluded faces return to Unnamed)</span>
+          <span class="lib-review-kbd">Space</span><span class="mut" style="font-size:11px">Preview the photo under the pointer</span>
+          <span class="lib-review-kbd">→</span><span class="mut" style="font-size:11px">Skip</span>
+          <span class="lib-review-kbd">←</span><span class="mut" style="font-size:11px">Back</span>
+        </div>
+      </div>
+      <div id="lib-review-pv" style="display:none;position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.92);align-items:center;justify-content:center;cursor:zoom-out">
+        <img alt="" style="max-width:94%;max-height:94%;object-fit:contain">
+      </div>`;
+    document.body.appendChild(el);
+    el.querySelector('#lib-review-close').onclick = closeReviewFaces;
+    el.querySelector('#lib-review-confirm').onclick = reviewConfirmCurrent;
+    el.querySelector('#lib-review-ignore').onclick = reviewIgnoreCurrent;
+    el.querySelector('#lib-review-skip').onclick = () => reviewGoTo(reviewState.idx + 1);
+    el.querySelector('#lib-review-back').onclick = reviewBack;
+    el.querySelector('#lib-review-none').onclick = reviewToggleAll;
+    el.querySelector('#lib-review-pv').onclick = reviewClosePreview;
+    // ⚠️ Bound directly on the input, not just relied on via document-level bubbling below —
+    // the input carries a `list=` (datalist) attribute, and at least one Chromium build was
+    // observed swallowing the keydown entirely while its autocomplete popup was open, so Enter
+    // never reached the document listener. Binding here means it fires regardless.
+    el.querySelector('#lib-review-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); reviewConfirmCurrent(); }
+    });
+    return el;
+  }
+  async function openReviewFaces() {
+    let clusters;
+    try { clusters = await invoke('catalog_unnamed_clusters'); }
+    catch (err) { toast(humanizeErr('load faces to review', err), 'err'); return; }
+    if (!clusters || !clusters.length) { toast('No unnamed faces to review'); return; }
+    reviewState.clusters = clusters;
+    reviewState.idx = 0;
+    reviewState.suggest = null;
+    const el = reviewEl();
+    el.classList.add('on');
+    const datalist = el.querySelector('#lib-review-names');
+    datalist.innerHTML = peopleList.filter((p) => !p.auto).map((p) => `<option value="${esc(p.name)}">`).join('');
+    reviewRenderCurrent();
+  }
+  async function openFindMore(person) {
+    let sugg;
+    try { sugg = await invoke('catalog_person_suggestions', { personId: person.id, minSimilarity: null, limit: null }); }
+    catch (err) { toast(humanizeErr('find more photos', err), 'err'); return; }
+    if (!sugg || !sugg.length) { toast(`No more likely photos of "${person.name}" right now`); return; }
+    const PAGE = 40;
+    const pages = [];
+    for (let i = 0; i < sugg.length; i += PAGE) {
+      const chunk = sugg.slice(i, i + PAGE);
+      // One tile per moment: `also` = same-moment faces the answer applies to.
+      const moments = chunk.map((x) => [x.face_id, ...(x.also || [])]);
+      const ids = moments.flat();
+      pages.push({ person_id: person.id, cover_face_id: ids[0], face_ids: ids, face_count: ids.length, moments });
+    }
+    reviewState.clusters = pages;
+    reviewState.idx = 0;
+    reviewState.suggest = { person, total: sugg.length, added: 0 };
+    reviewEl().classList.add('on');
+    reviewRenderCurrent();
+  }
+  function closeReviewFaces() {
+    const el = document.getElementById('lib-review');
+    if (el) el.classList.remove('on');
+    reviewState.clusters = [];
+  }
+  function reviewGoTo(idx) {
+    if (idx >= reviewState.clusters.length) {
+      const sg = reviewState.suggest;
+      closeReviewFaces(); refreshPeople();
+      toast(sg ? `Added ${sg.added} photo${sg.added === 1 ? '' : 's'} to "${sg.person.name}"` : 'All caught up — no more faces to review', true);
+      return;
+    }
+    reviewState.idx = idx;
+    reviewRenderCurrent();
+  }
+  function reviewBack() {
+    if (reviewState.idx > 0) { reviewState.idx -= 1; reviewRenderCurrent(); }
+  }
+  /// "Unselect all" (every tile = not them), or "Select all" once nothing is selected.
+  function reviewToggleAll() {
+    const cells = [...document.querySelectorAll('#lib-review-grid .lib-review-face')];
+    const anySel = cells.some((c) => !reviewState.deselected.has(parseInt(c.dataset.faceId, 10)));
+    cells.forEach((cell) => {
+      const fid = parseInt(cell.dataset.faceId, 10);
+      if (anySel) reviewState.deselected.add(fid); else reviewState.deselected.delete(fid);
+      cell.classList.toggle('desel', anySel);
+      cell.classList.toggle('sel', !anySel);
+    });
+    reviewSyncToggleAll();
+  }
+  function reviewSyncToggleAll() {
+    const b = document.getElementById('lib-review-none');
+    const cells = [...document.querySelectorAll('#lib-review-grid .lib-review-face')];
+    if (b) b.textContent = cells.some((c) => !reviewState.deselected.has(parseInt(c.dataset.faceId, 10))) ? 'Unselect all' : 'Select all';
+  }
+  function reviewPreview(faceId) {
+    const pv = document.getElementById('lib-review-pv');
+    const img = pv.querySelector('img');
+    img.removeAttribute('src');
+    pv.style.display = 'flex';
+    pv.dataset.faceId = faceId;
+    invoke('catalog_face_preview', { faceId }).then((buf) => {
+      if (pv.dataset.faceId !== String(faceId)) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      img.onload = () => URL.revokeObjectURL(url);
+      img.src = url;
+    }).catch((err) => { reviewClosePreview(); toast(humanizeErr('preview this photo', err), 'err'); });
+  }
+  function reviewClosePreview() {
+    const pv = document.getElementById('lib-review-pv');
+    if (pv) { pv.style.display = 'none'; delete pv.dataset.faceId; }
+  }
+  function reviewRenderCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c) { reviewGoTo(reviewState.idx + 1); return; }
+    reviewState.deselected = new Set();
+    reviewClosePreview();
+    document.getElementById('lib-review-back').style.visibility = reviewState.idx > 0 ? '' : 'hidden';
+    const sg = reviewState.suggest;
+    const nameInput = document.getElementById('lib-review-name');
+    const confirmBtn = document.getElementById('lib-review-confirm');
+    document.getElementById('lib-review-ignore').style.display = sg ? 'none' : '';
+    nameInput.readOnly = !!sg;
+    if (sg) {
+      document.getElementById('lib-review-pos').textContent = `· Is this ${sg.person.name}? · page ${reviewState.idx + 1} of ${reviewState.clusters.length} · click a face that isn't them`;
+      nameInput.value = sg.person.name;
+      confirmBtn.innerHTML = 'Add &amp; next';
+    } else {
+      const speciesHint = c.species ? ` · ${c.species[0].toUpperCase()}${c.species.slice(1)} detected` : '';
+      const tentHint = c.tentative ? ' · maybe the same person — click any that aren\'t' : '';
+      const lookHint = c.suggested_name ? ` · looks like ${c.suggested_name} (${Math.round((c.suggested_similarity || 0) * 100)}%)` : '';
+      document.getElementById('lib-review-pos').textContent = `· cluster ${reviewState.idx + 1} of ${reviewState.clusters.length} · ${c.face_count} face${c.face_count === 1 ? '' : 's'}${speciesHint}${tentHint}${lookHint}`;
+      // Pre-filled with the look-alike's name: Enter merges this group into them.
+      nameInput.value = c.suggested_name || '';
+      confirmBtn.innerHTML = 'Name &amp; next';
+    }
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 0);
+    const grid = document.getElementById('lib-review-grid');
+    // One tile per moment (photos seconds apart): its answer applies to the whole moment.
+    const moments = (c.moments && c.moments.length) ? c.moments : c.face_ids.map((id) => [id]);
+    grid.innerHTML = moments.map((m) => `<div class="lib-review-face sel" data-face-id="${m[0]}"><img alt="">${m.length > 1 ? `<span class="lib-review-n" title="${m.length} photos from the same moment">×${m.length}</span>` : ''}</div>`).join('');
+    grid.querySelectorAll('.lib-review-face').forEach((cell) => {
+      const fid = parseInt(cell.dataset.faceId, 10);
+      loadFaceCrop(fid, cell.querySelector('img'));
+      cell.onclick = () => {
+        if (reviewState.deselected.has(fid)) reviewState.deselected.delete(fid);
+        else reviewState.deselected.add(fid);
+        cell.classList.toggle('desel', reviewState.deselected.has(fid));
+        cell.classList.toggle('sel', !reviewState.deselected.has(fid));
+        reviewSyncToggleAll();
+      };
+    });
+    reviewSyncToggleAll();
+  }
+  /// Every face excluded by the user — a deselected tile excludes its whole moment.
+  function reviewExcluded(c) {
+    const moments = (c.moments && c.moments.length) ? c.moments : c.face_ids.map((id) => [id]);
+    return new Set(moments.filter((m) => reviewState.deselected.has(m[0])).flat());
+  }
+  async function reviewConfirmCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c) return;
+    const sg = reviewState.suggest;
+    if (sg) {
+      const ex = reviewExcluded(c);
+      const accept = c.face_ids.filter((id) => !ex.has(id));
+      const reject = c.face_ids.filter((id) => ex.has(id));
+      try {
+        await invoke('catalog_resolve_suggestions', { personId: sg.person.id, accept, reject });
+        sg.added += accept.length;
+        reviewGoTo(reviewState.idx + 1);
+      } catch (err) { toast(humanizeErr('add these photos', err), 'err'); }
+      return;
+    }
+    const name = document.getElementById('lib-review-name').value.trim();
+    if (!name) { toast('Type a name first'); return; }
+    const ex = reviewExcluded(c);
+    const selectedIds = c.face_ids.filter((id) => !ex.has(id));
+    const excludedIds = c.face_ids.filter((id) => ex.has(id));
+    if (c.tentative) {
+      // A loose "maybe" group belongs to nobody yet: only the kept faces move; excluded ones
+      // simply stay unassigned.
+      if (!selectedIds.length) { reviewGoTo(reviewState.idx + 1); return; }
+      try {
+        const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+        await invoke('catalog_split_faces', { faceIds: selectedIds, intoId: existing ? existing.id : null, intoName: existing ? null : name });
+        const aa = await invoke('catalog_auto_assign').catch(() => ({ assigned: 0 }));
+        await refreshPeople();
+        toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"${aa.assigned ? ` · ${aa.assigned} more photos tagged automatically` : ''}`, true);
+        if (aa.assigned) await reloadReviewQueue();
+        reviewGoTo(reviewState.idx + 1);
+      } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
+      return;
+    }
+    try {
+      const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+      if (excludedIds.length) await invoke('catalog_split_faces', { faceIds: excludedIds, intoId: null, intoName: null });
+      if (existing) {
+        // Move the confirmed faces into the existing person and confirm them there.
+        await invoke('catalog_split_faces', { faceIds: selectedIds, intoId: existing.id, intoName: null });
+        await invoke('catalog_confirm_person', { personId: existing.id, faceIds: selectedIds });
+      } else {
+        await invoke('catalog_rename_person', { personId: c.person_id, name });
+        await invoke('catalog_confirm_person', { personId: c.person_id, faceIds: selectedIds.length ? selectedIds : null });
+      }
+      const aa = await invoke('catalog_auto_assign').catch(() => ({ assigned: 0 }));
+      await refreshPeople();
+      toast(`Named ${selectedIds.length} face${selectedIds.length === 1 ? '' : 's'} "${name}"${aa.assigned ? ` · ${aa.assigned} more photos tagged automatically` : ''}`, true);
+      if (aa.assigned) await reloadReviewQueue();
+      reviewGoTo(reviewState.idx + 1);
+    } catch (err) { toast(humanizeErr('confirm this person', err), 'err'); }
+  }
+  /// Auto-tagging can empty or shrink clusters later in the queue — refetch everything after the
+  /// current position so the user is never asked about faces that were just tagged.
+  async function reloadReviewQueue() {
+    if (reviewState.suggest) return;
+    const fresh = await invoke('catalog_unnamed_clusters').catch(() => null);
+    if (!fresh) return;
+    const done = new Set(reviewState.clusters.slice(0, reviewState.idx + 1).map((c) => c.tentative ? `t${c.face_ids[0]}` : c.person_id));
+    reviewState.clusters = reviewState.clusters.slice(0, reviewState.idx + 1)
+      .concat(fresh.filter((c) => !done.has(c.tentative ? `t${c.face_ids[0]}` : c.person_id)));
+  }
+  async function reviewIgnoreCurrent() {
+    const c = reviewState.clusters[reviewState.idx];
+    if (!c || reviewState.suggest) return;
+    if (c.tentative) { reviewGoTo(reviewState.idx + 1); return; }
+    try {
+      await invoke('catalog_set_person_ignored', { personId: c.person_id, ignored: true });
+      await refreshPeople();
+      reviewGoTo(reviewState.idx + 1);
+    } catch (err) { toast(humanizeErr('ignore this person', err), 'err'); }
+  }
+  document.addEventListener('keydown', (e) => {
+    const el = document.getElementById('lib-review');
+    if (!el || !el.classList.contains('on')) return;
+    const pv = document.getElementById('lib-review-pv');
+    const pvOpen = pv && pv.style.display !== 'none';
+    if (pvOpen && (e.key === 'Escape' || e.key === ' ')) { e.preventDefault(); reviewClosePreview(); return; }
+    if (e.key === 'Escape') { closeReviewFaces(); return; }
+    const t = e.target;
+    // A read-only field ("Is this X?" pre-fills the name and focuses it) is no reason to swallow
+    // the review keys — otherwise Space/arrows never worked on that page.
+    const fld = t && t.closest && t.closest('input,textarea');
+    const inField = fld && !fld.readOnly;
+    if (e.key === 'Enter' && inField) { e.preventDefault(); reviewConfirmCurrent(); return; }
+    if (inField) return;
+    if (e.key.toLowerCase() === 'x') { reviewIgnoreCurrent(); return; }
+    if (e.key === 'ArrowRight') { reviewGoTo(reviewState.idx + 1); return; }
+    if (e.key === 'ArrowLeft') { reviewBack(); return; }
+    if (e.key === ' ') {
+      // The tile under the pointer (Quick Look style); none hovered = the first tile.
+      const hov = el.querySelector('.lib-review-face:hover') || el.querySelector('.lib-review-face');
+      if (hov) { e.preventDefault(); reviewPreview(parseInt(hov.dataset.faceId, 10)); }
+    }
+  });
+  /// Visual multi-candidate picker (people-pets wireframes screen D) — replaces the old
+  /// "retype a name from this newline list" merge flow (failure #8), which failed outright on
+  /// any typo and had no picker at all. Reuses `.lib-coll-row`/`.lib-face-ava` so a candidate
+  /// row looks exactly like its sidebar row, face crop included. Resolves to the chosen
+  /// PersonNode, or null if dismissed.
+  function pickPersonModal(title, candidates) {
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);'
+        + 'display:flex;align-items:center;justify-content:center';
+      const sorted = candidates.slice().sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+      wrap.innerHTML = `<div style="background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;
+          padding:14px;min-width:260px;max-width:340px;max-height:70vh;overflow:auto;box-shadow:var(--lift-2)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px">${esc(title)}</div>
+        <div id="lib-pick-rows"></div>
+        <div class="lib-coll-row" data-pick-cancel style="opacity:.6;margin-top:6px">Cancel</div>
+      </div>`;
+      const rows = wrap.querySelector('#lib-pick-rows');
+      sorted.forEach((c) => {
+        const row = document.createElement('div');
+        row.className = 'lib-coll-row';
+        row.innerHTML = `${faceAvaHtml(c)}<span class="lib-coll-lb">${esc(c.name)}</span><span class="lib-coll-count">${fmtN(c.face_count ?? '')}</span>`;
+        row.onclick = () => { wrap.remove(); resolve(c); };
+        rows.appendChild(row);
+        const ava = row.querySelector('.lib-face-ava[data-face-id]');
+        const img = ava && ava.querySelector('img');
+        const faceId = ava && parseInt(ava.dataset.faceId, 10);
+        if (img && Number.isFinite(faceId)) loadFaceCrop(faceId, img);
+      });
+      wrap.querySelector('[data-pick-cancel]').onclick = () => { wrap.remove(); resolve(null); };
+      wrap.onclick = (e) => { if (e.target === wrap) { wrap.remove(); resolve(null); } };
+      document.body.appendChild(wrap);
+    });
+  }
+  /// Grid of the group's faces; click one to make it the cover.
+  async function pickCoverModal(p) {
+    let ids;
+    try { ids = await invoke('catalog_person_face_ids', { personId: p.id, limit: 120 }); }
+    catch (err) { toast(humanizeErr('load this group', err), 'err'); return; }
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
+    wrap.id = 'lib-people-edit'; // borrows the People editor's card/grid styling
+    wrap.innerHTML = `<div class="lib-pe-card"><div class="lib-pe-top"><span>Choose a cover for ${esc(p.name)}</span><span class="lib-btn" data-close>Cancel</span></div>
+      <div class="lib-pe-grid">${ids.map((id) => `<div class="lib-pe-face" data-face-id="${id}" title="Use as cover"${id === p.cover_face_id ? ' style="outline:2px solid var(--acc2)"' : ''}><img alt=""></div>`).join('')}</div></div>`;
+    document.body.appendChild(wrap);
+    wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+    wrap.querySelector('[data-close]').onclick = () => wrap.remove();
+    wrap.querySelectorAll('.lib-pe-face').forEach((el) => {
+      const fid = parseInt(el.dataset.faceId, 10);
+      loadFaceCrop(fid, el.querySelector('img'));
+      el.onclick = async () => {
+        try {
+          await invoke('catalog_set_person_cover', { personId: p.id, faceId: fid });
+          wrap.remove();
+          await refreshPeople();
+          if (document.getElementById('lib-people-grid')?.classList.contains('on')) openPeopleGrid();
+        } catch (err) { toast(humanizeErr('change the cover', err), 'err'); }
+      };
+    });
+  }
+  function showPersonMenu(e, id) {
+    const p = peopleList.find((x) => x.id === id);
+    if (!p) return;
+    const items = [
+      ...(!p.auto ? [[`Find more photos of ${p.name}…`, () => openFindMore(p)]] : []),
+      ...(!p.auto ? [['Undo automatic tags', async () => {
+        if (!await window.confirmModal(`Remove every photo that was tagged "${p.name}" automatically?\n\nPhotos you confirmed yourself stay. The removed ones won't be auto-tagged as ${p.name} again.`, 'Remove')) return;
+        try {
+          const n = await invoke('catalog_undo_auto_assign', { personId: id });
+          if (state.catalogScope === `person:${id}`) await openCatalogView(`person:${id}`);
+          await refreshPeople();
+          toast(`Removed ${n} automatic tag${n === 1 ? '' : 's'} from "${p.name}"`, true);
+        } catch (err) { toast(humanizeErr('undo automatic tags', err), 'err'); }
+      }]] : []),
+      ['Change cover photo…', () => pickCoverModal(p)],
+      ['Rename…', async () => {
+        const name = await window.askTextModal('Rename person', '', p.name);
+        if (!name) return;
+        try { await invoke('catalog_rename_person', { personId: id, name }); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('rename this person', err), 'err'); }
+      }],
+      ['Merge into…', async () => {
+        const others = peopleList.filter((x) => x.id !== id);
+        if (!others.length) { toast('No other people to merge into'); return; }
+        const target = await pickPersonModal(`Merge "${p.name}" into…`, others);
+        if (!target) return;
+        try {
+          await invoke('catalog_merge_people', { fromId: id, intoId: target.id });
+          if (state.catalogScope === `person:${id}`) await openCatalogView(`person:${target.id}`);
+          await refreshPeople();
+          toast(`Merged "${p.name}" into "${target.name}"`, true);
+        } catch (err) { toast(humanizeErr('merge these people', err), 'err'); }
+      }],
+      [p.kind === 'pet' ? 'Mark as Person' : 'Mark as Pet', async () => {
+        try { await invoke('catalog_set_person_kind', { personId: id, kind: p.kind === 'pet' ? 'person' : 'pet' }); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('change person/pet', err), 'err'); }
+      }],
+      ['Ignore (stop suggesting)', async () => {
+        try {
+          await invoke('catalog_set_person_ignored', { personId: id, ignored: true });
+          if (state.catalogScope === `person:${id}`) { state.source = 'folder'; state.entries = []; renderGrid(); }
+          await refreshPeople();
+          toast(`Ignored "${p.name}"`, true);
+        } catch (err) { toast(humanizeErr('ignore this person', err), 'err'); }
+      }],
+      ...(p.auto ? [] : [[`Delete "${p.name}"`, async () => {
+        if (!await window.confirmModal(`Delete "${p.name}"?\n\nTheir photos stay exactly where they are — only this person's grouping is removed. A future face scan may re-group them.`, 'Delete')) return;
+        await invoke('catalog_delete_person', { personId: id }).catch((err) => toast(humanizeErr('delete this person', err), 'err'));
+        if (state.catalogScope === `person:${id}`) { state.source = 'folder'; state.entries = []; renderGrid(); }
+        await refreshPeople();
+      }]]),
+    ];
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:none;font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
+  // "Needs review" only appears once something is actually flagged — an empty row promising
+  // a feature with nothing behind it reads as broken, not reassuring. Never auto-hides once a
+  // photo is fixed/deleted/dismissed from it though: it's driven by catalogCounts.blurry like
+  // every other row here, so it just goes away on its own once the count returns to 0.
+  // Per Library View.html's Collections group (Recents…Synced, then Needs Review /
+  // Not-Face-Scanned, then Raw/Videos), these live INSIDE Collections, not as siblings of
+  // "All Photos" above it — moved there by renderCollections()'s own assembly order below.
+  function reviewRowHtml() {
+    return catalogCounts.blurry ? `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'blurry' ? ' on' : ''}" data-catalog="blurry" role="button" tabindex="0" title="Photos flagged as possibly out of focus — review, never auto-deleted">
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Needs Review</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.blurry)}</span>
+      </div>` : '';
+  }
+  // Same "only appears once it's actually true of something" rule as reviewRowHtml above — an
+  // always-visible "0 pending" row would just be noise on a fully-indexed library. Answers
+  // "which photos have/haven't been face-scanned" (the sidebar had no answer to this before),
+  // driven by the SAME faces_scanned_at predicate faces_run itself uses (catalog_counts).
+  function facesPendingRowHtml() {
+    return catalogCounts.faces_pending ? `
+      <div class="lib-coll-row${state.source === 'catalog' && state.facesFilter === 'pending' ? ' on' : ''}" data-faces-pending="1" title="Photos not yet scanned for faces">
+        <span class="lib-coll-ic">${ic('focus', 14)}</span><span class="lib-coll-lb">Not Face-Scanned</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.faces_pending)}</span>
+      </div>` : '';
+  }
+
+  function catalogSectionHtml() {
+    return `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'all' ? ' on' : ''}" data-catalog="all" role="button" tabindex="0">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">All Photos</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.all ?? '')}</span>
+      </div>`;
+    // Note: Drives used to render immediately here. It's now placed by renderCollections()'s own
+    // assembly order (see the sidebar reorder comment there) rather than baked into this
+    // function's return value, so section order can change in one place.
+    // Note: RAW/Videos used to render here too (as data-type-shortcut rows) — moved into the
+    // Collections section body (renderCollections()) to match Library View.html:331-332, which
+    // puts them as the LAST two rows inside Collections, not as siblings of "All Photos".
+  }
+
+  // RAW/Videos: quick-access shortcuts onto the existing type-filter mechanism (lib-type-filter)
+  // rather than a new backend scope — always shown (unlike reviewRow/facesPendingRow, there's
+  // no catalog_counts field to gate on without a Rust change, and "0 RAW files" is still a
+  // useful thing to see rather than noise). Per Library View.html:331-332, these are the last
+  // two rows INSIDE Collections, not top-level rows next to All Photos.
+  function rawVideoShortcutRows() {
+    // HANDOVER 2026-09-08 item #14: these rendered no count element at all, unlike every other
+    // row in renderCollections() — catalog_counts() now exposes raw/video (catalog.rs), same
+    // ?? '' fix as every other count span (0 must render "0", not blank).
+    const raw = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'raw' ? ' on' : ''}" data-type-shortcut="raw" title="All RAW files">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Raw</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.raw ?? '')}</span>
+      </div>`;
+    const video = `
+      <div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'all' && state.typeFilter === 'video' ? ' on' : ''}" data-type-shortcut="video" title="All video clips">
+        <span class="lib-coll-ic">${ic('video', 14)}</span><span class="lib-coll-lb">Videos</span>
+        <span class="lib-coll-count">${fmtN(catalogCounts.video ?? '')}</span>
+      </div>`;
+    return raw + video;
+  }
+
+  // "By Date" — its own top-level section (UI_SPEC.md zone: sidebar tree, wireframe order
+  // All Photos → By date → Collections → …), styled with the same sec-head weight as
+  // Collections/People/Albums rather than nested inside catalogSectionHtml's All-Photos block.
+  // Uses its own dateExpanded('__root__') open flag (session-only, not sidebarSecOpen) since
+  // that's the pre-existing mechanism the year/month toggle rows already share — moving it to
+  // sidebarSecOpen would need a migration for no behavioral gain.
+  function dateSectionHtml() {
+    if (!dateCounts.days.length && !dateCounts.no_date) return '';
+    const open = dateExpanded.has('__root__');
+    return `<div class="lib-coll-heading lib-sec-h" data-date-tree-toggle="1">
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span>By date</span>
+      </div>${open ? `<div class="lib-tree-children">${dateTreeHtml()}</div>` : ''}`;
+  }
+
+  /// Registers `path` with the catalog and — at most once per COVERING ROOT per session — runs
+  /// the real (walk-skip-optimized) scan for it, then resolves with `{volumeId, relDir}` so
+  /// `openFolder` can read the grid's own entries STRAIGHT FROM THE CATALOG instead of a separate
+  /// live filesystem walk. This is the fix for the deepest issue found across several rounds of
+  /// this session's work: ordinary folder browsing used to run its own independent, uncached
+  /// `list_dir`/`listDirRecursive` walk on every open, completely separate from this scan — so
+  /// every optimization made to the CATALOG's own walk (this function, `catalog_scan`) never
+  /// changed what was actually on screen. Awaited by `openFolder` now, not fire-and-forget.
+  //
+  // `catalog_add_root` is cheap (an ancestor lookup + upsert, not a walk) — safe to call on every
+  // folder open, unlike the scan below. Deduped by ROOT ID, not volume: an earlier version of
+  // this capped by volume_id (matching the OLD, pre-catalog-backed-grid reasoning: "the scan is
+  // already incremental, so repeating it is merely pointless, never wrong"). That stopped being
+  // true the moment the grid started reading from the catalog — `catalog_scan(volume_id)` walks
+  // every ROOT registered for that volume, but a root registered AFTER the volume's one-per-
+  // session scan already ran would never get walked at all, and its folder would show an empty
+  // grid despite having real files on disk. Root-id keying still skips the redundant rescan when
+  // clicking through an already-covered root's own subfolders (catalog_add_root's ancestor
+  // collapse returns the SAME root id for those), while still triggering a real scan — cheap,
+  // thanks to walk-skip, for anything already walked and unchanged — for a genuinely new root.
+  const _catalogScannedRoots = new Set();
+  // ⚠️ Set (not fired) here, deliberately. This used to call catalogRunBackgroundPhases()
+  // directly, fire-and-forget, the MOMENT catalog_scan resolved — which is BEFORE openFolder has
+  // even called renderGrid(), let alone before the first screenful's interactive thumbnails have
+  // decoded. The bulk thumbnail/focus/hash pass (decode_batch_pool + the writer-lock chain) then
+  // raced the interactive get_thumbnail_or_offline calls for the exact same CPU cores for the
+  // entire first-paint window — confirmed live: fixing ONLY the readiness gate (firstPaintReady,
+  // below) without ALSO fixing this made no visible difference on the real 57k-photo library,
+  // because the gate's own bounded wait kept timing out against real contention it did nothing to
+  // remove. openFolder flips this flag into an actual firstPaintReady().then(...) call, once
+  // AFTER its own renderGrid() has run and the queue this generation's decode work sits in
+  // actually exists — calling firstPaintReady() from here instead would just resolve instantly
+  // (nothing queued yet) and be no fix at all.
+  let _catalogBgPending = false;
+  function catalogRegisterFolder(path) {
+    // 'browse' (set by Choose folder / drop / recent-folder jump) makes the new root transient:
+    // it replaces the previous browsed root and is only kept via the storage menu's "Keep in library".
+    const kind = _nextRootKind; _nextRootKind = null;
+    return invoke('catalog_add_root', { path, kind })
+      .then((root) => {
+        if (!root) return null;
+        const needsScan = !_catalogScannedRoots.has(root.id);
+        if (needsScan) _catalogScannedRoots.add(root.id);
+        const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
+        return scanPromise.then((scanned) => {
+          if (scanned) { refreshCatalogCounts(); _catalogBgPending = true; }
+          // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
+          // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
+          // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
+          // the rest of the library is swept in the background by catalog_scan itself.
+          // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
+          // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
+          // the catalog as soon as the sync lands and shows on the next render of that folder.
+          if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
+            .then((r) => { if (r && r.changed > 0) refreshCatalogCounts(); }).catch(() => {});
+          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
+        });
+      })
+      .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });
+  }
+
+  /// Thumbnails (the offline-browsing tier) and focus scoring are deliberately NOT part of
+  /// catalog_scan's own chain on the Rust side — decoding every photo is far more expensive
+  /// than reading an EXIF header or a small XMP sidecar, so folding it into the scan that fires
+  /// on every ordinary folder-open would make routine browsing noticeably slower. Run here
+  /// instead, once, in the background, after the fast walk/metadata/sidecar sync has already
+  /// left the grid showing real data. `_catalogBgRunning` just skips overlap on rapid repeated
+  /// folder-opens — nothing is lost by skipping, since the rows a skipped run would have picked
+  /// up (thumb=0 / focus_at stale) are still exactly where the NEXT run will find them.
+  /// Repeatedly invokes catalog_thumbnails (now one 32-item batch per call — see thumbnail_run's
+  /// own comment) with a real pacing delay between calls, instead of a single invoke() that used
+  /// to loop Rust-side until the ENTIRE backlog was clear. Measured before this change: ~11
+  /// minutes of unbroken parallel decoding for ~27,000 newly-imported photos, competing with the
+  /// interactive grid and everything else for the whole duration. An ordinary relaunch with
+  /// nothing new still costs exactly one invoke() (thumb=0 candidate set is empty, has_more is
+  /// false immediately) — this only changes the shape of what happens when there's real,
+  /// genuinely new work to do, not whether there's any work at all.
+  // ⚠️ `_bgStopped` is the JS half of making Cancel actually work. The Rust `cancel` flag alone
+  // was never enough here: catalog_thumbnails used to clear it at the start of every batch, so a
+  // click was erased 200ms later by the next call (confirmed live — an hour of clicking Cancel
+  // did nothing). Rust no longer resets it per batch, and this flag independently stops the loop
+  // from issuing further batches, so neither half depends on the other being correct.
+  let _bgStopped = false;
+  function bgStopAll() {
+    _bgStopped = true;
+    if (!LIBTEST) invoke('catalog_scan_cancel').catch(() => {});
+  }
+  // Persistent "Pause background indexing" — survives relaunch (localStorage) and is re-asserted
+  // to Rust on startup. Deliberately separate from Cancel: Cancel stops what is running now,
+  // pause stops anything from starting until the user says otherwise.
+  const LS_BG_PAUSED = 'chromasmith_bg_paused';
+  function bgPaused() {
+    try { return localStorage.getItem(LS_BG_PAUSED) === '1'; } catch (e) { return false; }
+  }
+  function bgSetPaused(paused) {
+    try { localStorage.setItem(LS_BG_PAUSED, paused ? '1' : '0'); } catch (e) {}
+    if (!LIBTEST) invoke('catalog_bg_set_paused', { paused: !!paused }).catch(() => {});
+    if (paused) bgStopAll();
+    // Resume must actually restart the chain: the phases only otherwise start after a new folder
+    // scan, so Resume used to leave CLIP indexing (the only source of auto tags for un-indexed
+    // photos) stopped for the rest of the session — "dog" stuck while 51k photos sat unindexed.
+    else if (!LIBTEST) { _bgStopped = false; catalogRunBackgroundPhases(); }
+    renderActivity();
+  }
+  window.chromasmithBgPaused = bgPaused;
+  window.chromasmithBgSetPaused = bgSetPaused;
+  // ⚠️ MODULE-level, not local to drainCatalogThumbnails — confirmed live: the panel visibly
+  // flickered between 0 and a climbing number, and the cause was the PREVIOUS version deriving
+  // `done` from a `startRemaining` baseline captured fresh on every call to this function. This
+  // loop restarts more than once per app session (a fresh catalog_scan on a newly-visited root
+  // re-fires catalogRunBackgroundPhases; a transient invoke() error ends one drain early and a
+  // later trigger starts a new one) — each restart re-captured a LOWER startRemaining (real work
+  // had completed since the last restart), which made the displayed total visibly drop and done
+  // snap back toward zero on every restart, even though nothing had regressed.
+  // `doneThisSession` fixes this by never being derived from a baseline at all: it's a running
+  // SUM of `generated` across every batch, so it can only ever increase, restart or not. `total`
+  // is computed as done + whatever's still outstanding, so it stays internally consistent (and
+  // grows on its own if new work is discovered mid-session — e.g. a newly-scanned folder) instead
+  // of being a frozen number that the real backlog can fall behind or jump ahead of.
+  let _thumbDoneThisSession = 0;
+  async function drainCatalogThumbnails() {
+    _bgStopped = false;
+    if (!LIBTEST) await invoke('catalog_cancel_reset').catch(() => {}); // ONCE, before the first batch — never inside the loop
+    for (;;) {
+      if (_bgStopped || bgPaused()) return;
+      let r;
+      try { r = await invoke('catalog_thumbnails'); } catch (e) { console.error('catalog_thumbnails', e); return; }
+      if (!r || !r.has_more) return;
+      if (typeof r.remaining === 'number') {
+        _thumbDoneThisSession += r.generated || 0;
+        const total = _thumbDoneThisSession + r.remaining;
+        window.__libActivityTotal = r.remaining; // read by test/library_perf.mjs's honest-progress assertion
+        activityUpdate('catalog', { stage: 'thumb', done: _thumbDoneThisSession, total });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+  let _catalogBgRunning = false;
+  let _catalogRecoveryChecking = false;
+  let _catalogSourceChanged = false;
+  let _catalogActiveJobId = null;
+  let _catalogActiveRecovery = null;
+  function catalogRecoverySnapshot(roots) {
+    const identity = catalogRootIdentity(roots);
+    return normalizeCatalogRecovery({ version: CATALOG_RECOVERY_VERSION, roots: identity, requestedPhases: CATALOG_REQUESTED_PHASES, completedPhases: [] });
+  }
+  async function resumeCatalogIndex(row) {
+    const recovery = normalizeCatalogRecovery(row && row.recovery);
+    if (!recovery || _catalogBgRunning || _catalogRecoveryChecking || (LIBTEST && !window.__libtestRecoveryEnabled)) return;
+    _catalogRecoveryChecking = true;
+    try {
+      const current = catalogRootIdentity(await invoke('catalog_root_identity'));
+      if (JSON.stringify(current) !== JSON.stringify(recovery.roots)) {
+        toast('Library sources changed since this indexing job stopped. Start a new index from the current library.', 'err');
+        return;
+      }
+      _bgStopped = false;
+      const unsupported = recovery.requestedPhases.filter(phase => !CATALOG_RECOVERY_PHASES.includes(phase));
+      if (unsupported.length) toast(`Retrying saved/checkpointed phases only. A fresh library scan still needs to run ${catalogPhaseNames(unsupported)}.`, false);
+      _catalogSourceChanged = false;
+      catalogRunBackgroundPhases(recovery, row.id);
+    } catch (error) {
+      toast('Could not verify the saved indexing sources. Open the original library and try again.', 'err');
+      console.error('catalog recovery source check', error);
+    } finally {
+      _catalogRecoveryChecking = false;
+    }
+  }
+  // Tagging photos that ALREADY have a CLIP embedding is pure math on stored vectors (seconds, no
+  // image decode), so it must not wait behind the chain below: that chain is skipped entirely
+  // while background indexing is paused, and otherwise only reaches 'autotag' after CLIP has
+  // decoded every remaining photo (hours on a 57k library). Both kept already-indexed photos
+  // untagged indefinitely ("dog" showed 6 photos, ~3000 were indexed dogs). Once per session.
+  var _autoTagBackfillDone = false; // var, not let: refreshCatalogCounts can call this before this line runs (TDZ)
+  function catalogAutoTagBackfill() {
+    if (LIBTEST || _autoTagBackfillDone) return;
+    _autoTagBackfillDone = true;
+    invoke('catalog_auto_tag')
+      .then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } })
+      .catch((e) => console.error('auto-tag backfill', e));
+  }
+  async function catalogRunBackgroundPhases(recovery = null, jobId = null) {
+    const isRecoveryRun = !!recovery && !!jobId;
+    const startup = catalogBackgroundStartupActions(isRecoveryRun, bgPaused(), _bgStopped);
+    // Stored-vector backfill is independent of heavy indexing and must still run while indexing is paused.
+    if (startup.backfill) catalogAutoTagBackfill();
+    if ((LIBTEST && (!window.__libtestRecoveryEnabled || !recovery || !jobId)) || _catalogBgRunning || !startup.startHeavy) return;
+    _catalogBgRunning = true;
+    _catalogActiveJobId = jobId || `catalog-index-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const activeJobId = _catalogActiveJobId;
+    if (!recovery) {
+      try { recovery = catalogRecoverySnapshot(await invoke('catalog_root_identity')); }
+      catch (error) { console.warn('Could not save catalog recovery sources', error); }
+    }
+    _catalogActiveRecovery = isRecoveryRun ? catalogRecoveryForRetry(recovery) : recovery;
+    if (isRecoveryRun) recovery = _catalogActiveRecovery;
+    activityUpdate('catalog', { jobId: activeJobId, recovery, label: 'Indexing library', stage: recovery ? 'stack' : 'working', done: 0, total: 0 });
+    const phaseFailures = [];
+    const finish = () => {
+      const stopped = _bgStopped || bgPaused();
+      const unsupported = isRecoveryRun ? _catalogActiveRecovery.requestedPhases.filter(phase => !CATALOG_RECOVERY_PHASES.includes(phase)) : [];
+      const pendingSupported = isRecoveryRun ? _catalogActiveRecovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase) && !_catalogActiveRecovery.completedPhases.includes(phase)) : [];
+      const outcome = _catalogSourceChanged ? 'interrupted' : stopped ? (bgPaused() ? 'interrupted' : 'cancelled') : phaseFailures.length || unsupported.length || pendingSupported.length ? 'partial' : 'completed';
+      const detail = _catalogSourceChanged ? 'Registered library sources changed; resume stopped before continuing' : stopped ? 'Saved indexing results remain valid; pending phases can resume' : phaseFailures.length ? `${phaseFailures.length} phase${phaseFailures.length === 1 ? '' : 's'} failed; saved results remain valid` : unsupported.length || pendingSupported.length ? `${pendingSupported.length ? `Marker checks remain for ${catalogPhaseNames(pendingSupported)}; ` : ''}${unsupported.length ? `a normal library scan is still needed for ${catalogPhaseNames(unsupported)}` : 'retry supported phases to process remaining eligible items'}` : 'Indexing phases finished';
+      activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Indexing library', stage: 'done', outcome, failed: phaseFailures, current: detail });
+      _catalogBgRunning = false; _catalogActiveJobId = null; _catalogActiveRecovery = null; refreshCatalogCounts();
+    };
+    const sourceStillMatches = async () => {
+      if (!recovery) return true;
+      try {
+        const current = catalogRootIdentity(await invoke('catalog_root_identity'));
+        if (JSON.stringify(current) === JSON.stringify(recovery.roots)) return true;
+      } catch (e) {}
+      _catalogSourceChanged = true; _bgStopped = true;
+      toast('Registered library sources changed during recovery. The job stopped safely.', 'err');
+      return false;
+    };
+    if (isRecoveryRun) {
+      const handlers = {
+        hash: async () => { await invoke('catalog_hash'); return true; },
+        faces: async () => { let exhausted = false; for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) { exhausted = true; break; } } return exhausted; },
+        embed: async () => { await invoke('catalog_embed_faces', {}); return true; },
+        clip: async () => { await invoke('catalog_clip_embed', {}); refreshCatalogCounts(); return true; },
+        pets: async () => { let exhausted = false; for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) { exhausted = true; break; } } refreshPeople(); return exhausted; }
+      };
+      const phases = catalogRecoveryExecutionPlan(true, recovery);
+      runCatalogPhasePlan(phases, handlers,
+        async phase => !_bgStopped && !bgPaused() && await sourceStillMatches() && (activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Retrying supported index phases', stage: phase, current: 'Checking saved work markers' }), true),
+        (phase, error) => { phaseFailures.push(`${phase}: ${String(error && error.message || error)}`); console.error('catalog recovery phase ' + phase, error); },
+        (phase, exhausted) => {
+          if (exhausted === true && !_bgStopped && !bgPaused()) {
+            _catalogActiveRecovery.completedPhases = [...new Set([..._catalogActiveRecovery.completedPhases, phase])];
+            activityUpdate('catalog', { jobId: activeJobId, recovery: _catalogActiveRecovery, label: 'Retrying supported index phases', stage: phase, current: 'Phase completed; native markers remain the recovery source of truth' });
+          }
+        }).catch(error => console.error('catalog recovery phases', error)).finally(finish);
+      return;
+    }
+    // ⚠️ Each phase is independently attempted. This used to be a bare .then() chain, so a
+    // single rejection (e.g. catalog_stack failing) silently skipped EVERY later phase --
+    // thumbnails, focus, hash -- with the error going only to the WebView console, invisible
+    // from stderr. That failure mode is indistinguishable from "indexing is just slow".
+    const handlers = {
+      stack: () => invoke('catalog_stack'),
+      thumbnails: () => drainCatalogThumbnails(),
+      focus: () => invoke('catalog_focus').then(async (result) => {
+          if (result?.scored) await refreshCullFocusScores();
+          return result;
+      }),
+      hash: () => invoke('catalog_hash'),
+      faces: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_faces_scan', {}); if (!r || !r.scanned) break; } },
+      embed: () => invoke('catalog_embed_faces', {}),
+      cluster: () => invoke('catalog_cluster_faces').then(() => refreshPeople()),
+      clip: () => invoke('catalog_clip_embed', {}).then(() => { refreshCatalogCounts(); }),
+      autotag: () => invoke('catalog_auto_tag').then(() => { refreshAutoTags(); refreshCatalogCounts(); if (state.showInfo) { state.clipTags.clear(); renderInfoPanel(); } }),
+      pets: async () => { for (let i = 0; i < 6 && !_bgStopped && !bgPaused(); i++) { const r = await invoke('catalog_pets_scan', {}); refreshCatalogCounts(); if (!r || !r.scanned) break; } refreshPeople(); }
+    };
+    const phases = catalogRecoveryExecutionPlan(false, recovery);
+    const step = (name, fn) => fn().catch((e) => { phaseFailures.push(`${name}: ${String(e && e.message || e)}`); console.error('background phase ' + name, e); });
+    runCatalogPhasePlan(phases, Object.fromEntries(phases.map(phase => [phase, () => step(phase, handlers[phase])])),
+      async () => !_bgStopped && !bgPaused(), () => {}, () => {})
+      .catch((e) => console.error('catalog background phases', e))
+      .finally(finish);
+  }

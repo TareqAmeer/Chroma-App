@@ -1,0 +1,72 @@
+  // ── People & Pets grid (click the sidebar section's title) ─────────────────────────────────
+  // Google Photos-style: every named person and pet as a large tile over the grid area; click a
+  // tile to open their photos, right-click for the same menu as the sidebar row.
+  function openPeopleGrid() {
+    const main = document.getElementById('lib-main');
+    if (!main) return;
+    let el = document.getElementById('lib-people-grid');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'lib-people-grid';
+      main.appendChild(el);
+    }
+    const named = peopleList.filter((p) => !p.auto && !p.ignored).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+    const unnamed = peopleList.filter((p) => p.auto && !p.ignored).reduce((n, p) => n + (p.face_count || 0), 0);
+    // Unnamed groups big enough to be someone you know (REVIEW_MIN_PHOTOS in catalog.rs) —
+    // name one inline, or × to stop it being suggested.
+    const groups = peopleList.filter((p) => p.auto && !p.ignored && (p.face_count || 0) >= 20)
+      .sort((a, b) => b.face_count - a.face_count).slice(0, 300);
+    el.innerHTML = `<div class="lib-pg-top"><span class="lib-pg-title">People &amp; Pets</span>
+        ${unnamed ? `<span class="lib-btn" data-pg-review>Review ${fmtN(unnamed)} unnamed faces</span>` : ''}
+        <span class="lib-btn" data-pg-close>Close</span></div>
+      <div class="lib-pg-grid">${named.map((p) => `<div class="lib-pg-tile" data-person="${p.id}">
+          <img alt=""><span class="lib-pg-name">${esc(p.name)}</span><span class="lib-pg-n">${fmtN(p.face_count || 0)}</span></div>`).join('')
+        || '<div class="mut" style="grid-column:1/-1">No one named yet — review unnamed faces to start.</div>'}</div>
+      ${groups.length ? `<div class="lib-pg-sub">Unnamed groups · ${groups.length}</div>
+      <div class="lib-pg-grid">${groups.map((p) => `<div class="lib-pg-tile unnamed" data-person="${p.id}">
+          <img alt=""><span class="lib-pg-x" data-pg-remove title="Not someone I know — stop suggesting">×</span>
+          <span class="lib-pg-n">${fmtN(p.face_count || 0)}</span>
+          <input class="lib-pg-nm" placeholder="${p.kind === 'pet' ? 'Name this pet…' : 'Name this person…'}" list="lib-pg-names"></div>`).join('')}</div>
+      <datalist id="lib-pg-names">${named.map((p) => `<option value="${esc(p.name)}">`).join('')}</datalist>` : ''}`;
+    // #lib-main is itself the grid's scroller: pin the overlay to its visible window and stop it
+    // scrolling underneath while open.
+    el.style.top = main.scrollTop + 'px';
+    el.style.height = main.clientHeight + 'px';
+    main.style.overflow = 'hidden';
+    el.classList.add('on');
+    el.querySelectorAll('.lib-pg-tile').forEach((t) => {
+      const p = peopleList.find((x) => x.id === parseInt(t.dataset.person, 10));
+      if (p && p.cover_face_id != null) loadFaceCrop(p.cover_face_id, t.querySelector('img'));
+      t.onclick = (e) => { if (e.target.closest('input,[data-pg-remove]')) return; closePeopleGrid(); openCatalogView(`person:${p.id}`); };
+      t.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, p.id); };
+      const x = t.querySelector('[data-pg-remove]');
+      if (x) x.onclick = async () => {
+        try { await invoke('catalog_set_person_ignored', { personId: p.id, ignored: true }); t.remove(); await refreshPeople(); }
+        catch (err) { toast(humanizeErr('remove this group', err), 'err'); }
+      };
+      const nm = t.querySelector('.lib-pg-nm');
+      if (nm) nm.onkeydown = async (e) => {
+        if (e.key !== 'Enter') return;
+        const name = nm.value.trim();
+        if (!name) return;
+        try {
+          const existing = peopleList.find((q) => !q.auto && q.name.toLowerCase() === name.toLowerCase());
+          if (existing) await invoke('catalog_merge_people', { fromId: p.id, intoId: existing.id });
+          else { await invoke('catalog_rename_person', { personId: p.id, name }); await invoke('catalog_confirm_person', { personId: p.id, faceIds: null }); }
+          await refreshPeople();
+          toast(existing ? `Added to "${existing.name}"` : `Named "${name}"`, true);
+          openPeopleGrid();
+        } catch (err) { toast(humanizeErr('name this group', err), 'err'); }
+      };
+    });
+    el.querySelector('[data-pg-close]').onclick = closePeopleGrid;
+    const rv = el.querySelector('[data-pg-review]');
+    if (rv) rv.onclick = () => openReviewFaces();
+  }
+  function closePeopleGrid() {
+    const el = document.getElementById('lib-people-grid');
+    if (!el || !el.classList.contains('on')) return;
+    el.classList.remove('on');
+    const main = document.getElementById('lib-main');
+    if (main) main.style.overflow = '';
+  }

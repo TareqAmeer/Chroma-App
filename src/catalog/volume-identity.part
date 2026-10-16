@@ -1,0 +1,219 @@
+// ── Volume identity ──────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct VolumeRow {
+    pub id: i64,
+    pub uuid: String,
+    pub label: String,
+    pub last_path: String,
+    pub is_local: bool,
+    pub total_bytes: u64,
+    pub online: bool,
+}
+
+/// Mount point (and, where available, a volume-from-device hint) for `path`, via the platform
+/// layer. `macos.rs`'s comment on `is_boot_volume` explains the APFS split-volume-group reason
+/// the mount-point prefix check exists; `windows.rs`'s version compares against the system
+/// drive instead, which needs no such reasoning.
+fn statfs_mount_point(path: &Path) -> Option<(String, String)> {
+    let mount = crate::platform::mount_point(path)?;
+    let hint = crate::platform::volume_identity_hint(path).unwrap_or_else(|| mount.clone());
+    Some((mount, hint))
+}
+
+fn is_boot_volume(mount_point: &str) -> bool {
+    crate::platform::is_boot_volume(mount_point)
+}
+
+fn gen_id() -> String {
+    // No adversary and no cross-user collision concern (this is a single local user's own
+    // drives) — two SystemTime reads plus the process id give ample uniqueness without adding
+    // a `uuid` dependency for one string.
+    let a = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    std::thread::sleep(std::time::Duration::from_nanos(1));
+    let b = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    format!("{:016x}{:016x}{:08x}", a as u64, b as u64, std::process::id())
+}
+
+/// Resolves (mount point, uuid, is_local) for whatever volume `path` lives on. For the boot
+/// disk, `uuid` is the reserved literal `"local"` and paths are stored as the absolute path
+/// minus its leading `/` — one code path, no downstream special-casing between "external drive"
+/// and "this Mac's own disk".
+///
+/// For an external volume, identity is a marker file written once at the volume's root
+/// (`VOLUME_MARKER`) — NOT the filesystem UUID (digiKam's own docs describe that changing on a
+/// system update, disk reconfiguration, or plain reconnect) and NOT `f_mntfromname` alone (that
+/// tracks the USB port / attach order, not the drive). Falls back to a `fp:`-prefixed
+/// fingerprint of (mount point basename, volume capacity) when the marker can't be written
+/// (read-only media) — degraded but functional, and the caller can tell it apart by the prefix.
+fn volume_identity(path: &Path) -> (String, String, bool) {
+    // ⚠️ Canonicalize FIRST. `/tmp` -> `/private/tmp` and `/var` -> `/private/var` are ordinary
+    // symlinks, and `statfs` reports the REAL mount point of wherever a path actually resolves
+    // to — so calling it on the symlinked form and then string-prefix-stripping the ORIGINAL
+    // (non-canonical) path against that mount point silently fails to match, and every file
+    // under it goes unwalked. Canonicalizing both sides once, here, is what keeps
+    // `add_root_run`'s rel_path computation and `walk_root`'s reconstruction consistent.
+    let canon = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let Some((mount_point, hint)) = statfs_mount_point(&canon) else {
+        return ("fp:unknown".into(), "/".into(), true);
+    };
+    if is_boot_volume(&mount_point) {
+        return ("local".into(), mount_point, true);
+    }
+    let marker = PathBuf::from(&mount_point).join(VOLUME_MARKER);
+    if let Ok(existing) = std::fs::read_to_string(&marker) {
+        let id = existing.trim().to_string();
+        if !id.is_empty() {
+            return (id, mount_point, false);
+        }
+    }
+    let id = gen_id();
+    if std::fs::write(&marker, &id).is_ok() {
+        return (id, mount_point, false);
+    }
+    // Read-only or unwritable volume: fingerprint instead of failing identity entirely.
+    let (total, _free) = crate::platform::disk_bytes(Path::new(&mount_point));
+    // On Windows, `hint` is a `\\?\Volume{GUID}\` path (platform::volume_identity_hint via
+    // GetVolumeNameForVolumeMountPointW) — stable across a drive-letter reassignment, unlike
+    // `mount_point`'s own basename (the letter itself, which is exactly what CAN change between
+    // reconnects — docs/windows-port.md G8). On macOS, `hint` is `f_mntfromname` (e.g.
+    // "/dev/disk4s1"), which is explicitly LESS stable there per this function's own doc comment
+    // above (tracks USB port/attach order, not the drive) — so only prefer the hint when it's
+    // recognizably the Windows GUID form; otherwise keep the existing basename behavior.
+    let identity_key = if hint.starts_with(r"\\?\Volume") {
+        hint
+    } else {
+        Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    };
+    (format!("fp:{identity_key}:{total}"), mount_point, false)
+}
+
+/// Inserts or refreshes a volume row for whatever volume `path` lives on, returning its id and
+/// the mount point (needed by the caller to compute `rel_path`). `last_path`/`last_seen`/
+/// `total_bytes` are refreshed on every call — they're a CACHE of where the volume was last
+/// seen, never its identity.
+fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, String)> {
+    let (uuid, mount_point, is_local) = volume_identity(path);
+    let label = if is_local {
+        "This Mac".to_string()
+    } else {
+        Path::new(&mount_point).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| mount_point.clone())
+    };
+    let (total_bytes, _free) = crate::platform::disk_bytes(Path::new(&mount_point));
+
+    conn.execute(
+        "INSERT INTO volumes (uuid, label, last_path, total_bytes, is_local, last_seen)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(uuid) DO UPDATE SET
+            last_path = excluded.last_path,
+            total_bytes = excluded.total_bytes,
+            last_seen = excluded.last_seen",
+        params![uuid, label, mount_point, total_bytes as i64, is_local as i64, now_secs() as i64],
+    )?;
+    let id: i64 = conn.query_row("SELECT id FROM volumes WHERE uuid = ?1", params![uuid], |r| r.get(0))?;
+    Ok((id, mount_point))
+}
+
+/// The absolute path a catalog row currently resolves to, computed fresh from the volume's
+/// LAST-SEEN mount point — never stored. This is what makes a remount at a different
+/// `/Volumes/...` path transparent to every caller: `set_sidecar`, `get_thumbnail`, opening a
+/// photo in the editor, none of them need to know a volume table exists.
+fn abs_path(vol_last_path: &str, _is_local: bool, rel_path: &str) -> String {
+    // Was `if is_local { format!("/{rel_path}") } else { ... }` — a bare "/" is only correct
+    // because the boot volume's mount point happens to BE "/" on macOS. On Windows the boot
+    // volume's mount point is "C:\" (platform::mount_point via GetVolumePathNameW), so the old
+    // local-volume branch built "/Users\Tareq\..." (leading POSIX slash glued onto a
+    // backslash-separated Windows path) — a string that names no real file, so every catalog
+    // lookup against a freshly-scanned local photo failed with "not in the catalog" (found live
+    // during this port's first Windows test run; see docs/windows-port.md G6's write-up — this
+    // was the SECOND bug hiding behind that same symptom, after the canonicalize \\?\ mismatch).
+    // `Path::join` uses the platform's native separator, matching whatever `rel_path` (itself
+    // built from a canonicalized path's native-separator string) already uses, for both the
+    // local and external-volume cases alike — `vol_last_path` IS the real mount point either way.
+    if rel_path.is_empty() {
+        vol_last_path.to_string()
+    } else {
+        // ⚠️ `Path::join` onto a BARE drive letter ("D:", no trailing separator) does NOT insert
+        // one — Windows itself distinguishes "D:foo" (drive-relative) from "D:\foo" (absolute),
+        // and Rust's Path preserves that. If `vol_last_path` was ever persisted without its
+        // trailing separator (confirmed live 2026-09-16: an older `volumes.last_path` row was
+        // exactly "D:"), every abs_path() call silently produced "D:PHOTOS\..." — a DIFFERENT
+        // string that still happens to resolve to the same real file (Windows treats a drive-
+        // relative path as relative to that drive's current directory, which is usually its
+        // root), so it passed every existence check and got written into the flagged/favorites/
+        // rejected registries as a SEPARATE entry from the correctly-formed path for the same
+        // photo — doubling those counts and showing every affected photo twice in the grid.
+        // Guaranteeing a trailing separator here (independent of whatever wrote `last_path`)
+        // means join() can never take that special-cased bare-prefix path again.
+        let mut base = vol_last_path.to_string();
+        if !base.ends_with('/') && !base.ends_with('\\') {
+            base.push(std::path::MAIN_SEPARATOR);
+        }
+        // ⚠️ `rel_path` is stored CANONICALLY `/`-separated (see the scan-loop comment above,
+        // `rel.to_string_lossy().replace('\\', "/")`) so the same row matches whichever OS last
+        // scanned that volume. `Path::join` does NOT renormalize separators inside the string
+        // it's given — it just concatenates `base` + one native separator + `rel_path` verbatim
+        // — so on Windows this used to produce a MIXED path like `D:\PHOTOS/2026/2026-08-06/
+        // P_TM4740.MP4`: a native prefix followed by forward-slash segments. That string still
+        // resolves via Rust's own fs calls (which accept either separator) but is REJECTED by
+        // Windows shell APIs (`SHCreateItemFromParsingName`, used for video thumbnails/playback)
+        // with `E_INVALIDARG` — confirmed live via [DEBUG H1] logging, 100% of sampled video
+        // files. Convert the canonical `/` to the platform separator before joining so every
+        // consumer of `abs_path()` gets a fully native path on Windows.
+        let native_rel = if std::path::MAIN_SEPARATOR != '/' {
+            rel_path.replace('/', &std::path::MAIN_SEPARATOR.to_string())
+        } else {
+            rel_path.to_string()
+        };
+        Path::new(&base).join(native_rel).to_string_lossy().into_owned()
+    }
+}
+
+/// Keeps `photos.rating/label/edited/favorite` in sync with the sidecar the instant the user
+/// changes them, so a server-side filter on those columns (query_run's rating/favorite/edited,
+/// once added) can never show stale results relative to what `set_sidecar` just wrote — the
+/// specific failure mode CatalogQuery's own doc comment on those fields used to rule them out
+/// for: a rating/flag/edit changed in this running session, filtered on before the next full
+/// library scan re-parses the sidecar.
+/// ⚠️ Best-effort and silent on "not found": a photo edited via a view that never went through
+/// catalog_query (Recents/Exported/an un-registered folder) legitimately has no catalog row yet
+/// — that is not an error, just nothing to keep in sync.
+pub fn sync_sidecar_fields_run(conn: &Connection, path: &str, rating: i32, label: &str, color_label: &str, edited: bool, favorite: bool) {
+    let Some(photo_id) = find_photo_by_abs_path(conn, path) else { return };
+    // Same raw value a rescan's own sidecar sync writes (see the "UPDATE photos SET rating..."
+    // site in scan_run) — no extra clamping here, or this path and a rescan could disagree on
+    // what a -1 (rejected) rating means for the exact same photo.
+    let _ = conn.execute(
+        "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5 WHERE id = ?6",
+        params![rating, label, color_label, edited as i64, favorite as i64, photo_id],
+    );
+}
+
+#[tauri::command(async)]
+pub fn catalog_volumes(state: tauri::State<CatalogState>) -> Result<Vec<VolumeRow>, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    volumes_run(&conn)
+}
+
+pub fn volumes_run(conn: &Connection) -> Result<Vec<VolumeRow>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, uuid, label, last_path, is_local, total_bytes FROM volumes ORDER BY is_local DESC, label")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            let is_local: i64 = r.get(4)?;
+            let last_path: String = r.get(3)?;
+            Ok(VolumeRow {
+                id: r.get(0)?,
+                uuid: r.get(1)?,
+                label: r.get(2)?,
+                last_path: last_path.clone(),
+                is_local: is_local != 0,
+                total_bytes: r.get::<_, i64>(5)? as u64,
+                online: is_local != 0 || Path::new(&last_path).is_dir(),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}

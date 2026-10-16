@@ -1,0 +1,641 @@
+// ── Stacking ─────────────────────────────────────────────────────────────────────────────────
+//
+// Catalog-only, per the plan's own rule (prior art, PhotoPrism): never moves, renames, or
+// writes anything to a file. `stack_id` is always the CURRENT leader's own `photos.id` (never a
+// separate stack-id counter — see the schema's own doc comment on the column), which is what
+// makes leader promotion on delete a matter of re-pointing every member's `stack_id`, not
+// maintaining a second table.
+//
+// Two of the plan's three link rules are implemented here (both purely catalog-internal, no
+// dependency on the export flow): the mirrored `Originals/<rel>` <-> `Exports/<rel>` path, and
+// same-folder stem + capture-date agreement (a RAW+JPEG pair straight off a camera, no
+// Exports/ split at all). The third — the export's own recorded destination, threaded through
+// `append_export_history` — needs a library.rs change to `ExportHistoryEntry` and isn't done
+// yet; see the plan doc.
+//
+// ⚠️ An ambiguous match (captured dates disagree, or missing on either side) is left UNSTACKED
+// rather than guessed — two different photos sharing a stem is a real, documented collision
+// (camera counter rollover; CLAUDE.md's own duplicate-detection trap), and silently merging
+// them would hide one from the grid entirely.
+
+fn stem_of(name_lc: &str) -> &str {
+    match name_lc.rfind('.') {
+        Some(i) => &name_lc[..i],
+        None => name_lc,
+    }
+}
+
+/// Strips exactly one leading `originals/` or `exports/` path segment (case-insensitive) so a
+/// photo at `Originals/2026/2026-08-03/x.RW2` and its export at `Exports/2026/2026-08-03/x.jpg`
+/// normalize to the same key — the layout §"SSD layout, exports, and stacking" establishes.
+/// A photo with neither prefix (no Exports/ split — a plain RAW+JPEG pair in one folder) is
+/// returned unchanged, which is exactly rule B: it still groups with its same-folder sibling.
+fn normalized_stack_dir(rel_dir: &str) -> String {
+    let lower = rel_dir.to_ascii_lowercase();
+    for prefix in ["originals/", "exports/"] {
+        if lower.starts_with(prefix) {
+            // ASCII lowercasing never changes byte length, so this slice on the ORIGINAL
+            // string (preserving its real casing) lines up with the lowercase match above.
+            return rel_dir[prefix.len()..].to_string();
+        }
+    }
+    if lower == "originals" || lower == "exports" {
+        return String::new();
+    }
+    rel_dir.to_string()
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct StackResult {
+    pub stacks_formed: usize,
+    pub photos_linked: usize,
+}
+
+struct StackCandidate {
+    id: i64,
+    volume_id: i64,
+    rel_dir: String,
+    name_lc: String,
+    kind: String,
+    captured: Option<i64>,
+    added: i64,
+}
+
+/// Rule 1 — the export's own RECORDED destination (`ExportHistoryEntry.dest`), authoritative
+/// for every export made since that field existed (older entries deserialize with `dest: ""`
+/// and are silently skipped). Takes the history map as a parameter rather than reading
+/// `export_history.json` itself: that file lives under `library::cache_dir()`, which — unlike
+/// `catalog_dir()`'s `CS_CATALOG_DIR` — has no test-time override, so a function that read it
+/// directly would be untestable without touching this machine's real export history (the same
+/// constraint `cache_usage`/`clear_cache_tier` accepted; here it's cheap to just not have it).
+///
+/// Only links a source that is CURRENTLY UNSTACKED to a dest that is ALSO currently unstacked
+/// — an already-stacked row (by an earlier call, or by rules 2/3 in a previous run) is left
+/// alone rather than re-parented, so this rule can never fight a stack that already exists.
+fn link_via_export_history(
+    conn: &Connection,
+    history: &std::collections::HashMap<String, Vec<crate::library::ExportHistoryEntry>>,
+) -> Result<StackResult, String> {
+    let mut result = StackResult::default();
+    let is_unstacked = |id: i64| -> bool {
+        conn.query_row("SELECT stack_id IS NULL FROM photos WHERE id = ?1", params![id], |r| r.get::<_, bool>(0)).unwrap_or(false)
+    };
+    for (source_path, entries) in history {
+        let Some(source_id) = find_photo_by_abs_path(conn, source_path) else { continue };
+        if !is_unstacked(source_id) {
+            continue;
+        }
+        let mut formed_this_source = false;
+        for entry in entries {
+            if entry.dest.is_empty() {
+                continue;
+            }
+            let Some(dest_id) = find_photo_by_abs_path(conn, &entry.dest) else { continue };
+            if dest_id == source_id || !is_unstacked(dest_id) {
+                continue;
+            }
+            conn.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![source_id]).map_err(|e| e.to_string())?;
+            conn.execute(
+                "UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE id = ?2",
+                params![source_id, dest_id],
+            )
+            .map_err(|e| e.to_string())?;
+            if !formed_this_source {
+                result.stacks_formed += 1;
+                result.photos_linked += 1; // the leader itself
+                formed_this_source = true;
+            }
+            result.photos_linked += 1; // this derivative
+        }
+    }
+    Ok(result)
+}
+
+/// Not chunked/resumable like the other phases (a single pass over unlinked rows, sorted and
+/// grouped in memory) — grouping candidates for a stack needs to see the whole unlinked set at
+/// once, unlike a per-row metadata read. Still cheap: only rows with `stack_id IS NULL` are
+/// even considered, so a fully-stacked archive costs one empty query on every later run.
+pub fn stack_run(conn: &Connection, cancel: &AtomicBool) -> Result<StackResult, String> {
+    // ⚠️ Same note as focus_run — still holds `conn` for its whole run, QoS-marked as a stopgap
+    // rather than restructured, since burst-stack grouping is metadata comparison (cheap) not a
+    // per-file content read.
+    crate::bgwork::mark_current_thread_background();
+    let mut result = StackResult::default();
+    // Rule 1 first — it's authoritative (the app's own record of what it wrote where), so
+    // anything it links must not then be re-evaluated by the heuristic rules 2/3 below. Those
+    // rules only ever look at `stack_id IS NULL` rows, so running this first is what makes that
+    // exclusion automatic rather than something to track separately.
+    let rule1 = link_via_export_history(conn, &crate::library::export_history_read_all())?;
+    result.stacks_formed += rule1.stacks_formed;
+    result.photos_linked += rule1.photos_linked;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, volume_id, rel_dir, name_lc, kind, captured, added
+             FROM photos WHERE present = 1 AND stack_id IS NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let candidates: Vec<StackCandidate> = stmt
+        .query_map([], |r| {
+            Ok(StackCandidate {
+                id: r.get(0)?,
+                volume_id: r.get(1)?,
+                rel_dir: r.get(2)?,
+                name_lc: r.get(3)?,
+                kind: r.get(4)?,
+                captured: r.get(5)?,
+                added: r.get(6)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let mut groups: std::collections::HashMap<(i64, String, String), Vec<&StackCandidate>> = std::collections::HashMap::new();
+    for c in &candidates {
+        let key = (c.volume_id, normalized_stack_dir(&c.rel_dir), stem_of(&c.name_lc).to_string());
+        groups.entry(key).or_default().push(c);
+    }
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for members in groups.values() {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if members.len() < 2 {
+            continue;
+        }
+        // Ambiguous unless every member agrees on a non-null capture date — see the module
+        // doc comment above for why this is a hard requirement, not a best-effort one.
+        let first_captured = members[0].captured;
+        let all_agree = first_captured.is_some() && members.iter().all(|m| m.captured == first_captured);
+        if !all_agree {
+            continue;
+        }
+        let raws: Vec<&&StackCandidate> = members.iter().filter(|m| m.kind == "raw").collect();
+        let leader: &StackCandidate = if raws.len() == 1 {
+            raws[0]
+        } else {
+            // No single RAW to anchor on (none, or more than one — e.g. two raw formats from
+            // the same body) — fall back to the oldest-added row, so something deterministic
+            // always wins rather than leaving an otherwise-clean group unstacked.
+            members.iter().min_by_key(|m| m.added).unwrap()
+        };
+        tx.execute("UPDATE photos SET stack_id = ?1, stack_role = 'leader' WHERE id = ?1", params![leader.id]).map_err(|e| e.to_string())?;
+        result.stacks_formed += 1;
+        result.photos_linked += 1;
+        for m in members.iter().filter(|m| m.id != leader.id) {
+            tx.execute(
+                "UPDATE photos SET stack_id = ?1, stack_role = 'derivative', export_of = ?1 WHERE id = ?2",
+                params![leader.id, m.id],
+            )
+            .map_err(|e| e.to_string())?;
+            result.photos_linked += 1;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_stack(app: tauri::AppHandle) -> Result<StackResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        stack_run(&conn, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_stack task panicked: {e}"))?
+}
+
+/// Smart-collection registries (Rejected/Flagged/…) are plain path lists that know nothing about
+/// library roots, so a removed folder's photos — or test fixtures and temp files written by the
+/// harnesses — kept showing there. A path is "outside the library" when it sits in a temp dir,
+/// or the catalog has it as a hidden row (`present = 0`, i.e. its root was removed). Paths the
+/// catalog never indexed are kept: a browse-only folder's flags must still show.
+pub fn registry_paths_outside_library(conn: &Connection, paths: &[String]) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let vols: Vec<(i64, String)> = match conn.prepare("SELECT id, last_path FROM volumes") {
+        Ok(mut st) => st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map(|it| it.filter_map(Result::ok).collect())
+            .unwrap_or_default(),
+        Err(_) => return out,
+    };
+    let Ok(mut st) = conn.prepare("SELECT present FROM photos WHERE volume_id = ?1 AND rel_path = ?2") else { return out };
+    for p in paths {
+        if p.starts_with("/var/folders/") || p.starts_with("/private/var/folders/") || p.starts_with("/tmp/") || p.starts_with("/private/tmp/") {
+            out.insert(p.clone());
+            continue;
+        }
+        // Firmlink alias: "/System/Volumes/Data/Users/…" is the same file as "/Users/…".
+        let norm = p.strip_prefix("/System/Volumes/Data").unwrap_or(p);
+        for (vid, last_path) in &vols {
+            let Ok(rel) = Path::new(norm).strip_prefix(Path::new(last_path.as_str())) else { continue };
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            if let Ok(present) = st.query_row(params![vid, rel.as_str()], |r| r.get::<_, i64>(0)) {
+                if present == 0 { out.insert(p.clone()); }
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
+    let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
+    let mut volumes: Vec<(i64, String, bool)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)))
+        .ok()?
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    drop(stmt);
+    volumes.sort_by_key(|(_, last_path, is_local)| std::cmp::Reverse(if *is_local { 1 } else { last_path.len() }));
+
+    for (vid, last_path, _is_local) in &volumes {
+        // Was `if is_local { "/" } else { format!("{last_path}/") }` — the same bare-"/"
+        // assumption `abs_path` used to make (see that function's doc comment): correct only
+        // because macOS's boot volume mount point happens to BE "/". `last_path` is already the
+        // real mount point either way ("/" on macOS, "C:\" on Windows), so `Path::strip_prefix`
+        // — which compares path COMPONENTS, not raw bytes, so it tolerates the trailing-separator
+        // difference between "/" and "C:\" without a special case — replaces both branches at
+        // once. Found live during this port's Windows test run (docs/windows-port.md G6): with
+        // the old code every local-volume lookup here failed, e.g. "not in the catalog" errors on
+        // a photo the very same test had just scanned.
+        let Ok(rel) = Path::new(path).strip_prefix(Path::new(last_path.as_str())) else { continue };
+        // Canonical `/` separator, same as walk_root/add_root_run — `rel_path` is stored that
+        // way regardless of platform now, so the lookup key has to match it or every local-volume
+        // lookup on Windows fails with "not in the catalog" for a photo just scanned.
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        if let Ok(id) = conn.query_row(
+            "SELECT id FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+            params![vid, rel.as_str()],
+            |r| r.get(0),
+        ) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RenamePreviewRow {
+    pub old_path: String,
+    pub new_path: String,
+    pub collision: bool,
+}
+
+#[derive(Clone)]
+struct RenamePhoto {
+    id: i64,
+    volume_id: i64,
+    volume_root: String,
+    rel_dir: String,
+    rel_path: String,
+    name: String,
+    year: Option<i32>,
+    month: Option<i32>,
+    day: Option<i32>,
+    camera: Option<String>,
+}
+
+fn rename_photo_for_path(conn: &Connection, path: &str) -> Result<RenamePhoto, String> {
+    let id = find_photo_by_abs_path(conn, path).ok_or_else(|| format!("photo is not in the catalog: {path}"))?;
+    conn.query_row(
+        "SELECT p.id,p.volume_id,v.last_path,p.rel_dir,p.rel_path,p.name,p.cap_y,p.cap_m,p.cap_d,p.camera
+         FROM photos p JOIN volumes v ON v.id=p.volume_id WHERE p.id=?1 AND p.present=1",
+        params![id],
+        |r| Ok(RenamePhoto { id:r.get(0)?, volume_id:r.get(1)?, volume_root:r.get(2)?, rel_dir:r.get(3)?, rel_path:r.get(4)?, name:r.get(5)?, year:r.get(6)?, month:r.get(7)?, day:r.get(8)?, camera:r.get(9)? }),
+    ).map_err(|e| format!("read catalog photo for rename: {e}"))
+}
+
+fn rename_photo_abs(photo: &RenamePhoto) -> PathBuf { PathBuf::from(abs_path(&photo.volume_root, false, &photo.rel_path)) }
+
+fn rename_destination_name(photo: &RenamePhoto, template: &str, seq: usize) -> Result<String, String> {
+    let date = match (photo.year, photo.month, photo.day) {
+        (Some(y), Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+        // Match import naming semantics: absent capture metadata contributes an empty token.
+        _ => String::new(),
+    };
+    let src = Path::new(&photo.name);
+    let stem = src.file_stem().and_then(|v| v.to_str()).unwrap_or("photo");
+    let ext = src.extension().and_then(|v| v.to_str()).unwrap_or("");
+    let base = crate::ingest::expand_filename(template, stem, &date, photo.camera.as_deref().unwrap_or(""), seq);
+    if base.is_empty() || base == "." || base == ".." || base.contains('/') || base.contains('\\') || base.chars().any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*')) {
+        return Err(format!("template produces an invalid filename for {}", photo.name));
+    }
+    Ok(if ext.is_empty() { base } else { format!("{base}.{ext}") })
+}
+
+fn rename_sidecars(old: &Path, new: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let mut out = Vec::new();
+    let old_name = old.file_name().and_then(|v| v.to_str()).unwrap_or("");
+    let new_name = new.file_name().and_then(|v| v.to_str()).unwrap_or("");
+    let new_stem = new.file_stem().and_then(|v| v.to_str()).unwrap_or("");
+    let old_stem = old.file_stem().and_then(|v| v.to_str()).unwrap_or("");
+    let ext = old.extension().and_then(|v| v.to_str()).unwrap_or("");
+    for side in [old.with_extension("xmp"), old.with_extension("rrdata"), PathBuf::from(format!("{}.rrdata", old.to_string_lossy()))] {
+        if !side.is_file() { continue; }
+        let side_name = side.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        let target_name = if side_name.starts_with(old_name) {
+            format!("{}{}", new_name, &side_name[old_name.len()..])
+        } else {
+            format!("{}.{}", new_stem, side.extension().and_then(|v| v.to_str()).unwrap_or("xmp"))
+        };
+        out.push((side.clone(), side.parent().unwrap_or(Path::new(".")).join(target_name)));
+    }
+    if let Some(dir) = old.parent() {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            let wanted_suffix = format!(".{}.xmp", ext);
+            let wanted_suffix_lower = wanted_suffix.to_lowercase();
+            for entry in entries.flatten() {
+                let side = entry.path();
+                if !side.is_file() || side.extension().and_then(|v| v.to_str()).map_or(true, |e| !e.eq_ignore_ascii_case("xmp")) { continue; }
+                let Some(side_name) = side.file_name().and_then(|v| v.to_str()) else { continue };
+                let lower = side_name.to_lowercase();
+                let target = if lower == format!("{}.xmp", old_name.to_lowercase()) {
+                    Some(format!("{new_name}.xmp")) // darktable <basename>.<ext>.xmp form
+                } else if lower.ends_with(&wanted_suffix_lower) {
+                    let prefix_len = side_name.len().saturating_sub(wanted_suffix.len());
+                    let prefix = &side_name[..prefix_len];
+                    let tail = prefix.get(old_stem.len()..).unwrap_or("");
+                    let numbered_version = prefix.get(..old_stem.len()).map_or(false, |p| p.eq_ignore_ascii_case(old_stem)) && tail.starts_with('_')
+                        && !tail[1..].is_empty() && tail[1..].chars().all(|c| c.is_ascii_digit());
+                    numbered_version.then(|| format!("{new_stem}{tail}{wanted_suffix}"))
+                } else { None };
+                if let Some(target) = target {
+                    let pair=(side.clone(),dir.join(target));
+                    if !out.iter().any(|(p,_)| p == &pair.0) { out.push(pair); }
+                }
+            }
+        }
+    }
+    out
+}
+
+fn rename_plan(conn: &Connection, paths: &[String], template: &str, sequence_start: u32) -> Result<(Vec<RenamePreviewRow>, Vec<(RenamePhoto, PathBuf)>), String> {
+    crate::ingest::validate_filename_template(template)?;
+    if paths.is_empty() { return Err("select at least one photo".into()); }
+    let mut selected = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for path in paths {
+        let photo = rename_photo_for_path(conn, path)?;
+        if seen.insert(photo.id) { selected.push(photo); }
+    }
+    let mut result: Vec<(RenamePhoto, PathBuf)> = Vec::new();
+    let mut groups = std::collections::HashSet::new();
+    let mut sequence = sequence_start;
+    for photo in selected {
+        let stem = Path::new(&photo.name).file_stem().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+        let mut siblings = vec![photo.clone()];
+        let mut stmt = conn.prepare("SELECT id,rel_path,name FROM photos WHERE volume_id=?1 AND rel_dir=?2 AND present=1 AND id!=?3").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![photo.volume_id, photo.rel_dir, photo.id], |r| Ok((r.get::<_,i64>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))).map_err(|e| e.to_string())?;
+        let photo_ext = Path::new(&photo.name).extension().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+        for sibling in rows.flatten() {
+            let sibling_stem = Path::new(&sibling.2).file_stem().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+            if sibling_stem != stem { continue; }
+            let sibling_ext = Path::new(&sibling.2).extension().and_then(|v| v.to_str()).unwrap_or("").to_lowercase();
+            let is_jpeg = |e: &str| matches!(e,"jpg"|"jpeg");
+            let is_raw_jpeg_pair = (crate::formats::is_raw_ext(&photo_ext) && is_jpeg(&sibling_ext))
+                || (crate::formats::is_raw_ext(&sibling_ext) && is_jpeg(&photo_ext));
+            if !is_raw_jpeg_pair { continue; }
+            if let Ok(p) = rename_photo_for_path(conn, &abs_path(&photo.volume_root, false, &sibling.1)) { siblings.push(p); }
+        }
+        let group_key = if siblings.len() > 1 { format!("{}:{}:{}", photo.volume_id, photo.rel_dir.to_lowercase(), stem) } else { format!("photo:{}", photo.id) };
+        if !groups.insert(group_key) { continue; }
+        let destination = rename_destination_name(&photo, template, sequence as usize)?;
+        for sibling in siblings {
+            let src = rename_photo_abs(&sibling);
+            let dst = src.parent().unwrap_or(Path::new("")).join(rename_destination_name(&sibling, template, sequence as usize)?);
+            // RAW/JPEG companions keep one shared basename and sequence.
+            let dst = if sibling.id == photo.id { dst } else {
+                let ext = Path::new(&sibling.name).extension().and_then(|v| v.to_str()).unwrap_or("");
+                src.parent().unwrap_or(Path::new("")).join(if ext.is_empty() { PathBuf::from(&destination) } else { PathBuf::from(format!("{}.{}", Path::new(&destination).file_stem().and_then(|v| v.to_str()).unwrap_or(""), ext)) })
+            };
+            if !result.iter().any(|(p,_)| p.id == sibling.id) { result.push((sibling,dst)); }
+        }
+        sequence = sequence.saturating_add(1);
+    }
+    let sources: std::collections::HashSet<String> = result.iter().map(|(p,_)| rename_photo_abs(p).to_string_lossy().to_lowercase()).collect();
+    let mut destinations = std::collections::HashSet::new();
+    let mut rows = Vec::new();
+    for (photo, dst) in &result {
+        let src = rename_photo_abs(photo);
+        let target_key = dst.to_string_lossy().to_lowercase();
+        let collision = !destinations.insert(target_key.clone()) || (dst.exists() && !sources.contains(&target_key));
+        rows.push(RenamePreviewRow { old_path: src.to_string_lossy().into_owned(), new_path: dst.to_string_lossy().into_owned(), collision });
+    }
+    let side_sources: std::collections::HashSet<String> = result.iter().flat_map(|(photo, dst)| rename_sidecars(&rename_photo_abs(photo), dst).into_iter().map(|(old,_)| old.to_string_lossy().to_lowercase())).collect();
+    for ((photo,dst), row) in result.iter().zip(rows.iter_mut()) {
+        for (_,side_dst) in rename_sidecars(&rename_photo_abs(photo),dst) {
+            let key=side_dst.to_string_lossy().to_lowercase();
+            if side_dst.exists() && !side_sources.contains(&key) { row.collision=true; }
+        }
+    }
+    Ok((rows,result))
+}
+
+#[tauri::command(async)]
+pub fn catalog_rename_preview(paths: Vec<String>, template: String, sequence_start: u32, state: tauri::State<CatalogState>) -> Result<Vec<RenamePreviewRow>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    rename_plan(&conn, &paths, &template, sequence_start).map(|(rows,_)| rows)
+}
+
+#[tauri::command]
+pub async fn catalog_rename_apply(app: tauri::AppHandle, paths: Vec<String>, template: String, sequence_start: u32) -> Result<Vec<RenamePreviewRow>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let (rows, photos) = rename_plan(&conn, &paths, &template, sequence_start)?;
+        if rows.iter().any(|r| r.collision) { return Err("one or more target filenames already exist or collide".into()); }
+        rename_apply_run(&mut conn, &photos, rows)
+    }).await.map_err(|e| format!("catalog_rename_apply task panicked: {e}"))?
+}
+
+struct RenameMove { old: PathBuf, temp: PathBuf, new: PathBuf }
+
+fn push_rename_move(moves: &mut Vec<RenameMove>, seen: &mut std::collections::HashSet<String>, old: PathBuf, new: PathBuf, id: i64) -> Result<(), String> {
+    if old == new { return Ok(()); }
+    let key = old.to_string_lossy().to_lowercase();
+    if !seen.insert(key) { return Ok(()); }
+    let parent = old.parent().unwrap_or(Path::new("."));
+    let suffix = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let temp = parent.join(format!(".chromasmith-rename-{id}-{suffix}.tmp"));
+    if temp.exists() { return Err("could not reserve a temporary rename path".into()); }
+    moves.push(RenameMove { old, temp, new });
+    Ok(())
+}
+
+fn rename_apply_run(conn: &mut Connection, photos: &[(RenamePhoto, PathBuf)], rows: Vec<RenamePreviewRow>) -> Result<Vec<RenamePreviewRow>, String> {
+    let mut moves = Vec::new();
+    let mut photo_map = Vec::new();
+    let mut seen_fs = std::collections::HashSet::new();
+    for ((photo, new), row) in photos.iter().zip(rows.iter()) {
+        let old = rename_photo_abs(photo);
+        if old != *new { push_rename_move(&mut moves, &mut seen_fs, old.clone(), new.clone(), photo.id)?; }
+        for (side, side_new) in rename_sidecars(&old,new) {
+            push_rename_move(&mut moves, &mut seen_fs, side, side_new, photo.id)?;
+        }
+        photo_map.push((photo.clone(), row.new_path.clone()));
+    }
+    // The complete destination set was preflighted before touching the filesystem.
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    // Free every original unique path inside this still-uncommitted transaction before writing
+    // any final name. This makes A↔B swaps valid while preserving the original photo IDs and all
+    // foreign-key relationships.
+    for (photo, _) in &photo_map {
+        tx.execute("UPDATE photos SET rel_path=?1 WHERE id=?2", params![format!(".chromasmith-rename-tmp-{}-{}", std::process::id(), photo.id), photo.id]).map_err(|e| e.to_string())?;
+    }
+    let mut staged = 0usize;
+    for m in &moves {
+        if let Err(e) = std::fs::rename(&m.old, &m.temp) {
+            for prior in moves[..staged].iter().rev() { let _ = std::fs::rename(&prior.temp, &prior.old); }
+            return Err(format!("stage {} for rename: {e}", m.old.display()));
+        }
+        staged += 1;
+    }
+    let mut installed = 0usize;
+    for m in &moves {
+        if let Err(e) = std::fs::rename(&m.temp, &m.new) {
+            for prior in moves[..installed].iter().rev() { let _ = std::fs::rename(&prior.new, &prior.old); }
+            for remaining in moves[installed..].iter().rev() { if remaining.temp.exists() { let _ = std::fs::rename(&remaining.temp, &remaining.old); } }
+            return Err(format!("install {}: {e}", m.new.display()));
+        }
+        installed += 1;
+    }
+    let mut album_map: Vec<(String,String)> = photo_map.iter().map(|(photo,new)| (rename_photo_abs(photo).to_string_lossy().into_owned(),new.clone())).collect();
+    let update_result: Result<(), String> = (|| {
+    for (photo, new_path) in &photo_map {
+        let path = PathBuf::from(new_path);
+        let rel = path.strip_prefix(&photo.volume_root).map_err(|e| e.to_string())?.to_string_lossy().replace('\\',"/");
+        let rel_dir = Path::new(&rel).parent().map(|p| p.to_string_lossy().replace('\\',"/")).unwrap_or_default();
+        let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        let meta = std::fs::metadata(&path).map_err(|e| format!("stat renamed file: {e}"))?;
+        let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64).unwrap_or(0);
+        tx.execute("UPDATE photos SET rel_path=?1,rel_dir=?2,name=?3,name_lc=?4,size=?5,mtime=?6,sidecar_mtime=?7 WHERE id=?8",
+            params![rel,rel_dir,name,name.to_lowercase(),meta.len() as i64,mtime,sidecar_mtime_of(&path) as i64,photo.id]).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+    })();
+    if let Err(e) = update_result {
+        for m in moves.iter().rev() { let current = if m.new.exists() { &m.new } else { &m.temp }; if current.exists() { let _ = std::fs::rename(current, &m.old); } }
+        return Err(e);
+    }
+    if let Err(e) = crate::library::rewrite_album_paths(&album_map) {
+        for m in moves.iter().rev() { let _ = std::fs::rename(&m.new, &m.old); }
+        return Err(e);
+    }
+    match tx.commit() {
+        Ok(()) => Ok(rows),
+        Err(e) => {
+            let reverse: Vec<(String,String)> = album_map.iter().map(|(old,new)|(new.clone(),old.clone())).collect();
+            let _ = crate::library::rewrite_album_paths(&reverse);
+            for m in moves.iter().rev() { let _ = std::fs::rename(&m.new, &m.old); }
+            Err(format!("commit renamed catalog paths: {e}"))
+        }
+    }
+}
+
+pub fn note_deleted_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for p in paths {
+        if let Some(id) = find_photo_by_abs_path(conn, p) {
+            let role: Option<String> =
+                conn.query_row("SELECT stack_role FROM photos WHERE id = ?1", params![id], |r| r.get(0)).ok();
+            updated += conn
+                .execute("UPDATE photos SET present = 0 WHERE id = ?1", params![id])
+                .map_err(|e| e.to_string())?;
+            if role.as_deref() == Some("leader") {
+                promote_stack_leader(conn, id)?;
+            }
+        }
+        // A path not found in the catalog is not an error — it may be a photo the catalog never
+        // indexed (a folder never opened, or a scan that hasn't reached it yet). Nothing to do.
+    }
+    Ok(updated)
+}
+
+/// Mark only already-indexed, currently-existing paths present after a receipt-backed Trash
+/// restore. The operation preserves the existing row identity and metadata; it never discovers
+/// or resurrects a different file by name.
+pub fn note_restored_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for path in paths {
+        if !std::path::Path::new(path).is_file() { continue; }
+        if let Some(id) = find_photo_by_abs_path(conn, path) {
+            updated += conn.execute("UPDATE photos SET present = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(updated)
+}
+
+/// `stack_id` is always the CURRENT leader's own id (see the stacking module doc comment above),
+/// so promoting a derivative to leader means re-pointing every surviving member's `stack_id` to
+/// the NEW leader — there is no separate stack-id counter to leave alone. Called right after the
+/// old leader is marked `present = 0`; a no-op when nothing present remains in the stack (the
+/// whole stack was deleted together) or when the deleted row wasn't actually a leader.
+fn promote_stack_leader(conn: &Connection, old_leader_id: i64) -> Result<(), String> {
+    // Newest remaining member by file mtime (NOT capture date — every member of a real stack
+    // typically shares one capture date, so that would tie; mtime is what actually tells apart
+    // "the original export" from "a later re-export") becomes the new leader — the finished
+    // export is what you'd want looking at, same reasoning the plan gives for why a stack's
+    // THUMBNAIL is the newest export even though the RAW stays the click target while intact.
+    let new_leader: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM photos WHERE stack_id = ?1 AND present = 1 AND id != ?1
+             ORDER BY mtime DESC LIMIT 1",
+            params![old_leader_id],
+            |r| r.get(0),
+        )
+        .ok();
+    let Some(new_leader_id) = new_leader else { return Ok(()) }; // nothing left to promote — stack is gone
+    conn.execute(
+        "UPDATE photos SET stack_id = ?1, stack_role = 'leader', export_of = NULL WHERE id = ?1",
+        params![new_leader_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE photos SET stack_id = ?1, export_of = ?1 WHERE stack_id = ?2 AND present = 1 AND id != ?1",
+        params![new_leader_id, old_leader_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Called right after `trash_file` succeeds for a batch of paths — best-effort from the
+/// frontend's own delete flow, mirroring `note_sidecar`'s posture: the real, recoverable action
+/// (moving the file to Trash) has already happened by the time this runs, so a failure here
+/// only means a stale catalog row until the next scan, never a lost file.
+#[tauri::command(async)]
+pub fn catalog_note_deleted(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    note_deleted_run(&conn, &paths)
+}
+
+#[tauri::command(async)]
+pub fn catalog_note_restored(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    note_restored_run(&conn, &paths)
+}
+
+/// "Not blurry" — the dismiss action for the Needs-review surface. `reviewed = 1` survives
+/// indefinitely UNLESS focus_run rescoring the photo (its mtime moved — see that function's own
+/// comment) resets it, on the theory that a genuinely re-edited file may need a fresh look.
+pub fn dismiss_review_run(conn: &Connection, paths: &[String]) -> Result<usize, String> {
+    let mut updated = 0;
+    for p in paths {
+        if let Some(id) = find_photo_by_abs_path(conn, p) {
+            updated += conn.execute("UPDATE photos SET reviewed = 1 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(updated)
+}
+
+#[tauri::command(async)]
+pub fn catalog_dismiss_review(paths: Vec<String>, state: tauri::State<CatalogState>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    dismiss_review_run(&conn, &paths)
+}

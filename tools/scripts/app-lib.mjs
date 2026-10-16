@@ -1,6 +1,13 @@
 // Shared split/build logic for chromasmith-22.html <-> src/app/ (docs/plans/refactor-plan.md, Phase 1).
-export const TARGET = 'chromasmith-22.html';
-export const DIR = 'src/app';
+// Each target is a committed generated file with a src dir that can be edited instead (two-way sync, app-sync.mjs).
+export const TARGETS = [
+  { target: 'chromasmith-22.html', dir: 'src/app', mode: 'html' },
+  { target: 'desktop/library-ui.js', dir: 'src/library-ui', mode: 'text', cutRe: /^ {0,2}\/\/ ── / },
+  { target: 'desktop/src-tauri/src/catalog.rs', dir: 'src/catalog', mode: 'text', cutRe: /^\/\/ ── / },
+  { target: 'desktop/src-tauri/src/library.rs', dir: 'src/library', mode: 'text', cutRe: /^\/\/ ── / },
+  { target: 'desktop/src-tauri/src/main.rs', dir: 'src/main-rs', mode: 'text', cutRe: /^\/\/ ── / },
+];
+const TARGET = 'chromasmith-22.html';
 // Domain folders for the cut sections of the big script, by header-slug regex (first match wins; default "editor").
 // Pure layout: order of parts is in manifest.json, so this never changes the built file.
 const DOMAINS = [
@@ -15,7 +22,28 @@ const domainOf = slug => (DOMAINS.find(([, re]) => re.test(slug)) || ['editor'])
 const BIG = 2000; // script segments longer than this are cut at section headers
 
 // text -> { files: {name: content}, manifest }  (lossless: join(parts, '\n') === text)
-export function splitText(text) {
+const slugOf = l => l.replace(/^\s*\/\/ ── /, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '') || 'section';
+
+// Generic text target: cut at every line matching cfg.cutRe; parts re-join with "\n".
+function splitPlain(text, cfg) {
+  const lines = text.split('\n'), cuts = [0];
+  for (let n = 1; n < lines.length; n++) if (cfg.cutRe.test(lines[n])) cuts.push(n);
+  cuts.push(lines.length);
+  const files = {}, info = [], used = new Set();
+  for (let k = 0; k < cuts.length - 1; k++) {
+    let base = k === 0 ? 'head' : slugOf(lines[cuts[k]]), name = base + '.part', d = 2;
+    while (used.has(name)) name = base + '-' + d++ + '.part';
+    used.add(name);
+    files[name] = lines.slice(cuts[k], cuts[k + 1]).join('\n');
+    info.push({ file: name, firstLine: cuts[k] + 1, lines: cuts[k + 1] - cuts[k] });
+  }
+  const manifest = { target: cfg.target, join: '\n', parts: info.map(m => m.file), info };
+  files['manifest.json'] = JSON.stringify(manifest, null, 1) + '\n';
+  return { files, manifest };
+}
+
+export function splitText(text, cfg = TARGETS[0]) {
+  if (cfg.mode === 'text') return splitPlain(text, cfg);
   const lines = text.split('\n');
   const segs = [];
   let start = 0, inScript = false;
@@ -54,7 +82,7 @@ export function splitText(text) {
       add(name, 'script', from, cuts[k + 1]);
     });
   });
-  const manifest = { target: TARGET, join: '\n', parts: info.map(m => m.file), info };
+  const manifest = { target: cfg.target, join: '\n', parts: info.map(m => m.file), info };
   files['manifest.json'] = JSON.stringify(manifest, null, 1) + '\n';
   return { files, manifest };
 }

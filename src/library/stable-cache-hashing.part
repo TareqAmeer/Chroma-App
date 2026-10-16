@@ -1,0 +1,716 @@
+// ── Stable cache hashing ──────────────────────────────────────────────────────────────────
+// `std::collections::hash_map::DefaultHasher` (the previous implementation) is explicitly
+// documented by the standard library as NOT stable across Rust releases or even between two
+// runs of the same binary in general — fine for an in-memory HashMap, wrong for a hash baked
+// into an on-disk filename. A routine toolchain bump would silently reassign every cache key
+// at once: for the bounded ~500MB thumbnail cache that's a one-time free regeneration, but the
+// planned never-pruned offline-thumbnail catalog tier (§ROADMAP: "Surviving app updates") would
+// turn that into gigabytes of permanently orphaned files with no way to regenerate them if the
+// source volume is unplugged. FNV-1a is a public, unchanging algorithm — the same input always
+// produces the same output, forever, regardless of Rust version. Pinned by
+// `cache_key_is_a_hardcoded_literal` below: if this ever silently changed, that test fails loud
+// instead of 20GB of thumbnails quietly going stale.
+fn fnv1a(parts: &[&str]) -> u64 {
+    const OFFSET: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+    let mut h = OFFSET;
+    for part in parts {
+        for b in part.as_bytes() {
+            h ^= *b as u64;
+            h = h.wrapping_mul(PRIME);
+        }
+        // A separator byte between parts so ("ab","c") and ("a","bc") hash differently.
+        h ^= 0xff;
+        h = h.wrapping_mul(PRIME);
+    }
+    h
+}
+
+// Each cache tier gets its OWN version constant rather than sharing one. Before this, every
+// tier's key derived from `cache_key`'s single internal version literal (via a
+// `.replace(".jpg", "...")` filename trick on meta/phash), so bumping it to fix a THUMBNAIL
+// rendering change also silently invalidated every cached EXIF read and every perceptual hash —
+// at 100k photos, a multi-minute metadata re-read to fix something that only touched pixels.
+const THUMB_RENDER_VER: &str = "thumb-v4"; // v4: RAW thumbs prefer the embedded preview (CHR-143: Sony 160x120 thumb is 4:3, not the real 3:2). Earlier: bumped: key is now STABLE (path-only) — see cache_key
+const META_READER_VER: &str = "meta-v7";   // v7: subsec (SubSecTimeOriginal) for same-second burst ordering. v6: GPS lat/lon + offline place name (v5: RW2-lens EXIF garbage-value fix)
+/// Videos get their OWN meta-cache version so adding duration/dimensions to PhotoMeta did not
+/// invalidate every photo's cached EXIF read. See meta_cache_path.
+const VIDEO_META_VER: &str = "vmeta-v1";
+const PHASH_VER: &str = "phash-v1";
+// v2 switches the editor-render cache from lossy JPEG to lossless PNG. A cache entry is used as
+// the actual editor source on a later open, so it must preserve every developed display pixel.
+const DECODE_RENDER_VER: &str = "decode-v2";
+// CHR-120 (a): v3's lossless WebP was confirmed LIVE to be the actual first-open bottleneck —
+// not proxy generation (that was already fast) but *decoding* an already-cached lossless WebP
+// through the WKWebView's img.decode(): measured 20+ seconds for a single 2560px-long-edge image
+// in isolation (invoke to fetch the path: ~1s; img.decode() alone: ~20s), dwarfing every other
+// step in the open path combined. Lossless WebP decode is known to be far slower than JPEG in
+// most decoder implementations, and this is a DISPLAY-tier proxy only — never the export source
+// (that stays lossless PNG, DECODE_RENDER_VER) — so a high-quality JPEG (indistinguishable at
+// interactive zoom levels, decodes via a mature/fast path in every WebView — confirmed live:
+// ~71ms decode for the same image) is the right tradeoff. v4 bump invalidates every v3 entry so
+// nothing old is misread as the new format.
+const DISPLAY_PROXY_VER: &str = "display-v4-jpeg";
+const LR_THUMB_VER: &str = "lr-thumb-v1";
+/// Bump this if `is_evictable_cache_file`'s notion of what belongs to the thumbnail tier ever
+/// changes shape again — see `migrate_thumb_cache_v2` below, which uses it as a one-time-per-
+/// upgrade marker filename.
+const THUMB_CACHE_MIGRATION_MARKER: &str = ".thumbcache_v2";
+
+/// ⚠️ STABLE key — path only, no mtime/size. This used to be `fnv1a(path, mtime, size, VER)`,
+/// which meant every touch/edit/resync/re-download produced a BRAND NEW filename and permanently
+/// ORPHANED the old one (nothing ever mapped "this path's PREVIOUS key" back to delete it).
+/// Measured on the real 57k-photo library this shipped against: 174,399 cached thumbnail files
+/// for 57,422 photos — a 3.04x redundancy, entirely dead weight, growing without bound on every
+/// future edit. A stable key means the SAME photo always maps to the SAME two files
+/// (`<key>` + `<key>.v`, see `read_cache_if_current`/`write_cache_atomic` below), so a future
+/// edit OVERWRITES in place instead of accumulating a new orphan — this is the same reasoning
+/// `lr_thumb_path` (below) already uses for Lightroom cloud thumbnails ("no mtime/size in the
+/// key — the id alone is stable"), just extended to local files where "the id" is the path.
+/// Staleness detection moves to the separate `.v` validity sidecar instead of being encoded in
+/// the filename itself.
+fn cache_key(path: &str) -> String {
+    format!("{:016x}.jpg", fnv1a(&[path, THUMB_RENDER_VER]))
+}
+
+/// Resolution-aware variant for the non-360px tiers (the 800px offline reference, the 1600px
+/// Quick Look / face-crop source). Keyed separately so a 360px grid thumbnail and an 800px
+/// offline preview for the SAME photo never collide — they are different pixels for different
+/// jobs, and serving one where the other is expected is exactly the class of bug the sidecar
+/// validity check exists to prevent.
+fn cache_key_at(path: &str, long_edge: u32) -> String {
+    let le = long_edge.to_string();
+    format!("{:016x}.jpg", fnv1a(&[path, THUMB_RENDER_VER, &le]))
+}
+
+/// Reads the cached thumbnail at `cache_path` ONLY if its validity sidecar (`<cache_path>.v`,
+/// plain-text "mtime,size") matches the CALLER-SUPPLIED live values — the caller already did the
+/// one `fs::metadata` call needed to know those, so this never stats twice. A missing or
+/// mismatched sidecar is treated as a plain cache miss (never a hard error): the caller's normal
+/// decode-and-write path already handles that self-healingly, same as any other cache miss in
+/// this file. The `bytes.len() > 128` floor is the SAME truncated-file guard the old inline check
+/// had — a crash or full-disk mid-write must not be served forever as a valid thumbnail.
+fn read_cache_if_current(cache_path: &Path, mtime: u64, size: u64) -> Option<Vec<u8>> {
+    let vpath = validity_sidecar_path(cache_path);
+    let text = std::fs::read_to_string(&vpath).ok()?;
+    let mut parts = text.trim().split(',');
+    let saved_mtime: u64 = parts.next()?.parse().ok()?;
+    let saved_size: u64 = parts.next()?.parse().ok()?;
+    if saved_mtime != mtime || saved_size != size {
+        return None;
+    }
+    let bytes = std::fs::read(cache_path).ok()?;
+    if bytes.len() <= 128 {
+        return None;
+    }
+    Some(bytes)
+}
+
+fn validity_sidecar_path(cache_path: &Path) -> PathBuf {
+    let mut s = cache_path.as_os_str().to_os_string();
+    s.push(".v");
+    PathBuf::from(s)
+}
+
+/// Writes `bytes` to the stable `cache_path`, then its validity sidecar, both via write-to-
+/// tempfile-then-rename — required now in a way it wasn't before: with the OLD per-(mtime,size)
+/// key, two concurrent decodes of the same photo could only ever target the SAME final filename
+/// if they'd compute IDENTICAL content anyway (same mtime/size), so a plain `fs::write` racing
+/// itself was harmless. With a STABLE key, two genuinely concurrent callers (e.g. the interactive
+/// prefetch and the lazy per-card pump both requesting the same just-scrolled-to photo) can now
+/// target the exact same filename while one is mid-decode of a DIFFERENT byte sequence (an edit
+/// landed between the two calls) — a bare `fs::write` interleaving would risk a reader observing
+/// a torn file. `rename()` on the same filesystem is atomic: a reader always sees either the
+/// complete old file or the complete new one, never a partial mix.
+///
+/// Order matters: the DATA file is renamed into place BEFORE the validity sidecar, so a reader
+/// can never observe "sidecar says current" while the data behind it is still the previous
+/// (or absent) generation. If a crash lands between the two renames, the sidecar simply doesn't
+/// match on the next read (self-heals as an ordinary cache miss) — never serves wrong content.
+fn write_cache_atomic(cache_path: &Path, bytes: &[u8], mtime: u64, size: u64) {
+    static NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let pid = std::process::id();
+    let mut tmp = cache_path.as_os_str().to_os_string();
+    tmp.push(format!(".tmp.{pid}.{n}"));
+    let tmp = PathBuf::from(tmp);
+    if std::fs::write(&tmp, bytes).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+    if std::fs::rename(&tmp, cache_path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return;
+    }
+    let vpath = validity_sidecar_path(cache_path);
+    let vtmp_name = format!("{}.tmp.{pid}.{n}", vpath.file_name().and_then(|s| s.to_str()).unwrap_or("v"));
+    let vtmp = vpath.with_file_name(vtmp_name);
+    if std::fs::write(&vtmp, format!("{mtime},{size}")).is_ok() {
+        let _ = std::fs::rename(&vtmp, &vpath).or_else(|_| std::fs::remove_file(&vtmp));
+    }
+}
+
+/// One-time cleanup, run once ever per install (gated on `THUMB_CACHE_MIGRATION_MARKER`): the
+/// switch to a stable `cache_key` above means every file cached under the OLD per-(mtime,size)
+/// scheme becomes permanently unreachable the instant this ships — nothing will ever look up
+/// those filenames again, so they'd otherwise just sit as dead weight until `prune_caches`'s 6GB
+/// cap happened to be exceeded, which (a stable key no longer generating fresh orphans on every
+/// edit) could take a very long time. Reuses `is_evictable_cache_file` — the SAME filter
+/// `prune_caches` already trusts to correctly exclude the favorites/flags/rejects/duplicates/
+/// edited/recents registries and export history living in the same directory — rather than
+/// writing a second, independent "what's safe to delete here" rule that could disagree with it.
+/// Deletes everything evictable unconditionally (old-format entries are indistinguishable from
+/// freshly-written new-format ones by filename alone, both being opaque hashes) — safe because
+/// every one of these tiers is fully, cheaply regenerable app cache, not user data.
+pub fn migrate_thumb_cache_v2() {
+    migrate_thumb_cache_v2_in(&cache_dir());
+}
+
+/// The actual logic, taking `dir` as a plain parameter so it's directly unit-testable against a
+/// scratch directory instead of the real, machine-specific `cache_dir()` — see the tests below.
+fn migrate_thumb_cache_v2_in(dir: &Path) {
+    let marker = dir.join(THUMB_CACHE_MIGRATION_MARKER);
+    if marker.exists() {
+        return;
+    }
+    let mut freed = 0u64;
+    let mut count = 0u64;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd.filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            let name_s = name.to_string_lossy();
+            if !is_evictable_cache_file(&name_s) {
+                continue;
+            }
+            if let Ok(m) = entry.metadata() {
+                if m.is_file() {
+                    if std::fs::remove_file(entry.path()).is_ok() {
+                        freed += m.len();
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("thumb cache migration: cleared {count} stale entr{} ({}MB) from the old per-mtime cache key format", if count == 1 { "y" } else { "ies" }, freed / (1024 * 1024));
+    let _ = std::fs::write(&marker, b"1");
+}
+
+/// Cached thumbnail (long edge ~360px, JPEG). RAW files use rawler's embedded-preview
+/// extraction (falls back thumbnail -> preview -> full decode internally) — this reads the
+/// camera's own embedded JPEG in the common case, NOT a full demosaic, so opening a folder of
+/// hundreds of RAWs stays fast. Cache key includes mtime+size so edits/replacements invalidate.
+/// TIER 1 of the thumbnail path: the preview the camera already embedded, returned as-is with no
+/// decode of the full image at all.
+///
+/// Measured cold, per source (examples/thumb_timing.rs) — and the result is the opposite of what
+/// you would guess:
+///
+/// | file            | full decode | embedded |
+/// |-----------------|-------------|----------|
+/// | `__TM4202.jpg`  | 803.8 ms    | ~1 ms    |
+/// | `__TM5132.jpg`  | 515.9 ms    | ~1 ms    |
+/// | `P_TM5168.RW2`  | 174.5 ms    | (already embedded) |
+/// | `__TM3719.RW2`  |  97.4 ms    | (already embedded) |
+///
+/// JPEGs are the SLOW case, not RAWs: the RAW path already calls rawler's
+/// `extract_thumbnail_pixels`, while `image::open` on a JPEG decodes all 24 megapixels and then
+/// throws almost all of them away to make a 360px square. A 6-wide decode pool therefore needs
+/// ~27s to fill a 200-photo JPEG folder, which is what "scrolling a large folder stutters" is.
+///
+/// The embedded preview is 256x171 on this camera — smaller than `LONG_EDGE`, so it is a PROXY,
+/// not a replacement. The frontend paints it immediately and upgrades to the real thumbnail on
+/// idle. Returns Err when a file has no embedded preview, which is the caller's signal to skip
+/// straight to tier 2 rather than show nothing.
+#[tauri::command(async)]
+pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> {
+    let ext = ext_lower(Path::new(&path));
+    if !matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
+        return Err("no embedded preview for this type".into());
+    }
+    let file = std::fs::File::open(&path).map_err(|e| format!("open {path}: {e}"))?;
+    let mut br = std::io::BufReader::new(file);
+    let exif = exif::Reader::new()
+        .read_from_container(&mut br)
+        .map_err(|e| format!("exif: {e}"))?;
+    // IFD1 is the thumbnail directory; these two tags give its byte range in the file.
+    let offset = exif
+        .get_field(exif::Tag::JPEGInterchangeFormat, exif::In::THUMBNAIL)
+        .and_then(|f| f.value.get_uint(0))
+        .ok_or("no embedded thumbnail")? as usize;
+    let len = exif
+        .get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL)
+        .and_then(|f| f.value.get_uint(0))
+        .ok_or("no embedded thumbnail length")? as usize;
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    // ⚠️ The offset is relative to the start of the TIFF header inside the APP1 segment, not to
+    // the start of the file. Locating the embedded SOI directly is both simpler and robust to
+    // that, and a sanity check on the recovered slice keeps a malformed file from panicking.
+    let start = find_embedded_soi(&bytes).ok_or("no embedded JPEG found")?;
+    let end = (start + len).min(bytes.len());
+    let slice = if end > start + 4 { &bytes[start..end] } else { return Err("embedded thumbnail too small".into()) };
+    if slice.len() < 128 || slice[0] != 0xFF || slice[1] != 0xD8 {
+        return Err(format!("embedded thumbnail malformed (offset hint {offset})"));
+    }
+    Ok(tauri::ipc::Response::new(slice.to_vec()))
+}
+
+/// Byte offset of the SECOND JPEG SOI marker — i.e. the embedded preview, not the main image.
+fn find_embedded_soi(bytes: &[u8]) -> Option<usize> {
+    let pat = [0xFFu8, 0xD8, 0xFF];
+    // Skip the main image's own SOI at 0, then find the next one.
+    bytes.windows(3).skip(3).position(|w| w == pat).map(|i| i + 3)
+}
+
+#[tauri::command(async)]
+pub fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String> {
+    // rawler's embedded-preview extraction and the `image` crate can both panic on malformed
+    // input (a truncated/corrupt file, an unsupported internal variant, etc.) — an uncaught
+    // panic here would take down the whole Tauri process, breaking every future thumbnail (and
+    // everything else) for the rest of the session. Catch it and report it as a normal Err
+    // instead, matching the pattern examples/test_thumb.rs already uses to probe this same call.
+    let path_for_panic_msg = path.clone();
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| get_thumbnail_inner(path)))
+        .unwrap_or_else(|panic| {
+            let msg = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "<non-string panic>".to_string());
+            Err(format!("thumbnail decode panicked for {path_for_panic_msg}: {msg}"))
+        })
+        .map(tauri::ipc::Response::new)
+}
+
+/// `get_thumbnail`, with a fallback to the catalog's never-pruned offline thumbnail tier when
+/// the direct decode fails — the common real-world trigger being the volume is unplugged, so
+/// `path` (which came from `catalog_query`'s own `abs_path` reconstruction) simply doesn't
+/// resolve to anything right now. This is a SEPARATE command rather than a change to
+/// `get_thumbnail` itself: a `tauri::State` parameter can only be filled in through the real
+/// Tauri IPC machinery, not a plain function call — and `catalog.rs`'s own offline-thumbnail
+/// GENERATION phase calls `get_thumbnail` directly (not through IPC) to reuse its decode
+/// pipeline, which a `State` parameter there would have broken.
+///
+/// ⚠️ The catalog lookup only runs as a FALLBACK, after a real decode attempt — a mounted
+/// volume's photo must always show its true, current thumbnail, never a possibly-stale cached
+/// one, even if the catalog happens to have an offline copy on file from before an edit.
+#[tauri::command(async)]
+pub fn get_thumbnail_or_offline(path: String, state: tauri::State<crate::catalog::CatalogState>) -> Result<tauri::ipc::Response, String> {
+    // ⚠️ FAST PATH, checked first: on a large library this is what actually makes a warm relaunch
+    // fast. The catalog's own bulk thumbnail pass (thumbnail_run) may have ALREADY decoded and
+    // written this exact photo to the never-pruned offline tier — before this fix, that work sat
+    // unread on every ordinary launch because the fallback below only fires on a live-decode
+    // FAILURE, so every card re-paid the full RAW-demosaic cost every single time regardless of
+    // whether a perfectly good cached copy already existed. `thumb_mtime` (added alongside this)
+    // is what makes serving it directly SAFE rather than a staleness risk: it only fires when the
+    // live file's mtime still matches what the cached copy was generated against.
+    if let Ok(meta) = std::fs::metadata(&path) {
+        let live_mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+        if let Ok(conn) = state.read_conn.lock() {
+            if let Some(bytes) = crate::catalog::offline_thumb_bytes_if_current(&conn, &path, live_mtime) {
+                return Ok(tauri::ipc::Response::new(bytes));
+            }
+        }
+    }
+    if let Ok(resp) = get_thumbnail(path.clone()) {
+        return Ok(resp);
+    }
+    // Read-only lookup — must go through read_conn, not the writer mutex, or an offline photo's
+    // thumbnail (the fallback path this function exists for) blocks for the whole duration of any
+    // in-progress scan/embed/cluster/CLIP batch (N3.1: the whole point of the reader/writer split
+    // in CatalogState is defeated if a "read" call still takes the writer lock).
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    match crate::catalog::offline_thumb_bytes(&conn, &path) {
+        Some(bytes) => Ok(tauri::ipc::Response::new(bytes)),
+        // Distinguish "the file simply isn't on this machine" (a catalog row pointing at another
+        // volume — e.g. imported on a different computer and never copied over) from a genuine
+        // decode failure, so the frontend can show a different placeholder/tooltip instead of the
+        // same warning-triangle "something is wrong with this file" icon for both. Checked last,
+        // only once every real recovery path (live decode, offline cache) has already failed.
+        None => Err(missing_thumbnail_error(&path)),
+    }
+}
+
+fn missing_thumbnail_error(path: &str) -> String {
+    if std::fs::metadata(path).is_err() {
+        format!("file not found on this machine: {path}")
+    } else {
+        format!("no thumbnail available (online or offline) for {path}")
+    }
+}
+
+#[cfg(test)]
+mod missing_thumbnail_error_tests {
+    use super::missing_thumbnail_error;
+
+    #[test]
+    fn nonexistent_path_reports_file_not_found() {
+        let msg = missing_thumbnail_error("Z:\\this\\path\\does\\not\\exist\\clip.mp4");
+        assert!(msg.contains("file not found on this machine"), "got: {msg}");
+    }
+
+    #[test]
+    fn existing_path_reports_generic_no_thumbnail() {
+        // Any real file on disk (this source file itself) — present, so the branch must NOT
+        // claim it's missing even though no thumbnail could be produced for it.
+        let msg = missing_thumbnail_error(file!());
+        assert!(!msg.contains("file not found on this machine"), "got: {msg}");
+        assert!(msg.contains("no thumbnail available"), "got: {msg}");
+    }
+}
+
+/// Embedded RAW pixels for a grid thumbnail. Prefers the camera's PREVIEW over its tiny EXIF
+/// "thumbnail": Sony ARW thumbnails are 160x120 (4:3) while the sensor is 3:2, so the thumbnail
+/// gave every ARW tile the wrong aspect (and was upscaled from 160px). The preview carries the
+/// real frame shape. Same order for every RAW format; falls back thumbnail -> full decode.
+fn raw_embedded_pixels(path: &str) -> Result<image::DynamicImage, String> {
+    let params = RawDecodeParams::default();
+    if let Ok(src) = rawler::rawsource::RawSource::new(Path::new(path)) {
+        if let Ok(dec) = rawler::get_decoder(&src) {
+            if let Ok(Some(img)) = dec.preview_image(&src, &params) {
+                return Ok(img);
+            }
+        }
+    }
+    rawler::analyze::extract_thumbnail_pixels(path, &params).map_err(|e| e.to_string())
+}
+
+pub(crate) fn get_thumbnail_inner(path: String) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let size = meta.len();
+    let key = cache_key(&path);
+    let cache_path = cache_dir().join(&key);
+    // Truncated-file guard (a crash or full-disk mid-write) and staleness detection both live in
+    // read_cache_if_current now — see its own doc comment.
+    if let Some(bytes) = read_cache_if_current(&cache_path, mtime, size) {
+        return Ok(bytes);
+    }
+    // ImageIO first for non-RAW stills (ROADMAP 15). Measured cold, this is the difference
+    // between ~800ms and a fraction of it on a 24MP JPEG, because the `image` crate decodes every
+    // pixel before downsizing while ImageIO decodes at a reduced DCT scale. RAW deliberately does
+    // NOT come through here: rawler's embedded-preview path is already fast (97-175ms) and is the
+    // one that applies the camera's own rendering. See fastthumb.rs's header for the numbers.
+    #[cfg(windows)]
+    {
+        let ext = ext_lower(Path::new(&path));
+        if !is_raw_ext(&ext) && is_image_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(&path, 360) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+        // Video posters come from the shell's own thumbnail handler (winvideothumb.rs) — the
+        // same mechanism Explorer uses, reached via IShellItemImageFactory rather than a bundled
+        // decoder. Sitting here means it inherits the disk cache above for free, same as the
+        // macOS AVFoundation path below.
+        if is_video_ext(&ext) {
+            let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
+            if let Some(bytes) = crate::winvideothumb::poster_jpeg(&path, 360, dur) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let ext = ext_lower(Path::new(&path));
+        if !is_raw_ext(&ext) && is_image_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(&path, 360) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+        // Video posters come from AVFoundation — the OS's own decoder, the same one Finder and
+        // QuickLook use, reached by linking the framework rather than adding a dependency (see
+        // videothumb.rs). Sitting here means it inherits the disk cache above for free, which is
+        // what makes posters survive a restart; the front end used to decode clips in a hidden
+        // <video> and could never cache anything past the session.
+        if is_video_ext(&ext) {
+            let dur = crate::catalog::video_track_info(&path).map(|i| i.duration_secs).unwrap_or(0.0);
+            if let Some(bytes) = crate::videothumb::poster_jpeg(&path, 360, dur) {
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+    }
+
+    let ext = ext_lower(Path::new(&path));
+    // A clip AVFoundation declined (DRM, an exotic codec, a corrupt container) — or any video at
+    // all on a non-macOS build. Fail cleanly so the frontend keeps its video placeholder; never
+    // fall through to `image::open`, which cannot read a container of any kind.
+    if is_video_ext(&ext) {
+        return Err("video poster: no frame could be decoded from this clip".into());
+    }
+    // The `image` crate has no HEIC decoder, but macOS itself does — ImageIO, which is what
+    // WKWebView already uses to display these in the editor. `sips` is the shell front end to it
+    // and ships with every macOS, so no dependency is added and no patented decoder is vendored.
+    //
+    // ⚠️ Shelling out is acceptable HERE and nowhere else in this file: it costs a process spawn
+    // per photo, which is fine against a cache that makes it happen once per file, and the
+    // alternative (vendoring libheif) means shipping a ~2MB decoder for a format the OS already
+    // reads. Falls through to the normal error path if sips fails, so a corrupt HEIC still shows
+    // the placeholder rather than hanging.
+    if is_heic_ext(&ext) {
+        let tmp = cache_path.with_extension("heicthumb.jpg");
+        let ok = std::process::Command::new("/usr/bin/sips")
+            .args(["-s", "format", "jpeg", "-Z", "360", &path, "--out"])
+            .arg(&tmp)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if ok {
+            if let Ok(bytes) = std::fs::read(&tmp) {
+                let _ = std::fs::remove_file(&tmp);
+                write_cache_atomic(&cache_path, &bytes, mtime, size);
+                return Ok(bytes);
+            }
+        }
+        let _ = std::fs::remove_file(&tmp);
+        return Err("heic thumbnail: sips could not decode this file".into());
+    }
+    let img = if is_raw_ext(&ext) {
+        let img = raw_embedded_pixels(&path).map_err(|e| format!("thumbnail decode: {e}"))?;
+        apply_orientation_dynamic(img, raw_orientation(&path))
+    } else {
+        // still_decode::open_any_path (not a bare image::open) so a widened IMAGE_EXTS format
+        // — most importantly .jxl, which image::open() cannot read at all — renders identically
+        // here and in the editor. Falls through correctly for jpg/png/tif/etc too, since
+        // open_any_path's own sniffing covers those the same way image::open did.
+        crate::still_decode::open_any_path(Path::new(&path))?
+    };
+    const LONG_EDGE: u32 = 360;
+    let (w, h) = (img.width(), img.height());
+    let scale = LONG_EDGE as f32 / w.max(h) as f32;
+    let thumb = img.resize(
+        (w as f32 * scale).round().max(1.0) as u32,
+        (h as f32 * scale).round().max(1.0) as u32,
+        image::imageops::FilterType::Triangle,
+    );
+    let mut out = Cursor::new(Vec::new());
+    thumb
+        .to_rgb8()
+        .write_to(&mut out, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("jpeg encode: {e}"))?;
+    let bytes = out.into_inner();
+    write_cache_atomic(&cache_path, &bytes, mtime, size);
+    Ok(bytes)
+}
+
+// Lightroom cloud thumbnails, cached by asset id. Renditions are immutable (an asset id always
+// yields the same thumbnail2x bytes), so no mtime/size in the key — the id alone is stable.
+// Reuses the same thumbnails cache dir, so prune_caches() sweeps these too. Keeps the raw asset
+// id out of the filename (it can contain odd chars) by hashing it.
+fn lr_thumb_path(asset_id: &str) -> PathBuf {
+    cache_dir().join(format!("lr_{:016x}.jpg", fnv1a(&[asset_id, LR_THUMB_VER])))
+}
+
+// Err = cache miss (JS falls back to the network fetch); Ok = cached JPEG bytes.
+#[tauri::command(async)]
+pub fn get_lr_thumb(asset_id: String) -> Result<tauri::ipc::Response, String> {
+    std::fs::read(lr_thumb_path(&asset_id))
+        .map(tauri::ipc::Response::new)
+        .map_err(|_| "miss".into())
+}
+
+#[tauri::command(async)]
+pub fn save_lr_thumb(asset_id: String, data_b64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| format!("bad base64: {e}"))?;
+    std::fs::write(lr_thumb_path(&asset_id), &bytes).map_err(|e| format!("write lr thumb: {e}"))
+}
+
+pub(crate) fn decode_cache_dir() -> PathBuf {
+    let dir = crate::platform::cache_root().join("decode");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+pub(crate) fn decode_cache_key(path: &str, mtime: u64, size: u64, recipe_key: &str) -> String {
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    // recipe_key folds in RAW profile / native-NR / demosaic-algo / auto-lens — anything that
+    // changes decoded pixels. DECODE_RENDER_VER is its own tier, independent of the others.
+    format!("{:016x}.png", fnv1a(&[path, &mtime_s, &size_s, recipe_key, DECODE_RENDER_VER]))
+}
+
+/// Persistent full-resolution decode cache — the "photos re-decode on every relaunch" fix.
+/// PREVIOUSLY the only persistent cache was the ~360px grid thumbnail; the actual expensive
+/// full-res RAW decode (demosaic + NR, several seconds) lived ONLY in the in-memory imgCache
+/// (library-ui.js), which is gone the instant the app quits — so reopening a photo you viewed
+/// last session re-ran the entire native pipeline from scratch every time. This caches the
+/// finished, graded-ready pixels as a quality-95 JPEG (a 24MP RGBA8 frame is ~96MB raw vs
+/// ~5-15MB JPEG) keyed on path+mtime+size+recipe_key, so a relaunch can skip straight to a
+/// ~100-200ms JPEG decode instead of the multi-second native RAW pipeline. `recipe_key` is
+/// whatever RAW-stage settings (profile, native NR, demosaic algo, auto-lens) were in effect
+/// when it was cached — changing any of them changes the key, so a stale cache is never served.
+#[tauri::command(async)]
+pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let key = decode_cache_key(&path, mtime, meta.len(), &recipe_key);
+    let cache_path = decode_cache_dir().join(&key);
+    let bytes = std::fs::read(&cache_path).map_err(|_| {
+        crate::diag::log("info", format!("RAW_DIAG cache_miss file={}", std::path::Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?")));
+        "no cached decode".to_string()
+    })?;
+    crate::diag::log("info", format!("RAW_DIAG cache_hit file={} bytes={}", std::path::Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?"), bytes.len()));
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Returns the existing full-quality cache path so the WebView can load the PNG through the
+/// native asset protocol instead of transferring its tens of megabytes through IPC.
+#[tauri::command(async)]
+pub fn get_decode_cache_path(path: String, recipe_key: String) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let _ = mtime;
+    let cache_path = decode_cache_file(&path, &recipe_key)?.ok_or("no cached decode")?;
+    Ok(cache_path.to_string_lossy().into_owned())
+}
+
+fn display_cache_path(path: &str, mtime: u64, size: u64, recipe_key: &str, long_edge: u32) -> PathBuf {
+    decode_cache_dir().join(format!("{:016x}.display-{}.jpg", fnv1a(&[path, &mtime.to_string(), &size.to_string(), recipe_key, DISPLAY_PROXY_VER]), long_edge))
+}
+
+/// Returns a display-sized JPEG preview through the asset protocol (CHR-120: was lossless WebP —
+/// see DISPLAY_PROXY_VER). The pixels come from the same finished full-resolution decode cache;
+/// this only changes the transport/display tier, never the export source.
+#[tauri::command(async)]
+pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
+    let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+    let mut stage_t = std::time::Instant::now();
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(&path, mtime, meta.len(), &recipe_key, edge);
+    if !out_path.is_file() {
+        // This is the hidden cost a "batch cache complete" or "already cached" shortcut still
+        // pays on first use: the full-resolution PNG this function reads back in was very
+        // possibly just written moments earlier by cache_raw_decode's own png_write stage.
+        let full = read_decode_cache_rgba(&path, &recipe_key)?;
+        crate::diag::stage("display_proxy", &file_name, "read_decode_full", &mut stage_t);
+        let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(full.as_raw(), full.width(), full.height(), edge)?);
+        crate::diag::stage("display_proxy", &file_name, "resize_lanczos", &mut stage_t);
+        let mut encoded = Vec::new();
+        // Quality 92: visually indistinguishable from the source at interactive zoom (this is a
+        // DISPLAY proxy, never the export path), while decoding through a mature/fast JPEG path
+        // in every WebView instead of the previous lossless-WebP encoding's 20+ second decode.
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
+            .encode_image(&scaled)
+            .map_err(|e| format!("encode display preview: {e}"))?;
+        crate::diag::stage("display_proxy", &file_name, "jpeg_encode", &mut stage_t);
+        std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+        request_decode_cache_prune();
+        crate::diag::stage("display_proxy", &file_name, "jpeg_write", &mut stage_t);
+    } else {
+        crate::diag::stage("display_proxy", &file_name, "already_exists_check", &mut stage_t);
+    }
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// Display-proxy downscale: Lanczos3 like before, but SIMD + multi-threaded (fast_image_resize).
+/// The image crate's single-threaded Lanczos3 took 3.5-5s per 24MP frame on the Intel dev Mac,
+/// running in the background exactly while the user's NEXT photo decoded — measured doubling
+/// that decode. Returns RGBA8 (alpha is always opaque here, so no premultiply step is needed).
+fn resize_rgba_lanczos(rgba: &[u8], w: u32, h: u32, long_edge: u32) -> Result<image::RgbaImage, String> {
+    use fast_image_resize as fr;
+    let k = long_edge as f64 / w.max(h) as f64;
+    if k >= 1.0 {
+        return image::RgbaImage::from_raw(w, h, rgba.to_vec()).ok_or_else(|| "rgba dimensions do not match".to_string());
+    }
+    let (dw, dh) = (((w as f64 * k).round() as u32).max(1), ((h as f64 * k).round() as u32).max(1));
+    let src = fr::images::ImageRef::new(w, h, rgba, fr::PixelType::U8x4).map_err(|e| format!("resize src: {e}"))?;
+    let mut dst = fr::images::Image::new(dw, dh, fr::PixelType::U8x4);
+    fr::Resizer::new()
+        .resize(&src, &mut dst, &fr::ResizeOptions::new().resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Lanczos3)))
+        .map_err(|e| format!("resize: {e}"))?;
+    image::RgbaImage::from_raw(dw, dh, dst.into_vec()).ok_or_else(|| "resize output dimensions".to_string())
+}
+
+/// Same output as get_display_decode_cache, but for a caller that JUST decoded this exact photo
+/// and still has the pixels in hand (cache_raw_decode's fresh-decode path) — skips the
+/// read-the-PNG-back-in + re-decode-it round trip entirely (CHR-120: confirmed live as ~220ms of
+/// get_display_decode_cache's ~1s "regenerate the proxy AGAIN right after the decode that just
+/// produced these exact pixels" cost). Resize/encode/write are otherwise identical, so this is
+/// the same finished JPEG a fresh get_display_decode_cache call would have produced, and a caller
+/// that doesn't have pixels on hand (prewarming, the "already cached" shortcut) still uses that.
+pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8],
+                                      long_edge: u32, file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(path, mtime, meta.len(), recipe_key, edge);
+    if out_path.is_file() {
+        crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
+        return Ok(out_path.to_string_lossy().into_owned());
+    }
+    let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(rgba, width, height, edge)?);
+    crate::diag::stage("display_proxy", file_name, "resize_lanczos", stage_t);
+    let mut encoded = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
+        .encode_image(&scaled)
+        .map_err(|e| format!("encode display preview: {e}"))?;
+    crate::diag::stage("display_proxy", file_name, "jpeg_encode", stage_t);
+    std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    request_decode_cache_prune();
+    crate::diag::stage("display_proxy", file_name, "jpeg_write", stage_t);
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// Returns an already-generated display proxy without triggering the expensive first-time
+/// resize/PNG encode. Library prewarming uses this probe so it never competes with an active RAW
+/// open by generating proxies that batch caching has not prepared yet.
+#[tauri::command(async)]
+pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge: u32) -> Result<String, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(&path, mtime, meta.len(), &recipe_key, edge);
+    if !out_path.is_file() { return Err("no cached display proxy".into()); }
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
+/// The full-resolution decode cache is written as lossless QOI (same pixels as the PNG it
+/// replaces, same key stem): PNG's inflate + unfilter cost 3-4s per 24MP frame on the Intel dev
+/// Mac every time a relaunched session first needed full resolution; QOI decodes the same frame
+/// in a fraction of that, at roughly 1.5-2x the disk size. Entries written before this as `.png`
+/// are still read (same hash, so no re-decode is forced) until the LRU prune retires them.
+fn decode_cache_qoi_name(png_key: &str) -> String {
+    format!("{}.qoi", png_key.trim_end_matches(".png"))
+}
+
+/// The existing full-resolution cache file for this photo+recipe, QOI preferred over legacy PNG.
+pub(crate) fn decode_cache_file(path: &str, recipe_key: &str) -> Result<Option<PathBuf>, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let qoi = decode_cache_dir().join(decode_cache_qoi_name(&png_key));
+    if qoi.is_file() { return Ok(Some(qoi)); }
+    let png = decode_cache_dir().join(png_key);
+    Ok(png.is_file().then_some(png))
+}
+
+pub(crate) fn decode_cache_exists(path: &str, recipe_key: &str) -> Result<bool, String> {
+    Ok(decode_cache_file(path, recipe_key)?.is_some())
+}
+
+/// HDR-preview marker: "this photo+recipe's scene-linear companion has NO value above the 1.05
+/// headroom threshold", so its cached SDR RGBA8 frame is byte-for-byte what an HDR-preview decode
+/// would show and the frame caches may serve it. Written next to the decode cache (same key stem,
+/// `.hdrclear`) by decode_raw_v2 / cache_raw_decode, which see the unquantized values. Without
+/// it, HDR preview forces a full native decode on EVERY open (the companion isn't cached).
+fn hdr_clear_marker_path(path: &str, recipe_key: &str) -> Result<PathBuf, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    Ok(decode_cache_dir().join(format!("{}.hdrclear", png_key.trim_end_matches(".png"))))
+}
+
+pub(crate) fn write_hdr_clear_marker(path: &str, recipe_key: &str) {
+    if let Ok(p) = hdr_clear_marker_path(path, recipe_key) {
+        let _ = std::fs::write(&p, b"1");
+        let _ = std::fs::remove_file(p.with_extension("hdrext")); // mutually exclusive
+    }
+}

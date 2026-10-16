@@ -1,0 +1,62 @@
+  // ── folder tree ────────────────────────────────────────────────────────────
+  async function renderTree() {
+    const side = document.getElementById('lib-tree');
+    side.innerHTML = '';
+    if (!state.root) { side.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--mut)">Choose a folder to browse.</div>'; return; }
+    const rootNode = await buildTreeNode(state.root);
+    side.appendChild(rootNode);
+  }
+  // buildTreeNode re-runs for EVERY expanded node on EVERY tree redraw (renderTree() re-renders
+  // the whole tree on any row click anywhere in it) — without this cache, expanding/collapsing
+  // one node re-stats every other already-expanded folder's contents too. Cached per-session;
+  // invalidated for a path when openFolder() is actually asked to (re-)list it.
+  const _treeListCache = new Map();
+  async function listDirCached(path) {
+    if (_treeListCache.has(path)) return _treeListCache.get(path);
+    const entries = await invoke('list_dir', { path });
+    _treeListCache.set(path, entries);
+    return entries;
+  }
+  async function buildTreeNode(path) {
+    const wrap = document.createElement('div');
+    wrap.className = 'lib-tree-node';
+    const row = document.createElement('div');
+    row.className = 'lib-tree-row' + (state.source === 'folder' && state.currentFolder === path ? ' on' : '');
+    const isExpanded = state.expanded.has(path);
+    // Chevron rotates rather than swapping ▾/▸ glyphs — same mechanism as the editor's
+    // .msk-group-chev, so a leaf's permanently-empty chevron slot doesn't need its own case.
+    row.innerHTML = `<span class="lib-tree-chev${isExpanded ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`
+      + `<span style="display:inline-flex;vertical-align:-2px;margin-right:5px;color:var(--mut)">${ic('folder', 13)}</span>`
+      + `<span>${baseName(path) || path}</span>`;
+    // Chevron: expansion ONLY — no folder load. Row body: load ONLY — no expansion toggle.
+    // Same split the date tree already uses (see its own onclick wiring, above) — merging
+    // them here was the exact bug that made peeking at a folder's children trigger a full load.
+    row.querySelector('[data-chev-toggle]').onclick = async (e) => {
+      e.stopPropagation();
+      if (state.expanded.has(path)) state.expanded.delete(path); else state.expanded.add(path);
+      await renderTree();
+    };
+    row.onclick = async (e) => {
+      e.stopPropagation();
+      await openFolder(path);
+      await renderTree(); // openFolder() doesn't re-render the tree itself — needed for the .on highlight
+    };
+    // Top-level row: right-click opens the library-folder menu (Remove … from library).
+    if (path === state.root) {
+      row.title = 'Right-click to remove this folder from the library';
+      row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCacheMenu(e); };
+    }
+    wrap.appendChild(row);
+    if (isExpanded) {
+      try {
+        const entries = await listDirCached(path);
+        const childWrap = document.createElement('div');
+        childWrap.className = 'lib-tree-children';
+        for (const e of entries.filter((e) => e.is_dir)) {
+          childWrap.appendChild(await buildTreeNode(e.path));
+        }
+        wrap.appendChild(childWrap);
+      } catch (e) { /* unreadable folder (permissions etc) — skip its children */ }
+    }
+    return wrap;
+  }

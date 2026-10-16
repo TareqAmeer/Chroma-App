@@ -1,0 +1,109 @@
+  // ── helpers ─────────────────────────────────────────────────────────────────
+  // baseName/kbd are used well above this point in the file (the topbar's Export button title
+  // is built during the initial overlay HTML assembly, long before this line runs top-to-bottom)
+  // — `function` declarations, not `const`, so they're hoisted and callable from anywhere in
+  // this closure regardless of source order. A `const` here previously threw "Cannot access
+  // 'kbd' before initialization" the moment the overlay HTML was built, which — caught live via
+  // the wireframe-inventory gate — silently left the whole topbar/sidebar/menus unrendered (a
+  // thrown error during template-literal assembly, not merely a wrong label).
+  //
+  // csBaseName (desktop-native.js) splits on either OS separator — a real path from the Rust
+  // side is native-separated ('/' on macOS, '\' on Windows), unlike this file's own test-mode
+  // mock IPC layer above, which fabricates always-'/'-separated paths on purpose. Falls back to
+  // the same split inline for LIBTEST (`?libtest=1`), which runs this file in a plain browser
+  // with no desktop-native.js loaded to define the global.
+  function baseName(p) { return window.csBaseName ? window.csBaseName(p) : String(p).split(/[\\/]/).pop(); }
+  // csKbd (desktop-native.js): ⌘E on macOS, Ctrl+E on Windows. Same LIBTEST fallback as baseName
+  // above — a plain-'⌘'-prefixed label when nothing sets window.csKbd, matching every literal
+  // this replaces.
+  function kbd(mods, key) {
+    if (window.csKbd) return window.csKbd(mods, key);
+    const list = Array.isArray(mods) ? mods : mods ? [mods] : [];
+    return `⌘${list.map((m) => (m === 'shift' ? '⇧' : m === 'alt' ? '⌥' : '')).join('')}${key}`;
+  }
+  // Best-effort MIME from the filename — File objects built from read_file_bytes carry no
+  // type, and chromasmith-22.html has type-based branches downstream (its loadFXImages filter
+  // is now extension-aware too, but a real MIME keeps every other check honest).
+  const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', heic: 'image/heic', bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v' };
+  const mimeFromName = (p) => MIME_BY_EXT[(p.split('.').pop() || '').toLowerCase()] || '';
+  let _nextRootKind = null;
+  async function pickFolder() {
+    try {
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false } });
+      if (!chosen) return;
+      _nextRootKind = 'browse';
+      state.root = Array.isArray(chosen) ? chosen[0] : chosen;
+      localStorage.setItem(LS_ROOT, state.root);
+      pushRecentFolder(state.root);
+      state.expanded.clear();
+      state.expanded.add(state.root);
+      await renderTree();
+      await openFolder(state.root);
+    } catch (e) { console.error('pickFolder', e); }
+  }
+
+  // Same root-switch sequence as pickFolder() above, for a folder dropped from Finder onto the
+  // grid instead of chosen via the OS dialog.
+  async function importDroppedFolder(path) {
+    _nextRootKind = 'browse';
+    state.root = path;
+    localStorage.setItem(LS_ROOT, state.root);
+    pushRecentFolder(state.root);
+    state.expanded.clear();
+    state.expanded.add(state.root);
+    await renderTree();
+    await openFolder(state.root);
+  }
+  // Drop files/folders from Finder onto the grid to import — there was previously no drag&drop
+  // path into the Library at all (only the main editor's own drop zones, which load blobs
+  // directly and know nothing about folders or the Library's state). A single dropped item is
+  // probed with list_dir: it succeeds for a real directory and fails for a plain file (Rust's
+  // std::fs::read_dir errors on a non-directory path — see library.rs's list_dir), so the same
+  // drop target can tell folders and photos apart without the browser's limited File API. Files
+  // (or a probe failure) fall through to opening them as a photo batch, mirroring a multi-select
+  // batch open.
+  //
+  // ⚠️ The actual OS→app handoff now happens in wireNativeFileDrop() below, NOT here. WKWebView
+  // (macOS) never populates File.path on an HTML5 drop — a browser security restriction, not a
+  // Tauri bug — so with dragDropEnabled:false this function used to hit "Could not read the
+  // dropped file path(s)" on every drop. tauri.conf.json now sets dragDropEnabled:true, which
+  // routes OS file drags through Tauri's native tauri://drag-drop event (real absolute paths)
+  // instead of the DOM 'drop' event, so this handler only fires for the (documented) fallback
+  // case where the native path is unavailable — e.g. LIBTEST's browser harness. Kept, rather
+  // than deleted, purely as that fallback; it no longer needs a "give up" toast because the
+  // native listener is the one actually doing the work in the shipped app.
+  function wireGridFileDrop() {
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    const hasOsFiles = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+    gridEl.addEventListener('dragover', (e) => {
+      if (!hasOsFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      gridEl.classList.add('lib-dragover');
+    });
+    gridEl.addEventListener('dragleave', (e) => { if (e.target === gridEl) gridEl.classList.remove('lib-dragover'); });
+    gridEl.addEventListener('drop', async (e) => {
+      if (!hasOsFiles(e)) return;
+      e.preventDefault();
+      gridEl.classList.remove('lib-dragover');
+      if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+      const files = Array.from(e.dataTransfer.files || []);
+      if (!files.length) return;
+      const paths = files.map((f) => f.path).filter(Boolean);
+      if (!paths.length) return; // no usable path here — wireNativeFileDrop already handled it
+      await handleLibraryDrop(paths);
+    });
+  }
+  // Shared by both the DOM fallback above and the native listener below.
+  async function handleLibraryDrop(paths) {
+    if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+    if (paths.length === 1) {
+      try {
+        const listing = await invoke('list_dir', { path: paths[0] });
+        if (Array.isArray(listing)) { await importDroppedFolder(paths[0]); return; }
+      } catch (err) { /* not a directory — fall through to opening it as a photo */ }
+    }
+    await openPathsInEditor(paths);
+  }

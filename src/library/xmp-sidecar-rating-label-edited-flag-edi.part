@@ -1,0 +1,84 @@
+// ── XMP sidecar: rating + label + edited flag + edit recipe, in ONE read/write pair.
+// Standard fields (xmp:Rating 0-5/-1, xmp:Label) stay Lightroom/Bridge-compatible; the
+// Chromasmith-specific bits (edited flag, base64 edit recipe) live in their own namespace
+// other tools simply ignore. A plain "<name>.xmp" next to the photo — portable, no DB. ──────
+fn sidecar_path(photo_path: &str) -> PathBuf {
+    crate::canon::sidecar_path_for(Path::new(photo_path))
+}
+
+#[derive(Serialize, Default)]
+pub struct Sidecar {
+    pub rating: i32,
+    pub label: String,  // "" | "Red" | "Green" | "Star"
+    /// Chromasmith colour label, independent of Lightroom's xmp:Label flag semantics.
+    /// Empty is explicit no-colour; old sidecars without this attribute remain empty.
+    #[serde(default)]
+    pub color_label: String,
+    pub edited: bool,
+    /// base64 FX-snapshot JSON of the ACTIVE version, "" if none.
+    ///
+    /// ⚠️ This stays the active version's recipe even once several exist, rather than moving into
+    /// the versions list. Everything that reads a recipe today — the grid's decode cache key, the
+    /// editor's restore path, export history — keeps working untouched, and a sidecar written by
+    /// this build still opens correctly in a build that predates virtual copies. Moving it would
+    /// have been tidier and would have silently dropped every existing edit.
+    pub recipe: String,
+    pub favorite: bool,
+    /// Named alternates. EMPTY for a photo that has never been virtual-copied, which is the
+    /// normal case — `versions[active].recipe` and `recipe` are kept in step by set_sidecar.
+    #[serde(default)]
+    pub versions: Vec<Version>,
+    #[serde(default)]
+    pub active: usize,
+    /// Full hierarchical paths, e.g. `"Travel|Iceland|Reykjavik"` — populated from
+    /// `lr:hierarchicalSubject`, falling back to `dc:subject` promoted to single-segment paths
+    /// when only a flat tag list exists (a sidecar never written by this app or Lightroom).
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// One-slot "undo buffer" for the Library grid's "Reset edit" context-menu action. NOT shown
+    /// in the visible `versions` list — that list is for user-facing virtual copies, and this is
+    /// an internal implementation detail of a single reset/undo pair. `Some(recipe)` means the
+    /// most recent thing that happened to this sidecar was a reset that discarded `recipe`; the
+    /// next real edit (any `set_sidecar` call with a non-reset recipe) or the next reset both
+    /// clear it, so this is exactly ONE level of undo, not a history.
+    #[serde(default)]
+    pub last_reset_recipe: Option<String>,
+    /// `edited` at the moment of that same reset, so undo restores the edited badge correctly
+    /// rather than assuming it was always `true`.
+    #[serde(default)]
+    pub last_reset_edited: bool,
+}
+
+/// Metadata fields supplied by a saved card-import recipe. Empty values are omitted so a
+/// template that only sets (for example) copyright never clears metadata already on the card.
+#[derive(Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ImportMetadata {
+    pub creator: String,
+    pub copyright: String,
+    pub caption: String,
+    pub job_project: String,
+    pub keywords: Vec<String>,
+    /// Optional Chromasmith FX snapshot (base64 JSON) captured by an import recipe.
+    #[serde(default)]
+    pub starting_edit_recipe: String,
+}
+
+impl ImportMetadata {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.creator.trim().is_empty()
+            && self.copyright.trim().is_empty()
+            && self.caption.trim().is_empty()
+            && self.job_project.trim().is_empty()
+            && self.keywords.iter().all(|keyword| keyword.trim().is_empty())
+            && self.starting_edit_recipe.trim().is_empty()
+    }
+}
+
+/// One virtual copy: a name and its own full recipe. No pixels are duplicated — a virtual copy is
+/// a second set of edits over the same file, which is the whole point.
+#[derive(Serialize, serde::Deserialize, Default, Clone, PartialEq)]
+pub struct Version {
+    pub name: String,
+    pub recipe: String,
+}

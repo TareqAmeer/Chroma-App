@@ -1,0 +1,29 @@
+// ── Scan phase D: offline thumbnails ────────────────────────────────────────────────────────
+//
+// The blocker this exists to fix: the app's ordinary thumbnail cache (library.rs's cache_dir())
+// is capped at 500MB and evicted oldest-mtime-first at every launch — at ~60KB/thumb that's
+// ~8,000 photos, nowhere near enough for offline browsing of a real archive. This is a SECOND,
+// separate, never-pruned tier in Application Support (not Caches — an offline thumbnail of an
+// unplugged drive is not regenerable, which by this app's own Caches-vs-Application-Support
+// split makes it user data, not a cache). Keyed on `photos.id`, not the FNV-1a cache_key — a
+// stable integer that never changes, unlike a hash whose *inputs* (path+mtime+size) go stale
+// the moment a file moves.
+//
+// ⚠️ Deliberately calls `library::get_thumbnail` — the SAME calibrated decode pipeline every
+// other thumbnail in the app goes through (RAW embedded-preview extraction, orientation
+// correction, HEIC via ImageIO, the works) — rather than reimplementing any of it. Reusing the
+// existing #[tauri::command] function directly (not duplicating its logic) is what guarantees
+// an offline thumbnail looks exactly like the one the app would have shown online.
+
+pub(crate) fn thumb_dir() -> PathBuf {
+    let dir = catalog_dir().join("thumbs");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn offline_thumb_path(id: i64) -> PathBuf {
+    let shard = (id.rem_euclid(256)).to_string();
+    let dir = thumb_dir().join(shard);
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{id}.jpg"))
+}

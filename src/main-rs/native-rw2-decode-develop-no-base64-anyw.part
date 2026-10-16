@@ -1,0 +1,290 @@
+// ── Native RW2 decode + develop, no base64 anywhere ─────────────────────────────────────
+// (see raw_decode.rs for why native: WKWebView's SharedArrayBuffer support isn't reliable
+// enough for the browser build's libraw-wasm decoder in this shell.)
+//
+// The JS side bakes the DCP color transform into a 65^3 LUT once per profile (bakeDcpLUT)
+// and registers it here; each decode then runs entirely in Rust — rawler decode + PPG
+// demosaic + rayon-parallel LUT apply — and returns display-ready RGBA8. This removed the
+// two big costs measured in the old flow: a 24M-pixel trilinear loop on the JS main thread,
+// and base64/oversized buffers over IPC (request was a 33MB base64 string; response was
+// 145MB of u16 RGB that JS immediately quantized to 8-bit anyway).
+//
+// Request framing (raw invoke body, no JSON): [u32 jsonLen][json utf8][payload]
+//   store_dcp_lut json {"key": "..."}     payload = little-endian f32 LUT data (65^3*3)
+//   decode_raw_v2 json {"mode":"lut","lutKey":"..."} or {"mode":"srgb"} or {"mode":"linear16"}
+//                 payload = the RW2 file bytes
+// decode_raw_v2 response: [u32 w][u32 h][u32 iso][RGBA8 | u16 RGB LE (linear16 mode)]
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
+static DCP_LUTS: Mutex<Option<HashMap<String, std::sync::Arc<Vec<f32>>>>> = Mutex::new(None);
+// CHR-162: LUT keys registered for a DNG's OWN embedded profile (`dcp:<make model>:dng-<hash>`)
+// whose file carries a ProfileGainTableMap -> the camera-RGB -> ProPhoto(exposed) matrix that
+// map's input weights need. Presence means "apply the file's gain map before this LUT".
+static DNG_GAIN_M: Mutex<Option<HashMap<String, [f32; 9]>>> = Mutex::new(None);
+
+/// The RGB16 a LUT should be applied to: the decode itself, or — for an embedded-DNG-profile key
+/// registered with a gain matrix — the decode with the file's ProfileGainTableMap applied.
+fn lut_input_rgb16<'a>(lut_key: &str, file: &[u8], decoded: &'a raw_decode::DecodedRaw) -> std::borrow::Cow<'a, [u16]> {
+    let m = DNG_GAIN_M.lock().ok().and_then(|g| g.as_ref().and_then(|h| h.get(lut_key).copied()));
+    match m.and_then(|m| raw_decode::parse_dng_gain_map(file).map(|gm| (m, gm))) {
+        Some((m, gm)) => std::borrow::Cow::Owned(raw_decode::apply_dng_gain_map(
+            &decoded.rgb16, decoded.width as usize, decoded.height as usize, &gm, &m)),
+        None => std::borrow::Cow::Borrowed(&decoded.rgb16),
+    }
+}
+
+// Single-slot cache for the EXPENSIVE half of decode_raw_v2 (demosaic — the multi-second cost;
+// see raw_decode.rs's own header comment) keyed by a hash of the raw bytes + every parameter that
+// actually changes the demosaic (nr/demosaic_algo/fast/autoLens/lensOverride). Switching only the
+// RAW profile ("RAW profile" dropdown → mode/lutKey) changes NONE of those, so it now hits this
+// cache and skips straight to the cheap LUT application — this is what makes a profile switch on
+// an already-open RAW near-instant instead of re-running PPGDemosaic from scratch, matching the
+// SAM_EMBED/Sam2EmbedCache "one photo edited at a time, newest wins" pattern already used above.
+struct RawDecodeCacheEntry {
+    key: u64,
+    decoded: std::sync::Arc<raw_decode::DecodedRaw>,
+}
+static RAW_DECODE_CACHE: Mutex<Option<RawDecodeCacheEntry>> = Mutex::new(None);
+
+/// Rayon pool for the user-waiting RAW open/refine (decode_raw_v2 with a DCP LUT). The global
+/// pool is capped at cores-2 workers at QoS "utility" so background scans can't starve the UI;
+/// applied to an interactive open it made the same decode ~1.1s slower than a default-QoS
+/// 8-thread run (measured with dump_rw2, CHR-121). This pool has one worker per core at QoS
+/// user-initiated. CS_INTERACTIVE_POOL=0 falls back to the global pool for A/B.
+static INTERACTIVE_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+
+fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    let pool = INTERACTIVE_POOL.get_or_init(|| {
+        if std::env::var("CS_INTERACTIVE_POOL").as_deref() == Ok("0") { return None; }
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(cores)
+            .thread_name(|i| format!("cs-interactive-{i}"))
+            .start_handler(|_| {
+                #[cfg(target_os = "macos")]
+                unsafe {
+                    extern "C" { fn pthread_set_qos_class_self_np(q: u32, p: i32) -> i32; }
+                    let _ = pthread_set_qos_class_self_np(0x19, 0); // QOS_CLASS_USER_INITIATED
+                }
+            })
+            .build()
+            .ok()
+    });
+    match pool { Some(p) => p.install(f), None => f() }
+}
+
+/// RAW review is user-waiting work like an editor open, so it shares the established
+/// user-initiated pool. Full-cache batch work keeps its existing caller/global-pool placement.
+fn run_raw_cache_development<R: Send>(display_only: bool, f: impl FnOnce() -> R + Send) -> R {
+    if display_only { on_interactive_pool(f) } else { f() }
+}
+
+/// Shared native RAW development used by full/review cache generation and transient detail crops.
+/// The caller chooses the foreground interactive pool; this function itself never persists or
+/// inserts frames into either cache.
+fn develop_raw_frame(
+    path: &str,
+    recipe_key: &str,
+    bytes: &[u8],
+    mode: &str,
+    lut_key: &str,
+    raw_nr: &str,
+    auto_lens: bool,
+    demosaic_algo: &str,
+    lens_override: &str,
+    lens_override_focal: f64,
+    want_hdr_companion: bool,
+) -> Result<(raw_decode::DecodedRaw, Vec<u8>, bool, Option<Vec<u8>>), String> {
+    let demosaic_algo = match demosaic_algo {
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo,
+        _ => "",
+    };
+    let lens_override = match (
+        lens_override.is_empty(),
+        lens_override_focal.is_finite() && lens_override_focal > 0.0,
+    ) {
+        (false, true) => Some((lens_override, lens_override_focal as f32)),
+        _ => None,
+    };
+    let nr = match raw_nr {
+        "off" => raw_decode::NrTier::Off,
+        "chroma" => raw_decode::NrTier::Chroma,
+        _ => raw_decode::NrTier::Fast,
+    };
+    let decoded =
+        raw_decode::decode_rw2_bytes(bytes, auto_lens, nr, demosaic_algo, false, lens_override)?;
+    let (effective_mode, _) = effective_dcp_mode(
+        mode,
+        &decoded.make,
+        (!lut_key.is_empty()).then_some(lut_key),
+    );
+    let mut hdr_clear = false;
+    let mut hdr_blob = None;
+    let rgba = if effective_mode == "lut" {
+        let guard = DCP_LUTS
+            .lock()
+            .map_err(|e| format!("DCP LUT cache lock poisoned: {e}"))?;
+        let lut = guard
+            .as_ref()
+            .and_then(|m| m.get(lut_key).cloned())
+            .ok_or_else(|| format!("LUT '{lut_key}' not registered"))?;
+        let n = ((lut.len() / 3) as f64).cbrt().round() as usize;
+        drop(guard);
+        let lut_input = lut_input_rgb16(lut_key, bytes, &decoded);
+        if want_hdr_companion {
+            let (rgba, e) = raw_decode::apply_lut_rgba_ext(&lut_input, &lut, n)?;
+            hdr_clear = !e.iter().any(|v| *v > 1.05);
+            hdr_blob = library::build_hdr_ext_blob(path, recipe_key, decoded.width, decoded.height, &e);
+            rgba
+        } else {
+            // Detail crops need the exact SDR body but no scene-linear companion allocation.
+            raw_decode::apply_lut_rgba(&lut_input, &lut, n)?
+        }
+    } else {
+        raw_decode::srgb_rgba(&decoded.rgb16, decoded.xyz_to_cam)
+    };
+    Ok((decoded, rgba, hdr_clear, hdr_blob))
+}
+
+// The explicit RAW-cache action already pays the full decode cost. Keep that developed frame
+// in-process so reopening it in the same session does not decode the RAW again.
+struct RawEditorCacheEntry {
+    path: String,
+    recipe_key: String,
+    mtime: u64,
+    size: u64,
+    width: u32,
+    height: u32,
+    rgba: std::sync::Arc<Vec<u8>>,
+}
+static RAW_EDITOR_CACHE: Mutex<Vec<RawEditorCacheEntry>> = Mutex::new(Vec::new());
+
+/// Inserts a developed frame into RAW_EDITOR_CACHE (FIFO, 3 entries).
+fn raw_editor_cache_insert(path: &str, recipe_key: &str, mtime: u64, size: u64, width: u32, height: u32,
+                           rgba: std::sync::Arc<Vec<u8>>) {
+    if let Ok(mut guard) = RAW_EDITOR_CACHE.lock() {
+        guard.retain(|entry| !(entry.path == path && entry.recipe_key == recipe_key));
+        guard.push(RawEditorCacheEntry {
+            path: path.to_string(), recipe_key: recipe_key.to_string(), mtime, size, width, height, rgba,
+        });
+        const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
+        if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
+    }
+}
+
+/// Persists a final developed RAW frame: the lossless PNG the next launch reopens from, and the
+/// 2560px display proxy the Library/editor show first. Shared by the batch action
+/// (cache_raw_decode) and every interactive open (decode_raw_v2 with cachePath) so the two can
+/// never write different shapes or keys.
+fn persist_decoded_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8],
+                        file_name: &str, stage_t: &mut std::time::Instant) -> Result<(), String> {
+    library::write_decode_cache_rgba(path, recipe_key, width, height, rgba)?;
+    diag::stage("cache", file_name, "qoi_write", stage_t);
+    library::write_display_cache_from_rgba(path, recipe_key, width, height, rgba, 2560, file_name, stage_t)?;
+    Ok(())
+}
+
+/// One background worker for writing developed frames to the persistent decode cache after an
+/// interactive open. Bounded on purpose: at most one write in flight plus one queued, and a
+/// newer request than that is simply dropped (the cache is best-effort — the next open of that
+/// photo decodes and tries again). Each job holds a ~96MB frame, so an unbounded queue during
+/// fast culling would be exactly the memory growth an 8GB Mac can't afford.
+static PERSIST_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+static PERSIST_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, rgba: std::sync::Arc<Vec<u8>>, hdr_clear: bool, hdr_ext: Option<Vec<u8>>) {
+    use std::sync::atomic::Ordering;
+    if PERSIST_PENDING.fetch_add(1, Ordering::SeqCst) >= 2 {
+        PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
+        return;
+    }
+    let pool = PERSIST_POOL.get_or_init(|| rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .thread_name(|_| "cs-decode-persist".into())
+        .start_handler(|_| bgwork::mark_current_thread_background())
+        .build().ok());
+    let job = move || {
+        let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
+        let mut stage_t = std::time::Instant::now();
+        if let Err(e) = persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t) {
+            eprintln!("persist decode cache for {file_name}: {e}");
+        } else if hdr_clear {
+            library::write_hdr_clear_marker(&path, &recipe_key);
+        } else if let Some(blob) = hdr_ext.as_ref() {
+            library::write_hdr_ext_blob(&path, &recipe_key, blob);
+        }
+        PERSIST_PENDING.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    };
+    match pool { Some(p) => p.spawn(job), None => { PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst); } }
+}
+
+fn parse_framed(body: &tauri::ipc::InvokeBody) -> Result<(serde_json::Value, &[u8]), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = body else {
+        return Err("expected raw invoke body".into());
+    };
+    if bytes.len() < 4 {
+        return Err("framed body too short".into());
+    }
+    let jlen = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    if bytes.len() < 4 + jlen {
+        return Err("framed body truncated".into());
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes[4..4 + jlen]).map_err(|e| format!("frame json: {e}"))?;
+    Ok((json, &bytes[4 + jlen..]))
+}
+
+#[tauri::command(async)]
+fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let key = json["key"].as_str().ok_or("missing key")?.to_string();
+    if payload.len() % 4 != 0 {
+        return Err("LUT payload not f32-aligned".into());
+    }
+    let lut: Vec<f32> = payload
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    // Also persist to disk — see catalog::persist_dcp_lut's doc comment. This is what lets the
+    // offline full-res background job (catalog::hq_offline_run) apply DCP-accurate color without
+    // depending on the interactive editor having baked this exact profile earlier in the SAME
+    // session; once baked here, it survives every future launch.
+    catalog::persist_dcp_lut(&key, &lut);
+    // `make` (the raw EXIF camera make this LUT was resolved for, e.g. "Panasonic") — recorded in
+    // a small manifest so hq_offline_run can map a photo's OWN decoded.make (free from its full
+    // decode, no extra IPC) back to this key. camPrefix's bundled-vs-disk-profile resolution is
+    // JS-only logic (dcp_store.rs/resolveDcpSource) that a background Rust job has no way to
+    // replicate — this manifest is what avoids needing to.
+    if let Some(make) = json["make"].as_str() {
+        if !make.trim().is_empty() {
+            catalog::record_dcp_lut_for_make(make, &key);
+        }
+    }
+    if let Some(arr) = json["dngGain"].as_array().filter(|a| a.len() == 9) {
+        let mut m = [0f32; 9];
+        for (i, v) in arr.iter().enumerate() {
+            m[i] = v.as_f64().unwrap_or(0.0) as f32;
+        }
+        if let Ok(mut g) = DNG_GAIN_M.lock() {
+            g.get_or_insert_with(HashMap::new).insert(key.clone(), m);
+        }
+    }
+    let mut guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+    guard.get_or_insert_with(HashMap::new).insert(key, std::sync::Arc::new(lut));
+    Ok(())
+}
+
+/// The "cancel and quit" side of the quit-block dialog (see the window-close handler in
+/// `setup()`). Sets `cancel` so any in-flight `hq_offline_run` batch stops between items rather
+/// than finishing whatever's already queued, clears `hq_offline_active` (the window-close
+/// handler's own gate) so the close this triggers doesn't immediately re-block itself, then exits
+/// for real via `app.exit()` — NOT `window.close()`, which would just re-fire the same
+/// CloseRequested event and loop.
+#[tauri::command]
+fn hq_offline_force_quit(app: tauri::AppHandle) {
+    use tauri::Manager;
+    let state = app.state::<catalog::CatalogState>();
+    state.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+    state.hq_offline_active.store(false, std::sync::atomic::Ordering::Relaxed);
+    app.exit(0);
+}

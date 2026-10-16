@@ -1,0 +1,127 @@
+  // ── sort ────────────────────────────────────────────────────────────────────
+  // "YYYY:MM:DD HH:MM:SS" has whole-second resolution, so burst shots tie on it. Append the EXIF
+  // sub-second digits (left-aligned: "45" -> 0.45s) as a fixed-width fraction so the string
+  // compare orders same-second frames by when they were actually taken.
+  function dateSortKey(m) {
+    const date = m.date || '';
+    if (!date) return '';
+    const frac = String(m.subsec || '').replace(/\D/g, '').padEnd(9, '0').slice(0, 9);
+    return `${date}.${frac}`;
+  }
+  function sortKeyOf(entry) {
+    const sc = state.sidecars.get(entry.path) || { edited: false };
+    const m = state.meta.get(entry.path) || {};
+    switch (state.sortBy) {
+      case 'mtime': return entry.mtime || 0;
+      case 'date': return dateSortKey(m);
+      case 'iso': return m.iso || 0;
+      case 'shutter': return (m.shutter || '').startsWith('1/') ? -1 / parseFloat(m.shutter.slice(2) || '1') : parseFloat(m.shutter) || 0;
+      case 'aperture': return parseFloat((m.aperture || '').replace('f/', '')) || 0;
+      case 'focal': return parseFloat(m.focal_len || '') || 0;
+      case 'edited': return sc.edited ? 1 : 0;
+      case 'rating': return sc.rating || 0;
+      case 'editedts': return entry.edited_ts || 0;
+      case 'camera': return (m.camera || '').toLowerCase();
+      default: return (entry.name || '').toLowerCase();
+    }
+  }
+  function sortEntries(list) {
+    const dir = state.sortDir === 'desc' ? -1 : 1;
+    // Decorate-sort: compute each entry's sort key once up front instead of re-deriving it
+    // (map lookups + string/number coercion) on every comparator call during the O(n log n) sort.
+    // Expanded-stack members (tagged _stackOf at splice time) are pulled out before the sort and
+    // re-inserted right after their leader, so a stack stays contiguous instead of scattering.
+    const members = new Map();
+    const rest = [];
+    for (const e of list) {
+      if (e._stackOf != null) { (members.get(e._stackOf) || members.set(e._stackOf, []).get(e._stackOf)).push(e); }
+      else rest.push(e);
+    }
+    const sorted = rest.map((entry) => [sortKeyOf(entry), entry])
+      .sort((a, b) => (a[0] < b[0] ? -1 * dir : a[0] > b[0] ? 1 * dir : 0))
+      .map((pair) => pair[1]);
+    if (!members.size) return sorted;
+    const out = [];
+    for (const e of sorted) { out.push(e); const m = members.get(e.id); if (m) { out.push(...m); members.delete(e.id); } }
+    for (const m of members.values()) out.push(...m); // leader filtered out — keep members visible
+    return out;
+  }
+
+  function metaStripHtml(entry) {
+    if (state.metaDisplay === 'off') return '';
+    const m = state.meta.get(entry.path) || {};
+    const parts = [m.iso ? `ISO ${m.iso}` : '', m.shutter || '', m.aperture || '', m.focal_len || ''].filter(Boolean);
+    if (!parts.length) return '';
+    const cls = state.metaDisplay === 'always' ? 'always-mode' : 'hover-mode';
+    return `<div class="lib-meta-strip ${cls}">${parts.join(' · ')}</div>`;
+  }
+
+  // Camera/Lens/ISO option lists. Built from the metadata of every photo seen in the current
+  // view and only ever grown while it is open — rebuilding from the (already filtered) entries
+  // shrank the list to the one chosen value, and catalog views (All Photos, dates, keywords)
+  // never populated these at all, so the dropdowns stayed on "All …" with nothing to pick.
+  const facetSeen = { key: null, camera: new Set(), lens: new Set(), iso: new Set() };
+  function refreshFacetSelects() {
+    const key = state.source === 'folder' ? 'f:' + state.currentFolder : state.source + ':' + (state.catalogScope || '');
+    const filtered = state.cameraFilter !== 'all' || state.lensFilter !== 'all' || state.isoFilter !== 'all';
+    if (facetSeen.key !== key && !filtered) { facetSeen.camera.clear(); facetSeen.lens.clear(); facetSeen.iso.clear(); }
+    facetSeen.key = key;
+    for (const e of state.entries) {
+      const m = state.meta.get(e.path); if (!m) continue;
+      if (m.camera) facetSeen.camera.add(m.camera);
+      if (m.lens) facetSeen.lens.add(m.lens);
+      if (m.iso) facetSeen.iso.add(String(m.iso));
+    }
+    const fill = (id, vals, allLabel, fmt, cur) => {
+      const sel = document.getElementById(id); if (!sel) return;
+      if (cur !== 'all' && !vals.includes(cur)) vals.push(cur);
+      sel.innerHTML = `<option value="all">${allLabel}</option>` + vals.map((v) => `<option value="${escapeAttrFacet(v)}">${escapeAttrFacet(fmt(v))}</option>`).join('');
+      sel.value = cur;
+    };
+    fill('lib-camera-filter', Array.from(facetSeen.camera).sort(), 'All cameras', (v) => v, state.cameraFilter);
+    fill('lib-lens-filter', Array.from(facetSeen.lens).sort(), 'All lenses', (v) => v, state.lensFilter);
+    fill('lib-iso-filter', Array.from(facetSeen.iso).sort((a, b) => (+a) - (+b)), 'All ISOs', (v) => 'ISO ' + v, state.isoFilter);
+  }
+  function escapeAttrFacet(v) { return String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  function passesFilters(entry) {
+    // A missing/unreadable file (deleted/moved since the last scan — real for the cross-folder
+    // "recents"/"edited"/"exported"/album views, which stat fresh and flag rather than error)
+    // has nothing to show: no thumbnail, no metadata, and opening it just toasts an error. Hide
+    // it from the grid/list entirely instead of rendering a broken placeholder card for it.
+    if (entry.missing) return false;
+    const sc = state.sidecars.get(entry.path) || { rating: 0, label: '', color_label: '', edited: false };
+    const m = state.meta.get(entry.path) || {};
+    if (state.typeFilter !== 'all' && !state.typeFilter.split(',').includes(entry.kind)) return false;
+    // Catalog-backed views already filtered camera/lens/ISO in the query, and their metadata
+    // loads in the background — re-checking here hid every photo whose meta hadn't arrived yet.
+    if (!(state._catalogPaged && (state.source === 'catalog' || state.source === 'folder'))) {
+      if (state.cameraFilter !== 'all' && m.camera !== state.cameraFilter) return false;
+      if (state.lensFilter !== 'all' && m.lens !== state.lensFilter) return false;
+      if (state.isoFilter !== 'all' && String(m.iso || '') !== state.isoFilter) return false;
+    }
+    if (state.dupeFilter === 'dupes' && !state.dupeClusters.has(entry.path)) return false;
+    if (state.syncedFilter === 'synced' && !state.syncedPaths.has(entry.path)) return false;
+    if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
+    if (state.facesFilter === 'indexed' && !entry.faces_scanned) return false;
+    if (state.facesFilter === 'pending' && entry.faces_scanned) return false;
+    if (state.search && !entryMatchesSearch(entry, sc, state.search)) return false;
+    // "N or more", except '0' which means exactly unrated — the two useful questions.
+    if (state.ratingFilter !== 'all') {
+      const want = parseInt(state.ratingFilter, 10);
+      const got = sc.rating || 0;
+      if (want === 0 ? got !== 0 : got < want) return false;
+    }
+    if (state.tagFilter === 'red' && sc.label !== 'Red') return false;
+    if (state.tagFilter === 'green' && sc.label !== 'Green') return false;
+    if (state.tagFilter === 'edited' && !sc.edited) return false;
+    if (state.tagFilter === 'noedited' && sc.edited) return false;
+    if (state.tagFilter === 'favorite' && !sc.favorite) return false;
+    // #5: "Unflagged" chip (Library View.html:392) — no pick/reject label and not a favorite.
+    // No backend catalog_query field for this combination; filtered client-side like the other
+    // tagFilter values already are as a secondary pass over whatever the query returned.
+    if (state.tagFilter === 'none' && (sc.label === 'Red' || sc.label === 'Green' || sc.favorite)) return false;
+    if (COLOR_LABELS_ENABLED && !(state._catalogPaged && (state.source === 'catalog' || state.source === 'folder')) && state.colorLabelFilter !== 'all'
+      && (sc.color_label || '') !== (state.colorLabelFilter === 'none' ? '' : state.colorLabelFilter)) return false;
+    return true;
+  }

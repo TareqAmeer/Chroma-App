@@ -1,0 +1,239 @@
+  // ── Shared edit-recipe actions ───────────────────────────────────────────────────────────
+  // Extracted so the context menu (buildPathsMenu, below) and the grid keyboard shortcuts (the
+  // document keydown handler further down) call exactly one implementation each — a keyboard-
+  // only copy would drift from the menu's the moment either changed.
+  async function libCopyEdit(paths) {
+    if (!paths.length) return;
+    const sc = await getSidecar(paths[0]);
+    window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+    window.__copiedRecipeOrigin = { path: paths[0], recipe: window.__copiedRecipe };
+    toast('Edit copied', true);
+  }
+  // BEGIN RECIPE_BATCH_HELPER
+  async function recipeBatchDrain(batch, api, onUpdate, shouldStop = () => false) {
+    let processed = 0;
+    for (const item of batch.items.filter(i => i.status === 'pending')) {
+      if (shouldStop() || batch.status !== 'running') break;
+      try {
+        const result = await api('recipe_batch_apply_item', { id: batch.id, index: item.index });
+        const position = batch.items.findIndex(i => i.index === result.index);
+        batch.items[position] = result;
+      }
+      catch (err) {
+        // The journal is authoritative even if IPC was interrupted after a successful write.
+        batch = await api('recipe_batch_get', { id: batch.id });
+        if (batch.items.find(i => i.index === item.index)?.status === 'pending') throw err;
+      }
+      await onUpdate(batch, item);
+      if (++processed % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return await api('recipe_batch_get', { id: batch.id });
+  }
+  // END RECIPE_BATCH_HELPER
+  const recipeBatches = new Map();
+  const recipeBatchRuns = new Set();
+  const recipeBatchCancellation = new Set();
+  const recipeBatchEditorBaseline = new Map();
+  async function refreshBatchPhoto(item) {
+    let sc;
+    if (item.status === 'applied') {
+      sc = { ...(state.sidecars.get(item.path) || {}), recipe: item.recipe, edited: true };
+      state.sidecars.set(item.path, sc);
+    } else {
+      state.sidecars.delete(item.path);
+      sc = await getSidecar(item.path);
+    }
+    if (sc.edited) markCardEdited(item.path);
+    else overlay.querySelector(`.lib-card[data-path="${CSS.escape(item.path)}"] .lib-edited-badge`)?.remove();
+    if (item.path === state.openedPath && recipeBatchEditorBaseline.get(item.path) === snapshotToB64(getUISnapshot())) {
+      applyUISnapshot(sc.recipe ? snapshotFromB64(sc.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, [])); fxUpdate();
+      recipeBatchEditorBaseline.set(item.path, snapshotToB64(getUISnapshot()));
+    }
+  }
+  function showRecipeBatch(batch) {
+    recipeBatches.set(batch.id, batch);
+    const counts = {};
+    batch.items.forEach(i => { counts[i.status] = (counts[i.status] || 0) + 1; });
+    const finished = batch.status !== 'running';
+    activityUpdate('recipe-batch-' + batch.id, {
+      jobId: 'recipe-batch-' + batch.id, label: batch.label, stage: finished ? 'done' : 'working',
+      outcome: batch.status === 'cancelled' ? 'cancelled' : undefined,
+      done: batch.items.length - (counts.pending || 0), total: batch.items.length,
+      current: `${counts.applied || 0} applied · ${counts.failed || 0} failed · ${counts.pending || 0} pending · ${counts.skipped || 0} skipped · ${counts.conflict || 0} conflicts · ${counts.undone || 0} undone`,
+      batchId: batch.id, failed: batch.items.filter(i => i.status === 'failed').map(i => i.path + ': ' + i.error),
+      cancelFn: () => { recipeBatchCancellation.add(batch.id); invoke('recipe_batch_cancel', { id: batch.id }).then(showRecipeBatch).catch(e => { recipeBatchCancellation.delete(batch.id); toast(humanizeErr('cancel this batch', e), 'err'); }); },
+    });
+  }
+  async function runRecipeBatch(batch) {
+    if (recipeBatchRuns.has(batch.id)) return;
+    recipeBatchRuns.add(batch.id); recipeBatchCancellation.delete(batch.id); showRecipeBatch(batch);
+    try {
+      batch = await recipeBatchDrain(batch, invoke, async (next, item) => {
+        recipeBatches.set(next.id, next);
+        if (item.index % 25 === 0 || next.items.find(i => i.index === item.index)?.status !== 'applied') showRecipeBatch(next);
+        if (next.items.find(i => i.index === item.index)?.status === 'applied') await refreshBatchPhoto(next.items.find(i => i.index === item.index));
+      }, () => recipeBatchCancellation.has(batch.id) || recipeBatches.get(batch.id)?.status === 'cancelled');
+      showRecipeBatch(batch);
+    } catch (e) { toast(humanizeErr('continue this batch; open Results to resume', e), 'err'); }
+    finally { recipeBatchRuns.delete(batch.id); }
+  }
+  async function confirmRecipeBatchTargets(label, items) {
+    const ready = items.filter(item => !item.error);
+    const failed = items.filter(item => item.error);
+    const shown = items.slice(0, 24);
+    const dialog = document.createElement('dialog');
+    dialog.id = 'recipe-batch-target-review';
+    dialog.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);padding:18px;width:640px;max-width:90vw;max-height:85vh;overflow:auto';
+    dialog.setAttribute('aria-labelledby', 'recipe-batch-target-title');
+    const rows = shown.map(item => `<li style="margin:8px 0"><strong>${esc(baseName(item.path))}</strong><span style="display:block;color:var(--mut)">${item.error ? esc(item.error) : 'Ready to receive recipe'}</span></li>`).join('');
+    dialog.innerHTML = `<h2 id="recipe-batch-target-title">Review ${esc(label)} targets</h2>
+      <p>${items.length} photos selected · ${ready.length} ready · ${failed.length} unable to prepare. No edits have been written.</p>
+      <ol style="max-height:42vh;overflow:auto;padding-left:28px">${rows}</ol>
+      ${items.length > shown.length ? `<p>Showing ${shown.length} of ${items.length} photos. Apply will affect all ${items.length} listed targets.</p>` : ''}
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" data-action="cancel">Cancel</button><button type="button" data-action="apply" ${ready.length ? '' : 'disabled'}>Apply to ${ready.length} ready photos</button></div>`;
+    document.body.appendChild(dialog);
+    const result = new Promise(resolve => {
+      dialog.addEventListener('close', () => { dialog.remove(); resolve(dialog.returnValue === 'apply'); }, { once: true });
+      dialog.querySelector('[data-action="cancel"]').onclick = () => dialog.close('cancel');
+      dialog.querySelector('[data-action="apply"]').onclick = () => dialog.close('apply');
+      dialog.addEventListener('cancel', event => { event.preventDefault(); dialog.close('cancel'); }, { once: true });
+    });
+    dialog.showModal();
+    return result;
+  }
+  async function startRecipeBatch(label, paths, recipeForPhoto, reviewTargets = false) {
+    if (!paths.length) return;
+    await flushPendingSave();
+    if (state.openedPath) recipeBatchEditorBaseline.set(state.openedPath, snapshotToB64(getUISnapshot()));
+    const items = [];
+    // Preparation is bounded too, so a large selection never floods the IPC bridge.
+    const uniquePaths = [...new Set(paths)];
+    let preparationCancelled = false;
+    for (const path of uniquePaths) {
+      if (preparationCancelled) break;
+      if (items.length % 25 === 0) {
+        activityUpdate('recipe-prepare', { label: label + ' — preparing', stage: 'working', batchId: null, done: items.length, total: uniquePaths.length, current: 'Preparing recipes', cancelFn: () => { preparationCancelled = true; } });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      let cur;
+      try {
+        cur = await getSidecar(path);
+        items.push({ path, recipe: await recipeForPhoto(cur, path), expectedRecipe: cur.recipe || '', expectedActive: cur.active || 0 });
+      } catch (e) { items.push({ path, recipe: '', error: 'Preparation failed: ' + String(e.message || e) }); }
+    }
+    activityUpdate('recipe-prepare', { stage: 'done', batchId: null });
+    if (preparationCancelled) return;
+    if (reviewTargets && !(await confirmRecipeBatchTargets(label, items))) return;
+    const batch = await invoke('recipe_batch_create', { label, items });
+    await runRecipeBatch(batch);
+  }
+  async function libPasteEdit(paths) {
+    const recipe = window.__copiedRecipe;
+    if (!recipe) return;
+    try { await startRecipeBatch('Paste edit', paths, () => recipe, true); }
+    catch (e) { toast(humanizeErr('paste edits', e), 'err'); }
+  }
+  // Dust sync is deliberately separate from paste: choose spots, then approve each photo.
+  async function libSyncDust(paths) {
+    const source = window.__copiedRecipe && snapshotFromB64(window.__copiedRecipe);
+    const spots = (source?.heal || []).filter(o => !o.pts?.length);
+    if (!spots.length) { toast('Copy an edit containing circular dust spots first'); return; }
+    await flushPendingSave();
+    const origin = window.__copiedRecipeOrigin;
+    const sourcePath = origin?.recipe === window.__copiedRecipe ? origin.path : null;
+    const sourceMeta = sourcePath ? await getMeta(sourcePath) : {};
+    const shoot = m => m.camera && m.date ? m.camera + '|' + String(m.date).slice(0, 10) : null;
+    const sourceShoot = shoot(sourceMeta);
+    const targets = [];
+    for (const path of [...new Set(paths)].filter(p => p !== sourcePath)) {
+      const sc = await getSidecar(path), meta = await getMeta(path);
+      targets.push({ path, sc, meta, mismatch: !!(sourceShoot && shoot(meta) && sourceShoot !== shoot(meta)) });
+    }
+    if (!targets.length) { toast('Select target photos other than the copied source'); return; }
+    const d = document.createElement('dialog');
+    d.id = 'dust-sync-review';
+    d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);padding:18px;width:680px;max-width:90vw;max-height:90vh;overflow:auto';
+    d.setAttribute('aria-labelledby', 'dust-sync-title');
+    d.innerHTML = `<h3 id="dust-sync-title">Review sensor-dust sync</h3><p>Select only sensor-dust spots. Existing target retouch and all other settings stay intact. Camera and capture day are a shoot check; unknown metadata requires your explicit approval.</p><fieldset><legend>Source spots (brush strokes excluded)</legend>${spots.map((o, i) => `<label style="display:block"><input type="checkbox" data-spot="${i}"> Spot ${i + 1} · ${esc(o.mode || 'heal')} · ${Math.round(o.x * 100)}%, ${Math.round(o.y * 100)}%</label>`).join('')}</fieldset><div data-photo></div><p data-count></p><div style="display:flex;gap:8px"><button class="btn bgh" data-prev>Previous</button><button class="btn bgh" data-next>Next</button><button class="btn bgh" data-apply disabled>Apply approved photos</button><button class="btn bgh" data-close>Cancel</button></div>`;
+    let index = 0;
+    const approved = new Set();
+    const selected = () => [...d.querySelectorAll('[data-spot]:checked')].map(e => spots[Number(e.dataset.spot)]);
+    const render = () => {
+      const t = targets[index], ops = selected();
+      d.querySelector('[data-photo]').innerHTML = `<h4>${index + 1}/${targets.length} · ${esc(t.path)}</h4><p>${esc(t.meta.camera || 'Unknown camera')} · ${esc(t.meta.date || 'Unknown capture date')}${t.mismatch ? ' · Different camera/day — excluded' : ''}</p><div style="position:relative;width:100%;height:260px;background:var(--bg2)"><img alt="Original photo for dust-position review" style="width:100%;height:100%;object-fit:contain"><svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-label="Selected dust positions in original source coordinates" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">${ops.map(o => `<ellipse cx="${Number(o.x)}" cy="${Number(o.y)}" data-radius="${Number(o.r)}" rx="${Number(o.r)}" ry="${Number(o.r)}" fill="none" stroke="#ff6464" stroke-width=".004"/>`).join('')}</svg></div><p>Positions use the uncropped source. Review the repair at 100% in the Editor after applying; Undo batch restores all approved photos.</p><label><input type="checkbox" data-approve ${approved.has(t.path) ? 'checked' : ''} ${t.mismatch || !ops.length ? 'disabled' : ''}> Reviewed marker positions on this original; apply these dust spots</label>`;
+      const img = d.querySelector('[data-photo] img');
+      loadThumb(t.path, img, false, 0);
+      // Fit the overlay to the actual thumbnail rectangle, excluding contain letterboxing.
+      img.onload = () => { const w=img.clientWidth,h=img.clientHeight,a=img.naturalWidth/img.naturalHeight,fw=Math.min(w,h*a),fh=fw/a;const svg=d.querySelector('[data-photo] svg');svg.querySelectorAll('[data-radius]').forEach(e=>{const r=Number(e.dataset.radius)*Math.max(img.naturalWidth,img.naturalHeight);e.setAttribute('rx',r/img.naturalWidth);e.setAttribute('ry',r/img.naturalHeight);});svg.style.cssText+=`;left:${(w-fw)/2}px;top:${(h-fh)/2}px;width:${fw}px;height:${fh}px`; };
+      d.querySelector('[data-approve]').onchange = e => { e.target.checked ? approved.add(t.path) : approved.delete(t.path); update(); };
+      d.querySelector('[data-prev]').disabled = index === 0;
+      d.querySelector('[data-next]').disabled = index === targets.length - 1;
+      update();
+    };
+    const update = () => { d.querySelector('[data-count]').textContent = `${approved.size} approved · ${targets.length - approved.size} excluded: ${targets.filter(t => !approved.has(t.path)).map(t => t.path + ' (' + (t.mismatch ? 'different camera/capture day' : 'not approved') + ')').join('; ')}`; d.querySelector('[data-apply]').disabled = !approved.size || !selected().length; };
+    d.querySelectorAll('[data-spot]').forEach(e => e.onchange = () => { approved.clear(); render(); });
+    d.querySelector('[data-prev]').onclick = () => { index--; render(); };
+    d.querySelector('[data-next]').onclick = () => { index++; render(); };
+    d.querySelector('[data-close]').onclick = () => d.close();
+    d.querySelector('[data-apply]').onclick = async () => {
+      const chosen = JSON.parse(JSON.stringify(selected()));
+      const reviewed = new Map(targets.filter(t => approved.has(t.path)).map(t => [t.path, t.sc]));
+      d.close();
+      try { await startRecipeBatch('Sensor-dust sync (reviewed)', [...reviewed.keys()], (cur, path) => {
+        const prior = reviewed.get(path);
+        if ((cur.recipe || '') !== (prior.recipe || '') || (cur.active || 0) !== (prior.active || 0)) throw new Error('Photo changed after review; review it again');
+        const snap = cur.recipe ? snapshotFromB64(cur.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, []);
+        snap.heal = [...(snap.heal || []), ...chosen.map((o, i) => ({ ...o, id: 'dust-' + Date.now() + '-' + i }))];
+        return snapshotToB64(snap);
+      }); } catch (e) { toast(humanizeErr('sync reviewed dust spots', e), 'err'); }
+    };
+    render(); document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+  }
+  async function recipeBatchResults(id) {
+    let batch = await invoke('recipe_batch_get', { id });
+    recipeBatches.set(id, batch);
+    const d = document.createElement('dialog');
+    d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;padding:18px;width:620px;max-width:90vw';
+    d.setAttribute('aria-labelledby', 'recipe-batch-result-title-' + id);
+    const render = () => {
+      d.innerHTML = `<h3 id="recipe-batch-result-title-${id}" style="margin:0 0 12px">${esc(batch.label)} — results</h3><div style="max-height:50vh;overflow:auto"><table style="width:100%;font-size:12px"><thead><tr><th align="left">Photo</th><th align="left">Result</th></tr></thead><tbody>${batch.items.map(i => `<tr><td>${esc(i.path)}</td><td>${esc(i.status)}${i.error ? ': ' + esc(i.error) : ''}</td></tr>`).join('')}</tbody></table></div>${batch.items.some(i => String(i.error || '').startsWith('Preflight:')) ? '<p style="font-size:12px">Preparation failures need repair before applying again. Select failed photos, fix their source recipe or access, then repeat Paste.</p>' : ''}<div style="display:flex;gap:8px;margin-top:14px"><button class="btn bgh" data-action="resume">Resume / retry selected</button><button class="btn bgh" data-action="select">Select failed / skipped</button><button class="btn bgh" data-action="undo">Undo batch</button><button class="btn bgh" data-action="close">Close</button></div>`;
+      d.querySelector('[data-action="close"]').onclick = () => d.close();
+      d.querySelector('[data-action="select"]').onclick = () => {
+        state.selected = new Set(batch.items.filter(i => ['failed', 'skipped', 'conflict'].includes(i.status)).map(i => i.path));
+        syncSelCount(); renderGrid(); d.close();
+      };
+      const selectedPaths = state.selected;
+      const selectedRetryable = batch.items.some(i => selectedPaths.has(i.path) && (i.status === 'skipped' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
+      d.querySelector('[data-action="resume"]').disabled = recipeBatchRuns.has(id) || (!selectedRetryable && !batch.items.some(i => i.status === 'pending' || (i.status === 'failed' && !String(i.error || '').startsWith('Preflight:'))));
+      d.querySelector('[data-action="undo"]').disabled = recipeBatchRuns.has(id) || !batch.items.some(i => i.status === 'applied');
+      d.querySelector('[data-action="resume"]').onclick = async () => {
+        try {
+          const retryIndices = batch.items.filter(i => selectedPaths.has(i.path) && ['failed', 'skipped'].includes(i.status)).map(i => i.index);
+          batch = await invoke('recipe_batch_resume', { id, ...(retryIndices.length ? { retryIndices } : {}) });
+          d.close(); await runRecipeBatch(batch);
+        }
+        catch (e) { toast(humanizeErr('resume this batch', e), 'err'); }
+      };
+      d.querySelector('[data-action="undo"]').onclick = async () => {
+        try {
+          batch = await invoke('recipe_batch_undo', { id });
+          for (const item of batch.items.filter(i => i.status === 'undone')) await refreshBatchPhoto(item);
+          showRecipeBatch(batch); render();
+        } catch (e) { toast(humanizeErr('undo this batch', e), 'err'); }
+      };
+    };
+    render(); document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+  }
+  // Results remain accessible after the activity pill is dismissed and across app restarts.
+  window.chromasmithRecipeBatchHistory = async () => {
+    try {
+      const batches = await invoke('recipe_batch_list');
+      const d = document.createElement('dialog');
+      d.style.cssText = 'background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;padding:18px;max-width:90vw';
+      d.setAttribute('aria-labelledby', 'recipe-batch-history-title');
+      d.innerHTML = `<h3 id="recipe-batch-history-title">Batch edit history</h3>${batches.length ? batches.map(b => `<button class="btn bgh" data-batch="${esc(b.id)}" style="display:block;margin:6px 0">${esc(b.label)} · ${esc(b.status)} · ${b.total} photos</button>`).join('') : '<p>No batch edits yet.</p>'}<button class="btn bgh" data-close>Close</button>`;
+      d.querySelectorAll('[data-batch]').forEach(btn => { btn.onclick = () => { d.close(); recipeBatchResults(Number(btn.dataset.batch)).catch(e => toast(humanizeErr('open batch results', e), 'err')); }; });
+      d.querySelector('[data-close]').onclick = () => d.close();
+      document.body.appendChild(d); d.addEventListener('close', () => d.remove()); d.showModal();
+    } catch (e) { toast(humanizeErr('read batch history', e), 'err'); }
+  };

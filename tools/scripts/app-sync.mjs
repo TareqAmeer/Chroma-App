@@ -5,11 +5,11 @@
 // Working-tree files are refreshed only when they carry no unstaged edits.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { splitText, buildText, TARGET, DIR } from './app-lib.mjs';
+import { splitText, buildText, TARGETS } from './app-lib.mjs';
 
 const git = (args, input) => execFileSync('git', args, { input, maxBuffer: 1 << 30 });
 const show = ref => { try { return git(['show', ref]).toString('utf8'); } catch { return null; } };
-const stagedList = () => git(['ls-files', '--', DIR]).toString().split('\n').filter(Boolean);
+const stagedList = DIR => git(['ls-files', '--', DIR]).toString().split('\n').filter(Boolean);
 const mode = p => git(['ls-files', '-s', '--', p]).toString().split(/\s/)[0] || '100644';
 const clean = p => { try { git(['diff', '--quiet', '--', p]); return true; } catch { return false; } };
 const put = (p, content) => {
@@ -17,34 +17,41 @@ const put = (p, content) => {
   git(['update-index', '--add', '--cacheinfo', `${mode(p)},${blob},${p}`]);
 };
 
-const files = stagedList();
-const headHtml = show('HEAD:' + TARGET);
-const stagedHtml = show(':' + TARGET);
-if (headHtml === null || stagedHtml === null) process.exit(0);
-if (!files.includes(DIR + '/manifest.json')) { // first commit of src/app: seed from html
-  const { files: f } = splitText(stagedHtml); for (const [n, c] of Object.entries(f)) put(`${DIR}/${n}`, c);
-  console.log('app-sync: seeded src/app'); process.exit(0);
-}
-const manifest = JSON.parse(show(`:${DIR}/manifest.json`));
-const built = buildText(manifest, n => show(`:${DIR}/${n}`));
-if (built === stagedHtml) process.exit(0);
+let failed = false;
+function syncOne(cfg) {
+  const { target: TARGET, dir: DIR } = cfg;
+  const files = stagedList(DIR);
+  const headHtml = show('HEAD:' + TARGET);
+  const stagedHtml = show(':' + TARGET);
+  if (headHtml === null || stagedHtml === null) return;
+  if (!files.includes(DIR + '/manifest.json')) { // first commit of src/app: seed from html
+    const { files: f } = splitText(stagedHtml, cfg); for (const [n, c] of Object.entries(f)) put(`${DIR}/${n}`, c);
+    console.log('app-sync: seeded src/app'); return;
+  }
+  const manifest = JSON.parse(show(`:${DIR}/manifest.json`));
+  const built = buildText(manifest, n => show(`:${DIR}/${n}`));
+  if (built === stagedHtml) return;
 
-let htmlChanged = stagedHtml !== headHtml, srcChanged = built !== headHtml;
-if (htmlChanged && srcChanged) {
-  console.error('BLOCKED: staged chromasmith-22.html and src/app disagree and both differ from HEAD.\n' +
-    'Edit one side only, or run `node tools/scripts/app-split.mjs` (html wins) / `node tools/scripts/app-build.mjs` (src wins), re-stage, and retry.');
-  process.exit(1);
+  let htmlChanged = stagedHtml !== headHtml, srcChanged = built !== headHtml;
+  if (htmlChanged && srcChanged) {
+    console.error('BLOCKED: staged chromasmith-22.html and src/app disagree and both differ from HEAD.\n' +
+      'Edit one side only, or run `node tools/scripts/app-split.mjs` (html wins) / `node tools/scripts/app-build.mjs` (src wins), re-stage, and retry.');
+    { failed = true; return; };
+  }
+  if (htmlChanged) { // html is the edited side -> refresh src/app
+    const { files: f } = splitText(stagedHtml, cfg);
+    const wasClean = Object.fromEntries(Object.keys(f).map(n => [n, clean(`${DIR}/${n}`)]));
+    for (const p of files) if (!(p.slice(DIR.length + 1) in f)) git(['update-index', '--force-remove', '--', p]);
+    for (const [n, c] of Object.entries(f)) put(`${DIR}/${n}`, c);
+    for (const [n, c] of Object.entries(f)) if (wasClean[n]) { fs.mkdirSync(`${DIR}/${n}`.replace(/\/[^/]*$/, ''), { recursive: true }); fs.writeFileSync(`${DIR}/${n}`, c); }
+    console.log('app-sync: html edited -> src/app refreshed');
+  } else { // src edited -> rebuild html
+    const wasClean = clean(TARGET);
+    put(TARGET, built);
+    if (wasClean) fs.writeFileSync(TARGET, built);
+    console.log('app-sync: src/app edited -> chromasmith-22.html rebuilt');
+  }
+
 }
-if (htmlChanged) { // html is the edited side -> refresh src/app
-  const { files: f } = splitText(stagedHtml);
-  const wasClean = Object.fromEntries(Object.keys(f).map(n => [n, clean(`${DIR}/${n}`)]));
-  for (const p of files) if (!(p.slice(DIR.length + 1) in f)) git(['update-index', '--force-remove', '--', p]);
-  for (const [n, c] of Object.entries(f)) put(`${DIR}/${n}`, c);
-  for (const [n, c] of Object.entries(f)) if (wasClean[n]) { fs.mkdirSync(`${DIR}/${n}`.replace(/\/[^/]*$/, ''), { recursive: true }); fs.writeFileSync(`${DIR}/${n}`, c); }
-  console.log('app-sync: html edited -> src/app refreshed');
-} else { // src edited -> rebuild html
-  const wasClean = clean(TARGET);
-  put(TARGET, built);
-  if (wasClean) fs.writeFileSync(TARGET, built);
-  console.log('app-sync: src/app edited -> chromasmith-22.html rebuilt');
-}
+TARGETS.forEach(syncOne);
+process.exit(failed ? 1 : 0);

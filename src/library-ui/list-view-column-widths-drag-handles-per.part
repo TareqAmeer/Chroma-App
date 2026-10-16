@@ -1,0 +1,149 @@
+  // ── list-view column widths: drag handles + persistence ─────────────────────────────────
+  // --lib-list-cols (a single shared CSS var, see the comment above its :root default) is one
+  // grid-template-columns string applied to both #lib-list-head and every .lib-card in list
+  // mode — a drag handle on a header cell just rewrites the one track that column corresponds
+  // to and re-sets the var; the header/rows can never disagree since they share the same var.
+  const LIB_COL_DEFAULTS = { thumb: 52, date: 92, editedts: 92, camera: 132, iso: 56, shutter: 68, aperture: 60, focal: 56, flags: 56, edited: 60 };
+  const LIB_COL_ORDER = ['thumb', 'name', 'date', 'editedts', 'camera', 'iso', 'shutter', 'aperture', 'focal', 'flags', 'edited'];
+  let libColWidths;
+  try { libColWidths = { ...LIB_COL_DEFAULTS, ...JSON.parse(localStorage.getItem('chromasmith_lib_cols') || '{}') }; }
+  catch (e) { libColWidths = { ...LIB_COL_DEFAULTS }; }
+  function applyLibColWidths() {
+    const tmpl = LIB_COL_ORDER.map((k) => (k === 'name' ? 'minmax(120px,1fr)' : `${libColWidths[k]}px`)).join(' ');
+    document.documentElement.style.setProperty('--lib-list-cols', tmpl);
+  }
+  applyLibColWidths();
+  listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
+    const key = cell.dataset.sort;
+    if (!(key in LIB_COL_DEFAULTS)) return; // 'name' has no fixed width to drag
+    const handle = document.createElement('div');
+    handle.className = 'lib-col-resize';
+    handle.onmousedown = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startX = e.clientX, startW = libColWidths[key];
+      const onMove = (ev) => { libColWidths[key] = Math.max(40, startW + (ev.clientX - startX)); applyLibColWidths(); };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        try { localStorage.setItem('chromasmith_lib_cols', JSON.stringify(libColWidths)); } catch (err) { /* ignore */ }
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
+    handle.ondblclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      libColWidths[key] = LIB_COL_DEFAULTS[key];
+      applyLibColWidths();
+      try { localStorage.setItem('chromasmith_lib_cols', JSON.stringify(libColWidths)); } catch (err) { /* ignore */ }
+    };
+    cell.appendChild(handle);
+  });
+  function syncListHead() {
+    listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
+      const on = cell.dataset.sort === state.sortBy;
+      cell.classList.toggle('sorted', on);
+      cell.classList.toggle('desc', on && state.sortDir === 'desc');
+    });
+  }
+
+  // Virtual, cross-folder smart collections — see Rust's list_collection()/registry_set() and
+  // the DRK-style sidebar (renderCollections(), below the folder tree wiring). "edited"
+  // stays reachable from the legacy #lib-source dropdown too (list_edited() is a thin alias),
+  // kept for anyone used to that control; the sidebar is the primary, richer entry point.
+  let backfillDone = false;
+  function ensureBackfill() {
+    if (backfillDone) return;
+    backfillDone = true;
+    const folders = Array.from(new Set([state.root, ...getRecentFolders()].filter(Boolean)));
+    invoke('backfill_edited_registry', { folders })
+      .then(() => renderCollectionCounts())
+      .catch((err) => console.error('backfill_edited_registry', err));
+  }
+  overlay.querySelector('#lib-source').onchange = async (e) => {
+    state.source = e.target.value;
+    if (state.source === 'edited') {
+      ensureBackfill();
+      await openCollectionView('edited');
+    } else if (state.currentFolder) {
+      await openFolder(state.currentFolder);
+    }
+  };
+  {
+    const subCb = overlay.querySelector('#lib-subfolders');
+    subCb.checked = state.includeSubfolders;
+    subCb.onchange = async () => {
+      state.includeSubfolders = subCb.checked;
+      saveSubfoldersForScope(state._folderScope || { path: state.currentFolder }, state.includeSubfolders);
+      if (state.source === 'folder' && state.currentFolder) await openFolder(state.currentFolder);
+    };
+  }
+  async function openCollectionView(name) {
+    state.source = name;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    lrState.album = null; // leaving the cloud view — don't re-highlight a stale album later
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let entries;
+    try { entries = await invoke('list_collection', { name }); }
+    catch (e) { showLibraryError('Couldn’t load this collection.', 'Try again', () => openCollectionView(name)); return; }
+    // Missing registry records are retained natively for recovery/history, but cannot render as
+    // photos.  Exclude them from this view's total so its sidebar badge, footer, and grid agree.
+    state.entries = entries.filter((e) => !e.missing);
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    rememberLibraryView({ kind: 'collection', name });
+    renderCollections(); // re-highlight the active row
+  }
+  // The guaranteed-offline tier is catalog-backed rather than a user-editable registry. Read
+  // its current ids first, then use the catalog's normal row builder so cards retain their
+  // original paths (and can still resolve cached thumbnails when the source drive is away).
+  async function openOfflineCollectionView() {
+    state.source = 'offline';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    lrState.album = null;
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    try {
+      const cached = await invoke('catalog_hq_offline_list');
+      const ids = (cached || []).map((entry) => entry.photo_id).filter((id) => Number.isFinite(id));
+      if (!ids.length) {
+        state.entries = [];
+        grid.innerHTML = '<div id="lib-empty">No photos are currently saved for offline access.</div>';
+        rememberLibraryView({ kind: 'collection', name: 'offline' });
+        renderCollections();
+        return;
+      }
+      const page = await invoke('catalog_query', { q: { photoIds: ids } });
+      state.entries = (page.entries || []).filter((entry) => !entry.missing);
+      const paths = state.entries.map((entry) => entry.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+      await renderGrid();
+      rememberLibraryView({ kind: 'collection', name: 'offline' });
+      renderCollections();
+    } catch (e) {
+      showLibraryError('Couldn’t load offline photos.', 'Try again', () => openOfflineCollectionView());
+    }
+  }
+  async function openExportedView() {
+    state.source = 'exported';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let entries;
+    try { entries = await invoke('list_exported'); }
+    catch (e) { showLibraryError('Couldn’t load exported photos.', 'Try again', () => openExportedView()); return; }
+    state.entries = entries.filter((e) => !e.missing);
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    rememberLibraryView({ kind: 'exported' });
+    renderCollections();
+  }

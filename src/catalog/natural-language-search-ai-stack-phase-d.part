@@ -1,0 +1,742 @@
+// ── Natural-language search (AI stack Phase D) — CLIP. Resumable via `clip_scanned_at IS NULL OR
+// clip_scanned_at != mtime`, same shape as `hash_run`/`faces_run`. One embedding per PHOTO (not
+// per stack-leader-only — a derivative export can have different content than its RAW leader, so
+// embedding only leaders would miss it, unlike keywords which genuinely live on the leader's own
+// XMP). Search itself is a linear scan over every embedded photo: SQLite has no native vector
+// index, and a dot product over a few hundred thousand 512-dim rows is a few hundred ms in Rust
+// — fine for an on-demand search action, not worth a real ANN index at this library size.
+
+#[derive(Serialize, Clone, Default)]
+pub struct ClipEmbedResult {
+    pub embedded: usize,
+}
+
+/// Auto-tagging keeps a stricter bar than the Info panel's one-click suggestions: these are
+/// applied without the user looking, so a wrong "dog" costs more than a missing one.
+/// SigLIP match probability; on 800 hand-checked library photos 0.004 kept the real subjects
+/// ("dog", "bridge", "boat", "lake") while the wrong guesses seen sat below it.
+const AUTO_TAG_THRESHOLD: f32 = 0.004;
+const AUTO_TAG_TOP_K: usize = 6;
+
+fn store_auto_tags(conn: &Connection, id: i64, mtime: i64, emb: &[f32]) -> Result<(), String> {
+    let mut tags = crate::clip::suggest_tags(emb, AUTO_TAG_TOP_K, AUTO_TAG_THRESHOLD)?;
+    let species: Vec<&str> = ["dog", "cat"].into_iter().filter(|sp| tags.iter().any(|(t, _)| t == sp)).collect();
+    for sp in species {
+        if let Some((breed, p)) = crate::clip::suggest_breed(emb, sp)? {
+            tags.push((breed, p));
+        }
+    }
+    conn.execute("DELETE FROM photo_auto_tags WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+    for (term, score) in tags {
+        conn.execute("INSERT OR REPLACE INTO photo_auto_tags (photo_id, term, score) VALUES (?1, ?2, ?3)", params![id, term, score])
+            .map_err(|e| e.to_string())?;
+    }
+    conn.execute("UPDATE photos SET auto_tagged_at = ?1 WHERE id = ?2", params![mtime, id]).map_err(|e| e.to_string())?;
+    apply_auto_keywords(conn, id)?;
+    Ok(())
+}
+
+/// Writes a photo's detected tags into its real keywords (the .xmp sidecar + the catalog's
+/// keyword index), so "dog" photos land under the Keywords sidebar on their own. Each term is
+/// applied once per photo (auto_keyword_applied): removing it afterwards sticks. A tag reuses an
+/// existing keyword whose name matches it or its plural ("dog" -> an existing "Animals|Dogs").
+/// Offline photos are skipped and retried on a later pass (their terms stay unapplied).
+fn apply_auto_keywords(conn: &Connection, id: i64) -> Result<(), String> {
+    let terms: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT term FROM photo_auto_tags WHERE photo_id = ?1 AND term NOT IN (SELECT term FROM auto_keyword_applied WHERE photo_id = ?1)")
+            .map_err(|e| e.to_string())?;
+        let r = stmt.query_map(params![id], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        r
+    };
+    if terms.is_empty() { return Ok(()); }
+    let row: Option<(String, String, i64)> = conn
+        .query_row(
+            "SELECT p.rel_path, v.last_path, v.is_local FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.id = ?1 AND p.present = 1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let Some((rel, last_path, is_local)) = row else { return Ok(()) };
+    if is_local == 0 && !Path::new(&last_path).is_dir() { return Ok(()); }
+    let abs = abs_path(&last_path, is_local != 0, &rel);
+    if !Path::new(&abs).is_file() { return Ok(()); }
+
+    let mut sc = crate::library::get_sidecar(abs.clone());
+    let have: std::collections::HashSet<String> = sc.keywords.iter().map(|k| k.rsplit('|').next().unwrap_or(k).to_lowercase()).collect();
+    let mut added = Vec::new();
+    for term in &terms {
+        let plural = format!("{term}s");
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT path FROM keywords WHERE lower(leaf) = ?1 OR lower(leaf) = ?2 ORDER BY length(path) LIMIT 1",
+                params![term.to_lowercase(), plural.to_lowercase()],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let kw = existing.unwrap_or_else(|| term.clone());
+        let leaf = kw.rsplit('|').next().unwrap_or(&kw).to_lowercase();
+        if !have.contains(&leaf) && !have.contains(&term.to_lowercase()) && !sc.keywords.contains(&kw) {
+            sc.keywords.push(kw.clone());
+            added.push(kw);
+        }
+    }
+    if !added.is_empty() {
+        crate::library::set_keywords(abs, sc.keywords.clone())?;
+        for kw in &added {
+            let kw_id = upsert_keyword_path(conn, kw)?;
+            conn.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    for term in &terms {
+        conn.execute("INSERT OR IGNORE INTO auto_keyword_applied (photo_id, term) VALUES (?1, ?2)", params![id, term])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Backfill: tags every photo that already has a CLIP embedding but no tags for it yet (libraries
+/// indexed before auto-tagging existed). Pure math on stored vectors — no image decode.
+pub fn auto_tag_run(conn: &Connection, cancel: &AtomicBool) -> Result<usize, String> {
+    let mut done = 0;
+    // An offline photo keeps unapplied terms and would be re-selected forever — stop once a
+    // batch holds nothing this run hasn't already handled.
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        if cancel.load(Ordering::Relaxed) { break; }
+        let rows: Vec<(i64, i64, Vec<u8>)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, clip_scanned_at, clip_embedding FROM photos
+                     WHERE clip_embedding IS NOT NULL AND present = 1 AND (auto_tagged_at IS NULL OR auto_tagged_at != clip_scanned_at
+                       OR EXISTS (SELECT 1 FROM photo_auto_tags t WHERE t.photo_id = photos.id
+                                  AND t.term NOT IN (SELECT term FROM auto_keyword_applied a WHERE a.photo_id = photos.id)))
+                     LIMIT 500",
+                )
+                .map_err(|e| e.to_string())?;
+            let r = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get::<_, Option<i64>>(1)?.unwrap_or(0), r.get(2)?)))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            r
+        };
+        let rows: Vec<_> = rows.into_iter().filter(|(id, _, _)| seen.insert(*id)).collect();
+        if rows.is_empty() { break; }
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, at, blob) in &rows {
+            store_auto_tags(&tx, *id, *at, &blob_to_f32_vec(blob))?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        done += rows.len();
+    }
+    Ok(done)
+}
+
+#[tauri::command]
+pub async fn catalog_auto_tag(app: tauri::AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        // Same as every other one-shot job: a stale Cancel from an earlier scan must not make
+        // this break before its first batch.
+        state.cancel.store(false, Ordering::Relaxed);
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        auto_tag_run(&conn, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_auto_tag task panicked: {e}"))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct TagCount {
+    pub term: String,
+    pub count: i64,
+}
+
+/// Every auto tag in the library with its photo count — the search box's "Things" suggestions.
+#[tauri::command(async)]
+pub fn catalog_auto_tag_counts(state: tauri::State<CatalogState>) -> Result<Vec<TagCount>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT t.term, COUNT(*) FROM photo_auto_tags t JOIN photos p ON p.id = t.photo_id WHERE p.present = 1 GROUP BY t.term ORDER BY COUNT(*) DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok(TagCount { term: r.get(0)?, count: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    rows
+}
+
+#[derive(Serialize, Default)]
+pub struct PhotoTagInfo {
+    pub photo_id: Option<i64>,
+    /// True once the photo has a CLIP embedding (it has been analyzed).
+    pub analyzed: bool,
+    pub tags: Vec<ClipTagHit>,
+    pub place: Option<String>,
+    /// True when opening the panel just wrote detected tags into the photo's keywords.
+    pub keywords_added: bool,
+}
+
+/// Everything the Editor's Info panel needs for auto tags, keyed by file path (the Editor only
+/// knows the path). Self-healing: an analyzed photo whose tags were never stored (indexed before
+/// auto-tagging existed) is tagged right here instead of waiting for the background backfill.
+#[tauri::command(async)]
+pub fn catalog_photo_tag_info(state: tauri::State<CatalogState>, path: String) -> Result<PhotoTagInfo, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let Some(id) = find_photo_by_abs_path(&conn, &path) else { return Ok(PhotoTagInfo::default()) };
+    let (emb, scanned, tagged, place): (Option<Vec<u8>>, Option<i64>, Option<i64>, Option<String>) = conn
+        .query_row("SELECT clip_embedding, clip_scanned_at, auto_tagged_at, place FROM photos WHERE id = ?1", params![id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })
+        .map_err(|e| e.to_string())?;
+    let before: i64 = conn.query_row("SELECT COUNT(*) FROM photo_keywords WHERE photo_id = ?1", params![id], |r| r.get(0)).unwrap_or(0);
+    if let Some(blob) = &emb {
+        if tagged.is_none() || tagged != scanned {
+            store_auto_tags(&conn, id, scanned.unwrap_or(0), &blob_to_f32_vec(blob))?;
+        } else {
+            apply_auto_keywords(&conn, id)?;
+        }
+    }
+    let after: i64 = conn.query_row("SELECT COUNT(*) FROM photo_keywords WHERE photo_id = ?1", params![id], |r| r.get(0)).unwrap_or(0);
+    let mut stmt = conn.prepare("SELECT term, score FROM photo_auto_tags WHERE photo_id = ?1 ORDER BY score DESC").map_err(|e| e.to_string())?;
+    let tags = stmt
+        .query_map(params![id], |r| Ok(ClipTagHit { term: r.get(0)?, score: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(PhotoTagInfo { photo_id: Some(id), analyzed: emb.is_some(), tags, place, keywords_added: after > before })
+}
+
+pub fn clip_embed_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<ClipEmbedResult, String> {
+    let mut result = ClipEmbedResult::default();
+    const DECODE_LONG_EDGE: u32 = 384; // CLIP's own input is 224x224 (shortest-edge+crop) — well under this
+    // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
+    let scoped = photo_ids.is_some();
+    // Whole-run total so the progress pill shows real overall progress, not "this 32-photo batch"
+    // (which read as a constant ~100% on a 50k backlog). Scoped runs use the selection size.
+    let grand_total: usize = if let Some(ids) = photo_ids {
+        ids.len()
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (clip_scanned_at IS NULL OR clip_scanned_at != mtime)",
+            [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    };
+    // Id cursor for the unscoped pass: each batch starts after the last one, so a run of photos
+    // that can't be read right now (e.g. 32 DNGs in a row) is stepped over and retried on the next
+    // pass instead of being re-selected forever — that used to end the whole pass at the first
+    // all-unreadable batch, silently stopping tagging for the session.
+    let mut cursor: i64 = 0;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let batch: Vec<(i64, Option<String>, i64)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})
+                   AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.kind != 'video' AND p.id > ?1
+                       AND (p.clip_scanned_at IS NULL OR p.clip_scanned_at != p.mtime)
+                     ORDER BY p.id
+                     LIMIT 32"
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([cursor], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
+        if batch.is_empty() {
+            break;
+        }
+        cursor = batch.iter().map(|(id, _, _)| *id).max().unwrap_or(cursor);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            if scoped {
+                break;
+            }
+            continue; // whole batch offline — move on
+        }
+        // Only a thumbnail this catalog says is current for the photo (never a stray file at the
+        // same id path from another catalog).
+        let has_thumb: std::collections::HashSet<i64> = {
+            let ids: Vec<String> = batch.iter().map(|(id, _, _)| id.to_string()).collect();
+            let sql = format!("SELECT id FROM photos WHERE id IN ({}) AND thumb_long_edge > 0 AND thumb_mtime >= mtime", ids.join(","));
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let r = stmt.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+            r
+        };
+        let total_in_batch = batch.len();
+        let base_embedded = result.embedded;
+        progress(ScanProgress { phase: "clip".into(), done: base_embedded, total: grand_total.max(base_embedded + total_in_batch), current: String::new() });
+
+        // Chunked, not one par_iter over the whole batch — see faces_run's comment above for why:
+        // a single par_iter().map() reports done=0 for the ENTIRE batch's runtime (progress() isn't
+        // Send-safe to call from inside the rayon closure), which is what "stuck at 0%" turned out
+        // to mean on a small scoped run. This replaces the earlier attempt that tried to work
+        // around the Send bound with a Mutex<&mut dyn FnMut> (didn't compile — dyn FnMut has no
+        // Send bound, so Mutex<...> wasn't Sync either); chunking sidesteps the problem entirely by
+        // only ever calling progress() from this thread, between chunks.
+        const CHUNK: usize = 4;
+        let mut embedded: Vec<(i64, i64, Option<Vec<f32>>)> = Vec::with_capacity(total_in_batch);
+        for chunk in batch.chunks(CHUNK) {
+            progress(ScanProgress {
+                phase: "clip".into(),
+                done: base_embedded + embedded.len(),
+                total: grand_total.max(base_embedded + total_in_batch),
+                current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
+            });
+            let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
+                .par_iter()
+                .map(|(id, abs, mtime)| {
+                    // The library's own 800px thumbnail first: the model only sees 224x224, so a
+                    // full RAW decode buys nothing — and some RAWs (certain DNGs) the decoder
+                    // can't open at all still have a thumbnail. Original file as the fallback.
+                    let thumb = thumb_dir().join(id.rem_euclid(256).to_string()).join(format!("{id}.jpg"));
+                    let from_thumb = || has_thumb.contains(id).then(|| image::open(&thumb).ok()).flatten().map(|i| { let i = i.to_rgb8(); let (w, h) = i.dimensions(); (i.into_raw(), w, h) });
+                    let emb = from_thumb()
+                        .or_else(|| crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE).ok())
+                        .and_then(|(rgb, w, h)| crate::clip::embed_image(&rgb, w, h).ok());
+                    (*id, *mtime, emb)
+                })
+                .collect();
+            embedded.append(&mut part);
+            progress(ScanProgress { phase: "clip".into(), done: base_embedded + embedded.len(), total: grand_total.max(base_embedded + total_in_batch), current: String::new() });
+        }
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, mtime, emb) in &embedded {
+            let Some(emb) = emb else { continue }; // unreadable right now — retried next pass
+            let blob = f32_vec_to_blob(emb);
+            tx.execute("UPDATE photos SET clip_embedding = ?1, clip_scanned_at = ?2 WHERE id = ?3", params![blob, mtime, id])
+                .map_err(|e| e.to_string())?;
+            store_auto_tags(&tx, *id, *mtime, emb)?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.embedded += embedded.iter().filter(|(_, _, e)| e.is_some()).count();
+
+        if scoped && embedded.iter().all(|(_, _, e)| e.is_none()) {
+            break; // nothing in this batch could be embedded — avoid spinning on unreadable rows
+        }
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_clip_embed(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<ClipEmbedResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--clip-embed-worker", "clip", photo_ids.as_deref())?;
+            return Ok(ClipEmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
+        }
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        clip_embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_clip_embed task panicked: {e}"))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct ClipSearchHit {
+    pub id: i64,
+    pub score: f32,
+}
+
+/// Search cutoff, as a SigLIP match probability (`clip::match_prob`) of the raw query text.
+/// Measured on 800 real library photos (2026-10-04): nonsense queries ("fdsfsdfksj", "asdf
+/// qwerty") had no photo at or above 0.001, while "dog" kept 402, "bridge" 59, "red car" 5 —
+/// so 0.001 removes the junk without hiding real matches.
+const CLIP_SEARCH_MIN_SCORE: f32 = 0.001;
+
+/// Embeds `text` and ranks every CLIP-embedded present photo by cosine similarity, highest
+/// first. A linear scan (see this section's own doc comment on why that's fine at this scale) —
+/// `limit` caps the RETURNED rows, not the work done, since ranking needs every score anyway.
+/// Rows scoring below `CLIP_SEARCH_MIN_SCORE` are dropped entirely, not just ranked last — see
+/// that constant's doc comment for the real measured evidence behind the cutoff.
+#[tauri::command]
+pub async fn catalog_clip_search(app: tauri::AppHandle, text: String, limit: Option<usize>) -> Result<Vec<ClipSearchHit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let query_emb = crate::clip::embed_text(&text)?;
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT id, clip_embedding FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL").map_err(|e| e.to_string())?;
+        let mut hits: Vec<ClipSearchHit> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let blob: Vec<u8> = r.get(1)?;
+                Ok((id, blob))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|(id, blob)| ClipSearchHit { id, score: crate::clip::match_prob(crate::clip::cosine_sim(&query_emb, &blob_to_f32_vec(&blob))) })
+            .filter(|h| h.score >= CLIP_SEARCH_MIN_SCORE)
+            .collect();
+        hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(limit.unwrap_or(200));
+        Ok(hits)
+    })
+    .await
+    .map_err(|e| format!("catalog_clip_search task panicked: {e}"))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct PlaceCount {
+    pub place: String,
+    pub count: i64,
+}
+
+/// Every distinct place name in the catalog with its photo count, most photos first — feeds the
+/// Library search's suggestion list and the Info panel's location keyword suggestion.
+#[tauri::command(async)]
+pub fn catalog_places(state: tauri::State<CatalogState>) -> Result<Vec<PlaceCount>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT place, COUNT(*) FROM photos WHERE present = 1 AND place IS NOT NULL AND place != '' GROUP BY place ORDER BY COUNT(*) DESC LIMIT 2000")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok(PlaceCount { place: r.get(0)?, count: r.get(1)? }))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string());
+    rows
+}
+
+#[derive(Serialize, Clone)]
+pub struct ClipTagHit {
+    pub term: String,
+    pub score: f32,
+}
+
+#[derive(Serialize, Clone)]
+pub struct VerifyEntry {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Serialize, Default)]
+pub struct VerifyResult {
+    pub checked: usize,
+    pub ok: usize,
+    /// Content changed AND mtime changed since the stored baseline — an ordinary edit
+    /// (re-export, overwrite), not corruption. Re-baselined automatically (same as hash_run).
+    pub changed: usize,
+    /// Content changed but mtime did NOT — the file was modified without its mtime updating,
+    /// which is the anomaly silent corruption actually looks like. THE list a user needs to see.
+    pub corrupt: Vec<VerifyEntry>,
+}
+
+/// Re-reads and re-hashes every already-hashed, present photo RIGHT NOW and compares against
+/// the stored baseline — this is the explicit "Verify" action, distinct from hash_run (which
+/// only establishes a baseline for photos that don't have one yet). The whole point of a
+/// verify sweep is doing the expensive re-read even when nothing else has asked for it.
+pub fn verify_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<VerifyResult, String> {
+    let mut result = VerifyResult::default();
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.rel_path, p.mtime, p.hashed_at, p.content_hash, v.last_path, v.is_local
+             FROM photos p JOIN volumes v ON v.id = p.volume_id
+             WHERE p.present = 1 AND p.content_hash IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String, String, i64, i64, String, String, bool)> = stmt
+        .query_map([], |r| {
+            let is_local: i64 = r.get(7)?;
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, is_local != 0))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let total = rows.len();
+    for (i, (id, name, rel_path, stored_mtime, hashed_at, stored_hash, last_path, is_local)) in rows.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if i % 32 == 0 {
+            progress(ScanProgress { phase: "verify".into(), done: i, total, current: name.clone() });
+        }
+        if !is_local && !Path::new(last_path).is_dir() {
+            continue; // offline — can't verify what isn't reachable, and mustn't report it as corrupt
+        }
+        let abs = abs_path(last_path, *is_local, rel_path);
+        let Ok(current_meta) = std::fs::metadata(&abs) else { continue }; // gone since present was set — a rescan will catch it
+        let current_mtime = current_meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(*stored_mtime);
+        let Some(fresh_hash) = blake3_hex(&abs) else { continue };
+
+        if &fresh_hash == stored_hash {
+            result.ok += 1;
+            continue;
+        }
+        if current_mtime == *hashed_at {
+            // Content differs, mtime does not — this is what corruption looks like.
+            result.corrupt.push(VerifyEntry { id: *id, name: name.clone(), path: abs });
+        } else {
+            // A legitimate edit hash_run hasn't caught up to yet — re-baseline now rather than
+            // waiting for the next scan, and don't report it as a problem.
+            let _ = conn.execute(
+                "UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3",
+                params![fresh_hash, current_mtime, id],
+            );
+            result.changed += 1;
+        }
+    }
+    result.checked = total;
+    let now = now_secs() as i64;
+    let _ = conn.execute(
+        "UPDATE photos SET verified_at = ?1 WHERE present = 1 AND content_hash IS NOT NULL",
+        params![now],
+    );
+    progress(ScanProgress { phase: "done".into(), done: total, total, current: String::new() });
+    Ok(result)
+}
+
+/// One row's worth of `verify_run`'s per-photo logic, factored out so it can run OFF the DB
+/// connection entirely (pure filesystem + hashing, no `conn` needed) — see `verify_run_scoped`.
+enum VerifyOutcome {
+    Ok,
+    Skipped,
+    Corrupt(VerifyEntry),
+    Changed { id: i64, fresh_hash: String, current_mtime: i64 }
+}
+fn verify_one(row: &(i64, String, String, i64, i64, String, String, bool)) -> VerifyOutcome {
+    let (id, name, rel_path, _stored_mtime, hashed_at, stored_hash, last_path, is_local) = row;
+    if !is_local && !Path::new(last_path).is_dir() {
+        return VerifyOutcome::Skipped; // offline — can't verify what isn't reachable
+    }
+    let abs = abs_path(last_path, *is_local, rel_path);
+    let Ok(current_meta) = std::fs::metadata(&abs) else { return VerifyOutcome::Skipped }; // gone since present was set
+    let current_mtime = current_meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(*hashed_at);
+    let Some(fresh_hash) = blake3_hex(&abs) else { return VerifyOutcome::Skipped };
+
+    if &fresh_hash == stored_hash {
+        return VerifyOutcome::Ok;
+    }
+    if current_mtime == *hashed_at {
+        // Content differs, mtime does not — this is what corruption looks like.
+        VerifyOutcome::Corrupt(VerifyEntry { id: *id, name: name.clone(), path: abs })
+    } else {
+        // A legitimate edit hash_run hasn't caught up to yet — re-baseline, don't report it.
+        VerifyOutcome::Changed { id: *id, fresh_hash, current_mtime }
+    }
+}
+
+/// Same corruption-detection sweep as `verify_run` above, but structured for the LIVE app rather
+/// than the test suite's small in-memory databases: `verify_run` holds ONE `&Connection` for its
+/// entire single-threaded run, which for a real library is a full-file BLAKE3 hash over tens of
+/// thousands of photos — confirmed live to run for 20+ CPU-minutes and counting on a 57k-photo
+/// library, the whole time holding CatalogState's single writer Mutex and blocking every other
+/// catalog write (rating, favoriting, importing), exactly the class of bug already fixed for the
+/// AI-stack phases (see CatalogState::ai_worker's doc comment) but never applied here since this
+/// function had never been looked at before a user reported the app "stuck" right after clicking
+/// Verify. Reads the row list once (short read_conn lock), hashes in rayon-parallel chunks with
+/// NO lock held at all (blake3_hex touches only the filesystem), and only re-locks `conn`
+/// briefly per chunk to apply the small number of "changed" re-baseline writes.
+pub fn verify_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<VerifyResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let rows: Vec<(i64, String, String, i64, i64, String, String, bool)> = {
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.name, p.rel_path, p.mtime, p.hashed_at, p.content_hash, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.content_hash IS NOT NULL",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| {
+                let is_local: i64 = r.get(7)?;
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, is_local != 0))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        rows
+    };
+
+    let total = rows.len();
+    let mut result = VerifyResult::default();
+    const CHUNK: usize = 16;
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    let mut done = 0usize;
+    for chunk in rows.chunks(CHUNK) {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        pacer.start_chunk();
+        let outcomes: Vec<VerifyOutcome> = chunk.par_iter().map(verify_one).collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            for outcome in outcomes {
+                match outcome {
+                    VerifyOutcome::Ok => result.ok += 1,
+                    VerifyOutcome::Skipped => {}
+                    VerifyOutcome::Corrupt(entry) => result.corrupt.push(entry),
+                    VerifyOutcome::Changed { id, fresh_hash, current_mtime } => {
+                        let _ = conn.execute(
+                            "UPDATE photos SET content_hash = ?1, hashed_at = ?2 WHERE id = ?3",
+                            params![fresh_hash, current_mtime, id]
+                        );
+                        result.changed += 1;
+                    }
+                }
+            }
+        }
+        done += chunk.len();
+        progress(ScanProgress { phase: "verify".into(), done, total, current: String::new() });
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    result.checked = done;
+    if done == total {
+        // Only stamp verified_at when the sweep actually finished (not cancelled partway) —
+        // matches verify_run's own all-or-nothing semantics above.
+        let now = now_secs() as i64;
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let _ = conn.execute("UPDATE photos SET verified_at = ?1 WHERE present = 1 AND content_hash IS NOT NULL", params![now]);
+    }
+    progress(ScanProgress { phase: "done".into(), done, total, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_verify(app: tauri::AppHandle) -> Result<VerifyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        verify_run_scoped(&state, &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_verify task panicked: {e}"))?
+}
+
+#[tauri::command(async)]
+pub fn catalog_scan_cancel(state: tauri::State<CatalogState>) {
+    state.cancel.store(true, Ordering::Relaxed);
+    kill_ai_worker(&state);
+}
+
+/// The face-scan worker (see CatalogState::ai_worker) has no in-process cancel flag to check —
+/// it's a separate OS process, so the only way to stop it mid-scan is to kill it. Safe to do at
+/// any point: it commits one small chunk-of-4 transaction at a time (see faces_run), so the
+/// worst case is losing whatever chunk was in flight, not corrupting anything — WAL mode is
+/// crash-safe by design. It resumes correctly next time it's started, driven entirely by
+/// faces_scanned_at, exactly like recovering from an ordinary crash or force-quit.
+pub(crate) fn kill_ai_worker(state: &CatalogState) {
+    if let Ok(mut slot) = state.ai_worker.lock() {
+        if let Some(mut child) = slot.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+/// Clears the cancel flag at the START of a paced multi-batch drain (catalog_thumbnails,
+/// catalog_hq_offline), which — unlike the one-shot job commands — must NOT clear it per batch
+/// or the user's Cancel is erased by the next batch milliseconds later. Call once, before the
+/// first batch; never inside the loop.
+#[tauri::command(async)]
+pub fn catalog_cancel_reset(state: tauri::State<CatalogState>) {
+    state.cancel.store(false, Ordering::Relaxed);
+}
+
+/// User-facing "Pause background indexing" — a deliberate, persistent choice (the frontend keeps
+/// it in localStorage and re-asserts it on every launch), distinct from `cancel`, which is a
+/// one-shot "stop what's running now". While paused, every paced drain loop declines to start a
+/// new batch. This exists because there was previously NO way to reclaim the machine from
+/// background work short of quitting the app.
+static BG_PAUSED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command(async)]
+pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
+    BG_PAUSED.store(paused, Ordering::Relaxed);
+    // Every OTHER paced background loop already checks bg_is_paused() cooperatively between
+    // batches. The face-scan worker is a separate OS process with no way to see that in-process
+    // static flag, so "pause" has to mean the same abrupt-but-safe kill catalog_scan_cancel uses
+    // — otherwise clicking Pause would visibly do nothing to CPU usage while a face scan is the
+    // thing actually running, defeating the whole point of "reclaim the machine now". It resumes
+    // correctly (see kill_ai_worker's doc) whenever the frontend next asks for a face scan.
+    if paused {
+        kill_ai_worker(&state);
+    }
+}
+
+pub(crate) fn bg_is_paused() -> bool {
+    BG_PAUSED.load(Ordering::Relaxed)
+}

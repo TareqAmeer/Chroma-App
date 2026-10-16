@@ -1,14 +1,16 @@
-// Splits chromasmith-22.html into src/app/ (see app-lib.mjs). Usage: node tools/scripts/app-split.mjs [--out dir]
+// Splits generated targets into their src dirs (see app-lib.mjs TARGETS).
+// Usage: node tools/scripts/app-split.mjs [targetFile ...]   (default: all)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { splitText, TARGET, DIR } from './app-lib.mjs';
+import { splitText, TARGETS } from './app-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const oi = process.argv.indexOf('--out');
-const OUT = oi > 0 ? path.resolve(process.argv[oi + 1]) : path.join(root, DIR);
-const { files } = splitText(fs.readFileSync(path.join(root, TARGET), 'utf8'));
-fs.rmSync(OUT, { recursive: true, force: true });
-fs.mkdirSync(OUT, { recursive: true });
-for (const [n, c] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(OUT, n)), { recursive: true }); fs.writeFileSync(path.join(OUT, n), c); }
-console.log(Object.keys(files).length - 1, 'segments ->', path.relative(root, OUT));
+const want = process.argv.slice(2);
+for (const cfg of TARGETS.filter(t => !want.length || want.includes(t.target))) {
+  const OUT = path.join(root, cfg.dir);
+  const { files } = splitText(fs.readFileSync(path.join(root, cfg.target), 'utf8'), cfg);
+  fs.rmSync(OUT, { recursive: true, force: true });
+  for (const [n, c] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(OUT, n)), { recursive: true }); fs.writeFileSync(path.join(OUT, n), c); }
+  console.log(cfg.target, '->', cfg.dir, Object.keys(files).length - 1, 'parts');
+}

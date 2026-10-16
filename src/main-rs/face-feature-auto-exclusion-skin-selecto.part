@@ -1,0 +1,37 @@
+// ── Face-feature auto-exclusion + skin selector (ROADMAP item 16, plus item 4's remainder) — see
+// faceparse.rs for the model, the class mapping and why the originally-quoted class table was
+// wrong. Framed request/response, same idiom as sam_encode/sam_points: caller sends an
+// already-cropped RGB8 face region (derived from the SAM subject mask's bounding box) + its
+// width/height; response is 5 same-sized alpha masks (eyes_brows, glasses, lips, hair, skin),
+// each width*height bytes, concatenated in that fixed order. `skin` was added for
+// mskFaceSelectSkin (a POSITIVE skin selector, unlike the first 4 groups which only ever feed an
+// eraser) — same struct, same call, no new command needed.
+#[tauri::command(async)]
+fn faceparse_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("faceparse_run: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let masks = faceparse::parse(payload, w, h)?;
+    #[derive(serde::Serialize)]
+    struct Header { width: u32, height: u32 }
+    let header = Header { width: masks.w, height: masks.h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("faceparse_run header: {e}"))?;
+    let body_len = header_bytes.len()
+        + masks.eyes_brows.len()
+        + masks.glasses.len()
+        + masks.lips.len()
+        + masks.hair.len()
+        + masks.skin.len();
+    let mut out = Vec::with_capacity(4 + body_len);
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&masks.eyes_brows);
+    out.extend_from_slice(&masks.glasses);
+    out.extend_from_slice(&masks.lips);
+    out.extend_from_slice(&masks.hair);
+    out.extend_from_slice(&masks.skin);
+    Ok(tauri::ipc::Response::new(out))
+}

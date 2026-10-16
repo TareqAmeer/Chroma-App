@@ -1,0 +1,50 @@
+  // ── Native OS file drag&drop bridge ───────────────────────────────────────────────────────
+  // dragDropEnabled:true (tauri.conf.json) makes Tauri itself watch the OS-level drag session
+  // and hands real absolute paths to the frontend via tauri://drag-over/-drop/-leave, instead of
+  // letting the browser's own HTML5 DnD receive it (which is what exposed the missing-.path bug
+  // above). This ONE listener serves every drop target in the app — the Library grid AND every
+  // editor drop zone in chromasmith-22.html (.dz elements: before/after, Match&Refine source/
+  // ref, LUT/preset start, FX image/LUT, canvas photo tray, Lightroom-handoff dev zones) — by
+  // hit-testing the drop position against the DOM, then either running the Library import path
+  // directly or reconstructing File objects (via readPathsAsFiles, same helper openPathsInEditor
+  // uses) and feeding them into each zone's EXISTING handler (dzd/clDropFiles/loadFXImages) so
+  // none of those handlers had to change. In-page drags (mask reorder, filmstrip/canvas-tray
+  // drag, card→sidebar drag) are unaffected: they never put a file:// URL on the OS pasteboard,
+  // so Tauri's native watcher has nothing to intercept and plain HTML5 dragstart/drop keeps
+  // handling them exactly as before.
+  function wireNativeFileDrop() {
+    if (LIBTEST || !window.__TAURI__ || !window.__TAURI__.event) return; // nothing real to listen to
+    const dpr = () => window.devicePixelRatio || 1;
+    let overEl = null;
+    const clearOver = () => { if (overEl) { overEl.classList.remove('over', 'lib-dragover'); overEl = null; } };
+    // Tauri's drag position is in PHYSICAL window pixels; elementFromPoint wants CSS (logical)
+    // pixels, hence the devicePixelRatio divide.
+    const dzAt = (payload) => {
+      const pos = payload && payload.position;
+      if (!pos) return null;
+      const el = document.elementFromPoint(pos.x / dpr(), pos.y / dpr());
+      return el && el.closest ? el.closest('.dz, #lib-grid') : null;
+    };
+    window.__TAURI__.event.listen('tauri://drag-over', (e) => {
+      if (window.csDropOverlay) window.csDropOverlay.show();
+      clearOver();
+      const dz = dzAt(e.payload);
+      if (dz) { dz.classList.add(dz.id === 'lib-grid' ? 'lib-dragover' : 'over'); overEl = dz; }
+    });
+    window.__TAURI__.event.listen('tauri://drag-leave', () => { clearOver(); if (window.csDropOverlay) window.csDropOverlay.hide(); });
+    window.__TAURI__.event.listen('tauri://drag-drop', async (e) => {
+      const dz = dzAt(e.payload);
+      clearOver();
+      if (window.csDropOverlay) window.csDropOverlay.hide();
+      const paths = (e.payload && e.payload.paths) || [];
+      if (!paths.length) return;
+      // Dropped outside any drop zone: treat it like a drop on the Library instead of ignoring it.
+      if (!dz) { await handleLibraryDrop(paths); return; }
+      if (dz.id === 'lib-grid') { await handleLibraryDrop(paths); return; }
+      const files = await readPathsAsFiles(paths);
+      if (!files.length) return;
+      const fakeEvent = { preventDefault() {}, currentTarget: dz, dataTransfer: { files } };
+      if (dz.id === 'cl-dz') { if (typeof clDropFiles === 'function') clDropFiles(fakeEvent); return; }
+      if (typeof dzd === 'function') dzd(fakeEvent, dz.id.replace(/^dz-/, ''));
+    });
+  }

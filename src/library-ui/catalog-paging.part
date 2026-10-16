@@ -1,0 +1,370 @@
+  // ── Catalog paging ───────────────────────────────────────────────────────────────────────
+  // Replaces the old "fetch up to 50,000 rows in one shot" behavior. That cap was a blanket
+  // memory guard with no relation to what's actually visible (the grid only ever mounts a
+  // screenful of DOM cards — see VIRT_MIN above), and once a library crossed it silently, every
+  // client-side count/select-all/filter result was quietly computed over a partial library
+  // with no indication anything was missing. A real library-wide view now fetches in pages of
+  // CATALOG_PAGE_SIZE and grows `state.entries` as the user actually scrolls toward the end of
+  // what's loaded — `virtUpdate`'s own near-the-end check below is what triggers the next page.
+  const CATALOG_PAGE_SIZE = 4000;
+  // Any view backed by catalog_query (All Photos / By Date / a registered folder / a keyword or
+  // person scope) sets `state._catalogPaged = true` and `state._catalogBaseQuery` to the query
+  // shape (minus offset) so a filter change or a scroll-triggered "load more" can re-issue it.
+  // Album/Exported/Lightroom-cloud views never set this and keep their existing, unpaged,
+  // client-side-filtered behavior untouched.
+  function catalogFilterFields() {
+    // rating/favorite/edited/label are safe here because set_sidecar (library.rs) now writes
+    // them into the catalog the instant the user changes a rating/flag/edit — see
+    // CatalogQuery's own doc comment on sync_sidecar_fields_run for why that write-through is
+    // what makes this different from just reading the DB's (previously stale) copy.
+    return {
+      kind: state.typeFilter !== 'all' ? state.typeFilter : null,
+      camera: state.cameraFilter !== 'all' ? state.cameraFilter : null,
+      lens: state.lensFilter !== 'all' ? state.lensFilter : null,
+      iso: state.isoFilter !== 'all' && state.isoFilter ? parseInt(state.isoFilter, 10) : null,
+      faces: state.facesFilter !== 'all' ? state.facesFilter : null,
+      rating: state.ratingFilter !== 'all' ? parseInt(state.ratingFilter, 10) : null,
+      colorLabel: !COLOR_LABELS_ENABLED || state.colorLabelFilter === 'all' ? null : (state.colorLabelFilter === 'none' ? '' : state.colorLabelFilter),
+      favorite: state.tagFilter === 'favorite' ? true : null,
+      edited: state.tagFilter === 'edited' ? true : (state.tagFilter === 'noedited' ? false : null),
+      label: state.tagFilter === 'red' ? 'Red' : (state.tagFilter === 'green' ? 'Green' : null),
+    };
+  }
+  /// Re-issues the current catalog-backed view's base query at the given offset and appends the
+  /// result to state.entries. Used both for scroll-triggered "load more" (offset = current
+  /// length) and is NOT used for offset 0 — that first page is always fetched by the view-opening
+  /// function itself (openCatalogView/openFolder), which also has to do view-specific setup
+  /// (skeleton, empty-state message, stack-expansion splicing) a bare append must not repeat.
+  /// Returns true if a page was successfully fetched (whether or not more remain after it),
+  /// false if nothing happened (wrong view, already loading, or a transient failure) — the
+  /// distinction selectAllCatalogEntries needs to tell "reached the end" apart from "network
+  /// hiccup, stop looping" without spinning forever on the latter.
+  async function loadMoreCatalogEntries() {
+    // The source check guards against a stale _catalogPaged/_catalogBaseQuery surviving a
+    // switch to a non-catalog view (album/exported/Lightroom) that never resets them —
+    // those views' own open functions don't set _catalogPaged themselves, so this is the one
+    // place that has to know which sources are actually catalog_query-backed.
+    if (state.source !== 'catalog' && state.source !== 'folder') return false;
+    if (!state._catalogPaged || !state._catalogCapped || state._catalogLoadingMore) return false;
+    if (!state._catalogBaseQuery) return false;
+    state._catalogLoadingMore = true;
+    try {
+      const q = { ...state._catalogBaseQuery, offset: state.entries.length };
+      const page = await invoke('catalog_query', { q });
+      // Same offline-filtering note as query_run's own: entries already excludes offline rows
+      // when includeOffline was false, so simple concatenation is correct — nothing to dedupe,
+      // since OFFSET always continues the same ORDER BY the first page used.
+      state.entries = state.entries.concat(page.entries);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      renderGrid();
+      return true;
+    } catch (e) {
+      // Best-effort: leave capped as-is so the next scroll-near-end retries rather than
+      // silently giving up on the rest of the library after one transient failure.
+      return false;
+    } finally {
+      state._catalogLoadingMore = false;
+    }
+  }
+  /// ⌘A must mean "every photo the current filter matches," not "every photo loaded so far" —
+  /// paging only fetches on scroll, so on a library bigger than one page, plain
+  /// `state.entries.filter(passesFilters)` silently stopped at CATALOG_PAGE_SIZE (the exact
+  /// regression this exists to fix: select-all capped at 4,000 the moment paging shipped).
+  /// Pulls in every remaining page first, THEN selects — same data source virtUpdate's own
+  /// scroll-triggered loadMoreCatalogEntries uses, just driven eagerly instead of by scrolling.
+  async function selectAllCatalogEntries() {
+    if (state._catalogPaged) {
+      if (state._catalogCapped && typeof toast === 'function') {
+        toast(`Loading all ${state._catalogTotal || ''} photos to select…`);
+      }
+      while (state._catalogCapped) {
+        const ok = await loadMoreCatalogEntries();
+        if (!ok) {
+          if (typeof toast === 'function') toast('Could not load the rest of the gallery — selection may be incomplete', false);
+          break;
+        }
+      }
+    }
+    const all = sortEntries(state.entries.filter(passesFilters));
+    state.selected = new Set(all.map((en) => en.path));
+    updateCardSelClasses();
+  }
+  /// Filters that moved server-side (type/camera/lens/iso/faces) now need a full re-fetch from
+  /// offset 0 on change, not a re-filter of whatever partial array happens to be in memory — a
+  /// changed camera filter must not keep operating on the previous filter's truncated page.
+  /// Everything NOT backed by catalog_query (albums, exported, Lightroom cloud) is untouched by
+  /// this and keeps the old client-side-only renderGrid() behavior.
+  function applyCatalogFilterChange() {
+    if (state._catalogPaged) {
+      if (state.source === 'catalog') { openCatalogView(state.catalogScope); return; }
+      if (state.source === 'folder' && state.currentFolder) { openFolder(state.currentFolder); return; }
+    }
+    renderGrid();
+  }
+  // Test hook: the grid probe needs the measured metrics, which are otherwise closure-local.
+  // ⚠️ Bug #2: this was declared ONLY inside `if (LIBTEST)` below, so `window.__libInfo` was
+  // undefined in the real packaged app — a "dead public API nobody calls" not because nothing
+  // wanted to call it, but because it plain didn't exist outside the test harness. It's the
+  // real trigger both the toolbar ⓘ button and the "Get Info" context-menu item call, so it must
+  // exist unconditionally.
+  window.__libInfo = (on) => { state.showInfo = on; renderInfoPanel(); };
+  if (LIBTEST) {
+    window.__libState = () => ({ m: state._virtMetrics, on: state._virtOn, n: (state._virtAll || []).length, range: state._virtRange });
+    window.__libRenderGrid = () => renderGrid();
+    window.__libToggleUnifiedView = (on) => setUnifiedView(on);
+    window.__libSelect = (p) => { state.selected.add(p); };
+    window.__libCompareState = () => ({ active: compareState.active, selected: compareState.paths.slice(), loaded: [...compareState.items.keys()], loadCount: compareState.loadCount,
+      activeLoads: compareState.activeLoads, maxConcurrentLoads: compareState.maxConcurrentLoads, editorEntries: typeof fxImages !== 'undefined' ? fxImages.length : 0 });
+    window.__libtestSetCompareLoader = (loader) => { _libtestCompareLoader = typeof loader === 'function' ? loader : null; };
+    window.__libShowQuickLook = (p) => showQuickLook(p);
+    window.__libtestOpenFaceCloseups = (path) => openPhotoPeopleEditor([path], { closeups: true });
+    window.__libtestPrepareRawReviewPreviews = (paths) => prepareRawReviewPreviews(paths);
+    window.__libtestCancelRawReviewPreviews = () => _rawReviewPrep?.cancel();
+    window.__libtestRawReviewState = () => ({ active: rawReviewActiveJob ? { path: rawReviewActiveJob.path, kind: rawReviewActiveJob.kind } : null,
+      queued: rawReviewQueue.map((job) => ({ path: job.path, kind: job.kind })),
+      prep: _rawReviewPrep ? { jobId: _rawReviewPrep.jobId, stage: _rawReviewPrep.stage, done: _rawReviewPrep.done, total: _rawReviewPrep.total,
+        current: _rawReviewPrep.current, cancelled: _rawReviewPrep.cancelled } : null });
+    // CHR-184 test hooks: drive the real keyword/album write paths and read back what undo restored.
+    window.__libAddKeyword = (p, kw) => addKeywordToPhoto(p, kw);
+    window.__libRemoveKeyword = (p, kw) => removeKeywordFromPhoto(p, kw);
+    window.__libAlbumAdd = async (id, name, paths) => { const n = await albumAddUndoable(id, name, paths); await refreshAlbums(); return n; };
+    window.__libAlbums = () => _albums.map((a) => ({ id: a.id, name: a.name, paths: [...a.paths] }));
+    window.__libKeywords = (p) => [...((state.sidecars.get(p) || {}).keywords || [])];
+    window.__libCreateAlbum = async (name) => { const al = await invoke('album_create', { name }); await refreshAlbums(); return al; };
+    // Test-only trigger for showLibraryError()'s recovery state — its 4 real call sites (folder/
+    // collection/exported/Lightroom-album load failures) all need a real IPC rejection, which
+    // libtestInvoke's list_dir mock never produces (it resolves for any path). Without this,
+    // #lib-empty-retry has no reachable test path at all — surface_coverage_check.mjs flagged it
+    // as a genuinely uncaptured surface (backlog #5 follow-up).
+    window.__libForceLoadError = () => { showLibraryError('Couldn’t open this folder.', 'Choose another folder', () => {}); };
+    window.__libQuicklookCacheState = () => ({ cached: [...quicklookPreviews.keys()], pending: [...quicklookRequests.keys()] });
+    window.__libScrollTo = (p) => scrollLibraryToPath(p);
+    window.__libClusterByHash = (pairs) => clusterByHash(pairs);
+    window.__libOpenFolder = (path) => openFolder(path);
+    window.__libOpenCollectionView = (name) => openCollectionView(name);
+    window.__libOpenCatalogView = (scope) => openCatalogView(scope);
+    window.__libTrashContext = () => ({ root: state.root, folder: state.currentFolder, source: state.source, scope: state.catalogScope || null, viewMode: state.viewMode, paths: state.entries.map((entry) => entry.path) });
+    window.__libStartTrashDelete = (paths) => { window.__libPendingTrashDelete = libDeletePaths(paths, { message: 'Test move to Trash?', confirmLabel: 'Move to Trash' }); };
+    window.__libWaitTrashDelete = () => window.__libPendingTrashDelete;
+    window.__libResolveHeldTrash = () => { const resolve = window.__libtestHeldTrash?.shift(); if (resolve) resolve(); };
+    window.__libUndoLast = () => libUndoLast();
+    window.__libSetLabel = (path, label) => setLabel(path, label);
+    window.__libNavigationState = (at = 0) => { const nav = libraryNavigationOrder(); return { builds: navigationBuilds, count: nav.entries.length, pathAt: nav.entries[at]?.path, cursor: state._kbCursor, cursorIndex: nav.index.get(state._kbCursor) ?? -1 }; };
+    window.__libDeleteCullRejects = () => cullDeleteRejected();
+    window.__libEnterSurvey = enterSurveyMode;
+    window.__libSurveyState = () => ({ paths: surveyState.cells.map((cell) => cell.path), labels: surveyState.cells.map((cell) => (state.sidecars.get(cell.path) || {}).label || ''), cullLabels: surveyState.cullAllPaths.map((path) => (state.sidecars.get(path) || {}).label || ''), focus: surveyState.focus, totalSelected: compareState.totalSelected, active: compareState.active && (compareState.mode === 'survey' || compareState.mode === 'cull'), mode: compareState.mode, offset: surveyState.cullOffset, cullPaths: surveyState.cullPaths.slice(), groupPicker: surveyState.cullGroupPicker, autoAdvance: cullAutoAdvanceEnabled() });
+    window.__libCullTimeGroups = () => surveyState.cullGroups.map((g) => ({ label: cullGroupLabel(g), count: g.paths.length, paths: g.paths.slice(), unknown: !!g.unknown, duplicate: !!g.duplicate }));
+    window.__libCullRecommendations = () => surveyState.cullGroups.map((group) => ({ key: group.key, paths: group.paths.slice(), ...cullGroupPreference(group) }));
+    window.__libRefreshCullFocusScores = (token) => refreshCullFocusScores(token === undefined ? surveyState.entryToken : token);
+    window.__libCullSessionToken = () => surveyState.entryToken;
+    window.__libInvalidateCullSession = () => ++surveyState.entryToken;
+    window.__libOpenImportPanel = (path) => openImportPanel(path);
+    window.__libSubfolderPreference = {
+      key: folderScopeKey,
+      read: subfoldersForScope,
+      save: saveSubfoldersForScope,
+    };
+    window.__libHqOfflineDrain = () => hqOfflineDrainLoop();
+    window.__libDrainThumbs = () => drainCatalogThumbnails();
+    window.__libBgStopAll = () => bgStopAll();
+  }
+  // Rows kept mounted beyond the viewport in each direction. This used to be a flat 2, which is
+  // enough to avoid a visible GAP while scrolling but nowhere near enough to avoid the far more
+  // annoying problem: scroll down a little and back up, and every card you just passed had been
+  // unmounted and has to be fetched and decoded again, so the grid visibly re-loads photos you
+  // were already looking at. The window is now sized to the row budget instead — see
+  // virtOverscanRows() — so a small scroll stays entirely inside already-mounted rows.
+  // ⚠️ VIRT_MAX_CARDS is the binding constraint, not a guess: test/library_perf.mjs asserts the
+  // mounted `.lib-card` count stays <= 200 at n=5000 (and a 6,000-node total DOM budget, at ~18
+  // nodes per card). 180 leaves headroom under that guard.
+  const VIRT_MAX_CARDS = 180;
+  const VIRT_MIN_OVERSCAN_ROWS = 2;
+  let _virtScrollBound = null;
+
+  /// Measures the live grid's geometry from the DOM rather than recomputing it from CSS. The
+  /// column count comes from `auto-fill` and the card height from content, so both depend on the
+  /// thumbnail size, the dock state, the window width and whether titles are shown — deriving
+  /// them by hand would be a second source of truth that drifts the moment any of that changes.
+  function virtMetrics(gridEl) {
+    const cards = gridEl.querySelectorAll('.lib-card');
+    if (cards.length < 2) return null;
+    const top0 = cards[0].offsetTop;
+    let cols = 1;
+    while (cols < cards.length && cards[cols].offsetTop === top0) cols++;
+    // Row pitch from the first card that actually starts a new row.
+    // Averaged over every mounted row with fractional rects: offsetTop rounds, so a 192.5px pitch
+    // read as 193 and the spacers drifted half a pixel per row against the real rows.
+    const rows = Math.floor((cards.length - 1) / cols);
+    const rowH = rows > 0
+      ? (cards[rows * cols].getBoundingClientRect().top - cards[0].getBoundingClientRect().top) / rows
+      : (cards[0].offsetHeight + 16);
+    return { cols, rowH: Math.max(1, rowH), cardH: cards[0].offsetHeight, cardW: cards[0].offsetWidth };
+  }
+
+  /// Spends the whole mounted-card budget on overscan rather than mounting a fixed two rows.
+  /// Derived from the LIVE metrics (cols/rowH), like everything else here, because both come from
+  /// `auto-fill` and change with thumbnail size, dock state and window width — at 5 columns this
+  /// gives ~36 mounted rows against the ~5 visible, so scrolling a screen or two in either
+  /// direction re-uses mounted cards instead of re-fetching them.
+  function virtOverscanRows(m, viewH) {
+    const visibleRows = Math.max(1, Math.ceil(viewH / m.rowH));
+    const budgetRows = Math.floor(VIRT_MAX_CARDS / Math.max(1, m.cols));
+    // Split whatever the budget leaves over the visible band evenly above and below.
+    return Math.max(VIRT_MIN_OVERSCAN_ROWS, Math.floor((budgetRows - visibleRows) / 2));
+  }
+
+  /// Mounts only the rows near the viewport, with a spacer above and below holding the scroll
+  /// height. Spacers span the full row (`grid-column:1/-1`) so the CSS grid's auto-fill column
+  /// maths is untouched — the alternative, absolutely positioning cards, would mean
+  /// reimplementing the responsive layout this file already gets from the browser.
+  function virtUpdate(force) {
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl || !state._virtOn) return;
+    const all = state._virtAll || [];
+    const m = state._virtMetrics;
+    if (!m) return;
+    const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+      ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
+    const viewTop = Math.max(0, (scroller.scrollTop || 0) - gridEl.offsetTop);
+    const viewH = scroller.clientHeight || window.innerHeight;
+    const totalRows = Math.ceil(all.length / m.cols);
+    const over = virtOverscanRows(m, viewH);
+    const firstRow = Math.max(0, Math.floor(viewTop / m.rowH) - over);
+    const lastRow = Math.min(totalRows - 1, Math.ceil((viewTop + viewH) / m.rowH) + over);
+    if (!force && state._virtRange && state._virtRange[0] === firstRow && state._virtRange[1] === lastRow) return;
+    state._virtRange = [firstRow, lastRow];
+    // Within 3 rows of the end of what's actually been FETCHED (not just what's been scrolled
+    // past — `all`/`totalRows` are state._virtAll, which is only as long as state.entries):
+    // fetch the next page now, before the user reaches a visible "ran out of photos" edge.
+    // Fire-and-forget: loadMoreCatalogEntries has its own re-entrancy guard, and virtUpdate
+    // itself must stay synchronous (it runs inside the scroll rAF callback).
+    if (lastRow >= totalRows - 3) loadMoreCatalogEntries();
+    const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
+    renderCards(gridEl, all.slice(from, to), all, false, {
+      offset: from,
+      // A spacer is itself a grid item, so it brings its own row-gap: subtract it, or content
+      // jumps one gap (16px) the moment the top spacer first appears mid-scroll.
+      padTop: firstRow > 0 ? Math.max(1, firstRow * m.rowH - (m.rowH - m.cardH)) : 0,
+      padBot: lastRow < totalRows - 1 ? Math.max(1, (totalRows - 1 - lastRow) * m.rowH - (m.rowH - m.cardH)) : 0,
+    });
+  }
+
+  /// Re-measures cols/rowH after the grid's width changed (dock resizer, window resize) and keeps
+  /// the same photo at the same viewport offset: scrollTop is in pixels, so without this the old
+  /// rowH/cols leave it pointing at a different photo. The anchor is a fractional ITEM index so it
+  /// survives a column-count change too.
+  let _virtRO = null, _virtAnchor = null, _virtRmTimer = 0;
+  function virtRemeasure() {
+    const gridEl = document.getElementById('lib-grid');
+    const old = state._virtMetrics;
+    if (!gridEl || !state._virtOn || !old) return;
+    const scroller = gridEl.parentElement;
+    // Capture the anchor ONCE per resize burst, from the still-committed old metrics, before any
+    // relayout/clamping moves scrollTop; commit only after layout settles (transient mid-layout
+    // measurements, e.g. one giant row while thumbnails re-flow, are not real geometry).
+    if (_virtAnchor == null) _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols;
+    clearTimeout(_virtRmTimer);
+    // Card HEIGHT is not measurable right after the width changes (thumbnails size themselves a
+    // beat later: freshly laid-out cards read 40px against a real 279px), but the column count
+    // and card width are. So scale the last good height by the width ratio and take the gap from the fresh layout (row pitch minus card height is right
+    // even while thumbs are unloaded).
+    _virtRmTimer = setTimeout(() => {
+      const g = document.getElementById('lib-grid');
+      const anchor = _virtAnchor; _virtAnchor = null;
+      const o = state._virtMetrics;
+      if (!g || !state._virtOn || !o) return;
+      const raw = virtMetrics(g);
+      if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
+      // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
+      // by a 1.0 ratio kept a stale first-mount measurement (184.75px vs a real 192.5px row)
+      // forever, so every window shift moved content against the spacers and the scroller
+      // jumped backwards mid-wheel (test/probe_gallery_scroll_jitter.mjs).
+      const sameW = Math.abs(raw.cardW - o.cardW) < 0.5 && raw.cols === o.cols;
+      const cardH = sameW ? raw.cardH : o.cardH * raw.cardW / o.cardW;
+      const fresh = sameW ? raw : { cols: raw.cols, cardW: raw.cardW, cardH, rowH: Math.max(1, cardH + (raw.rowH - raw.cardH)) };
+      if (fresh.cols === o.cols && Math.abs(fresh.rowH - o.rowH) < 0.5) return;
+      state._virtMetrics = fresh; state._virtRange = null;
+      // Spacers first (right scrollHeight), then scroll, then re-window.
+      virtUpdate(true);
+      scroller.scrollTop = g.offsetTop + anchor / fresh.cols * fresh.rowH;
+      state._virtRange = null;
+      virtUpdate(true);
+    }, 80);
+  }
+
+  // scrollIntoView() also scrolls every overflow:hidden ancestor horizontally to reveal the card.
+  // #lib-overlay is overflow:hidden, and toggleExpandedView() calls renderGrid() while its 0.12s
+  // width transition is still running (overlay still docked-narrow), so the card sits past the
+  // visible edge and the overlay got scrolled by ~200px that never reverted once it widened —
+  // the whole gallery shifted left (sidebar off-screen, header cut). Only the vertical scroll is
+  // wanted here, so put back every ancestor's (and the window's) horizontal scroll afterwards.
+  function scrollCardIntoView(card, opts) {
+    const kept = [];
+    for (let el = card.parentElement; el; el = el.parentElement) kept.push([el, el.scrollLeft]);
+    const winX = window.scrollX;
+    card.scrollIntoView(opts);
+    for (const [el, x] of kept) if (el.scrollLeft !== x) el.scrollLeft = x;
+    if (window.scrollX !== winX) window.scrollTo(winX, window.scrollY);
+  }
+  /// Scrolls the sidebar grid so the given path's card is visible. Used after opening a photo
+  /// into the editor so the newly-active card doesn't stay scrolled off-screen. Works whether or
+  /// not the grid is virtualized: a virtualized grid may not have mounted a DOM card for `path`
+  /// at all, so this computes the target row from state._virtAll/_virtMetrics and sets scrollTop
+  /// directly (same coordinate space virtUpdate reads: scroller.scrollTop - gridEl.offsetTop),
+  /// then forces a virtUpdate so the row actually mounts. Non-virtualized grids fall back to a
+  /// plain scrollIntoView on the existing card.
+  function scrollLibraryToPath(path, center) {
+    if (!path) return;
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    if (state._virtOn) {
+      // A caller may have toggled expanded/docked view (different column count) just before
+      // this runs, without an intervening renderGrid() — refresh so row/scrollTop math below
+      // isn't computed against stale geometry from the old layout.
+      // CHR-125: only invalidate when geometry really changed. Nulling _virtRange every call made
+      // inRange always false, so opening a photo re-centred the strip on it (jump).
+      const fresh = virtMetrics(gridEl);
+      const o = state._virtMetrics;
+      if (fresh && (!o || o.cols !== fresh.cols || Math.abs(o.rowH - fresh.rowH) > 0.5)) { state._virtMetrics = fresh; state._virtRange = null; }
+    }
+    if (state._virtOn && state._virtMetrics) {
+      const idx = state._virtPathIndex?.get(path) ?? -1;
+      if (idx < 0) return;
+      const inRange = state._virtRange && idx >= state._virtRange[0] * state._virtMetrics.cols && idx < (state._virtRange[1] + 1) * state._virtMetrics.cols;
+      if (inRange) {
+        const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+        if (card) { scrollCardIntoView(card, { block: center ? 'center' : 'nearest' }); return; }
+      }
+      const scroller = gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+        ? gridEl.parentElement : (gridEl.closest('#lib-overlay') || document.documentElement);
+      const row = Math.floor(idx / state._virtMetrics.cols);
+      const targetTop = gridEl.offsetTop + row * state._virtMetrics.rowH;
+      scroller.scrollTop = Math.max(0, targetTop - scroller.clientHeight / 2 + state._virtMetrics.rowH / 2);
+      virtUpdate(true);
+      return;
+    }
+    const card = gridEl.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) scrollCardIntoView(card, { block: center ? 'center' : 'nearest' });
+  }
+
+  // Thumbnail loader with a small concurrency pool + viewport priority. renderGrid used to
+  // fire one get_thumbnail invoke per card synchronously — opening a 500-RAW folder launched
+  // 500 concurrent Rust decodes at once (the <img loading="lazy"> attribute is useless here,
+  // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
+  // visibility via an IntersectionObserver; visible cards jump the queue.
+  const THUMB_POOL = 6;
+  // _pickNextIdx() below strictly prefers any non-video job over a video one, so a mixed folder
+  // paints ALL its photos (JPEG via the embedded-preview tier, then RAW) before the first clip is
+  // touched. That ordering is about COST, not about blocking: a cold video poster is an
+  // AVFoundation keyframe decode, roughly a RAW thumbnail's worth of work, and every one after
+  // that is a disk-cache hit.
+  // ⚠️ The separate, much smaller video cap this used to carry existed because posters were
+  // decoded in the WebView from a whole-file read with multi-second timeouts. That path is gone
+  // (see videothumb.rs), so the cap is the ordinary pool — kept as a named constant rather than
+  // deleted so it is a one-line change if cold 4K generation ever needs throttling again.
+  let _thumbActiveVideo = 0;
+  const THUMB_POOL_VIDEO = THUMB_POOL;
+  let _thumbQueue = []; // [{path, imgEl, visible}]
+  let _thumbActive = 0;
+  let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped

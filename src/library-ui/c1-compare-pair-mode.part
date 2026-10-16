@@ -1,0 +1,723 @@
+  // ── C1: Compare-pair mode ─────────────────────────────────────────────────────────────
+  // Two panes, each an independent {imgIdx, snapshotSrc} pointing into the SAME loaded batch
+  // (fxImages, via openPathsInEditor) — same-photo-two-looks falls out for free by letting
+  // both panes share an imgIdx. snapshotSrc uses the exact descriptor shape B3's
+  // resolveSplitSnapshot already understands ('orig'|{hist:N}|{style:name}|{export:v}); this
+  // file adds only the 'live' meaning (null → resolveSplitSnapshot treats falsy as 'orig', so
+  // Compare keeps its own tiny string<->descriptor mapping instead of touching that resolver).
+  const compareState = {
+    active: false,
+    mode: 'compare',
+    entryToken: 0,
+    paths: [],                          // the ordered selection Compare was entered with
+    items: new Map(),                   // at most the two currently visible Compare sources
+    loadCount: 0,
+    activeLoads: 0,
+    maxConcurrentLoads: 0,
+    paneA: { idx: 0, srcKey: 'live' },
+    paneB: { idx: 0, srcKey: 'live' },
+    // Which pane flags/labels apply to. B by default because that is the pane the arrows cycle:
+    // Compare is "hold A, judge candidates in B", so the candidate is what you are rating.
+    focus: 'B',
+    zoom: 1, panX: 0, panY: 0,
+    prevViewMode: 'grid',
+  };
+  let _libtestCompareLoader = null;
+  const surveyState = { cells: [], focus: 0, entryToken: 0, cullPaths: [], cullOffset: 0,
+    cullAllPaths: [], cullCaptureByPath: new Map(), cullEntryByPath: new Map(), cullDupeClusterByPath: new Map(), cullDupeStatus: 'idle', cullHashToken: 0, cullPreferredByGroup: new Map(), cullManualPreferenceGroups: new Set(), cullRecommendationByPath: new Map(), cullGapSec: 60, cullGroups: [], cullSelected: new Set(), cullGroupPage: 0, cullGroupPicker: false };
+  const CULL_GAPS = [1, 5, 15, 30, 60, 120, 300, 600];
+  function cullCaptureGroups(paths, gapSec) {
+    const known = [], unknown = [];
+    paths.forEach((path, order) => {
+      const captured = surveyState.cullCaptureByPath.get(path);
+      if (Number.isFinite(captured)) known.push({ path, captured, order }); else unknown.push({ path, order });
+    });
+    known.sort((a, b) => a.captured - b.captured || a.order - b.order);
+    const groups = [];
+    for (const photo of known) {
+      const last = groups[groups.length - 1];
+      if (!last || photo.captured - last.lastCaptured > gapSec) {
+        groups.push({ key: `t:${photo.captured}:${photo.order}`, firstCaptured: photo.captured, lastCaptured: photo.captured, paths: [photo.path] });
+      } else { last.lastCaptured = photo.captured; last.paths.push(photo.path); }
+    }
+    if (unknown.length) groups.push({ key: 'unknown', unknown: true, firstCaptured: null, lastCaptured: null, paths: unknown.map((photo) => photo.path) });
+    return groups;
+  }
+  function cullReviewGroups(paths, gapSec) {
+    const groups = cullCaptureGroups(paths, gapSec), parent = groups.map((_, i) => i);
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+    const groupByPath = new Map();
+    groups.forEach((group, index) => group.paths.forEach((path) => groupByPath.set(path, index)));
+    const firstGroupByDupe = new Map();
+    for (const path of paths) {
+      const cluster = surveyState.cullDupeClusterByPath.get(path), group = groupByPath.get(path);
+      if (!cluster || group == null) continue;
+      if (firstGroupByDupe.has(cluster)) union(firstGroupByDupe.get(cluster), group);
+      else firstGroupByDupe.set(cluster, group);
+    }
+    const merged = new Map();
+    groups.forEach((group, index) => {
+      const root = find(index);
+      if (!merged.has(root)) merged.set(root, { ...group, paths: [], unknownOnly: true, duplicate: false });
+      const out = merged.get(root);
+      out.paths.push(...group.paths);
+      out.unknownOnly &&= !!group.unknown;
+      out.firstCaptured = out.firstCaptured == null ? group.firstCaptured : group.firstCaptured == null ? out.firstCaptured : Math.min(out.firstCaptured, group.firstCaptured);
+      out.lastCaptured = out.lastCaptured == null ? group.lastCaptured : group.lastCaptured == null ? out.lastCaptured : Math.max(out.lastCaptured, group.lastCaptured);
+      if (group.paths.some((path) => surveyState.cullDupeClusterByPath.has(path))) out.duplicate = true;
+    });
+    return [...merged.values()].map((group) => ({ ...group, unknown: group.unknownOnly }));
+  }
+  function cullGroupLabel(group) {
+    if (group.unknown) return 'No capture time';
+    const d = new Date(group.firstCaptured * 1000), e = new Date(group.lastCaptured * 1000);
+    const stamp = (x) => x.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const range = group.firstCaptured === group.lastCaptured ? stamp(d) : `${stamp(d)} – ${stamp(e)}`;
+    return group.duplicate ? `Near-duplicate / burst · ${range}` : range;
+  }
+  // A cull recommendation is an advisory review hint; it never mutates photo labels.
+  function cullGroupBest(group) {
+    let bestPath = '', bestScore = -Infinity, compared = 0;
+    for (const path of group.paths) {
+      const entry = surveyState.cullEntryByPath.get(path), score = entry?.sharpness;
+      if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+      compared++;
+      const bestCaptured = bestPath ? (surveyState.cullCaptureByPath.get(bestPath) ?? Infinity) : Infinity;
+      const captured = surveyState.cullCaptureByPath.get(path) ?? Infinity;
+      if (score > bestScore || (score === bestScore && (captured < bestCaptured || (captured === bestCaptured && path.localeCompare(bestPath) < 0)))) {
+        bestPath = path; bestScore = score;
+      }
+    }
+    const dupeCount = new Set(group.paths.map((path) => surveyState.cullDupeClusterByPath.get(path)).filter(Boolean)).size;
+    const duplicateReason = dupeCount ? ` Includes ${dupeCount} near-duplicate cluster${dupeCount === 1 ? '' : 's'} across the capture group.` : '';
+    if (bestPath) return { path: bestPath, reason: `Highest available focus score (${bestScore}); ${Math.max(0, compared - 1)} other photo${compared === 2 ? '' : 's'} compared.${duplicateReason}` };
+    return { path: group.paths[0] || '', reason: `No focus scores are available; this is a neutral starting point.${duplicateReason}` };
+  }
+  function cullGroupPreference(group) {
+    const best = cullGroupBest(group);
+    let path = surveyState.cullPreferredByGroup.get(group.key);
+    if (!group.paths.includes(path)) { path = best.path; surveyState.cullPreferredByGroup.set(group.key, path); }
+    return path === best.path ? { ...best, manual: false } : { path, manual: true, reason: 'Manual override; selected as the preferred frame for review.' };
+  }
+  function cullSelectedPhotoCount() { return surveyState.cullAllPaths.reduce((n, path) => n + Number(surveyState.cullSelected.has(path)), 0); }
+  function cullSelectedGroupCount() { return surveyState.cullGroups.filter((group) => group.paths.length > 1 && group.paths.some((path) => surveyState.cullSelected.has(path))).length; }
+  function cullMoveRecommendation(group, delta) {
+    if (!group || group.paths.length < 2) return;
+    const current = cullGroupPreference(group).path, index = Math.max(0, group.paths.indexOf(current));
+    surveyState.cullPreferredByGroup.set(group.key, group.paths[(index + delta + group.paths.length) % group.paths.length]);
+    surveyState.cullManualPreferenceGroups.add(group.key);
+    cullGroupsRender();
+  }
+  async function refreshCullFocusScores(expectedToken = surveyState.entryToken) {
+    if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+    const ids = [...new Set(surveyState.cullAllPaths.map((path) => surveyState.cullEntryByPath.get(path)?.id).filter(Number.isSafeInteger))];
+    if (!ids.length) return false;
+    const rows = [];
+    try {
+      // Keep photoIds queries below SQLite's bind-variable limit for large selections.
+      for (let i = 0; i < ids.length; i += 500) {
+        const page = await invoke('catalog_query', { q: { photoIds: ids.slice(i, i + 500) } });
+        rows.push(...(page.entries || []));
+        if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+      }
+    } catch (error) {
+      console.error('refresh culling focus scores', error);
+      return false;
+    }
+    const oldBest = new Map(surveyState.cullGroups.map((group) => [group.key, cullGroupBest(group).path]));
+    for (const row of rows) {
+      const entry = surveyState.cullEntryByPath.get(row.path);
+      if (entry) { entry.sharpness = row.sharpness; entry.blurry = row.blurry; }
+    }
+    for (const group of surveyState.cullGroups) {
+      if (surveyState.cullManualPreferenceGroups.has(group.key)) continue;
+      const preferred = surveyState.cullPreferredByGroup.get(group.key);
+      if (!preferred || preferred === oldBest.get(group.key)) {
+        surveyState.cullPreferredByGroup.set(group.key, cullGroupBest(group).path);
+      }
+    }
+    if (expectedToken !== surveyState.entryToken || compareState.mode !== 'cull' || !surveyState.cullGroupPicker) return false;
+    cullGroupsRender();
+    return true;
+  }
+  async function cullFindNearDuplicates() {
+    if (!surveyState.cullGroupPicker || surveyState.cullDupeStatus === 'scanning') return;
+    const token = ++surveyState.cullHashToken, paths = surveyState.cullAllPaths.filter((path) => surveyState.cullEntryByPath.get(path)?.is_image !== false);
+    surveyState.cullDupeStatus = 'scanning'; cullGroupsRender();
+    try {
+      const pairs = await invoke('phash_batch', { paths });
+      if (token !== surveyState.cullHashToken || !surveyState.cullGroupPicker) return;
+      surveyState.cullDupeClusterByPath.clear();
+      let clusterId = 0;
+      for (const members of clusterByHash(pairs || []).values()) {
+        if (members.length < 2) continue;
+        clusterId++;
+        members.forEach((path) => surveyState.cullDupeClusterByPath.set(path, clusterId));
+      }
+      surveyState.cullDupeStatus = 'done';
+      surveyState.cullGroups = cullReviewGroups(surveyState.cullAllPaths, surveyState.cullGapSec);
+    } catch (error) {
+      if (token !== surveyState.cullHashToken || !surveyState.cullGroupPicker) return;
+      console.error('cull near-duplicate scan failed', error);
+      surveyState.cullDupeClusterByPath.clear(); surveyState.cullDupeStatus = 'failed';
+      surveyState.cullGroups = cullReviewGroups(surveyState.cullAllPaths, surveyState.cullGapSec);
+    }
+    cullGroupsRender();
+  }
+  async function cullStartSelected() {
+    const selectedCount = cullSelectedPhotoCount(), groupCount = cullSelectedGroupCount();
+    if (selectedCount < 2) return;
+    const approved = await window.confirmModal(
+      `Start culling ${selectedCount} photos${groupCount ? ` across ${groupCount} groups with a suggested best frame` : ''}? Suggestions are review aids only; no flags or ratings will change until you choose a culling action.`,
+      `Review ${selectedCount} photos`);
+    if (!approved || !surveyState.cullGroupPicker) return;
+    const selected = surveyState.cullGroups.flatMap((group) => {
+      const included = group.paths.filter((path) => surveyState.cullSelected.has(path));
+      if (!included.length) return [];
+      const recommendation = cullGroupPreference(group), preferred = recommendation.path;
+      if (included.includes(preferred)) surveyState.cullRecommendationByPath.set(preferred, { reason: recommendation.reason, manual: recommendation.manual });
+      return included.includes(preferred) ? [preferred, ...included.filter((path) => path !== preferred)] : included;
+    });
+    surveyState.cullGroupPicker = false; surveyState.cullPaths = selected; surveyState.cullAllPaths = selected.slice();
+    surveyState.cullOffset = 0; compareState.paths = selected.slice(); compareState.totalSelected = selected.length; showCullPage(0);
+  }
+  function cullGroupsRender() {
+    const host = surveyHost(); if (!host || !surveyState.cullGroupPicker) return;
+    const pageSize = 50, pages = Math.max(1, Math.ceil(surveyState.cullGroups.length / pageSize));
+    surveyState.cullGroupPage = Math.max(0, Math.min(surveyState.cullGroupPage, pages - 1));
+    const shown = surveyState.cullGroups.slice(surveyState.cullGroupPage * pageSize, (surveyState.cullGroupPage + 1) * pageSize);
+    const selectedCount = cullSelectedPhotoCount(), suggestedCount = cullSelectedGroupCount();
+    host.innerHTML = `<section id="lib-cull-time-picker" aria-label="Group culling by capture time" style="height:100%;display:flex;flex-direction:column;gap:8px;overflow:hidden">
+      <header class="lib-cull-time-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong>Group by capture time</strong><label for="lib-cull-time-gap">New group after</label><select id="lib-cull-time-gap">${CULL_GAPS.map((s) => `<option value="${s}"${s === surveyState.cullGapSec ? ' selected' : ''}>${s < 60 ? `${s} sec` : `${s / 60} min`}</option>`).join('')}</select><button type="button" class="lib-btn" id="lib-cull-time-all">Select all</button><button type="button" class="lib-btn" id="lib-cull-time-none">Select none</button><span id="lib-cull-time-count" aria-live="polite">${selectedCount} photos selected · ${suggestedCount} ${suggestedCount === 1 ? 'suggestion' : 'suggestions'}</span><button type="button" class="lib-btn" id="lib-cull-dupes"${surveyState.cullDupeStatus === 'scanning' ? ' disabled' : ''}>${surveyState.cullDupeStatus === 'scanning' ? 'Finding near-duplicates…' : surveyState.cullDupeStatus === 'done' ? `Found ${new Set(surveyState.cullDupeClusterByPath.values()).size} near-duplicate groups` : surveyState.cullDupeStatus === 'failed' ? 'Retry near-duplicate scan' : 'Find near-duplicates'}</button><button type="button" class="lib-btn" id="lib-cull-time-start"${selectedCount < 2 || surveyState.cullDupeStatus === 'scanning' ? ' disabled' : ''}>Review ${selectedCount} photos</button></header>
+      <p class="lib-cull-time-note">Photos group by capture-time bursts; the optional selection scan joins near-duplicates across bursts and explains matches. Missing times stay separate and file dates are never used. Focus scores rank keepers when available. Suggestions never change flags or ratings; review or override each suggestion, then confirm before culling.</p>
+      <div class="lib-cull-time-page"><button type="button" class="lib-btn" data-group-page="-1"${surveyState.cullGroupPage === 0 ? ' disabled' : ''}>Previous groups</button><span>Groups ${surveyState.cullGroups.length ? surveyState.cullGroupPage * pageSize + 1 : 0}–${Math.min((surveyState.cullGroupPage + 1) * pageSize, surveyState.cullGroups.length)} of ${surveyState.cullGroups.length}</span><button type="button" class="lib-btn" data-group-page="1"${surveyState.cullGroupPage + 1 >= pages ? ' disabled' : ''}>Next groups</button></div>
+      <div id="lib-cull-time-groups" style="overflow:auto;min-height:0;flex:1">${shown.map((group, localIndex) => { const index = surveyState.cullGroupPage * pageSize + localIndex, checked = group.paths.every((path) => surveyState.cullSelected.has(path)), recommendation = group.paths.length > 1 ? cullGroupPreference(group) : null; const preferredIndex = recommendation ? group.paths.indexOf(recommendation.path) : -1; return `<details class="lib-cull-time-group" data-time-group="${index}"><summary><input type="checkbox" data-group-select="${index}"${checked ? ' checked' : ''} aria-label="Select group ${index + 1}"><span>${esc2(cullGroupLabel(group))}</span><span>${group.paths.length} photo${group.paths.length === 1 ? '' : 's'}</span></summary><div class="lib-cull-group-samples">${group.paths.slice(0, 12).map((path) => `<span>${esc2(baseName(path))}</span>`).join('')}${group.paths.length > 12 ? `<span>+${group.paths.length - 12} more</span>` : ''}</div>${recommendation ? `<div class="lib-cull-best-review" data-best-review="${index}" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--bdr)"><strong>Suggested best for review:</strong><span data-best-path>${esc2(baseName(recommendation.path))} (${preferredIndex + 1} of ${group.paths.length})</span><span data-best-reason style="color:var(--mut)">${esc2(recommendation.reason)}</span><button type="button" class="lib-btn" data-best-prev="${index}" aria-label="Choose previous candidate for group ${index + 1}">Previous</button><button type="button" class="lib-btn" data-best-next="${index}" aria-label="Choose next candidate for group ${index + 1}">Next candidate</button></div>` : ''}</details>`; }).join('')}</div>
+    </section>`;
+    host.querySelector('#lib-cull-time-gap').onchange = (e) => {
+      surveyState.cullGapSec = Number(e.target.value); surveyState.cullGroups = cullReviewGroups(surveyState.cullAllPaths, surveyState.cullGapSec); surveyState.cullGroupPage = 0; cullGroupsRender();
+    };
+    host.querySelector('#lib-cull-time-all').onclick = () => { surveyState.cullSelected = new Set(surveyState.cullAllPaths); cullGroupsRender(); };
+    host.querySelector('#lib-cull-time-none').onclick = () => { surveyState.cullSelected.clear(); cullGroupsRender(); };
+    host.querySelector('#lib-cull-dupes').onclick = () => cullFindNearDuplicates();
+    host.querySelectorAll('[data-group-select]').forEach((input) => input.addEventListener('change', () => {
+      const group = surveyState.cullGroups[Number(input.dataset.groupSelect)]; if (!group) return;
+      for (const path of group.paths) input.checked ? surveyState.cullSelected.add(path) : surveyState.cullSelected.delete(path);
+      cullGroupsRender();
+    }));
+    host.querySelectorAll('[data-group-page]').forEach((button) => button.addEventListener('click', () => { surveyState.cullGroupPage += Number(button.dataset.groupPage); cullGroupsRender(); }));
+    host.querySelectorAll('[data-best-prev]').forEach((button) => button.addEventListener('click', () => cullMoveRecommendation(surveyState.cullGroups[Number(button.dataset.bestPrev)], -1)));
+    host.querySelectorAll('[data-best-next]').forEach((button) => button.addEventListener('click', () => cullMoveRecommendation(surveyState.cullGroups[Number(button.dataset.bestNext)], 1)));
+    host.querySelector('#lib-cull-time-start').onclick = () => cullStartSelected();
+  }
+  function compareSrcKeyToDescriptor(key) {
+    if (!key || key === 'live') return null;
+    if (key === 'orig') return 'orig';
+    if (key.indexOf('hist:') === 0) return { hist: parseInt(key.slice(5), 10) };
+    if (key.indexOf('style:') === 0) return { style: key.slice(6) };
+    return null;
+  }
+  // A couple of recent history steps + Styles, mirroring B3's split-source menu options.
+  function compareSourceOptions() {
+    const opts = [{ v: 'live', label: 'Live edit' }, { v: 'orig', label: 'Original' }];
+    try {
+      if (typeof fxHistory !== 'undefined' && Array.isArray(fxHistory) && fxHistory.length) {
+        const start = Math.max(0, fxHistory.length - 6);
+        for (let i = fxHistory.length - 1; i >= start; i--) {
+          const e = fxHistory[i];
+          opts.push({ v: `hist:${i}`, label: `History: ${(e && e.label) || ('Step ' + (i + 1))}` });
+        }
+      }
+    } catch (e) {}
+    try {
+      if (typeof stylesList === 'function') stylesList().forEach((s) => opts.push({ v: `style:${s.name}`, label: 'Style: ' + s.name }));
+    } catch (e) {}
+    return opts;
+  }
+  function compareHost() { return document.getElementById('lib-compare'); }
+  function surveyHost() { return document.getElementById('lib-survey'); }
+  function escAttr2(s) { return esc2(s).replace(/"/g, '&quot;'); }
+  function comparePathForIdx(idx) { return compareState.paths[idx] || ''; }
+
+  // CHR-268: one place for the Survey header so build and reflow can't drift apart. States the
+  // shown count against the cap ("6 of 8 max") and, when more were selected, how many were left out.
+  const SURVEY_MAX = 8;
+  function surveyCapNote(n) {
+    return compareState.totalSelected > n ? ` · ${compareState.totalSelected - n} more selected, not shown` : '';
+  }
+  function surveyHeading(n) { return `Survey · ${n} of ${SURVEY_MAX} max${surveyCapNote(n)}`; }
+  function surveyColumns(count) { return count <= 2 ? 2 : count <= 4 ? 2 : count <= 6 ? 3 : 4; }
+  function surveyCellHtml(cell, idx) {
+    const sidecar = state.sidecars.get(cell.path) || { rating: 0, label: '', favorite: false };
+    const recommendation = compareState.mode === 'cull' ? surveyState.cullRecommendationByPath.get(cell.path) : null;
+    return `<section class="lib-cmp-pane lib-survey-cell${idx === surveyState.focus ? ' cmp-focus' : ''}" data-survey-idx="${idx}" tabindex="0" role="group" aria-label="Photo ${idx + 1}: ${escAttr2(baseName(cell.path))}">
+      <div class="lib-survey-head"><span>${idx + 1} / ${surveyState.cells.length}</span><span class="lib-survey-name">${esc2(baseName(cell.path))}</span>
+        ${compareState.mode === 'cull' ? '' : `<button type="button" data-survey-remove="${idx}" aria-label="Remove ${escAttr2(baseName(cell.path))} from Survey" title="Remove from Survey">×</button>`}</div>
+      <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
+      ${recommendation ? `<aside class="lib-cull-recommendation" role="note" aria-label="Culling suggestion"><strong>${recommendation.manual ? 'Manual review choice' : 'Suggested for review'}</strong><span>${esc2(recommendation.reason)}</span></aside>` : ''}
+      <div class="lib-cmp-chrome">
+        <div class="lib-flag${sidecar.label === 'Green' ? ' on' : ''}" data-survey-action="pick" title="Pick (P)">${ic('flagGreen',15)}</div>
+        <div class="lib-flag${sidecar.label === 'Red' ? ' on' : ''}" data-survey-action="reject" title="Reject (X)">${ic('close',12)}</div>
+        <div class="lib-flag${sidecar.favorite ? ' on' : ''}" data-survey-action="favorite" title="Favorite">${ic('heart',15)}</div>
+        ${COLOR_LABELS_ENABLED ? `<select class="lib-cull-color-select" aria-label="Colour label for ${escAttr2(baseName(cell.path))}" title="Colour label"><option value="">No colour</option>${COLOR_LABELS.map((c) => `<option${sidecar.color_label === c ? ' selected' : ''}>${c}</option>`).join('')}</select>` : ''}
+        <span class="lib-cmp-rating" style="margin-left:auto;color:var(--mut);font-size:10px">${STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : ''}</span>
+      </div>
+    </section>`;
+  }
+
+  function surveySyncFocus() {
+    const host = surveyHost(); if (!host) return;
+    const previousFocus = host.querySelector('.lib-survey-cell.cmp-focus')?.dataset.surveyIdx;
+    host.querySelectorAll('.lib-survey-cell').forEach((cell, i) => {
+      cell.classList.toggle('cmp-focus', i === surveyState.focus);
+      cell.setAttribute('aria-label', `Photo ${i + 1} of ${surveyState.cells.length}: ${baseName(surveyState.cells[i].path)}${i === surveyState.focus ? ', focused' : ''}`);
+    });
+    if (compareState.mode === 'cull' && previousFocus !== String(surveyState.focus)) {
+      // Focus changes the viewport from filmstrip to preview. Refit both affected canvases
+      // after layout, preserving their source-space zoom/pan and the existing render cache.
+      const entry = compareState.entryToken, focused = surveyState.focus;
+      requestAnimationFrame(() => {
+        if (!host.isConnected || entry !== compareState.entryToken || compareState.mode !== 'cull'
+          || focused !== surveyState.focus) return;
+        renderSurveyCell(focused);
+        if (previousFocus != null && Number(previousFocus) !== focused) renderSurveyCell(Number(previousFocus));
+      });
+    }
+    const bar = host.querySelector('#lib-compare-bar');
+    if (bar) {
+      const info = bar.querySelector('.survey-focus-note');
+      if (info) info.textContent = surveyState.cells.length ? (compareState.mode === 'cull'
+        ? `Photo ${surveyState.cullOffset + surveyState.focus + 1} focused · arrows/Tab move · Enter pick and advance · Shift+P/X flag and advance · Esc exits`
+        : `Photo ${surveyState.focus + 1} focused · arrows/Tab move · Delete removes · X/P/U flag · 0–5 rate`) : '';
+    }
+  }
+
+  function renderSurveyCell(idx) {
+    const cell = surveyState.cells[idx], el = surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
+    if(cell&&el)return detailRender(el,cell,cell.fxIdx,'live',cell.path);
+  }
+
+  function surveySyncCell(idx) {
+    const host = surveyHost(), cell = host && host.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
+    if (!cell || !surveyState.cells[idx]) return;
+    const sidecar = state.sidecars.get(surveyState.cells[idx].path) || { rating: 0, label: '', favorite: false };
+    cell.querySelector('[data-survey-action="pick"]')?.classList.toggle('on', sidecar.label === 'Green');
+    cell.querySelector('[data-survey-action="reject"]')?.classList.toggle('on', sidecar.label === 'Red');
+    cell.querySelector('[data-survey-action="favorite"]')?.classList.toggle('on', !!sidecar.favorite);
+    const colorSelect = cell.querySelector('.lib-cull-color-select');
+    if (colorSelect) colorSelect.value = sidecar.color_label || '';
+    const rating = cell.querySelector('.lib-cmp-rating');
+    if (rating) rating.textContent = STARS_ENABLED && sidecar.rating ? `${sidecar.rating}★` : '';
+    cullSyncDeleteBtn();
+  }
+  function surveySyncPath(path) { const idx = surveyState.cells.findIndex((cell) => cell.path === path); if (idx >= 0) surveySyncCell(idx); }
+  function surveyTargetPath() { return surveyState.cells[surveyState.focus]?.path || ''; }
+  function surveyCellCleanup(el) {
+    const canvas = el && el.querySelector('canvas');
+    if (canvas) { canvas.width = 0; canvas.height = 0; }
+    if (el) el.remove();
+  }
+
+  function buildSurveyUI() {
+    const host = surveyHost(); if (!host) return;
+    const n = surveyState.cells.length;
+    host.style.setProperty('--survey-cols', String(surveyColumns(n)));
+    host.style.setProperty('--survey-rows', String(Math.ceil(n / surveyColumns(n))));
+    const heading = compareState.mode === 'cull'
+      ? `Culling · ${surveyState.cullOffset + 1}–${surveyState.cullOffset + n} of ${surveyState.cullPaths.length}`
+      : surveyHeading(n);
+    const isCull = compareState.mode === 'cull';
+    host.classList.toggle('lib-cull-presentation', isCull);
+    host.innerHTML = `<div id="lib-compare-bar"><span class="survey-count">${heading}</span><span class="survey-focus-note" style="margin-left:auto;color:var(--acc)"></span>${isCull ? `<label class="lib-cull-auto-advance" title="Move to the next photo after a successful pick or reject"><input type="checkbox" id="lib-cull-auto-advance"${cullAutoAdvanceEnabled() ? ' checked' : ''}> Auto-advance</label><button type="button" id="lib-cull-fullscreen" class="lib-btn" title="Toggle full screen cull view">Full screen</button><button type="button" id="lib-cull-del" class="lib-btn" title="Move every photo rejected in this cull to the system Trash (asks first)">Delete rejected (0)</button>` : ''}</div>
+      <div id="lib-survey-grid">${surveyState.cells.map(surveyCellHtml).join('')}</div>`;
+    host.querySelectorAll('.lib-survey-cell').forEach((el) => {
+      el.addEventListener('focus', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
+      el.addEventListener('click', () => { surveyState.focus = Number(el.dataset.surveyIdx); surveySyncFocus(); });
+    });
+    host.querySelectorAll('[data-survey-remove]').forEach((button) => button.addEventListener('click', (e) => {
+      e.stopPropagation(); surveyRemove(Number(button.dataset.surveyRemove));
+    }));
+    host.querySelectorAll('[data-survey-action]').forEach((button) => button.addEventListener('click', async (e) => {
+      e.stopPropagation(); const idx = Number(button.closest('.lib-survey-cell')?.dataset.surveyIdx);
+      const cell = surveyState.cells[idx]; if (!cell) return;
+      if (button.dataset.surveyAction === 'favorite') {
+        const current = state.sidecars.get(cell.path) || { favorite: false };
+        await setFavorite(cell.path, !current.favorite);
+      } else {
+        const label = button.dataset.surveyAction === 'pick' ? 'Green' : 'Red';
+        const current = state.sidecars.get(cell.path) || { label: '' };
+        const nextLabel = current.label === label ? '' : label;
+        if (compareState.mode === 'cull' && idx === surveyState.focus && nextLabel && cullAutoAdvanceEnabled()) await cullAdvance(nextLabel, cell.path);
+        else await setLabel(cell.path, nextLabel);
+      }
+      surveySyncCell(idx);
+    }));
+    host.querySelectorAll('.lib-cull-color-select').forEach((select) => select.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const idx = Number(select.closest('.lib-survey-cell')?.dataset.surveyIdx);
+      const cell = surveyState.cells[idx]; if (!cell) return;
+      const value = select.value;
+      if (compareState.mode === 'cull' && idx === surveyState.focus) await cullColorAndAdvance(value, cell.path);
+      else await setColorLabel(cell.path, value);
+      surveySyncCell(idx);
+    }));
+    const delBtn = host.querySelector('#lib-cull-del');
+    if (delBtn) delBtn.onclick = () => cullDeleteRejected();
+    const advanceToggle = host.querySelector('#lib-cull-auto-advance');
+    if (advanceToggle) advanceToggle.onchange = () => {
+      try { localStorage.setItem('chromasmith_lib_cull_auto_advance', advanceToggle.checked ? '1' : '0'); } catch (e) {}
+    };
+    const fullscreenBtn = host.querySelector('#lib-cull-fullscreen');
+    if (fullscreenBtn) fullscreenBtn.onclick = async () => {
+      try {
+        if (document.fullscreenElement === host) await document.exitFullscreen();
+        else await host.requestFullscreen();
+      } catch (e) { if (typeof toast === 'function') toast(`Could not toggle full screen: ${e.message || e}`, false); }
+      fullscreenBtn.textContent = document.fullscreenElement === host ? 'Exit full screen' : 'Full screen';
+    };
+    detailControls(host);
+    surveyCellsRender();
+    surveySyncFocus();
+    cullSyncDeleteBtn();
+  }
+  function cullAutoAdvanceEnabled() {
+    try { return localStorage.getItem('chromasmith_lib_cull_auto_advance') !== '0'; } catch (e) { return true; }
+  }
+
+  function surveySyncCells() {
+    const host = surveyHost(), grid = host && host.querySelector('#lib-survey-grid');
+    if (!host || !grid) return;
+    const n = surveyState.cells.length, cols = surveyColumns(n);
+    host.style.setProperty('--survey-cols', String(cols));
+    host.style.setProperty('--survey-rows', String(Math.ceil(n / cols)));
+    const count = host.querySelector('.survey-count'); if (count) count.textContent = surveyHeading(n);
+    [...grid.querySelectorAll('.lib-survey-cell')].forEach((el, i) => {
+      el.dataset.surveyIdx = String(i);
+      el.querySelector('.lib-survey-head > span:first-child').textContent = `${i + 1} / ${n}`;
+      el.querySelector('[data-survey-remove]').dataset.surveyRemove = String(i);
+    });
+    surveySyncFocus();
+  }
+
+  function surveyCellsRender() {
+    for (let i = 0; i < surveyState.cells.length; i++) renderSurveyCell(i);
+  }
+
+  function surveyFocus(delta, focusDom = true) {
+    if (!surveyState.cells.length) return;
+    if (compareState.mode === 'cull' && delta > 0 && surveyState.focus === surveyState.cells.length - 1) {
+      const next = surveyState.cullOffset + surveyState.cells.length;
+      if (next < surveyState.cullPaths.length) { showCullPage(next); return; }
+      return;
+    }
+    if (compareState.mode === 'cull' && delta < 0 && surveyState.focus === 0 && surveyState.cullOffset > 0) {
+      showCullPage(Math.max(0, surveyState.cullOffset - 4)); return;
+    }
+    surveyState.focus = (surveyState.focus + delta + surveyState.cells.length) % surveyState.cells.length;
+    surveySyncFocus();
+    if (focusDom) surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
+  function surveyFocusVertical(rowDelta) {
+    const n = surveyState.cells.length, cols = surveyColumns(n), rows = Math.ceil(n / cols);
+    if (!n) return;
+    const col = surveyState.focus % cols, row = Math.floor(surveyState.focus / cols);
+    const nextRow = (row + rowDelta + rows) % rows;
+    surveyState.focus = Math.min(nextRow * cols + col, n - 1);
+    surveySyncFocus();
+    surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
+
+  function surveyRemove(idx = surveyState.focus) {
+    if (idx < 0 || idx >= surveyState.cells.length) return;
+    surveyCellCleanup(surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`));
+    surveyState.cells.splice(idx, 1);
+    if (surveyState.cells.length < 2) { exitCompareMode(); return; }
+    surveyState.focus = Math.min(idx, surveyState.cells.length - 1);
+    surveySyncCells();
+    surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${surveyState.focus}"]`)?.focus({ preventScroll: true });
+  }
+
+  function buildCompareUI() {
+    const host = compareHost();
+    if (!host) return;
+    const paneHtml = (which) => `
+      <div class="lib-cmp-pane" data-pane="${which}">
+        <div class="lib-cmp-head">
+          <select class="lib-cmp-photo-sel" data-pane="${which}"></select>
+          <select class="lib-cmp-src-sel" data-pane="${which}">${compareSourceOptions().map((o) => `<option value="${o.v}">${o.label}</option>`).join('')}</select>
+        </div>
+        <div class="lib-cmp-canvas-wrap"><canvas></canvas></div>
+        <div class="lib-cmp-chrome">
+          <div class="lib-flag" data-pane="${which}" data-flag="Green" title="Pick">${ic('flagGreen',15)}</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Red" title="Reject">${ic('close', 12)}</div>
+          <div class="lib-flag" data-pane="${which}" data-flag="Favorite" title="Favorite">${ic('heart',15)}</div>
+          <span style="margin-left:auto;color:var(--mut);font-size:10px" class="lib-cmp-name" data-pane="${which}"></span>
+        </div>
+      </div>`;
+    host.innerHTML = `
+      <div id="lib-compare-bar">
+        <span>Compare — ←/→ cycles the right pane · ⏎ promotes it · X/P/U and color keys flag · Tab swaps pane · Esc exits</span>
+      </div>
+      <div id="lib-compare-panes">${paneHtml('A')}${paneHtml('B')}</div>`;
+    host.querySelectorAll('.lib-cmp-photo-sel').forEach((sel) => {
+      sel.innerHTML = compareState.paths.map((p, i) => `<option value="${i}">${esc2(baseName(p))}</option>`).join('');
+      sel.onchange = (e) => {
+        const which = e.target.dataset.pane;
+        compareState[which === 'A' ? 'paneA' : 'paneB'].idx = parseInt(e.target.value, 10);
+        renderComparePane(which);
+      };
+    });
+    host.querySelectorAll('.lib-cmp-src-sel').forEach((sel) => {
+      sel.onchange = (e) => {
+        const which = e.target.dataset.pane;
+        compareState[which === 'A' ? 'paneA' : 'paneB'].srcKey = e.target.value;
+        renderComparePane(which);
+      };
+    });
+    host.querySelectorAll('.lib-flag').forEach((flag) => {
+      flag.onclick = async () => {
+        const which = flag.dataset.pane;
+        if (!comparePaneReady(which)) return;
+        const path = comparePathForIdx(compareState[which === 'A' ? 'paneA' : 'paneB'].idx);
+        if (!path) return;
+        if (flag.dataset.flag === 'Favorite') {
+          const cur = state.sidecars.get(path) || { favorite: false };
+          await setFavorite(path, !cur.favorite);
+        } else {
+          const cur = state.sidecars.get(path) || { label: '' };
+          await setLabel(path, cur.label === flag.dataset.flag ? '' : flag.dataset.flag);
+        }
+        syncCompareChrome(which);
+      };
+    });
+    syncCompareChrome('A'); syncCompareChrome('B');
+    setupCompareZoomPan();
+  }
+  function esc2(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function syncCompareChrome(which) {
+    const host = compareHost(); if (!host) return;
+    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
+    const path = comparePathForIdx(p.idx);
+    const sc = state.sidecars.get(path) || { rating: 0, label: '', favorite: false };
+    host.querySelectorAll(`.lib-cmp-photo-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = String(p.idx); });
+    host.querySelectorAll(`.lib-cmp-src-sel[data-pane="${which}"]`).forEach((sel) => { sel.value = p.srcKey; });
+    host.querySelectorAll(`.lib-flag[data-pane="${which}"]`).forEach((flag) => {
+      const f = flag.dataset.flag;
+      flag.classList.toggle('on', f === 'Favorite' ? !!sc.favorite : sc.label === f);
+    });
+    const nameEl = host.querySelector(`.lib-cmp-name[data-pane="${which}"]`);
+    if (nameEl) {
+      const pane = host.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
+      nameEl.textContent = p.pendingPath === path ? `Loading ${baseName(path)}…`
+        : pane?.dataset.detailError ? `Could not load ${baseName(path)}`
+          : baseName(path);
+    }
+  }
+  function comparePaneReady(which) {
+    const p = compareState[which === 'A' ? 'paneA' : 'paneB'];
+    return !!p && !!comparePathForIdx(p.idx) && p.presentedPath === comparePathForIdx(p.idx)
+      && p.presentedSrcKey === p.srcKey && p.renderReady === true && p.pendingPath !== comparePathForIdx(p.idx);
+  }
+  // Source-detail renders use a private context and never select a photo in the Editor.
+  async function renderComparePane(which) {
+    const p=compareState[which==='A'?'paneA':'paneB'];
+    const pane=compareHost()?.querySelector(`.lib-cmp-pane[data-pane="${which}"]`);
+    if(!pane)return;
+    const path = comparePathForIdx(p.idx);
+    p.pendingPath = path;
+    p.renderReady = false;
+    pane.setAttribute('aria-busy', 'true');
+    delete pane.dataset.detailError;
+    pane.querySelector('.lib-detail-error')?.remove();
+    const nameEl = pane.querySelector('.lib-cmp-name');
+    if (nameEl) nameEl.textContent = `Loading ${baseName(path)}…`;
+    const rendering = detailRender(pane,p,p.idx,p.srcKey,path, (sourcePath, token) => ensureCompareItem(sourcePath, token));
+    const revision = p.pendingRevision;
+    const ready = await rendering;
+    if (revision === p.pendingRevision) p.renderReady = ready;
+    syncCompareChrome(which);
+  }
+  function compareWantedPaths() {
+    return new Set([comparePathForIdx(compareState.paneA.idx), comparePathForIdx(compareState.paneB.idx)].filter(Boolean));
+  }
+  function releaseCompareItem(item) {
+    if (!item) return;
+    for (const image of [item.img, item.fullImg]) {
+      if (!image) continue;
+      try { image.width = 0; image.height = 0; } catch (_) {}
+      if (image._filmRaw) { image._filmRaw.releaseDecodeBuffers?.(); delete image._filmRaw; }
+      delete image._hdrHeadroom; delete image._sceneLinear;
+    }
+  }
+  function pruneCompareItems() {
+    const wanted = compareWantedPaths();
+    for (const [path, item] of compareState.items) if (!wanted.has(path)) {
+      compareState.items.delete(path); releaseCompareItem(item);
+    }
+  }
+  async function ensureCompareItem(path, token) {
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare') return null;
+    const cached = compareState.items.get(path);
+    if (cached) return cached;
+    pruneCompareItems();
+    if (_libtestCompareLoader) {
+      const item = await _libtestCompareLoader(path);
+      if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) {
+        releaseCompareItem(item); return null;
+      }
+      if (!item) throw new Error(`Could not decode ${baseName(path)}`);
+      item.path = path; compareState.items.set(path, item); pruneCompareItems();
+      return compareState.items.get(path) || null;
+    }
+    const files = await readPathsAsFiles([path], { pathBackedRaw: !!window.__TAURI__ });
+    if (!files.length) throw new Error(`Could not read ${baseName(path)}`);
+    await prepareBatchRawFiles(files, files.okPaths || [path]);
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) return null;
+    compareState.loadCount++;
+    compareState.activeLoads++;
+    compareState.maxConcurrentLoads = Math.max(compareState.maxConcurrentLoads, compareState.activeLoads);
+    let loaded;
+    try { loaded = await loadFXImages(files, { privateEntries: true }); }
+    finally { compareState.activeLoads--; }
+    if (!compareState.active || token !== compareState.entryToken || state.viewMode !== 'compare' || !compareWantedPaths().has(path)) {
+      for (const item of loaded || []) releaseCompareItem(item);
+      return null;
+    }
+    const item = Array.isArray(loaded) && loaded[0];
+    if (!item) throw new Error(`Could not decode ${baseName(path)} (private loader returned ${Array.isArray(loaded) ? loaded.length + ' entries' : String(loaded)})`);
+    item.path = path;
+    compareState.items.set(path, item);
+    pruneCompareItems();
+    return compareState.items.get(path) || null;
+  }
+  const detailState={linked:true,metadata:false,renderer:null,queue:Promise.resolve(),cache:new Map()};
+  function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
+  function detailCells(){return state.viewMode==='compare'
+    ? ['A','B'].map(w=>({cell:compareState[w==='A'?'paneA':'paneB'],el:compareHost()?.querySelector(`[data-pane="${w}"].lib-cmp-pane`)}))
+    : surveyState.cells.map((cell,i)=>({cell,el:surveyHost()?.querySelector(`[data-survey-idx="${i}"].lib-survey-cell`)}));}
+  function detailRerender(){if(state.viewMode==='compare'){renderComparePane('A');renderComparePane('B');}else surveyCellsRender();}
+  function detailControls(host){
+    const bar=host?.querySelector('#lib-compare-bar');if(!bar)return;
+    bar.insertAdjacentHTML('beforeend','<button type="button" class="lib-btn" data-detail="fit">Fit</button><button type="button" class="lib-btn" data-detail="native">100%</button><button type="button" class="lib-btn" data-detail="link" aria-pressed="true">Linked</button><button type="button" class="lib-btn" data-detail="meta" aria-pressed="false">Metadata</button>');
+    const link=bar.querySelector('[data-detail="link"]'),metadata=bar.querySelector('[data-detail="meta"]');link.textContent=detailState.linked?'Linked':'Unlinked';link.setAttribute('aria-pressed',String(detailState.linked));metadata.setAttribute('aria-pressed',String(detailState.metadata));
+    bar.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{
+      if(b.dataset.detail==='link'){detailState.linked=!detailState.linked;b.textContent=detailState.linked?'Linked':'Unlinked';b.setAttribute('aria-pressed',String(detailState.linked));return;}
+      if(b.dataset.detail==='meta'){detailState.metadata=!detailState.metadata;b.setAttribute('aria-pressed',String(detailState.metadata));host.querySelectorAll('.lib-detail-meta').forEach(m=>m.hidden=!detailState.metadata);detailRerender();return;}
+      for(const {cell} of detailCells())Object.assign(detailView(cell),{scale:b.dataset.detail==='native'?1:0,cx:.5,cy:.5});detailRerender();
+    });
+    let dragging=null,lx=0,ly=0;
+    const target=e=>e.target.closest('.lib-cmp-pane');
+    const cellFor=el=>el?.dataset.pane?compareState[el.dataset.pane==='A'?'paneA':'paneB']:surveyState.cells[+el?.dataset.surveyIdx];
+    const change=(el,scale,dx=0,dy=0)=>{
+      const cell=cellFor(el);if(!cell)return;const view=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight;if(!w||!h)return;
+      const fit=Math.min(1,el.querySelector('.lib-cmp-canvas-wrap').clientWidth/w,el.querySelector('.lib-cmp-canvas-wrap').clientHeight/h);
+      view.scale=scale??(view.scale||fit);view.cx=Math.max(0,Math.min(1,view.cx-dx/(w*view.scale)));view.cy=Math.max(0,Math.min(1,view.cy-dy/(h*view.scale)));
+      if(detailState.linked)for(const pair of detailCells())Object.assign(detailView(pair.cell),view);
+      detailRerender();
+    };
+    host.addEventListener('wheel',e=>{const el=target(e);if(!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;e.preventDefault();const cell=cellFor(el),v=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight,wrap=el.querySelector('.lib-cmp-canvas-wrap');if(!w||!h)return;const fit=Math.min(1,wrap.clientWidth/w,wrap.clientHeight/h);change(el,Math.min(8,Math.max(fit,(v.scale||fit)*Math.exp(-e.deltaY*.0015))));},{passive:false});
+    host.addEventListener('pointerdown',e=>{const el=target(e);if(e.button!==0||!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;dragging=el;lx=e.clientX;ly=e.clientY;el.setPointerCapture(e.pointerId);e.preventDefault();});
+    host.addEventListener('pointermove',e=>{if(!dragging)return;change(dragging,null,e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY;});
+    host.addEventListener('pointerup',()=>dragging=null);host.addEventListener('pointercancel',()=>dragging=null);
+  }
+  function setupCompareZoomPan(){detailControls(compareHost());}
+  async function detailRender(el,cell,idx,srcKey,path,itemResolver=null){
+    const revision=cell.detailRevision=(cell.detailRevision||0)+1,entry=compareState.entryToken;
+    if (itemResolver) cell.pendingRevision = revision;
+    // Serialize only this viewer's renders; source reads/metadata may finish in any order.
+    const job=async()=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      const it=itemResolver?await itemResolver(path,entry):(typeof fxImages!=='undefined'?fxImages[idx]:null);if(!it)return false;
+      if(it._rawHalf&&typeof fxPromoteWebRaw==='function')await fxPromoteWebRaw(it);
+      if(typeof fnEnsureNative==='function')await fnEnsureNative(it);
+      const sc=await getSidecar(path),meta=await getMeta(path);
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      let strip=el.querySelector('.lib-detail-meta');if(!strip){strip=document.createElement('div');strip.className='lib-detail-meta';strip.style.cssText='padding:4px 8px;height:24px;box-sizing:border-box;flex:none;color:var(--mut);font-size:11px';el.appendChild(strip);}strip.hidden=!detailState.metadata;
+      let source=it.fullImg||it.img;
+      if(typeof geomCanvas==='function')source=geomCanvas({...it,img:source});
+      const iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
+      const fit=Math.min(1,Math.max(1,wrap.clientWidth)/iw,Math.max(1,wrap.clientHeight)/ih),scale=view.scale||fit;
+      const sw=Math.max(1,Math.min(iw,Math.floor(wrap.clientWidth/scale))),sh=Math.max(1,Math.min(ih,Math.floor(wrap.clientHeight/scale)));
+      const x=Math.max(0,Math.min(iw-sw,Math.round(view.cx*iw-sw/2))),y=Math.max(0,Math.min(ih-sh,Math.round(view.cy*ih-sh/2)));
+      const dpr=Math.min(window.devicePixelRatio||1,2),pw=Math.max(1,Math.round(sw*scale*dpr)),ph=Math.max(1,Math.round(sh*scale*dpr));
+      // At most viewport pixels, never a fitted canvas enlarged to simulate native detail.
+      const cap=Math.min(1,Math.sqrt(1e6/(pw*ph))),ow=Math.max(1,Math.round(pw*cap)),oh=Math.max(1,Math.round(ph*cap));
+      const snap=srcKey==='live'?(sc.recipe?snapshotFromB64(sc.recipe):null):(typeof resolveSplitSnapshot==='function'?resolveSplitSnapshot(compareSrcKeyToDescriptor(srcKey)):'orig');
+      const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
+      if(!rendered){
+        const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+        const privateBaseline=!!itemResolver&&!snap&&_fxPristineDefault;
+        const restoreUI=(snap&&snap!=='orig')||privateBaseline;
+        _fxHistLocked=true;
+        try{
+          if(snap&&snap!=='orig')applyUISnapshot(snap);
+          else if(privateBaseline){applyUISnapshot(_fxPristineDefault,{skipRender:true});if(RAW_FILE_EXT_RE.test('.'+it.ext))applyRawDefaults();}
+          const sourceOwnsVlog=it.exif?.photoStyle===17&&!(snap&&typeof snap==='object'&&snap.selects&&Object.prototype.hasOwnProperty.call(snap.selects,'sel-input'));
+          const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams(it.adjustOverride||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
+          if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
+          const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
+          const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
+          renderer.setImage(crop);renderer.render(P,ow,oh,{glowScale:1,scOverride:iw/FXR.CAL.refWidth,uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
+          rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
+          detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
+        }finally{if(restoreUI)applyUISnapshot(live,{skipRender:true});if(undo)undo();_fxHistLocked=locked;}
+      }
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
+      Object.assign(el.dataset,{sourceWidth:String(iw),sourceHeight:String(ih),detailScale:String(scale),detailX:String(x),detailY:String(y),detailWidth:String(sw),detailHeight:String(sh)});
+
+      const row=state.entries.find(e=>e.path===path);strip.textContent=[meta.shutter,meta.aperture,meta.iso?'ISO '+meta.iso:'',row?.sharpness!=null?'Focus '+Math.round(row.sharpness):''].filter(Boolean).join(' · ')||'Exposure metadata unavailable';
+      if (itemResolver && cell.pendingRevision === revision) {
+        cell.presentedPath = path; cell.presentedSrcKey = srcKey; cell.pendingPath = '';
+        el.removeAttribute('aria-busy'); delete el.dataset.detailError;
+        el.querySelector('.lib-detail-error')?.remove();
+      }
+      return true;
+    };
+    detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      console.warn('compare detail',e);el.dataset.detailError=String(e.message||e);
+      let error=el.querySelector('.lib-detail-error');if(!error){error=document.createElement('div');error.className='lib-detail-error';error.style.cssText='padding:16px;color:var(--mut);font-size:12px';el.querySelector('.lib-cmp-canvas-wrap')?.appendChild(error);}
+      if(error)error.textContent=`Could not load ${baseName(path)}: ${String(e.message||e)}`;
+      if (itemResolver && cell.pendingRevision === revision) { cell.pendingPath = ''; el.removeAttribute('aria-busy'); }
+      return false;
+    });
+  }
+
+  function canEnterCompare() {
+    if (state.source === 'lr') {
+      if (typeof toast === 'function') toast("Compare isn't available for Lightroom cloud albums yet", false);
+      return false;
+    }
+    return true;
+  }
+  /// Applies a label from Compare and repaints just the affected pane's flag row. Routed through
+  /// the grid's own setLabel so the sidecar write, the cache update and the grid's later repaint
+  /// all stay in one place — a second writer here is how the two views drift apart, which is the
+  /// defect ROADMAP 14 describes.
+  async function compareApplyLabel(path, label) {
+    const pane = compareState.focus;
+    if (!comparePaneReady(pane) || comparePathForIdx(compareState[pane === 'A' ? 'paneA' : 'paneB'].idx) !== path) return false;
+    await setLabel(path, label);
+    ['A', 'B'].forEach((w) => {
+      if (comparePathForIdx(compareState[w === 'A' ? 'paneA' : 'paneB'].idx) === path) renderComparePane(w);
+    });
+    compareSyncFocus();
+  }
+  /// Marks which pane the keyboard is acting on. Without a visible marker, Tab silently changes
+  /// what X does — the kind of hidden mode that makes a culling shortcut untrustworthy.
+  function compareSyncFocus() {
+    const host = document.getElementById('lib-compare');
+    if (!host) return;
+    host.querySelectorAll('.lib-cmp-pane').forEach((el) => {
+      el.classList.toggle('cmp-focus', el.dataset.pane === compareState.focus);
+    });
+    const bar = document.getElementById('lib-compare-bar');
+    if (bar) {
+      const t = bar.querySelector('.cmp-focus-note') || (() => {
+        const sp = document.createElement('span'); sp.className = 'cmp-focus-note';
+        sp.style.cssText = 'margin-left:auto;color:var(--acc)'; bar.appendChild(sp); return sp;
+      })();
+      t.textContent = `X/P/U → pane ${compareState.focus} (Tab swaps)`;
+    }
+  }

@@ -1,0 +1,314 @@
+// ── Portable People & Pets sidecar (people-pets wireframes screen K) ───────────────────────────
+//
+// XMP (set_people_regions, above) is the interoperable per-photo record — it survives a
+// reorganisation and is readable by Lightroom/Bridge, but it carries names and boxes only, never
+// embeddings, so importing it back would mean re-running face detection+embedding to make faces
+// clusterable again. This is the FAST path: one JSON file at the root of the external drive
+// itself (`.chromasmith/people.json`), carrying names AND embeddings, keyed by each photo's
+// `rel_path` (stable across machines — it's relative to the volume, not the mount point, which
+// differs by OS/user). Plugging the drive into another Mac and adopting this file skips the
+// entire detect→embed→cluster pass, not just the naming.
+//
+// ⚠️ Deliberately NOT auto-merged on mount. Portable people data is only read or written through
+// explicit operations; silently merging two machines' people lists is how you get duplicate
+// "Sofia"s with no way back, exactly the failure mode CLAUDE.md warns adopt-on-mount features
+// away from elsewhere in this codebase.
+
+#[derive(Serialize, Deserialize, Clone)]
+struct PortableFace {
+    rel_path: String,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    score: f32,
+    kps: String,
+    /// Base64 of the raw little-endian f32x512 blob `photo_faces.embedding` already stores —
+    /// reusing that exact encoding rather than JSON floats keeps the file a fraction of the size.
+    embedding: Option<String>,
+    /// True ONLY for a user-confirmed face (`confirmed = 1`). An auto-tag (`confirmed = 2`) is
+    /// `auto` instead — collapsing both into `true` promoted every unseen auto-tag to
+    /// "user-confirmed" on import. Older files lack `auto`/`species` (serde default).
+    confirmed: bool,
+    #[serde(default)]
+    auto: bool,
+    #[serde(default)]
+    species: Option<String>,
+    person_name: String,
+    person_kind: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct PortablePeopleFile {
+    written_at: i64,
+    hostname: String,
+    face_count: usize,
+    person_count: usize,
+    faces: Vec<PortableFace>,
+}
+
+fn portable_people_path(dest_dir: &str) -> PathBuf {
+    Path::new(dest_dir).join(".chromasmith").join("people.json")
+}
+
+#[derive(Serialize, Clone)]
+pub struct PortablePeopleSummary {
+    pub written_at: i64,
+    pub hostname: String,
+    pub face_count: usize,
+    pub person_count: usize,
+}
+
+/// Writes every named/confirmed face to `<dest_dir>/.chromasmith/people.json`. Called explicitly
+/// (a "Save to drive" action), not on every rename — matching CLAUDE.md's own flagged concern
+/// about writing thousands of sidecars on every edit; one JSON file has no such cost, but keeping
+/// the trigger explicit keeps the mental model ("this is a deliberate backup/export") consistent
+/// with the XMP writer's own batched trigger.
+fn export_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortablePeopleSummary, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.rel_path, f.x0, f.y0, f.x1, f.y1, f.score, f.kps, f.embedding, f.confirmed, pe.name, pe.kind, f.species
+             FROM photo_faces f
+             JOIN photos p ON p.id = f.photo_id
+             JOIN people pe ON pe.id = f.person_id
+             WHERE f.person_id IS NOT NULL AND pe.ignored = 0",
+        )
+        .map_err(|e| e.to_string())?;
+    let faces: Vec<PortableFace> = stmt
+        .query_map([], |r| {
+            let embedding: Option<Vec<u8>> = r.get(7)?;
+            let confirmed: i64 = r.get(8)?;
+            Ok(PortableFace {
+                rel_path: r.get(0)?,
+                x0: r.get(1)?,
+                y0: r.get(2)?,
+                x1: r.get(3)?,
+                y1: r.get(4)?,
+                score: r.get(5)?,
+                kps: r.get(6)?,
+                embedding: {
+                    use base64::Engine;
+                    embedding.map(|b| base64::engine::general_purpose::STANDARD.encode(b))
+                },
+                confirmed: confirmed == 1,
+                auto: confirmed == 2,
+                species: r.get(11)?,
+                person_name: r.get(9)?,
+                person_kind: r.get(10)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+
+    let person_count = {
+        let mut names = std::collections::HashSet::new();
+        for f in &faces {
+            names.insert(f.person_name.clone());
+        }
+        names.len()
+    };
+    let file = PortablePeopleFile {
+        written_at: now_secs() as i64,
+        hostname: hostname_for_export(),
+        face_count: faces.len(),
+        person_count,
+        faces,
+    };
+    let path = portable_people_path(dest_dir);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string(&file).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(PortablePeopleSummary {
+        written_at: file.written_at,
+        hostname: file.hostname,
+        face_count: file.face_count,
+        person_count: file.person_count,
+    })
+}
+
+fn hostname_for_export() -> String {
+    std::process::Command::new("scutil")
+        .arg("--get")
+        .arg("ComputerName")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "this Mac".to_string())
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct PortableImportResult {
+    pub faces_matched: usize,
+    pub faces_unmatched: usize,
+    pub people_created: usize,
+}
+
+/// The explicit "Use it" action — matches each portable face to a LOCAL photo by `rel_path`
+/// within the given volume (`dest_dir` must be a volume's own mount point, i.e. what
+/// `export_portable_people_run` was called with), finds-or-creates the named person, and
+/// writes the face row (inserting the face itself if this machine never ran its own detection
+/// pass over that photo — the whole point of adopting the file instead of rescanning).
+/// ⚠️ Never called implicitly — see this section's own header comment on why adopt-on-mount is
+/// deliberately not automatic.
+fn import_portable_people_run(conn: &Connection, dest_dir: &str) -> Result<PortableImportResult, String> {
+    let path = portable_people_path(dest_dir);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let file: PortablePeopleFile = serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
+
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut result = PortableImportResult::default();
+    let mut person_ids: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let now = now_secs() as i64;
+
+    for face in &file.faces {
+        let photo_id: Option<i64> = tx
+            .query_row(
+                "SELECT p.id FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE p.rel_path = ?1 AND v.last_path = ?2",
+                params![face.rel_path, dest_dir],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let Some(photo_id) = photo_id else {
+            result.faces_unmatched += 1;
+            continue;
+        };
+
+        let person_id = if let Some(&id) = person_ids.get(&face.person_name) {
+            id
+        } else {
+            let existing: Option<i64> = tx
+                .query_row("SELECT id FROM people WHERE name = ?1", params![face.person_name], |r| r.get(0))
+                .optional()
+                .map_err(|e| e.to_string())?;
+            let id = match existing {
+                Some(id) => id,
+                None => {
+                    tx.execute(
+                        "INSERT INTO people (name, cover_face_id, created, auto, kind) VALUES (?1, NULL, ?2, 0, ?3)",
+                        params![face.person_name, now, face.person_kind],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    result.people_created += 1;
+                    tx.last_insert_rowid()
+                }
+            };
+            person_ids.insert(face.person_name.clone(), id);
+            id
+        };
+
+        let embedding_blob: Option<Vec<u8>> = face
+            .embedding
+            .as_deref()
+            .and_then(|b64| {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(b64).ok()
+            });
+
+        // Reuse an existing face row for this photo at (nearly) the same box if one exists —
+        // this machine may have already run its own detection pass — otherwise insert fresh.
+        let existing_face: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM photo_faces WHERE photo_id = ?1 AND ABS(x0 - ?2) < 0.01 AND ABS(y0 - ?3) < 0.01",
+                params![photo_id, face.x0, face.y0],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        let confirmed: i64 = if face.confirmed { 1 } else if face.auto { 2 } else { 0 };
+        match existing_face {
+            Some(fid) => {
+                tx.execute(
+                    "UPDATE photo_faces SET person_id = ?1, confirmed = ?2 WHERE id = ?3",
+                    params![person_id, confirmed, fid],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps, embedding, person_id, confirmed, species)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![photo_id, face.x0, face.y0, face.x1, face.y1, face.score, face.kps, embedding_blob, person_id, confirmed, face.species],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+        result.faces_matched += 1;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_cluster_faces(app: tauri::AppHandle, eps: Option<f64>, min_points: Option<usize>) -> Result<ClusterResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let mut r = cluster_run(&conn, eps.unwrap_or(0.6), min_points.unwrap_or(2))?;
+        r.auto_assigned = auto_assign_run(&conn)?.assigned;
+        Ok(r)
+    })
+    .await
+    .map_err(|e| format!("catalog_cluster_faces task panicked: {e}"))?
+}
+
+#[derive(Serialize, Clone)]
+pub struct PersonNode {
+    pub id: i64,
+    pub name: String,
+    pub cover_face_id: Option<i64>,
+    pub face_count: i64,
+    /// `true` = still the machine's own "Person N" grouping, never renamed/merged by the user.
+    /// Exposed so the frontend can split the sidebar into Named vs. an Unnamed backlog instead
+    /// of a flat "Person 1..Person 40" list — see people-pets-wireframes.html screen A. Was
+    /// tracked in the `people.auto` column since v6 but never reached the frontend before this.
+    pub auto: bool,
+    /// 'person' | 'pet' — a pet is a Person row with a species, not a separate table/UI/store
+    /// (people-pets wireframes screen I: "the word Subjects goes away"). No automatic pet
+    /// detector exists yet (see catalog.rs's PetDetection note near the bottom of this file) —
+    /// today a pet person can only be created by hand via `catalog_set_person_kind`.
+    pub kind: String,
+    /// `true` = user said "not a real person, stop suggesting this" (screen A's pinned Ignored
+    /// row). Distinct from delete: an ignored person's faces stay assigned, so they don't
+    /// resurface as a fresh unnamed cluster on the next scan.
+    pub ignored: bool,
+}
+
+#[tauri::command(async)]
+pub fn catalog_people(state: tauri::State<CatalogState>) -> Result<Vec<PersonNode>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, p.cover_face_id, (SELECT COUNT(*) FROM photo_faces f WHERE f.person_id = p.id), p.auto, p.kind, p.ignored
+             FROM people p ORDER BY p.name"
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| {
+            let auto: i64 = r.get(4)?;
+            let kind: String = r.get(5)?;
+            let ignored: i64 = r.get(6)?;
+            Ok(PersonNode {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                cover_face_id: r.get(2)?,
+                face_count: r.get(3)?,
+                auto: auto != 0,
+                kind,
+                ignored: ignored != 0,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}

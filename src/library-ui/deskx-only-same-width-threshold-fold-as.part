@@ -1,0 +1,48 @@
+  // ── deskx-only: same width-threshold fold as the Editor's own #fx-deskbar (chromasmith-22.html
+  // — body.fx-deskbar-tight1/2, driven by a ResizeObserver on #fx-deskbar). Kept as a SEPARATE
+  // observer/class pair rather than sharing the Editor's classes: #fx-deskbar keeps observing
+  // even while hidden behind a full-window Library, so sharing its classes would drive Library's
+  // fold state off a 0-width, invisible bar. Same 900px/820px thresholds and same two-stage
+  // order (All FX label first, then Export label) as the Editor, so both bars degrade by
+  // identical rules even though each tracks its own state. Library's own #lib-top-compact
+  // (above) still exists for the non-deskx/web layout — this only fires under deskx, and only
+  // once the grid layout is active (.full), same guard as syncTopCompact.
+  function syncTopTight() {
+    if (!document.body.classList.contains('deskx') || (!overlay.classList.contains('full') && !state.unified_view)) {
+      libTop.classList.remove('lib-top-tight1', 'lib-top-tight2');
+      return;
+    }
+    syncTopOverflow(); // one staged, collision-driven fold (see syncTopOverflow)
+  }
+  new ResizeObserver(syncTopTight).observe(libTop);
+  window.addEventListener('resize', syncTopTight);
+
+  // Measure the actual side tracks after the grid has resolved, rather than relying on the
+  // top bar's aggregate scrollWidth (which can stay unchanged when a grid item overflows its
+  // own track). Each pass removes optional controls and re-measures until every live button is
+  // inside its track with the 12px inter-group gap intact.
+  function syncTopOverflow() {
+    if (!document.body.classList.contains('deskx') || (!overlay.classList.contains('full') && !state.unified_view)) {
+      libTop.classList.remove('lib-top-overflow1','lib-top-overflow2','lib-top-overflow3');
+      if (overlay.classList.contains('full')) {
+        libTop.classList.remove('lib-top-compact');
+        if (libTop.scrollWidth > libTop.clientWidth + 1) libTop.classList.add('lib-top-compact');
+      }
+      return;
+    }
+    const STAGES = ['lib-top-tight1', 'lib-top-tight2', 'lib-top-compact', 'lib-top-overflow1', 'lib-top-overflow2', 'lib-top-overflow3'];
+    libTop.classList.remove(...STAGES);
+    // Fold in stages only while visible controls genuinely collide or leave the window. The bar's
+    // own width/scrollWidth is useless under sk2 (its box is narrower than the controls it lays
+    // out), which folded All FX/Export to icons even with hundreds of spare pixels.
+    const collide = () => {
+      const rs = [...libTop.querySelectorAll('button,.lib-search-wrap')].filter((el) => el.getClientRects().length && !el.closest('.lib-menu,#lib-view-menu') && !el.parentElement.closest('.lib-search-wrap'))
+        .map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0).sort((a, b) => a.left - b.left);
+      return rs.some((r, i) => r.right > document.documentElement.clientWidth + 1 || (i && r.left < rs[i - 1].right - 1 && r.top < rs[i - 1].bottom && r.bottom > rs[i - 1].top));
+    };
+    for (const c of STAGES) { if (!collide()) break; libTop.classList.add(c); }
+  }
+  new ResizeObserver(()=>requestAnimationFrame(syncTopOverflow)).observe(libTop);
+  window.addEventListener('resize', syncTopOverflow);
+  // Webfonts swap in after first layout and change button widths — re-measure once they land.
+  document.fonts?.ready?.then(()=>requestAnimationFrame(syncTopOverflow));

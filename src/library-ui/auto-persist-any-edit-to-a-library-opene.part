@@ -1,0 +1,14 @@
+  // ── auto-persist: any edit to a library-opened photo silently saves a non-destructive
+  // recipe (the same FX snapshot the undo history and session-save use) into its XMP
+  // sidecar and marks it "edited" — even before export. The DISK write is still debounced
+  // (a slider drag writes once, not per frame), but the "edited" badge itself now appears
+  // the instant an edit happens, not up to 2s later — and previously it didn't appear at
+  // all until the whole grid was rebuilt (renderGrid() was the only place the badge markup
+  // was ever produced), i.e. you'd have to leave the folder and come back to see it.
+  // No-op for photos not opened from the Library (state.openedPath ''). ──
+  function markCardEdited(path) {
+    const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card && !card.querySelector('.lib-edited-badge')) {
+      card.insertAdjacentHTML('beforeend', EDITED_BADGE_HTML);
+    }
+  }

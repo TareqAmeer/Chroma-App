@@ -1,0 +1,398 @@
+  // ── Marquee (drag-rectangle) multi-select over the grid. Works in both the folder grid
+  // (selects by data-path into state.selected) and the cloud grid (data-lr-id into
+  // lrState.selected). Starts only when the drag begins on empty grid background and moves
+  // past a small threshold, so a normal click on a card still selects/opens as usual.
+  function setupMarquee() {
+    const main = document.getElementById('lib-main');
+    if (!main || main._marqueeWired) return;
+    main._marqueeWired = true;
+    let box = null, sx = 0, sy = 0, add = false, active = false, scroller = null, sTop0 = 0, bgDown = false;
+    main.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest('.lib-card')) return;       // a card handles its own click
+      if (e.target.closest('#lib-list-head')) return;
+      if (e.target.closest('#lib-batchbar')) return;   // CHR-8: bar lives in #lib-main; its clicks are not background clicks
+      sx = e.clientX; sy = e.clientY; add = e.shiftKey; active = false;
+      bgDown = true;
+      const gridEl = document.getElementById('lib-grid');
+      scroller = gridEl && gridEl.parentElement && gridEl.parentElement.scrollHeight > gridEl.parentElement.clientHeight
+        ? gridEl.parentElement : (gridEl && gridEl.closest('#lib-overlay')) || document.documentElement;
+      sTop0 = scroller.scrollTop || 0;
+    });
+    document.addEventListener('pointermove', (e) => {
+      if (sx === 0 && sy === 0) return;
+      if (!(e.buttons & 1)) { sx = sy = 0; return; }
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (!active && Math.hypot(dx, dy) < 5) return;    // below threshold → not a marquee yet
+      active = true;
+      if (!box) {
+        box = document.createElement('div');
+        box.style.cssText = 'position:fixed;z-index:9998;border:1px solid var(--acc);background:rgba(212,144,58,.14);pointer-events:none';
+        document.body.appendChild(box);
+        if (!add) { if (state.source === 'lr') { lrState.selected.clear(); } else { state.selected.clear(); } }
+      }
+      // Compare in SCROLL-INVARIANT ("content") Y coordinates, not raw viewport clientY. The box
+      // is drawn `position:fixed` (anchored to the viewport, which is right — it shouldn't grow
+      // just because the page scrolled), but a plain clientY hit-test against getBoundingClientRect
+      // was comparing the box's fixed screen position against cards whose screen position moves
+      // every time the grid scrolls: a row already inside the box, scrolled out from under it by a
+      // wheel scroll mid-drag (no mouse movement needed to observe this — it just needed one more
+      // pointermove to re-evaluate), read as "no longer hit" and got deselected, even though the
+      // user never shrank the rectangle. Adding the current scrollTop to both sides cancels the
+      // scroll delta: `clientY + scrollTop` for a fixed piece of content stays constant as the
+      // container scrolls (clientY drops by exactly as much as scrollTop rises).
+      const sTopNow = scroller ? (scroller.scrollTop || 0) : 0;
+      const cy0 = sy + sTop0, cy1 = e.clientY + sTopNow;
+      const x0 = Math.min(sx, e.clientX), y0Content = Math.min(cy0, cy1), x1 = Math.max(sx, e.clientX), y1Content = Math.max(cy0, cy1);
+      // Screen-space box for drawing: convert the content-space bounds back using the CURRENT
+      // scrollTop so the visible rectangle still tracks the mouse correctly on screen.
+      const y0 = y0Content - sTopNow, y1 = y1Content - sTopNow;
+      box.style.left = x0 + 'px'; box.style.top = y0 + 'px'; box.style.width = (x1 - x0) + 'px'; box.style.height = (y1 - y0) + 'px';
+      const cloud = state.source === 'lr';
+      document.querySelectorAll('#lib-grid .lib-card').forEach((c) => {
+        const r = c.getBoundingClientRect();
+        const rTop = r.top + sTopNow, rBottom = r.bottom + sTopNow;
+        const hit = r.left < x1 && r.right > x0 && rTop < y1Content && rBottom > y0Content;
+        const key = cloud ? c.dataset.lrId : c.dataset.path;
+        if (!key) return;
+        const set = cloud ? lrState.selected : state.selected;
+        if (hit) set.add(key); else if (!add) set.delete(key);
+        c.classList.toggle('multi', set.has(key));
+      });
+      if (typeof syncSelCount === 'function') syncSelCount();
+    });
+    document.addEventListener('pointerup', () => {
+      // A plain click (no drag) that started on empty grid background clears the selection —
+      // clicking away from the photos is the expected way to deselect, same as most file
+      // browsers/galleries. Only fires when the pointerdown itself began off any card (bgDown)
+      // and never crossed the 5px drag threshold (active stayed false, i.e. no marquee box was
+      // ever drawn) and wasn't a shift-click (add), which is for extending a selection, not
+      // clearing it.
+      if (bgDown && !active && !add) {
+        if (state.source === 'lr') { lrState.selected.clear(); document.querySelectorAll('#lib-grid .lib-card[data-lr-id]').forEach((c) => c.classList.remove('multi')); }
+        else { state.selected.clear(); updateCardSelClasses(); }
+      }
+      bgDown = false;
+      sx = sy = 0; scroller = null;
+      if (box) { box.remove(); box = null; active = false; }
+    });
+  }
+  setupMarquee();
+
+  // Boot timeline (window._bootMarks, chromasmith-22.html) — read by test/probe_boot_splash_progress.mjs.
+  function bootMark(k) { try { if (window._bootMarks && !window._bootFilled) window._bootMarks.push([k, Math.round(performance.now())]); } catch (e) {} }
+  async function restoreSavedLibraryView() {
+    const view = initialLibraryView;
+    if (!view) return false;
+    bootMark('restore:' + view.kind);
+    if (view.kind === 'folder' && typeof view.path === 'string' && view.path) {
+      await openFolder(view.path, { prefetchThumbs: true });
+      return true;
+    }
+    if (view.kind === 'collection' && COLLECTIONS.some((c) => c.name === view.name)) {
+      await openCollectionView(view.name);
+      return true;
+    }
+    if (view.kind === 'exported') {
+      await openExportedView();
+      return true;
+    }
+    if (view.kind === 'catalog' && typeof view.scope === 'string' && view.scope) {
+      await openCatalogView(view.scope);
+      return true;
+    }
+    if (view.kind === 'lr' && view.albumId && window.lrCloud && window.lrCloud.connected()) {
+      await openLrAlbum(view.albumId);
+      return true;
+    }
+    return false;
+  }
+
+  async function toggleLibrary(opts) {
+    if (state.open && state.expanded_view) rememberGalleryScrollPosition();
+    state.open = !state.open;
+    overlay.classList.toggle('on', state.open);
+    document.body.classList.toggle('lib-docked', state.open);
+    if (!state.open && state.expanded_view) toggleExpandedView(false); // don't stay full-window for next open
+    syncJobsHost();
+    syncDockPadding();
+    // The dock shifts the app's layout; the preview canvas measures the window to fit, so
+    // poke a resize once the CSS has applied.
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    if (state.open) {
+      bootMark('tree');
+      await renderTree();
+      bootMark('tree:done');
+      updateBootSplashProgress({ phase: 'subfolders', done: 0, total: 0 });
+      // If the currently-open photo came from a Lightroom album, return to that album instead
+      // of the last local folder (chromasmith-22.html's lrImportAsset stamps the origin).
+      const origin = window.chromasmithOpenedOrigin;
+      if (origin && origin.source === 'lr' && window.lrCloud && window.lrCloud.connected()) {
+        try {
+          if (!lrState.albums) lrState.albums = await window.lrCloud.albums();
+          renderCollections();
+          await openLrAlbum(origin.albumId || (lrState.albums[0] && lrState.albums[0].id));
+          return;
+        } catch (e) { console.error('reopen lr album', e); /* fall through to folder */ }
+      }
+      // No folder yet: the first-launch empty state wins over any restored view (a restored "All
+      // photos" view over an empty catalog showed "No photos in this folder" instead).
+      if (!state.root) { renderLibraryNoRoot(); return; }
+      if (!state._restoredLastView) {
+        state._restoredLastView = true;
+        try { if (await restoreSavedLibraryView()) return; } catch (e) { console.error('restore Library view', e); }
+      }
+      // First-ever launch (or every folder removed): show the in-app empty state with two
+      // explicit actions, rather than immediately popping the OS folder picker — a modal dialog
+      // appearing over a screen the user hasn't even seen yet reads as the app grabbing control,
+      // and it means the "first two minutes" storyboard's first-launch frame is unreachable.
+      if (!state.root) { renderLibraryNoRoot(); return; }
+      const openOpts = opts && opts.prefetchThumbs ? { prefetchThumbs: true } : undefined;
+      if (state.currentFolder) await openFolder(state.currentFolder, openOpts);
+      else await openFolder(state.root, openOpts);
+    }
+  }
+  window.chromasmithToggleLibrary = toggleLibrary; // called from the header button in desktop-native.js
+  // Shared CHR-266 shortcut registry adapters. Keep the public surface small and let the registry
+  // own key matching; these callbacks reuse the same targets and mutations as Library controls.
+  window.chromasmithLibraryIsOpen = () => state.open;
+  if (typeof window.chromasmithRegisterShortcut === 'function') {
+    const shortcutTargets = () => state.selected.size ? [...state.selected]
+      : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : []));
+    const withQuickLook = () => {
+      if (quicklook.active) return [quicklook.path];
+      if (state.source === 'lr') return [];
+      if (state.viewMode === 'survey' && compareState.active) return [surveyTargetPath()];
+      if (state.viewMode === 'compare' && compareState.active) return comparePaneReady(compareState.focus)
+        ? [comparePathForIdx(compareState[compareState.focus === 'A' ? 'paneA' : 'paneB'].idx)] : [];
+      return shortcutTargets();
+    };
+    const applyShortcutLabel = (label) => { const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull' && label) return cullAdvance(label, ps[0]);
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active) setLabel(ps[0], label).then(() => surveySyncPath(ps[0]));
+      else if (!quicklook.active && state.viewMode === 'compare' && compareState.active) compareApplyLabel(ps[0], label);
+      else ps.forEach(p => setLabel(p, label)); };
+    window.chromasmithRegisterShortcut('library.reject', () => applyShortcutLabel('Red'));
+    window.chromasmithRegisterShortcut('library.pick', () => applyShortcutLabel('Green'));
+    window.chromasmithRegisterShortcut('library.clear-flag', () => applyShortcutLabel(''));
+    const applyShortcutColor = (colorLabel) => {
+      if (!COLOR_LABELS_ENABLED) return false;
+      const ps = withQuickLook().filter(Boolean);
+      if (!ps.length) return false;
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull') return cullColorAndAdvance(colorLabel, ps[0]);
+      if (!quicklook.active && state.viewMode === 'survey' && compareState.active) setColorLabel(ps[0], colorLabel).then(() => surveySyncPath(ps[0]));
+      else ps.forEach((p) => setColorLabel(p, colorLabel));
+    };
+    COLOR_LABELS.forEach((color, i) => window.chromasmithRegisterShortcut(`library.color-${color.toLowerCase()}`, () => applyShortcutColor(color)));
+    window.chromasmithRegisterShortcut('library.color-clear', () => applyShortcutColor(''));
+    for (let rating = 0; rating <= 5; rating++) {
+      window.chromasmithRegisterShortcut(`library.rate-${rating}`, () => {
+        if (!STARS_ENABLED) return false;
+        const ps = withQuickLook().filter(Boolean); if (!ps.length) return false;
+        if (!quicklook.active && state.viewMode === 'survey' && compareState.active && compareState.mode === 'cull') return cullRateAndAdvance(rating, ps[0]);
+        ps.forEach(p => setRating(p, rating).then(() => surveySyncPath(p)));
+      });
+    }
+    window.chromasmithRegisterShortcut('library.open', () => {
+      if (isNativeActivationTarget(document.activeElement)) return false;
+      // Compare owns Enter for promotion; the capture-phase opener must let it through.
+      if (state.viewMode === 'compare' && compareState.active) return false;
+      const path = state._kbCursor || (state.selected.size === 1 ? [...state.selected][0] : '');
+      if (quicklook.active) { const p = quicklook.path; hideQuickLook(); openInEditor(p); }
+      else if (path) openInEditor(path); else return false;
+    });
+    window.chromasmithRegisterShortcut('library.quicklook', () => {
+      if (isNativeActivationTarget(document.activeElement)) return false;
+      const path = state._kbCursor || state.openedPath || (state.selected.size === 1 ? [...state.selected][0] : '');
+      if (quicklook.active) hideQuickLook(); else if (path) showQuickLook(path); else return false;
+    });
+    window.chromasmithRegisterShortcut('library.next', (e) => {
+      if (state.source === 'lr') return false;
+      if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
+      if (state.viewMode === 'survey' && compareState.active) { surveyFocus(1); return; }
+      if (quicklook.active) {
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(quicklook.path) ?? -1;
+        if (i >= 0 && i + 1 < shown.length) showQuickLook(shown[i + 1].path);
+      } else {
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
+        if (shown.length) {
+          const next = Math.min(shown.length - 1, (i < 0 ? -1 : i) + 1);
+          state._kbCursor = shown[next].path;
+          if (e.shiftKey) {
+            if (selectAnchor < 0) selectAnchor = i >= 0 ? i : next;
+            const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+            state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
+          } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
+          scrollLibraryToPath(state._kbCursor); updateCardSelClasses();
+        } else return false;
+      }
+    });
+    window.chromasmithRegisterShortcut('library.previous', (e) => {
+      if (state.source === 'lr') return false;
+      if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
+      if (state.viewMode === 'survey' && compareState.active) { surveyFocus(-1); return; }
+      if (quicklook.active) {
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(quicklook.path) ?? -1;
+        if (i > 0) showQuickLook(shown[i - 1].path);
+      } else {
+        const nav = libraryNavigationOrder(), shown = nav.entries;
+        const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
+        if (shown.length) {
+          const next = Math.max(0, i < 0 ? 0 : i - 1);
+          state._kbCursor = shown[next].path;
+          if (e.shiftKey) {
+            if (selectAnchor < 0) selectAnchor = i >= 0 ? i : next;
+            const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+            state.selected.clear(); for (let n = lo; n <= hi; n++) state.selected.add(shown[n].path);
+          } else { selectAnchor = next; state.selected.clear(); state.selected.add(state._kbCursor); }
+          scrollLibraryToPath(state._kbCursor); updateCardSelClasses();
+        } else return false;
+      }
+    });
+    window.chromasmithRegisterShortcut('editor.copy', () => libCopyEdit(shortcutTargets()));
+    window.chromasmithRegisterShortcut('editor.paste', () => libPasteEdit(shortcutTargets()));
+    window.chromasmithRegisterShortcut('library.open-recent', async () => {
+      if (!state.open) await toggleLibrary();
+      toggleRecentMenu({ stopPropagation() {} });
+    });
+  }
+  // Unconditional (not LIBTEST-gated), same reasoning as window.__libInfo above: a real hook
+  // for navigating the Library to an arbitrary folder without going through the folder-tree
+  // click or the OS picker dialog — used by tools/diagnostics/raw_bench.py to drive scenarios against
+  // real, already-cataloged photos in a single long-lived session (no relaunch between repeats).
+  window.chromasmithApplyColorCopyToSelection = async ({ lookId, name, lutMix = 100, targetPaths } = {}) => {
+    const paths = [...new Set((Array.isArray(targetPaths) ? targetPaths : []).filter(p => typeof p === 'string' && p))];
+    if (!paths.length) throw new Error('Select at least one Library photo');
+    if (typeof window.chromasmithMergeSelectiveRecipe !== 'function') throw new Error('Recipe merge is unavailable');
+    if (typeof lookId !== 'string' || !lookId.startsWith('l:')) throw new Error('Saved Color Copy look is missing');
+    const source = { selects: { 'sel-lut': lookId }, sliders: { 'lut-mix': String(lutMix) } };
+    await startRecipeBatch('Color Copy' + (name ? ': ' + name : ''), paths, cur => {
+      const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+      return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, source, ['lut']));
+    });
+    return { submitted: paths.length };
+  };
+  window.chromasmithOpenFolder = openFolder;
+  // Same reasoning: lets tools/diagnostics/raw_open_bench.py time the REAL editor open (openInEditor,
+  // the path a card click takes) by file path, without the Library grid having that folder open.
+  window.chromasmithOpenInEditor = openInEditor;
+  window.chromasmithRawRecipeKey = rawRecipeKey;
+
+  window.__TAURI__.event.listen('menu-library', toggleLibrary);
+  // File > Open Recent (main.rs) — surfaces the SAME recents dropdown the header's own Recent
+  // button (#lib-recent) already builds from getRecentFolders(), rather than keeping a second,
+  // Rust-side mirror of that list in sync. toggleRecentMenu positions itself off #lib-recent's
+  // own bounding rect, which is only meaningful once the Library panel is actually open — so
+  // open it first (a no-op if it already is) before showing the popover.
+  window.__TAURI__.event.listen('menu-open-recent', async () => {
+    if (!state.open) await toggleLibrary();
+    toggleRecentMenu({ stopPropagation() {} });
+  });
+
+  // N1a piece 3/4: reconnect detection + batched conflict prompt for the offline edit queue.
+  // Deliberately reuses the SAME 4s poll below (not a new timer) — a reconnect is exactly the
+  // "catalog_volumes came back online" event that poll already watches for. Two-way flow:
+  //   - no-conflict entries (original unchanged since queueing) replay silently, one at a time
+  //   - conflicted entries are batched into ONE prompt for the whole set, never one per photo
+  // `offlineQueuePromptOpen` guards against re-opening the modal on the next poll tick while the
+  // user hasn't answered the current one yet.
+  let offlineQueuePromptOpen = false;
+  async function confirmOriginalSourceAvailable(path) {
+    try { await invoke('read_file_head', { path, len: 0 }); }
+    catch (error) {
+      if (LIBTEST) (window.__libtestSourceAvailabilityConfirms ||= []).push({ path, openedPath: state.openedPath, available: false, error: String(error && error.message || error) });
+      return false;
+    }
+    if (LIBTEST) (window.__libtestSourceAvailabilityConfirms ||= []).push({ path, openedPath: state.openedPath, available: true });
+    state.originalUnavailableEditPaths.delete(path);
+    state.photoSourceModes.set(path, 'original');
+    if (state.openedPath === path) window.chromasmithSourceRenderUpdate?.({ source: 'original' });
+    return true;
+  }
+  function offlineQueueConflictModal(n) {
+    return new Promise((res) => {
+      let dlg = document.getElementById('lib-offq-modal');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'lib-offq-modal';
+        dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:440px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+        dlg.innerHTML = '<div id="lib-offq-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+          + '<button type="button" id="lib-offq-ignore" class="btn bgh">Ignore queued edits</button>'
+          + '<button type="button" id="lib-offq-apply" class="btn bpri">Apply queued edits anyway</button></div>';
+        document.body.appendChild(dlg);
+      }
+      dlg.querySelector('#lib-offq-msg').textContent =
+        `${n} photo${n > 1 ? 's were' : ' was'} edited offline and ${n > 1 ? 'their' : 'its'} original${n > 1 ? 's have' : ' has'} since changed.\n\n`
+        + 'Ignore queued edits — discard them, leave the changed original untouched.\n'
+        + 'Apply queued edits anyway — apply them to the original as it is now.';
+      const finish = (v) => { dlg.close(); res(v); };
+      dlg.querySelector('#lib-offq-apply').onclick = () => finish('apply');
+      dlg.querySelector('#lib-offq-ignore').onclick = () => finish('ignore');
+      dlg.onkeydown = (e) => { if (e.key === 'Escape') finish(null); };
+      dlg.showModal();
+    });
+  }
+  async function checkOfflineQueueOnReconnect() {
+    if (offlineQueuePromptOpen) return;
+    let queued;
+    try { queued = await invoke('list_offline_queue'); } catch (e) { console.error('list_offline_queue', e); return; }
+    if (!queued || !queued.length) return;
+    const noConflict = queued.filter((q) => !q.conflict);
+    const conflicted = queued.filter((q) => q.conflict);
+    // Non-conflicted entries replay silently and automatically — no prompt for the common case.
+    for (const q of noConflict) {
+      try {
+        await invoke('apply_queued_edit', { id: q.id });
+        await confirmOriginalSourceAvailable(q.path);
+      } catch (e) { console.error('apply_queued_edit', e); }
+    }
+    if (noConflict.length && typeof toast === 'function') {
+      toast(`${noConflict.length} offline edit${noConflict.length > 1 ? 's' : ''} applied now that the drive is reconnected.`, true);
+    }
+    if (!conflicted.length) return;
+    // Genuinely conflicted entries — batched into ONE prompt for the whole set, never one per
+    // photo (see this section's header comment).
+    offlineQueuePromptOpen = true;
+    try {
+      const choice = await offlineQueueConflictModal(conflicted.length);
+      if (choice === 'apply') {
+        for (const q of conflicted) {
+          try { await invoke('apply_queued_edit', { id: q.id }); await confirmOriginalSourceAvailable(q.path); }
+          catch (e) { console.error('apply_queued_edit', e); }
+        }
+        if (typeof toast === 'function') toast(`Applied ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''} despite the change${conflicted.length > 1 ? 's' : ''}.`, true);
+      } else if (choice === 'ignore') {
+        for (const q of conflicted) {
+          try { await invoke('discard_queued_edit', { id: q.id }); }
+          catch (e) { console.error('discard_queued_edit', e); }
+        }
+        if (typeof toast === 'function') toast(`Discarded ${conflicted.length} queued edit${conflicted.length > 1 ? 's' : ''}.`, false);
+      }
+      // choice === null (dismissed via Escape): leave the entries queued — the next reconnect
+      // poll will re-check and prompt again, rather than silently resolving anything either way.
+    } finally {
+      offlineQueuePromptOpen = false;
+    }
+  }
+
+  // Card detection. macOS emits no mount notification that reaches a Tauri webview, so this
+  // polls /Volumes — cheap (one readdir plus a statfs per volume) and only while the Library is
+  // actually open, so a backgrounded app does no work.
+  refreshVolumes();
+  setInterval(() => {
+    const ov = document.getElementById('lib-overlay');
+    if (!ov || ov.style.display === 'none') return;
+    refreshVolumes();
+    // Reuses this same poll for the Drives section's online/offline state, rather than a
+    // second timer — a catalogued external drive being plugged or unplugged is exactly the
+    // same kind of event refreshVolumes() already watches for.
+    if (!LIBTEST) invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+    if (!LIBTEST || /[?&]liboffq=1/.test(location.search)) checkOfflineQueueOnReconnect();
+  }, 4000);
+  // Exposed for the harness (?liboffq=1) — driving a real 4s wait per test run is wasteful, so
+  // test/library_perf.mjs-style probes can call this directly instead of racing the timer.
+  window.chromasmithCheckOfflineQueue = checkOfflineQueueOnReconnect;

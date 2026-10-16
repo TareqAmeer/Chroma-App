@@ -1,0 +1,469 @@
+  // ── DOM scaffold ──────────────────────────────────────────────────────────────
+  const overlay = document.createElement('div');
+  overlay.id = 'lib-overlay';
+  overlay.innerHTML = `
+    <!-- Top bar. Two layouts share this one markup:
+         - non-deskx (web/iOS, no Editor counterpart to match): original flex flow, unchanged —
+           logo-gap -> search -> view toggle -> zoom -> flag row -> sort -> filters -> spacer ->
+           All FX -> Export -> gear.
+         - body.deskx (macOS shell): a 3-column grid (#lib-top-left/#lib-top-center/#lib-top-right
+           below), matching #fx-deskbar's own left/title/right structure in chromasmith-22.html
+           exactly — see the Topbar Parity comparison this was built from (Library vs Editor
+           topbar, both measured live). Sort/Filters/view-toggle move into the left group at the
+           same x the Editor's undo button starts from; search moves into the centre, same slot
+           as the Editor's filename/status title; zoom, flags, All FX, Export and the gear share
+           one right-hand order with the Editor: zoom -> flags -> All FX -> Export -> gear.
+           Everything the wireframe's bar has no room for (folder picker, Google Photos import,
+           recent folders, Get Info, full-window toggle, sidebar show/hide, display options,
+           theme) relocates into the gear's View menu below, per Tareq's own call on where
+           displaced controls go. -->
+    <div id="lib-top" class="lib-fullview-only">
+      <div class="lib-logo-gap"></div>
+      <div id="lib-top-left">
+      <div style="position:relative">
+        <button class="lib-btn lib-pill" id="lib-sort-btn" title="Sort by">${ic('sortAsc',13)}<span class="lbl" id="lib-sort-label">Date taken</span></button>
+        <div class="lib-menu" id="lib-sort-menu">
+          <div class="grp-label">Sort by</div>
+          <select id="lib-sort" style="display:none">
+            <option value="name">Name</option>
+            <option value="mtime">Date modified</option>
+            <option value="date">Date taken</option>
+            <option value="iso">ISO</option>
+            <option value="shutter">Shutter speed</option>
+            <option value="aperture">Aperture</option>
+            <option value="focal">Focal length</option>
+            <option value="camera">Camera</option>
+            <option value="edited">Edit status</option>
+            <option value="rating">Rating</option>
+            <option value="editedts">Date edited</option>
+          </select>
+          <!-- #13: matches the wireframe's own 3 keys (Library View.html:238-241) exactly —
+               Name/Rating/Camera stay reachable via the list-view's own column headers
+               (data-sort on .lib-lh-cell), a separate real feature the wireframe's mock has no
+               equivalent surface for, so removing them from just this menu keeps the feature
+               without keeping the menu's own divergence from the wireframe. "Date added" reuses
+               the existing 'mtime' sort key (file mtime) — the closest available proxy; there is
+               no distinct added-to-catalog timestamp anywhere in this app. -->
+          ${['date:Date taken', 'mtime:Date added', 'editedts:Date edited']
+            .map((s) => { const [v, l] = s.split(':'); return `<div class="opt" data-sortval="${v}"><span>${l}</span>${LIB_CHECK_SVG}</div>`; }).join('')}
+          <hr>
+          <!-- Newest first / Oldest first radio pair, replacing the old single "Reverse order"
+               toggle — Library View.html:244-245, copied literally. -->
+          <div class="opt" data-sortdir="desc"><span>Newest first</span>${LIB_CHECK_SVG}</div>
+          <div class="opt" data-sortdir="asc"><span>Oldest first</span>${LIB_CHECK_SVG}</div>
+        </div>
+      </div>
+      <div id="lib-filters-btn-wrap">
+        <button class="lib-btn lib-pill" id="lib-filters-btn" title="Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M4 6h16M4 12h16M4 18h16M8 4l2 2-2 2-2-2ZM16 10l2 2-2 2-2-2ZM11 16l2 2-2 2-2-2Z"/></svg><span class="lbl">Filters</span><span id="lib-filters-badge"></span></button>
+      </div>
+      <!-- Grid/List only, matching Library View.html's 2-button toggle — Compare moved into the
+           gear's View menu (below) per explicit decision: it's a real feature but not common
+           enough to earn a permanent topbar slot next to the two everyday view modes. -->
+      <div class="lib-seg lib-viewtoggle" id="lib-viewmode-seg" hidden style="display:none">
+        <button data-v="grid" title="Grid view">${ic('gridView',14)}</button>
+        <button data-v="list" title="List view">${ic('tableView',14)}</button>
+      </div>
+      </div>
+      <div class="lib-spacer"></div>
+      <!-- Single search feature, one icon: plain filename/keyword search and AI/CLIP semantic
+           search (e.g. "a dog on a beach") both live in this one box — typing filters live
+           (plain match), and Enter with non-empty text ALWAYS also runs the AI/CLIP semantic
+           search (runClipTextSearch, wired below), not only when the plain match is empty.
+           HANDOVER §3.11 — this comment previously claimed the empty-match condition. Per
+           explicit decision, there is no separate AI-search button/icon: two search icons read
+           as two features when there's really only one. Under deskx this sits centred in
+           #lib-top-center, same slot as the Editor's filename/status title. -->
+      <div id="lib-top-center">
+      <div class="lib-search-wrap">
+        ${ic('search', 14)}
+        <input id="lib-search" placeholder="Search places, keywords, anything" autocomplete="off" title="Type a place, keyword or filename; press Enter to also find photos that look like it (e.g. &quot;dog on a beach&quot;)" />
+        <div id="lib-search-suggest" hidden></div>
+      </div>
+      </div>
+      <div id="lib-top-right">
+      <!-- 2026-09-11 (topbar parity pass): zoom + flags merged into ONE cluster
+           (#lib-zoomflag-cluster), mirroring the Editor's own #fx-zoom-ctrl (chromasmith-22.html)
+           which holds its zoom slider AND flag buttons as one group carrying a single divider.
+           Previously these were two independent flex children of #lib-top-right, each getting
+           the row's own 8px gap on both sides — that read as "zoom  flags" evenly spaced same as
+           "flags  All FX", when the Editor treats zoom+flags as one visual unit and only dividers
+           its OUTER edges. See body.deskx #lib-overlay #lib-zoomflag-cluster below for the exact
+           divider/gap values, copied literally from #fx-deskbar-tools .fx-zoom-ctrl /
+           body.deskx .fx-zoom-ctrl. -->
+      <div id="lib-zoomflag-cluster">
+      <div class="lib-zoomrow">
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-out" title="Smaller thumbnails">${ic('zoomOut',12)}</button>
+        <input type="range" id="lib-thumbsize" min="90" max="320" step="10" title="Thumbnail size">
+        <button type="button" class="lib-zoom-btn" id="lib-zoom-in" title="Larger thumbnails">${ic('zoomIn',12)}</button>
+      </div>
+      <!-- Flag row: applies to the selected Library photos. The Editor's separate toolbar
+           continues to rate only the photo being edited via window.chromasmithToggle*().
+           Reject icon is 'flagRed' (not the generic 'close' this used to render) — the Editor's
+           own reject button (#btn-flag-red, chromasmith-22.html) uses 'flagRed' specifically so
+           the two bars show the literal same glyph, not two different X shapes at two different
+           stroke weights. -->
+      <div class="lib-flagrow" id="lib-flagrow">
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-reject" title="Reject selected photos">${ic('flagRed',18)}</button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-pick" title="Pick selected photos">${ic('flagGreen',18)}</button>
+        <button class="lib-btn lib-btn-icon flag-btn" id="lib-flag-fav" title="Favorite selected photos">${ic('heart',18)}</button>
+      </div>
+      </div>
+      <button class="lib-btn lib-pill" id="lib-allfx-btn" title="Apply your All FX effects to every selected photo (right-click to choose what it applies)">${ic('enableAll',14)}<span class="lbl">All FX</span></button>
+      <button class="lib-btn lib-btn-export" id="lib-export-btn" title="Export selected photos — ${kbd([], 'E')}">${ic('export',14)}<span class="lbl">Export</span></button>
+      <!-- id (not just a bare positioning div) so body.deskx can give it the SAME margin-left/
+           padding-left/border-left divider as the Editor's own #fx-settings, instead of just the
+           row's flat 8px gap — see the #lib-settings CSS rule below, copied from #fx-settings. -->
+      <div style="position:relative" id="lib-settings">
+        <button class="lib-btn lib-btn-icon" id="lib-view-menu-btn" title="View settings"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 3h6l6 6v6l-6 6H9l-6-6V9Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <!-- CHR-147 fix: reverted to a flat single-list menu. The 2026-09-11 two-column
+             category drill-down (matching the Editor's #fx-settings-menu) hid every option
+             outside the default "Library" pane behind a tab click with no strong visual cue,
+             so toggles like "Hide flag & type icons" and the theme switch appeared unresponsive
+             — reported as "settings button doesn't work in library view". Library has far fewer
+             settings than the Editor, so the drill-down's scroll-avoidance tradeoff wasn't
+             worth the discoverability cost here. -->
+        <!-- Same drill-down as the Studio's #fx-settings-menu (categories left, page right),
+             sharing its .fx-settings-* classes. The first category opens by default and hovering
+             a category switches to it, so nothing is hidden behind an unexplained click (CHR-147). -->
+        <!-- One settings menu for gallery and Studio: these panes are moved into the Studio's
+             #fx-settings-menu at init (libSettingsAdopt) and shown as its gallery categories. -->
+        <div id="lib-view-menu" hidden>
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-library">          
+          <div class="fx-ovf-grp-label">Workspace</div>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-unified-toggle" title="Keep the Library and current photo editor visible side by side">
+            <span>Show Gallery + Studio together</span><input id="lib-unified-toggle" type="checkbox" aria-label="Show Gallery and Studio together">
+          </label>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-stars-toggle" title="Show, filter and set star ratings while preserving ratings in photo sidecars">
+           <span>Show star ratings</span><input id="lib-stars-toggle" type="checkbox" aria-label="Show star ratings">
+          </label>
+          <label class="fx-ovf-item lib-unified-setting" for="lib-color-labels-toggle" title="Show, edit, filter and use color labels independently from Pick and Reject">
+            <span>Show colour labels</span><input id="lib-color-labels-toggle" type="checkbox" aria-label="Show colour labels">
+          </label>
+          <div class="fx-ovf-sep"></div>
+          <button class="fx-ovf-item opt-action" id="lib-pick" title="Choose root folder">${ic('library',15)}<span>Choose folder…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-quickstart" title="Replay the quick-start tour: open, edit, export">${ic('info',15)}<span>Quick start tour</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-gphotos" title="Import from Google Photos">${ic('cloud',15)}<span>Import from Google Photos…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-recent" title="Recent folders &amp; the Google Photos Download cache">${ic('history',15)}<span>Recent folders…</span></button>
+          <button class="fx-ovf-item" id="lib-takeout-names" title="Use the people Google Photos already recognised — choose an unzipped Google Takeout folder">${ic('cloud',15)}<span>Import names from Google Photos…</span></button>
+          <div class="fx-ovf-sep"></div>
+          <div class="fx-ovf-grp-label">Library backup</div>
+          <button class="fx-ovf-item opt-action" id="lib-backup-create" title="Save a verified copy of library data, edits and organization">${ic('export',15)}<span>Create library backup…</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-backup-restore" title="Verify a backup and restore it to a separate folder">${ic('import',15)}<span>Verify / restore backup…</span></button>
+          <div id="lib-backup-last" class="fx-ovf-grp-label" aria-live="polite">Last backup: checking…</div>
+          <button class="fx-ovf-item opt-action" id="lib-info-btn" title="Get Info for the selected photo — I">${ic('info',15)}<span>Get Info</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-expand" title="Full-window view — G">${ic('fit',15)}<span>Full-window view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-compare-btn" title="Compare two photos/looks side by side — C">${ic('compare',15)}<span>Compare view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-survey-btn" title="Survey selected photos side by side — N">${ic('compare',15)}<span>Survey view</span></button>
+          <button class="fx-ovf-item opt-action" id="lib-preview-btn" title="Show photos from this view as a moving wall, drift, scattered prints or cursor trail">${ic('play',15)}<span>Photo preview</span></button>
+          </div>
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-thumbnails">
+          <div class="fx-ovf-grp-label">Layout</div>
+          <div class="fx-ovf-item" data-viewval="grid"><span>Grid</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-viewval="list" id="lib-listview-opt"><span>List</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-sep"></div>          
+          <div class="fx-ovf-item" id="lib-hideicons"><span>Hide flag &amp; type icons</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-zerogap"><span>No spacing between photos</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-mat"><span>Border around photos</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" id="lib-showtitle"><span>Show title</span>${LIB_CHECK_SVG}</div>
+          <button class="fx-ovf-item opt-toggle" id="lib-aspect-toggle" title="Show thumbnails at their real aspect ratio instead of cropped to a square."><span>Real aspect ratio</span>${LIB_CHECK_SVG}</button>
+          <div class="fx-ovf-sep"></div>
+          <div class="fx-ovf-grp-label">Metadata overlay</div>
+          <select id="lib-metadisp" style="display:none">
+            <option value="off">Off</option>
+            <option value="hover">On hover</option>
+            <option value="always">Always on</option>
+          </select>
+          <div class="fx-ovf-item" data-metaval="off"><span>Off</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-metaval="always"><span>Always on</span>${LIB_CHECK_SVG}</div>
+          <div class="fx-ovf-item" data-metaval="hover"><span>On hover</span>${LIB_CHECK_SVG}</div>
+          </div>
+          <div class="fx-settings-pane lib-settings-pane" id="lib-pane-panels">          
+          <button class="fx-ovf-item opt-toggle" id="lib-tree-toggle" title="Show/hide the sidebar (collections, cloud sources, folder tree)"><span>Show sidebar</span>${LIB_CHECK_SVG}</button>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+    <!-- The filter row stays in this pinned grid track while #lib-main scrolls below it. -->
+    <div id="lib-filters" class="lib-fullview-only">
+      <div class="lib-filterrow" id="lib-filter-row">
+        <span class="lib-flabel">Types</span>
+        <button class="lib-chip lib-sel" data-fgrp="type" data-fval="all">All</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="raw">RAW</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="jpeg">JPEG</button>
+        <button class="lib-chip" data-fgrp="type" data-fval="video">Video</button>
+        <button class="lib-chip" id="lib-types-more" title="More types">…</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="heic" hidden>HEIC</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="tiff" hidden>TIFF</button>
+        <button class="lib-chip lib-more-type" data-fgrp="type" data-fval="png" hidden>PNG</button>
+        <div class="lib-filterdiv"></div>
+        <span class="lib-flabel">Flags &amp; tags</span>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="green" title="Picked">${ic('flagGreen', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="red" title="Rejected">${ic('close', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="favorite" title="Favorited">${ic('heart', 14)}</button>
+        <button class="lib-chip lib-iconchip" data-fgrp="flag" data-fval="none" title="Unflagged"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" stroke-linejoin="miter"><circle cx="12" cy="12" r="9"/><path d="M6 18 18 6"/></svg></button>
+        <div class="lib-filterdiv"></div>
+        <button class="lib-chip" id="lib-more-filters" title="Camera, lens, ISO, duplicates, sync and rating filters">More…</button>
+      </div>
+      <span id="lib-lr-chip">✓ Lightroom connected <span class="lib-lr-signout" title="Sign out of Adobe Lightroom">Sign out</span></span>
+      <div id="lib-filter-chips"></div>
+    </div>
+    <div id="lib-viewbar" class="lib-fullview-only"></div>
+    <div id="lib-filters-panel" class="lib-fullview-only">
+      <div id="lib-filters-panel-head">
+        <span>Filters</span>
+        <span id="lib-filters-panel-close" title="Close">${ic('close', 15)}</span>
+      </div>
+      <label id="lib-subfolders-wrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer" title="Also show photos in every subfolder, not just this one — matches Lightroom's 'Include Photos from Subfolders'">
+        <input type="checkbox" id="lib-subfolders">Subfolders</label>
+      <div class="lib-filter-field"><label for="lib-source">Photo source</label><select id="lib-source" title="Photo source">
+        <option value="folder">This folder</option>
+        <option value="edited">All Edited</option>
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-type-filter">File type</label><select id="lib-type-filter" title="Filter by file type">
+        <option value="all">All types</option>
+        <option value="raw">RAW</option><option value="jpeg">JPEG</option>
+        <option value="png">PNG</option><option value="tiff">TIFF</option>
+        <!-- heic/webp/hdr/other added alongside the format-widening work: kind_of() (Rust,
+             library.rs → formats::media_kind) has always emitted "heic" for iPhone photos —
+             there was no option here to reach it, so HEIC files were listable but never
+             filterable. "other" covers the desktop-only decode_image_v1 formats
+             (TGA/DDS/QOI/FF/PNM*/JXL) plus GIF/BMP/ICO/AVIF, none of which had a bucket of
+             their own. -->
+        <option value="heic">HEIC</option><option value="webp">WebP</option>
+        <option value="hdr">HDR/EXR</option><option value="other">Other</option>
+        <option value="video">Video</option>
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-camera-filter">Camera</label><select id="lib-camera-filter" title="Filter by camera"><option value="all">All cameras</option></select></div>
+      <div class="lib-filter-field"><label for="lib-lens-filter">Lens</label><select id="lib-lens-filter" title="Filter by lens"><option value="all">All lenses</option></select></div>
+      <div class="lib-filter-field"><label for="lib-iso-filter">ISO</label><select id="lib-iso-filter" title="Filter by ISO"><option value="all">All ISOs</option></select></div>
+      <div class="lib-filter-field"><label for="lib-dupe-filter">Duplicates</label><select id="lib-dupe-filter" title="Filter by duplicate status">
+        <option value="all">All photos</option>
+        <option value="dupes">Duplicates only</option>
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-synced-filter">Google Photos sync</label><select id="lib-synced-filter" title="Filter by Google Photos sync status">
+        <option value="all">All photos</option>
+        <option value="synced">Synced to Google Photos</option>
+        <option value="notsynced">Not synced</option>
+      </select></div>
+      <div class="lib-filter-field"><label for="lib-faces-filter">Face indexing</label><select id="lib-faces-filter" title="Filter by face-indexing status">
+        <option value="all">All photos</option>
+        <option value="indexed">Face-scanned</option>
+        <option value="pending">Not face-scanned</option>
+      </select></div>
+      <div id="lib-color-label-filter-wrap" class="lib-filter-field"><label for="lib-color-label-filter">Colour label</label>
+        <select id="lib-color-label-filter" title="Filter by colour label">
+          <option value="all">Any colour label</option><option value="none">No colour label</option>
+          <option>Red</option><option>Yellow</option><option>Green</option><option>Blue</option><option>Purple</option>
+        </select>
+      </div>
+      <!-- Own wrapper, deliberately: syncFilterUI() hides _rf.closest('label') || _rf.parentElement
+           when STARS_ENABLED is false (it is, unconditionally, in production today), so this
+           select's PARENT must be a dedicated element it alone owns — otherwise that hide call
+           takes out whatever else shares the parent. It used to share #lib-filters-pop with
+           seven other filters and #lib-filters-panel now, either of which this would have
+           hidden in full; this wrapper is what makes STARS_ENABLED=false actually mean "hide
+           just the rating filter" rather than "hide whichever container it happens to sit in". -->
+      <div id="lib-rating-filter-wrap" class="lib-filter-field"><label for="lib-rating-filter">Star rating</label>
+        <select id="lib-rating-filter" title="Filter by star rating">
+          <option value="all">Any rating</option>
+          <option value="0">Unrated</option>
+          <option value="1">★1+</option>
+          <option value="2">★2+</option>
+          <option value="3">★3+</option>
+          <option value="4">★4+</option>
+          <option value="5">★5</option>
+        </select>
+      </div>
+      <div class="lib-filter-field"><label for="lib-tag-filter">Tags</label><select id="lib-tag-filter" title="Filter by tag">
+        <option value="all">All tags</option>
+        <option value="red">Rejected (X)</option>
+        <option value="green">Picked (flag)</option>
+        <option value="edited">Edited</option>
+        <option value="noedited">Not edited</option>
+        <option value="favorite">Favorites</option>
+        <option value="none">Unflagged</option>
+      </select></div>
+      <button class="lib-btn" id="lib-filters-clear">Clear all</button>
+      <div class="lib-fp-label">Display</div>
+      <select id="lib-views" title="Saved filter + sort views"><option value="">Views…</option></select>
+      <!-- lib-thumbsize (zoom), lib-showtitle/lib-hideicons/lib-zerogap and lib-metadisp all
+           relocated to the top bar / gear View menu above — kept as the single live copy of
+           each id there, not duplicated here. -->
+    </div>
+    <!-- Deskx-docked-only resizer for the filmstrip's own width — a sibling of #lib-side, not
+         nested inside it, so it stays grabbable regardless of what's shown inside #lib-side.
+         Same drag pattern as #lib-side-resizer below, but sets --dock-w-user on
+         chromasmith-22.html's .fx-layout (the actual grid track, not this element's own cosmetic
+         width) — see that variable's own comment for why it's an indirection layer. -->
+    <div class="lib-dock-resizer" id="lib-dock-resizer"></div>
+    <button id="lib-unified-resizer" type="button" role="separator" aria-orientation="vertical"
+      aria-label="Resize Gallery and Studio panes" aria-valuemin="300" aria-valuemax="900" aria-valuenow="50" tabindex="0" hidden></button>
+    <div id="lib-side">
+      <div class="lib-side-resizer" id="lib-side-resizer"></div>
+      <div class="lib-side-tabs">
+        <!-- "on" was a static class here, always Library, even while docked next to an open
+             photo (i.e. actually in Develop) — the active tab now genuinely tracks which view
+             you're in (syncSideTabs(), called on every toggleExpandedView + photo open). Icons
+             kept for visual consistency with the full-view tabs. The dock CAN be resized down to
+             LIB_DOCK_MIN (90px), where the label genuinely has no room — syncSideTabsCompact()
+             hides the <span> at that point (see its own comment). aria-label is set explicitly
+             to the plain tab name (not the title's "Switch to X" phrasing) so hiding the span
+             doesn't change what a screen reader announces this button as. -->
+        <button class="lib-side-tab" id="lib-side-tab-library" title="Switch to Gallery" aria-label="Gallery">${ic('library',13)}<span>Gallery</span></button>
+        <!-- HANDOVER §3.4: "Develop — not yet available" contradicted the click, which already
+             performs a real navigation (closes the Library, same as the header button / L key).
+             The wiring is correct — Develop simply IS the editor you land back in — so the
+             stale "not yet available" title was the lie, not the handler. -->
+        <button class="lib-side-tab" id="lib-side-tab-develop" title="Switch to Studio" aria-label="Studio">${ic('tools',13)}<span>Studio</span></button>
+      </div>
+      <div id="lib-collections" class="lib-fullview-only"></div><div id="lib-folders-header" class="lib-fullview-only"></div><div id="lib-tree" class="lib-fullview-only"></div><div id="lib-collections-post" class="lib-fullview-only"></div>
+    </div>
+    <div id="lib-main">
+      <!-- Grid title: the view's name at the top; while scrolling it becomes the date of the top
+           visible row (month / day / hour, picked from the view's own date span) so a
+           several-thousand-photo folder reads as a timeline instead of one undivided wall. -->
+      <div id="lib-grid-title"><span class="lgt-k"></span><h1 class="lgt-h"></h1></div>
+      <div id="lib-list-head">
+        <div class="lib-lh-cell lib-lh-thumb"></div>
+        <div class="lib-lh-cell" data-sort="name">Name</div>
+        <div class="lib-lh-cell" data-sort="date">Date</div>
+        <div class="lib-lh-cell" data-sort="editedts">Edited on</div>
+        <div class="lib-lh-cell" data-sort="camera">Camera</div>
+        <div class="lib-lh-cell" data-sort="iso">ISO</div>
+        <div class="lib-lh-cell" data-sort="shutter">Shutter</div>
+        <div class="lib-lh-cell" data-sort="aperture">Aperture</div>
+        <div class="lib-lh-cell" data-sort="focal">Focal</div>
+        <div class="lib-lh-cell lib-lh-flags">Flags</div>
+        <div class="lib-lh-cell" data-sort="edited">Edited</div>
+      </div>
+      <div id="lib-grid"></div>
+      <div id="lib-compare"></div>
+      <div id="lib-survey"></div>
+    </div>
+    <div id="lib-bottom" class="lib-fullview-only">
+      <span style="font-size:11px;color:var(--mut)" id="lib-thumb-progress"></span>
+      <span id="lib-status-labels" style="font-size:11px;color:var(--mut);display:flex;gap:8px;align-items:center"></span>
+      <span id="lib-activity"></span>
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--mut)" id="lib-status-sel"></span>
+      <!-- CHR-157: the photo count sits at the right end of the status bar. -->
+      <span style="font-size:11px;color:var(--mut)" id="lib-count"></span>
+    </div>
+  `;
+  // Swiss v2: no status bar in the gallery. The photo count and flag tallies sit at the right of the
+  // big grid title; indexing / thumbnail progress becomes a small indicator in the top bar that
+  // expands on click. Same elements (same ids, same updaters) — only their place changes.
+  (function sk2LibRelocate() {
+    const title = overlay.querySelector('#lib-grid-title'), top = overlay.querySelector('#lib-top-right');
+    if (title && !title.querySelector('.lgt-m')) {
+      const left = document.createElement('div'); left.className = 'lgt-l';
+      while (title.firstChild) left.appendChild(title.firstChild);
+      const meta = document.createElement('div'); meta.className = 'lgt-m';
+      ['lib-status-sel', 'lib-status-labels', 'lib-count'].forEach((id) => { const e = overlay.querySelector('#' + id); if (e) meta.appendChild(e); });
+      title.append(left, meta);
+    }
+    // Background progress belongs in the top-right status rail, but the rail wrapper itself is
+    // deliberately a DIV: the job-history control inside it is the only button. Keeping the
+    // original updater-owned nodes preserves their IDs/listeners, while the history popover can
+    // remain mounted (and keyboard-reachable) even after the active job has gone idle.
+    if (document.body.classList.contains('sk2') && top && !overlay.querySelector('#sk2-act')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'sk2-act';
+      wrap.style.cssText = 'display:inline-flex;position:relative;align-items:center;gap:8px;max-width:360px;min-width:0;flex:0 1 auto';
+      const live = document.createElement('span');
+      live.className = 'sk2-act-body';
+      live.style.cssText = 'display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:240px';
+      const dot = document.createElement('span');
+      dot.className = 'sk2-act-dot';
+      dot.setAttribute('aria-hidden', 'true');
+      dot.hidden = true;
+      const jobs = document.createElement('button');
+      jobs.id = 'sk2-act-jobs';
+      jobs.type = 'button';
+      jobs.className = 'lib-btn';
+      jobs.textContent = 'Jobs';
+      jobs.title = 'Recent background jobs';
+      jobs.setAttribute('aria-label', 'Recent background jobs');
+      jobs.setAttribute('aria-expanded', 'false');
+      jobs.setAttribute('aria-controls', 'sk2-act-pop');
+      const pop = document.createElement('div');
+      pop.id = 'sk2-act-pop';
+      pop.hidden = true;
+      pop.setAttribute('role', 'region');
+      pop.setAttribute('aria-label', 'Recent background jobs');
+      pop.style.cssText = 'position:absolute;top:calc(100% + 6px);right:0;z-index:9999;width:min(420px,calc(100vw - 16px));max-height:min(62vh,520px);overflow:auto;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:10px;box-shadow:var(--lift-2);';
+      const thumbProgress = overlay.querySelector('#lib-thumb-progress');
+      const activityEl = overlay.querySelector('#lib-activity');
+      if (thumbProgress) live.appendChild(thumbProgress);
+      if (activityEl) live.appendChild(activityEl);
+      wrap.append(dot, live, jobs, pop);
+      top.appendChild(wrap);
+      jobs.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const open = pop.hidden;
+        compactJobsOpen = open;
+        activity.expanded = open;
+        pop.hidden = !open;
+        jobs.setAttribute('aria-expanded', String(open));
+        wrap.classList.toggle('open', open);
+        renderActivity();
+      };
+      wrap.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !pop.hidden) {
+          compactJobsOpen = false;
+          activity.expanded = false;
+          pop.hidden = true; jobs.setAttribute('aria-expanded', 'false'); wrap.classList.remove('open'); jobs.focus();
+          e.stopPropagation();
+        }
+      });
+    }
+    // 12: housekeeping rows (Library folders…, Free up space…, …) fold behind one "Manage" row.
+    const mg = () => {
+      const first = overlay.querySelector('.sk2-manage');
+      if (!first || first.parentNode.querySelector('.sk2-manage-btn')) return;
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sk2-manage-btn'; b.textContent = 'Manage';
+      b.onclick = () => first.parentNode.classList.toggle('sk2-manage-open');
+      first.parentNode.insertBefore(b, first);
+    };
+    new MutationObserver(mg).observe(overlay, { childList: true, subtree: true }); mg();
+    // (The docked filmstrip's photo counter was removed — it repeated the total and never said
+    // which photo was open.)
+    // Under Swiss v2, #lib-activity and #lib-thumb-progress live in the stable-width top-right
+    // activity wrapper above; the wrapper does not appear/disappear with job transitions.
+  })();
+  // Make the dock a real grid-column sibling of the preview/panel/rail row instead of a
+  // body-level overlay — see the big comment above the style block. .fx-layout already exists
+  // in the DOM by the time this script runs (injected just before </body>, after the app's own
+  // markup). Falls back to a plain body-append if .fx-layout is ever missing (e.g. this file
+  // loaded standalone for testing) so the panel still renders, just without the grid-column
+  // placement — better than a hard failure.
+  const fxLayoutEl = document.querySelector('.fx-layout');
+  if (fxLayoutEl) fxLayoutEl.insertBefore(overlay, fxLayoutEl.firstChild);
+  else document.body.appendChild(overlay);
+
+  // Reopen affordance for a fully-collapsed docked filmstrip (see the #lib-dock-reopen CSS
+  // comment) — deliberately appended to <body> directly, NOT into .fx-layout/#lib-overlay: it
+  // has to stay clickable while the dock column it reopens is display:none.
+  const dockReopenBtn = document.createElement('button');
+  dockReopenBtn.id = 'lib-dock-reopen';
+  dockReopenBtn.title = 'Show the filmstrip';
+  dockReopenBtn.setAttribute('aria-label', 'Show the filmstrip');
+  dockReopenBtn.innerHTML = ic('library', 15); // no dedicated sidebar/panel icon in ICONS; reuses the Library tab's own glyph — this IS what it reopens
+  document.body.appendChild(dockReopenBtn);
+
+  // No JS-computed padding/width to keep in sync anymore — chromasmith-22.html's own
+  // body.lib-docked/body.lib-full selectors (toggled below) size the reserved grid column
+  // directly. Kept as a harmless no-op stub since a couple of call sites below still poke it
+  // after a state change; deleting them individually isn't worth the risk of missing one.
+  function syncDockPadding() {}
+
+  // CHR-130: scroll/click in the docked filmstrip re-saturates it until 1.2s of inactivity.
+  (function () {
+    const main = overlay.querySelector('#lib-main');
+    if (!main) return;
+    let t = 0;
+    const wake = () => { main.classList.add('fs-active'); clearTimeout(t); t = setTimeout(() => main.classList.remove('fs-active'), 1200); };
+    main.addEventListener('scroll', wake, { passive: true });
+    main.addEventListener('pointerdown', wake, true);
+  })();

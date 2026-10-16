@@ -1,0 +1,181 @@
+// ── Sidecar sweep: notice in-place .xmp rewrites without re-walking the library ──────────────
+//
+// A rating/label written by rewriting an existing `.xmp` does not move any directory mtime, so
+// the directory-only launch check cannot see it. `photos.sidecar_mtime` (written by walk_root)
+// is the baseline; this re-stats the sidecars of ONE directory at a time and updates only the
+// rows whose sidecar mtime differs, leaving `sidecar_run` (phase C) to re-parse exactly those.
+// Never holds the writer lock across filesystem IO; one directory per lock step.
+
+#[derive(Serialize, Clone, Default, Debug)]
+pub struct SidecarSweepResult {
+    pub dirs: usize,
+    pub changed: usize,
+}
+
+/// Directories already verified this session (volume_id, rel_dir) — shared by the lazy
+/// per-folder check and the background sweep so neither repeats the other's work. Only used by
+/// the live (`Locked`) paths; tests pass `None`.
+type VerifiedDirs = Mutex<std::collections::HashSet<(i64, String)>>;
+static VERIFIED_SIDECAR_DIRS: std::sync::LazyLock<VerifiedDirs> =
+    std::sync::LazyLock::new(|| Mutex::new(std::collections::HashSet::new()));
+
+/// Re-syncs `photos.sidecar_mtime` for the photos directly inside `rel_dir`. Returns rows changed.
+fn sidecar_sync_dir(src: &ConnSrc, volume_id: i64, mount: &Path, rel_dir: &str) -> Result<usize, String> {
+    // Filesystem — no lock. Same keying as walk_root: sidecar mtime by lowercase stem, seconds.
+    let mut xmp: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    if let Ok(rd) = std::fs::read_dir(mount.join(rel_dir)) {
+        for e in rd.flatten() {
+            let p = e.path();
+            if ext_lower(&p) == "xmp" {
+                if let Some(stem) = p.file_stem() {
+                    xmp.insert(stem.to_string_lossy().to_lowercase(), sidecar_mtime_of(&p));
+                }
+            }
+        }
+    }
+    src.with(|conn| {
+        let rows: Vec<(i64, String, i64)> = conn
+            .prepare("SELECT id, name, sidecar_mtime FROM photos WHERE volume_id = ?1 AND rel_dir = ?2 AND present = 1")
+            .map_err(|e| e.to_string())?
+            .query_map(params![volume_id, rel_dir], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let diffs: Vec<(i64, i64)> = rows
+            .iter()
+            .filter_map(|(id, name, old)| {
+                let stem = Path::new(name).file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+                let new = xmp.get(&stem).copied().unwrap_or(0) as i64;
+                (new != *old).then_some((*id, new))
+            })
+            .collect();
+        if diffs.is_empty() {
+            return Ok(0);
+        }
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, new) in &diffs {
+            tx.execute("UPDATE photos SET sidecar_mtime = ?1 WHERE id = ?2", params![new, id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(diffs.len())
+    })
+}
+
+/// Sidecar-syncs every directory recorded in `walked_dirs` for the roots of `only_volume_id`
+/// that is (a) under `only_under` when given and (b) not already verified. Stops at `budget`
+/// (lazy per-folder use) or on `cancel` / the user's pause (background use).
+fn sidecar_sweep_impl(
+    src: &ConnSrc,
+    only_volume_id: Option<i64>,
+    only_under: Option<(i64, &str)>,
+    verified: Option<&VerifiedDirs>,
+    budget: Option<std::time::Duration>,
+    cancel: &AtomicBool,
+) -> Result<SidecarSweepResult, String> {
+    let started = std::time::Instant::now();
+    let todo: Vec<(i64, PathBuf, String)> = src.with(|conn| {
+        let mut out = Vec::new();
+        let mut roots = conn
+            .prepare(
+                "SELECT r.id, r.volume_id, v.last_path FROM roots r JOIN volumes v ON v.id = r.volume_id
+                 WHERE (?1 IS NULL OR r.volume_id = ?1)",
+            )
+            .map_err(|e| e.to_string())?;
+        let roots: Vec<(i64, i64, String)> = roots
+            .query_map(params![only_volume_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let mut dirs_stmt = conn.prepare("SELECT rel_dir FROM walked_dirs WHERE root_id = ?1").map_err(|e| e.to_string())?;
+        for (root_id, volume_id, mount) in roots {
+            let dirs: Vec<String> = dirs_stmt
+                .query_map(params![root_id], |r| r.get(0))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<_, _>>()
+                .map_err(|e| e.to_string())?;
+            for d in dirs.into_iter().filter(|d| !is_xmp_rel(d)) {
+                if let Some((vid, under)) = only_under {
+                    if vid != volume_id || !(d == under || d.starts_with(&format!("{under}/"))) {
+                        continue;
+                    }
+                }
+                out.push((volume_id, PathBuf::from(&mount), d));
+            }
+        }
+        Ok(out)
+    })?;
+    let mut result = SidecarSweepResult::default();
+    for (volume_id, mount, rel_dir) in todo {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(b) = budget {
+            if started.elapsed() >= b {
+                break;
+            }
+        } else {
+            if bg_is_paused() {
+                break;
+            }
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
+        }
+        if let Some(v) = verified {
+            if v.lock().map(|g| g.contains(&(volume_id, rel_dir.clone()))).unwrap_or(false) {
+                continue;
+            }
+        }
+        if !mount.is_dir() {
+            continue;
+        }
+        result.changed += sidecar_sync_dir(src, volume_id, &mount, &rel_dir)?;
+        result.dirs += 1;
+        if let Some(v) = verified {
+            if let Ok(mut g) = v.lock() {
+                g.insert((volume_id, rel_dir));
+            }
+        }
+    }
+    Ok(result)
+}
+
+/// Test/offline entry: sweeps everything under a held connection (no session memo, no pacing).
+pub fn sidecar_sweep_run(conn: &Connection, only_volume_id: Option<i64>, cancel: &AtomicBool) -> Result<SidecarSweepResult, String> {
+    sidecar_sweep_impl(&ConnSrc::Held(conn), only_volume_id, None, None, None, cancel)
+}
+
+/// Live background sweep (whole library, one directory per writer-lock step, paused-aware).
+pub fn sidecar_sweep_scoped(state: &CatalogState, only_volume_id: Option<i64>, cancel: &AtomicBool) -> Result<SidecarSweepResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    sidecar_sweep_impl(&ConnSrc::Locked(state), only_volume_id, None, Some(&VERIFIED_SIDECAR_DIRS), None, cancel)
+}
+
+/// Lazy check for the folder the user just opened: that directory and its subdirectories, bounded
+/// by `budget` so a root with hundreds of folders cannot delay the grid.
+#[tauri::command]
+pub async fn catalog_sync_sidecars(app: tauri::AppHandle, volume_id: i64, rel_dir: String) -> Result<SidecarSweepResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        let cancel = AtomicBool::new(false);
+        let t = std::time::Instant::now();
+        let r = sidecar_sweep_impl(
+            &ConnSrc::Locked(&state),
+            Some(volume_id),
+            Some((volume_id, rel_dir.as_str())),
+            Some(&VERIFIED_SIDECAR_DIRS),
+            Some(std::time::Duration::from_millis(1500)),
+            &cancel,
+        )?;
+        crate::diag::log("info", format!("SCAN_TIMING lazy_sidecar_sync rel_dir={rel_dir} ms={} dirs={} changed={}", t.elapsed().as_millis(), r.dirs, r.changed));
+        if r.changed > 0 {
+            // Re-parse just the rows whose sidecar changed (phase C is keyed on mtime != parsed).
+            let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
+            sidecar_run_scoped(&state, &mut emit, &cancel)?;
+        }
+        Ok(r)
+    })
+    .await
+    .map_err(|e| format!("catalog_sync_sidecars task panicked: {e}"))?
+}

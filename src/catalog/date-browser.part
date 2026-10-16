@@ -1,0 +1,64 @@
+// ── Date browser ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct DayCount {
+    pub y: i32,
+    pub m: i32,
+    pub d: i32,
+    pub n: u64,
+}
+
+#[derive(Serialize)]
+pub struct DateCounts {
+    /// Flat (year, month, day, count) rows — one per day that has at least one present photo.
+    /// The frontend nests these into a Year › Month › Day tree client-side; a flat list plus
+    /// one query is what lets the WHOLE tree fill in with counts at every level in a single
+    /// round trip, no lazy per-node loading needed even at 15 years of history.
+    pub days: Vec<DayCount>,
+    /// Photos with no readable capture date — its own bucket rather than folded into a wrong
+    /// day, matching the same "don't guess a date" rule `ingest.rs`'s own capture_date follows.
+    pub no_date: u64,
+}
+
+#[tauri::command(async)]
+pub fn catalog_date_counts(state: tauri::State<CatalogState>) -> Result<DateCounts, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    date_counts_run(&conn)
+}
+
+pub fn date_counts_run(conn: &Connection) -> Result<DateCounts, String> {
+    // ⚠️ Must match query_run's own grouped-view predicate exactly (`stack_id IS NULL OR
+    // stack_id = id`) — verified live 2026-09-16: without it, a month with real stacks (e.g. a
+    // Sony body's paired RAW+JPG, auto-stacked as leader+derivative) showed a bigger number here
+    // than the grid actually displayed for that same month (43 here vs 36 real top-level photos
+    // in the grid), because this counted every derivative separately instead of folding it into
+    // its leader the way the grid does. A "By Date" count that doesn't match what clicking into
+    // that date actually shows is worse than no count.
+    let mut stmt = conn
+        .prepare(
+            "SELECT cap_y, cap_m, cap_d, COUNT(*) FROM photos
+             WHERE present = 1 AND cap_y IS NOT NULL AND cap_m IS NOT NULL AND cap_d IS NOT NULL
+               AND (stack_id IS NULL OR stack_id = id)
+             GROUP BY cap_y, cap_m, cap_d
+             ORDER BY cap_y DESC, cap_m DESC, cap_d DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let days = stmt
+        .query_map([], |r| {
+            Ok(DayCount { y: r.get(0)?, m: r.get(1)?, d: r.get(2)?, n: r.get::<_, i64>(3)? as u64 })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let no_date: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND (cap_y IS NULL OR cap_m IS NULL OR cap_d IS NULL)
+               AND (stack_id IS NULL OR stack_id = id)",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(DateCounts { days, no_date: no_date as u64 })
+}

@@ -1,0 +1,29 @@
+  // ── ROADMAP R13 part 2 (astro stacking) — a tiny modal so the user picks Mean vs Median,
+  // same <dialog> pattern as offlineQueueConflictModal below. Mean is the default (plain noise
+  // averaging); Median is offered alongside it because it's cheap to add given merge.rs already
+  // computes both from the same aligned stack, and it's the real astrophotography choice when a
+  // hot pixel, cosmic-ray hit, or a satellite/airplane light streak could contaminate one frame.
+  function astroStackModeModal() {
+    return new Promise((res) => {
+      let dlg = document.getElementById('lib-astro-modal');
+      if (!dlg) {
+        dlg = document.createElement('dialog');
+        dlg.id = 'lib-astro-modal';
+        dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:360px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+        dlg.innerHTML = '<div style="font-size:13px;line-height:1.5;margin-bottom:14px">Stack mode:<br>'
+          + '<span style="opacity:.7;font-size:11px">Mean — plain noise-reducing average.<br>'
+          + 'Median — also rejects hot pixels, cosmic-ray hits and satellite/airplane trails that hit only one frame.</span></div>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+          + '<button type="button" id="lib-astro-cancel" class="btn bgh">Cancel</button>'
+          + '<button type="button" id="lib-astro-median" class="btn bgh">Median</button>'
+          + '<button type="button" id="lib-astro-mean" class="btn bpri">Mean</button></div>';
+        document.body.appendChild(dlg);
+      }
+      const finish = (v) => { dlg.close(); res(v); };
+      dlg.querySelector('#lib-astro-mean').onclick = () => finish('mean');
+      dlg.querySelector('#lib-astro-median').onclick = () => finish('median');
+      dlg.querySelector('#lib-astro-cancel').onclick = () => finish(null);
+      dlg.onkeydown = (e) => { if (e.key === 'Escape') finish(null); };
+      dlg.showModal();
+    });
+  }

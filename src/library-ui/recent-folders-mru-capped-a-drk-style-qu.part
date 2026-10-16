@@ -1,0 +1,122 @@
+  // ── recent folders (MRU, capped) — a DRK-style quick-access list so re-opening a
+  // folder you browsed earlier this session (or a prior one) doesn't need the OS picker
+  // again. Kept separate from state.root/LS_ROOT (which only remembers the LAST folder). ────
+  const LS_RECENTS = 'chromasmith_lib_recents';
+  const RECENTS_MAX = 8;
+  function getRecentFolders() {
+    try { return JSON.parse(localStorage.getItem(LS_RECENTS) || '[]'); } catch (e) { return []; }
+  }
+  function pushRecentFolder(path) {
+    if (!path) return;
+    const list = getRecentFolders().filter((p) => p !== path);
+    list.unshift(path);
+    try { localStorage.setItem(LS_RECENTS, JSON.stringify(list.slice(0, RECENTS_MAX))); } catch (e) { /* ignore */ }
+  }
+  // Pinned folders — persisted favorites, unlike the MRU recents above (see the Recent menu).
+  const LS_PINS = 'chromasmith_lib_pins';
+  function getPinnedFolders() {
+    try { return JSON.parse(localStorage.getItem(LS_PINS) || '[]'); } catch (e) { return []; }
+  }
+  function togglePinnedFolder(path) {
+    if (!path) return;
+    const list = getPinnedFolders();
+    const i = list.indexOf(path);
+    if (i >= 0) list.splice(i, 1); else list.push(path);
+    try { localStorage.setItem(LS_PINS, JSON.stringify(list)); } catch (e) { /* ignore */ }
+    if (typeof toast === 'function') toast(i >= 0 ? 'Folder unpinned' : 'Folder pinned', true);
+  }
+
+  // Top-bar "Recent" dropdown: pinned Google Photos Download entry (always first, created on
+  // demand even if no import ran yet this launch) + the MRU recent-folders list. Lives in
+  // #lib-top rather than the folder tree (#lib-side) because #lib-side is HIDDEN in the
+  // docked filmstrip mode (deskx) — a tree-only quick-access link would be invisible there,
+  // which is exactly the "can't find quick access to the folder" bug this replaces.
+  let gphotosDirCache = null;
+  async function gphotosDownloadsDir() {
+    if (!gphotosDirCache) { try { gphotosDirCache = await invoke('gphotos_downloads_dir'); } catch (e) { console.error('gphotos_downloads_dir', e); } }
+    return gphotosDirCache;
+  }
+  let recentMenu = null;
+  function closeRecentMenu() { if (recentMenu) { recentMenu.remove(); recentMenu = null; } }
+  document.addEventListener('click', closeRecentMenu);
+  async function toggleRecentMenu(e) {
+    e.stopPropagation();
+    if (recentMenu) { closeRecentMenu(); return; }
+    const gDir = await gphotosDownloadsDir();
+    const lDirEarly = await lrDownloadsDir().catch(() => null);
+    const recents = getRecentFolders().filter((p) => p !== gDir && p !== lDirEarly);
+    recentMenu = document.createElement('div');
+    recentMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:220px;max-width:320px;box-shadow:var(--lift-2)';
+    // `ic` param replaces the emoji this menu used to prefix every label with (☁️/📌/📁) —
+    // CLAUDE.md §3b: "No emoji and no unicode glyphs in desktop chrome; they render per-platform
+    // and never match a stroke weight." Optional so the two plain "No recent folders yet" /
+    // Google/Lightroom rows below that pass no icon still render exactly as before.
+    const item = (label, path, icoName) => {
+      const el = document.createElement('div');
+      if (icoName) {
+        const escLabel = String(label).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        el.innerHTML = `<span style="display:inline-flex;vertical-align:-3px;margin-right:7px;color:var(--mut)">${ic(icoName, 14)}</span>${escLabel}`;
+      } else el.textContent = label;
+      el.title = path;
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center';
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await openAsRoot(path); };
+      recentMenu.appendChild(el);
+    };
+    const menuSep = () => {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0';
+      recentMenu.appendChild(sep);
+    };
+    if (window.__TAURI__) {
+      const createEl = document.createElement('div');
+      createEl.textContent = 'New Session…';
+      createEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--txt);display:flex;align-items:center';
+      createEl.onmouseenter = () => { createEl.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      createEl.onmouseleave = () => { createEl.style.background = ''; };
+      createEl.onclick = async (ev) => { ev.stopPropagation(); closeRecentMenu(); await createPhotoSession(); };
+      recentMenu.appendChild(createEl);
+      menuSep();
+    }
+    // Pinned folders: user-curated favorites that survive past the 8-slot recents MRU — the
+    // recents list silently pushes out folders you ALWAYS come back to once you browse a few
+    // others. Pin/unpin the current folder from this same menu.
+    const lDir = lDirEarly;
+    const pins = getPinnedFolders().filter((p) => p !== gDir && p !== lDir);
+    if (gDir) item('Google Photos Download', gDir, 'cloud');
+    if (lDir) item('Lightroom Download', lDir, 'cloud');
+    if (pins.length) {
+      if (gDir) menuSep();
+      pins.forEach((p) => item(baseName(p), p, 'pin'));
+    }
+    if (state.currentFolder) {
+      menuSep();
+      const isPinned = getPinnedFolders().includes(state.currentFolder);
+      const pinEl = document.createElement('div');
+      pinEl.innerHTML = `<span style="display:inline-flex;vertical-align:-3px;margin-right:7px">${ic(isPinned ? 'close' : 'pin', 14)}</span>${isPinned ? 'Unpin current folder' : 'Pin current folder'}`;
+      pinEl.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;color:var(--mut);display:flex;align-items:center';
+      pinEl.onmouseenter = () => { pinEl.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      pinEl.onmouseleave = () => { pinEl.style.background = ''; };
+      pinEl.onclick = (ev) => { ev.stopPropagation(); togglePinnedFolder(state.currentFolder); closeRecentMenu(); };
+      recentMenu.appendChild(pinEl);
+    }
+    const shownRecents = recents.filter((p) => !pins.includes(p));
+    if (shownRecents.length) {
+      menuSep();
+      shownRecents.forEach((p) => item(baseName(p), p, 'folder'));
+    } else if (!gDir && !pins.length) {
+      item('No recent folders yet', '');
+    }
+    document.body.appendChild(recentMenu);
+    const r = document.getElementById('lib-recent').getBoundingClientRect();
+    const { innerWidth: vw } = window;
+    const mr = recentMenu.getBoundingClientRect();
+    recentMenu.style.left = Math.min(r.left, vw - mr.width - 8) + 'px';
+    recentMenu.style.top = (r.bottom + 4) + 'px';
+  }
+
+  // Folder size at which the grid switches to windowed rendering. Chosen off the measurement in
+  // renderGrid's comment: 200 files is comfortable, 1,000 is heavy, 5,000 does not load.
+  const VIRT_MIN = 400;

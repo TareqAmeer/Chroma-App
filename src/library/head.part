@@ -1,0 +1,266 @@
+// Local photo library browser: folder tree + thumbnail grid + star ratings, alongside (not
+// replacing) the app's existing Google Photos integration — this is purely for finding/culling
+// RAWs on disk before editing. Native-only (arbitrary filesystem folder browsing isn't a thing
+// in a sandboxed browser), so this lives entirely in the desktop shell, not chromasmith-22.html.
+use rawler::decoders::RawDecodeParams;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+// Extension lists live in formats.rs (the single source of truth, mirrored against
+// chromasmith-22.html's FMT_* registry — see that module's doc comment). Re-exported here so
+// existing call sites in this file keep working unchanged.
+use crate::formats::{is_heic_ext, is_image_ext, is_raw_ext, is_video_ext, media_kind};
+
+fn ext_lower(path: &Path) -> String {
+    path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase()
+}
+
+/// EXIF orientation (1/3/6/8) for a RAW, read the same way raw_decode.rs does for the full
+/// decode. rawler's extract_thumbnail_pixels/extract_preview_pixels return pixels as-shot with
+/// NO rotation applied (unlike the full-decode path), so without this, portrait RW2s showed
+/// upright only once the full decode finished — the library grid thumbnail and the provisional
+/// preview shown while that decode is in flight were both sideways.
+fn raw_orientation(path: &str) -> u16 {
+    (|| -> Option<u16> {
+        let source = rawler::rawsource::RawSource::new(Path::new(path)).ok()?;
+        let decoder = rawler::get_decoder(&source).ok()?;
+        let md = decoder.raw_metadata(&source, &RawDecodeParams::default()).ok()?;
+        md.exif.orientation
+    })()
+    .unwrap_or(1)
+}
+
+/// Rotate/flip a decoded thumbnail/preview per EXIF orientation (1=as-is, 3=180°, 6=90° CW,
+/// 8=90° CCW — the only values cameras emit).
+pub(crate) fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> image::DynamicImage {
+    match orientation {
+        3 => img.rotate180(),
+        6 => img.rotate90(),
+        8 => img.rotate270(),
+        _ => img,
+    }
+}
+
+/// Coarse file-type bucket for the library's type filter. Delegates to formats::media_kind —
+/// the one implementation, shared with ingest.rs and catalog.rs.
+fn kind_of(ext: &str) -> &'static str {
+    media_kind(ext)
+}
+
+#[derive(Serialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub is_image: bool,
+    /// A clip, not a photo — kept separate from is_image (rather than folding video into it)
+    /// because every existing is_image call site (thumbnail fetch, RAW-specific menus, EXIF
+    /// panel) assumes a decodable still; this flag lets the frontend opt video INTO the parts
+    /// of the grid that do apply (grid card, open-in-editor, filters) without touching those.
+    #[serde(default)]
+    pub is_video: bool,
+    pub kind: &'static str, // "raw" | "jpeg" | "png" | "tiff" | "video"; "" for dirs
+    /// Filesystem mtime (unix secs) and byte size — cheap (same stat() the thumbnail/meta cache
+    /// keys already pay for), used by the library grid's "Date modified" / size sort+display so
+    /// it doesn't need a separate get_meta round-trip per entry just to sort a folder.
+    pub mtime: u64,
+    pub size: u64,
+    /// Set only by list_edited() below, for an entry whose file no longer exists on disk.
+    #[serde(default)]
+    pub missing: bool,
+    /// mtime of the .xmp sidecar (0 if none exists yet) — the "Date edited" list-view column.
+    /// Not the photo file's own mtime: a re-export doesn't touch the source file, only the
+    /// sidecar's recipe/rating/flags, so the sidecar's own mtime is the only honest "last
+    /// edited" signal.
+    pub edited_ts: u64,
+}
+
+fn edited_ts_of(photo_path: &str) -> u64 {
+    std::fs::metadata(sidecar_path(photo_path))
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// One level of a folder (not recursive — the frontend expands the tree lazily, same UX as
+/// Finder/Lightroom's folder panel, and avoids walking a user's entire disk up front).
+#[tauri::command(async)]
+pub fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    let mut out = Vec::new();
+    let rd = std::fs::read_dir(&path).map_err(|e| format!("read_dir {path}: {e}"))?;
+    // Collected once so the .xmp lookup below is a HashMap hit instead of a second `stat` per
+    // photo — mirrors catalog.rs's walk_root, which fixed the identical pattern there (a per-file
+    // sidecar existence probe measured as a meaningful share of a real walk's cost). This is a
+    // SEPARATE code path (the Library tree's single-level browser, also used by the recursive
+    // subfolder walk) that never got the same fix, so it still paid it on every directory listed.
+    let entries: Vec<std::fs::DirEntry> = rd.flatten().collect();
+    let mut xmp_mtimes: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for e in &entries {
+        let p = e.path();
+        if ext_lower(&p) == "xmp" {
+            if let Some(stem) = p.file_stem() {
+                let mt = e.metadata().ok().and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                xmp_mtimes.insert(stem.to_string_lossy().to_lowercase(), mt);
+            }
+        }
+    }
+    for entry in &entries {
+        let p = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue; // hide dotfiles/dotfolders, matches Finder's default
+        }
+        // file_type() comes from readdir's own d_type on the platforms this app ships for, so
+        // this costs no syscall, unlike the `p.is_dir()` this replaced.
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or_else(|_| p.is_dir());
+        let ext = ext_lower(&p);
+        let is_image = !is_dir && is_image_ext(&ext);
+        let is_video = !is_dir && !is_image && is_video_ext(&ext);
+        if is_dir || is_image || is_video {
+            let kind = if is_dir { "" } else if is_video { "video" } else { kind_of(&ext) };
+            let (mtime, size) = entry.metadata().ok().map(|m| {
+                let mt = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                (mt, m.len())
+            }).unwrap_or((0, 0));
+            let path_s = p.to_string_lossy().into_owned();
+            // Video has no sidecar-based edit recipe today (grading is applied live, not saved to
+            // an .xmp on disk the way photo edits are) — 0 is honest, not a placeholder.
+            // Equivalent to the old `edited_ts_of(&path_s)`: `with_extension` only ever replaces
+            // the extension, so the stem is unchanged and both sides come from the SAME listing.
+            let edited_ts = if is_image { p.file_stem().and_then(|s| xmp_mtimes.get(&s.to_string_lossy().to_lowercase())).copied().unwrap_or(0) } else { 0 };
+            out.push(DirEntry { name, path: path_s, is_dir, is_image, is_video, kind, mtime, size, missing: false, edited_ts });
+        }
+    }
+    out.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(out)
+}
+
+#[cfg(test)]
+mod list_dir_tests {
+    /// CHR-143: ARW grid thumbnails must keep the photo's real 3:2 shape, not the 4:3 EXIF thumb.
+    #[test]
+    fn arw_thumbnail_keeps_real_aspect() {
+        let p = "/Volumes/Crucial/PHOTOS/2025/2025-10-07/TM_00522.ARW";
+        if !std::path::Path::new(p).exists() { return; }
+        let img = raw_embedded_pixels(p).unwrap();
+        let a = img.width() as f32 / img.height() as f32;
+        assert!((a - 1.5).abs() < 0.03, "aspect {a} ({}x{})", img.width(), img.height());
+    }
+
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_list_dir_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Pins list_dir's output shape across the file_type()/batched-sidecar refactor: a photo
+    /// WITH a real .xmp sidecar must still report a nonzero edited_ts, one WITHOUT must still
+    /// report exactly 0 (not a false positive from an unrelated sidecar in the same directory),
+    /// and dirs/videos must still be classified correctly with edited_ts always 0.
+    #[test]
+    fn list_dir_reports_correct_kinds_and_edited_ts() {
+        let dir = scratch("basic");
+        std::fs::write(dir.join("a.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("a.xmp"), b"<xmp/>").unwrap(); // a's sidecar
+        std::fs::write(dir.join("b.jpg"), b"y").unwrap(); // no sidecar
+        std::fs::write(dir.join("orphan.xmp"), b"<xmp/>").unwrap(); // sidecar with no matching photo
+        std::fs::write(dir.join("c.mp4"), b"z").unwrap();
+        std::fs::create_dir(dir.join("sub")).unwrap();
+
+        let out = list_dir(dir.to_string_lossy().into_owned()).unwrap();
+        let by_name = |n: &str| out.iter().find(|e| e.name == n).unwrap_or_else(|| panic!("missing {n}"));
+
+        let a = by_name("a.jpg");
+        assert!(a.is_image && !a.is_dir && !a.is_video);
+        assert!(a.edited_ts > 0, "a.jpg has a real sidecar and must report a nonzero edited_ts");
+
+        let b = by_name("b.jpg");
+        assert_eq!(b.edited_ts, 0, "b.jpg has no sidecar — must not pick up orphan.xmp or a.xmp");
+
+        let c = by_name("c.mp4");
+        assert!(c.is_video && !c.is_image);
+        assert_eq!(c.edited_ts, 0, "video has no sidecar-based edit recipe today");
+
+        let sub = by_name("sub");
+        assert!(sub.is_dir && !sub.is_image && !sub.is_video);
+        assert_eq!(sub.edited_ts, 0);
+
+        // orphan.xmp itself and dotfiles must not surface as entries.
+        assert!(out.iter().all(|e| e.name != "orphan.xmp"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+/// ⚠️ `CS_CACHE_DIR` overrides this for tests — added 2026-09-16 after confirmed live pollution:
+/// every test that calls `set_sidecar_run` (version_tests, sidecar_preservation_tests, and others)
+/// ends up calling `registry_set`/`registry_write` for the real "edited"/"favorites"/"flagged"/
+/// "rejected" registries, since neither read this override before now. Those registries live
+/// under THIS machine's real `%LOCALAPPDATA%\Chromasmith\thumbnails\*_registry.json` — the exact
+/// same files the live desktop app reads for its Flagged/Favorites/Rejected sidebar counts. A
+/// user running `cargo test` on their own dev machine (not a CI sandbox) had over a thousand
+/// leftover test-fixture temp paths (`cs_sidecar_<pid>_foreign\photo.jpg` and similar) counted as
+/// real flagged/favorite photos, on top of doubling every real one via an unrelated path bug —
+/// see abs_path()'s own doc comment for that half of the incident. Mirrors `catalog_dir()`'s
+/// `CS_CATALOG_DIR` (catalog.rs) exactly, including the same "tests must set/unset around
+/// themselves, serialized via a lock" caveat — see CACHE_DIR_TEST_LOCK below.
+pub(crate) fn cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("CS_CACHE_DIR") {
+        let p = PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    let dir = crate::platform::cache_root().join("thumbnails");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// Serializes every test that sets `CS_CACHE_DIR` — env vars are process-global, and Rust's test
+/// runner executes `#[test]` functions concurrently on multiple threads by default, so two tests
+/// setting different values at once would race (one test's registry writes landing in the OTHER
+/// test's directory, or briefly in the real one). Held for the whole isolated section via
+/// `isolate_cache_dir()`'s RAII guard, not just around the `set_var` call itself.
+#[cfg(test)]
+pub(crate) static CACHE_DIR_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// RAII guard: sets `CS_CACHE_DIR` to a fresh temp directory for the lock's duration and restores
+/// the previous value (typically unset) on drop, so a test that touches `set_sidecar_run`/
+/// `registry_set`/etc. can never write into this machine's real registries. `tag` should be
+/// unique per call site (mirrors the existing `scratch(tag)` helpers' own convention) so two
+/// tests running back-to-back don't share a directory even though the lock already serializes
+/// them — cheap insurance, not load-bearing on its own.
+#[cfg(test)]
+pub(crate) struct CacheDirGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    previous: Option<String>,
+}
+#[cfg(test)]
+impl Drop for CacheDirGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(v) => std::env::set_var("CS_CACHE_DIR", v),
+            None => std::env::remove_var("CS_CACHE_DIR"),
+        }
+    }
+}
+#[cfg(test)]
+pub(crate) fn isolate_cache_dir(tag: &str) -> CacheDirGuard {
+    let lock = CACHE_DIR_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let previous = std::env::var("CS_CACHE_DIR").ok();
+    let dir = std::env::temp_dir().join(format!("cs_cache_dir_{}_{}", std::process::id(), tag));
+    let _ = std::fs::create_dir_all(&dir);
+    std::env::set_var("CS_CACHE_DIR", dir.to_string_lossy().as_ref());
+    CacheDirGuard { _lock: lock, previous }
+}

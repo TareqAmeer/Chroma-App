@@ -1,0 +1,75 @@
+  // ── Sort pill + popover (design transplant: Library View.html's #btn-sort/#sort-menu) ──
+  // sortSel above / toggleSortDir below remain the single source of truth; this popover just drives them.
+  const sortBtn = overlay.querySelector('#lib-sort-btn');
+  const sortMenu = overlay.querySelector('#lib-sort-menu');
+  const sortLabelEl = overlay.querySelector('#lib-sort-label');
+  const SORT_LABELS = { name: 'Name', mtime: 'Date added', date: 'Date taken', camera: 'Camera', rating: 'Rating', editedts: 'Date edited' };
+  function syncSortLabel() { sortLabelEl.textContent = SORT_LABELS[state.sortBy] || sortSel.selectedOptions[0]?.textContent || state.sortBy; }
+  syncSortLabel();
+  function syncSortMenuSel() {
+    sortMenu.querySelectorAll('.opt[data-sortval]').forEach((o) => o.classList.toggle('sel', o.dataset.sortval === state.sortBy));
+    sortMenu.querySelectorAll('.opt[data-sortdir]').forEach((o) => o.classList.toggle('sel', o.dataset.sortdir === (state.sortDir === 'asc' ? 'asc' : 'desc')));
+  }
+  syncSortMenuSel();
+  sortBtn.onclick = (e) => { sortMenu.classList.toggle('open'); window.settingsClose && settingsClose(); e.stopPropagation(); };
+  sortMenu.querySelectorAll('.opt[data-sortval]').forEach((opt) => {
+    opt.onclick = () => { sortSel.value = opt.dataset.sortval; sortSel.onchange({ target: sortSel }); syncSortLabel(); syncSortMenuSel(); sortMenu.classList.remove('open'); };
+  });
+  sortMenu.querySelectorAll('.opt[data-sortdir]').forEach((opt) => {
+    opt.onclick = () => {
+      state.sortDir = opt.dataset.sortdir;
+      localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+      syncSortMenuSel(); renderGrid();
+      // Newest/Oldest stays open like every other data-sortdir/data-metaval/data-theme radio
+      // group in this menu family — only opt-action rows close the menu (#21 fix).
+    };
+  });
+  document.addEventListener('click', (e) => { if (!sortMenu.contains(e.target) && e.target !== sortBtn) sortMenu.classList.remove('open'); });
+
+  const metaSel = overlay.querySelector('#lib-metadisp');
+  metaSel.value = state.metaDisplay;
+  metaSel.onchange = (e) => { state.metaDisplay = e.target.value; localStorage.setItem('chromasmith_lib_metadisp', state.metaDisplay); renderGrid(); };
+
+  // #12: these three rows now use the same checkmark-glyph .sel idiom as every other row in
+  // this menu (sort-field, metadata, theme, aspect-ratio) instead of a native checkbox.
+  const showTitleOpt = overlay.querySelector('#lib-showtitle');
+  showTitleOpt.classList.toggle('on', !!state.showTitle);
+  showTitleOpt.onclick = () => {
+    state.showTitle = !state.showTitle;
+    localStorage.setItem('chromasmith_lib_showtitle', state.showTitle ? '1' : '0');
+    showTitleOpt.classList.toggle('on', state.showTitle);
+    renderGrid();
+  };
+  const hideIconsOpt = overlay.querySelector('#lib-hideicons');
+  hideIconsOpt.classList.toggle('on', !!state.hideIcons);
+  overlay.classList.toggle('lib-hide-icons', state.hideIcons);
+  hideIconsOpt.onclick = () => {
+    state.hideIcons = !state.hideIcons;
+    localStorage.setItem('chromasmith_lib_hideicons', state.hideIcons ? '1' : '0');
+    hideIconsOpt.classList.toggle('on', state.hideIcons);
+    overlay.classList.toggle('lib-hide-icons', state.hideIcons);
+  };
+  const matOpt = overlay.querySelector('#lib-mat');
+  matOpt.classList.toggle('on', !!state.gridMat);
+  if (grid) grid.classList.toggle('lib-mat', state.gridMat);
+  matOpt.onclick = () => {
+    state.gridMat = !state.gridMat;
+    localStorage.setItem('chromasmith_lib_mat', state.gridMat ? '1' : '0');
+    matOpt.classList.toggle('on', state.gridMat);
+    const g = document.getElementById('lib-grid');
+    if (g) g.classList.toggle('lib-mat', state.gridMat);
+  };
+  {
+    let q = false;
+    const lm = overlay.querySelector('#lib-main');
+    if (lm) lm.addEventListener('scroll', () => { if (q) return; q = true; requestAnimationFrame(() => { q = false; gridTitleUpdate(); }); }, { passive: true });
+  }
+  const zeroGapOpt = overlay.querySelector('#lib-zerogap');
+  zeroGapOpt.classList.toggle('on', !!state.zeroGap);
+  if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
+  zeroGapOpt.onclick = () => {
+    state.zeroGap = !state.zeroGap;
+    localStorage.setItem('chromasmith_lib_zerogap', state.zeroGap ? '1' : '0');
+    zeroGapOpt.classList.toggle('on', state.zeroGap);
+    if (grid) grid.classList.toggle('lib-zero-gap', state.zeroGap);
+  };

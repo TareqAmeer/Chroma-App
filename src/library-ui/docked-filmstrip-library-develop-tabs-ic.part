@@ -1,0 +1,28 @@
+  // ── Docked filmstrip Library/Develop tabs: icon-only once the dock is dragged too narrow for
+  // the label text — same overflow-measurement approach as syncTopCompact() above, applied to
+  // .lib-side-tabs instead of #lib-top. Runs in BOTH modes (unlike syncTopCompact) because the
+  // dock width the tabs live in is resizable in docked mode too, via #lib-dock-resizer. ──
+  const libSideTabs = overlay.querySelector('.lib-side-tabs');
+  // ⚠️ Measure the LABEL <span>s, not .lib-side-tab or .lib-side-tabs itself: each tab is
+  // flex:1;min-width:0, so the flex algorithm already shrinks the button's own box to fit its
+  // track before layout — its scrollWidth reports that already-shrunk box, never the clipped
+  // child's true content width, so it never reads as overflowing (same false-negative as
+  // HANDOVER §8 item #13's 2-line label, different mechanism). The span's own overflow:hidden;
+  // text-overflow:ellipsis DOES still report a real scrollWidth>clientWidth once its text is
+  // clipped, which is what makes it a reliable signal here.
+  function syncSideTabsCompact() {
+    if (!libSideTabs) return;
+    // Always measure with labels temporarily VISIBLE first — once .compact hides a span, its
+    // scrollWidth/clientWidth both read 0 (display:none), which reads as "not clipped" and would
+    // flip .compact straight back off on the very next call, re-showing text that still doesn't
+    // fit. Re-checking from a clean slate every time is what makes this idempotent under a live
+    // drag-resize, not just on the first narrowing pass.
+    libSideTabs.classList.remove('compact');
+    const spans = libSideTabs.querySelectorAll('.lib-side-tab span');
+    const clipped = [...spans].some((s) => s.scrollWidth > s.clientWidth + 1);
+    libSideTabs.classList.toggle('compact', clipped);
+  }
+  if (libSideTabs) {
+    new ResizeObserver(syncSideTabsCompact).observe(libSideTabs);
+    window.addEventListener('resize', syncSideTabsCompact);
+  }

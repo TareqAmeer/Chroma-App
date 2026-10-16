@@ -1,0 +1,570 @@
+  // ── Albums: user-made collections that LINK to photos rather than copying them ─────────────
+  // Every collection above this is DERIVED (edited/favorites/exported/rejected are each computed
+  // from a per-photo fact). An album is the missing manual one: "these 40 frames are the Geneva
+  // set", with no way to say that short of moving files on disk.
+  //
+  // ⚠️ It stores PATHS, never pixels (see library.rs's album_* commands). A photo can sit in any
+  // number of albums at full quality, and deleting an album cannot lose a photograph. The cost is
+  // that an album goes stale if a file is moved outside the app — handled by `missing` entries
+  // rather than by silently dropping them.
+  let _albums = [];
+  function albumsSectionHtml() {
+    const rows = _albums.map((a) => `
+      <div class="lib-coll-row${state.source === 'album:' + a.id ? ' on' : ''}" data-album="${a.id}" title="${esc2(a.name)} — ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'}">
+        <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${esc2(a.name)}</span>
+        <span class="lib-coll-count">${a.paths.length ?? ''}</span>
+      </div>`).join('');
+    const newBtn = `<span id="lib-album-new" title="New album" style="cursor:pointer;padding:0 4px">+</span>`;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('albums', 'Albums',
+      rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No albums yet</div>', { trail: newBtn });
+  }
+  // Saved live catalog queries are visually and behaviorally separate from manual path lists
+  // above and saved filter/sort snapshots elsewhere in the Library.
+  let smartAlbums = [];
+  const smartHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function smartRuleLabel(rule) {
+    if (!rule) return 'No rules';
+    if (rule.type === 'group') return `(${(rule.rules || []).map(smartRuleLabel).join(rule.matchMode === 'any' ? ' OR ' : ' AND ')})`;
+    const field = ({ rating: 'Rating', edited: 'Edited', favorite: 'Favorite', captureYear: 'Capture year', camera: 'Camera', mediaKind: 'Media type' })[rule.field] || rule.field;
+    const op = ({ equals: '=', atLeast: '≥', atMost: '≤' })[rule.operator] || '=';
+    return `${field} ${op} ${String(rule.value)}`;
+  }
+  function smartAlbumsSectionHtml() {
+    const rows = smartAlbums.map((a) => `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === `smart:${a.id}` ? ' on' : ''}" data-smart-album="${smartHtml(a.id)}" role="button" tabindex="0" title="${smartHtml(a.name)} — ${smartHtml(smartRuleLabel(a.ruleSet?.root))}; ${smartHtml((a.sourceLabels || []).join(', '))}">
+      <span class="lib-coll-ic">${ALBUM_SVG}</span><span class="lib-coll-lb">${smartHtml(a.name)}</span><span class="lib-coll-count">${fmtN(a.matchCount || 0)}</span>
+      <button type="button" data-smart-edit="${smartHtml(a.id)}" aria-label="Edit ${smartHtml(a.name)} rules" title="Edit rules" style="margin-left:4px">⋯</button></div>`).join('');
+    const add = '<span id="lib-smart-album-new" title="Create a rule-based smart album" style="cursor:pointer;padding:0 4px">+</span>';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('smart-albums', 'Smart albums', rows || '<div class="lib-coll-row" style="opacity:.5;cursor:default">No smart albums yet</div>', { trail: add });
+  }
+  function smartRuleRowHtml(rule) {
+    const fields = [['rating','Rating'],['edited','Edited'],['favorite','Favorite'],['captureYear','Capture year'],['camera','Camera'],['mediaKind','Media type']];
+    const field = rule?.field || 'rating';
+    return `<div data-smart-rule-row style="display:grid;grid-template-columns:minmax(95px,1fr) minmax(82px,.8fr) minmax(85px,.8fr) auto;gap:6px;align-items:center;margin:6px 0">
+      <select data-smart-field aria-label="Rule field">${fields.map(([v,l]) => `<option value="${v}"${field===v?' selected':''}>${l}</option>`).join('')}</select>
+      <select data-smart-operator aria-label="Rule comparison"><option value="equals">is</option><option value="atLeast">at least</option><option value="atMost">at most</option></select><span data-smart-value-host></span><button type="button" data-smart-remove-rule aria-label="Remove condition">−</button></div>`;
+  }
+  async function smartAlbumBuilder(existing = null) {
+    const sources = await invoke('smart_album_sources').catch(() => []);
+    if (!sources.length) { toast('Add a catalog folder before creating a smart album.', false); return null; }
+    const current = existing?.ruleSet?.root;
+    const editable = current?.type === 'group' && (current.rules || []).every((r) => r.type === 'condition') ? current : null;
+    if (existing && !editable) { toast('This album has nested groups; the current editor only edits flat rules.', false); return null; }
+    const dlg = document.createElement('dialog'); dlg.id = 'lib-smart-album-dialog';
+    dlg.style.cssText = 'width:min(620px,calc(100vw - 28px));max-height:85vh;overflow:auto;padding:0;border:1px solid var(--bdr);border-radius:10px;background:var(--sur2);color:var(--txt);box-shadow:0 18px 60px rgba(0,0,0,.45)';
+    const selected = new Set(existing?.sourceRootIds || []);
+    dlg.innerHTML = `<form style="padding:18px;display:grid;gap:12px;font:inherit">
+      <h2 style="font-size:16px;margin:0">${existing ? 'Edit smart album' : 'New smart album'}</h2>
+      <label style="display:grid;gap:5px">Name<input name="name" maxlength="80" required value="${smartHtml(existing?.name || '')}" placeholder="e.g. Four-star edits"></label>
+      <fieldset style="border:1px solid var(--bdr);border-radius:7px;padding:9px"><legend>Catalog folders</legend><div style="display:grid;gap:4px;max-height:140px;overflow:auto">${sources.map((s) => `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-smart-source value="${Number(s.id)}"${selected.has(s.id)?' checked':''}>${smartHtml(s.label)}</label>`).join('')}</div></fieldset>
+      <label style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px">Match <select name="matchMode"><option value="all"${editable?.matchMode!=='any'?' selected':''}>all rules (AND)</option><option value="any"${editable?.matchMode==='any'?' selected':''}>any rule (OR)</option></select></label>
+      <div><strong>Rules</strong><div data-smart-rules></div><button type="button" data-smart-add-rule>Add condition</button></div>
+      <p style="font-size:11px;color:var(--mut);margin:0">Membership and counts use current catalog data. Exported state is not yet indexed for these rules.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" data-smart-cancel>Cancel</button><button type="submit">${existing?'Save changes':'Create smart album'}</button></div>
+    </form>`;
+    document.body.appendChild(dlg);
+    const ruleHost = dlg.querySelector('[data-smart-rules]');
+    const addRule = (rule = null) => {
+      if (ruleHost.children.length >= 12) return;
+      ruleHost.insertAdjacentHTML('beforeend', smartRuleRowHtml(rule));
+      const row = ruleHost.lastElementChild, field = row.querySelector('[data-smart-field]'), op = row.querySelector('[data-smart-operator]'), host = row.querySelector('[data-smart-value-host]');
+      const sync = () => {
+        const f = field.value, bool = f === 'edited' || f === 'favorite', text = f === 'camera' || f === 'mediaKind';
+        op.querySelectorAll('option').forEach((o) => { o.hidden = (bool || text) && o.value !== 'equals'; }); if (bool || text) op.value = 'equals';
+        host.innerHTML = bool ? '<select data-smart-value aria-label="Rule value"><option value="true">Yes</option><option value="false">No</option></select>'
+          : `<input data-smart-value aria-label="Rule value" ${text?'type="text" maxlength="160"':`type="number" min="${f==='rating'?-1:1}" max="${f==='rating'?5:9999}"`} value="${text?'':(f==='rating'?4:new Date().getFullYear())}" placeholder="${text?(f==='camera'?'Camera name':'raw / jpeg / video'):''}" style="width:100%;min-width:0">`;
+      };
+      field.addEventListener('change', sync); sync();
+      if (rule) { op.value = rule.operator; host.querySelector('[data-smart-value]').value = String(rule.value); }
+      row.querySelector('[data-smart-remove-rule]').onclick = () => { if (ruleHost.children.length > 1) row.remove(); };
+    };
+    if (editable?.rules?.length) editable.rules.forEach((r) => addRule(r)); else addRule();
+    dlg.querySelector('[data-smart-add-rule]').onclick = () => addRule();
+    dlg.querySelector('[data-smart-cancel]').onclick = () => dlg.close('cancel');
+    return new Promise((resolve) => {
+      dlg.addEventListener('close', () => {
+        if (dlg.returnValue !== 'save') { dlg.remove(); resolve(null); return; }
+        const form = dlg.querySelector('form');
+        const rules = [...ruleHost.querySelectorAll('[data-smart-rule-row]')].map((row) => {
+          const field = row.querySelector('[data-smart-field]').value, operator = row.querySelector('[data-smart-operator]').value, raw = row.querySelector('[data-smart-value]').value;
+          return { type:'condition', field, operator, value:['edited','favorite'].includes(field)?raw==='true':['rating','captureYear'].includes(field)?Number(raw):raw.trim() };
+        });
+        const input = { id:existing?.id, name:form.elements.name.value.trim(), sourceRootIds:[...dlg.querySelectorAll('[data-smart-source]:checked')].map((x)=>Number(x.value)), ruleSet:{version:1,root:{type:'group',matchMode:form.elements.matchMode.value,rules}} };
+        dlg.remove(); resolve(input);
+      });
+      dlg.querySelector('form').addEventListener('submit',(e)=>{e.preventDefault();dlg.returnValue='save';dlg.close('save');});
+      dlg.showModal();
+    });
+  }
+  async function refreshSmartAlbums() { smartAlbums=await invoke('smart_album_list').catch(()=>[]); renderCollections(); }
+  async function createOrEditSmartAlbum(existing=null) {
+    const input=await smartAlbumBuilder(existing); if(!input)return;
+    try { await invoke('smart_album_save',{input}); await refreshSmartAlbums(); toast(existing?'Smart album updated':'Smart album created',true); }
+    catch(err){toast(humanizeErr('save the smart album',err),'err');}
+  }
+  function wireSmartAlbumRows(host) {
+    const add=host.querySelector('#lib-smart-album-new'); if(add)add.onclick=(e)=>{e.stopPropagation();createOrEditSmartAlbum();};
+    host.querySelectorAll('.lib-coll-row[data-smart-album]').forEach((row)=>{
+      const id=row.dataset.smartAlbum, item=()=>smartAlbums.find((a)=>a.id===id);
+      row.onclick=(e)=>{if(e.target.closest('[data-smart-edit]'))return;openCatalogView(`smart:${id}`);};
+      row.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openCatalogView(`smart:${id}`);}};
+      row.querySelector('[data-smart-edit]').onclick=(e)=>{e.stopPropagation();createOrEditSmartAlbum(item());};
+      row.oncontextmenu=async(e)=>{e.preventDefault();const a=item();if(!a)return;if(await window.confirmModal(`Delete smart album “${a.name}”? Its matching photos stay untouched.`,'Delete')){await invoke('smart_album_delete',{id});await refreshSmartAlbums();}};
+    });
+  }
+  const ALBUM_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a2 2 0 0 1-2 2H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h4l2 2"/></svg>';
+  async function refreshAlbums() {
+    _albums = await invoke('album_list').catch(() => []);
+    if (_albums.length) revealAlbums();
+    renderCollections();
+  }
+  function wireAlbumRows(host) {
+    const nb = host.querySelector('#lib-album-new');
+    if (nb) nb.onclick = async (e) => {
+      e.stopPropagation();
+      const name = await window.askTextModal('Album name', '', '');
+      if (!name) return;
+      try { await invoke('album_create', { name }); revealAlbums(); await refreshAlbums(); toast(`Album "${name}" created`, true); }
+      catch (err) { toast(humanizeErr('create the album', err), 'err'); }
+    };
+    host.querySelectorAll('.lib-coll-row[data-album]').forEach((row) => {
+      const id = row.dataset.album;
+      row.onclick = () => openAlbumView(id);
+      row.oncontextmenu = (e) => { e.preventDefault(); showAlbumMenu(e, id); };
+      // Same drag contract the Favorites/Flagged/Rejected rows use, so dropping onto an album is
+      // the same gesture with the same data — it just appends to a list instead of setting a flag.
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = async (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
+        if (!paths.length) return;
+        const al = _albums.find((x) => x.id === id);
+        const added = await albumAddUndoable(id, al ? al.name : 'album', paths);
+        await refreshAlbums();
+        // Says what actually happened: re-dragging photos already in an album is a common gesture
+        // and reporting "3 added" when nothing changed would be a lie.
+        const dup = paths.length - added;
+        toast(added
+          ? `${added} added${dup ? `, ${dup} already there` : ''}`
+          : `Already in this album`, true);
+      };
+    });
+  }
+  async function openAlbumView(id) {
+    state.source = 'album:' + id;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    lrState.album = null;
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let entries;
+    try { entries = await invoke('list_album', { id }); }
+    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load this album.</div>'; return; }
+    state.entries = entries;
+    {
+      const paths = entries.filter((e) => !e.missing).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    renderCollections();
+    const missing = entries.filter((e) => e.missing).length;
+    if (missing) toast(`${missing} photo${missing === 1 ? '' : 's'} in this album can't be found on disk`, false);
+  }
+  function showAlbumMenu(e, id) {
+    const a = _albums.find((x) => x.id === id);
+    if (!a) return;
+    const items = [
+      ['Rename…', async () => {
+        const name = await window.askTextModal('Rename album', '', a.name);
+        if (!name) return;
+        try { await invoke('album_rename', { id, name }); await refreshAlbums(); }
+        catch (err) { toast(humanizeErr('rename the album', err), 'err'); }
+      }],
+      [`Delete "${a.name}"`, async () => {
+        // Deliberately blunt about what is and isn't destroyed — the whole point of an album is
+        // that throwing it away is safe, and the user should know that before confirming.
+        // confirmModal, never window.confirm — see the "Delete version" comment above.
+        if (!await window.confirmModal(`Delete the album "${a.name}"?\n\nThe ${a.paths.length} photo${a.paths.length === 1 ? '' : 's'} in it stay exactly where they are on disk — only the list is removed.`, 'Delete')) return;
+        await invoke('album_delete', { id }).catch((err) => toast(humanizeErr('delete the album', err), 'err'));
+        if (state.source === 'album:' + id) { state.source = 'folder'; state.entries = []; renderGrid(); }
+        await refreshAlbums();
+      }],
+    ];
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:180px;box-shadow:none;font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(e.clientY, window.innerHeight - 90) + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
+  /// Offline thumbnails split per-root once there's more than one root catalogued — a user
+  /// with an old archive volume plus a current one otherwise has no way to clear just one.
+  /// Decode cache stays global-only (opaque hashed cache keys, no root column to filter on —
+  /// see catalog_root_cache_usage's own doc comment) — one item, not one per root, for that.
+  async function showCacheMenu(e, rootsOnly) {
+    if (!cacheUsage) { try { await refreshCacheUsage(); } catch (_) {} }
+    if (!cacheUsage) return;
+    const x = Math.min(e.clientX, window.innerWidth - 260);
+    const y = Math.min(e.clientY, window.innerHeight - 90);
+    let rootUsage = [];
+    try { rootUsage = await invoke('catalog_root_cache_usage'); } catch (err) { /* fall back to the global-only view below */ }
+
+    const items = [];
+    const rootLabel = (r) => (r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`);
+    for (const r of rootUsage) {
+      if (r.kind === 'browse') {
+        items.push([`Keep ${rootLabel(r)} in library`, async () => {
+          try { await invoke('catalog_keep_root', { id: r.root_id }); toast(`Kept ${rootLabel(r)}`); }
+          catch (err) { toast(humanizeErr('keep that folder', err), 'err'); }
+        }]);
+      }
+    }
+    {
+      for (const r of rootUsage) {
+        items.push([`Remove ${rootLabel(r)} from library`, async () => {
+          if (!await window.confirmModal(`Remove ${rootLabel(r)} from the library?\n\nIts ${r.photo_count} photo${r.photo_count === 1 ? '' : 's'} disappear from the library only — nothing is deleted from disk, and ratings and labels are kept if you add it again.`, 'Remove')) return;
+          try { await invoke('catalog_remove_root', { id: r.root_id }); toast(`Removed ${rootLabel(r)}`); refreshCatalogCounts(); if (state.currentFolder) openFolder(state.currentFolder); }
+          catch (err) { toast(humanizeErr('remove that folder', err), 'err'); }
+        }]);
+      }
+    }
+    if (!rootsOnly && rootUsage.length > 1) {
+      for (const r of rootUsage) {
+        const label = r.rel_path ? `${r.volume_label} / ${r.rel_path}` : `${r.volume_label} (whole volume)`;
+        items.push([`Clear ${label} thumbnails (${fmtGB(r.offline_thumbs_bytes)} GB)`, async () => {
+          if (!await window.confirmModal(`Clear offline thumbnails for ${label}?\n\nThey regenerate automatically next time this root is scanned while connected — but until then, browsing while unplugged shows blank cards instead of thumbnails.`, 'Clear')) return;
+          try { await invoke('clear_root_cache', { rootId: r.root_id }); toast(`Cleared ${label}`); refreshCacheUsage(); }
+          catch (err) { toast(humanizeErr('clear that root\'s thumbnails', err), 'err'); }
+        }]);
+      }
+    } else if (!rootsOnly) {
+      items.push([`Clear offline thumbnails (${fmtGB(cacheUsage.offline_thumbs_bytes)} GB)`, async () => {
+        // confirmModal, never window.confirm — matches the album-delete confirm above. Worth
+        // spelling out what's actually lost: nothing on the drive, just the never-pruned
+        // never-changes-on-its-own cache that makes an UNPLUGGED drive browsable.
+        if (!await window.confirmModal('Clear offline thumbnails?\n\nThey regenerate automatically next time each drive is scanned while connected — but until then, browsing while unplugged shows blank cards instead of thumbnails.', 'Clear')) return;
+        try { await invoke('clear_cache_tier', { tier: 'offline_thumbs' }); toast('Offline thumbnails cleared'); refreshCacheUsage(); }
+        catch (err) { toast(humanizeErr('clear offline thumbnails', err), 'err'); }
+      }]);
+    }
+    if (!rootsOnly) items.push([`Clear decode cache (${fmtGB(cacheUsage.decode_cache_bytes)} GB)`, async () => {
+      try { await invoke('clear_cache_tier', { tier: 'decode' }); toast('Decode cache cleared'); refreshCacheUsage(); }
+      catch (err) { toast(humanizeErr('clear the decode cache', err), 'err'); }
+    }]);
+
+    const menu = document.createElement('div');
+    // HANDOVER §3.7: this popover had no class, id or role — invisible to assistive tech and
+    // unreachable by keyboard. The confirmModal each item already goes through is fine; this is
+    // just addressability for the trigger itself.
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = 'position:fixed;z-index:9999;background:var(--sur2);border:1px solid var(--bdr);'
+      + 'border-radius:7px;padding:4px;min-width:220px;max-width:320px;box-shadow:none;font-size:12px';
+    items.forEach(([label, fn]) => {
+      const it = document.createElement('div');
+      it.textContent = label;
+      it.setAttribute('role', 'menuitem');
+      it.tabIndex = 0;
+      it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      it.onmouseleave = () => { it.style.background = ''; };
+      it.onclick = () => { menu.remove(); fn(); };
+      menu.appendChild(it);
+    });
+    document.body.appendChild(menu);
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+
+  function renderCollections() {
+    const host = document.getElementById('lib-collections');
+    if (!host) return;
+    const collectionsBody = COLLECTIONS.map((c) => `
+      <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}" role="button" tabindex="0">
+        <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
+        <span class="lib-coll-count">${collectionCounts[c.name] ?? ''}</span>
+      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
+    // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
+    // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
+    // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN
+    // leading separator (or none, if it has nothing to show), so reordering here never
+    // produces a doubled or missing divider between two adjacent sections.
+    // The wireframe's `.sec+.sec{border-top}` rule (Library View.html:135) puts a separator
+    // between EVERY adjacent top-level section, including All Photos -> By Date — this one was
+    // missing (only Collections/Folders got an explicit lib-coll-sep) until the wireframe diff
+    // tooling's structural audit flagged it. dateSectionHtml() can return '' (no dates yet), so
+    // the separator is conditional on it — else a bare divider would dangle before Collections.
+    const dateHtml = dateSectionHtml();
+    // ⚠️ REGRESSION FIX (found live 2026-09-08, not by any prior tooling — the tooling's own
+    // check for this had a silent early-return that no-op'd whenever #lib-tree was absent, so
+    // it never caught the destroy either). The first fix attempt moved #lib-tree via
+    // insertAdjacentElement to a position INSIDE #lib-collections (the folders-header's
+    // insertion point) — which is STILL inside the container this function rewrites via
+    // innerHTML, so the tree was destroyed on the very next render regardless. A node embedded
+    // anywhere inside a string that becomes some container's innerHTML is, structurally,
+    // ALWAYS a descendant of that container — there is no way to interleave a persistent live
+    // node between two pieces of rewritten HTML without giving it a container of its own.
+    // #lib-side's static template (see its <div id="lib-tree">...</div> markup) now gives the
+    // tree that container: #lib-tree sits as a REAL, PERMANENT SIBLING of #lib-collections,
+    // never touched by any innerHTML assignment, with its own small #lib-folders-header sibling
+    // immediately before it (rewritten every render — it's just a chevron+label, cheap) and
+    // #lib-collections-post immediately after it (holds only Cloud, the one section that must
+    // render after the tree). #lib-collections itself now holds everything BEFORE Folders.
+    // Inner scrollers (the People list) are recreated by the rewrite below and would snap back to
+    // the top on every background refresh — keep their scroll positions.
+    // Background refreshes (counts, keywords, activity, people) call this many times with
+    // nothing changed; rewriting identical HTML still recreates every node (face avatars
+    // included), which flickered. Only touch the DOM when the markup actually differs.
+    const setHtml = (el, html) => { if (el._renderedHtml !== html) { el.innerHTML = html; el._renderedHtml = html; } };
+    const keepScroll = [...host.querySelectorAll('.lib-people-scroll')].map((el) => el.scrollTop);
+    setHtml(host, catalogSectionHtml() + (dateHtml ? '<div class="lib-coll-sep"></div>' + dateHtml : '')
+      + '<div class="lib-coll-sep"></div>' + sidebarSection('collections', 'Collections', collectionsBody)
+      + keywordsSectionHtml() + peopleSectionHtml() + albumsSectionHtml() + smartAlbumsSectionHtml() + drivesSectionHtml() + devicesSectionHtml());
+    host.querySelectorAll('.lib-people-scroll').forEach((el, i) => { if (keepScroll[i]) el.scrollTop = keepScroll[i]; });
+    const foldersHeaderEl = document.getElementById('lib-folders-header');
+    if (foldersHeaderEl) setHtml(foldersHeaderEl, '<div class="lib-coll-sep"></div>' + sidebarSection('folders', 'Folders', ''));
+    const treeEl = document.getElementById('lib-tree');
+    if (treeEl) treeEl.style.display = sidebarSecOpen.has('folders') ? '' : 'none';
+    const postEl = document.getElementById('lib-collections-post');
+    if (postEl) setHtml(postEl, cloudSectionHtml());
+    // Every wiring call below used to query `host` (#lib-collections) alone, which was safe
+    // when every section lived inside it. Now that Folders/Cloud are their own siblings, the
+    // wiring scope is #lib-side — the real common ancestor of all four containers — so a row in
+    // any of them still gets its click/drag handlers.
+    const host2 = document.getElementById('lib-side') || host;
+    host2.querySelectorAll('[data-sec-toggle]').forEach((row) => {
+      row.onclick = (e) => {
+        e.stopPropagation();
+        const key = row.dataset.secToggle;
+        if (key === 'people' && e.target.closest('.lib-sec-label')) { openPeopleGrid(); return; }
+        if (sidebarSecOpen.has(key)) sidebarSecOpen.delete(key); else sidebarSecOpen.add(key);
+        saveSidebarSecOpen();
+        renderCollections();
+      };
+    });
+    wireAlbumRows(host);
+    wireSmartAlbumRows(host);
+    wirePeopleRows(host);
+    host2.querySelectorAll('.lib-coll-row[data-catalog]').forEach((row) => {
+      row.onclick = () => openCatalogView(row.dataset.catalog);
+      // "All Photos" doubles as a clear-all-filters shortcut on a second click — matches the
+      // sidebar's other "click again to reset" gestures and gives filters an escape hatch that
+      // doesn't require opening the Filters panel.
+      if (row.dataset.catalog === 'all') row.ondblclick = () => clearAllLibFilters();
+    });
+    host2.querySelectorAll('.lib-coll-row[data-type-shortcut]').forEach((row) => {
+      row.onclick = async () => {
+        state.typeFilter = row.dataset.typeShortcut;
+        syncFilterControls();
+        await openCatalogView('all');
+      };
+    });
+    const facesPendingRow = host2.querySelector('[data-faces-pending]');
+    if (facesPendingRow) {
+      facesPendingRow.onclick = async () => {
+        // "All photos" scope + the faces filter, same combination the filter-chip dropdown
+        // produces — not a new backend query scope, so it can never disagree with what the
+        // dropdown itself would show for the identical filter.
+        // ⚠️ The filter MUST be set before openCatalogView runs, not after: openCatalogView
+        // reads state.facesFilter into the query it sends (catalogFilterFields()), so setting
+        // it afterward and calling plain renderGrid() would client-side-filter whatever partial
+        // page "all" happened to fetch — the exact "sidebar count vs grid count" mismatch this
+        // filter exists to fix, reintroduced at its own entry point.
+        state.facesFilter = 'pending';
+        syncFilterControls();
+        await openCatalogView('all');
+      };
+    }
+    const rootsRow = host2.querySelector('[data-lib-roots]');
+    if (rootsRow) rootsRow.onclick = (e) => showCacheMenu(e, true);
+    const freeUpRow = host2.querySelector('[data-cache-free]');
+    if (freeUpRow) freeUpRow.onclick = (e) => showCacheMenu(e);
+    const verifyRow = host2.querySelector('[data-verify-library]');
+    if (verifyRow) verifyRow.onclick = () => runVerifyLibrary();
+    const findDupesRow = host2.querySelector('[data-find-duplicates]');
+    if (findDupesRow) findDupesRow.onclick = () => runDupeDetectionOnDemand();
+    const rescanFlagsRow = host2.querySelector('[data-rescan-flags]');
+    if (rescanFlagsRow) rescanFlagsRow.onclick = () => runRescanFlags();
+    // "By Date" root row: toggles the whole tree open/closed, same gesture the real folder
+    // tree's own root uses, but never navigates on its own (a bare "By Date" click isn't a
+    // filterable scope — unlike every row inside it).
+    const dateTreeRoot = host2.querySelector('[data-date-tree-toggle]');
+    if (dateTreeRoot) {
+      dateTreeRoot.onclick = () => {
+        if (dateExpanded.has('__root__')) dateExpanded.delete('__root__'); else dateExpanded.add('__root__');
+        renderCollections();
+      };
+    }
+    host2.querySelectorAll('.lib-tree-row[data-date-scope]').forEach((row) => {
+      const toggleKey = row.dataset.dateToggle;
+      // Chevron: LOCAL state only — toggle which children are visible, re-render the sidebar
+      // from the counts already in memory (refreshCatalogCounts fetched them), and stop right
+      // there. No invoke, no catalog_query, no photo load — this is what makes "just looking at
+      // the tree" cheap regardless of how large the library is.
+      const chevEl = row.querySelector('[data-chev-toggle]');
+      if (chevEl && toggleKey) {
+        chevEl.onclick = (e) => {
+          e.stopPropagation();
+          if (dateExpanded.has(toggleKey)) dateExpanded.delete(toggleKey); else dateExpanded.add(toggleKey);
+          renderCollections();
+        };
+      }
+      // Row (label/count — anywhere but the chevron, which already stopped its own
+      // propagation): the actual "load these photos" action, nothing else. Expansion is the
+      // chevron's job alone — clicking a year to load it must not also reveal its months, or
+      // every date click grows the tree whether or not that's what was wanted.
+      row.onclick = (e) => {
+        e.stopPropagation();
+        openCatalogView(row.dataset.dateScope);
+      };
+    });
+    // Keywords' header now goes through the shared [data-sec-toggle] wiring above (#4) —
+    // no bespoke click handler needed any more.
+    host2.querySelectorAll('.lib-tree-row[data-kw-scope]').forEach((row) => {
+      // Chevron: expansion ONLY, no catalog navigation — same split the date tree and folder
+      // tree use. Row body: navigation ONLY, no expansion toggle.
+      const kwChev = row.querySelector('[data-chev-toggle]');
+      const toggleKey = row.dataset.kwToggle;
+      if (kwChev && toggleKey) {
+        kwChev.onclick = (e) => {
+          e.stopPropagation();
+          const id = parseInt(toggleKey, 10);
+          if (kwExpanded.has(id)) kwExpanded.delete(id); else kwExpanded.add(id);
+          renderCollections();
+        };
+      }
+      row.onclick = (e) => {
+        e.stopPropagation();
+        openCatalogView(row.dataset.kwScope);
+      };
+      // Drag-to-tag: same contract the album rows use (application/x-chromasmith-paths), just
+      // calling set_keywords per photo instead of album_add.
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = async (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch { /* ignore */ }
+        if (!paths.length) return;
+        const kwPath = row.dataset.kwPath;
+        await Promise.all(paths.map((p) => addKeywordToPhoto(p, kwPath)));
+        toast(`Tagged ${paths.length} photo${paths.length > 1 ? 's' : ''} "${kwPath.split('|').pop()}"`);
+      };
+    });
+    host2.querySelectorAll('.lib-card-row[data-card]').forEach((row) => {
+      row.onclick = () => openImportPanel(row.dataset.card);
+    });
+    host2.querySelectorAll('.lib-card-row[data-card-pick]').forEach((row) => {
+      row.onclick = () => pickImportFolder();
+    });
+    host2.querySelectorAll('.lib-coll-row[data-coll]').forEach((row) => {
+      row.onclick = () => {
+        const name = row.dataset.coll;
+        if (name === 'edited') ensureBackfill();
+        if (name === 'exported') openExportedView();
+        else if (name === 'offline') openOfflineCollectionView();
+        else openCollectionView(name);
+      };
+      // Drag-to-add: only the three collections that are actually a per-photo mutation (not a
+      // derived/automatic one like Recents/Edited/Exported/Duplicates/Synced) are valid drop
+      // targets — dropping applies the exact same write each already exposes via click (the
+      // heart icon / flag icons / X-P-U shortcuts), so a dropped photo shows up here for the
+      // same reason a manually-flagged one would.
+      const mutate = COLL_DROP_MUTATIONS[row.dataset.coll];
+      if (!mutate) return;
+      row.ondragover = (e) => {
+        if (!Array.from(e.dataTransfer.types || []).includes('application/x-chromasmith-paths')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('lib-coll-dragover');
+      };
+      row.ondragleave = () => row.classList.remove('lib-coll-dragover');
+      row.ondrop = (e) => {
+        e.preventDefault();
+        row.classList.remove('lib-coll-dragover');
+        let paths = [];
+        try { paths = JSON.parse(e.dataTransfer.getData('application/x-chromasmith-paths') || '[]'); } catch (err) { /* ignore */ }
+        if (!paths.length) return;
+        const label = row.querySelector('.lib-coll-lb');
+        Promise.all(paths.map(mutate)).then(() => toast(`Added ${paths.length} photo${paths.length === 1 ? '' : 's'} to ${label ? label.textContent : 'collection'}`, true));
+      };
+    });
+    const root = host2.querySelector('[data-lr-root]');
+    if (root) {
+      // Disconnected → wireframe empty state in the main area (the Connect button there starts
+      // OAuth); connected with albums loaded → jump to the first album; loading → ignore.
+      root.onclick = () => {
+        if (!window.lrCloud) return;
+        if (!window.lrCloud.connected()) { showLrEmptyState(); return; }
+        if (lrState.loading) return;
+        if (lrState.albums && lrState.albums.length) openLrAlbum(lrState.albums[0].id);
+        else lrConnectAndLoad();
+      };
+      root.oncontextmenu = (e) => { e.preventDefault(); lrSignOut(); };
+    }
+    host2.querySelectorAll('[data-lr-album]').forEach((row) => { row.onclick = () => openLrAlbum(row.dataset.lrAlbum); });
+    // Connected chip (viewbar, right-aligned) — visible only while browsing the cloud source.
+    overlay.classList.toggle('lr-mode', state.source === 'lr' && !!(window.lrCloud && window.lrCloud.connected()));
+    const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');
+    if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
+  }
+  function renderCollectionCounts() {
+    invoke('collection_counts').then((counts) => {
+      collectionCounts = counts;
+      // Derive this smart collection from the live guaranteed-offline index rather than
+      // maintaining a second registry that could drift from the actual cached files.
+      return invoke('catalog_hq_offline_list').then((entries) => {
+        collectionCounts.offline = (entries || []).length;
+      }).catch(() => {}).then(() => renderCollections());
+    }).catch(() => {});
+  }
+  renderCollections();
+  // Load persisted albums after the Library DOM and album helpers are initialized. The previous
+  // call lived inside openExportedView(), so existing albums stayed at the initial empty state
+  // until the user happened to open Exported or mutate an album.
+  refreshAlbums();
+  renderCollectionCounts();
+  // ⚠️ NOT guarded on LIBTEST — unlike catalogRegisterFolder (which has no meaningful mock to
+  // run against), catalog_counts/catalog_date_counts ARE mocked, and gating this away from
+  // libtest would mean the date tree and sidebar counts are never exercised by the one harness
+  // that can screenshot-verify a sidebar layout bug (CLAUDE.md §10.14) — which is exactly the
+  // bug this comment replaced: the date tree rendered permanently empty under ?libtest=1&libcat=1
+  // because this call never ran to populate dateCounts in the first place.
+  refreshCatalogCounts();
+  wireActivityListeners();
+  // Click anywhere outside the popover collapses it — the same "click-away closes it" gesture
+  // every other popover/menu in this file already uses.
+  document.addEventListener('click', (e) => {
+    if (document.getElementById('sk2-act')?.contains(e.target)) return;
+    if (compactJobsOpen || activity.expanded) {
+      compactJobsOpen = false;
+      activity.expanded = false;
+      renderActivity();
+    }
+  });

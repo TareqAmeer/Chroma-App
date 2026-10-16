@@ -1,0 +1,244 @@
+  // ── N3.3: shared blocking-wait modal — the FALLBACK UI ──────────────────────────────────────
+  // Every long-running op in the N3 inventory (catalog scans via N3.1's reader/writer split,
+  // merges via spawn_blocking, the subject scan, stills/video export/tiled render) is already
+  // non-blocking by construction, so nothing in this codebase calls this today — see ROADMAP.md's
+  // N3 writeup for the honest "found none" note. It exists as a real, ready-to-use escape hatch
+  // for the rare FUTURE op that genuinely can't be made safe to run alongside other work: an
+  // unmissable centered <dialog> (same construction as `lib-offq-modal` above — plain
+  // `document.createElement('dialog')` + inline styles, no framework) stating what's running and
+  // that the app must wait, with the SAME progress-bar markup class (`.lib-act-bar`) the activity
+  // pill already uses so a viewer sees one consistent progress-bar look everywhere in the app.
+  // ⚠️ Deliberately NOT wired to any job automatically — a caller opens it explicitly
+  // (`libBlockingWaitModal.show(label)`), then feeds it progress via the SAME `libActivityJob`
+  // schema (`libBlockingWaitModal.update({done,total,current})`), then closes it
+  // (`libBlockingWaitModal.hide()`) when the op finishes. Using this for something that COULD run
+  // concurrently with other work is a regression, not a shortcut — N3.2's non-modal panel is the
+  // default and should be tried first.
+  window.libBlockingWaitModal = (() => {
+    let dlg = null;
+    function ensure() {
+      if (dlg) return dlg;
+      dlg = document.createElement('dialog');
+      dlg.id = 'lib-blocking-wait-modal';
+      dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:18px 20px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML = '<div id="lib-bwm-title" style="font-size:13px;font-weight:600;margin-bottom:6px"></div>'
+        + '<div id="lib-bwm-sub" style="font-size:12px;color:var(--mut);margin-bottom:12px">Please wait — this can\'t run alongside other work.</div>'
+        + '<div class="lib-act-bar" style="margin-bottom:6px"><div id="lib-bwm-bar" style="width:0%"></div></div>'
+        + '<div id="lib-bwm-current" style="font-size:11px;color:var(--mut)"></div>';
+      document.body.appendChild(dlg);
+      // No close button/Escape handler on purpose — this models a genuine "the app must wait"
+      // state, not a dismissible notice. Dismissal happens only via hide(), called by the caller
+      // once the blocking op actually finishes.
+      dlg.addEventListener('cancel', (e) => e.preventDefault());
+      return dlg;
+    }
+    return {
+      show(label) { const d = ensure(); d.querySelector('#lib-bwm-title').textContent = label || 'Working…'; d.querySelector('#lib-bwm-bar').style.width = '0%'; d.querySelector('#lib-bwm-current').textContent = ''; if (!d.open) d.showModal(); },
+      update({ done, total, current } = {}) { const d = ensure(); const pct = total ? Math.round((done / total) * 100) : 0; d.querySelector('#lib-bwm-bar').style.width = pct + '%'; d.querySelector('#lib-bwm-current').textContent = current || (total ? `${done} of ${total}` : ''); },
+      hide() { if (dlg && dlg.open) dlg.close(); },
+    };
+  })();
+
+  async function openCatalogView(scope) {
+    closePeopleGrid();
+    state.source = 'catalog';
+    state.catalogScope = scope || 'all';
+    state.selected.clear();
+    const grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let page;
+    try {
+      // Scope encoding: 'all', or 'date:YYYY', 'date:YYYY:M', 'date:YYYY:M:D' — parsed here
+      // rather than passed as separate arguments so state.catalogScope stays one plain string,
+      // the same shape a saved view or a URL could carry.
+      const dateParts = scope && scope.startsWith('date:') ? scope.slice(5).split(':').map(Number) : null;
+      const kwPath = scope && scope.startsWith('kw:') ? scope.slice(3) : null;
+      const personId = scope && scope.startsWith('person:') ? parseInt(scope.slice(7), 10) : null;
+      const smartAlbumId = scope && scope.startsWith('smart:') ? scope.slice(6) : null;
+      const q = { text: null, includeOffline: true, limit: CATALOG_PAGE_SIZE, offset: 0,
+        year: dateParts ? dateParts[0] : null, month: dateParts ? (dateParts[1] || null) : null, day: dateParts ? (dateParts[2] || null) : null,
+        noDate: scope === 'date-nodate', blurryOnly: scope === 'blurry', keywords: kwPath ? [kwPath] : [], personId, smartAlbumId,
+        ...catalogFilterFields() };
+      updateBootSplashProgress({ phase: 'metadata', done: 0, total: 0 }); // a restored catalog view has no scan events — step the splash itself (no-op once it's gone)
+      page = await invoke('catalog_query', { q });
+      updateBootSplashProgress({ phase: 'sidecar', done: 0, total: 0 });
+      // Base shape for loadMoreCatalogEntries's later pages — offset is overwritten there per
+      // call, everything else must stay identical to this page's own query or a "load more"
+      // could silently start answering a different question than the page the user is looking
+      // at (e.g. missing the faces/camera filter that produced what's on screen already).
+      state._catalogPaged = true;
+      state._catalogBaseQuery = { ...q, offset: undefined };
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+    } catch (e) {
+      grid.innerHTML = '<div id="lib-empty">Could not load the catalog.</div>';
+      return;
+    }
+    // Splice in any stack the user has expanded — the grouped query above always returns ONE
+    // row per stack, so an expansion the user asked for (badge click, tracked in
+    // state._expandedStacks by the stack's leader id) has to be fetched separately and spliced
+    // back into place. Best-effort: if the expansion fetch fails, the row just stays collapsed
+    // rather than blocking the whole view.
+    let entries = page.entries;
+    if (state._expandedStacks.size) {
+      const spliced = [];
+      for (const entry of entries) {
+        if (entry.stack_n > 1 && state._expandedStacks.has(entry.id)) {
+          try {
+            const sub = await invoke('catalog_query', { q: { expandStack: entry.id } });
+            for (const m of sub.entries) if (m.id !== entry.id) m._stackOf = entry.id;
+            spliced.push(...sub.entries);
+            continue;
+          } catch (e) { /* fall through — show the collapsed row instead */ }
+        }
+        spliced.push(entry);
+      }
+      entries = spliced;
+    }
+    state.entries = entries;
+    if (!entries.length) {
+      grid.innerHTML = '<div id="lib-empty">Nothing here — open a folder in the Gallery and it\'ll appear here.</div>';
+      rememberLibraryView({ kind: 'catalog', scope: state.catalogScope });
+      renderCollections();
+      return;
+    }
+    // ⚠️ Meta is loaded in the BACKGROUND, same split openFolder already uses and for the exact
+    // same reason (its own comment: "get_meta cache miss reads the whole RAW file... awaiting it
+    // for EVERY file kept the grid on Loading... until the last file finished"). This scope can
+    // be a whole YEAR or "All Photos" across the entire library — unlike the album/exported/
+    // search views that share this general shape, catalog_query here has no natural size cap, so
+    // awaiting a full getMetaBatch before ANY render was a single, silent, potentially
+    // many-thousand-file IPC call with no progress signal at all: no activity pill (that's
+    // catalog_scan, a different command), no thumb-progress readout (nothing had been queued for
+    // thumbnails yet, since renderGrid hadn't run), nothing — exactly "taking forever with zero
+    // indication of what's happening." Sidecars stay awaited (small JSON reads, needed for
+    // flags/edited badges to be right on first paint); the openToken guard below is the same
+    // "user moved on" check openFolder's own background meta pass uses.
+    const openToken = (state._openToken = (state._openToken || 0) + 1);
+    {
+      const paths = entries.filter((e) => !e.offline).map((e) => e.path);
+      await getSidecarsBatch(paths);
+      updateBootSplashProgress({ phase: 'cache', done: 0, total: 0 });
+      getMetaBatch(paths).then(() => {
+        if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
+        refreshFacetSelects();
+        renderGrid();
+      });
+    }
+    await renderGrid();
+    rememberLibraryView({ kind: 'catalog', scope: state.catalogScope });
+    renderCollections();
+  }
+
+  /// Toggles a stack's expanded/collapsed state (the badge's click handler) and re-renders via
+  /// the same path a filter change uses, so the splice-in logic above is the only place that
+  /// needs to know about expansion at all.
+  // CHR-158: expand/collapse in place instead of refreshView() — that re-queried the whole
+  // catalog, painted the skeleton over the grid and re-rendered every card, so the entire
+  // Library visibly reloaded for a one-stack change. Now only this stack's members are fetched
+  // and spliced into state.entries, the grid re-renders from memory (thumbnails carried over so
+  // nothing flashes), and a FLIP animation slides the other cards to their new slots while the
+  // members fan out of (or fold back into) the leader. Falls back to refreshView() outside the
+  // catalog view or if the leader isn't on screen.
+  const _stackLeaderRows = new Map(); // leader id -> the collapsed grouped row, for collapsing back
+  function stackCardRects() {
+    const m = new Map();
+    const g = document.getElementById('lib-grid');
+    if (g) g.querySelectorAll('.lib-card').forEach((c) => {
+      const img = c.querySelector('img');
+      m.set(c.dataset.path, { r: c.getBoundingClientRect(), src: img && img.getAttribute('src') });
+    });
+    return m;
+  }
+  function stackFlip(before, leaderPath) {
+    const g = document.getElementById('lib-grid');
+    if (!g) return;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const from = before.get(leaderPath);
+    g.querySelectorAll('.lib-card').forEach((c) => {
+      const old = before.get(c.dataset.path);
+      const img = c.querySelector('img');
+      if (old && old.src && img && !img.getAttribute("src")) { img.src = old.src; img.classList.add("loaded"); } // no thumbnail flash
+      if (reduce) return;
+      const now = c.getBoundingClientRect();
+      if (old) {
+        const dx = old.r.left - now.left, dy = old.r.top - now.top;
+        if (dx || dy) c.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }],
+          { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
+      } else if (from) {
+        const dx = from.r.left - now.left, dy = from.r.top - now.top;
+        c.animate([{ transform: `translate(${dx}px,${dy}px) scale(.85)`, opacity: 0 }, { transform: 'none', opacity: 1 }],
+          { duration: 300, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+    });
+  }
+  async function toggleStackExpanded(leaderId) {
+    const expanding = !state._expandedStacks.has(leaderId);
+    const idx = state.entries.findIndex((e) => e.id === leaderId && e._stackOf == null);
+    if (state.source !== 'catalog' || idx < 0) {
+      if (expanding) state._expandedStacks.add(leaderId); else state._expandedStacks.delete(leaderId);
+      return refreshView();
+    }
+    const leader = state.entries[idx];
+    let next;
+    if (expanding) {
+      let sub;
+      try { sub = await invoke('catalog_query', { q: { expandStack: leaderId } }); } catch (e) { return; }
+      for (const m of sub.entries) if (m.id !== leaderId) m._stackOf = leaderId;
+      _stackLeaderRows.set(leaderId, leader);
+      next = state.entries.slice(0, idx).concat(sub.entries, state.entries.slice(idx + 1));
+      await getSidecarsBatch(sub.entries.filter((e) => !e.offline).map((e) => e.path));
+      state._expandedStacks.add(leaderId);
+    } else {
+      // Fold the members back into the leader before they leave the DOM.
+      const g = document.getElementById('lib-grid');
+      const lc = g && g.querySelector(`.lib-card[data-path="${CSS.escape(leader.path)}"]`);
+      if (g && lc && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const lr = lc.getBoundingClientRect();
+        const anims = [];
+        state.entries.filter((e) => e._stackOf === leaderId).forEach((e) => {
+          const c = g.querySelector(`.lib-card[data-path="${CSS.escape(e.path)}"]`);
+          if (!c) return;
+          const r = c.getBoundingClientRect();
+          anims.push(c.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${lr.left - r.left}px,${lr.top - r.top}px) scale(.85)`, opacity: 0 }],
+            { duration: 180, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' }).finished.catch(() => {}));
+        });
+        // Bounded: a hidden/throttled window never advances animations, so never wait on them alone.
+        await Promise.race([Promise.all(anims), new Promise((r) => setTimeout(r, 240))]);
+      }
+      const row = _stackLeaderRows.get(leaderId) || leader;
+      const first = state.entries.findIndex((e) => e.id === leaderId || e._stackOf === leaderId);
+      next = state.entries.filter((e) => e._stackOf !== leaderId && !(e.id === leaderId));
+      next.splice(Math.min(first, next.length), 0, row);
+      _stackLeaderRows.delete(leaderId);
+      state._expandedStacks.delete(leaderId);
+    }
+    const before = stackCardRects();
+    const scroller = document.getElementById('lib-grid')?.parentElement;
+    const top = scroller ? scroller.scrollTop : 0;
+    state.entries = next;
+    await renderGrid();
+    if (scroller) scroller.scrollTop = top;
+    stackFlip(before, leader.path);
+  }
+
+  /// The one thing every post-mutation refresh (delete, duplicate, ...) should call instead of
+  /// reaching for `openFolder` directly. Before this existed, three call sites each hard-coded
+  /// `if (state.currentFolder) await openFolder(state.currentFolder)` — which is a silent no-op
+  /// in a catalog view (`state.currentFolder` is '' there), so deleting a photo from All Photos
+  /// would leave it sitting in the grid looking undeleted until something else forced a
+  /// re-render. This knows about every scope the grid can currently be showing.
+  function refreshView() {
+    if (state.source === 'catalog') return openCatalogView(state.catalogScope);
+    if (state.currentFolder) return openFolder(state.currentFolder);
+    return renderGrid();
+  }
+
+  // Drop targets for the drag-a-selection-onto-a-collection gesture (card dragstart wiring is
+  // in renderGrid, above) — each is just the existing per-photo mutation that collection is
+  // itself derived from.
+  const COLL_DROP_MUTATIONS = {
+    favorites: (p) => setFavorite(p, true),
+    flagged: (p) => setLabel(p, 'Green'),
+    rejected: (p) => setLabel(p, 'Red'),
+  };

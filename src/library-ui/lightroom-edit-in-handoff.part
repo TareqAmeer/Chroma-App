@@ -1,0 +1,120 @@
+  // ── Lightroom "Edit In" handoff ──────────────────────────────────────────────────────────
+  // File(s) handed to us by Launch Services (Lightroom's "Edit In" — which can hand off SEVERAL
+  // selected photos at once, Finder's "Open With", or a direct `open -a Chromasmith file.tif`)
+  // — see main.rs's PendingOpen/take_pending_open_path (cold-launch case, pulled once below
+  // since an emitted event this early could arrive before any listener is attached) and the
+  // "open-file-path" event (already-running-app case, where a listener reliably already
+  // exists). Both now carry an ARRAY of paths (a single-file handoff is just a 1-element
+  // array) — previously only the LAST file of a multi-select Edit-In survived at all.
+  async function openEditInHandoff(paths) {
+    if (!paths || !paths.length) return;
+    try {
+      if (paths.length === 1) {
+        const [path] = paths;
+        const buf = await invoke('read_file_bytes', { path });
+        const file = new File([buf], baseName(path), { type: mimeFromName(path), lastModified: 0 });
+        await libLoadFX([file]);
+        window.chromasmithEditInPath = path;
+        state.openedPath = path;
+        if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+        if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+        if (typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see openInEditorInner's comment
+        if (typeof syncSideTabs === 'function') syncSideTabs();
+        window.chromasmithSourcePath = path;
+      // The editor needs the ORIGINAL file path to read its HDR gain map at export
+      // time (see gainmap.rs) — loadFXImages only ever receives a File, which has none.
+      window.chromasmithSourcePath = path;
+        state.openedPaths = [];
+        const sc = await getSidecar(path);
+        if (sc.recipe) {
+          try { applyUISnapshot(snapshotFromB64(sc.recipe)); if (typeof fxUpdate === 'function') fxUpdate(); }
+          catch (e) { console.error('restore handoff recipe', e); }
+        }
+      } else {
+        // Multi-file Edit-In: load as a batch (registers Recents for each — openPathsInEditor)
+        // and restore each photo's own crop/masks/independent-adjust, same as "Export N photos".
+        await openPathsInEditor(paths);
+        window.chromasmithEditInPath = paths.slice(); // array form — see chromasmithSaveToLightroom's write-back loop
+        for (let i = 0; i < paths.length; i++) {
+          const sc = await getSidecar(paths[i]);
+          if (!sc.recipe || !fxImages[i]) continue;
+          try {
+            const snap = snapshotFromB64(sc.recipe);
+            if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+            if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+            if (snap.adjustIndependent && snap.sliders) {
+              const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
+              fxImages[i].adjustOverride = v;
+            }
+          } catch (e) { console.error('restore handoff recipe', e); }
+        }
+      }
+      const btn = document.getElementById('db-save-lr');
+      if (btn) btn.style.display = '';
+      // A photo handed off from Lightroom's "Edit in Chromasmith" used to bypass the Library
+      // entirely — no Recents entry, no recent-folder entry. openPathsInEditor already handles
+      // touch_recent for the multi-file branch; the single-file branch does it here.
+      if (paths.length === 1) {
+        invoke('touch_recent', { path: paths[0] }).then(() => { if (state.source === 'recents') renderCollectionCounts(); }).catch(() => {});
+      }
+      paths.forEach((path) => {
+        const dir = path.replace(/[\\/][^\\/]*$/, '');
+        if (dir && dir !== path) pushRecentFolder(dir);
+      });
+      const label = paths.length > 1 ? `${paths.length} photos` : baseName(paths[0]);
+      if (typeof log === 'function') log(`Opened from Lightroom: ${label} — use "Save to Lightroom" when done`, 'ok');
+      if (typeof toast === 'function') toast('Opened from Lightroom', true);
+    } catch (e) {
+      console.error('Edit-In handoff load failed', paths, e);
+      if (typeof log === 'function') log(`Failed to open Lightroom handoff file(s): ${e && e.message || e}`, 'err');
+    }
+  }
+  invoke('take_pending_open_path').then((paths) => { if (paths && paths.length) openEditInHandoff(paths); }).catch(() => {});
+  window.__TAURI__.event.listen('open-file-path', (e) => { if (e && e.payload && e.payload.length) openEditInHandoff(e.payload); });
+
+  // Recipe-only export/version history (see library.rs's get_export_history/
+  // append_export_history) — a persisted, coarser-grained log distinct from the in-session
+  // fxHistory undo stack: it only grows on a successful export and survives relaunches.
+  window.chromasmithRecordExport = async (version, snap, dest) => {
+    // A multi-photo batch (Open N photos / Export N photos / cmd-dbl-click) clears openedPath
+    // to '' (see the three call sites that set it) since there's no single "current" photo to
+    // auto-persist to — but that previously ALSO made every export from a batch record nothing
+    // at all in export history, for any photo in the batch, silently (caught below). Fall back
+    // to openedPaths and log the same just-exported recipe against every photo in the batch —
+    // not perfectly accurate for the "Export N photos" context-menu flow (which restores each
+    // photo's own prior recipe before rendering, so the true per-photo recipes can differ), but
+    // infinitely better than the previous blank history for every batch export.
+    const path = state.openedPath;
+    const paths = path ? [path] : (state.openedPaths || []);
+    if (!paths.length) return;
+    const recipe = snapshotToB64(snap);
+    // `dest` (the real on-disk path the export was written to, when the native save path can
+    // report it — see saveFilesNative's own per-item {ok,path} result) is only meaningful for
+    // the single-photo case. A batch has no reliable 1:1 mapping available at this call site
+    // between `paths` (Library paths) and the render results (indexed by fxImages position) —
+    // recording it against the wrong photo would silently mislink an unrelated stack, which is
+    // worse than recording nothing (stack rule 1 in catalog.rs just skips a dest-less entry).
+    await Promise.all(paths.map((p) => invoke('append_export_history', { path: p, version, recipe, dest: paths.length === 1 ? (dest || null) : null }).catch((e) => console.error('append_export_history', p, e))));
+    renderCollectionCounts(); // these photos may be newly counted in the "Exported" collection
+  };
+  // C3: lets chromasmith-22.html's export loop (which only has fxImages indices, not library
+  // paths) map each rendered photo back to its ON-DISK source path, in the same order
+  // fxImages was loaded — used to record which photo a successful Google Photos upload
+  // actually came from (see gpUploadItems' call site / window.chromasmithRecordSynced).
+  window.chromasmithGetOpenedPaths = () => (state.openedPath ? [state.openedPath] : (state.openedPaths || []));
+  // CHR-203: the Editor's Versions panel uses the same sidecar version commands as the
+  // right-click "New virtual copy" / version rows, for the single photo that's open.
+  window.chromasmithVersions = {
+    available: () => !!state.openedPath,
+    get: async () => { const p = state.openedPath; if (!p) return null; const sc = await getSidecar(p); return { versions: sc.versions || [], active: sc.active || 0 }; },
+    add: async (name) => { const p = state.openedPath; await flushPendingSave(); const sc = await invoke('sidecar_add_version', { path: p, name }); state.sidecars.set(p, sc); renderGrid(); return sc; },
+    setActive: async (index) => { const p = state.openedPath; const sc = await invoke('sidecar_set_active_version', { path: p, index }); state.sidecars.set(p, sc); renderGrid(); await openInEditor(p); return sc; },
+    rename: async (index, name) => { const p = state.openedPath; const sc = await invoke('sidecar_rename_version', { path: p, index, name }); state.sidecars.set(p, sc); return sc; },
+    del: async (index) => { const p = state.openedPath; const sc = await invoke('sidecar_delete_version', { path: p, index }); state.sidecars.set(p, sc); renderGrid(); return sc; },
+  };
+  window.chromasmithGetExportHistory = async () => {
+    const path = state.openedPath;
+    if (!path) return [];
+    return invoke('get_export_history', { path }).catch(() => []);
+  };
+  let grid; // set at the top of renderGrid; the helpers above close over it

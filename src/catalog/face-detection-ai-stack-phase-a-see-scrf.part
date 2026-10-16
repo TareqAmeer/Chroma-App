@@ -1,0 +1,510 @@
+// ── Face detection (AI stack Phase A) — see scrfd.rs for the model/decode and CLAUDE.md's
+// AI-stack briefing for the overall plan. Detect only: bounding boxes + landmarks, no embedding,
+// no clustering, no naming. Same resumable/chunked/cancellable shape as hash_run above, just a
+// smaller batch (32 vs hash's 64) — a decode + SCRFD inference per photo is heavier per-unit work
+// than a streamed file hash.
+
+#[derive(Serialize, Clone, Default)]
+pub struct FacesResult {
+    pub scanned: usize,
+    pub faces_found: usize,
+}
+
+/// Detection is run on a capped-resolution decode (`decode_rgb8_capped`, 1600px long edge — well
+/// above SCRFD's own 640px input, so nothing is lost to this cap that SCRFD could have used
+/// anyway) rather than a full-resolution demosaic, for the same reason `get_quicklook_preview`
+/// avoids one: a face-sized region only needs a few hundred pixels to detect, not 24 megapixels.
+pub fn faces_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<FacesResult, String> {
+    // This runs on a tauri::async_runtime::spawn_blocking thread (see catalog_faces_scan below),
+    // never the UI thread — mark it low-priority so the OS scheduler prefers the UI thread under
+    // contention. See bgwork.rs for why this matters beyond the existing thread-COUNT caps.
+    crate::bgwork::mark_current_thread_background();
+    let mut result = FacesResult::default();
+    // ~1s/chunk of CHUNK=4 is a generous baseline for SCRFD's fixed 640x640 inference (serialized
+    // behind its session Mutex, ~150-250ms each) plus decode — see bgwork::ChunkPacer's doc.
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(1));
+    // Scoped selections (a context-menu "Find faces in selection") are already bounded to the
+    // photos the user picked — a single pass over exactly those ids, no LIMIT/loop-until-empty
+    // (that machinery exists only to chunk an unbounded library-wide scan). Unscoped (`None`)
+    // reproduces today's query byte-for-byte.
+    let scoped = photo_ids.is_some();
+    // Whole-run total so the progress pill shows real overall progress, not "this 32-photo batch"
+    // (which read as a constant ~100% on a 50k backlog). Scoped runs use the selection size.
+    let grand_total: usize = if let Some(ids) = photo_ids {
+        ids.len()
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
+            [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as usize
+    };
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let batch: Vec<(i64, Option<String>, i64)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
+                "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.kind != 'video' AND p.id IN ({})
+                   AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)",
+                placeholders.join(",")
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.kind != 'video'
+                       AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)
+                     LIMIT 32"
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        let total_in_batch = batch.len();
+        let base_scanned = result.scanned;
+        let mut attempted_in_batch: usize = 0;
+        progress(ScanProgress { phase: "faces".into(), done: base_scanned, total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
+
+        // Chunked rather than one par_iter over the whole batch: progress() can only be called
+        // from THIS thread (a rayon closure isn't Send-safe to call it from — see clip_embed_run's
+        // history), so a single par_iter().map() over the whole batch reports done=0 before and
+        // done=total after with NOTHING in between. On a small scoped batch (e.g. 10 photos) that
+        // reads as "stuck at 0%" for the whole batch, which is exactly the reported bug — the
+        // batch itself was too coarse a progress granularity, not just the walk phase's known
+        // total:0 case. CHUNK=4 gives real incremental ticks while keeping each chunk parallel.
+        //
+        // ⚠️ Committing per CHUNK (not once at the end of the whole 32-photo batch) is load-
+        // bearing, not just nicer progress: if a later chunk hits a photo that hangs (see the
+        // per-photo timeout below), earlier chunks' already-computed results used to sit
+        // uncommitted in memory for the whole batch instead of being saved immediately.
+        const DECODE_LONG_EDGE: u32 = 1600;
+        const CHUNK: usize = 4;
+        // A single pathological photo (corrupt file, a decoder edge case) must never be able to
+        // hang the whole scan forever. Each photo's decode+detect runs on its own OS thread with
+        // a hard wall-clock budget; a photo that blows through it is treated exactly like a
+        // decode failure (left unscanned, counted against face_scan_fail_count below) rather than
+        // stalling every other chunk and photo behind it indefinitely.
+        const PER_PHOTO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+        // After this many failed/timed-out attempts, give up on a photo permanently (mark it
+        // scanned with zero faces) instead of re-selecting it on every future pass forever — see
+        // the face_scan_fail_count migration comment for the incident this fixes.
+        const MAX_FAIL_ATTEMPTS: i64 = 3;
+        for chunk in batch.chunks(CHUNK) {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            progress(ScanProgress {
+                phase: "faces".into(),
+                done: base_scanned + attempted_in_batch,
+                total: grand_total.max(base_scanned + total_in_batch),
+                current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
+            });
+            // System-state throttling (bgwork::throttle_pause): pause under thermal pressure or
+            // low-power mode instead of grinding ahead at full speed regardless of what the rest
+            // of the machine needs right now — checked once per chunk (cheap) rather than per
+            // photo.
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
+            pacer.start_chunk();
+            let part: Vec<(i64, i64, Option<Vec<crate::scrfd::Face>>)> = chunk
+                .par_iter()
+                .map(|(id, abs, mtime)| {
+                    let (id, abs, mtime) = (*id, abs.clone(), *mtime);
+                    let (tx_done, rx_done) = std::sync::mpsc::channel();
+                    // ⚠️ decode_batch_pool() (a FIXED-size pool), NOT std::thread::spawn. A raw
+                    // spawn per photo has no upper bound: recv_timeout below stops WAITING on a
+                    // slow photo after 30s, but the spawned thread itself keeps running to
+                    // completion regardless — on a scoped scan with many consecutive slow/stuck
+                    // photos, those abandoned threads never get cleaned up and pile up without
+                    // limit. Confirmed live: a real scoped run (20k photos) stalled at "4 done"
+                    // for minutes with the app pegged at 100%+ CPU and 71 live threads on the
+                    // worker process — real work, but a growing pile of orphaned decode threads
+                    // all competing for the same handful of physical cores, extending every
+                    // SUBSEQUENT photo's wall time too and compounding into an apparent hang. A
+                    // fixed-size pool bounds concurrent decode work to its own worker count no
+                    // matter how many photos individually time out.
+                    decode_batch_pool().spawn(move || {
+                        crate::bgwork::mark_current_thread_background();
+                        let faces = crate::library::decode_rgb8_capped(&abs, DECODE_LONG_EDGE)
+                            .ok()
+                            .and_then(|(rgb, w, h)| crate::scrfd::detect_multiscale(&rgb, w, h).ok().map(|faces| (faces, w, h)))
+                            .map(|(faces, w, h)| {
+                                faces
+                                    .into_iter()
+                                    .map(|f| crate::scrfd::Face {
+                                        x0: f.x0 / w as f32,
+                                        y0: f.y0 / h as f32,
+                                        x1: f.x1 / w as f32,
+                                        y1: f.y1 / h as f32,
+                                        score: f.score,
+                                        kps: f.kps.map(|(x, y)| (x / w as f32, y / h as f32))
+                                    })
+                                    .collect()
+                            });
+                        // If the receiver already gave up (timeout), this send just fails and is
+                        // ignored — the thread still exits on its own once decode/detect returns,
+                        // it's just no longer waited on.
+                        let _ = tx_done.send(faces);
+                    });
+                    let faces = rx_done.recv_timeout(PER_PHOTO_TIMEOUT).unwrap_or(None);
+                    (id, mtime, faces)
+                })
+                .collect();
+
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            // `attempted_in_batch` — NOT `result.scanned` — is what progress() reports as `done`.
+            // `result.scanned` only advances on a SUCCESS or a terminal give-up (fail_count hits
+            // MAX_FAIL_ATTEMPTS below), so a run of photos that fail detection but haven't hit the
+            // cap yet (fail_count 1 or 2) used to leave `done` frozen for as long as that run
+            // lasted — real, CPU-heavy work with a progress pill that looked stuck. Confirmed
+            // live: a scoped scan's `face_scan_fail_count` distribution climbing (1→2 for dozens
+            // of photos every ~15s, worker at 215% CPU) while `faces_scanned_at`'s done count
+            // stayed completely flat. `attempted_in_batch` counts every photo this chunk actually
+            // processed, pass or fail, so the pill always reflects real throughput.
+            attempted_in_batch += part.len();
+            for (id, mtime, faces) in &part {
+                match faces {
+                    Some(faces) => {
+                        tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                        for f in faces {
+                            let kps_json = serde_json::to_string(&f.kps).map_err(|e| e.to_string())?;
+                            tx.execute(
+                                "INSERT INTO photo_faces (photo_id, x0, y0, x1, y1, score, kps) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                                params![id, f.x0, f.y0, f.x1, f.y1, f.score, kps_json]
+                            )
+                            .map_err(|e| e.to_string())?;
+                        }
+                        result.faces_found += faces.len();
+                        tx.execute(
+                            "UPDATE photos SET faces_scanned_at = ?1, face_scan_fail_count = 0 WHERE id = ?2",
+                            params![mtime, id]
+                        )
+                        .map_err(|e| e.to_string())?;
+                        result.scanned += 1;
+                    }
+                    None => {
+                        // Unreadable / timed out. Bump the fail count; after MAX_FAIL_ATTEMPTS,
+                        // give up permanently (mark scanned with zero faces) so this photo stops
+                        // being re-selected by every future pass's LIMIT-32 query — that
+                        // re-selection-forever is exactly what turned one bad photo into an
+                        // unkillable, CPU-pegging scan.
+                        let fail_count: i64 = tx
+                            .query_row("SELECT face_scan_fail_count FROM photos WHERE id = ?1", params![id], |r| r.get(0))
+                            .unwrap_or(0)
+                            + 1;
+                        if fail_count >= MAX_FAIL_ATTEMPTS {
+                            tx.execute("DELETE FROM photo_faces WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                            tx.execute(
+                                "UPDATE photos SET faces_scanned_at = ?1, face_scan_fail_count = ?2 WHERE id = ?3",
+                                params![mtime, fail_count, id]
+                            )
+                            .map_err(|e| e.to_string())?;
+                            result.scanned += 1;
+                        } else {
+                            tx.execute("UPDATE photos SET face_scan_fail_count = ?1 WHERE id = ?2", params![fail_count, id])
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+            progress(ScanProgress { phase: "faces".into(), done: base_scanned + attempted_in_batch, total: grand_total.max(base_scanned + total_in_batch), current: String::new() });
+            // Adaptive backoff (bgwork::ChunkPacer): a chunk that ran unexpectedly slow is
+            // itself evidence of system contention, whatever the root cause — back off
+            // proportionally rather than immediately hammering the next chunk. A no-op on a
+            // healthy scan (chunks finishing within the baseline sleep for zero time).
+            let pause = pacer.end_chunk();
+            if pause > std::time::Duration::ZERO {
+                std::thread::sleep(pause);
+            }
+        }
+
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.scanned, total: result.scanned, current: String::new() });
+    Ok(result)
+}
+
+/// CLI entrypoint for the face-scan worker process (see CatalogState::ai_worker's doc comment
+/// for why this exists as a separate process). `photo_ids` is `None` for a full-library scan or
+/// `Some` for a scoped one ("Find faces in selection" has NO size cap — a "select all" on a huge
+/// folder is exactly as unbounded as the sidebar's whole-library button, which is why this is a
+/// parameter here rather than the worker always assuming None the way the first version of this
+/// did). See run_ai_worker for the shared parent-side machinery this pairs with.
+pub fn run_face_scan_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("face-scan worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match faces_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE scanned={} faces_found={}", r.scanned, r.faces_found);
+            0
+        }
+        Err(e) => {
+            eprintln!("face-scan worker: {e}");
+            1
+        }
+    }
+}
+
+/// CLI entrypoint for the pet-detection worker process — mirrors run_face_scan_worker exactly,
+/// see its doc comment (including the `photo_ids` scoping note).
+pub fn run_pets_scan_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("pets-scan worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match pets_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE scanned={} pets_found={}", r.scanned, r.pets_found);
+            0
+        }
+        Err(e) => {
+            eprintln!("pets-scan worker: {e}");
+            1
+        }
+    }
+}
+
+/// CLI entrypoint for the face-embedding (ArcFace) worker process — mirrors run_face_scan_worker.
+pub fn run_embed_faces_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("embed-faces worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match embed_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE embedded={}", r.embedded);
+            0
+        }
+        Err(e) => {
+            eprintln!("embed-faces worker: {e}");
+            1
+        }
+    }
+}
+
+/// CLI entrypoint for the CLIP-embedding worker process — mirrors run_face_scan_worker.
+pub fn run_clip_embed_worker(db_path: &Path, photo_ids: Option<&[i64]>) -> i32 {
+    crate::bgwork::mark_current_thread_background();
+    let conn = match open_and_migrate(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("clip-embed worker: could not open catalog at {}: {e}", db_path.display());
+            return 1;
+        }
+    };
+    let cancel = AtomicBool::new(false);
+    match clip_embed_run(&conn, photo_ids, &mut |p| println!("PROGRESS {} {}", p.done, p.total), &cancel) {
+        Ok(r) => {
+            println!("DONE embedded={}", r.embedded);
+            0
+        }
+        Err(e) => {
+            eprintln!("clip-embed worker: {e}");
+            1
+        }
+    }
+}
+
+/// Shared parent-side machinery for EVERY unscoped AI-stack phase (face detect, face embed, pet
+/// detect, CLIP embed — see CatalogState::ai_worker's doc comment for why they're isolated at
+/// all). Spawns `chromasmith <subcommand> <db_path>`, relays its `PROGRESS done total` lines as
+/// `catalog-scan` events tagged with `phase`, and returns the `key=value` pairs parsed from its
+/// final `DONE ...` line — each caller decodes those into its own Result struct, since
+/// FacesResult/PetsResult/EmbedResult/ClipEmbedResult all have different field names.
+///
+/// ⚠️ Reads the child's stdout on a background thread and consumes it via `recv_timeout`, NOT a
+/// plain blocking read loop — this exact shape (piped stdout, undrained-until-EOF) already
+/// deadlocked once here (see the stderr comment below) for a reason that wasn't anticipated in
+/// advance. If the worker goes silent for WATCHDOG straight, this thread kills it and moves on
+/// instead of hanging forever, whatever the actual cause turns out to be — a backstop, not a
+/// substitute for having understood the failure the first time.
+fn run_ai_worker(
+    app: &tauri::AppHandle,
+    state: &tauri::State<CatalogState>,
+    subcommand: &'static str,
+    phase: &'static str,
+    photo_ids: Option<&[i64]>
+) -> Result<std::collections::HashMap<String, usize>, String> {
+    use tauri::Emitter;
+    let db_path = catalog_db_path();
+    let exe = std::env::current_exe().map_err(|e| format!("could not resolve current executable: {e}"))?;
+    // Scoped calls ("Find faces in selection" has NO size cap — see run_face_scan_worker's doc
+    // comment) pass their ids via a temp file rather than as a raw CLI arg: comma-joining tens of
+    // thousands of i64s is still under macOS's ARG_MAX in practice, but a file has no such ceiling
+    // to worry about at all, and is trivial to read back with a plain line-per-id format.
+    let ids_file = photo_ids.filter(|ids| !ids.is_empty()).map(|ids| {
+        let path = std::env::temp_dir().join(format!("chromasmith_scan_ids_{}_{}.txt", std::process::id(), now_secs()));
+        let text = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join("\n");
+        let _ = std::fs::write(&path, text);
+        path
+    });
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg(subcommand).arg(&db_path);
+    if let Some(f) = &ids_file {
+        cmd.arg(f);
+    }
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        // ⚠️ NOT piped. A piped-but-undrained stderr is a classic Unix subprocess deadlock: the
+        // OS pipe buffer (~64KB) fills once the worker logs enough (this app's RAW decode path
+        // alone can produce hundreds of WARN lines — see main.rs's own logger comment), the child
+        // blocks on its next write, and this thread blocks forever reading stdout lines that will
+        // now never come — both idle, the JS promise never resolves, and the UI reads as
+        // permanently "working" with ~0% CPU. Caught by re-checking this fix live against the
+        // face-detect worker before this generic helper existed: DB progress had stalled with the
+        // process genuinely idle, not spinning. `inherit` needs no draining — it shares the
+        // parent's own stderr fd directly, same as every other `eprintln!` in this codebase.
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("could not start {subcommand} worker: {e}"))?;
+
+    let stdout = child.stdout.take();
+    *state.ai_worker.lock().map_err(|e| e.to_string())? = Some(child);
+
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(120);
+    let mut kv = std::collections::HashMap::new();
+    if let Some(stdout) = stdout {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if tx.send(line).is_err() {
+                    break; // receiver gave up (watchdog fired) — nothing left to do here
+                }
+            }
+            // tx drops here either way, which is what lets the loop below tell "worker went
+            // quiet forever" (RecvTimeoutError::Timeout) apart from "worker finished normally"
+            // (RecvTimeoutError::Disconnected, once every already-sent line is drained).
+        });
+        loop {
+            match rx.recv_timeout(WATCHDOG) {
+                Ok(line) => {
+                    if let Some(rest) = line.strip_prefix("PROGRESS ") {
+                        let mut parts = rest.split_whitespace();
+                        if let (Some(done), Some(total)) = (parts.next().and_then(|s| s.parse().ok()), parts.next().and_then(|s| s.parse().ok())) {
+                            let _ = app.emit("catalog-scan", ScanProgress { phase: phase.into(), done, total, current: String::new() });
+                        }
+                    } else if let Some(rest) = line.strip_prefix("DONE ") {
+                        for pair in rest.split_whitespace() {
+                            if let Some((k, v)) = pair.split_once('=') {
+                                if let Ok(n) = v.parse() {
+                                    kv.insert(k.to_string(), n);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    eprintln!("{subcommand}: no output for {}s — treating as hung and killing it", WATCHDOG.as_secs());
+                    kill_ai_worker(state);
+                    break;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break // normal EOF
+            }
+        }
+    }
+
+    // Take (not just read) the slot: if it's already None, catalog_scan_cancel/pause already
+    // killed and reaped this child, and calling wait() again here would be a benign no-op at
+    // best — but there's nothing left to wait on either way.
+    let child = state.ai_worker.lock().map_err(|e| e.to_string())?.take();
+    if let Some(mut child) = child {
+        let _ = child.wait();
+    }
+    if let Some(f) = &ids_file {
+        let _ = std::fs::remove_file(f);
+    }
+    let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+    Ok(kv)
+}
+
+#[tauri::command]
+pub async fn catalog_faces_scan(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<FacesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+
+        // ⚠️ Routed through the worker regardless of scope — NOT just when photo_ids is None.
+        // "Find faces in selection" has no size cap (any n>=1, including a `select all` on a huge
+        // folder — see the context-menu item's own comment), so a "scoped calls are always small"
+        // assumption was wrong: it left this exact Mutex-holding, non-QoS'd bug reachable from
+        // that menu item after the unscoped path was already fixed, confirmed live (onnxruntime
+        // actively computing inside the MAIN process, not a child, while the app was reported
+        // stuck). Falls back to in-process only when there's no real on-disk catalog to hand a
+        // child (CatalogState::new's in-memory fallback) — a child reading a different, empty
+        // in-memory-only database would just silently scan nothing.
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--face-scan-worker", "faces", photo_ids.as_deref())?;
+            return Ok(FacesResult { scanned: kv.get("scanned").copied().unwrap_or(0), faces_found: kv.get("faces_found").copied().unwrap_or(0) });
+        }
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        faces_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_faces_scan task panicked: {e}"))?
+}

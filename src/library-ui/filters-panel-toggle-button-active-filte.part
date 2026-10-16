@@ -1,0 +1,187 @@
+  // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
+  const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter', 'lib-color-label-filter'];
+  // One filter state, two views: state.* is the source of truth and both the chip row and the
+  // panel dropdowns are redrawn from it. A multi-type chip selection ("raw,video") gets its own
+  // transient option in the type dropdown instead of the dropdown falsely reading "All types".
+  // Also re-applies the panel's orange "set" highlight (k-set), which only listened for user
+  // 'change' events — resets done in code (clear-all, saved views, sidebar shortcuts) left it stale.
+  const FILTER_STATE_KEYS = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
+    'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter', 'lib-dupe-filter': 'dupeFilter',
+    'lib-synced-filter': 'syncedFilter', 'lib-faces-filter': 'facesFilter', 'lib-tag-filter': 'tagFilter',
+    'lib-rating-filter': 'ratingFilter', 'lib-color-label-filter': 'colorLabelFilter' };
+  function syncFilterSelectsFromState() {
+    Object.entries(FILTER_STATE_KEYS).forEach(([id, key]) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const v = state[key] === undefined ? 'all' : String(state[key]);
+      if (id === 'lib-type-filter') {
+        let multi = sel.querySelector('option[data-multi]');
+        if (v.includes(',')) {
+          if (!multi) { multi = document.createElement('option'); multi.dataset.multi = '1'; sel.appendChild(multi); }
+          multi.value = v;
+          multi.textContent = v.split(',').map((t) => { const o = [...sel.options].find((x) => x.value === t); return o ? o.textContent : t.toUpperCase(); }).join(' + ');
+        } else if (multi) multi.remove();
+      }
+      if ([...sel.options].some((o) => o.value === v)) { if (sel.value !== v) sel.value = v; }
+      sel.classList.toggle('k-set', sel.selectedIndex > 0 && sel.value !== 'all');
+    });
+  }
+  function syncFilterUI() {
+    const chipsEl = document.getElementById('lib-filter-chips');
+    const badgeEl = document.getElementById('lib-filters-badge');
+    if (!chipsEl || !badgeEl) return;
+    syncFilterSelectsFromState();
+    // CHR-161: several chip-row types at once can't be shown by the single-value select, so
+    // they get their own pill ("RAW + Video") whose × clears the type filter.
+    const multiType = state.typeFilter.includes(',');
+    const active = FILTER_SELECT_IDS.map((id) => document.getElementById(id)).filter((sel) => sel && sel.value !== 'all' && !(multiType && sel.id === 'lib-type-filter'));
+    const n = active.length + (multiType ? 1 : 0);
+    badgeEl.textContent = n ? String(n) : '';
+    badgeEl.classList.toggle('on', n > 0);
+    const typeSel = document.getElementById('lib-type-filter');
+    const typeName = (v) => { const o = typeSel && [...typeSel.options].find((x) => x.value === v); return o ? o.textContent : v.toUpperCase(); };
+    chipsEl.innerHTML = (multiType ? `<span class="lib-chip">${state.typeFilter.split(',').map(typeName).join(' + ')}<span class="lib-chip-x" data-for="lib-type-filter" title="Remove filter">${ic('close', 10)}</span></span>` : '') + active.map((sel) => {
+      const opt = sel.options[sel.selectedIndex];
+      return `<span class="lib-chip">${opt ? opt.textContent : sel.value}<span class="lib-chip-x" data-for="${sel.id}" title="Remove filter">${ic('close', 10)}</span></span>`;
+    }).join('');
+    chipsEl.querySelectorAll('.lib-chip-x').forEach((x) => {
+      x.onclick = () => {
+        const sel = document.getElementById(x.dataset.for);
+        if (!sel) return;
+        sel.value = 'all';
+        sel.onchange({ target: sel });
+      };
+    });
+  }
+  // Library top-bar flags operate on the Library selection. The Editor's own top-bar buttons
+  // continue to use the separate window.chromasmithToggle* bridge for its currently edited photo.
+  const syncLibFlagRow = () => {
+    const reject = overlay.querySelector('#lib-flag-reject');
+    const pick = overlay.querySelector('#lib-flag-pick');
+    const fav = overlay.querySelector('#lib-flag-fav');
+    if (!reject || !pick || !fav) return;
+    const paths = [...state.selected];
+    const labels = paths.map((p) => (state.sidecars.get(p) || {}).label || '');
+    const favorites = paths.map((p) => !!(state.sidecars.get(p) || {}).favorite);
+    reject.classList.toggle('on', paths.length > 0 && labels.every((label) => label === 'Red'));
+    pick.classList.toggle('on', paths.length > 0 && labels.every((label) => label === 'Green'));
+    fav.classList.toggle('on', paths.length > 0 && favorites.every(Boolean));
+  };
+  // Backlog #1 disables actions without a target; backlog #4 explains that prerequisite and
+  // routes Library actions to the selection, never a previously opened Editor photo.
+  const syncLibActionButtons = () => {
+    const reject = overlay.querySelector('#lib-flag-reject');
+    const pick = overlay.querySelector('#lib-flag-pick');
+    const fav = overlay.querySelector('#lib-flag-fav');
+    const hasTarget = state.selected.size > 0;
+    [reject, pick, fav].forEach((b) => {
+      if (b) {
+        b.disabled = !hasTarget;
+      }
+    });
+    const exportBtn = overlay.querySelector('#lib-export-btn');
+    const allFxBtn = overlay.querySelector('#lib-allfx-btn');
+    if (exportBtn) exportBtn.disabled = !hasTarget;
+    if (allFxBtn) allFxBtn.disabled = !hasTarget;
+    syncLibFlagRow();
+  };
+  const applySelectionLabel = async (label) => {
+    const paths = [...state.selected];
+    if (!paths.length) return;
+    const clear = paths.every((p) => ((state.sidecars.get(p) || {}).label || '') === label);
+    await Promise.all(paths.map((p) => setLabel(p, clear ? '' : label)));
+    syncLibActionButtons();
+  };
+  overlay.querySelector('#lib-flag-reject').onclick = () => applySelectionLabel('Red');
+  overlay.querySelector('#lib-flag-pick').onclick = () => applySelectionLabel('Green');
+  overlay.querySelector('#lib-flag-fav').onclick = async () => {
+    const paths = [...state.selected];
+    if (!paths.length) return;
+    const allFavorited = paths.every((p) => !!(state.sidecars.get(p) || {}).favorite);
+    await Promise.all(paths.map((p) => setFavorite(p, !allFavorited)));
+    syncLibActionButtons();
+  };
+  syncLibActionButtons();
+  const filtersBtn = overlay.querySelector('#lib-filters-btn');
+  const filtersPanel = overlay.querySelector('#lib-filters-panel');
+  const filterRow = overlay.querySelector('#lib-filter-row');
+  // #5: the Filters button now opens the wireframe's own inline chip row (Library View.html
+  // :497 — btnFilters.onclick toggles filterRow, verbatim), not the old side panel. The panel
+  // still exists and still holds the 7 filters (camera/lens/ISO/duplicates/sync/faces/rating)
+  // that have no wireframe equivalent — opened from the row's own "More filters…" chip instead.
+  filtersBtn.onclick = (e) => {
+    e.stopPropagation();
+    filterRow.classList.toggle('open');
+    filtersBtn.classList.toggle('active', filterRow.classList.contains('open'));
+  };
+  document.addEventListener('click', (e) => {
+    if (filterRow.classList.contains('open') && !filterRow.contains(e.target) && e.target !== filtersBtn) filterRow.classList.remove('open');
+  });
+  overlay.querySelector('#lib-filters-panel-close').onclick = (e) => {
+    e.stopPropagation();
+    filtersPanel.classList.remove('open');
+  };
+  document.addEventListener('click', (e) => {
+    if (filtersPanel.classList.contains('open') && !filtersPanel.contains(e.target) && e.target !== filtersBtn) filtersPanel.classList.remove('open');
+  });
+  const moreFiltersBtn = overlay.querySelector('#lib-more-filters');
+  if (moreFiltersBtn) {
+    moreFiltersBtn.onclick = (e) => {
+      e.stopPropagation();
+      filtersPanel.classList.add('open');
+    };
+  }
+  // Chip-row wiring: single-select per data-fgrp group (same rule as the wireframe's own
+  // script), driving the SAME state.typeFilter/tagFilter the hidden #lib-type-filter select and
+  // the rest of the filter machinery already use.
+  filterRow.querySelectorAll('.lib-chip[data-fgrp]').forEach((chip) => {
+    chip.onclick = () => {
+      const grp = chip.dataset.fgrp;
+      const val = chip.dataset.fval;
+      if (grp === 'type') {
+        // CHR-161: types multi-select — each chip toggles in/out of a comma list in
+        // state.typeFilter ("raw,jpeg"); "All" (or deselecting the last one) clears it.
+        const cur = new Set(state.typeFilter === 'all' ? [] : state.typeFilter.split(','));
+        if (val === 'all') cur.clear(); else if (cur.has(val)) cur.delete(val); else cur.add(val);
+        state.typeFilter = cur.size ? [...cur].join(',') : 'all';
+        syncFilterChips();
+        syncFilterUI();
+        applyCatalogFilterChange();
+      } else if (grp === 'flag') {
+        // Clicking the active flag/tag chip again turns it off.
+        state.tagFilter = state.tagFilter === val ? 'all' : val;
+        syncFilterChips();
+        syncFilterUI();
+        applyCatalogFilterChange();
+      }
+    };
+  });
+  overlay.querySelector('#lib-types-more').onclick = (e) => {
+    e.stopPropagation();
+    filterRow.classList.toggle('types-expanded');
+  };
+  overlay.querySelector('#lib-filters-clear').onclick = () => clearAllLibFilters();
+  const aspectToggleBtn = overlay.querySelector('#lib-aspect-toggle');
+  if (aspectToggleBtn) aspectToggleBtn.onclick = () => {
+    state.gridAspect = !state.gridAspect;
+    try { localStorage.setItem('chromasmith_lib_gridaspect', state.gridAspect ? '1' : '0'); } catch {}
+    renderGrid();
+  };
+  let searchDebounce;
+  const searchInput = overlay.querySelector('#lib-search');
+  searchInput.oninput = (e) => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); renderSearchSuggest(e.target.value); }, 150);
+  };
+  searchInput.onfocus = () => { if (!placeList.length) refreshPlaces(); renderSearchSuggest(searchInput.value); };
+  searchInput.onblur = () => { const b = document.getElementById('lib-search-suggest'); if (b) b.hidden = true; };
+  // AI stack Phase D: Enter runs a semantic (CLIP) search over the whole catalog instead of the
+  // live filename filter oninput already does — a deliberately different gesture (type-to-filter
+  // vs press-Enter-to-search) so the common case (narrowing the current view by filename) stays
+  // instant with no round trip, and the AI search is opt-in per query, not a live-as-you-type
+  // model call on every keystroke.
+  searchInput.onkeydown = (e) => {
+    const b = document.getElementById('lib-search-suggest');
+    if (e.key === 'Escape' && b) b.hidden = true;
+    if (e.key === 'Enter' && searchInput.value.trim()) { if (b) b.hidden = true; runClipTextSearch(searchInput.value.trim()); }
+  };

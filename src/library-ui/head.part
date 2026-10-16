@@ -1,0 +1,1028 @@
+// Chromasmith Library view: local folder browser with cached thumbnails,
+// alongside (not replacing) the Google Photos integration — purely for finding/culling/rating
+// RAWs on disk before editing. Native-only (arbitrary filesystem folder browsing isn't a thing
+// in a sandboxed browser); injected only into the Tauri build, gated on window.__TAURI__, so
+// this file is a safe no-op anywhere else. chromasmith-22.html is never touched.
+(function () {
+  // ?libtest=1 — browser-only visual test harness. The Library is native-gated, which meant NO
+  // pre-ship way to SEE a layout change: every check ran in a plain browser where this file
+  // no-ops, and layout bugs (the "sidebar missing" regression) survived to the packaged app.
+  // The flag swaps in tiny mocks for the handful of Tauri commands the Library needs so the
+  // real DOM/CSS renders and can be screenshotted against the wireframes. Production is
+  // untouched: the flag only exists via URL and the Tauri path never evaluates the mocks.
+  const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
+  let ltAlbums = [];
+  let ltSmartAlbums = [];
+  if (!window.__TAURI__ && !LIBTEST) return;
+  // Resolve through the current Tauri function at call time so the native diagnostics
+  // wrapper installed by chromasmith-22.html can observe Library IPC too.
+  const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
+  // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
+  const QUICKLOOK_CACHE_MAX = 5;
+  const QUICKLOOK_CACHE_BYTES = 32 * 1024 * 1024;
+  const quicklookPreviews = new Map();
+  const quicklookRequests = new Map();
+  let rawReviewActive = false;
+  let rawReviewActiveJob = null;
+  const rawReviewQueue = [];
+  let rawFaceReviewSession = null;
+  let rawFaceReviewSessionId = 0;
+  function retireRawFaceReviewSession() {
+    const session = rawFaceReviewSession;
+    if (!session) return;
+    session.cancelled = true;
+    rawFaceReviewSession = null;
+    session.wrap?.remove();
+    for (const url of session.urls || []) URL.revokeObjectURL(url);
+    session.urls?.clear();
+    for (let i = rawReviewQueue.length - 1; i >= 0; i--) {
+      if (rawReviewQueue[i].kind.startsWith('face-review') && rawReviewQueue[i].ownerJobId === session.jobId)
+        rawReviewQueue.splice(i, 1)[0].reject(new Error('RAW face review superseded'));
+    }
+  }
+  function queueRawReview(path, load, kind = 'quicklook', ownerJobId = null) {
+    return new Promise((resolve, reject) => {
+      rawReviewQueue.push({ path, load, resolve, reject, kind, ownerJobId });
+      // Keep up to three speculative Quick Look requests plus one persistent preparation
+      // request. Preparation is lazy (one item at a time) and must never be evicted as though
+      // it were disposable neighbour prefetch.
+      while (rawReviewQueue.filter((job) => job.kind === 'quicklook').length > 3) {
+        const queuedQuicklook = rawReviewQueue.filter((job) => job.kind === 'quicklook');
+        const stale = queuedQuicklook.find((job) => job.path !== quicklook.path) || queuedQuicklook[0];
+        const index = rawReviewQueue.indexOf(stale);
+        rawReviewQueue.splice(index, 1)[0].reject(new Error('RAW preview superseded'));
+      }
+      pumpRawReview();
+    });
+  }
+  function pumpRawReview() {
+    if (rawReviewActive || !rawReviewQueue.length) return;
+    const current = rawReviewQueue.findIndex((job) => job.kind === 'quicklook' && job.path === quicklook.path);
+    // Quick Look requests remain ahead of background work even when speculative; the current
+    // image wins within that lane. Explicit face review then outranks bulk preparation.
+    const quicklookIndex = current >= 0 ? current : rawReviewQueue.findIndex((job) => job.kind === 'quicklook');
+    const faceReviewIndex = rawReviewQueue.findIndex((job) => job.kind === 'face-review');
+    const job = rawReviewQueue.splice(quicklookIndex >= 0 ? quicklookIndex : faceReviewIndex >= 0 ? faceReviewIndex : 0, 1)[0];
+    rawReviewActive = true;
+    rawReviewActiveJob = job;
+    Promise.resolve().then(job.load).then(job.resolve, job.reject).finally(() => { rawReviewActive = false; rawReviewActiveJob = null; pumpRawReview(); });
+  }
+  // Quick Look on a RAW shows the camera's embedded JPEG by default (instant, so flipping through
+  // a shoot while culling never waits on a decode). The developed RAW render is opt-in per photo
+  // (D key) — or always, with localStorage chromasmithQuickLookDeveloped='1'.
+  function quicklookAlwaysDeveloped() {
+    try { return localStorage.getItem('chromasmithQuickLookDeveloped') === '1'; } catch (_) { return false; }
+  }
+  async function quicklookPreview(path, developed = false) {
+    if (!path) return Promise.reject(new Error('missing preview path'));
+    const isRaw = RAW_EXT_RE.test(path) && (developed || quicklookAlwaysDeveloped());
+    const settings = isRaw ? await rawCacheSettings(path, 'review') : null;
+    const key = displayCacheKey(path, settings?.recipeKey || 'image-preview');
+    if (quicklookPreviews.get(path)?.key === key) {
+      const record = quicklookPreviews.get(path);
+      quicklookPreviews.delete(path);
+      quicklookPreviews.set(path, record);
+      return record.bytes;
+    }
+    if (quicklookRequests.get(path)?.key === key) return quicklookRequests.get(path).promise;
+    const request = (isRaw ? queueRawReview(path, async () => {
+      const asset = await cacheOneRaw(path, 'review', settings);
+      const response = await fetch(window.__TAURI__?.core?.convertFileSrc ? window.__TAURI__.core.convertFileSrc(asset) : asset);
+      if (!response.ok) throw new Error('Developed RAW preview asset unavailable');
+      return response.arrayBuffer();
+    }) : invoke('get_quicklook_preview', { path })).then((bytes) => {
+      if (quicklookRequests.get(path)?.promise === request) {
+        quicklookPreviews.delete(path);
+        quicklookPreviews.set(path, { key, bytes });
+        let total = [...quicklookPreviews.values()].reduce((sum, record) => sum + (record.bytes.byteLength || record.bytes.length || 0), 0);
+        while (quicklookPreviews.size > QUICKLOOK_CACHE_MAX || total > QUICKLOOK_CACHE_BYTES) {
+          const oldest = quicklookPreviews.keys().next().value;
+          const record = quicklookPreviews.get(oldest);
+          total -= record.bytes.byteLength || record.bytes.length || 0;
+          quicklookPreviews.delete(oldest);
+        }
+      }
+      return bytes;
+    }).finally(() => {
+      if (quicklookRequests.get(path)?.promise === request) quicklookRequests.delete(path);
+    });
+    quicklookRequests.set(path, { key, promise: request });
+    return request;
+  }
+  // Every Library-originated Editor load goes through here so loadFXImages can tell it apart
+  // from a drag-drop / Open File load (see chromasmithForgetOpened).
+  async function libLoadFX(files) {
+    window.__csLibOpen = true;
+    try { return await loadFXImages(files); } finally { window.__csLibOpen = false; }
+  }
+  // A Rust command's Result::Err reaches here as a bare String (sometimes a plain sentence like
+  // "no such album", sometimes an internal detail like an os-error from a failed write) — either
+  // way it was landing in a toast completely unframed, with no verb telling the user what had
+  // been ATTEMPTED. `what` says the attempted action; the raw reason still appears, so nothing
+  // about a real failure is hidden, but the first thing read is now "Couldn't rename the album",
+  // not the bare word an internal Result happened to carry.
+  function humanizeErr(what, err) {
+    const raw = String((err && err.message) || err || '').trim();
+    return `Couldn't ${what}${raw ? ` — ${raw}` : ''}`;
+  }
+  // Virtual-copy state for the harness, so the version rows in the context menu are reachable
+  // without a real sidecar on disk.
+  let ltVersions = [], ltActive = 0;
+  const ltRecipeBatches = new Map(), ltBatchSidecars = new Map(), ltBatchFailures = new Set(), ltBatchSkips = new Set();
+  let ltFailNextSidecarWrite = false, ltDelayNextSidecarWrite = false;
+  if (LIBTEST) {
+    window.libtestRecipeBatchFailNext = indices => { indices.forEach(i => ltBatchFailures.add(i)); };
+    window.libtestRecipeBatchSkipNext = indices => { indices.forEach(i => ltBatchSkips.add(i)); };
+    if (/[?&]libtestBatchRecovery=1/.test(location.search)) {
+      const id = 27301;
+      ltRecipeBatches.set(id, { id, label: 'Interrupted paste', status: 'running', createdAt: Date.now(), items: [
+        { index: 0, path: '/test/Photos/applied.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'applied', error: null },
+        { index: 1, path: '/test/Photos/pending.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'pending', error: null },
+        { index: 2, path: '/test/Photos/failed.jpg', recipe: 'target', before: { recipe: 'before' }, status: 'failed', error: 'Simulated interrupted write failure' },
+      ] });
+    }
+    window.libtestRecipeBatchInvoke = (command, args) => libtestInvoke(command, args);
+    // Exercise the real preparation/drain path with a large deterministic selection. The
+    // delay is applied only by the LIBTEST journal mock below so a browser regression can
+    // observe the running state long enough to interact with the Library.
+    window.libtestRecipeBatchStartLarge = count => startRecipeBatch(
+      'Responsiveness fixture',
+      Array.from({ length: Math.max(1, Math.min(5000, Number(count) || 1)) }, (_, index) => `/test/Photos/BATCH_${String(index + 1).padStart(5, '0')}.RW2`),
+      () => window.__copiedRecipe || 'responsiveness-fixture-recipe'
+    );
+    window.__libtestSeedSidecar = (path, sidecar) => {
+      const value = { rating: 0, label: '', color_label: '', favorite: false, edited: false, recipe: '', ...(sidecar || {}) };
+      ltBatchSidecars.set(path, structuredClone(value));
+      state.sidecars.set(path, structuredClone(value));
+    };
+    window.__libtestFailNextSidecarWrite = () => { ltFailNextSidecarWrite = true; };
+    window.__libtestDelayNextSidecarWrite = () => { ltDelayNextSidecarWrite = true; window.__libtestSidecarWriteStarted = false; };
+    window.__libtestReadSidecar = (path) => structuredClone(ltBatchSidecars.get(path) || ltSidecars.get(path) || {});
+  }
+  // Undo-reset mock state — mirrors the Rust one-slot buffer (last_reset_recipe/last_reset_edited)
+  // so ?libtest=1 can exercise the "Reset edit" / "Undo last reset" context-menu pair without a
+  // real Tauri backend.
+  let ltLastResetRecipe = null, ltLastResetEdited = false, ltRecipe = '', ltEdited = false;
+  const ltSidecars = new Map();
+  let ltOfflineQueue = [], ltOfflineQueueNextId = 0;
+  // ?libdates=1 spreads the mock capture dates (one photo every ~9h from 2026-03-01) so the
+  // grid's scrolling date title can be exercised; without it every photo shares one date.
+  const LT_DATES = /[?&]libdates=1/.test(location.search);
+  function ltMetaFor(p) {
+    if (LT_DATES) {
+      const n = parseInt((/(\d+)\.\w+$/.exec(p || '') || [])[1] || '0', 10) % 1000;
+      const d = new Date(Date.UTC(2026, 2, 1) + n * 9.3 * 3600e3), z = (v) => String(v).padStart(2, '0');
+      const date = `${d.getUTCFullYear()}:${z(d.getUTCMonth() + 1)}:${z(d.getUTCDate())} ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:00`;
+      return { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date };
+    }
+    return /\.(mp4|mov|m4v)$/i.test(String(p || ''))
+      ? { dur: 12.5, width: 3840, height: 2160, date: '2026-07-20' }
+      : { camera: 'DC-S9', lens: 'LUMIX S 18-40', iso: 200, shutter: '1/250', aperture: 'f/5.6', focal_len: '28mm', date: '2026-07-20' };
+  }
+  // Call counters for the "no redundant work" regression test (library_perf.mjs): reopening an
+  // already-cataloged folder must read from catalog_query, not re-walk via list_dir/
+  // listDirRecursive — see Fix 1 of the catalog-backed-grid plan. Exposed on window below.
+  let libtestListDirCalls = 0, libtestCatalogQueryCalls = 0;
+  const libtestThumbnailCalls = new Map();
+  window.__libtestCallCounts = () => ({ listDir: libtestListDirCalls, catalogQuery: libtestCatalogQueryCalls });
+  window.__libtestThumbnailCalls = (suffix) => [...libtestThumbnailCalls].filter(([path]) => path.endsWith(suffix)).reduce((n, [, count]) => n + count, 0);
+  // ?libshapes=1: odd-numbered photos are a 3:2 red landscape, even ones a 2:3 blue portrait
+  // (white band across the top), so the photo-reveal test can check the frame reshaping and the
+  // top-down fill on real pixels instead of the 1×1 stand-in every other test uses.
+  const LT_SHAPES = /[?&]libshapes=1/.test(location.search);
+  async function ltShapePng(p) {
+    const n = parseInt((/(\d+)\.\w+$/.exec(p || '') || [])[1] || '0', 10), land = n % 2 === 1;
+    const c = new OffscreenCanvas(land ? 600 : 400, land ? 400 : 600), g = c.getContext('2d');
+    g.fillStyle = land ? '#c0392b' : '#2e86de'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, Math.round(c.height * 0.1));
+    return (await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+  }
+  function libtestInvoke(cmd, args) {
+    const A = args || {};
+    if (LIBTEST && (cmd === 'queue_offline_edit' || cmd === 'set_sidecar')) {
+      (window.__libtestPersistenceCalls ||= []).push({ command: cmd, args: structuredClone(A) });
+    }
+    if (LIBTEST && window.__libtestCatalogInvoke) {
+      const mocked = window.__libtestCatalogInvoke(cmd, structuredClone(A));
+      if (mocked && mocked.__libtestHandled === true) return Promise.resolve(mocked.result);
+    }
+    if (LIBTEST && cmd.startsWith('recipe_batch_')) (window.__libtestRecipeBatchCalls ||= []).push({ command: cmd, args: structuredClone(A) });
+    if (LIBTEST && cmd === 'reveal_in_finder') (window.__libtestRevealCalls ||= []).push({ command: cmd, args: structuredClone(A) });
+    if (LT_SHAPES && (cmd === 'get_thumbnail' || cmd === 'get_thumbnail_or_offline' || cmd === 'read_file_bytes')) return ltShapePng(A.path);
+    const px = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XBhAAAAABJRU5ErkJggg==';
+    const png = Uint8Array.from(atob(px), (c) => c.charCodeAt(0));
+    switch (cmd) {
+      case 'extract_embedded_auxiliary': return Promise.resolve([]); // browser stand-in: no source-photo auxiliaries
+      case 'list_dir': {
+        libtestListDirCalls++;
+        const dir = String(A.path || '/test');
+        if (/Folders only/.test(dir)) return Promise.resolve([]);
+        const out = [];
+        // ?libn=N synthesises a large folder. 18 is enough to eyeball layout, but grid cost is a
+        // question about 500-5000 files and cannot be answered at 18 — see the virtualisation
+        // budget in test/perf_bench.mjs.
+        const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+        // ⚠️ Every 6th entry is a VIDEO. This mock used to emit nothing but RW2s, which is exactly
+        // why a video-card defect (a revoked poster blob URL surviving in a JS cache, so every
+        // clip painted a permanent broken-image "?") could never be reproduced in the harness —
+        // CLAUDE.md §10.14's point about Library bugs being invisible without ?libtest=1 only
+        // holds if the mock actually emits the kinds of entry the grid has to render.
+        for (let i = 1; i <= N; i++) {
+          const isVid = i % 6 === 0;
+          out.push(isVid
+            ? { path: `${dir}/P_TM${6000 + i}.MP4`, name: `P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', ext: 'mp4', mtime: 1700000000 + i, size: 90000000 + i }
+            : { path: `${dir}/IMG_${1000 + i}.RW2`, name: `IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', ext: 'rw2', mtime: 1700000000 + i, size: 1000 + i });
+        }
+        out.push({ path: `${dir}/sub`, name: 'sub', is_dir: true, is_image: false, kind: '', ext: '', mtime: 0, size: 0 });
+        return Promise.resolve(out);
+      }
+      // ?libhangthumb=1 simulates the exact failure mode that once hung the whole boot sequence:
+      // a single get_thumbnail_or_offline call that never resolves at all (not slow — genuinely
+      // never settles). prefetchThumbnails' per-call timeout (library-ui.js) is what's supposed
+      // to stop this from ever stalling boot again — this mock is what proves it, rather than
+      // trusting the fix by inspection.
+      case 'get_thumbnail': case 'get_thumbnail_or_offline': {
+        if (cmd === 'get_thumbnail_or_offline') libtestThumbnailCalls.set(A.path, (libtestThumbnailCalls.get(A.path) || 0) + 1);
+        const hang = (/[?&]libhangthumb=([\w,]+)/.exec(location.search) || [])[1];
+        if (hang === 'all' || (hang && hang !== 'all' && new RegExp(hang.split(',').join('|')).test(A.path || ''))) return new Promise(() => {});
+        const slow = (/[?&]libslowthumb=([\w,]+)/.exec(location.search) || [])[1];
+        if (slow && new RegExp(slow.split(',').join('|')).test(A.path || '')) {
+          const delay = Math.max(0, parseInt((/[?&]libslowms=(\d+)/.exec(location.search) || [])[1] || '1800', 10));
+          return new Promise((resolve) => setTimeout(() => resolve(png.buffer), delay));
+        }
+        return Promise.resolve(png.buffer);
+      }
+      case 'read_file_bytes':
+        if (!(window.__libtestOriginalAvailable !== undefined
+          ? !!window.__libtestOriginalAvailable : !/[?&]libforceoffline=1/.test(location.search))
+          && !(/[?&]libhqcache=1/.test(location.search)
+            && [..._hqOfflineByPath.values()].some((entry) => entry.path === A.path))) {
+          return Promise.reject(new Error('libtest: source disconnected'));
+        }
+        return Promise.resolve(window.__libtestFileBytes?.[A.path] || png.buffer);
+      case 'get_sidecar': if (ltBatchSidecars.has(A.path)) return Promise.resolve(ltBatchSidecars.get(A.path)); return Promise.resolve({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      case 'get_sidecar_batch': return Promise.resolve((A.paths || []).map((path) => ({ rating: 0, label: '', color_label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited, ...(ltSidecars.get(path) || {}) })));
+      // reset_edit/undo_reset_edit — see CLAUDE.md's Reset-edit-undo item: captures/restores the
+      // one-slot undo buffer exactly like the real Rust commands, so the libtest harness can
+      // click through "Reset edit" then "Undo last reset" and see the edited badge come back.
+      case 'reset_edit': {
+        ltLastResetRecipe = ltRecipe; ltLastResetEdited = ltEdited;
+        ltRecipe = ''; ltEdited = false;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      }
+      case 'undo_reset_edit': {
+        if (ltLastResetRecipe === null) return Promise.reject(new Error('Nothing to undo'));
+        ltRecipe = ltLastResetRecipe; ltEdited = ltLastResetEdited;
+        ltLastResetRecipe = null; ltLastResetEdited = false;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: ltEdited, recipe: ltRecipe, versions: ltVersions, active: ltActive, last_reset_recipe: ltLastResetRecipe, last_reset_edited: ltLastResetEdited });
+      }
+      case 'sidecar_add_version': {
+        if (!ltVersions.length) ltVersions.push({ name: 'Original', recipe: 'R0' });
+        ltVersions.push({ name: A.name || 'Copy ' + ltVersions.length, recipe: 'R' + ltVersions.length });
+        ltActive = ltVersions.length - 1;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
+      }
+      case 'sidecar_set_active_version': { ltActive = A.index; return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive }); }
+      case 'sidecar_rename_version': { if (ltVersions[A.index]) ltVersions[A.index].name = A.name; return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive }); }
+      case 'sidecar_delete_version': {
+        ltVersions.splice(A.index, 1);
+        if (ltVersions.length <= 1) { ltVersions.length = 0; ltActive = 0; } else if (ltActive >= ltVersions.length) ltActive = ltVersions.length - 1;
+        return Promise.resolve({ rating: 0, label: '', favorite: false, edited: true, recipe: 'R', versions: ltVersions, active: ltActive });
+      }
+      case 'recipe_batch_create': {
+        const batch = { id: Date.now(), label: A.label, status: 'running', createdAt: Date.now(), items: A.items.map((i,index) => ({ ...i, index, status: i.error ? 'failed' : 'pending', error: i.error || null, before: ltBatchSidecars.get(i.path) || { recipe: ltRecipe, edited: ltEdited, rating: 0, label: '' } })) };
+        ltRecipeBatches.set(batch.id,batch); return Promise.resolve(structuredClone(batch));
+      }
+      case 'recipe_batch_list': return Promise.resolve([...ltRecipeBatches.values()].map(b => ({ id: b.id, label: b.label, status: b.status, createdAt: b.createdAt, total: b.items.length, pending: b.items.filter(i => i.status === 'pending').length, failed: b.items.filter(i => i.status === 'failed').length, conflict: b.items.filter(i => i.status === 'conflict').length })));
+      case 'recipe_batch_get': return Promise.resolve(structuredClone(ltRecipeBatches.get(A.id)));
+      case 'recipe_batch_apply_item': {
+        const applyItem = () => {
+          const batch = ltRecipeBatches.get(A.id), item = batch.items[A.index];
+          if (batch.status !== 'running') return Promise.resolve(structuredClone(item));
+          if (ltBatchFailures.delete(item.index)) { item.status = 'failed'; item.error = 'Simulated sidecar write failure'; }
+          else if (ltBatchSkips.delete(item.index)) { item.status = 'skipped'; item.error = 'Skipped by test fixture'; }
+          else { ltBatchSidecars.set(item.path, { ...item.before, recipe: item.recipe, edited: true }); item.status = 'applied'; item.error = null; }
+          if (!batch.items.some(i => i.status === 'pending')) batch.status = 'completed';
+          return Promise.resolve(structuredClone(item));
+        };
+        const delay = Math.max(0, Number(window.__libtestRecipeBatchApplyDelayMs) || 0);
+        return delay ? new Promise(resolve => setTimeout(() => resolve(applyItem()), delay)) : applyItem();
+      }
+      case 'recipe_batch_cancel': { const b = ltRecipeBatches.get(A.id); b.status = 'cancelled'; return Promise.resolve(structuredClone(b)); }
+      case 'recipe_batch_resume': { const b = ltRecipeBatches.get(A.id), retry = A.retryIndices ? new Set(A.retryIndices) : null; b.status = 'running'; b.items.forEach(i => { if ((retry ? retry.has(i.index) && ['failed', 'skipped'].includes(i.status) : i.status === 'failed') && !String(i.error || '').startsWith('Preflight:')) { i.status = 'pending'; i.error = null; } }); return Promise.resolve(structuredClone(b)); }
+      case 'recipe_batch_undo': {
+        const b = ltRecipeBatches.get(A.id);
+        b.items.filter(i => i.status === 'applied').forEach(i => {
+          if (ltBatchSidecars.get(i.path)?.recipe !== i.recipe) { i.status = 'conflict'; i.error = 'Photo changed after batch'; }
+          else { ltBatchSidecars.set(i.path,i.before); i.status = 'undone'; }
+        });
+        b.status = 'undone'; return Promise.resolve(structuredClone(b));
+      }
+      case 'set_sidecar': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
+        // Mirror the Rust command's undo-buffer-clearing rule: a genuine edit save (non-empty
+        // recipe, edited:true) supersedes any pending reset-undo buffer.
+        const current = ltBatchSidecars.get(A.path) || ltSidecars.get(A.path) || { color_label: '' };
+        const updated = { ...current, ...A };
+        const persist = () => {
+          if (ltBatchSidecars.has(A.path)) ltBatchSidecars.set(A.path, updated);
+          if (A.edited && A.recipe) { ltRecipe = A.recipe; ltEdited = true; ltLastResetRecipe = null; ltLastResetEdited = false; }
+          ltSidecars.set(A.path, updated);
+        };
+        if (ltDelayNextSidecarWrite) {
+          ltDelayNextSidecarWrite = false;
+          window.__libtestSidecarWriteStarted = true;
+          return new Promise(resolve => { window.__libtestSidecarWriteRelease = () => { persist(); resolve(); }; });
+        }
+        persist(); return Promise.resolve();
+      }
+      case 'set_color_label': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
+        const cur = ltBatchSidecars.get(A.path) || { rating: 0, label: '', color_label: '', favorite: false, edited: false };
+        const next = { ...cur, color_label: A.colorLabel || '' };
+        ltBatchSidecars.set(A.path, next);
+        state.sidecars.set(A.path, next);
+        return Promise.resolve();
+      }
+      // N1a offline edit queue — mirrors catalog.rs's real conflict logic closely enough to
+      // exercise the reconnect flow (?liboffq=1/?liboffqconflict=1, see wireOfflineQueueReconnect
+      // below) without a real Tauri backend: queue_offline_edit stores a recipe against a path;
+      // list_offline_queue reports each entry's conflict flag from `ltOfflineQueueConflict`
+      // (settable via ?liboffqconflict=1 for the harness to exercise the prompt path);
+      // apply_queued_edit/discard_queued_edit both remove the entry, the former also "writing"
+      // it into the mock sidecar so a real assertion can check the recipe landed.
+      case 'queue_offline_edit': {
+        ltOfflineQueue = ltOfflineQueue.filter((q) => q.path !== A.path);
+        ltOfflineQueue.push({ id: ++ltOfflineQueueNextId, path: A.path, recipe: A.recipe, queued_at: Date.now() / 1000 });
+        return Promise.resolve();
+      }
+      case 'list_offline_queue': {
+        const conflict = /[?&]liboffqconflict=1/.test(location.search);
+        return Promise.resolve(ltOfflineQueue.map((q) => ({ ...q, conflict })));
+      }
+      case 'apply_queued_edit': {
+        const q = ltOfflineQueue.find((x) => x.id === A.id);
+        if (q) { ltRecipe = q.recipe; ltEdited = true; }
+        ltOfflineQueue = ltOfflineQueue.filter((x) => x.id !== A.id);
+        return Promise.resolve();
+      }
+      case 'discard_queued_edit': {
+        ltOfflineQueue = ltOfflineQueue.filter((x) => x.id !== A.id);
+        return Promise.resolve();
+      }
+      // A video's meta carries dur/width/height and no camera/lens, matching read_meta's real
+      // video branch — that is what the grid's duration badge reads.
+      case 'get_meta': return Promise.resolve(ltMetaFor(A.path));
+      case 'get_meta_batch': return Promise.resolve((A.paths || []).map(ltMetaFor));
+      case 'collection_counts': {
+        // Regression fixture: ten historical Edited records point at files no longer present.
+        // The real backend now excludes those from badges without deleting their recovery data.
+        if (/[?&]libcountmismatch=1/.test(location.search)) {
+          return Promise.resolve({ recents: 4, favorites: 2, edited: 8, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+        }
+        return Promise.resolve({ recents: 4, favorites: 2, edited: 3, exported: 1, flagged: 0, rejected: 0, duplicates: 2, gphotos: 1 });
+      }
+      case 'album_list': return Promise.resolve(ltAlbums);
+      case 'smart_album_sources': return Promise.resolve([{ id: 7, label: 'Sample library / Photos' }, { id: 8, label: 'Sample library / Scans' }]);
+      case 'smart_album_list': return Promise.resolve(ltSmartAlbums);
+      case 'smart_album_save': {
+        const input = A.input || {};
+        const item = { id: input.id || 'smart-' + (ltSmartAlbums.length + 1), name: input.name, sourceRootIds: input.sourceRootIds || [], sourceLabels: [], ruleSet: input.ruleSet, matchCount: 4 };
+        item.sourceLabels = item.sourceRootIds.map((id) => id === 7 ? 'Sample library / Photos' : 'Sample library / Scans');
+        const at = ltSmartAlbums.findIndex((x) => x.id === item.id); if (at >= 0) ltSmartAlbums[at] = item; else ltSmartAlbums.push(item);
+        return Promise.resolve(item);
+      }
+      case 'smart_album_delete': ltSmartAlbums = ltSmartAlbums.filter((x) => x.id !== A.id); return Promise.resolve();
+      case 'album_create': {
+        if (ltAlbums.some((a) => a.name.toLowerCase() === String(A.name).toLowerCase())) return Promise.reject(new Error('exists'));
+        const al = { id: 'alb' + (ltAlbums.length + 1), name: A.name, paths: [], updated: Date.now() / 1000 };
+        ltAlbums.push(al); return Promise.resolve(al);
+      }
+      case 'album_rename': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.name = A.name; return Promise.resolve(); }
+      case 'album_delete': { ltAlbums = ltAlbums.filter((x) => x.id !== A.id); return Promise.resolve(); }
+      case 'album_add': {
+        const a = ltAlbums.find((x) => x.id === A.id); if (!a) return Promise.reject(new Error('no album'));
+        const before = a.paths.length;
+        (A.paths || []).forEach((p) => { if (!a.paths.includes(p)) a.paths.push(p); });
+        return Promise.resolve(a.paths.length - before);
+      }
+      case 'album_remove': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.paths = a.paths.filter((p) => !(A.paths || []).includes(p)); return Promise.resolve(); }
+      case 'album_set_order': { const a = ltAlbums.find((x) => x.id === A.id); if (a) a.paths = (A.paths || []).filter((p) => a.paths.includes(p)); return Promise.resolve(); }
+      case 'list_album': {
+        const a = ltAlbums.find((x) => x.id === A.id); if (!a) return Promise.resolve([]);
+        return Promise.resolve(a.paths.map((p, i) => ({ path: p, name: p.split('/').pop(), is_dir: false, is_image: true,
+          kind: 'raw', mtime: 1700000000 + i, size: 1000 + i, missing: p.includes('ghost') })));
+      }
+      case 'phash_batch': {
+        // Fake hashes: make IMG_1001/1002 a duplicate pair (Hamming distance 1), everything
+        // else spread out (distinct low bits per index), so the Duplicates cluster UI is
+        // exercisable in the harness.
+        const paths = A.paths || [];
+        const BASE = BigInt('0x1234567800000000'), MUL = BigInt('0x9e3779b97f4a7c15'), MASK = BigInt('0xffffffffffffffff');
+        return Promise.resolve(paths.map((p, i) => {
+          if (/IMG_1001\./.test(p)) return [p, BASE.toString(16).padStart(16, '0')];
+          if (/IMG_1002\./.test(p)) return [p, (BASE ^ 1n).toString(16).padStart(16, '0')]; // 1 bit different (Hamming distance 1)
+          // XOR by a large odd multiple of the index — spreads hashes across many bit
+          // positions (unlike a plain BASE+i, which mostly toggles low bits and can
+          // accidentally land every photo in the same cluster via transitive Hamming chains).
+          return [p, ((BASE ^ (BigInt(i) * MUL)) & MASK).toString(16).padStart(16, '0')];
+        }));
+      }
+      case 'registry_set_cmd': return Promise.resolve();
+      case 'list_volumes': return Promise.resolve([
+        { name: 'LUMIX', path: '/Volumes/LUMIX', has_dcim: true, total_bytes: 128e9, free_bytes: 71e9 },
+        { name: 'Backup T7', path: '/Volumes/Backup T7', has_dcim: false, total_bytes: 2e12, free_bytes: 9e11 },
+      ]);
+      case 'scan_card': {
+        // A realistic mix: two shoot days, a video, and three already-imported duplicates, so
+        // every state the panel can show is reachable in the harness.
+        const out = [];
+        for (let i = 1; i <= 24; i++) out.push({
+          path: `/Volumes/LUMIX/DCIM/100LUMIX/P10${(6500 + i)}.RW2`, name: `P10${6500 + i}.RW2`,
+          size: 25e6 + i * 1e5, kind: 'raw', date: i > 14 ? '2026-08-14' : '2026-08-13', duplicate: i <= 3,
+        });
+        out.push({ path: '/Volumes/LUMIX/PRIVATE/M4ROOT/C0001.MP4', name: 'C0001.MP4', size: 810e6, kind: 'video', date: '2026-08-14', duplicate: false });
+        return Promise.resolve(out);
+      }
+      case 'ingest_copy': {
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return new Promise((res) => setTimeout(() => res({ copied: 22, duplicates_skipped: 3, failed: [], dest_root: A.options.destRoot, bytes: 1.4e9 }), 900));
+      }
+      case 'ingest_preview': {
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        const options = A.options || {};
+        const files = A.files || [];
+        const picked = options.only?.length ? files.filter((f) => options.only.includes(f.path)) : files;
+        const usedPrimary = new Set();
+        const usedBackup = new Set();
+        const unique = (root, name, used) => {
+          const folder = (options.folderTemplate || '{YYYY}/{YYYY-MM-DD}')
+            .replace('{YYYY-MM-DD}', '2026-08-13').replace('{YYYY}', '2026').replace('{MM}', '08').replace('{DD}', '13');
+          const path = `${root}/${folder}/${name}`;
+          const external = window.__libtestExistingNames || {};
+          const dot = name.lastIndexOf('.');
+          const stem = dot > 0 ? name.slice(0, dot) : name;
+          const ext = dot > 0 ? name.slice(dot) : '';
+          let candidate = path, n = 2;
+          while (external[candidate] || used.has(candidate.toLowerCase())) {
+            candidate = `${root}/${folder}/${stem} (${n++})${ext}`;
+          }
+          used.add(candidate.toLowerCase());
+          return candidate;
+        };
+        let sequence = Number(options.sequenceStart || 1);
+        return Promise.resolve(picked.map((f) => {
+          const duplicate = !!f.duplicate;
+          const skipped = !!options.skipDuplicates && duplicate;
+          if (skipped) return { sourcePath: f.path, sourceName: f.name, duplicate, skipped, primaryPath: null, backupPath: null };
+          const template = options.filenameTemplate || '';
+          const dot = f.name.lastIndexOf('.');
+          const stem = dot > 0 ? f.name.slice(0, dot) : f.name;
+          const ext = dot > 0 ? f.name.slice(dot) : '';
+          const name = template
+            ? template.replaceAll('{name}', stem).replaceAll('{seq}', String(sequence).padStart(4, '0')).replaceAll('{n}', String(sequence).padStart(4, '0')).replaceAll('{date}', f.date || '').replaceAll('{YYYY-MM-DD}', f.date || '').replaceAll('{YYYY}', '2026').replaceAll('{MM}', '08').replaceAll('{DD}', '13') + ext
+            : f.name;
+          sequence++;
+          return { sourcePath: f.path, sourceName: f.name, duplicate, skipped, primaryPath: unique(options.destRoot, name, usedPrimary), backupPath: options.backupRoot ? unique(options.backupRoot, name, usedBackup) : null };
+        }));
+      }
+      case 'eject_volume': return Promise.resolve();
+      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve(true);
+      case 'trash_file_with_undo': {
+        (window.__libtestCalls = window.__libtestCalls || []).push(['trash_file', A]);
+        const receipt = { photo: { originalPath: A.path, receiptId: `libtest-trash:${A.path}` }, sidecar: null, warning: null };
+        if (window.__libtestHoldTrash) return new Promise((resolve) => (window.__libtestHeldTrash ||= []).push(() => resolve(receipt)));
+        return Promise.resolve(receipt);
+      }
+      case 'restore_trashed_entry': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
+      case 'release_trash_receipts': return Promise.resolve(0);
+      case 'duplicate_file': return Promise.resolve();
+      case 'plugin:dialog|open': return Promise.resolve((window.__libtestDialogResults || []).shift() || '/test/Pictures/2026');
+      case 'lr_downloads_dir': return Promise.resolve('/test/Lightroom Download');
+      case 'gphotos_downloads_dir': return Promise.resolve('/test/Google Photos Download');
+      case 'get_lr_thumb': return Promise.reject(new Error('miss')); // always a miss → exercises the network+save path
+      case 'save_lr_thumb': return Promise.resolve();
+      case 'list_collection': {
+        if (/[?&]libcountmismatch=1/.test(location.search) && A.name === 'edited') {
+          return Promise.resolve(Array.from({ length: 18 }, (_, i) => ({
+            id: i + 1, name: `IMG_${1000 + i}.RW2`, path: `/test/Edited/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i,
+            size: 1000 + i, missing: i >= 8, edited_ts: 0, thumb_path: null,
+          })));
+        }
+        return Promise.resolve([]);
+      }
+      case 'list_exported': return Promise.resolve([]);
+      case 'get_export_history': return Promise.resolve([]);
+      // Catalog: `?libcat=1` synthesises N (from ?libn=N, default 18) catalog rows so "All
+      // Photos" is screenshot-verifiable without a real SQLite catalog behind it. Every 7th
+      // entry is marked offline, matching the plan's libtest convention for exercising the
+      // offline card state in a plain browser.
+      // Same "Folders only" convention list_dir's own mock above already uses for a
+      // real-empty/inaccessible folder — here it simulates catalog registration itself failing
+      // (a folder outside any allowed root), which is what actually forces openFolder() onto its
+      // FALLBACK list_dir path (S6d chunk C: lib-empty-nofolder needed this — the primary
+      // catalog_query({q.folder}) mock below always synthesises >=1 entries and cannot represent
+      // a genuinely-empty registered folder).
+      case 'catalog_add_root': {
+        if (/Folders only/.test(String(A.path || ''))) return Promise.resolve(null);
+        const path = String(A.path || '/test/Photos').replace(/\\/g, '/').replace(/\/$/, '');
+        const rel = path.replace(/^\/test\/Photos\/?/, '');
+        return Promise.resolve({ id: 1, volume_id: 1, rel_path: rel, kind: 'originals', abs_path: A.path, requested_rel_path: rel });
+      }
+      case 'catalog_scan': return Promise.resolve({ scanned: 0, added: 0, marked_absent: 0 });
+      case 'catalog_note_deleted': return Promise.resolve((A.paths || []).length);
+      case 'catalog_note_restored': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve((A.paths || []).length);
+      case 'catalog_rename_preview': case 'catalog_rename_apply': {
+        const template = String(A.template || '{name}');
+        const start = Math.max(0, Number(A.sequenceStart) || 0);
+        const rows = (A.paths || []).map((oldPath, i) => {
+          const oldName = String(oldPath).split(/[\\/]/).pop() || '';
+          const dot = oldName.lastIndexOf('.');
+          const ext = dot > 0 ? oldName.slice(dot) : '';
+          const stem = dot > 0 ? oldName.slice(0, dot) : oldName;
+          const date = '2026-07-20';
+          const camera = 'DC-S9';
+          const base = template.replace(/\{name\}/g, stem).replace(/\{date\}|\{YYYY-MM-DD\}/g, date)
+            .replace(/\{camera\}/g, camera).replace(/\{seq\}|\{n\}/g, String(start + i).padStart(4, '0'))
+            .replace(/\{YYYY\}/g, '2026').replace(/\{MM\}/g, '07').replace(/\{DD\}/g, '20');
+          const slash = String(oldPath).lastIndexOf('/');
+          const backslash = String(oldPath).lastIndexOf('\\');
+          const cut = Math.max(slash, backslash);
+          return { oldPath, newPath: `${String(oldPath).slice(0, cut + 1)}${base}${ext}`, collision: false };
+        });
+        return Promise.resolve(rows);
+      }
+      case 'get_quicklook_preview': {
+        (window.__libtestQuicklookCalls ||= []).push(A.path);
+        return Promise.resolve(window.__libtestQuicklookBytes || png);
+      }
+      case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
+      // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
+      // harmless no-op mock (trash_file is recorded above), like every other pure-Rust-side mutation mock here.
+      case 'duplicate_file': return Promise.resolve(A.path ? A.path.replace(/(\.[^.]+)$/, ' copy$1') : '');
+      case 'catalog_volumes': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // One online, one offline — CLAUDE.md's own stated convention for this exact case, so
+        // the Drives section's two states are both screenshot-verifiable in one page load.
+        return Promise.resolve([
+          { id: 1, uuid: 'local', label: 'This Mac', last_path: '/', is_local: true, total_bytes: 0, online: true },
+          { id: 2, uuid: 'ext-1', label: 'Archive T7', last_path: '/Volumes/Archive T7', is_local: false, total_bytes: 2e12, online: true },
+          { id: 3, uuid: 'ext-2', label: 'Old LaCie', last_path: '/Volumes/Old LaCie', is_local: false, total_bytes: 1e12, online: false },
+        ]);
+      }
+      case 'catalog_counts': {
+        const N = /[?&]libcat=1/.test(location.search) ? Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10)) : 0;
+        // Pending = every third photo (id % 3 === 0), matching the synthetic entries' own
+        // faces_scanned rule below — a real, verifiable count rather than an arbitrary fraction.
+        const pending = N ? Array.from({ length: N }, (_, i) => i + 1).filter((id) => id % 3 === 0).length : 0;
+        // Matches the list_dir mock's own synthetic split (line ~68 below): every 6th entry
+        // is a video (.MP4), everything else is RAW (.RW2) — same rule, so the sidebar count
+        // and the grid's actual per-card badges agree.
+        const video = N ? Array.from({ length: N }, (_, i) => i + 1).filter((id) => id % 6 === 0).length : 0;
+        const raw = N - video;
+        return Promise.resolve({ all: N, blurry: N ? Math.max(1, Math.floor(N / 5)) : 0, faces_pending: pending, faces_scanned: N - pending, raw, video });
+      }
+      case 'catalog_date_counts': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ days: [], no_date: 0 });
+        // A small fixed spread across two months so the tree has something to expand — the
+        // exact counts don't need to add up to ?libn's total, this is a layout/wiring check.
+        return Promise.resolve({
+          days: [
+            { y: 2026, m: 8, d: 22, n: 4 }, { y: 2026, m: 8, d: 15, n: 2 }, { y: 2026, m: 7, d: 3, n: 6 },
+            { y: 2025, m: 12, d: 25, n: 3 },
+          ],
+          no_date: 1,
+        });
+      }
+      case 'cache_usage': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ offline_thumbs_bytes: 0, decode_cache_bytes: 0, working_thumbs_bytes: 0, budget_bytes: 20 * 1024 * 1024 * 1024 });
+        return Promise.resolve({
+          offline_thumbs_bytes: 3.2 * 1024 * 1024 * 1024,
+          decode_cache_bytes: 5.1 * 1024 * 1024 * 1024,
+          working_thumbs_bytes: 120 * 1024 * 1024,
+          budget_bytes: 20 * 1024 * 1024 * 1024,
+        });
+      }
+      case 'clear_cache_tier': return Promise.resolve(0);
+      case 'catalog_root_cache_usage': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // Two roots on one volume so the per-root breakdown branch (>1 root) is exercised.
+        return Promise.resolve([
+          { root_id: 1, volume_label: 'Archive T7', rel_path: 'Originals/2025', abs_path: '/Volumes/Archive T7/Originals/2025', photo_count: 8, offline_thumbs_bytes: 1.1 * 1024 * 1024 * 1024 },
+          { root_id: 2, volume_label: 'Archive T7', rel_path: 'Originals/2026', abs_path: '/Volumes/Archive T7/Originals/2026', photo_count: 12, offline_thumbs_bytes: 2.1 * 1024 * 1024 * 1024 },
+        ]);
+      }
+      case 'catalog_root_identity': return Promise.resolve([{ id: 1, path: '/test/Photos' }]);
+      case 'clear_root_cache': return Promise.resolve(0);
+      case 'catalog_hash': return Promise.resolve({ hashed: 0 });
+      // Reached now that catalogRegisterFolder no longer short-circuits under LIBTEST (Fix 1 of
+      // the catalog-backed-grid plan) — catalogRunBackgroundPhases' chain fires for real, so it
+      // needs mocks too, even though there's nothing behind them in the harness to actually stack/
+      // thumbnail/focus-score. `has_more: false` on catalog_thumbnails stops drainCatalogThumbnails
+      // from looping forever against a mock that never has real backlog to drain.
+      case 'catalog_stack': return Promise.resolve({ stacked: 0 });
+      // ?libthumbforever=1 simulates the phase that ran for an hour with a dead Cancel button:
+      // catalog_thumbnails reports has_more FOREVER. drainCatalogThumbnails must still stop when
+      // cancelled — the Rust flag alone could never do it (it was cleared per batch), so this
+      // pins the JS-side stop. `remaining` is deliberately >32 so the honest-progress assertion
+      // has something real to check against the old per-batch "0 of 32".
+      case 'catalog_thumbnails': {
+        if (/[?&]libthumbforever=1/.test(location.search)) {
+          window.__libThumbBatches = (window.__libThumbBatches || 0) + 1;
+          return Promise.resolve({ generated: 1, has_more: true, remaining: 57288 - window.__libThumbBatches });
+        }
+        return Promise.resolve({ generated: 0, has_more: false, remaining: 0 });
+      }
+      case 'catalog_cancel_reset': return Promise.resolve();
+      case 'catalog_cancel_pending': return Promise.resolve(false);
+      case 'catalog_bg_set_paused': return Promise.resolve();
+      case 'catalog_bg_paused': return Promise.resolve(false);
+      case 'catalog_scan_cancel': return Promise.resolve();
+      case 'catalog_focus': return Promise.resolve({ scored: 0 });
+      // ?libhqstuck=1 simulates the exact failure mode that once froze the whole app: a RAW
+      // whose camera can NEVER get a DCP LUT baked (no bundled/disk profile) reports the SAME
+      // pending_raw_sample every single call — hqOfflineDrainLoop (library-ui.js) must detect
+      // this and stop retrying, not spin forever. peek_raw_camera is deliberately left unmocked
+      // (falls through to the default rejection below) so hqOfflineTryBakeCameraFor's bake
+      // attempt genuinely fails every time, exactly like a real unsupported camera would.
+      case 'catalog_hq_offline': {
+        if (/[?&]libhqstuck=1/.test(location.search)) {
+          return Promise.resolve({ generated: 0, evicted: 0, skipped_no_lut: 1, target_total: 1, pending_raw_sample: '/test/AllPhotos/IMG_STUCK.RW2' });
+        }
+        return Promise.resolve({ generated: 0, evicted: 0, skipped_no_lut: 0, target_total: 0, pending_raw_sample: null });
+      }
+      case 'catalog_hq_offline_list': return Promise.resolve([]);
+      case 'catalog_hq_offline_set_active': return Promise.resolve();
+      // One synthetic corrupt entry so the report popover is screenshot-verifiable too.
+      case 'catalog_verify': return Promise.resolve({ checked: 20, ok: 19, changed: 0, corrupt: [{ id: 3, name: 'IMG_1003.RW2', path: '/test/AllPhotos/IMG_1003.RW2' }] });
+      case 'catalog_keywords': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        // Two-level tree: Travel > Iceland, plus a standalone Portrait leaf — enough to verify
+        // nesting, counts, and the click-to-filter scope string all render correctly.
+        return Promise.resolve([
+          { id: 1, path: 'Travel', leaf: 'Travel', parent_id: null, n: 2 },
+          { id: 2, path: 'Travel|Iceland', leaf: 'Iceland', parent_id: 1, n: 1 },
+          { id: 3, path: 'Portrait', leaf: 'Portrait', parent_id: null, n: 1 },
+        ]);
+      }
+      case 'set_keywords': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve();
+      // Stateful (failure 13, CLAUDE.md people-pets plan) — earlier this array was a hardcoded
+      // literal returned fresh every call, so rename/merge/delete resolved without the sidebar
+      // ever reflecting it and no People UI change could be seen working in this harness. Module
+      // scope, not per-call, so a rename/merge/delete genuinely persists for the rest of the tab.
+      case 'catalog_people': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        if (!window.__libtestPeople) {
+          window.__libtestPeople = [
+            { id: 1, name: 'Sofia', cover_face_id: 1, face_count: 412, auto: false },
+            { id: 2, name: 'Marcus', cover_face_id: 2, face_count: 207, auto: false },
+            { id: 3, name: 'Person 3', cover_face_id: 3, face_count: 33, auto: true },
+            { id: 4, name: 'Person 4', cover_face_id: 4, face_count: 31, auto: true },
+            { id: 5, name: 'Person 5', cover_face_id: 5, face_count: 12, auto: true },
+          ];
+        }
+        return Promise.resolve(window.__libtestPeople.slice());
+      }
+      case 'catalog_face_crop': {
+        // 2x2 solid-color JPEG, just enough bytes for the browser to decode and fire onload —
+        // proves the avatar's loaded/fade wiring works without needing real face data.
+        const b64 = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAACAAIBAREA/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAA/AKp//9k=';
+        const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return Promise.resolve(bytes);
+      }
+      case 'catalog_face_preview': return Promise.resolve(png);
+      case 'catalog_person_face_ids': return Promise.resolve([]);
+      case 'catalog_set_person_cover': return Promise.resolve(null);
+      case 'ingest_cancel': return Promise.resolve(false);
+      case 'scrfd_detect': return Promise.resolve([]);
+      case 'session_create': {
+        const nm = String(A.name || 'Session');
+        return Promise.resolve({ path: `${A.parentPath || '/test'}/${nm}`, manifest: { format: 'chromasmith-session', formatVersion: 1, id: 'libtest-session', name: nm, createdUnixSecs: 1700000000, folders: {}, assets: [] } });
+      }
+      case 'preview_lightroom_xmp_preset': return Promise.resolve({ name: String(A.fileName || 'Preset').replace(/\.[^.]+$/, ''), recipe: {}, keys: [], settings: [], fidelityNote: 'libtest stand-in' });
+      case 'catalog_faces_scan': return Promise.resolve({ scanned: 0, faces_found: 0 });
+      case 'catalog_embed_faces': return Promise.resolve({ embedded: 0 });
+      case 'catalog_cluster_faces': return Promise.resolve({ people: 0, clustered_faces: 0, unclustered_faces: 0 });
+      case 'catalog_pets_scan': return Promise.resolve({ scanned: 0, pets_found: 0 });
+      case 'catalog_rename_person': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) { p.name = args.name; p.auto = false; }
+        return Promise.resolve();
+      }
+      case 'catalog_merge_people': {
+        const list = window.__libtestPeople || [];
+        const from = list.find((x) => x.id === args.fromId);
+        const into = list.find((x) => x.id === args.intoId);
+        if (from && into) {
+          into.face_count += from.face_count;
+          into.auto = false;
+          window.__libtestPeople = list.filter((x) => x.id !== args.fromId);
+        }
+        return Promise.resolve();
+      }
+      case 'catalog_delete_person': {
+        window.__libtestPeople = (window.__libtestPeople || []).filter((x) => x.id !== args.personId);
+        return Promise.resolve();
+      }
+      // Review mode (screen C) mocks — face_ids are synthesized deterministically from the
+      // person id so the mock needs no separate face store: person 3 (33 faces) -> ids 300..332.
+      case 'catalog_unnamed_clusters': {
+        return Promise.resolve((window.__libtestPeople || []).filter((p) => p.auto).map((p) => ({
+          person_id: p.id,
+          cover_face_id: p.cover_face_id,
+          face_count: p.face_count,
+          face_ids: Array.from({ length: Math.min(p.face_count, 16) }, (_, i) => p.id * 100 + i),
+        })));
+      }
+      case 'catalog_person_suggestions': {
+        return Promise.resolve(Array.from({ length: 6 }, (_, i) => ({ face_id: 9000 + i, photo_id: 9000 + i, similarity: 0.8 - i * 0.05 })));
+      }
+      case 'catalog_resolve_suggestions': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.face_count += (args.accept || []).length;
+        return Promise.resolve();
+      }
+      case 'catalog_auto_assign': return Promise.resolve({ assigned: 0, people: 0 });
+      case 'catalog_untag_faces': return Promise.resolve((args.faceIds || []).length);
+      case 'catalog_faces_for_path':
+        (window.__libtestFacePathCalls ||= []).push(structuredClone(A));
+        return Promise.resolve([
+        { face_id: 301, x0: .2, y0: .2, x1: .3, y1: .35, person_id: 3, name: 'Tareq', kind: 'person', confirmed: true, auto_tagged: true, person_auto: false },
+        { face_id: 302, x0: .5, y0: .2, x1: .6, y1: .35, person_id: null, name: null, kind: null, confirmed: false, auto_tagged: false, person_auto: false },
+      ]);
+      case 'catalog_undo_auto_assign': return Promise.resolve(0);
+      case 'catalog_import_google_takeout': return Promise.resolve({ sidecars_with_people: 0, photos_matched: 0, photos_not_in_library: 0, faces_tagged: 0, people_created: 0, auto_assigned: 0 });
+      case 'catalog_confirm_person': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.auto = false;
+        return Promise.resolve();
+      }
+      case 'catalog_split_faces': {
+        // Mock doesn't track individual faces, so it only needs to make "into an existing
+        // person" and "back to Unnamed" distinguishable enough for the UI flow to be testable.
+        if (args.intoId) {
+          const into = (window.__libtestPeople || []).find((x) => x.id === args.intoId);
+          if (into) { into.face_count += (args.faceIds || []).length; into.auto = false; }
+        }
+        return Promise.resolve(args.intoId || 0);
+      }
+      case 'catalog_set_person_ignored': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p && args.ignored) window.__libtestPeople = (window.__libtestPeople || []).filter((x) => x.id !== args.personId);
+        return Promise.resolve();
+      }
+      case 'catalog_set_person_kind': {
+        const p = (window.__libtestPeople || []).find((x) => x.id === args.personId);
+        if (p) p.kind = args.kind;
+        return Promise.resolve();
+      }
+      case 'catalog_clip_embed': return Promise.resolve({ embedded: 0 });
+      case 'catalog_auto_tag': return Promise.resolve(0);
+      case 'catalog_auto_tag_counts': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ term: 'dog', count: 4 }, { term: 'beach', count: 2 }] : []);
+      case 'catalog_photo_auto_tags': return Promise.resolve([]);
+      case 'catalog_photo_tag_info': return Promise.resolve(A.path && /2\./.test(A.path) ? { photo_id: 2, analyzed: false, tags: [], place: null }
+        : { photo_id: 1, analyzed: true, place: 'London, Greater London, England, United Kingdom', tags: [{ term: 'dog', score: 0.3 }, { term: 'blanket', score: 0.26 }] });
+      case 'catalog_places': return Promise.resolve(/[?&]libcat=1/.test(location.search) ? [{ place: 'London, Greater London, England, United Kingdom', count: 3 }] : []);
+      case 'catalog_clip_tags': {
+        // R10: fixed fake suggestions so the Info panel's "Suggested" section is exercisable
+        // under ?libtest=1 without a real CLIP model — deterministic per photo id so re-renders
+        // don't jitter, and empty for one id to prove the "no suggestions" silent-empty state.
+        if (A.photoId === 2) return Promise.resolve([]);
+        return Promise.resolve([
+          { term: 'landscape', score: 0.31 },
+          { term: 'mountain', score: 0.27 },
+          { term: 'sunset', score: 0.24 },
+        ]);
+      }
+      case 'catalog_clip_search': {
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve([]);
+        if (!A.text || !A.text.trim()) return Promise.resolve([]);
+        // Deterministic-but-query-dependent synthetic ranking so the harness can verify the
+        // grid actually reorders per query rather than always showing the same fixed set.
+        const seed = [...A.text].reduce((s, c) => s + c.charCodeAt(0), 0);
+        return Promise.resolve([3, 7, 1, 12, 5].map((id, i) => ({ id: ((id + seed) % 18) + 1, score: 0.9 - i * 0.1 })));
+      }
+      case 'catalog_query': {
+        const q = A.q || {};
+        if (q.smartAlbumId) (window.__libtestSmartAlbumQueries ||= []).push(structuredClone(q));
+        if (q.photoIds) {
+          (window.__libtestPhotoIdQueries ||= []).push(q.photoIds.slice());
+          if (window.__libtestHoldPhotoIdQuery) return new Promise((resolve) => { window.__libtestPhotoIdQueryResolve = resolve; });
+          const entries = (window.__libtestCatalogEntries || []).filter((entry) => q.photoIds.includes(entry.id));
+          return Promise.resolve({ total: entries.length, capped: false, entries: entries.map((entry) => ({
+            ...entry, sharpness: window.__libtestFocusScoreOverrides?.[entry.id] ?? entry.sharpness,
+          })) });
+        }
+        // Ordinary folder browsing's own scope (Fix 1 of the catalog-backed-grid plan) — NOT
+        // gated on ?libcat=1, since this is the everyday "open a folder" path every ?libtest=1
+        // page already exercises, not just the opt-in Date/Search/catalog harness. Mirrors
+        // list_dir's own synthetic shape/count (?libn=N, every 6th a video) so
+        // library_perf.mjs's existing DOM/timing budgets keep measuring the same thing — grid
+        // cost for N entries — through the code path that now actually feeds them in the real
+        // app, and so a test can assert list_dir/listDirRecursive are NOT called on this path.
+        if (q.folder) {
+          libtestCatalogQueryCalls++;
+          (window.__libtestFolderQueries ||= []).push(structuredClone(q.folder));
+          const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+          const folderPrefix = q.folder.relDir
+            ? (String(q.folder.relDir).startsWith('/') ? String(q.folder.relDir) : `/test/${q.folder.relDir}`)
+            : '/test/AllPhotos';
+          // ?liboffline=1 exercises the disconnected-drive scenario: every entry still comes
+          // back (catalog_query's own include_offline default), just flagged offline — the
+          // grid must stay fully populated, not blocked.
+          const offline = /[?&]liboffline=1/.test(location.search);
+          const entries = [];
+          for (let i = 1; i <= N; i++) {
+            const isVid = i % 6 === 0;
+            entries.push(isVid
+              ? { id: i, name: `P_TM${6000 + i}.MP4`, path: `${folderPrefix}/P_TM${6000 + i}.MP4`, is_dir: false, is_image: false, is_video: true, kind: 'video', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 : null, size: 90000000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: null, blurry: false, stack_n: 0, thumb_path: null }
+              : { id: i, name: `IMG_${1000 + i}.RW2`, path: `${folderPrefix}/IMG_${1000 + i}.RW2`, is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, captured: /[?&]libtime=1/.test(location.search) && i !== 9 ? 1700000000 + Math.floor((i - 1) / 3) * 30 + (/[?&]libdupes=1/.test(location.search) && i === 2 ? 120 : 0) : null, size: 1000 + i, missing: false, edited_ts: 0, offline, volume: 'Test', sharpness: /[?&]libtime=1/.test(location.search) ? 100 + i * 10 : 400, blurry: false, stack_n: 0, thumb_path: null });
+          }
+          window.__libtestCatalogEntries = entries;
+          return Promise.resolve({ total: N, capped: false, entries });
+        }
+        if (!/[?&]libcat=1/.test(location.search)) return Promise.resolve({ total: 0, capped: false, entries: [] });
+        const N = Math.max(1, parseInt((/[?&]libn=(\d+)/.exec(location.search) || [])[1] || '18', 10));
+        // Expand-in-place mock: item 1 (see the stack_n below) is a synthetic 3-member stack —
+        // returns its members directly, ignoring every other filter, matching the real
+        // command's own "expand_stack overrides everything else" contract.
+        if (q.expandStack) {
+          return Promise.resolve({ total: 3, capped: false, entries: [
+            { id: 1, name: 'IMG_1001.RW2', path: '/test/AllPhotos/IMG_1001.RW2', is_dir: false, is_image: true, is_video: false,
+              kind: 'raw', mtime: 1700000001, size: 1001, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 3, thumb_path: null },
+            { id: 101, name: 'IMG_1001.jpg', path: '/test/AllPhotos/Exports/IMG_1001.jpg', is_dir: false, is_image: true, is_video: false,
+              kind: 'jpeg', mtime: 1700000101, size: 500, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 0, thumb_path: null },
+            { id: 102, name: 'IMG_1001-v2.jpg', path: '/test/AllPhotos/Exports/IMG_1001-v2.jpg', is_dir: false, is_image: true, is_video: false,
+              kind: 'jpeg', mtime: 1700000102, size: 500, missing: false, edited_ts: 0, offline: false, volume: 'Archive T7',
+              sharpness: 400, blurry: false, stack_n: 0, thumb_path: null },
+          ] });
+        }
+        // AI stack Phase D mock: photoIds overrides everything, same contract as expandStack —
+        // returns exactly those synthetic ids (same per-i shape the plain view below builds).
+        if (q.photoIds) {
+          const entries = q.photoIds.filter((i) => i >= 1 && i <= N).map((i) => ({
+            id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
+            missing: false, edited_ts: 0, offline: false, volume: 'Archive T7', sharpness: 400, blurry: false, stack_n: 0, thumb_path: null
+          }));
+          return Promise.resolve({ total: entries.length, capped: false, entries });
+        }
+        // Scoped mock: a date filter returns a visibly SMALLER slice than the full N, sized
+        // from the same fixed day counts catalog_date_counts's mock uses above, so clicking
+        // through the tree provably changes the grid rather than silently re-showing everything
+        // — the structural thing this mock exists to let the harness catch.
+        let scoped = N;
+        if (q.blurryOnly) scoped = Math.max(1, Math.floor(N / 5));
+        else if (q.keywords && q.keywords.length) scoped = 3;
+        else if (q.noDate) scoped = 1;
+        else if (q.year === 2026 && q.month === 8 && q.day === 22) scoped = 4;
+        else if (q.year === 2026 && q.month === 8 && q.day === 15) scoped = 2;
+        else if (q.year === 2026 && q.month === 8) scoped = 6;
+        else if (q.year === 2026 && q.month === 7 && q.day === 3) scoped = 6;
+        else if (q.year === 2026 && q.month === 7) scoped = 6;
+        else if (q.year === 2026) scoped = 12;
+        else if (q.year === 2025) scoped = 3;
+        const n = Math.min(N, scoped);
+        const entries = [];
+        for (let i = 1; i <= n; i++) {
+          const offline = i % 7 === 0;
+          const blurry = q.blurryOnly ? true : i % 5 === 0;
+          // Item 1 is a synthetic 3-member stack (see the expandStack branch above) — only in
+          // the plain "all" view, so scoped/filtered views stay uncluttered by it.
+          const isStackLeader = i === 1 && !q.blurryOnly && !q.noDate && q.year == null;
+          entries.push({ id: i, name: `IMG_${1000 + i}.RW2`, path: `/test/AllPhotos/IMG_${1000 + i}.RW2`,
+            is_dir: false, is_image: true, is_video: false, kind: 'raw', mtime: 1700000000 + i, size: 1000 + i,
+            missing: false, edited_ts: 0, offline, volume: offline ? 'Old LaCie' : 'Archive T7',
+            sharpness: blurry ? 20 : 400, blurry,
+            // Matches catalog_counts' mock pending rule (id % 3 === 0) so the sidebar count and
+            // the "Not face-scanned" filtered grid can never visibly disagree under ?libtest=1.
+            faces_scanned: i % 3 !== 0,
+            stack_n: isStackLeader ? 3 : 0, thumb_path: isStackLeader ? '/test/AllPhotos/Exports/IMG_1001-v2.jpg' : null });
+        }
+        return Promise.resolve({ total: n, capped: false, entries });
+      }
+      // ── Stand-ins added for native:contract (shapes from the Rust signatures). Side-effect
+      // commands record into window.__libtestCalls so flow tests can assert what was asked for.
+      case 'append_export_history': case 'registry_set_many': case 'catalog_keep_root':
+      case 'reveal_in_finder': case 'touch_recent': case 'write_file_bytes':
+      case 'cancel_registry_rescan': case 'hq_offline_force_quit':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(null);
+      case 'backfill_edited_registry': return Promise.resolve(0);
+      case 'rescan_edited_registry_recursive': return Promise.resolve(0);
+      case 'catalog_remove_root': return Promise.resolve(0);
+      case 'catalog_photo_ids_for_paths': return Promise.resolve((A.paths || []).map((p) => parseInt((/(\d+)\.\w+$/.exec(p) || [])[1] || '0', 10) - 1000));
+      case 'collage_output_path': return Promise.resolve(String(A.firstSource || '/test/AllPhotos/x.jpg').replace(/[^/]*$/, 'Collage.jpg'));
+      case 'take_pending_open_path': return Promise.resolve([]);
+      // Decode caches: the real commands return Err on a miss, which every caller already treats
+      // as "decode it yourself" — a permanent miss exercises that path.
+      case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path': case 'hdr_headroom_clear': case 'get_hdr_companion':
+        return Promise.reject(new Error('libtest: not cached'));
+      // Header sniff + fast thumbnail: answering these with the 1px stand-in PNG made every
+      // Gallery -> Editor open fail ("decode failed") in libtest, because the opener trusts the
+      // header over the file name. Missing is what every caller already handles (full read).
+      // Caught by test/library_flows.mjs.
+      case 'read_file_head': {
+        if (A.len === 0) {
+          const available = window.__libtestOriginalAvailable !== undefined
+            ? !!window.__libtestOriginalAvailable : !/[?&]libforceoffline=1/.test(location.search);
+          if (!available) return Promise.reject(new Error('libtest: source disconnected'));
+          const probe = new ArrayBuffer(8); new DataView(probe).setBigUint64(0, 1n, true);
+          return Promise.resolve(probe);
+        }
+        return Promise.reject(new Error('libtest: fast path unavailable'));
+      }
+      case 'get_thumbnail_fast': return Promise.reject(new Error('libtest: fast path unavailable'));
+      // The mock's ".RW2" files are really PNG bytes, so a camera ident would route them into the
+      // RAW decoder; only ?libraw=1 (a test that supplies real RAW bytes) gets one.
+      case 'peek_raw_camera': case 'peek_raw_camera_path':
+        if (!/[?&]libraw=1/.test(location.search)) return Promise.reject(new Error('libtest: not a RAW'));
+        return Promise.resolve({ make: 'Panasonic', model: 'DC-S9', lens: 'LUMIX S 18-40/F4.5-6.3', photo_style: null });
+      case 'merge_hdr_photos': case 'merge_focus_photos': case 'merge_panorama_photos': case 'merge_astro_photos':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(String((A.paths || ['/test/AllPhotos/IMG_1001.RW2'])[0]).replace(/\.\w+$/, `-${cmd.split('_')[1]}.tif`));
+      // ── Editor-side stand-ins (CHR-229). Heavy native pixel work — RAW/image decode, denoise,
+      // SAM/depth/face-parse models, gain-map/TIFF writers — deliberately MISSES here so the
+      // Editor's browser fallback is what the browser gates exercise; the native path itself is
+      // covered by npm run real:sweep inside the real app.
+      case 'decode_image_v1': case 'decode_raw_v2': case 'denoise_raw_high': case 'depth_run': case 'faceparse_run':
+      case 'sam_encode': case 'sam2_encode': case 'sam_points': case 'sam2_points': case 'subject_learn':
+      case 'subject_locate': case 'write_gainmap_heic': case 'write_gainmap_heic_from_map': case 'write_gainmap_uhdr_from_map':
+      case 'write_lightroom_tiff': case 'write_lightroom_tiff_raw': case 'store_dcp_lut': case 'read_dcp_file':
+      case 'get_display_decode_cache': case 'get_display_decode_cache_path': case 'download_url_native':
+      case 'google_oauth_loopback': case 'http_native':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      case 'cancel_denoise_high': case 'haptic_feedback': case 'open_url_native': case 'catalog_record_pet_sighting':
+      case 'subject_delete': case 'subject_rename': case 'subject_rename_ref': case 'stream_write':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve(null);
+      case 'catalog_face_scan_status': return Promise.resolve(true);
+      case 'library_backup_last': return Promise.resolve(window.__libtestLastBackup || null);
+      case 'library_backup_create': case 'library_backup_verify': case 'library_backup_restore':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        if (cmd === 'library_backup_create') {
+          const result = { path: A.destination, createdUnixSecs: 1700000000, photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, verified: true };
+          window.__libtestLastBackup = result;
+          return Promise.resolve(result);
+        }
+        if (cmd === 'library_backup_verify') return Promise.resolve({ photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, roots: [{ sourcePath: '/test/Photos', volumeUuid: 'test-volume' }] });
+        return Promise.resolve({ path: A.destination, createdUnixSecs: 1700000000, photoCount: 3, sidecarsIncluded: 2, sidecarsMissing: 1, verified: true });
+      case 'catalog_photo_faces': return Promise.resolve([{ x0: 0.3, y0: 0.2, x1: 0.6, y1: 0.6, score: 0.97 }]);
+      case 'diag_native_state': return Promise.resolve({ binary_path: '/libtest', binary_mtime: null, thumb_generated_session: 0, thumb_remaining: 0 });
+      case 'diag_state_path': return Promise.resolve('/libtest/chromasmith_diag_state.json');
+      case 'native_build_tag': return Promise.resolve('libtest');
+      case 'platform_capabilities':
+        return Promise.resolve({ os: 'macos', hdr_export: 'heic', eject: true, haptics: true, fast_thumb: true, video_poster: true, reveal_label: 'Show in Finder', mod_key: '⌘' });
+      case 'list_dcp_profiles': return Promise.resolve(A.make ? { prefix: 'DC-S9', source: 'bundled', styles: ['Standard', 'Vivid', 'Natural'] } : null);
+      case 'list_lens_profiles': return Promise.resolve([{ maker: 'Panasonic', model: 'LUMIX S 18-40/F4.5-6.3', focal_min: 18, focal_max: 40 }]);
+      case 'source_has_hdr': return Promise.resolve(false);
+      case 'set_export_dir': return Promise.resolve(String(A.path || '/test/Exports'));
+      case 'save_export_file_raw': case 'save_to_gphotos_downloads': case 'save_to_lr_downloads':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve({ path: '/test/Exports/' + (A.filename || 'export.jpg'), bytes: 1, renamed: false });
+      case 'stream_open': return Promise.resolve({ handle: 'libtest-stream', path: '/test/Exports/' + (A.filename || 'video.mp4') });
+      case 'stream_close': return Promise.resolve({ path: '/test/Exports/video.mp4', bytes: 1, renamed: false });
+      case 'subject_list': return Promise.resolve(window.__libtestSubjects || []);
+      case 'subject_import': return Promise.resolve(A.subjects || []);
+      case 'subject_merge': case 'subject_remove_ref':
+        return Promise.resolve({ id: A.keepId || A.id, name: 'Subject', prototype: [], refs: [], encoder: 'libtest' });
+      case 'subject_locate_multi': return Promise.resolve([{ x: 0.5, y: 0.5, score: 0.9 }]);
+      default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
+    }
+  }
+  if (LIBTEST) {
+    document.body.classList.add('deskx');
+    // Minimal event shim (menu-library listener registration). Callbacks are captured (not just
+    // discarded) so window.libtestFireEvent() below can drive the REAL wireActivityListeners
+    // handlers under test — a regression like the hq_offline/'catalog' kind clobbering race
+    // (library-ui.js's catalog-scan handler) lives entirely inside that callback, so a test that
+    // only calls activityUpdate()/libtestPhotoActivity() directly would never exercise it.
+    const _ltEventCallbacks = {};
+    window.__TAURI__ = {
+      core: { invoke: libtestInvoke },
+      event: {
+        listen: (name, cb) => { (_ltEventCallbacks[name] = _ltEventCallbacks[name] || []).push(cb); return Promise.resolve(() => {}); },
+      },
+    };
+    window.libtestFireEvent = (name, payload) => { (_ltEventCallbacks[name] || []).forEach((cb) => cb({ payload })); };
+    // Cloud mock: disconnected by default; window.libtestLrConnect() flips to a connected
+    // state with fake albums/assets so every Cloud UI state is screenshottable.
+    let ltConnected = false;
+    const ltAlbums = [{ id: 'al1', name: 'Dogs 2026' }, { id: 'al2', name: 'Travel' }, { id: 'al3', name: 'Film scans' }];
+    const ltAssets = (n) => Array.from({ length: n }, (_, i) => ({ id: 'as' + i, name: `__TM${4700 + i}.RW2`, captured: '2026-07-2' + (i % 9), meta: { make: 'Panasonic', model: 'DC-S9', lens: 'LUMIX S 18-40', iso: 'ISO 200', aperture: 'f/5.6', shutter: '1/250', focalLen: '28mm', date: '2026-07-2' + (i % 9) } }));
+    window.lrCloud = {
+      connected: () => ltConnected,
+      connect: async () => { ltConnected = !ltConnected; },
+      askClientId: async () => 'test-client',
+      albums: async () => ltAlbums,
+      assets: async () => ltAssets(9),
+      thumbBlob: async () => new Blob([png], { type: 'image/png' }),
+      importAsset: async () => { await new Promise((r) => setTimeout(r, 800)); },
+    };
+    window.libtestLrConnect = () => { ltConnected = true; window.dispatchEvent(new CustomEvent('lr-cloud-state')); };
+  }

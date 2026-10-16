@@ -1,0 +1,14 @@
+  // ── friendlyRawError: maps ugly RAW/DCP decode error strings to short human sentences for
+  // toasts. The raw string still goes to log()/console as before — only the toast is friendly.
+  // Exposed on window so chromasmith-22.html's own catch sites (which can't see this file's
+  // module scope) can reuse the exact same mapping instead of duplicating it.
+  function friendlyRawError(msg) {
+    const s = String(msg == null ? '' : (msg.message || msg));
+    if (/^no decoder: /.test(s)) return 'No decoder available for this file type';
+    if (/LUT 'dcp:[^']*' not registered/.test(s)) return 'Camera color profile not found';
+    if (/framed body truncated/i.test(s)) return 'RAW file appears truncated or corrupted';
+    if (/RangeError: Offset is outside the bounds of the DataView/i.test(s)) return 'Corrupt or truncated file data';
+    if (/TypeError: Failed to fetch/i.test(s)) return 'Network error — couldn\'t load required file';
+    return s;
+  }
+  window.friendlyRawError = friendlyRawError;

@@ -1,0 +1,34 @@
+  // ── Sidebar drag-resize (design transplant: Library View.html's #resizer) — .full mode only,
+  // where #lib-side is a real left column; a no-op elsewhere since the resizer is display:none.
+  // --lib-side-w is read by #lib-overlay.full's own grid-template-columns (not by #lib-side's
+  // width — a grid item's width can never override its track), so it MUST be set on `overlay`
+  // itself, not on the sidebar element: a custom property set on a descendant never flows up to
+  // an ancestor's own rule, which is why the resize handle visibly dragged but the column never
+  // actually moved. ──
+  const sideEl = overlay.querySelector('#lib-side');
+  // HANDOVER §3.6: sidebar rows are role="button" divs (added at their template sites), so they
+  // need Enter/Space to behave like a real button would. One delegated listener instead of
+  // per-row wiring — new rows (folder tree, keyword tree, collections) inherit it for free.
+  sideEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target.closest('[role="button"]');
+    if (!target || !sideEl.contains(target)) return;
+    e.preventDefault();
+    target.click();
+  });
+  const sideResizer = overlay.querySelector('#lib-side-resizer');
+  const savedSideW = parseInt(localStorage.getItem('chromasmith_lib_side_w'), 10);
+  if (savedSideW >= 150 && savedSideW <= 420) overlay.style.setProperty('--lib-side-w', savedSideW + 'px');
+  let sideResizing = false;
+  sideResizer.addEventListener('mousedown', (e) => { sideResizing = true; sideResizer.classList.add('active'); e.preventDefault(); });
+  window.addEventListener('mousemove', (e) => {
+    if (!sideResizing) return;
+    const w = Math.min(420, Math.max(150, e.clientX - sideEl.getBoundingClientRect().left));
+    overlay.style.setProperty('--lib-side-w', w + 'px');
+  });
+  window.addEventListener('mouseup', () => {
+    if (!sideResizing) return;
+    sideResizing = false; sideResizer.classList.remove('active');
+    const w = parseInt(getComputedStyle(overlay).getPropertyValue('--lib-side-w'), 10);
+    if (w) localStorage.setItem('chromasmith_lib_side_w', w);
+  });

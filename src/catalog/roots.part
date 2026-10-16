@@ -1,0 +1,251 @@
+// ── Roots ────────────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct CatalogRoot {
+    pub id: i64,
+    pub volume_id: i64,
+    pub rel_path: String,
+    pub kind: String,
+    pub abs_path: String,
+    /// The EXACT folder that was passed in, relative to the volume mount — NOT the same as
+    /// `rel_path` when an ancestor root already covers it (`rel_path` is then the ancestor's own,
+    /// per the nested-root collapse below). The frontend's catalog-backed folder browse needs
+    /// this to scope a `CatalogQuery` to the folder actually being opened, which can be a
+    /// subfolder of whatever root ended up registered.
+    pub requested_rel_path: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CatalogRootIdentity {
+    pub id: i64,
+    pub added: String,
+    pub volume: String,
+    pub path: String,
+}
+
+/// `anc` is an ancestor of (or equal to) `desc` as path SEGMENTS, not a string prefix — a bare
+/// `desc.starts_with(anc)` would wrongly match "PHOTOS2" against "PHOTOS". "" is the volume root
+/// and is an ancestor of everything.
+///
+/// `rel_path` strings are always `/`-separated regardless of platform (see `add_root_run` and
+/// `walk_root`) — a stable, OS-independent form is required for `UNIQUE(volume_id, rel_path)` to
+/// keep matching rows for an external volume that's been scanned from more than one OS (the
+/// marker-file identity in `volume_identity` already reunites the volume itself across OSes; the
+/// rel_path string has to agree too, or a rescan from a different OS inserts a duplicate row per
+/// file instead of matching the existing one — see `walk_root`'s doc comment for the incident
+/// this caused). This was previously native-separator (`\` on Windows), which is why a Windows
+/// rel_path like `Users\a\2026` under ancestor `Users\a` needed a native-separator check here too
+/// (docs/windows-port.md G6) — now both sides are always `/`, so the check is a plain `/`.
+fn is_ancestor_rel(anc: &str, desc: &str) -> bool {
+    if anc.is_empty() || anc == desc {
+        return true;
+    }
+    desc.starts_with(anc) && desc.as_bytes().get(anc.len()) == Some(&b'/')
+}
+
+/// Registers a folder to be catalogued. Scanning is opt-in per root, never "the whole disk" —
+/// mirrors the existing Library's folder-tree model, just with an index behind it now.
+///
+/// ⚠️ Roots must not NEST on the same volume. `catalogRegisterFolder` (library-ui.js) calls this
+/// for every folder the user opens, so browsing <root>/2026 after already having <root> as a
+/// root used to insert BOTH — and scan_run walks every root, so nearly the whole library got
+/// enumerated and upserted TWICE per scan. Measured on a real ~30k-photo library: two roots
+/// (`PHOTOS` and `PHOTOS/2026`, the latter holding 29,541 of the 29,663 total files) turned one
+/// ~14s walk into ~28s, doubling the SELECT+INSERT traffic alongside it. If an ancestor root
+/// already exists, return IT instead of inserting a nested one; if the new root is itself an
+/// ancestor of existing roots, insert it and drop the now-redundant descendants — `photos` keys
+/// on (volume_id, rel_path), not root_id, so no photo row or its ratings/labels/keywords are
+/// affected either way.
+pub fn add_root_run(conn: &Connection, path: &str, kind: Option<String>) -> Result<CatalogRoot, String> {
+    let p = PathBuf::from(path);
+    if !p.is_dir() {
+        return Err(format!("not a folder: {path}"));
+    }
+    // Canonicalize once, here, and use that form for everything downstream — `upsert_volume`
+    // (via `volume_identity`) resolves the MOUNT POINT from the canonical path, so the prefix
+    // strip below has to run against the same canonical form or it silently fails to match
+    // (see `volume_identity`'s doc comment on `/var` -> `/private/var`).
+    let canon = dunce::canonicalize(&p).map_err(|e| format!("resolve {path}: {e}"))?;
+    let (volume_id, mount_point) = upsert_volume(conn, &canon).map_err(|e| e.to_string())?;
+    let canon_str = canon.to_string_lossy().into_owned();
+    // Canonical separator is always `/` — see `walk_root`'s and `is_ancestor_rel`'s doc comments;
+    // this is the other place a root's own rel_path gets built, so it has to agree with them or a
+    // root re-added on Windows (native `\`) would never match its own ancestor/descendant check
+    // against a rel_path stored (from macOS, or from `walk_root`'s per-file rows) as `/`.
+    let rel_path = canon_str
+        .strip_prefix(&mount_point)
+        .unwrap_or(&canon_str)
+        .trim_start_matches(['/', '\\'])
+        .replace('\\', "/");
+
+    let existing: Vec<(i64, String)> = conn
+        .prepare("SELECT id, rel_path FROM roots WHERE volume_id = ?1")
+        .map_err(|e| e.to_string())?
+        .query_map(params![volume_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for (id, existing_rel) in &existing {
+        if is_ancestor_rel(existing_rel, &rel_path) {
+            // An ancestor (or itself) is already registered — return it unchanged, insert nothing.
+            let kind: String = conn.query_row("SELECT kind FROM roots WHERE id = ?1", params![id], |r| r.get(0)).map_err(|e| e.to_string())?;
+            let abs = if existing_rel.is_empty() { mount_point.clone() } else { format!("{mount_point}/{existing_rel}") };
+            return Ok(CatalogRoot { id: *id, volume_id, rel_path: existing_rel.clone(), kind, abs_path: abs, requested_rel_path: rel_path });
+        }
+    }
+    let descendants: Vec<i64> = existing
+        .iter()
+        .filter(|(_, r)| is_ancestor_rel(&rel_path, r))
+        .map(|(id, _)| *id)
+        .collect();
+
+    let mut kind = kind.unwrap_or_else(|| "originals".to_string());
+    if kind == "browse" {
+        // A browsed folder is only a permanent library source when nothing else is: the very
+        // first folder, or one that already contains a real root (dropping that root's kind would
+        // silently un-library it). Otherwise it is transient — see the purge below.
+        let permanent: i64 = conn
+            .query_row("SELECT COUNT(*) FROM roots WHERE kind != 'browse'", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let covers_real = existing.iter().any(|(id, r)| {
+            is_ancestor_rel(&rel_path, r)
+                && conn.query_row("SELECT kind FROM roots WHERE id = ?1", params![id], |x| x.get::<_, String>(0)).map(|k| k != "browse").unwrap_or(false)
+        });
+        if permanent == 0 || covers_real {
+            kind = "originals".to_string();
+        }
+    }
+    conn.execute(
+        "INSERT INTO roots (volume_id, rel_path, kind, added) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(volume_id, rel_path) DO UPDATE SET kind = excluded.kind",
+        // `roots.id` may be reused after removal; the nanosecond registration token makes
+        // same-path remove/re-add distinguishable even when SQLite reuses that integer ID.
+        params![volume_id, rel_path, kind, now_registration_id()],
+    )
+    .map_err(|e| e.to_string())?;
+    for id in descendants {
+        conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    }
+    let id: i64 = conn
+        .query_row(
+            "SELECT id FROM roots WHERE volume_id = ?1 AND rel_path = ?2",
+            params![volume_id, rel_path],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if kind == "browse" {
+        // Browsing a new folder replaces the previous browsed one instead of accumulating —
+        // the library must only ever contain folders the user explicitly kept.
+        let stale: Vec<i64> = conn
+            .prepare("SELECT id FROM roots WHERE kind = 'browse' AND id != ?1")
+            .map_err(|e| e.to_string())?
+            .query_map(params![id], |r| r.get(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for sid in stale {
+            remove_root_run(conn, sid)?;
+        }
+    }
+    Ok(CatalogRoot { id, volume_id, rel_path: rel_path.clone(), kind, abs_path: canon_str, requested_rel_path: rel_path })
+}
+
+/// Cleans up nested roots that already exist in a user's DB from before this fix (or from any
+/// path that could still race the check in add_root_run) — idempotent, safe to call every scan.
+/// See add_root_run's doc comment for why nested roots are a problem and why deleting a
+/// descendant root row is safe (no photo data is attached to a root).
+fn collapse_nested_roots(conn: &Connection) -> Result<(), String> {
+    let rows: Vec<(i64, i64, String)> = conn
+        .prepare("SELECT id, volume_id, rel_path FROM roots")
+        .map_err(|e| e.to_string())?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    for (id, volume_id, rel_path) in &rows {
+        let has_ancestor = rows
+            .iter()
+            .any(|(other_id, other_vol, other_rel)| other_id != id && other_vol == volume_id && is_ancestor_rel(other_rel, rel_path));
+        if has_ancestor {
+            conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn catalog_add_root(path: String, kind: Option<String>, state: tauri::State<CatalogState>) -> Result<CatalogRoot, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    add_root_run(&conn, &path, kind)
+}
+
+#[tauri::command(async)]
+pub fn catalog_remove_root(id: i64, state: tauri::State<CatalogState>) -> Result<u64, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    remove_root_run(&conn, id)
+}
+
+/// Stable, lightweight source identity for restart-safe background indexing. Keep this separate
+/// from cache_usage_by_root_run: recovery checks must not stat every generated thumbnail.
+#[tauri::command(async)]
+pub fn catalog_root_identity(state: tauri::State<CatalogState>) -> Result<Vec<CatalogRootIdentity>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    catalog_root_identity_run(&conn)
+}
+
+fn catalog_root_identity_run(conn: &Connection) -> Result<Vec<CatalogRootIdentity>, String> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.added, v.uuid, v.last_path, v.is_local, r.rel_path FROM roots r JOIN volumes v ON v.id = r.volume_id ORDER BY v.last_path, r.rel_path",
+    ).map_err(|e| e.to_string())?;
+    let roots = stmt.query_map([], |row| {
+        let id: i64 = row.get(0)?;
+        let added: i64 = row.get(1)?;
+        let volume: String = row.get(2)?;
+        let last_path: String = row.get(3)?;
+        let is_local: i64 = row.get(4)?;
+        let rel_path: String = row.get(5)?;
+        Ok(CatalogRootIdentity {
+            id,
+            added: added.to_string(),
+            volume,
+            path: abs_path(&last_path, is_local != 0, &rel_path).replace(char::from(92), "/").trim_end_matches('/').to_string(),
+        })
+    }).map_err(|e| e.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+    Ok(roots)
+}
+
+/// Un-registers a root and hides its photos (`present = 0`, never DELETE — ratings/labels/keywords
+/// survive and come back if the folder is re-added). Files on disk are never touched. Photos still
+/// covered by another root stay visible. Returns how many rows were hidden.
+pub fn remove_root_run(conn: &Connection, id: i64) -> Result<u64, String> {
+    let (volume_id, rel_path): (i64, String) = conn
+        .query_row("SELECT volume_id, rel_path FROM roots WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM roots WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let remaining: Vec<String> = conn
+        .prepare("SELECT rel_path FROM roots WHERE volume_id = ?1")
+        .map_err(|e| e.to_string())?
+        .query_map(params![volume_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut sql = String::from(
+        "UPDATE photos SET present = 0 WHERE volume_id = ?1 AND present = 1 AND (?2 = '' OR rel_dir = ?2 OR rel_dir LIKE ?2 || '/%')",
+    );
+    let mut args: Vec<rusqlite::types::Value> = vec![volume_id.into(), rel_path.into()];
+    for (i, r) in remaining.iter().enumerate() {
+        let n = i + 3;
+        sql.push_str(&format!(" AND NOT (?{n} = '' OR rel_dir = ?{n} OR rel_dir LIKE ?{n} || '/%')"));
+        args.push(r.clone().into());
+    }
+    let n = conn.execute(&sql, rusqlite::params_from_iter(args)).map_err(|e| e.to_string())?;
+    Ok(n as u64)
+}
+
+/// Makes a browsed root permanent (explicit "Keep in library").
+#[tauri::command(async)]
+pub fn catalog_keep_root(id: i64, state: tauri::State<CatalogState>) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE roots SET kind = 'originals' WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    Ok(())
+}

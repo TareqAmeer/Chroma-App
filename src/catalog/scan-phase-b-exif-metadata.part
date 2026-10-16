@@ -1,0 +1,91 @@
+// ── Scan phase B: EXIF metadata ─────────────────────────────────────────────────────────────
+//
+// Deliberately calls `library::read_meta_public`, NOT `library::get_meta` — `get_meta` writes a
+// `.meta4.json` per photo into the THUMBNAIL cache directory, which `prune_caches()` walks and
+// evicts against its 500MB cap. At 100k photos that would fill the thumbnail cache's eviction
+// pool with metadata JSON files that have nothing to do with thumbnails. The catalog's own
+// `meta_mtime` column IS the cache for catalogued photos — no second on-disk cache needed.
+
+/// "YYYY:MM:DD HH:MM:SS" (EXIF's own format, as `PhotoMeta::date` carries it) → (unix_secs,
+/// year, month, day). Days-since-epoch via Howard Hinnant's `days_from_civil` — the exact
+/// inverse of `ingest.rs`'s own `civil_from_days`, written out for the same reason that one was:
+/// exact for every date this will ever see, no `chrono` dependency for one conversion.
+/// Howard Hinnant's `days_from_civil` — days since the Unix epoch for a given calendar date.
+/// Shared by the EXIF parser below and the video capture-date parser (`video_capture_date`),
+/// which is exactly why it's its own function rather than staying inlined in one caller: the
+/// same exact-for-every-date math both need, written once.
+fn days_from_civil(y: i64, mo: i64, d: i64) -> i64 {
+    let y_adj = if mo <= 2 { y - 1 } else { y };
+    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
+    let yoe = (y_adj - era * 400) as u64;
+    let mp = if mo > 2 { mo - 3 } else { mo + 9 } as u64;
+    let doy = (153 * mp + 2) / 5 + (d as u64) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
+/// The inverse — civil date for a given days-since-epoch. Also Hinnant's algorithm, matching
+/// ingest.rs's own `civil_from_days` (which returns a formatted string; this returns ints,
+/// which is what a caller doing further date arithmetic — or writing to `cap_y`/`cap_m`/`cap_d`
+/// — actually needs).
+fn civil_from_days_ints(z: i64) -> (i32, i32, i32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m as i32, d as i32)
+}
+
+fn parse_exif_datetime(raw: &str) -> Option<(i64, i32, i32, i32)> {
+    if raw.len() < 19 {
+        return None;
+    }
+    let y: i64 = raw.get(0..4)?.parse().ok()?;
+    let mo: i64 = raw.get(5..7)?.parse().ok()?;
+    let d: i64 = raw.get(8..10)?.parse().ok()?;
+    let h: i64 = raw.get(11..13)?.parse().ok()?;
+    let mi: i64 = raw.get(14..16)?.parse().ok()?;
+    let s: i64 = raw.get(17..19)?.parse().ok()?;
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let days = days_from_civil(y, mo, d);
+    let secs = days * 86_400 + h * 3600 + mi * 60 + s;
+    Some((secs, y as i32, mo as i32, d as i32))
+}
+
+/// Mirrors `sortKeyOf`'s exact JS transform (`library-ui.js`) so a future SQL `ORDER BY` on
+/// `shutter_sec` reproduces the same order the grid already sorts by — including the `1/250`
+/// → `-1/250` negation, which is what makes "1/8000" sort faster than "1/60" instead of the
+/// other way around under a naive numeric parse.
+fn shutter_to_sec(s: &str) -> Option<f64> {
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(rest) = s.strip_prefix("1/") {
+        let denom: f64 = rest.parse().ok()?;
+        if denom == 0.0 {
+            return Some(0.0);
+        }
+        return Some(-1.0 / denom);
+    }
+    // JS parseFloat stops at the first non-numeric character ("2.5s" -> 2.5); Rust's f64::parse
+    // does not, so trim any trailing non-numeric suffix first.
+    let numeric: String = s.chars().take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
+    numeric.parse().ok()
+}
+
+fn leading_float(s: &str) -> Option<f64> {
+    let numeric: String = s.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+    if numeric.is_empty() {
+        None
+    } else {
+        numeric.parse().ok()
+    }
+}

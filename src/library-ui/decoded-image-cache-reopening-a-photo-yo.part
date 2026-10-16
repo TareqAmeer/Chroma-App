@@ -1,0 +1,244 @@
+  // ── decoded-image cache: reopening a photo you've already viewed this session skips the
+  // full decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely — the SAME
+  // fxImages[0] entry (its canvas, already the finished decode) is reinstalled directly via
+  // chromasmith-22.html's installFXImages(). Keyed by path only (not mtime/size — a file
+  // changing on disk mid-session while it's cached is an edge case, not worth the extra
+  // invoke() per open to detect). Budgeted by estimated byte size (canvas w*h*4), LRU-evicted
+  // by last-access time; the currently-open photo is never evicted (it's still on screen).
+  // "clear if the app gets too slow" per the user's own suggestion → chromasmithClearImageCache. ──
+  // A decoded 6000x4000 RW2 canvas is ~96MB before WebGL working buffers, so this cache must
+  // stay materially below the machine's total RAM. A previous RAM-scaled budget reached 3GB on
+  // an 8GB-reported Mac and, combined with full-resolution GPU targets and RAW thumbnail work,
+  // drove the app above 1.8GB during a cold Library session. Keep enough entries for quick
+  // back-and-forth navigation while reserving headroom for the active editor and OS.
+  const IMG_CACHE_BUDGET = (() => {
+    const gb = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
+    return Math.min(Math.max(gb, 4) * 0.125, 1) * 1024 * 1024 * 1024; // 512MB@4GB … 1GB max
+  })();
+  const imgCache = new Map(); // path -> {entry, size, ts}
+  // The editor's stroke icon set (chromasmith-22.html ICONS/icon()). Emoji render differently on
+  // every OS and never match a stroke weight, which is exactly why they were pulled out of the
+  // editor chrome — the Library was still using them and looked like a different application.
+  // Module scope: used by the header markup AND by renderGrid's per-card badges.
+  const ic = (n, sz) => (typeof window.icon === 'function' ? window.icon(n, sz || 16) : '');
+  // An HDR entry's lazy scene-linear buffer (hdrDenseBytesNow, set where it is defined) only
+  // counts once materialised, so the budget stays honest without charging every cached photo 288MB.
+  function imgCacheSize() {
+    let s = 0;
+    imgCache.forEach((v) => {
+      s += v.size;
+      const f = v.entry && v.entry.fullImg;
+      if (f && typeof f._hdrDenseBytesNow === 'function') s += f._hdrDenseBytesNow();
+    });
+    return s;
+  }
+  // Full-resolution frames are only worth keeping in RAM for the most recent couple of photos
+  // (the likely back-and-forth); older entries keep just their ~2560px working copy (~17MB, not
+  // ~96MB) and promote from the native/persistent cache if ever needed. On an 8GB Mac ten 24MP
+  // canvases in the page was a real contributor to swapping.
+  const IMG_CACHE_FULL_FRAMES = 2;
+  function imgCacheTrimFullFrames() {
+    const withFull = Array.from(imgCache.entries()).filter(([p, v]) => v.entry.fullImg && p !== state.openedPath)
+      .sort((a, b) => b[1].ts - a[1].ts);
+    for (const [, v] of withFull.slice(IMG_CACHE_FULL_FRAMES)) {
+      const f = v.entry.fullImg;
+      delete v.entry.fullImg;
+      if (f && f.width && f.height) v.size -= f.width * f.height * 4;
+    }
+  }
+  function imgCacheEvict() {
+    imgCacheTrimFullFrames();
+    if (imgCacheSize() <= IMG_CACHE_BUDGET) return;
+    const entries = Array.from(imgCache.entries())
+      .filter(([p]) => p !== state.openedPath)
+      .sort((a, b) => a[1].ts - b[1].ts); // oldest-accessed first
+    for (const [p] of entries) {
+      imgCache.delete(p);
+      if (imgCacheSize() <= IMG_CACHE_BUDGET) break;
+    }
+  }
+  // Reopen source for a RAW decoded this session: a ~2560px copy to install (a 24MP canvas cost
+  // ~1.5-2s to upload + analyse + render on every reopen) plus the full frame for on-demand
+  // promotion (openInEditor's fullCachedEntry). Same pixels, just a screen-sized working copy.
+  function displayTierEntry(entry) {
+    const full = entry && entry.img;
+    const fw = full && (full.naturalWidth || full.width), fh = full && (full.naturalHeight || full.height);
+    if (entry.fullImg) return { ...entry, exif: entry.exif ? { ...entry.exif } : entry.exif }; // already a working copy (loadFXImages by-path RAW)
+    if (!fw || !fh || Math.max(fw, fh) <= 3000) return entry;
+    const k = 2560 / Math.max(fw, fh);
+    const c = document.createElement('canvas');
+    c.width = Math.round(fw * k); c.height = Math.round(fh * k);
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(full, 0, 0, c.width, c.height);
+    Object.defineProperty(c, 'naturalWidth', { value: c.width }); Object.defineProperty(c, 'naturalHeight', { value: c.height });
+    return { ...entry, img: c, fullImg: full, exif: entry.exif ? { ...entry.exif } : entry.exif };
+  }
+  function imgCacheStore(path, entry, loadKey) {
+    const c = entry.img, f = entry.fullImg;
+    const size = ((c && c.width && c.height) ? c.width * c.height * 4 : 32 * 1024 * 1024) // heuristic fallback
+      + ((f && f.width && f.height) ? f.width * f.height * 4 : 0);
+    imgCache.set(path, { entry, size, ts: Date.now(), loadKey });
+    imgCacheEvict();
+  }
+  window.chromasmithClearImageCache = () => {
+    const n = imgCache.size, mb = Math.round(imgCacheSize() / (1024 * 1024));
+    imgCache.clear();
+    if (typeof toast === 'function') toast(`Cleared ${n} cached photo(s) (${mb} MB)`, true);
+    if (typeof log === 'function') log(`Image cache cleared: ${n} photo(s), ${mb} MB`, 'info');
+  };
+
+  const LS_ROOT = 'chromasmith_lib_root';
+  const initialUnifiedPreference = localStorage.getItem('chromasmith_lib_unified_view') === '1';
+  // A relaunch must restore the last Library destination, not merely a filesystem root.  That
+  // destination can be a folder, smart collection, date range, keyword/person catalog scope, or
+  // a cloud album; the legacy key only represented a folder.
+  const LS_LAST_FOLDER = 'chromasmith_lib_last_folder';
+  const LS_LAST_VIEW = 'chromasmith_lib_last_view_v2';
+  const LS_LAST_PATH = 'chromasmith_lib_last_path';
+  function savedLibraryView() {
+    if (LIBTEST && !/[?&]librestoreview=1/.test(location.search)) return null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LS_LAST_VIEW) || 'null');
+      return parsed && typeof parsed === 'object' && typeof parsed.kind === 'string' ? parsed : null;
+    } catch (e) { return null; }
+  }
+  const initialLibraryView = savedLibraryView();
+  let navigationMetadataRevision = 0;
+  // Writes, rollback, undo and async metadata loads can change ordering without a grid render.
+  class NavigationMetadataMap extends Map {
+    set(key, value) { navigationMetadataRevision++; return super.set(key, value); }
+    delete(key) { const changed = super.delete(key); if (changed) navigationMetadataRevision++; return changed; }
+    clear() { if (this.size) navigationMetadataRevision++; super.clear(); }
+  }
+  class NavigationMembershipSet extends Set {
+    add(value) { if (!this.has(value)) navigationMetadataRevision++; return super.add(value); }
+    delete(value) { const changed = super.delete(value); if (changed) navigationMetadataRevision++; return changed; }
+    clear() { if (this.size) navigationMetadataRevision++; super.clear(); }
+  }
+  let navigationCache = null, navigationBuilds = 0;
+  const state = {
+    // ?libnoroot=1 exercises the true first-launch state (renderLibraryNoRoot) — otherwise
+    // LIBTEST always has a root, so that path would be untestable in the harness.
+    root: LIBTEST ? (/[?&]libnoroot=1/.test(location.search) ? '' : '/test/Photos') : (localStorage.getItem(LS_ROOT) || ''),
+    expanded: new Set(),
+    currentFolder: LIBTEST ? '' : (initialLibraryView?.kind === 'folder' ? initialLibraryView.path : (localStorage.getItem(LS_LAST_FOLDER) || '')),
+    entries: [],           // image entries in the currently-viewed folder
+    sidecars: new NavigationMetadataMap(), // path -> {rating,label,edited,recipe}
+    meta: new NavigationMetadataMap(),     // path -> {camera,lens,date,iso}
+    clipTags: new Map(),   // photo id -> [{term,score}] (R10 suggested-tag cache, see renderInfoPanel)
+    dupeClusters: new NavigationMetadataMap(), // path -> clusterId (only present for clusters of size > 1)
+    dupeClusterSizes: new Map(), // clusterId -> size
+    _expandedStacks: new Set(), // leader ids the user has clicked open — catalog views only
+    syncedPaths: new NavigationMembershipSet(), // paths known-synced to Google Photos
+    originalUnavailableEditPaths: new Set(), // paths whose edits must queue until the original volume returns, regardless of render tier
+    photoSourceModes: new Map(), // path -> original | offlineCache | offlinePreview for the Editor's persistent source/render status
+    typeFilter: 'all',     // 'all' | 'raw' | 'jpeg' | 'png' | 'tiff' | 'heic' | 'webp' | 'hdr' | 'other' | 'video'
+    cameraFilter: 'all',
+    lensFilter: 'all',
+    isoFilter: 'all',
+    dupeFilter: 'all',     // 'all' | 'dupes'
+    syncedFilter: 'all',   // 'all' | 'synced' | 'notsynced'
+    facesFilter: 'all',    // 'all' | 'indexed' | 'pending' — face-indexing status (entry.facesScanned)
+    showInfo: false,       // metadata panel for the focused photo (I) — see renderInfoPanel
+    tagFilter: 'all',      // 'all' | 'red' | 'green' | 'edited' | 'noedited'
+    colorLabelFilter: 'all', // 'all' | 'none' | Red/Yellow/Green/Blue/Purple
+    // ⚠️ This existed in the saved-views capture list and the filter-id map before the feature
+    // did — ROADMAP claimed star ratings had shipped and they never had, so those were dead
+    // references to a control that was not in the DOM and a state key that was not here.
+    ratingFilter: 'all',   // 'all' | '0' (unrated) | '1'..'5' (that many stars or more)
+    search: '',
+    open: false,
+    expanded_view: false,  // full-window library grid (vs the docked 340px strip)
+    unified_view: false,
+    openedPath: '',        // path of the photo currently loaded into the editor FROM the library
+    openedPaths: [],       // paths of ALL photos currently loaded when opened as a multi-photo
+                            // batch (openedPath stays '' for a batch — see the three call sites
+                            // that clear it). Lets chromasmithRecordExport still log an export-
+                            // history entry per photo instead of silently recording nothing.
+    selected: new Set(),   // multi-selected paths (shift/cmd-click), for batch rate/flag/open
+    source: 'folder',      // 'folder' | a smart collection ('recents'/'favorites'/'edited'/'exported'/'flagged'/'rejected') | 'lr' (Lightroom cloud album)
+    viewMode: localStorage.getItem('chromasmith_lib_view') || 'grid', // 'grid' | 'list'
+    thumbSize: parseInt(localStorage.getItem('chromasmith_lib_thumbsize') || '140', 10),
+    // Default 'date' (Library View.html's sort pill reads "Date taken") — an existing user's
+    // own stored choice is still respected either way.
+    // Default 'date' (Library View.html's sort pill reads "Date taken") — an existing user's
+    // own stored choice is still respected either way.
+    sortBy: localStorage.getItem('chromasmith_lib_sort') || 'date',       // name|mtime|iso|shutter|aperture|focal|edited
+    sortDir: localStorage.getItem('chromasmith_lib_sortdir') || 'asc',    // 'asc' | 'desc'
+    metaDisplay: localStorage.getItem('chromasmith_lib_metadisp') || 'off', // 'off'|'hover'|'always'
+    // Default OFF (Library View.html's cards never show a filename) — per explicit decision.
+    // An existing user's own stored '0'/'1' choice is still respected either way.
+    showTitle: localStorage.getItem('chromasmith_lib_showtitle') === '1',
+    gridAspect: localStorage.getItem('chromasmith_lib_gridaspect') === '1', // item 31: real aspect ratio vs square-crop thumbnails
+    hideIcons: localStorage.getItem('chromasmith_lib_hideicons') === '1', // View menu: hide flag/badge icons drawn over photos
+    zeroGap: localStorage.getItem('chromasmith_lib_zerogap') === '1',
+    gridMat: localStorage.getItem('chromasmith_lib_mat') !== '0', // Swiss v2: on by default         // View menu: white border (mat) around each photo     // View menu: Lightroom-style zero-gap grid
+    // Matches Lightroom's "Include Photos from Subfolders" — list_dir is deliberately one level
+    // only (see its own doc comment), so a folder tree built by date (2026/08/22, 2026/08/23...)
+    // showed nothing when the PARENT folder was selected, only when a leaf was. Real reported
+    // confusion, not a hypothetical.
+    includeSubfolders: localStorage.getItem('chromasmith_lib_subfolders') === '1',
+    _folderScope: null,
+  };
+
+  function libraryNavigationOrder(rebuild = false) {
+    const signature = JSON.stringify([state.source, state._catalogPaged, state.sortBy, state.sortDir,
+      state.typeFilter, state.cameraFilter, state.lensFilter, state.isoFilter, state.dupeFilter,
+      state.syncedFilter, state.facesFilter, state.search, state.ratingFilter, state.tagFilter,
+      state.colorLabelFilter, COLOR_LABELS_ENABLED]);
+    if (rebuild || !navigationCache || navigationCache.source !== state.entries
+      || navigationCache.length !== state.entries.length || navigationCache.signature !== signature
+      || navigationCache.revision !== navigationMetadataRevision) {
+      const entries = sortEntries(state.entries.filter(passesFilters));
+      navigationCache = { entries, index: new Map(entries.map((entry, i) => [entry.path, i])),
+        source: state.entries, length: state.entries.length, signature, revision: navigationMetadataRevision };
+      navigationBuilds++;
+      // The virtual index must describe the rendered rows, not just the freshly filtered list.
+      // Metadata-only writes normally patch cards; reconcile the grid if membership/order
+      // actually changed, otherwise retain its DOM and scroll position.
+      const rendered = state._virtAll;
+      if (!rebuild && state.open && state.source !== 'lr' && ['grid', 'list'].includes(state.viewMode)
+        && rendered && (rendered.length !== entries.length || rendered.some((entry, i) => entry.path !== entries[i].path))) {
+        renderGrid();
+      }
+    }
+    return navigationCache;
+  }
+
+  // Keep the recursive-view choice with the catalog folder scope. Older versions used one
+  // application-wide checkbox; preserve that choice as the migrated default while allowing
+  // each folder (including folders on another volume) to remember its own override.
+  const LS_SUBFOLDER_SCOPES = 'chromasmith_lib_subfolders_v2';
+  function readSubfolderPrefs() {
+    const legacyDefault = localStorage.getItem('chromasmith_lib_subfolders') === '1';
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_SUBFOLDER_SCOPES) || 'null');
+      if (saved && saved.version === 2 && saved.scopes && typeof saved.scopes === 'object') {
+        return { defaultValue: saved.defaultValue === true, scopes: saved.scopes };
+      }
+    } catch {}
+    return { defaultValue: legacyDefault, scopes: {} };
+  }
+  function folderScopeKey(scope) {
+    if (!scope) return '';
+    return `${encodeURIComponent(String(scope.volumeId ?? 'path'))}:${encodeURIComponent(String(scope.relDir ?? scope.path ?? ''))}`;
+  }
+  function subfoldersForScope(scope) {
+    const prefs = readSubfolderPrefs();
+    const key = folderScopeKey(scope);
+    return key && Object.prototype.hasOwnProperty.call(prefs.scopes, key)
+      ? prefs.scopes[key] === true
+      : prefs.defaultValue;
+  }
+  function saveSubfoldersForScope(scope, enabled) {
+    const prefs = readSubfolderPrefs();
+    const key = folderScopeKey(scope);
+    if (!key) return;
+    prefs.scopes[key] = !!enabled;
+    try { localStorage.setItem(LS_SUBFOLDER_SCOPES, JSON.stringify({ version: 2, defaultValue: prefs.defaultValue, scopes: prefs.scopes })); } catch {}
+  }
+
+  function rememberLibraryView(view) {
+    if (LIBTEST) return;
+    try { localStorage.setItem(LS_LAST_VIEW, JSON.stringify(view)); } catch (e) {}
+  }
+

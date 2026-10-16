@@ -1,0 +1,41 @@
+// Whole-archive photo catalog: a SQLite index over every root the user has added, so the
+// Library can show "All Photos" and a date browser instead of one folder at a time, and so
+// browsing keeps working with the source volume unplugged.
+//
+// ⚠️ The XMP sidecar next to each photo is ALWAYS the source of truth. This catalog is a
+// derived, rebuildable CACHE of it plus filesystem facts (size/mtime/kind) — never the reverse.
+// A corrupt or deleted catalog.db is a rescan away from being exactly right again; a corrupt
+// sidecar is real user work gone. Every write here follows that: file first, catalog second.
+//
+// This module covers the WALKABLE CORE — schema, migrations, volume identity, roots, and the
+// scan that finds files and tracks which are still present. EXIF metadata (scan phase B),
+// sidecar contents (phase C), offline thumbnails (phase D), stacking, keywords and delete
+// integration are deliberately NOT here yet — they build on this foundation in later commits.
+use rayon::prelude::*;
+use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+// v20: no new DDL of its own — forces the presence-keyed blocks at the end of migrate() (GPS/place, auto-tag tables,
+// auto_tagged_at) to run on catalogs already stamped v19 before those blocks existed; without it the Editor's Info
+// panel queried a photo_auto_tags table that was never created and every photo read as "not tagged".
+// v21: same trick for the auto_tag_breeds_v1 block (breed re-tag), which v20 catalogs skipped.
+// v22: repair schema-21 catalogs missing the offline queue; existing queued work is preserved.
+const SCHEMA_VERSION: i64 = 23;
+
+/// Marker file written once at a volume's root when the user first adds a catalogued folder on
+/// it. Its content (a generated id, not a filesystem UUID) is the volume's identity — stable
+/// across a remount at a different `/Volumes/...` path, a volume rename, or moving the drive to
+/// another Mac. A dotfile, so `list_dir` already hides it. See `volume_uuid_for`.
+const VOLUME_MARKER: &str = ".chromasmith-volume-id";
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+fn now_registration_id() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos().min(i64::MAX as u128) as i64).unwrap_or(0)
+}

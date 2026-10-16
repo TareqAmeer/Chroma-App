@@ -1,0 +1,205 @@
+// ── Photo metadata (camera / lens / date / iso) for the library's filter dropdowns.
+// RAWs go through rawler's raw_metadata (no pixel decode); JPEG/TIFF through kamadak-exif;
+// PNG has no EXIF → nulls. Disk-cached exactly like thumbnails (path+mtime+size key). ──────
+#[derive(Serialize, serde::Deserialize, Default, Clone)]
+pub struct PhotoMeta {
+    pub camera: Option<String>,
+    /// Camera make and model as SEPARATE fields (the combined `camera` string stays for the
+    /// library filter dropdowns) — the metadata panel shows "Camera Make" / "Camera Model"
+    /// rows, and the lensfun profile lookup needs them split too.
+    #[serde(default)]
+    pub make: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    pub lens: Option<String>,
+    pub date: Option<String>,
+    pub iso: Option<u32>,
+    pub shutter: Option<String>,
+    pub aperture: Option<String>,
+    pub focal_len: Option<String>,
+    /// EXIF SubSecTimeOriginal digits (e.g. "45" for 0.45s). `date` is whole-second, so photos
+    /// from one burst tie on it; the grid's date sort breaks those ties with this.
+    #[serde(default)]
+    pub subsec: Option<String>,
+    /// Video only: clip length in seconds, and display dimensions. Read from the container header
+    /// (catalog::video_track_info), NOT from a decode — so the grid's duration badge still renders
+    /// for a clip AVFoundation cannot produce a poster frame for.
+    #[serde(default)]
+    pub dur: Option<f64>,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
+    /// GPS position (decimal degrees) and its offline reverse-geocoded place name
+    /// ("London, Greater London, England, United Kingdom") — see geocode.rs.
+    #[serde(default)]
+    pub lat: Option<f64>,
+    #[serde(default)]
+    pub lon: Option<f64>,
+    #[serde(default)]
+    pub place: Option<String>,
+}
+
+/// Formats a rawler Rational exposure time the way the app's own EXIF reader does
+/// ("1/250" or "2.5s" for slow shutters).
+fn fmt_shutter(secs: f64) -> String {
+    if secs <= 0.0 {
+        String::new()
+    } else if secs < 0.5 {
+        format!("1/{}", (1.0 / secs).round() as i64)
+    } else {
+        format!("{secs:.1}s")
+    }
+}
+
+fn meta_cache_path(path: &str, mtime: u64, size: u64) -> PathBuf {
+    // ⚠️ Its OWN key, independent of cache_key/THUMB_RENDER_VER — see the fnv1a doc comment
+    // above. META_READER_VER is bumped (not this filename) when read_meta's own output shape
+    // changes, so a photo cached with a stale field gets re-read without a thumbnail-only
+    // rendering change dragging every metadata read along with it.
+    let mtime_s = mtime.to_string();
+    let size_s = size.to_string();
+    // ⚠️ The version component is TYPE-DEPENDENT, one level finer than the per-tier constants
+    // above. Adding video duration/dimensions to PhotoMeta would otherwise have forced a
+    // META_READER_VER bump, re-reading EXIF for every photo in a 100k-photo catalog to deliver
+    // three numbers that only videos carry. Photo keys stay byte-identical; only videos (whose
+    // cached meta was PhotoMeta::default() anyway, since read_meta had no video branch) re-read.
+    let ver = if is_video_ext(&ext_lower(Path::new(path))) { VIDEO_META_VER } else { META_READER_VER };
+    cache_dir().join(format!("{:016x}.meta.json", fnv1a(&[path, &mtime_s, &size_s, ver])))
+}
+
+/// dur/width/height stay video-only; this fills lat/lon/place from a GPS fix when there is one.
+fn with_gps(mut m: PhotoMeta, gps: Option<(f64, f64)>) -> PhotoMeta {
+    if let Some((la, lo)) = gps {
+        m.lat = Some(la);
+        m.lon = Some(lo);
+        m.place = crate::geocode::place_for(la, lo);
+    }
+    m
+}
+
+fn read_meta(path: &str) -> PhotoMeta {
+    let ext = ext_lower(Path::new(path));
+    if is_raw_ext(&ext) {
+        let Ok(source) = rawler::rawsource::RawSource::new(Path::new(path)) else { return PhotoMeta::default() };
+        let Ok(decoder) = rawler::get_decoder(&source) else { return PhotoMeta::default() };
+        let Ok(md) = decoder.raw_metadata(&source, &RawDecodeParams::default()) else { return PhotoMeta::default() };
+        let camera = if md.make.is_empty() && md.model.is_empty() {
+            None
+        } else {
+            Some(format!("{} {}", md.make, md.model).trim().to_string())
+        };
+        let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f64 / r.d as f64 } else { 0.0 };
+        PhotoMeta {
+            camera,
+            make: if md.make.is_empty() { None } else { Some(md.make.trim().to_string()) },
+            model: if md.model.is_empty() { None } else { Some(md.model.trim().to_string()) },
+            lens: md.exif.lens_model.clone()
+                .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
+                .or_else(|| crate::lens_correct::exif_lens_model_fallback_path(Path::new(path))),
+            date: md.exif.date_time_original.clone(),
+            subsec: md.exif.sub_sec_time_original.clone(),
+            iso: md.exif.iso_speed_ratings.map(|v| v as u32),
+            shutter: md.exif.exposure_time.as_ref().map(|r| fmt_shutter(ratio(r))),
+            aperture: md.exif.fnumber.as_ref().map(|r| format!("f/{:.1}", ratio(r))),
+            focal_len: md.exif.focal_length.as_ref().map(|r| format!("{:.0}mm", ratio(r))),
+            ..with_gps(PhotoMeta::default(), md.exif.gps.as_ref().and_then(|g| {
+                let dms = |v: &[rawler::formats::tiff::Rational; 3]| [ratio(&v[0]), ratio(&v[1]), ratio(&v[2])];
+                let la = crate::geocode::dms_to_deg(dms(g.gps_latitude.as_ref()?), g.gps_latitude_ref.as_deref().map_or(false, |r| r.contains('S')));
+                let lo = crate::geocode::dms_to_deg(dms(g.gps_longitude.as_ref()?), g.gps_longitude_ref.as_deref().map_or(false, |r| r.contains('W')));
+                if la == 0.0 && lo == 0.0 { None } else { Some((la, lo)) }
+            }))
+        }
+    } else if matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff" | "heic" | "heif") {
+        let Ok(file) = std::fs::File::open(path) else { return PhotoMeta::default() };
+        let mut br = std::io::BufReader::new(file);
+        let Ok(exif) = exif::Reader::new().read_from_container(&mut br) else { return PhotoMeta::default() };
+        let s = |tag| {
+            exif.get_field(tag, exif::In::PRIMARY).map(|f| {
+                f.display_value().to_string().trim_matches('"').trim().to_string()
+            }).filter(|v| !v.is_empty())
+        };
+        let make = s(exif::Tag::Make);
+        let model = s(exif::Tag::Model);
+        let camera = match (make.clone(), model.clone()) {
+            (Some(mk), Some(md)) => Some(format!("{mk} {md}")),
+            (mk, md) => mk.or(md),
+        };
+        let iso = exif
+            .get_field(exif::Tag::PhotographicSensitivity, exif::In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0));
+        PhotoMeta {
+            camera,
+            make,
+            model,
+            lens: s(exif::Tag::LensModel),
+            date: s(exif::Tag::DateTimeOriginal),
+            subsec: s(exif::Tag::SubSecTimeOriginal),
+            iso,
+            shutter: s(exif::Tag::ExposureTime),
+            aperture: s(exif::Tag::FNumber).map(|v| format!("f/{v}")),
+            focal_len: s(exif::Tag::FocalLength),
+            ..with_gps(PhotoMeta::default(), crate::geocode::gps_from_exif(&exif))
+        }
+    } else if is_video_ext(&ext) {
+        // Container header only — one bounded `moov` read, never a decode and never a whole-file
+        // read (a clip here can be 1.3GB). This is what feeds the grid's duration badge, which is
+        // why it lives here rather than being lifted out of the poster decode: the badge must
+        // still be right when AVFoundation refuses the clip.
+        let info = crate::catalog::video_track_info(path);
+        let date = crate::catalog::video_capture_date(path).map(|d| {
+            // Match the "YYYY:MM:DD HH:MM:SS" shape EXIF DateTimeOriginal uses above, so every
+            // consumer of PhotoMeta.date keeps parsing one format.
+            let secs_of_day = d.captured.rem_euclid(86_400);
+            format!(
+                "{:04}:{:02}:{:02} {:02}:{:02}:{:02}",
+                d.y, d.m, d.d,
+                secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60
+            )
+        });
+        PhotoMeta {
+            date,
+            dur: info.as_ref().map(|i| i.duration_secs).filter(|d| *d > 0.0),
+            width: info.as_ref().map(|i| i.width).filter(|w| *w > 0),
+            height: info.as_ref().map(|i| i.height).filter(|h| *h > 0),
+            ..PhotoMeta::default()
+        }
+    } else {
+        PhotoMeta::default()
+    }
+}
+
+/// `read_meta` for sibling modules — ingest.rs derives a capture date from EXIF, and duplicating
+/// the RAW-vs-JPEG reader split there would be a second thing to keep in sync with the decoders.
+pub fn read_meta_public(path: &str) -> PhotoMeta {
+    read_meta(path)
+}
+
+#[tauri::command(async)]
+pub fn get_meta(path: String) -> PhotoMeta {
+    let Ok(meta) = std::fs::metadata(&path) else { return PhotoMeta::default() };
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let cp = meta_cache_path(&path, mtime, meta.len());
+    if let Ok(text) = std::fs::read_to_string(&cp) {
+        if let Ok(m) = serde_json::from_str(&text) {
+            return m;
+        }
+    }
+    let m = read_meta(&path);
+    if let Ok(text) = serde_json::to_string(&m) {
+        let _ = std::fs::write(&cp, text);
+    }
+    m
+}
+
+// Batched + parallelized: openFolder used to `Promise.all` one `get_meta`/`get_sidecar` IPC
+// round trip PER FILE, which is N Tauri IPC round trips on every folder open regardless of how
+// cheap any individual call is. One call carrying the whole path list cuts that to 1, and
+// rayon parallelizes the actual per-file work (real cost for a cold-cache get_meta, which reads
+// the whole RAW file for the lens fallback — negligible for get_sidecar's small XML read, but
+// harmless to parallelize either way). Order is preserved (rayon's into_par_iter().map().collect()
+// keeps input order), so the frontend can zip this 1:1 against its own `paths` array.
+#[tauri::command(async)]
+pub fn get_meta_batch(paths: Vec<String>) -> Vec<PhotoMeta> {
+    paths.into_par_iter().map(get_meta).collect()
+}

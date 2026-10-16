@@ -1,0 +1,231 @@
+// ── Focus / sharpness (out-of-focus review) ─────────────────────────────────────────────────
+//
+// Lightroom's own version of this is the thing the user explicitly said is "excessively slow" —
+// it works from a full-resolution render per photo. This scores the SAME small JPEG bytes
+// `thumbnail_run` already produced (offline_thumb_path / thumbnail_bytes_for) with a second,
+// separate scan phase: no RAW decode, no extra file read off the (possibly external) volume,
+// just one more cheap in-memory JPEG decode of a handful of KB plus a 3x3 convolution over a
+// few hundred pixels. That is the entire "fast" design — reuse decoded work, don't add a decode.
+//
+// Score = variance of the Laplacian of the greyscale thumbnail (the standard, well-known
+// blur-detection metric: a sharp image has a lot of high-frequency edge energy, so the second
+// derivative varies a lot from pixel to pixel; a blurred image is locally smooth, so it doesn't).
+// Never used to auto-delete or auto-reject anything — same posture as phash duplicate
+// clustering (CLAUDE.md trap 7): flag `blurry` for a review surface, require the user to act.
+//
+// ⚠️ The score is only comparable at a fixed input resolution — variance-of-Laplacian scales
+// with image size, so mixing thumbnail sizes would make the one FOCUS_BLUR_THRESHOLD constant
+// meaningless. `thumbnail_bytes_for` always returns the same long-edge size for a given photo
+// kind, so this holds without this module needing to know or care what that size is.
+
+const FOCUS_BLUR_THRESHOLD: f64 = 60.0;
+
+/// `None` when the bytes don't decode as an image, or the decoded image is too small to say
+/// anything meaningful about (a 160x120 embedded RAW preview, say) — callers leave `focus_at`
+/// unset in that case so the row is retried on a later pass rather than permanently scored 0.
+fn laplacian_variance_from_jpeg(bytes: &[u8]) -> Option<f64> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let gray = img.to_luma8();
+    let (w, h) = gray.dimensions();
+    if w < 9 || h < 9 {
+        return None;
+    }
+    let px = |x: i32, y: i32| -> f64 {
+        let cx = x.clamp(0, w as i32 - 1) as u32;
+        let cy = y.clamp(0, h as i32 - 1) as u32;
+        gray.get_pixel(cx, cy)[0] as f64
+    };
+    let mut sum = 0.0f64;
+    let mut sum_sq = 0.0f64;
+    let n = (w as f64) * (h as f64);
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let lap = -4.0 * px(x, y) + px(x - 1, y) + px(x + 1, y) + px(x, y - 1) + px(x, y + 1);
+            sum += lap;
+            sum_sq += lap * lap;
+        }
+    }
+    let mean = sum / n;
+    Some(sum_sq / n - mean * mean)
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct FocusResult {
+    pub scored: usize,
+    pub flagged: usize,
+}
+
+/// Same chunked/resumable/cancellable shape as `thumbnail_run`. Video is excluded (no still to
+/// score) and any photo the scan hasn't yet decoded a thumbnail for is skipped this pass — it
+/// will have one by the time this loop next runs, since thumbnail_run always runs first in the
+/// pipeline (see main.rs's chained-scan ordering).
+type FocusCandidate = (i64, String, i64);
+type FocusScore = (i64, i64, Option<f64>);
+struct FocusBatch {
+    last_scanned_id: Option<i64>,
+    candidates: Vec<FocusCandidate>,
+}
+
+fn focus_load_batch(conn: &Connection, after_id: i64) -> Result<FocusBatch, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
+             FROM photos p JOIN volumes v ON v.id = p.volume_id
+             WHERE p.id > ?1 AND p.present = 1 AND p.kind != 'video' AND p.thumb = 1
+               AND (p.focus_at IS NULL OR p.focus_at != p.mtime)
+             ORDER BY p.id LIMIT 64",
+        )
+        .map_err(|e| e.to_string())?;
+    let batch: Vec<(i64, Option<String>, i64)> = stmt
+        .query_map(params![after_id], |r| {
+            let id: i64 = r.get(0)?;
+            let rel_path: String = r.get(1)?;
+            let last_path: String = r.get(2)?;
+            let is_local: i64 = r.get(3)?;
+            let mtime: i64 = r.get(4)?;
+            let online = is_local != 0 || Path::new(&last_path).is_dir();
+            Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let last_scanned_id = batch.last().map(|(id, _, _)| *id);
+    let candidates = batch.into_iter().filter_map(|(id, abs, mtime)| abs.map(|path| (id, path, mtime))).collect();
+    Ok(FocusBatch { last_scanned_id, candidates })
+}
+
+fn focus_persist_batch(conn: &Connection, scored: &[FocusScore]) -> Result<FocusResult, String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut result = FocusResult::default();
+    for (id, mtime, score) in scored {
+        let Some(value) = score else { continue }; // decline now; a later scan invocation may retry
+        let blurry = if *value < FOCUS_BLUR_THRESHOLD { 1 } else { 0 };
+        // The photo may have changed or been removed while its thumbnail was being scored.
+        // Only publish a result for the exact, still-present version that produced the thumbnail.
+        let changed = tx.execute(
+            "UPDATE photos SET sharpness = ?1, blurry = ?2, focus_at = ?3, reviewed = 0
+             WHERE id = ?4 AND present = 1 AND mtime = ?3 AND thumb = 1",
+            params![value, blurry, mtime, id],
+        ).map_err(|e| e.to_string())?;
+        if changed == 0 {
+            continue;
+        }
+        result.scored += 1;
+        if blurry == 1 {
+            result.flagged += 1;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+fn focus_score_batch(batch: &[FocusCandidate]) -> Vec<FocusScore> {
+    decode_batch_pool().install(|| {
+        batch
+            .par_iter()
+            .map(|(id, path, mtime)| (*id, *mtime, thumbnail_bytes_for(path).ok().and_then(|bytes| laplacian_variance_from_jpeg(&bytes))))
+            .collect()
+    })
+}
+
+/// Runs the expensive thumbnail read/decode outside catalog locks. The two accessors are called
+/// separately for every batch so production can hold the shared connection mutex only while
+/// selecting candidates and while committing current results.
+fn focus_run_with_access(
+    mut load_batch: impl FnMut(i64) -> Result<FocusBatch, String>,
+    mut score_batch: impl FnMut(&[FocusCandidate]) -> Vec<FocusScore>,
+    mut persist_batch: impl FnMut(&[FocusScore]) -> Result<FocusResult, String>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<FocusResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = FocusResult::default();
+    let mut after_id = 0;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let batch = load_batch(after_id)?;
+        let Some(last_scanned_id) = batch.last_scanned_id else {
+            break;
+        };
+        after_id = last_scanned_id;
+        if batch.candidates.is_empty() {
+            continue;
+        }
+        progress(ScanProgress { phase: "focus".into(), done: result.scored, total: result.scored + batch.candidates.len(), current: String::new() });
+
+        // No catalog connection lock is held while reading cached JPEGs or computing Laplacian.
+        let scored = score_batch(&batch.candidates);
+        let batch_result = persist_batch(&scored)?;
+        result.scored += batch_result.scored;
+        result.flagged += batch_result.flagged;
+        // The keyset cursor advances across this batch even when scores were stale or unreadable,
+        // so later candidates are not starved. Skipped rows remain eligible on a later run.
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.scored, total: result.scored, current: String::new() });
+    Ok(result)
+}
+
+pub fn focus_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<FocusResult, String> {
+    focus_run_with_access(|after_id| focus_load_batch(conn, after_id), focus_score_batch, |scored| focus_persist_batch(conn, scored), progress, cancel)
+}
+
+#[tauri::command]
+pub async fn catalog_focus(app: tauri::AppHandle) -> Result<FocusResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        focus_run_with_access(
+            |after_id| {
+                let conn = state.conn.lock().map_err(|e| e.to_string())?;
+                focus_load_batch(&conn, after_id)
+            },
+            focus_score_batch,
+            |scored| {
+                let conn = state.conn.lock().map_err(|e| e.to_string())?;
+                focus_persist_batch(&conn, scored)
+            },
+            &mut |p| { let _ = app.emit("catalog-scan", p); },
+            &state.cancel,
+        )
+    })
+    .await
+    .map_err(|e| format!("catalog_focus task panicked: {e}"))?
+}
+
+/// The serving half — called from `library::get_thumbnail` as a fallback when the direct file
+/// read fails (the common case being: the volume is unplugged, so the path `catalog_query`
+/// handed the frontend doesn't currently resolve to anything). Reuses `find_photo_by_abs_path`'s
+/// exact prefix-matching, since this is the same "resolve an absolute path back to a catalog
+/// row" problem `note_deleted_run` already solves.
+pub fn offline_thumb_bytes(conn: &Connection, path: &str) -> Option<Vec<u8>> {
+    let id = find_photo_by_abs_path(conn, path)?;
+    let has_thumb: bool = conn.query_row("SELECT thumb FROM photos WHERE id = ?1", params![id], |r| r.get::<_, i64>(0)).ok()? != 0;
+    if !has_thumb {
+        return None;
+    }
+    std::fs::read(offline_thumb_path(id)).ok()
+}
+
+/// The FAST-PATH counterpart to `offline_thumb_bytes` above — that one is a FALLBACK, only tried
+/// after a live decode has already failed, because a bare `thumb=1` flag carries no information
+/// about whether the cached copy is still current. This checks `thumb_mtime` (the photo's mtime
+/// AT THE TIME the offline thumbnail was generated, set by `thumbnail_run`) against the live
+/// file's CURRENT mtime, passed in by the caller (a cheap `fs::metadata` the caller already did
+/// to decide whether to even try this path). A match means the offline copy is provably still
+/// the right rendering — safe to serve directly, skipping a live decode entirely — a mismatch
+/// (edit, replace, or never generated) correctly falls through to the existing live-decode path,
+/// preserving the "always show the true, current thumbnail" guarantee via the mtime check instead
+/// of by unconditionally paying for a fresh decode on every call.
+pub fn offline_thumb_bytes_if_current(conn: &Connection, path: &str, live_mtime: u64) -> Option<Vec<u8>> {
+    let id = find_photo_by_abs_path(conn, path)?;
+    let (has_thumb, thumb_mtime): (bool, i64) = conn
+        .query_row("SELECT thumb, thumb_mtime FROM photos WHERE id = ?1", params![id], |r| Ok((r.get::<_, i64>(0)? != 0, r.get(1)?)))
+        .ok()?;
+    if !has_thumb || thumb_mtime as u64 != live_mtime {
+        return None;
+    }
+    std::fs::read(offline_thumb_path(id)).ok()
+}

@@ -1,0 +1,192 @@
+// ── Face embedding (AI stack Phase B, part 1) — ArcFace, resumable via `photo_faces.embedding IS
+// NULL` (a freshly (re)inserted face row from `faces_run` always starts NULL, so a photo whose
+// faces changed on rescan gets its embeddings recomputed for free, same self-healing shape
+// `hash_run`'s mtime check gives file hashes). Batched by PHOTO, not by face row, so a photo with
+// several faces only pays one decode.
+
+fn f32_vec_to_blob(v: &[f32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(v.len() * 4);
+    for x in v {
+        out.extend_from_slice(&x.to_le_bytes());
+    }
+    out
+}
+
+fn blob_to_f32_vec(b: &[u8]) -> Vec<f32> {
+    b.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct EmbedResult {
+    pub embedded: usize,
+}
+
+pub fn embed_run(
+    conn: &Connection,
+    photo_ids: Option<&[i64]>,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool
+) -> Result<EmbedResult, String> {
+    let mut result = EmbedResult::default();
+    const DECODE_LONG_EDGE: u32 = 1600; // must match faces_run's — kps fractions were derived against this decode's own dimensions
+    // See faces_run's comment: a scoped selection is a single bounded batch, no LIMIT/loop.
+    let scoped = photo_ids.is_some();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let photo_batch: Vec<(i64, Option<String>)> = if let Some(ids) = photo_ids {
+            if ids.is_empty() {
+                break;
+            }
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
+                "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
+                 FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.id IN ({}) AND pf.embedding IS NULL AND pf.kps != '[]' AND {}",
+                placeholders.join(","),
+                FACE_EMBED_NOT_PET
+            );
+            let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let last_path: String = r.get(2)?;
+                    let is_local: i64 = r.get(3)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        } else {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT DISTINCT p.id, p.rel_path, v.last_path, v.is_local
+                     FROM photo_faces pf JOIN photos p ON p.id = pf.photo_id JOIN volumes v ON v.id = p.volume_id
+                     WHERE pf.embedding IS NULL AND pf.kps != '[]' AND p.present = 1 AND {FACE_EMBED_NOT_PET}
+                     LIMIT 16"
+                ))
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let last_path: String = r.get(2)?;
+                    let is_local: i64 = r.get(3)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            rows
+        };
+        let photo_batch: Vec<(i64, String)> = photo_batch.into_iter().filter_map(|(id, abs)| abs.map(|a| (id, a))).collect();
+        if photo_batch.is_empty() {
+            break;
+        }
+
+        // For each photo, the (face_id, kps fraction) rows still needing an embedding.
+        let mut face_rows: Vec<(i64, i64, String)> = Vec::new(); // (photo_id, face_id, kps json)
+        for (photo_id, _) in &photo_batch {
+            let mut fstmt = conn
+                .prepare(&format!("SELECT id, kps FROM photo_faces pf WHERE photo_id = ?1 AND embedding IS NULL AND kps != '[]' AND {FACE_EMBED_NOT_PET}"))
+                .map_err(|e| e.to_string())?;
+            let rows: Vec<(i64, String)> = fstmt
+                .query_map(params![photo_id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            for (fid, kps) in rows {
+                face_rows.push((*photo_id, fid, kps));
+            }
+        }
+
+        let base_embedded = result.embedded;
+        let total_faces = face_rows.len();
+        progress(ScanProgress { phase: "embed".into(), done: base_embedded, total: base_embedded + total_faces, current: String::new() });
+
+        // Chunked by PHOTO (same reasoning as faces_run above — a single par_iter over the whole
+        // batch reports done=0 the entire time it's actually running, which is what "stuck at 0%"
+        // turned out to mean on a small scoped batch). Progress is counted in FACES, not photos,
+        // since that's what `total` above is denominated in.
+        const CHUNK: usize = 4;
+        let mut embedded: Vec<(i64, Option<Vec<f32>>)> = Vec::with_capacity(total_faces);
+        for chunk in photo_batch.chunks(CHUNK) {
+            progress(ScanProgress {
+                phase: "embed".into(),
+                done: base_embedded + embedded.len(),
+                total: base_embedded + total_faces,
+                current: photo_batch_current(chunk.iter().map(|(_, path)| path.clone())),
+            });
+            let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
+                .par_iter()
+                .flat_map(|(photo_id, abs)| {
+                    // Failures are logged, not just dropped: a silent "retry later" hid a
+                    // months-long outage where no face got an embedding at all.
+                    let decoded = crate::library::decode_rgb8_capped(abs, DECODE_LONG_EDGE)
+                        .map_err(|e| eprintln!("embed: decode {abs}: {e}"))
+                        .ok();
+                    let my_faces: Vec<&(i64, i64, String)> = face_rows.iter().filter(|(pid, _, _)| pid == photo_id).collect();
+                    my_faces
+                        .into_iter()
+                        .map(|(_, face_id, kps_json)| {
+                            let emb = decoded.as_ref().and_then(|(rgb, w, h)| {
+                                let kps_frac: Vec<(f32, f32)> = serde_json::from_str(kps_json).ok()?;
+                                if kps_frac.len() != 5 {
+                                    return None;
+                                }
+                                let kps_px: [(f32, f32); 5] =
+                                    std::array::from_fn(|i| (kps_frac[i].0 * *w as f32, kps_frac[i].1 * *h as f32));
+                                crate::arcface::embed(rgb, *w, *h, &kps_px).map_err(|e| eprintln!("embed: face {face_id}: {e}")).ok()
+                            });
+                            (*face_id, emb)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            embedded.append(&mut part);
+            progress(ScanProgress { phase: "embed".into(), done: base_embedded + embedded.len(), total: base_embedded + total_faces, current: String::new() });
+        }
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (face_id, emb) in &embedded {
+            let Some(emb) = emb else { continue }; // unreadable/failed right now — retried next pass
+            let blob = f32_vec_to_blob(emb);
+            tx.execute("UPDATE photo_faces SET embedding = ?1 WHERE id = ?2", params![blob, face_id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.embedded += embedded.iter().filter(|(_, e)| e.is_some()).count();
+
+        if embedded.iter().all(|(_, e)| e.is_none()) {
+            // Nothing in this batch could be embedded (e.g. every photo offline/unreadable) —
+            // avoid spinning forever re-selecting the same unembeddable rows.
+            break;
+        }
+        if scoped {
+            break; // one bounded batch over the exact requested ids — never loop-until-empty
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.embedded, total: result.embedded, current: String::new() });
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn catalog_embed_faces(app: tauri::AppHandle, photo_ids: Option<Vec<i64>>) -> Result<EmbedResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        if catalog_db_path().is_file() {
+            let kv = run_ai_worker(&app, &state, "--embed-faces-worker", "embed", photo_ids.as_deref())?;
+            return Ok(EmbedResult { embedded: kv.get("embedded").copied().unwrap_or(0) });
+        }
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        embed_run(&conn, photo_ids.as_deref(), &mut |p| { let _ = app.emit("catalog-scan", p); }, &state.cancel)
+    })
+    .await
+    .map_err(|e| format!("catalog_embed_faces task panicked: {e}"))?
+}

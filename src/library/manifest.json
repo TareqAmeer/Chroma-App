@@ -1,0 +1,68 @@
+{
+ "target": "desktop/src-tauri/src/library.rs",
+ "join": "\n",
+ "parts": [
+  "head.part",
+  "stable-cache-hashing.part",
+  "hdr-companion-cache-stem-hdrext.part",
+  "photo-metadata-camera-lens-date-iso-for.part",
+  "xmp-sidecar-rating-label-edited-flag-edi.part",
+  "keywords-hierarchical-lightroom-compatib.part",
+  "cross-folder-smart-collections-edited-fa.part",
+  "export-version-history.part",
+  "perceptual-hash-duplicate-detection-dhas.part",
+  "albums-user-made-collections-that-link-t.part"
+ ],
+ "info": [
+  {
+   "file": "head.part",
+   "firstLine": 1,
+   "lines": 267
+  },
+  {
+   "file": "stable-cache-hashing.part",
+   "firstLine": 268,
+   "lines": 717
+  },
+  {
+   "file": "hdr-companion-cache-stem-hdrext.part",
+   "firstLine": 985,
+   "lines": 422
+  },
+  {
+   "file": "photo-metadata-camera-lens-date-iso-for.part",
+   "firstLine": 1407,
+   "lines": 206
+  },
+  {
+   "file": "xmp-sidecar-rating-label-edited-flag-edi.part",
+   "firstLine": 1613,
+   "lines": 85
+  },
+  {
+   "file": "keywords-hierarchical-lightroom-compatib.part",
+   "firstLine": 1698,
+   "lines": 974
+  },
+  {
+   "file": "cross-folder-smart-collections-edited-fa.part",
+   "firstLine": 2672,
+   "lines": 127
+  },
+  {
+   "file": "export-version-history.part",
+   "firstLine": 2799,
+   "lines": 199
+  },
+  {
+   "file": "perceptual-hash-duplicate-detection-dhas.part",
+   "firstLine": 2998,
+   "lines": 781
+  },
+  {
+   "file": "albums-user-made-collections-that-link-t.part",
+   "firstLine": 3779,
+   "lines": 1153
+  }
+ ]
+}

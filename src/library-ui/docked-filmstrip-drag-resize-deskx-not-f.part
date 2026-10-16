@@ -1,0 +1,217 @@
+  // ── Docked filmstrip drag-resize (deskx :not(.full) only) — was a hardcoded 120px; now the
+  // user can widen it toward the full Library view's own width. Same mousedown/mousemove/mouseup
+  // pattern as the sidebar resizer above, but writes --dock-w-user on chromasmith-22.html's OWN
+  // .fx-layout element (fxLayout, below) — the actual grid track authority (.fx-layout{--dock-w:
+  // var(--dock-w-user,120px)}), not this element's own `width`, which a grid item's track always
+  // overrides regardless of what the item's own CSS says. Clamped narrower than the sidebar
+  // resizer since this column also has to hold nothing but a single-column thumbnail strip.
+  // No width-gated reveal here on purpose: per spec (Editor (Developer) View.dc.html's
+  // .fs-tabs), the Library/Develop tab pair is visible at every width in this clamp, and the
+  // Collections/By-Date navigation tree is never visible at any width while docked — both are
+  // now plain unconditional CSS rules (above), not something this resize handler decides.
+  const LIB_DOCK_MIN = 90, LIB_DOCK_MAX = 420;
+  const dockResizer = overlay.querySelector('#lib-dock-resizer');
+  dockResizer.addEventListener('mousedown', (event) => {
+    if (!state.unified_view) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = unifiedWidth();
+    document.body.classList.add('lib-unified-dragging');
+    const move = (e) => setUnifiedWidth(startW + e.clientX - startX);
+    const finish = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', finish);
+      document.body.classList.remove('lib-unified-dragging');
+      setUnifiedWidth(unifiedWidth(), true);
+      renderGrid();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', finish, { once: true });
+  });
+  const fxLayout = document.body; // --dock-w-user must sit where --dock-w is resolved (body), see above
+  const unifiedResizer = overlay.querySelector('#lib-unified-resizer');
+  const unifiedToggle = overlay.querySelector('#lib-unified-toggle');
+  let dockCollapsed = localStorage.getItem('chromasmith_lib_dock_collapsed') === '1';
+  const UNIFIED_MIN = 300;
+  const UNIFIED_MAX = 900;
+  const unifiedSaved = Number(localStorage.getItem('chromasmith_lib_unified_w'));
+  if (Number.isFinite(unifiedSaved) && unifiedSaved >= UNIFIED_MIN && unifiedSaved <= UNIFIED_MAX) {
+    document.body.style.setProperty('--unified-lib-w-user', `${unifiedSaved}px`);
+  }
+  function unifiedWidth() {
+    const value = getComputedStyle(document.body).getPropertyValue('--unified-lib-w-user').trim();
+    if (value.endsWith('%')) return window.innerWidth * parseFloat(value) / 100;
+    const pixels = parseFloat(value);
+    return Number.isFinite(pixels) && pixels > 0 ? pixels : Math.round(window.innerWidth * 0.5);
+  }
+  function setUnifiedWidth(width, persist = false) {
+    const max = Math.max(UNIFIED_MIN, Math.min(UNIFIED_MAX, window.innerWidth - 600));
+    const next = Math.round(Math.min(max, Math.max(UNIFIED_MIN, width)));
+    document.body.style.setProperty('--unified-lib-w-user', `${next}px`);
+    unifiedResizer.setAttribute('aria-valuenow', String(next));
+    if (persist) localStorage.setItem('chromasmith_lib_unified_w', String(next));
+    return next;
+  }
+  function setUnifiedView(on) {
+    state.unified_view = !!on;
+    if (unifiedToggle) unifiedToggle.checked = state.unified_view;
+    if (state.unified_view) {
+      state.expanded_view = false;
+      dockCollapsed = false;
+      document.body.classList.remove('lib-docked', 'lib-dock-collapsed', 'lib-full');
+      overlay.classList.remove('full');
+      document.body.classList.add('lib-unified-view');
+      localStorage.setItem('chromasmith_lib_unified_view', '1');
+      const saved = Number(localStorage.getItem('chromasmith_lib_unified_w'));
+      if (saved > 0) setUnifiedWidth(saved);
+    } else {
+      document.body.classList.remove('lib-unified-view', 'lib-unified-dragging');
+      localStorage.removeItem('chromasmith_lib_unified_view');
+    }
+    unifiedResizer.hidden = !state.unified_view;
+    syncSideTabs();
+    syncSideTabsCompact();
+    syncListViewAvailability();
+    syncViewSeg();
+    if (typeof syncTopOverflow === 'function') requestAnimationFrame(syncTopOverflow);
+    renderGrid();
+    renderBatchBar();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  if (unifiedToggle) {
+    unifiedToggle.checked = localStorage.getItem('chromasmith_lib_unified_view') === '1';
+    unifiedToggle.onchange = () => setUnifiedView(unifiedToggle.checked);
+  }
+  unifiedResizer.addEventListener('pointerdown', (event) => {
+    if (!state.unified_view) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = unifiedWidth();
+    const move = (e) => setUnifiedWidth(startW + e.clientX - startX);
+    const finish = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      setUnifiedWidth(unifiedWidth(), true);
+      document.body.classList.remove('lib-unified-dragging');
+      renderGrid();
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish, { once: true });
+    window.addEventListener('pointercancel', finish, { once: true });
+    document.body.classList.add('lib-unified-dragging');
+  });
+  unifiedResizer.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const delta = event.key === 'ArrowLeft' ? -24 : 24;
+    setUnifiedWidth(unifiedWidth() + delta, true);
+    renderGrid();
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  });
+  unifiedResizer.hidden = !state.unified_view;
+  if (storedUnifiedView) state.unified_view = true;
+  const savedDockW = parseInt(localStorage.getItem('chromasmith_lib_dock_w'), 10);
+  if (fxLayout && savedDockW >= LIB_DOCK_MIN && savedDockW <= LIB_DOCK_MAX) fxLayout.style.setProperty('--dock-w-user', savedDockW + 'px');
+
+  // Fully closing the dock (not just narrowing to LIB_DOCK_MIN) — see the CSS comment on
+  // body.deskx.lib-dock-collapsed. Applied as a body class so it composes with .full/.lib-full
+  // for free (the reopen button's own CSS already excludes .lib-full) rather than needing its
+  // own interaction with every mode this file has.
+  function setDockCollapsed(v) {
+    dockCollapsed = v;
+    document.body.classList.toggle('lib-dock-collapsed', v);
+    localStorage.setItem('chromasmith_lib_dock_collapsed', v ? '1' : '0');
+    // Reopening: #lib-grid was display:none (its ancestor was) while collapsed, and renderGrid()
+    // never ran for it in the meantime — same staleness toggleExpandedView()'s own renderGrid()
+    // call exists to prevent (see that comment). Re-measure the tab labels too: the column's
+    // width didn't change while hidden, so nothing would otherwise re-trigger that check.
+    if (v === false) { renderGrid(); syncSideTabsCompact(); }
+  }
+  document.body.classList.toggle('lib-dock-collapsed', dockCollapsed);
+  dockReopenBtn.onclick = () => setDockCollapsed(false);
+
+  let dockResizing = false, dockWantsClose = false;
+  // Dragging all the way to the dock's own left edge (well inside the LIB_DOCK_MIN floor the
+  // width itself is clamped to below) is the "drag to close" gesture — reported missing
+  // entirely; there was previously no way to close the dock at all, only to narrow it to 90px.
+  const LIB_DOCK_CLOSE_ZONE = 40;
+  dockResizer.addEventListener('mousedown', (e) => {
+    if (dockCollapsed) return; // nothing to drag — resizer/dock are both hidden while collapsed
+    dockResizing = true; dockWantsClose = false; dockResizer.classList.add('active'); e.preventDefault();
+    document.body.classList.add('lib-dock-dragging');
+  });
+  // CHR-150: smooth drag. Three things made it judder: (1) .fx-layout animates
+  // grid-template-columns over 200ms, so every mousemove restarted a transition and the column
+  // lagged/rubber-banded behind the cursor — body.lib-dock-dragging turns that off; (2) each
+  // mousemove queued its own rAF, and each one re-windowed the virtual grid from scratch
+  // (_virtRange = null → every card rebuilt, thumbnails flashed) — now one rAF per frame, and
+  // the grid only re-windows when the COLUMN COUNT changes; (3) the grid's own ResizeObserver
+  // restored a scroll anchor captured at drag start 80ms after each pause, fighting the pin —
+  // virtRemeasure is skipped while dragging and one clean remeasure runs on release.
+  let dockPendingW = 0, dockRaf = 0;
+  function pinOpenedDuringDrag() {
+    const g = document.getElementById('lib-grid');
+    if (!g || !state.openedPath) return;
+    if (state._virtOn) {
+      const raw = virtMetrics(g), o = state._virtMetrics;
+      if (raw && (!o || raw.cols !== o.cols)) { state._virtMetrics = raw; scrollLibraryToPath(state.openedPath, true); return; }
+    }
+    const card = g.querySelector(`.lib-card[data-path="${CSS.escape(state.openedPath)}"]`);
+    if (!card) { scrollLibraryToPath(state.openedPath, true); return; }
+    const scroller = g.parentElement;
+    const cr = card.getBoundingClientRect(), sr = scroller.getBoundingClientRect();
+    scroller.scrollTop += (cr.top + cr.height / 2) - (sr.top + scroller.clientHeight / 2);
+  }
+  window.addEventListener('mousemove', (e) => {
+    if (!dockResizing || !fxLayout) return;
+    const raw = e.clientX - overlay.getBoundingClientRect().left;
+    dockWantsClose = raw < LIB_DOCK_CLOSE_ZONE;
+    dockPendingW = Math.round(Math.min(LIB_DOCK_MAX, Math.max(LIB_DOCK_MIN, raw)));
+    if (dockRaf) return;
+    dockRaf = requestAnimationFrame(() => {
+      dockRaf = 0;
+      fxLayout.style.setProperty('--dock-w-user', dockPendingW + 'px');
+      pinOpenedDuringDrag();
+    });
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dockResizing) return;
+    dockResizing = false; dockResizer.classList.remove('active');
+    document.body.classList.remove('lib-dock-dragging');
+    if (dockRaf) { cancelAnimationFrame(dockRaf); dockRaf = 0; if (fxLayout && dockPendingW) fxLayout.style.setProperty('--dock-w-user', dockPendingW + 'px'); }
+    if (dockWantsClose) { setDockCollapsed(true); return; }
+    // Settle: real metrics (spacers were left at the pre-drag row height), then re-pin.
+    const g = document.getElementById('lib-grid');
+    if (g && state._virtOn) { const m = virtMetrics(g); if (m) { state._virtMetrics = m; state._virtRange = null; virtUpdate(true); } }
+    if (state.openedPath) scrollLibraryToPath(state.openedPath, true);
+    const w = fxLayout ? parseInt(getComputedStyle(fxLayout).getPropertyValue('--dock-w-user'), 10) : 0;
+    if (w) localStorage.setItem('chromasmith_lib_dock_w', w);
+  });
+
+  // Library/Develop tabs — Develop switches from the full grid back to the docked filmstrip
+  // next to the open photo (toggleExpandedView(false), mirroring Library's toggleExpandedView
+  // (true) below), NOT toggleLibrary() — toggleLibrary() flips state.open and closes the WHOLE
+  // library dock (filmstrip included), which is the "docked filmstrip disappears when switching
+  // to Develop" bug: the tab is meant to narrow the view, not close it.
+  overlay.querySelector('#lib-side-tab-develop').onclick = () => { if (state.expanded_view || state.unified_view) toggleExpandedView(false); };
+  overlay.querySelector('#lib-side-tab-library').onclick = () => { if (state.unified_view) setUnifiedView(false); else if (!state.expanded_view) toggleExpandedView(true); };
+  syncSideTabs(); // initial state — expanded_view/openedPath may already be set by boot restore
+
+  // List-view table headers: clicking a header is just a shortcut for the #lib-sort dropdown +
+  // toggleSortDir() — reusing the same functions keeps grid view and list view unable to
+  // disagree about how the collection is sorted (single source of truth: state.sortBy/sortDir).
+  const listHead = overlay.querySelector('#lib-list-head');
+  listHead.querySelectorAll('.lib-lh-cell[data-sort]').forEach((cell) => {
+    cell.onclick = () => {
+      const key = cell.dataset.sort;
+      if (state.sortBy === key) {
+        toggleSortDir(); // already re-renders
+      } else {
+        sortSel.value = key;
+        sortSel.onchange({ target: sortSel }); // sets state.sortBy + re-renders
+      }
+    };
+  });

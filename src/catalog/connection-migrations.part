@@ -1,0 +1,784 @@
+// ── Connection + migrations ─────────────────────────────────────────────────────────────────
+
+/// Shared across every command via `.manage(CatalogState::new())`.
+///
+/// ⚠️ TWO connections, not one. The scan phases (scan_run/metadata_run/sidecar_run/hash_run/
+/// thumbnail_run/verify_run/rebuild_run) each loop internally across many chunked
+/// transactions over what can be minutes of real work — for the FIRST scan of a real archive,
+/// the plan behind this catalog estimates ~5-7 minutes for metadata alone. A single
+/// `Mutex<Connection>` held by one of those commands for its whole duration would starve every
+/// OTHER catalog command (a user clicking "All Photos" mid-scan would just hang until the scan
+/// finished) — the exact "main thread blocking" failure class this app's own CLAUDE.md and this
+/// project's own research into other tools both call out as what makes users abandon a library
+/// tool. `conn` is the sole writer, used by every command that scans or mutates; `read_conn` is
+/// a second, independent connection to the SAME file, used only by the fast read-only commands
+/// (catalog_query/counts/date_counts/volumes/roots). WAL mode (already enabled below) is
+/// SPECIFICALLY designed for this — one writer and any number of concurrent readers, neither
+/// blocking the other — but only across genuinely separate connections, which is the part a
+/// single shared Mutex was quietly defeating.
+pub struct CatalogState {
+    pub conn: Mutex<Connection>,
+    pub read_conn: Mutex<Connection>,
+    pub cancel: AtomicBool,
+    /// True while the JS-side hq_offline drain loop is actively running (set/cleared by JS via
+    /// `hq_offline_set_active`, not by `hq_offline_run` itself — a single batch call is too short
+    /// a window to represent "the whole drain sequence is still going"). Read by main.rs's
+    /// window-close handler to decide whether to block quitting with the "still caching, wait or
+    /// cancel?" prompt the user asked for.
+    pub hq_offline_active: AtomicBool,
+    /// The child process running the CURRENTLY ACTIVE AI-stack phase (see run_ai_worker), if any.
+    /// One slot, not one per phase: `runFindFaces` (library-ui.js) chains face-detect → face-embed
+    /// → cluster → pet-detect → CLIP-embed strictly SEQUENTIALLY via separate awaited `invoke()`
+    /// calls, so at most one of these ever runs at a time. An unscoped run of ANY of these four
+    /// (face detect, face embed, pet detect, CLIP embed — cluster is cheap pure math over already-
+    /// embedded vectors and stays in-process) is routed to a SEPARATE OS process — not just a
+    /// spawn_blocking thread — specifically so it stops holding `conn`'s Mutex for its entire
+    /// (potentially many-minute) duration: every other catalog WRITE (rating a photo, favoriting,
+    /// importing, thumbnail generation) shares that one Mutex and was blocking on it for as long
+    /// as whichever phase was running, which is a real, separate contributor to "the app is stuck"
+    /// beyond raw CPU usage — confirmed live: a report of "stopped responding while scanning for
+    /// faces" turned out to be `catalog_pets_scan`/`catalog_embed_faces`/`catalog_clip_embed`
+    /// running in-process, not the face-DETECT phase this file's isolation work started with.
+    /// The worker opens its OWN connection to the same on-disk WAL database, so it only ever holds
+    /// a lock for one small per-chunk commit, matching read_conn's own reasoning.
+    pub ai_worker: Mutex<Option<std::process::Child>>,
+}
+
+impl CatalogState {
+    /// ⚠️ Never panics, by construction — a catalog that fails to open must not fail the app.
+    /// Three-step fallback, each strictly less likely than the last: open the real file; if
+    /// that fails (corrupt), rename it aside and open a fresh one at the same path; if even
+    /// THAT fails (Application Support unwritable, disk full — the disk-backed path is
+    /// unusable for reasons a rename can't fix), fall back to an in-memory database, which
+    /// gives the app a working catalog for this session — All Photos, ratings, everything —
+    /// it just won't persist to the next launch. The original version's last resort was
+    /// `.expect(...)`, which is exactly the "never a startup failure" invariant this exists to
+    /// guarantee, undone in the one case actually worth guarding against.
+    pub fn new() -> Self {
+        let path = catalog_db_path();
+        let conn = open_and_migrate(&path)
+            .or_else(|e| {
+                crate::diag::log("error", format!("catalog: open failed ({e}), starting fresh"));
+                let aside = path.with_extension(format!("corrupt-{}.db", now_secs()));
+                let _ = std::fs::rename(&path, &aside);
+                open_and_migrate(&path)
+            })
+            .ok();
+
+        let (conn, read_conn) = match conn {
+            Some(conn) => {
+                // A genuinely separate connection to the same on-disk file — this is what
+                // actually gives reads their own lock, not a clone of the writer's.
+                let read_conn = open_and_migrate(&path).unwrap_or_else(|e| {
+                    // Vanishingly unlikely (the same path was just opened successfully above),
+                    // but if it happens, degrade to in-memory rather than fail startup — see
+                    // the in-memory branch below for why that's always safe.
+                    crate::diag::log("warn", format!("catalog: could not open a second (read) connection ({e}), read queries will share the writer's lock this session"));
+                    let c = Connection::open_in_memory().expect("in-memory sqlite must open");
+                    migrate(&c).expect("migrate an in-memory sqlite must succeed");
+                    c
+                });
+                (conn, read_conn)
+            }
+            None => {
+                crate::diag::log("error", "catalog: fresh file open also failed, falling back to an in-memory catalog for this session");
+                // ⚠️ Deliberately NOT two separate in-memory connections — `:memory:` databases
+                // are private per-connection, so a second `open_in_memory()` call here would be
+                // a DIFFERENT, empty database that never sees any write the first one makes.
+                // In this already-degraded fallback, reads sharing the writer's lock (via a
+                // second handle to the SAME file-less database) is the correct, safe choice —
+                // just without the concurrency benefit, which is an acceptable trade for a mode
+                // that only exists when the disk itself is unusable.
+                let c1 = Connection::open_in_memory().expect("in-memory sqlite must open");
+                migrate(&c1).expect("migrate an in-memory sqlite must succeed");
+                let c2 = Connection::open_in_memory().expect("in-memory sqlite must open");
+                migrate(&c2).expect("migrate an in-memory sqlite must succeed");
+                (c1, c2)
+            }
+        };
+        CatalogState {
+            conn: Mutex::new(conn),
+            read_conn: Mutex::new(read_conn),
+            cancel: AtomicBool::new(false),
+            hq_offline_active: AtomicBool::new(false),
+            ai_worker: Mutex::new(None)
+        }
+    }
+}
+
+pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Belt-and-suspenders, not a fix for a live bug: the writer connection is already the only
+    // one ever used for writes, single-threaded via CatalogState's own Mutex<Connection>, so two
+    // writer-side transactions can never race each other for the write lock in the first place —
+    // and read_conn (see CatalogState's doc comment) never writes, so it never needs to upgrade a
+    // lock either. SQLite's own busy-timeout default is 0ms (fail instantly on ANY contention,
+    // e.g. a WAL checkpoint), which has no reason to fire given the above, but costs nothing to
+    // guard against anyway.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    migrate(&conn)?;
+    one_time_passes(&conn)?;
+    Ok(conn)
+}
+
+/// Additive only: every step is `ALTER TABLE ADD COLUMN` or `CREATE TABLE IF NOT EXISTS`, never
+/// a drop-and-recreate of `photos`. `photos.id` is the offline-thumbnail filename
+/// (`thumbs/<id%256>/<id>.jpg`, added in a later commit) — any migration that reassigns ids
+/// orphans that entire cache tier. Idempotent: running it again with nothing new to do changes
+/// nothing, which is what `schema_migrates_and_is_idempotent` pins.
+/// One-time data passes keyed on a marker table, run on EVERY open — not inside `migrate`, which
+/// returns early once `user_version` is current and so would skip them on an up-to-date catalog.
+fn one_time_passes(conn: &Connection) -> rusqlite::Result<()> {
+    // Smart albums are user-authored rule ASTs stored beside the indexed catalog. Keep this
+    // additive table available even when an existing catalog is already at SCHEMA_VERSION;
+    // one_time_passes runs on each open specifically for idempotent additive work.
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS smart_albums (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, source_root_ids TEXT NOT NULL,
+        rule_set TEXT NOT NULL, updated_at INTEGER NOT NULL
+    ); CREATE UNIQUE INDEX IF NOT EXISTS ix_smart_albums_name ON smart_albums(lower(name));")?;
+    // Pets moved to DINOv2 identity embeddings: drop every pet-row vector (old CLIP crops, and
+    // HUMAN-face-model vectors on dog faces tagged as a pet) so pets_backfill_and_merge
+    // re-embeds them all with dino.rs, which also files the dog-face rows as pet rows.
+    let has_dino: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'pets_dino_v1'")?.exists([])?;
+    if !has_dino {
+        conn.execute_batch(
+            "CREATE TABLE pets_dino_v1 (done INTEGER);
+             UPDATE photo_faces SET embedding = NULL
+              WHERE species IS NOT NULL OR person_id IN (SELECT id FROM people WHERE kind = 'pet');
+             -- Unconfirmed sightings were filed into pets by the old CLIP match; let
+             -- group_orphan_pets re-file them with the new one.
+             UPDATE photo_faces SET person_id = NULL WHERE species IS NOT NULL AND confirmed = 0;
+             DELETE FROM people WHERE kind = 'pet' AND auto = 1
+               AND NOT EXISTS (SELECT 1 FROM photo_faces f WHERE f.person_id = people.id);",
+        )?;
+    }
+    // CLIP ViT-B/32 -> SigLIP 2 (2026-10): the old 512-dim embeddings live in a different space,
+    // so every photo is re-embedded and re-tagged from scratch. Keywords already written to
+    // photos stay (they're the user's now); auto_keyword_applied keeps them from re-applying.
+    let has_siglip: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'clip_siglip2_v1'")?.exists([])?;
+    if !has_siglip {
+        conn.execute_batch(
+            "CREATE TABLE clip_siglip2_v1 (done INTEGER);
+             UPDATE photos SET clip_embedding = NULL, clip_scanned_at = NULL, auto_tagged_at = NULL
+              WHERE clip_embedding IS NOT NULL OR clip_scanned_at IS NOT NULL OR auto_tagged_at IS NOT NULL;
+             DELETE FROM photo_auto_tags;",
+        )?;
+    }
+    // Breed tags arrived after the first auto-tag pass: re-tag every dog/cat photo once (pure
+    // math on stored embeddings).
+    let has_breeds: bool = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auto_tag_breeds_v1'")?.exists([])?;
+    if !has_breeds {
+        conn.execute_batch(
+            "CREATE TABLE auto_tag_breeds_v1 (done INTEGER);
+             UPDATE photos SET auto_tagged_at = NULL WHERE id IN (SELECT photo_id FROM photo_auto_tags WHERE term IN ('dog', 'cat'));",
+        )?;
+    }
+    Ok(())
+}
+
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if version >= SCHEMA_VERSION {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS volumes (
+            id          INTEGER PRIMARY KEY,
+            uuid        TEXT    NOT NULL UNIQUE,
+            label       TEXT    NOT NULL,
+            last_path   TEXT    NOT NULL,
+            mntfrom     TEXT,
+            total_bytes INTEGER NOT NULL DEFAULT 0,
+            is_local    INTEGER NOT NULL DEFAULT 0,
+            last_seen   INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS roots (
+            id          INTEGER PRIMARY KEY,
+            volume_id   INTEGER NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+            rel_path    TEXT    NOT NULL,
+            kind        TEXT    NOT NULL DEFAULT 'originals',
+            added       INTEGER NOT NULL,
+            keep_thumbs INTEGER NOT NULL DEFAULT 1,
+            UNIQUE(volume_id, rel_path)
+        );
+
+        CREATE TABLE IF NOT EXISTS photos (
+            id          INTEGER PRIMARY KEY,
+            volume_id   INTEGER NOT NULL REFERENCES volumes(id) ON DELETE CASCADE,
+            rel_path    TEXT    NOT NULL,
+            rel_dir     TEXT    NOT NULL,
+            name        TEXT    NOT NULL,
+            name_lc     TEXT    NOT NULL,
+            ext         TEXT    NOT NULL,
+            kind        TEXT    NOT NULL,
+            size        INTEGER NOT NULL,
+            mtime       INTEGER NOT NULL,
+
+            captured    INTEGER,
+            cap_y       INTEGER, cap_m INTEGER, cap_d INTEGER,
+
+            camera TEXT, make TEXT, model TEXT, lens TEXT,
+            iso         INTEGER,
+            shutter TEXT, shutter_sec REAL,
+            aperture TEXT, aperture_f REAL,
+            focal TEXT, focal_mm REAL,
+            meta_mtime  INTEGER,
+
+            rating      INTEGER NOT NULL DEFAULT 0,
+            label       TEXT    NOT NULL DEFAULT '',
+            color_label TEXT    NOT NULL DEFAULT '',
+            edited      INTEGER NOT NULL DEFAULT 0,
+            favorite    INTEGER NOT NULL DEFAULT 0,
+            sidecar_mtime        INTEGER NOT NULL DEFAULT 0,
+            sidecar_parsed_mtime INTEGER NOT NULL DEFAULT 0,
+
+            phash       TEXT,
+            thumb       INTEGER NOT NULL DEFAULT 0,
+
+            content_hash TEXT,
+            hashed_at    INTEGER,
+            verified_at  INTEGER,
+
+            stack_id    INTEGER,
+            stack_role  TEXT,
+            export_of   INTEGER,
+
+            sharpness   REAL,
+            blurry      INTEGER NOT NULL DEFAULT 0,
+            focus_at    INTEGER,
+            reviewed    INTEGER NOT NULL DEFAULT 0,
+
+            present     INTEGER NOT NULL DEFAULT 1,
+            scan_gen    INTEGER NOT NULL DEFAULT 0,
+            added       INTEGER NOT NULL,
+            UNIQUE(volume_id, rel_path)
+        );
+        CREATE INDEX IF NOT EXISTS ix_photos_captured ON photos(captured DESC);
+        CREATE INDEX IF NOT EXISTS ix_photos_ymd      ON photos(cap_y, cap_m, cap_d);
+        CREATE INDEX IF NOT EXISTS ix_photos_dir      ON photos(volume_id, rel_dir);
+        CREATE INDEX IF NOT EXISTS ix_photos_camera   ON photos(camera);
+        CREATE INDEX IF NOT EXISTS ix_photos_lens     ON photos(lens);
+        CREATE INDEX IF NOT EXISTS ix_photos_iso      ON photos(iso);
+        CREATE INDEX IF NOT EXISTS ix_photos_kind     ON photos(kind);
+        CREATE INDEX IF NOT EXISTS ix_photos_name     ON photos(name_lc);
+        CREATE INDEX IF NOT EXISTS ix_photos_present  ON photos(present, volume_id);
+        CREATE INDEX IF NOT EXISTS ix_photos_phash    ON photos(phash);
+        CREATE INDEX IF NOT EXISTS ix_photos_blurry   ON photos(blurry);
+        -- query_run's stack_n/thumb_path columns are correlated subqueries keyed on stack_id,
+        -- run once per row returned — without an index each one is a full table scan. Invisible
+        -- as long as catalog_query only ever served small, filtered views (a day, a search
+        -- result), but the catalog-backed folder browser can return the WHOLE library in one
+        -- page (a large recursive/Include-subfolders scope), where the missing index turns into an O(n^2)
+        -- query: measured 2,129s -> 0.269s (~8,000x) on a synthetic 60,000-row table shaped like
+        -- this one, at the exact row count real libraries reach.
+        CREATE INDEX IF NOT EXISTS ix_photos_stack_id ON photos(stack_id);
+
+        CREATE TABLE IF NOT EXISTS keywords (
+            id        INTEGER PRIMARY KEY,
+            path      TEXT NOT NULL UNIQUE,
+            leaf      TEXT NOT NULL,
+            parent_id INTEGER REFERENCES keywords(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS ix_kw_parent ON keywords(parent_id);
+        CREATE INDEX IF NOT EXISTS ix_kw_leaf   ON keywords(leaf);
+
+        CREATE TABLE IF NOT EXISTS photo_keywords (
+            photo_id   INTEGER NOT NULL REFERENCES photos(id)   ON DELETE CASCADE,
+            keyword_id INTEGER NOT NULL REFERENCES keywords(id) ON DELETE CASCADE,
+            PRIMARY KEY (photo_id, keyword_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_pk_kw ON photo_keywords(keyword_id, photo_id);
+        ",
+    )?;
+
+    // v1 -> v2: focus/sharpness columns, additive. `photos` may already exist from a v1
+    // catalog (this dev machine's own), so CREATE TABLE's IF NOT EXISTS above won't have added
+    // them — ALTER TABLE ADD COLUMN errors if the column is already there, so this is guarded
+    // by checking PRAGMA table_info first, which is what keeps re-running migrate() idempotent.
+    if version < 2 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("sharpness")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN sharpness REAL", [])?;
+        }
+        if !has_col("blurry")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN blurry INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !has_col("focus_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN focus_at INTEGER", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_blurry ON photos(blurry)", [])?;
+    }
+
+    // v2 -> v3: a "Not blurry" dismiss action for the Needs-review surface (photos.blurry alone
+    // gave no way to say "I looked, it's fine" — every focus rescore would just re-flag it).
+    if version < 3 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("reviewed")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+    }
+
+    // v3 -> v4: AI stack Phase A — face detection only (SCRFD), no embedding/clustering/naming
+    // yet (see CLAUDE.md's AI-stack briefing). `faces_scanned_at` follows the exact same
+    // resumability convention as `hashed_at`/`meta_mtime`: it stores the photo's `mtime` AT SCAN
+    // TIME, so `faces_scanned_at IS NULL OR faces_scanned_at != mtime` finds both never-scanned
+    // AND legitimately-changed photos in one predicate — see hash_run's own doc comment for why.
+    // Boxes are stored as fractions (0..1) of the DECODED image's width/height rather than
+    // absolute pixels: detection runs on a capped-resolution decode (decode_rgb8_capped), and a
+    // fraction is meaningful regardless of what resolution that happened to be, with no need to
+    // record it separately.
+    if version < 4 {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("faces_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN faces_scanned_at INTEGER", [])?;
+        }
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS photo_faces (
+                id       INTEGER PRIMARY KEY,
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                x0 REAL NOT NULL, y0 REAL NOT NULL, x1 REAL NOT NULL, y1 REAL NOT NULL,
+                score    REAL NOT NULL,
+                kps      TEXT NOT NULL -- JSON array of 5 [x,y] pairs, same 0..1 fraction convention
+            )",
+            []
+        )?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_photo ON photo_faces(photo_id)", [])?;
+    }
+
+    // v4 -> v5: AI stack Phase B — face embedding (ArcFace) + DBSCAN clustering into unnamed
+    // "Person N" groups. `embedding` is a raw little-endian f32x512 BLOB (2048 bytes) rather than
+    // a JSON array like `kps` — it's numeric and read back in bulk for every clustering pass, so
+    // a BLOB avoids both the parse cost and ~3x the storage JSON would cost at this scale.
+    // `person_id` is nullable and reassigned wholesale by each `catalog_cluster_faces` run
+    // (Phase B has no naming/merge UI yet — that's Phase C, which will need to start persisting
+    // manual assignments instead of freely re-clustering everything).
+    if version < 5 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS people (
+                id         INTEGER PRIMARY KEY,
+                name       TEXT NOT NULL,
+                cover_face_id INTEGER,
+                created    INTEGER NOT NULL
+            )",
+            []
+        )?;
+        if !has_col("photo_faces", "embedding")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN embedding BLOB", [])?;
+        }
+        if !has_col("photo_faces", "person_id")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN person_id INTEGER REFERENCES people(id) ON DELETE SET NULL", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_faces_person ON photo_faces(person_id)", [])?;
+    }
+
+    // v5 -> v6: AI stack Phase C — `people.auto` distinguishes a machine-generated "Person N"
+    // group from one the user has actually touched (renamed or merged into). `cluster_run` used
+    // to wipe and rebuild every person on every run, which would have silently thrown away a
+    // rename the moment the user re-clustered — this flag is what lets it reconcile instead (see
+    // `cluster_run`'s own doc comment).
+    if version < 6 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("people", "auto")? {
+            conn.execute("ALTER TABLE people ADD COLUMN auto INTEGER NOT NULL DEFAULT 1", [])?;
+        }
+    }
+
+    // v6 -> v7: AI stack Phase D — CLIP natural-language search. `clip_scanned_at` follows the
+    // same `hashed_at`/`faces_scanned_at` resumability convention (stores the photo's `mtime` AT
+    // EMBED TIME). One embedding per PHOTO (not per-face like Phase B) — CLIP embeds a whole
+    // scene, not a detected region.
+    if version < 7 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "clip_embedding")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN clip_embedding BLOB", [])?;
+        }
+        if !has_col("photos", "clip_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN clip_scanned_at INTEGER", [])?;
+        }
+    }
+
+    // v7 -> v8: per-directory mtime snapshot, so a `scan_run` on an unchanged tree can skip the
+    // expensive per-FILE walk entirely. Deliberately keyed on every directory in the tree, not
+    // just the root: a root directory's own mtime does NOT change when a file is added deep
+    // inside it (e.g. adding a photo to PHOTOS/2026/08/23 does not touch PHOTOS's mtime) — this
+    // library's own layout is exactly that nested year/month/day shape, so a root-only check
+    // would silently miss new photos. Directories are cheap to enumerate and stat (measured: 78
+    // directories for ~29,700 files, stat pass effectively free), unlike the files themselves
+    // (measured: ~9.2s for the same library's file count on this exFAT/fskit drive) — so this
+    // buys a real skip without giving up correctness.
+    if version < 8 {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS walked_dirs (
+                root_id  INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
+                rel_dir  TEXT    NOT NULL,
+                mtime    INTEGER NOT NULL,
+                PRIMARY KEY (root_id, rel_dir)
+            )",
+            [],
+        )?;
+    }
+
+    // v9 -> v10: the offline edit queue (N1a). ⚠️ This is a deliberate, narrow exception to this
+    // module's own "file first, catalog second" rule stated at the top of the file: a queued
+    // offline edit's recipe has NO sidecar to land in yet — the .xmp lives next to the original
+    // on the volume that is, by definition, unreachable while it's queued. This table is
+    // therefore the one place in the catalog that holds real, non-regenerable user work, until
+    // `apply_queued_edit` writes it out to the real sidecar and the row is deleted. `base_mtime`/
+    // `base_size` are NOT re-stat'd at queue time (the file is offline) — they're copied from
+    // this photo's own last-known `photos` row, i.e. whatever the last successful online scan
+    // recorded, which is exactly the state the queued edit was made against.
+    // CHR-293: some existing v21 catalogs lack this additive table. Re-run its idempotent
+    // creation during v22 migration; never drop or replace an existing queue or its recipes.
+    if version < 22 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS offline_edit_queue (
+                id         INTEGER PRIMARY KEY,
+                photo_id   INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                recipe     TEXT    NOT NULL,
+                base_mtime INTEGER NOT NULL,
+                base_size  INTEGER NOT NULL,
+                queued_at  INTEGER NOT NULL,
+                UNIQUE(photo_id)
+            );",
+        )?;
+    }
+
+    // v10 -> v11: People & Pets unification (see desktop/design/people-pets-wireframes.html and
+    // CLAUDE.md's people-tagging plan). Three additions, all additive/nullable so an existing
+    // library upgrades with zero data loss:
+    //   - `people.kind` ('person' | 'pet') — a pet is a Person row with a species, not a
+    //     separate table, so naming/merge/split/rename all work identically for both.
+    //   - `people.ignored` — the "not a real person, stop suggesting this" bucket (screen A's
+    //     pinned Ignored row). Distinct from delete: an ignored person's faces stay assigned so
+    //     they don't re-surface as a fresh unnamed cluster on the next scan.
+    //   - `photo_faces.confirmed` (0 = machine-proposed, 1 = user-confirmed) — screen B's
+    //     permanent split between "confirmed" and "also might be" faces. A `cluster_run` that
+    //     only ever nulls unconfirmed assignments (see below) can no longer destroy a review
+    //     you've already done, which was CLAUDE.md failure #5.
+    if version < 11 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("people", "kind")? {
+            conn.execute("ALTER TABLE people ADD COLUMN kind TEXT NOT NULL DEFAULT 'person'", [])?;
+        }
+        if !has_col("people", "ignored")? {
+            conn.execute("ALTER TABLE people ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        if !has_col("photo_faces", "confirmed")? {
+            // ⚠️ The column default is 0 (unconfirmed), NOT 1 — a SQLite column default applies
+            // to every future INSERT that omits the column, not just this migration's backfill,
+            // and a face `faces_run` detects tomorrow must start unconfirmed so `cluster_run` can
+            // actually propose it. Existing rows are backfilled to 1 separately, right below:
+            // they predate the confirmed/proposed split entirely, and treating them as confirmed
+            // is the only reading that doesn't retroactively demote every name a user already
+            // gave someone into a "suggestion" the moment they upgrade.
+            conn.execute(
+                "ALTER TABLE photo_faces ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            conn.execute("UPDATE photo_faces SET confirmed = 1", [])?;
+        }
+    }
+
+    // v11 -> v12: pet detection (RT-DETR, petdetect.rs — see people-pets wireframes screen P).
+    // `photos.pets_scanned_at` mirrors `faces_scanned_at`'s resumability convention exactly.
+    // `photo_faces.species` is set ONLY on a pet detection (NULL for a human face row) — it lets
+    // the review queue show "Dog"/"Cat" as a hint before the user has named the auto pet-person
+    // pets_run creates for each detection, since there is no re-identification model to cluster
+    // multiple sightings of the SAME animal together the way DBSCAN does for faces (see
+    // petdetect.rs's own module doc on why that's a separate, unsolved problem).
+    if version < 12 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "pets_scanned_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN pets_scanned_at INTEGER", [])?;
+        }
+        if !has_col("photo_faces", "species")? {
+            conn.execute("ALTER TABLE photo_faces ADD COLUMN species TEXT", [])?;
+        }
+    }
+
+    // v12 -> v13: `thumb` was a bare 0/1 flag with no validity stamp, so `get_thumbnail_or_offline`
+    // could only ever use the offline tier as a FALLBACK (on live-decode failure) — never as a
+    // fast path, even when a mounted volume's offline copy is provably still current. On a large
+    // library this meant the never-pruned offline-thumbnail tier (thumbnail_run's own output) sat
+    // unread on every ordinary launch while the interactive grid re-decoded from scratch, which is
+    // exactly the CPU contention this whole fix is about — a cheap disk read was available and
+    // unused. `thumb_mtime` records the photo's mtime AT THE TIME the offline thumbnail was
+    // generated; `get_thumbnail_or_offline` now serves the offline copy directly when it matches
+    // the file's CURRENT mtime, and only re-decodes when it doesn't (edit, replace, or never
+    // generated) — preserving the existing "always show the true, current thumbnail" guarantee via
+    // the mtime check instead of by unconditionally paying for a fresh decode.
+    if version < 13 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "thumb_mtime")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN thumb_mtime INTEGER NOT NULL DEFAULT 0", [])?;
+            // Backfill EXISTING thumb=1 rows with their current mtime, in the SAME migration step
+            // that adds the column — without this, thumb_mtime defaults to 0 for every photo
+            // already thumbnailed (which on a large, already-scanned library is most of them), and
+            // 0 can never match a real live mtime, so the new fast path below would silently miss
+            // on every one of them until thumbnail_run happened to regenerate each row someday
+            // (it only touches thumb=0 rows — an already-successful row is never revisited). This
+            // doesn't weaken any existing guarantee: the OLD fallback path served these same
+          // offline copies completely unconditionally, with no mtime check of any kind — trusting
+            // "current mtime" for a row already trusted with no check at all is strictly safer,
+            // not a new risk.
+            conn.execute("UPDATE photos SET thumb_mtime = mtime WHERE thumb = 1", [])?;
+        }
+    }
+
+    // v13 -> v14: the offline-editing story. Two pieces:
+    //
+    // 1. `thumb_long_edge` tracks what resolution the offline thumbnail at `offline_thumb_path`
+    //    was actually generated at. The offline tier's target resolution is bumping 360px -> 800px
+    //    (still reference-quality, not editable) — without a column to record what's ALREADY on
+    //    disk, thumbnail_run's `WHERE thumb = 0` filter would never revisit an existing thumb=1
+    //    row to upgrade it. Every existing row defaults to 0, which is always < the new target, so
+    //    the WHOLE library naturally re-queues for a one-time upgrade pass without any separate
+    //    backfill UPDATE needed here — see thumbnail_run's own WHERE clause.
+    // 2. `hq_offline`: the NEW guaranteed-offline tier — the last 100 edited + last 100 added
+    //    photos (live, re-evaluated set — see library::hq_offline_run), cached at FULL resolution
+    //    with real DCP-accurate color for RAW sources (via a persisted DCP LUT, see
+    //    catalog::persist_dcp_lut) or a byte-identical copy for already-rendered stills. Unlike
+    //    the 360/800px reference tier, a photo with an `hq_offline` row is meant to be
+    //    indistinguishable from having the original downloaded locally — the editor opens it
+    //    through the SAME normal-photo path as any local file when the source volume is
+    //    unreachable, not the reduced-preview "offline edit queue" (N1a) special case.
+    if version < 14 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "thumb_long_edge")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN thumb_long_edge INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS hq_offline (
+                photo_id  INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+                mtime     INTEGER NOT NULL,
+                reason    TEXT    NOT NULL,   -- 'edited' | 'added' | 'edited,added' (both)
+                is_copy   INTEGER NOT NULL    -- 1 = verbatim file copy (already-rendered still),
+                                              -- 0 = decoded+DCP-corrected JPEG (RAW source)
+            );
+            ",
+        )?;
+    }
+
+    // A photo that permanently fails to decode/detect (corrupt file, pathological dimensions,
+    // an unsupported codec quirk) used to be left with faces_scanned_at NULL forever — "retried
+    // next pass" — with no bound on how many passes that could be. Once every OTHER photo in the
+    // library finished, `faces_run`'s unscoped LIMIT-32 batch query (no ORDER BY, no exclusion of
+    // known-bad rows) kept re-selecting exactly the same doomed photos on every single pass,
+    // spinning the AI stack's onnx inference forever with zero DB progress — confirmed live via
+    // tools/diagnostics/cli.py (238-394% CPU, faces_scanned_at count unchanged across 80s) after a user
+    // report of the app "getting completely stuck" during a face scan. `face_scan_fail_count`
+    // lets faces_run give up on a photo after a few failed attempts (mark it scanned with zero
+    // faces) instead of retrying it every pass forever.
+    if version < 15 {
+        let has_col = |table: &str, name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name = ?1"))?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("photos", "face_scan_fail_count")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN face_scan_fail_count INTEGER NOT NULL DEFAULT 0", [])?;
+        }
+    }
+
+    // v15 -> v16: query_run gained camera/lens/iso/faces filters (previously applied only in
+    // the frontend, over whatever slice of the library the 50k-row query cap happened to
+    // include — the "sidebar says 23,315, grid says 16,172" mismatch). camera/lens/iso already
+    // had indexes; faces_scanned_at did not, and "not face-scanned" is exactly the query this
+    // was built to answer, over a full 57k-row library.
+    if version < 16 {
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_faces_scanned_at ON photos(faces_scanned_at)", [])?;
+    }
+
+    // v16 -> v17: query_run gained rating/favorite/edited/label filters, made safe by
+    // set_sidecar now calling sync_sidecar_fields_run on every write (see that function's own
+    // doc comment) instead of leaving those four columns to go stale until the next full scan.
+    if version < 17 {
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_rating   ON photos(rating)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_favorite ON photos(favorite)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_edited   ON photos(edited)", [])?;
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_label    ON photos(label)", [])?;
+    }
+
+    // v17 -> v18: `rel_path`/`rel_dir` are now always `/`-separated (see walk_root's doc comment)
+    // instead of the platform's native separator. A catalog that was ever scanned on Windows
+    // before this fix has `\`-separated rows; a catalog restored from macOS onto Windows (or any
+    // volume scanned from both OSes) can have BOTH forms for the same file, since `volume_identity`
+    // already reunites the same external volume across OSes but the old native-separator rel_path
+    // did not agree — the duplicate is a real orphaning bug (confirmed live: a 57,655-photo
+    // catalog restored from macOS backup onto Windows became 114,932 rows, exactly 2x, with
+    // faces_scanned_at frozen at the old count because every "new" Windows-side row started with
+    // no face data). This step: (1) rewrites every existing `\` to `/` in `photos.rel_path` and
+    // `rel_dir`, then (2) for any `(volume_id, rel_path)` collision that produces, keeps the row
+    // WITH `faces_scanned_at` set (falling back to whichever is `present`) and copies the other
+    // row's fresher stat facts onto it before deleting the loser — `ON DELETE CASCADE` handles
+    // photo_faces/labels/etc for the (data-less) loser automatically. Also normalizes `roots` and
+    // `walked_dirs` the same way so `is_ancestor_rel`'s now-`/`-only check keeps matching them.
+    if version < 18 {
+        conn.execute("UPDATE roots SET rel_path = REPLACE(rel_path, '\\', '/') WHERE rel_path LIKE '%\\%'", [])?;
+        conn.execute("UPDATE walked_dirs SET rel_dir = REPLACE(rel_dir, '\\', '/') WHERE rel_dir LIKE '%\\%'", [])?;
+        // ⚠️ Group and merge duplicates FIRST, by the NORMALIZED form, before rewriting anything
+        // in place — a bulk `UPDATE photos SET rel_path = REPLACE(...)` would try to write the
+        // canonical value onto BOTH the keeper and the loser in the same statement, tripping
+        // `UNIQUE(volume_id, rel_path)` the instant the loser's row is touched (the keeper, if
+        // already `/`-only, already holds that exact value). Doing the merge in Rust first means
+        // the loser is deleted before its rel_path ever needs to collide with anything.
+        let all: Vec<(i64, i64, String, Option<i64>, i64, i64, i64, i64, i64, i64)> = conn
+            .prepare(
+                "SELECT id, volume_id, rel_path, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime
+                 FROM photos WHERE rel_path LIKE '%\\%'",
+            )?
+            .query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for (id, volume_id, rel_path, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime) in all {
+            let canon = rel_path.replace('\\', "/");
+            let existing: Option<(i64, Option<i64>, i64, i64, i64, i64, i64, i64)> = conn
+                .query_row(
+                    "SELECT id, faces_scanned_at, present, size, mtime, scan_gen, added, sidecar_mtime
+                     FROM photos WHERE volume_id = ?1 AND rel_path = ?2",
+                    params![volume_id, canon],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
+                )
+                .ok();
+            match existing {
+                None => {
+                    // No canonical counterpart yet — safe to just rewrite this row in place.
+                    conn.execute(
+                        "UPDATE photos SET rel_path = ?1, rel_dir = REPLACE(rel_dir, '\\', '/') WHERE id = ?2",
+                        params![canon, id],
+                    )?;
+                }
+                Some((other_id, other_faces, other_present, _, _, _, _, _)) => {
+                    // Two rows for the same file: keep whichever already has face data (falling
+                    // back to whichever is `present`), adopt the OTHER row's fresher stat facts
+                    // onto the keeper, and delete the loser — `ON DELETE CASCADE` takes care of
+                    // the loser's photo_faces/labels/etc, which is empty anyway since it never
+                    // matched anything before this migration.
+                    let this_is_keeper = match (faces_scanned_at.is_some(), other_faces.is_some()) {
+                        (true, false) => true,
+                        (false, true) => false,
+                        _ => present >= other_present,
+                    };
+                    let (keeper_id, loser_id) = if this_is_keeper { (id, other_id) } else { (other_id, id) };
+                    let (fresh_size, fresh_mtime, fresh_present, fresh_scan_gen, fresh_added, fresh_sidecar) = if this_is_keeper {
+                        (size, mtime, present, scan_gen, added, sidecar_mtime)
+                    } else {
+                        conn.query_row(
+                            "SELECT size, mtime, present, scan_gen, added, sidecar_mtime FROM photos WHERE id = ?1",
+                            params![id],
+                            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+                        )?
+                    };
+                    conn.execute(
+                        "UPDATE photos SET size = ?1, mtime = ?2, present = ?3, scan_gen = ?4, added = MAX(added, ?5), sidecar_mtime = ?6 WHERE id = ?7",
+                        params![fresh_size, fresh_mtime, fresh_present, fresh_scan_gen, fresh_added, fresh_sidecar, keeper_id],
+                    )?;
+                    conn.execute("DELETE FROM photos WHERE id = ?1", params![loser_id])?;
+                }
+            }
+        }
+    }
+
+    // v18 -> v19: "not this person" memory for face suggestions (`catalog_person_suggestions`).
+    // A face the user rejected for a person is never suggested for that person again.
+    if version < 19 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS face_rejections (
+                face_id   INTEGER NOT NULL REFERENCES photo_faces(id) ON DELETE CASCADE,
+                person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+                PRIMARY KEY (face_id, person_id)
+            );",
+        )?;
+    }
+
+    // GPS position + offline reverse-geocoded place name ("London, Greater London, England,
+    // United Kingdom"), so the Library search finds photos by where they were taken. Keyed on the
+    // column's presence rather than a user_version bump so it can't collide with a concurrent
+    // schema bump; the first launch that adds it clears meta_mtime so metadata_run re-reads EXIF
+    // once, in the background, to fill it.
+    {
+        let has_col = |name: &str| -> rusqlite::Result<bool> {
+            let mut stmt = conn.prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = ?1")?;
+            Ok(stmt.exists(params![name])?)
+        };
+        if !has_col("place")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN gps_lat REAL", [])?;
+            conn.execute("ALTER TABLE photos ADD COLUMN gps_lon REAL", [])?;
+            conn.execute("ALTER TABLE photos ADD COLUMN place TEXT", [])?;
+            conn.execute("UPDATE photos SET meta_mtime = NULL WHERE kind != 'video'", [])?;
+        }
+        // Automatic content tags (dog, beach, park, food...) from the CLIP embedding — see
+        // auto_tag_run. Separate from user keywords: never written to the .xmp, regenerable.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS photo_auto_tags (
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                term     TEXT NOT NULL,
+                score    REAL NOT NULL,
+                PRIMARY KEY (photo_id, term)
+            );
+            CREATE INDEX IF NOT EXISTS ix_auto_tags_term ON photo_auto_tags(term, photo_id);
+            -- Which detected tags were already written as real keywords, so a keyword the user
+            -- deletes is never silently re-added on the next pass.
+            CREATE TABLE IF NOT EXISTS auto_keyword_applied (
+                photo_id INTEGER NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
+                term     TEXT NOT NULL,
+                PRIMARY KEY (photo_id, term)
+            );",
+        )?;
+        if !has_col("auto_tagged_at")? {
+            conn.execute("ALTER TABLE photos ADD COLUMN auto_tagged_at INTEGER", [])?;
+        }
+    }
+
+    // v22 -> v23: colour labels are distinct from xmp:Label pick/reject flags. Existing rows
+    // start empty; do not infer colours from historic Red/Green flag values.
+    if version < 23 {
+        let has_color_label: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('photos') WHERE name = 'color_label'")?
+            .exists([])?;
+        if !has_color_label {
+            conn.execute("ALTER TABLE photos ADD COLUMN color_label TEXT NOT NULL DEFAULT ''", [])?;
+        }
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_photos_color_label ON photos(color_label)", [])?;
+    }
+
+    conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    Ok(())
+}

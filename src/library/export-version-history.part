@@ -1,0 +1,198 @@
+// ── Export/version history ────────────────────────────────────────────────────────────────
+// Recipe-only, not pixel copies: each successful export appends {ts, version, recipe} for that
+// photo. `recipe` is the same base64 FX-snapshot JSON already used by the XMP sidecar/undo
+// history, so "restoring" a version just loads the recipe back into the live editor (no
+// re-render happens automatically) — cheap to store, unlike keeping full rendered images.
+// Kept in the app cache dir (like edited_registry.json above), NOT as a portable sidecar,
+// since it's bookkeeping about past exports rather than the photo's current edit state.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ExportHistoryEntry {
+    pub ts: u64,
+    pub version: String,
+    pub recipe: String,
+    /// The real on-disk path this export was written to — absent (`""`) on any entry recorded
+    /// before this field existed. `#[serde(default)]` so the existing on-disk
+    /// export_history.json (already real user data on this machine) still deserializes.
+    /// This is what catalog.rs's stack-linking rule 1 uses to link a RAW to its export
+    /// authoritatively, instead of guessing from folder layout or filename stem.
+    #[serde(default)]
+    pub dest: String,
+}
+fn export_history_store_path() -> PathBuf {
+    cache_dir().join("export_history.json")
+}
+pub(crate) fn export_history_read_all() -> HashMap<String, Vec<ExportHistoryEntry>> {
+    let raw: HashMap<String, Vec<ExportHistoryEntry>> = std::fs::read_to_string(export_history_store_path())
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    merge_export_history_keys(raw)
+}
+/// Case-variant keys from older files merge (entries by ts, cap 30); surviving key keeps a real spelling.
+fn merge_export_history_keys(raw: HashMap<String, Vec<ExportHistoryEntry>>) -> HashMap<String, Vec<ExportHistoryEntry>> {
+    let mut out = crate::canon::merge_case_keys(raw, |mut a, b| {
+        a.extend(b);
+        a.sort_by_key(|e| e.ts);
+        a
+    });
+    for v in out.values_mut() {
+        if v.len() > 30 {
+            let drop = v.len() - 30;
+            v.drain(0..drop);
+        }
+    }
+    out
+}
+/// One-time migration: rewrite export_history.json (backing it up) and the registries with
+/// case-duplicates merged. No-op when nothing is duplicated.
+pub fn migrate_case_duplicate_keys() {
+    if let Ok(text) = std::fs::read_to_string(export_history_store_path()) {
+        if let Ok(raw) = serde_json::from_str::<HashMap<String, Vec<ExportHistoryEntry>>>(&text) {
+            let n = raw.len();
+            let merged = merge_export_history_keys(raw);
+            if merged.len() != n {
+                let _ = std::fs::write(export_history_store_path().with_extension("json.bak"), &text);
+                export_history_write_all(&merged);
+            }
+        }
+    }
+    for name in ["edited", "favorites", "flagged", "rejected", "recents", "duplicates", "gphotos"] {
+        if let Ok(text) = std::fs::read_to_string(registry_path(name)) {
+            if let Ok(raw) = serde_json::from_str::<Vec<String>>(&text) {
+                let n = raw.len();
+                let d = crate::canon::dedupe_paths(raw);
+                if d.len() != n {
+                    registry_write(name, &d);
+                }
+            }
+        }
+    }
+}
+fn export_history_write_all(map: &HashMap<String, Vec<ExportHistoryEntry>>) {
+    if let Ok(text) = serde_json::to_string(map) {
+        let _ = std::fs::write(export_history_store_path(), text);
+    }
+}
+
+#[tauri::command(async)]
+pub fn get_export_history(path: String) -> Vec<ExportHistoryEntry> {
+    {
+        let mut all = export_history_read_all();
+        let k = crate::canon::find_key(&all, &path).cloned();
+        k.and_then(|k| all.remove(&k)).unwrap_or_default()
+    }
+}
+
+/// Capped at 30 entries per photo (newest last) — plenty of undo depth without the store
+/// growing unbounded for a photo re-exported hundreds of times.
+#[tauri::command(async)]
+pub fn append_export_history(path: String, version: String, recipe: String, dest: Option<String>) -> Result<(), String> {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut all = export_history_read_all();
+    let key = crate::canon::find_key(&all, &path).cloned().unwrap_or(path);
+    let list = all.entry(key).or_default();
+    list.push(ExportHistoryEntry { ts, version, recipe, dest: dest.unwrap_or_default() });
+    if list.len() > 30 {
+        let drop = list.len() - 30;
+        list.drain(0..drop);
+    }
+    export_history_write_all(&all);
+    Ok(())
+}
+
+/// Every photo path in a given cross-folder smart collection ("edited"/"favorites"/"flagged"/
+/// "rejected"/"recents") — stat'd fresh so renamed/deleted files are flagged `missing` instead
+/// of silently vanishing or erroring the whole list. Sorted newest-mtime-first; the frontend
+/// re-sorts/filters same as a normal folder view.
+#[tauri::command(async)]
+pub fn list_collection(name: String, cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = in_library(&cat, registry_read(&name))
+        .into_iter()
+        .map(|path| {
+            // Heal registry entries written with a guessed-lowercase extension (see real_case_sibling).
+            let path = real_case_sibling(Path::new(&path)).map(|c| c.to_string_lossy().into_owned()).unwrap_or(path);
+            let p = Path::new(&path);
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let kind = kind_of(&ext);
+            let edited_ts = edited_ts_of(&path);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime, size: m.len(), missing: false, edited_ts }
+                }
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime: 0, size: 0, missing: true, edited_ts },
+            }
+        })
+        .collect();
+    if name == "recents" {
+        out.reverse(); // registry order is oldest-touched-first (touch_recent pushes to the end)
+    } else {
+        out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    }
+    out
+}
+
+/// Kept for backward compat with the frontend's original "All Edited" call site — equivalent
+/// to `list_collection("edited")`.
+#[tauri::command(async)]
+pub fn list_edited(cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    list_collection("edited".to_string(), cat)
+}
+
+/// Photo paths that have at least one export-history entry (see append_export_history above) —
+/// the "Exported" smart collection. Reuses the same stat-fresh/missing-tolerant mapping as
+/// list_collection, just sourced from export_history.json's keys instead of a registry file.
+#[tauri::command(async)]
+pub fn list_exported(cat: tauri::State<crate::catalog::CatalogState>) -> Vec<DirEntry> {
+    let mut out: Vec<DirEntry> = in_library(&cat, export_history_read_all().into_keys().collect())
+        .into_iter()
+        .map(|path| {
+            let p = Path::new(&path);
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let kind = kind_of(&ext);
+            let edited_ts = edited_ts_of(&path);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime, size: m.len(), missing: false, edited_ts }
+                }
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: true, is_video: false, kind, mtime: 0, size: 0, missing: true, edited_ts },
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    out
+}
+
+/// Count only paths that can still produce a Library card. Registry/history records are retained
+/// for recovery when originals move or disconnect, but reporting those stale records in a badge
+/// made the sidebar disagree with the no-filter collection grid.
+fn existing_path_count(paths: impl IntoIterator<Item = String>) -> usize {
+    paths.into_iter().filter(|path| std::fs::metadata(path).is_ok()).count()
+}
+
+/// Counts for every smart collection's sidebar badge. The registries are small user-state lists;
+/// checking their paths keeps the badge aligned with the renderable collection without deleting
+/// a recoverable record.
+#[tauri::command(async)]
+pub fn collection_counts(cat: tauri::State<crate::catalog::CatalogState>) -> std::collections::HashMap<String, usize> {
+    let mut m = std::collections::HashMap::new();
+    for name in ["edited", "favorites", "flagged", "rejected", "recents", "duplicates", "gphotos"] {
+        m.insert(name.to_string(), existing_path_count(in_library(&cat, registry_read(name))));
+    }
+    m.insert("exported".to_string(), existing_path_count(in_library(&cat, export_history_read_all().into_keys().collect())));
+    m
+}
+
+/// Drops registry paths that belong to a removed folder or a temp dir — see
+/// catalog::registry_paths_outside_library. A locked/busy catalog leaves the list unfiltered.
+fn in_library(cat: &crate::catalog::CatalogState, paths: Vec<String>) -> Vec<String> {
+    let Ok(conn) = cat.read_conn.lock() else { return paths };
+    let out = crate::catalog::registry_paths_outside_library(&conn, &paths);
+    paths.into_iter().filter(|p| !out.contains(p)).collect()
+}

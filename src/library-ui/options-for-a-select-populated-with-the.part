@@ -1,0 +1,7 @@
+  // ── options for a <select> populated with the distinct values present in this folder ─────
+  function populateSelect(sel, values, allLabel) {
+    const cur = sel.value;
+    const distinct = Array.from(new Set(values.filter(Boolean))).sort();
+    sel.innerHTML = `<option value="all">${allLabel}</option>` + distinct.map((v) => `<option value="${v}">${v}</option>`).join('');
+    sel.value = distinct.includes(cur) ? cur : 'all';
+  }

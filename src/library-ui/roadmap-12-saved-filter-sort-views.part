@@ -1,0 +1,280 @@
+  // ── ROADMAP 12: saved filter/sort views ─────────────────────────────────────────────────
+  // A named snapshot of the filter bar plus the sort. Not a smart collection: a collection asks
+  // "which photos", a view asks "how am I looking at this folder" — so this deliberately does NOT
+  // capture the folder, and applying one leaves you where you are.
+  const LS_VIEWS = 'chromasmith_lib_views';
+  // Exactly the fields the filter popover and the sort control own. Listed explicitly rather than
+  // cloned from `state`, so a future unrelated state field can never silently become part of a
+  // saved view (and so an old saved view stays readable when one is added).
+  const VIEW_FIELDS = ['typeFilter','cameraFilter','lensFilter','isoFilter','dupeFilter','colorLabelFilter',
+                       'syncedFilter','facesFilter','tagFilter','ratingFilter','search','sortBy','sortDir',
+                       'viewMode','thumbSize'];
+  function loadViews() {
+    try { const v = JSON.parse(localStorage.getItem(LS_VIEWS) || '[]'); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  }
+  function saveViews(v) { try { localStorage.setItem(LS_VIEWS, JSON.stringify(v)); } catch {} }
+  function captureView() {
+    const out = {};
+    VIEW_FIELDS.forEach((k) => { if (state[k] !== undefined) out[k] = state[k]; });
+    return out;
+  }
+  function applyView(v) {
+    if (!v || !v.fields) return;
+    VIEW_FIELDS.forEach((k) => { if (v.fields[k] !== undefined) state[k] = v.fields[k]; });
+    // Persist the two that have their own localStorage keys, so a view survives a reload the same
+    // way manually setting them would.
+    try {
+      localStorage.setItem('chromasmith_lib_sort', state.sortBy);
+      localStorage.setItem('chromasmith_lib_sortdir', state.sortDir);
+      localStorage.setItem('chromasmith_lib_view', state.viewMode);
+      localStorage.setItem('chromasmith_lib_thumbsize', String(state.thumbSize));
+    } catch {}
+    syncFilterControls();
+    renderGrid();
+    renderViewsMenu();
+    if (typeof toast === 'function') toast(`View: ${v.name}`, true);
+  }
+  /// Pushes the restored values back into the actual <select>s, or the popover would keep showing
+  /// the previous view's settings while the grid showed the new one.
+  function syncFilterControls() {
+    // ⚠️ These ids all end in "-filter"; an earlier version of this map omitted that suffix on
+    // every entry except lib-sort, so getElementById returned null for seven of the eight and
+    // applying a saved view left every dropdown showing the PREVIOUS view's settings while the
+    // grid showed the new one — the exact failure this function's comment promises to prevent.
+    const map = { 'lib-type-filter': 'typeFilter', 'lib-camera-filter': 'cameraFilter',
+                  'lib-lens-filter': 'lensFilter', 'lib-iso-filter': 'isoFilter',
+                  'lib-dupe-filter': 'dupeFilter', 'lib-synced-filter': 'syncedFilter',
+                  'lib-faces-filter': 'facesFilter',
+                   'lib-tag-filter': 'tagFilter', 'lib-rating-filter': 'ratingFilter', 'lib-color-label-filter': 'colorLabelFilter',
+                  'lib-sort': 'sortBy' };
+    Object.entries(map).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el && state[key] !== undefined) el.value = state[key];
+    });
+    const se = document.getElementById('lib-search');
+    if (se) se.value = state.search || '';
+    // #5: keep the chip row in sync with state too, whichever entry point changed it (a
+    // sidebar Raw/Videos shortcut, the "More filters" panel, or clearAllLibFilters).
+    const fr = document.getElementById('lib-filter-row');
+    if (fr) {
+      syncFilterChips();
+    }
+    // HANDOVER §3.10: this called updateFilterChips(), which never existed — typeof-guarded so
+    // it silently no-op'd every time instead of throwing. syncFilterUI is the real function.
+    syncFilterUI();
+  }
+  function renderViewsMenu() {
+    const sel = document.getElementById('lib-views');
+    if (!sel) return;
+    const views = loadViews();
+    sel.innerHTML = '<option value="">Views…</option>'
+      + views.map((v, i) => `<option value="${i}">${String(v.name).replace(/</g,'&lt;')}</option>`).join('')
+      // <option> text is always plain text — no element can be injected here, so these two stay
+      // words rather than icons. U+FF0B FULLWIDTH PLUS -> a plain "+"; the ✕ was redundant next
+      // to "Delete" and is dropped rather than swapped for another glyph.
+      + '<option value="__save">+ Save current…</option>'
+      + (views.length ? '<option value="__del">Delete a view…</option>' : '');
+    sel.value = '';
+  }
+  async function onViewsChange(e) {
+    const v = e.target.value;
+    const views = loadViews();
+    // askTextModal, never window.prompt — same silent-no-op-under-WKWebView bug as the version
+    // rename above; found by grepping for the pattern after fixing that one.
+    if (v === '__save') {
+      const name = await window.askTextModal('Name this view', 'Filters + sort, not the folder', '');
+      if (name && name.trim()) { views.push({ name: name.trim(), fields: captureView() }); saveViews(views); }
+      renderViewsMenu();
+      return;
+    }
+    if (v === '__del') {
+      const name = await window.askTextModal('Delete which view?', views.map((x) => '· ' + x.name).join('\n'), '');
+      if (name) { saveViews(views.filter((x) => x.name !== name.trim())); }
+      renderViewsMenu();
+      return;
+    }
+    if (v !== '') applyView(views[parseInt(v, 10)]);
+    renderViewsMenu();
+  }
+
+  async function enterCompareMode() {
+    if (!canEnterCompare()) return;
+    const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
+    if (!paths.length) { if (typeof toast === 'function') toast('Select at least one photo to compare', false); return; }
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'compare'; compareState.totalSelected = paths.length;
+    const entryToken = ++compareState.entryToken;
+    for (const item of compareState.items.values()) releaseCompareItem(item);
+    compareState.items.clear(); compareState.loadCount = 0; compareState.maxConcurrentLoads = 0;
+    surveyState.entryToken++;
+    surveyState.cells = [];
+    compareState.paths = paths;
+    compareState.paneA = { idx: 0, srcKey: 'live' };
+    compareState.paneB = { idx: paths.length > 1 ? 1 : 0, srcKey: 'live' };
+    compareState.zoom = 1; compareState.panX = 0; compareState.panY = 0;
+    state.viewMode = 'compare';
+    syncViewSeg();
+    const host = compareHost();
+    const survey = surveyHost(); if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
+    if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'compare') return;
+    compareState.active = true;
+    buildCompareUI();
+    await renderComparePane('A');
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'compare') return;
+    await renderComparePane('B');
+  }
+  function exitCompareMode() {
+    compareState.entryToken++;
+    for(const c of detailState.cache.values())c.width=c.height=0;detailState.cache.clear();
+    for (const item of compareState.items.values()) releaseCompareItem(item);
+    compareState.items.clear();
+    surveyState.entryToken++;
+    compareState.active = false;
+    const host = compareHost();
+    if (host) { host.classList.remove('on'); host.innerHTML = ''; }
+    const survey = surveyHost();
+    if (survey) { survey.classList.remove('on'); survey.innerHTML = ''; }
+    surveyState.cells = []; surveyState.focus = 0;
+    surveyState.cullPaths = []; surveyState.cullOffset = 0;
+    surveyState.cullAllPaths = []; surveyState.cullGroups = []; surveyState.cullSelected.clear(); surveyState.cullPreferredByGroup.clear(); surveyState.cullManualPreferenceGroups.clear(); surveyState.cullRecommendationByPath.clear(); surveyState.cullEntryByPath.clear(); surveyState.cullCaptureByPath.clear(); surveyState.cullGroupPicker = false;
+    state.viewMode = compareState.prevViewMode || 'grid';
+    localStorage.setItem('chromasmith_lib_view', state.viewMode);
+    syncViewSeg();
+    renderGrid();
+  }
+
+  async function enterSurveyMode() {
+    if (!canEnterCompare()) return;
+    const paths = state.selected.size ? Array.from(state.selected) : (state.openedPath ? [state.openedPath] : []);
+    if (paths.length < 2) { if (typeof toast === 'function') toast('Select at least two photos for Survey', false); return; }
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'survey'; compareState.totalSelected = paths.length;
+    const entryToken = ++compareState.entryToken;
+    // Lightroom Survey is an 8-cell view. Make the cap visible in the toolbar instead of loading
+    // an unbounded batch that cannot fit or be meaningfully reviewed at once.
+    compareState.paths = paths.slice(0, SURVEY_MAX);
+    surveyState.cells = compareState.paths.map((path, fxIdx) => ({ path, fxIdx }));
+    surveyState.focus = 0;
+    compareState.zoom = 1; compareState.panX = 0; compareState.panY = 0;
+    state.viewMode = 'survey';
+    surveyState.entryToken++;
+    syncViewSeg();
+    const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
+    const host = surveyHost();
+    if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    try { await openPathsInEditor(compareState.paths); }
+    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('survey openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Survey', false); exitCompareMode(); return; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'survey') return;
+    compareState.active = true;
+    buildSurveyUI();
+    surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+  }
+  async function enterCullMode() {
+    surveyState.entryToken++;
+    const selected = state.selected;
+    const paths = sortEntries(state.entries.filter(passesFilters)).filter((entry) => selected.has(entry.path)).map((entry) => entry.path);
+    if (paths.length < 2) return;
+    if (state.viewMode !== 'compare' && state.viewMode !== 'survey') compareState.prevViewMode = state.viewMode;
+    compareState.mode = 'cull'; compareState.totalSelected = paths.length; compareState.paths = paths;
+    surveyState.cullAllPaths = paths.slice(); surveyState.cullPaths = paths.slice(); surveyState.cullOffset = 0; surveyState.focus = 0;
+    surveyState.cullCaptureByPath = new Map(state.entries.map((entry) => [entry.path, Number.isFinite(entry.captured) ? entry.captured : null]));
+    surveyState.cullEntryByPath = new Map(state.entries.filter((entry) => selected.has(entry.path)).map((entry) => [entry.path, entry]));
+    surveyState.cullPreferredByGroup.clear(); surveyState.cullManualPreferenceGroups.clear(); surveyState.cullRecommendationByPath.clear();
+    surveyState.cullDupeClusterByPath.clear(); surveyState.cullDupeStatus = 'idle'; surveyState.cullHashToken++;
+    surveyState.cullGapSec = 60; surveyState.cullGroups = cullReviewGroups(paths, surveyState.cullGapSec);
+    surveyState.cullSelected = new Set(paths); surveyState.cullGroupPage = 0; surveyState.cullGroupPicker = true;
+    state.viewMode = 'survey'; syncViewSeg();
+    compareHost()?.classList.remove('on');
+    const host = surveyHost(); if (host) host.classList.add('on');
+    compareState.active = true; cullGroupsRender();
+  }
+  async function showCullPage(offset) {
+    const entryToken = ++compareState.entryToken;
+    surveyState.entryToken++;
+    surveyState.cullOffset = Math.max(0, Math.min(offset, Math.max(0, surveyState.cullPaths.length - 1)));
+    const paths = surveyState.cullPaths.slice(surveyState.cullOffset, surveyState.cullOffset + 4);
+    surveyState.cells = paths.map((path, fxIdx) => ({ path, fxIdx })); surveyState.focus = 0;
+    state.viewMode = 'survey'; syncViewSeg();
+    const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
+    const host = surveyHost(); if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
+    try { await openPathsInEditor(paths); }
+    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('cull openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Culling', false); exitCompareMode(); return; }
+    if (entryToken !== compareState.entryToken || state.viewMode !== 'survey' || compareState.mode !== 'cull') return;
+    compareState.active = true; buildSurveyUI(); surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+  }
+  // CHR-267: "Delete rejected (n)" after culling. Reject only ever sets the Red label; nothing is
+  // removed until this explicit step, which counts the rejects in THIS cull, asks once, and goes
+  // through libDeletePaths -> trash_file (system Trash, never a hard delete).
+  function cullRejectedPaths() {
+    return surveyState.cullPaths.filter((p) => (state.sidecars.get(p) || {}).label === 'Red');
+  }
+  function cullSyncDeleteBtn() {
+    const btn = document.getElementById('lib-cull-del');
+    if (!btn) return;
+    const n = cullRejectedPaths().length;
+    btn.textContent = `Delete rejected (${n})`;
+    btn.disabled = n === 0;
+  }
+  async function cullDeleteRejected(opts = {}) {
+    const paths = cullRejectedPaths();
+    if (!paths.length) { toast('No rejected photos in this cull'); return []; }
+    const origin = libTrashOriginSnapshot();
+    const n = paths.length;
+    const names = paths.slice(0, 5).map(baseName).join(', ') + (n > 5 ? `, and ${n - 5} more` : '');
+    const cullUndoState = { paths: surveyState.cullPaths.slice(), offset: surveyState.cullOffset, focus: surveyState.focus };
+    const gone = await libDeletePaths(paths, {
+      message: `Delete ${n} rejected photo${n === 1 ? '' : 's'}? ${names}. They are moved to the system Trash, so you can still restore them from there.`,
+      confirmLabel: `Move ${n} to Trash`,
+      cullUndoState,
+    });
+    if (!gone.length || opts.exiting || !libTrashOriginMatches(origin)) return gone;
+    const goneSet = new Set(gone);
+    const keepFocusAt = surveyState.cullOffset;
+    surveyState.cullPaths = surveyState.cullPaths.filter((p) => !goneSet.has(p));
+    compareState.paths = surveyState.cullPaths.slice(); compareState.totalSelected = surveyState.cullPaths.length;
+    if (surveyState.cullPaths.length < 1) exitCompareMode(); else await showCullPage(keepFocusAt);
+    return gone;
+  }
+  async function cullCommitAndAdvance(targetPath, write, stillSaved) {
+    const path = targetPath; if (!path) return;
+    const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus, entry = compareState.entryToken;
+    const saved = await write(); surveySyncPath(path);
+    // A rebound command and a button use the same saved-write boundary. Moving away while
+    // IPC is pending must not advance an unrelated photo when the old decision completes.
+    if (!saved || !cullAutoAdvanceEnabled() || !stillSaved()) return;
+    if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
+    if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
+    const next = currentOffset + currentFocus + 1;
+    if (next >= surveyState.cullPaths.length) {
+      // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
+      if (cullRejectedPaths().length) await cullDeleteRejected({ exiting: true });
+      if (compareState.mode === 'cull' && state.viewMode === 'survey') exitCompareMode();
+      return;
+    }
+    if (next >= currentOffset + surveyState.cells.length) await showCullPage(next);
+    else surveyFocus(1);
+  }
+  function cullAdvance(label = 'Green', path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
+  }
+  function cullColorAndAdvance(colorLabel, path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setColorLabel(path, colorLabel), () => (state.sidecars.get(path) || {}).color_label === colorLabel);
+  }
+  function cullRateAndAdvance(rating, path = surveyTargetPath()) {
+    return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
+  }
+  // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
+  // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
+  function compareCycleB(delta) {
+    if (!compareState.paths.length) return;
+    const n = compareState.paths.length;
+    compareState.paneB.idx = ((compareState.paneB.idx + delta) % n + n) % n;
+    renderComparePane('B');
+  }
+  function comparePromoteB() {
+    const a = compareState.paneA, b = compareState.paneB;
+    compareState.paneA = { ...b }; compareState.paneB = { ...a };
+    renderComparePane('A'); renderComparePane('B');
+  }

@@ -1,0 +1,179 @@
+  // ── Star ratings: BUILT, then switched off (user decision, 2026-08-16) ──────────────────────
+  // Kept in the code rather than deleted, because the decision was "I no longer need it" and not
+  // "it was wrong" — flip this to true and every surface comes back: the card overlay, the 0-5
+  // keyboard shortcuts, the rating filter, the Rating sort key and list column.
+  //
+  // ⚠️ Switched off at the SURFACES, never in setRating or the sidecar schema. Ratings already
+  // written to .xmp sidecars stay there and stay readable; turning the UI off must not silently
+  // start dropping data the user recorded, or turning it back on would show an empty history.
+  let STARS_ENABLED = localStorage.getItem('chromasmith_lib_stars_enabled') !== '0';
+  function starsHtml(n) {
+    if (!STARS_ENABLED) return '';
+    n = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
+    let out = '<span class="lib-stars">';
+    for (let i = 1; i <= 5; i++) {
+      out += `<span class="lib-star${i <= n ? ' on' : ''}" data-star="${i}" title="${i} star${i > 1 ? 's' : ''} (${i})">★</span>`;
+    }
+    return out + '</span>';
+  }
+  /// Mirrors setLabel exactly — optimistic local update, sidecar write, same failure handling —
+  /// because a rating and a flag are the same kind of edit and should not drift apart.
+  // CHR-184: ⌘Z in the Library undoes rating / flag / favourite changes, not only "Reset edit".
+  // Every write path for those three funnels through setRating/setLabel/setFavorite, so they
+  // record the PREVIOUS value here. Writes made in the same tick (a multi-select X, a 5-key on
+  // 40 photos) share one group, so one ⌘Z reverts the whole action. Resets go on the same stack
+  // so ⌘Z always undoes the most recent thing, whichever kind it was.
+  const libMetaUndo = [];
+  let libMetaGroup = null, libMetaUndoing = false;
+  function libReleaseTrashReceipts(group) {
+    const ids = (group || []).flatMap((record) => record && record.kind === 'trash_delete' ? record.entries.flatMap((entry) => [entry.receipt.photo?.receiptId, entry.receipt.sidecar?.receiptId].filter(Boolean)) : []);
+    if (ids.length) invoke('release_trash_receipts', { receiptIds: ids }).catch((e) => console.error('release expired Trash undo receipts', e));
+  }
+  function libMetaRecord(rec) {
+    if (libMetaUndoing) return;
+    if (!libMetaGroup) {
+      libMetaGroup = [];
+      libMetaUndo.push(libMetaGroup);
+      if (libMetaUndo.length > 50) libReleaseTrashReceipts(libMetaUndo.shift());
+      setTimeout(() => { libMetaGroup = null; }, 0);
+    }
+    libMetaGroup.push(rec);
+  }
+  function libTrashOriginSnapshot() {
+    return {
+      root: state.root,
+      folder: state.currentFolder,
+      source: state.source,
+      collection: state.source === 'lr' ? (lrState.album || '') : (state.catalogScope || state.source),
+      viewMode: state.viewMode,
+      filters: {
+        search: state.search, type: state.typeFilter, camera: state.cameraFilter, lens: state.lensFilter,
+        iso: state.isoFilter, duplicates: state.dupeFilter, synced: state.syncedFilter, faces: state.facesFilter,
+        tags: state.tagFilter, rating: state.ratingFilter, includeSubfolders: !!state.includeSubfolders,
+      },
+    };
+  }
+  function libTrashOriginMatches(origin) {
+    return !!origin && JSON.stringify(origin) === JSON.stringify(libTrashOriginSnapshot());
+  }
+  // CHR-184: adding photos to an album (menu or drag) is undoable. Only the paths that were NOT
+  // already in the album are recorded, so undo never removes a photo that was there before.
+  async function albumAddUndoable(id, name, paths) {
+    const al = _albums.find((x) => x.id === id);
+    const had = new Set((al && al.paths) || []);
+    const fresh = [...new Set(paths)].filter((p) => !had.has(p));
+    const added = await invoke('album_add', { id, paths }).catch((e) => { toast(humanizeErr('add to the album', e), 'err'); return 0; });
+    if (added && fresh.length) libMetaRecord({ kind: 'album_add', id, name, paths: fresh });
+    return added;
+  }
+  async function libUndoLast() {
+    const g = libMetaUndo.pop();
+    if (!g || !g.length) { toast('Nothing to undo'); return; }
+    if (g[0].kind === 'reset') { await libUndoLastReset(g[0].paths); return; }
+    let undoFailed = false;
+    if (g[0].kind === 'trash_delete') { await libUndoTrashDelete(g[0]); return; }
+    libMetaUndoing = true;
+    try {
+      // Reverse order so a path changed twice in one group lands on its oldest value.
+      for (const r of [...g].reverse()) {
+        if (r.kind === 'rating') await setRating(r.path, r.prev);
+        else if (r.kind === 'label') await setLabel(r.path, r.prev);
+        else if (r.kind === 'color_label') { const saved = await setColorLabel(r.path, r.prev, true); if (!saved) undoFailed = true; }
+        else if (r.kind === 'favorite') await setFavorite(r.path, r.prev);
+        else if (r.kind === 'keywords') await restoreKeywords(r.path, r.prev);
+        else if (r.kind === 'album_add') {
+          await invoke('album_remove', { id: r.id, paths: r.paths }).catch((e) => toast(humanizeErr('undo the album add', e), 'err'));
+          await refreshAlbums();
+        }
+      }
+    } finally { libMetaUndoing = false; }
+    if (undoFailed) { libMetaUndo.push(g); toast('Could not undo colour label yet — retry when the photo folder is writable.'); return; }
+    if (state.viewMode === 'survey') surveyState.cells.forEach((cell, idx) => surveySyncCell(idx));
+    if (g[0].kind === 'album_add') { toast(`Undid add to "${g[0].name}"`); return; }
+    const n = new Set(g.map((r) => r.path)).size;
+    const noun = g[0].kind === 'label' ? 'flag' : g[0].kind === 'color_label' ? 'colour label' : g[0].kind === 'keywords' ? 'keyword' : g[0].kind;
+    toast(`Undid ${noun} change${n > 1 ? ` on ${n} photos` : ''}`);
+  }
+  async function libUndoTrashDelete(record) {
+    const retry = [];
+    const restored = [];
+    const errors = [];
+    for (const item of record.entries) {
+      try {
+        if (item.receipt.photo) {
+          await invoke('restore_trashed_entry', { receipt: item.receipt.photo });
+          item.receipt.photo = null;
+        }
+        if (item.receipt.sidecar) {
+          await invoke('restore_trashed_entry', { receipt: item.receipt.sidecar });
+          item.receipt.sidecar = null;
+        }
+        restored.push(item);
+      } catch (e) {
+        errors.push(`${baseName(item.path)}: ${humanizeErr('restore from Trash', e)}`);
+        retry.push(item);
+      }
+    }
+    let catalogRestoredCount = 0;
+    if (restored.length) {
+      const catalogPaths = restored.map((item) => item.path);
+      try { catalogRestoredCount = await invoke('catalog_note_restored', { paths: catalogPaths }); }
+      catch (e) {
+        errors.push(humanizeErr('update the restored Library catalog', e));
+        retry.push(...restored);
+        restored.length = 0;
+      }
+    }
+    const sameOrigin = libTrashOriginMatches(record.origin);
+    if (restored.length && sameOrigin) {
+      for (const item of restored) {
+        if (!state.entries.some((entry) => entry.path === item.path)) state.entries.push(item.entry);
+        if (item.sidecar) state.sidecars.set(item.path, item.sidecar); else state.sidecars.delete(item.path);
+        if (item.meta) state.meta.set(item.path, item.meta); else state.meta.delete(item.path);
+        imgCache.delete(item.path);
+      }
+      if (state._catalogTotal != null) state._catalogTotal += Number(catalogRestoredCount) || 0;
+      const livePaths = new Set(state.entries.map((entry) => entry.path));
+      state.selected = new Set(record.selectedBefore.filter((path) => livePaths.has(path)));
+      if (record.cullUndoState && record.origin.viewMode === 'survey' && compareState.mode !== 'cull') await enterCullMode();
+      if (record.cullUndoState && record.origin.viewMode === 'survey' && compareState.mode === 'cull') {
+        const deletedByAction = new Set(record.entries.map((item) => item.path));
+        const restoredByAction = new Set(restored.map((item) => item.path));
+        surveyState.cullPaths = record.cullUndoState.paths.filter((path) => livePaths.has(path) && (!deletedByAction.has(path) || restoredByAction.has(path)));
+        compareState.paths = surveyState.cullPaths.slice();
+        compareState.totalSelected = surveyState.cullPaths.length;
+        surveyState.cullOffset = record.cullUndoState.offset;
+        surveyState.focus = record.cullUndoState.focus;
+        await showCullPage(surveyState.cullOffset);
+        cullSyncDeleteBtn();
+      } else if (!record.cullUndoState) {
+        await refreshView();
+      }
+    } else if (restored.length) {
+      // A delete/undo can finish after the user navigates. Refresh whichever destination is
+      // current instead of injecting stale rows or reconstructing the old cull in this view.
+      await refreshView();
+    }
+    if (retry.length) {
+      record.entries = retry;
+      libMetaUndo.push([record]);
+      toast(`Restored ${restored.length}; ${retry.length} could not be restored. Undo remains available to retry. ${errors[0] || ''}`, 'err');
+      return;
+    }
+    toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
+  }
+  async function setRating(path, rating) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
+    const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
+    const updated = { ...cur, rating: n };
+    state.sidecars.set(path, updated);
+    let saved = true;
+    await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
+      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const holder = card && card.querySelector('.lib-stars');
+    if (holder) holder.outerHTML = starsHtml((state.sidecars.get(path) || cur).rating || 0);
+    if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
+    return saved;
+  }

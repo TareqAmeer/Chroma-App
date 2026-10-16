@@ -1,0 +1,1239 @@
+// ── HDR merge / focus stacking (ROADMAP R12) ────────────────────────────────────────────────
+// Both take a set of Library paths (2+ photos of the same scene), align them, blend them, and
+// write the result as a new PNG sitting next to the FIRST source photo — an ordinary photo the
+// Library then picks up and the user opens/edits normally, per R12's own "cleanest integration
+// point" call rather than inventing a new file type the rest of the app has to understand. See
+// merge.rs's module doc for the actual algorithms (ECC-equivalent translation alignment, Mertens
+// exposure fusion + median-outlier deghosting, variance-of-Laplacian focus stacking) and their
+// synthetic validation. Blocking/CPU-bound, so both run via spawn_blocking rather than on the
+// async command thread.
+fn merge_output_path(first_source: &str, suffix: &str) -> String {
+    let p = std::path::Path::new(first_source);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("merged");
+    let dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut candidate = dir.join(format!("{stem}{suffix}.png"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = dir.join(format!("{stem}{suffix}-{n}.png"));
+        n += 1;
+    }
+    candidate.to_string_lossy().into_owned()
+}
+
+/// N3.2: emits `merge.rs`'s `MergeProgress` callback ("decode"/"align"/"blend" phases, with real
+/// per-photo counts for decode) through the SAME `job-progress` event/schema `catalog-scan`
+/// already uses, onto the SAME activity pill in the Library sidebar (library-ui.js) — rather
+/// than inventing a fourth mechanism. Align/blend stay coarse 0/1→1/1 ticks (the alignment
+/// pyramid and Laplacian blend aren't instrumented internally — real intermediate progress there
+/// would mean threading a callback through an already-verified numerical algorithm's inner
+/// loops, not worth the risk for a step that's seconds long even on a big stack); decode gets a
+/// real i-of-n count since it's naturally one unit of work per source photo. These commands still
+/// have no cancel token (unlike the catalog scans) — merge.rs's tight loops have no natural
+/// cancellation point without that same invasive threading, so this is not wired to N3.3's
+/// fallback either; see docs/ROADMAP.md's N3 writeup for why that's a deliberate, documented gap.
+fn emit_job(app: &tauri::AppHandle, job: &str, label: &str, phase: &str, done: usize, total: usize) {
+    let _ = app.emit(
+        "job-progress",
+        &serde_json::json!({"job": job, "label": label, "phase": phase, "done": done, "total": total}),
+    );
+}
+
+// ⚠️ ROOT CAUSE of the Library activity pill getting permanently stuck on "Merging…"/"Stacking…":
+// each command below only called emit_job(..., "done", ...) on ITS OWN success path, after `?`
+// had already had every chance to return early on a decode/align/blend error. The pill (fed by
+// this same job-progress event, library-ui.js's activityUpdate) had already been moved to
+// 'align'/'blend' by the mid-op progress callback, so a failed merge left it parked there forever
+// — these jobs carry no cancelFn (see emit_job's doc comment above), so there was also no Cancel
+// action that could clear it; only reloading the window did. Fixed by running the real work
+// inside an `async` block and emitting "done" unconditionally afterward, from OUTSIDE the `?`
+// chain, so the pill always resolves — on success AND on failure — before the error is returned
+// to the caller (whose own catch already surfaces a toast via humanizeErr).
+#[tauri::command]
+async fn merge_hdr_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let app2 = app.clone();
+    let label = "Merging HDR";
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_hdr_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_hdr_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-hdr");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
+    emit_job(&app, "merge", label, "done", 1, 1);
+    result
+}
+
+#[tauri::command]
+async fn merge_focus_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let app2 = app.clone();
+    let label = "Focus stacking";
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_focus_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_focus_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-focus-stack");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
+    emit_job(&app, "merge", label, "done", 1, 1);
+    result
+}
+
+#[tauri::command]
+async fn merge_astro_photos(app: tauri::AppHandle, paths: Vec<String>, mode: String) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let mode2 = mode.clone();
+    let app2 = app.clone();
+    let label = "Astro stacking";
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_astro_progress(&paths2, &mode2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_astro_photos: join error: {e}"))??;
+        let suffix = if mode == "median" { "-astro-median" } else { "-astro-mean" };
+        let out_path = merge_output_path(&paths[0], suffix);
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
+    emit_job(&app, "merge", label, "done", 1, 1);
+    result
+}
+
+#[tauri::command]
+async fn merge_panorama_photos(app: tauri::AppHandle, paths: Vec<String>) -> Result<String, String> {
+    let paths2 = paths.clone();
+    let app2 = app.clone();
+    let label = "Merging panorama";
+    let result: Result<String, String> = async {
+        let png = tauri::async_runtime::spawn_blocking(move || {
+            let mut cb = |phase: &str, done: usize, total: usize| emit_job(&app2, "merge", label, phase, done, total);
+            merge::merge_panorama_progress(&paths2, &mut cb)
+        })
+        .await
+        .map_err(|e| format!("merge_panorama_photos: join error: {e}"))??;
+        let out_path = merge_output_path(&paths[0], "-panorama");
+        std::fs::write(&out_path, png).map_err(|e| format!("write {out_path}: {e}"))?;
+        Ok(out_path)
+    }
+    .await;
+    emit_job(&app, "merge", label, "done", 1, 1);
+    result
+}
+
+// ROADMAP R13 part 1 (collage) — the compositing itself runs entirely client-side in
+// chromasmith-22.html's/library-ui.js's own canvas (no alignment or heavy pixel math needed for
+// a fixed-template layout), so the only Rust piece it needs is the same collision-safe output
+// path convention `merge_output_path` already gives HDR/focus/astro merges; `write_file_bytes`
+// (already registered below) then writes the composited PNG the JS side builds.
+#[tauri::command(async)]
+fn collage_output_path(first_source: String) -> String {
+    merge_output_path(&first_source, "-collage")
+}
+
+fn film_negative_input<'a>(source: &'a [u16], json: &serde_json::Value) -> Result<std::borrow::Cow<'a, [u16]>, String> {
+    let recipe = &json["filmNegative"];
+    if recipe.is_null() { return Ok(std::borrow::Cow::Borrowed(source)); }
+    if recipe["domain"].as_str() != Some("camera-linear16-v1") { return Err("film negative: unsupported calibration domain; pick native film base again".into()); }
+    let read3 = |key: &str| -> Result<[f64; 3], String> {
+        let a = recipe[key].as_array().ok_or_else(|| format!("film negative: missing {key}"))?;
+        if a.len() != 3 { return Err(format!("film negative: invalid {key}")); }
+        Ok([a[0].as_f64().ok_or("invalid channel")?, a[1].as_f64().ok_or("invalid channel")?, a[2].as_f64().ok_or("invalid channel")?])
+    };
+    Ok(std::borrow::Cow::Owned(film_negative::convert_rgb16(source, read3("ref")?, read3("exp")?, recipe["out"].as_f64().ok_or("film negative: missing output reference")?, recipe["bw"].as_bool().unwrap_or(false))?))
+}
+
+fn film_source_key(payload: &[u8], json: &serde_json::Value) -> u64 {
+    // Persisted calibration identities must remain stable across Rust/app upgrades.
+    let mut h = blake3::Hasher::new();
+    h.update(payload);
+    for key in ["lutKey", "autoLens", "demosaicAlgo", "lensOverride", "lensOverrideFocal"] {
+        let value = json[key].to_string();
+        h.update(&(value.len() as u64).to_le_bytes());h.update(value.as_bytes());
+    }
+    u64::from_le_bytes(h.finalize().as_bytes()[..8].try_into().unwrap()) & ((1u64 << 52) - 1)
+}
+
+#[cfg(test)]
+mod film_negative_native_tests;
+
+fn check_film_source(payload: &[u8], json: &serde_json::Value) -> Result<(), String> {
+    if json["filmNegative"].is_object() && json["filmNegative"]["sourceKey"].as_u64() != Some(film_source_key(payload, json)) {
+        return Err("film negative: source/profile/geometry changed; pick native base again".into());
+    }
+    Ok(())
+}
+
+fn film_negative_bw(mut body: Vec<u8>, mode: &str, json: &serde_json::Value) -> Vec<u8> {
+    if matches!(mode, "lut" | "srgb") && json["filmNegative"]["bw"].as_bool() == Some(true) {
+        for pixel in body.chunks_exact_mut(4) {
+            let gray = (0.2126 * pixel[0] as f64 + 0.7152 * pixel[1] as f64 + 0.0722 * pixel[2] as f64).round() as u8;
+            pixel[0] = gray; pixel[1] = gray; pixel[2] = gray;
+        }
+    }
+    body
+}
+
+#[tauri::command(async)]
+fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    decode_raw_v2_payload(&json, payload)
+}
+
+fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tauri::ipc::Response, String> {
+    // sourcePath + empty payload: read the RAW natively (Library opens) instead of receiving the
+    // whole file over IPC. Same bytes either way, so the decode (and its memo key) is identical.
+    let path_bytes;
+    let payload: &[u8] = match (payload.is_empty(), json["sourcePath"].as_str()) {
+        (true, Some(p)) if !p.is_empty() => {
+            path_bytes = std::fs::read(p).map_err(|e| format!("read {p}: {e}"))?;
+            &path_bytes
+        }
+        _ => payload,
+    };
+    let mode = json["mode"].as_str().unwrap_or("linear16");
+    check_film_source(payload, &json)?;
+    let film_source = json["filmSource"].as_bool().unwrap_or(false) || mode == "sampleFilmBase" || json["filmNegative"].is_object();
+    let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
+    // "off"|"fast" ONLY — decode_raw_v2 is also the Library's thumbnail-decode path, so it must
+    // be STRUCTURALLY unable to trigger the ~25-90s neural High tier no matter what a caller
+    // sends; High only ever runs via the separate denoise_raw_high command below (see the
+    // denoiser design doc §A4). `nativeNr` (bool) is kept as a fallback for any caller still on
+    // the pre-tier JS build (desktop-native.js ships both fields for one release — see
+    // chromasmith-22.html's applyUISnapshot migration comment).
+    let nr = match json["rawNr"].as_str() {
+        Some("off") => raw_decode::NrTier::Off,
+        Some("fast") => raw_decode::NrTier::Fast,
+        Some("chroma") => raw_decode::NrTier::Chroma,
+        Some(other) => {
+            eprintln!("decode_raw_v2: rawNr={other:?} not accepted here (High runs via denoise_raw_high) — using Fast");
+            raw_decode::NrTier::Fast
+        }
+        None => {
+            if json["nativeNr"].as_bool().unwrap_or(true) {
+                raw_decode::NrTier::Fast
+            } else {
+                raw_decode::NrTier::Off
+            }
+        }
+    };
+    // Per-photo "RAW Processing" mode ("" = Standard/PPG, "ahd" = Sparkle-optimized) — see
+    // raw_decode.rs's decode_rw2_bytes doc comment for why this is opt-in, not a global default.
+    // Validate at the UI boundary: raw_decode.rs's decode_and_demosaic only accepts "" (PPG),
+    // "ahd", "vng", "mhc", "markesteijn1", or "markesteijn3" — any other string used to reach a `panic!` deep inside the demosaic
+    // branch and take down the whole process. An unrecognized value here (stale localStorage,
+    // future JS typo, etc.) now silently falls back to the standard "" (PPG) algorithm instead.
+    let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
+    let demosaic_algo = match demosaic_algo_raw {
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo_raw,
+        other => {
+            eprintln!("decode_raw_v2: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
+            ""
+        }
+    };
+    // Two-phase decode: `fast=true` skips the false-color-suppression / hue-defringe / native-NR
+    // passes (the serial, full-frame CPU work that made RAW opens take up to ~15s) so the shell
+    // can display a photo almost immediately, then request a `fast=false` decode of the SAME
+    // bytes in the background to silently upgrade to full quality once it lands (see
+    // desktop/desktop-native.js's NativeLibRawShim.open()/refine()). Defaults to false so any
+    // caller that doesn't set it gets today's unchanged, full-quality-only behavior.
+    let fast = json["fast"].as_bool().unwrap_or(false);
+    let _raw_diag = diag::raw_op(format!(
+        "decode_raw_v2 mode={} fast={} bytes={}",
+        mode, fast, payload.len()
+    ));
+    // Manual lens override (see list_lens_profiles below): a "Maker Model" string the user
+    // picked from the bundled DB's own lens list, paired with a focal length in mm — for
+    // manual/adapted lenses (TTArtisan and similar) that write no lens EXIF at all, so no
+    // amount of EXIF fallback can recover a tag the camera never wrote.
+    let lens_override = match (json["lensOverride"].as_str(), json["lensOverrideFocal"].as_f64()) {
+        (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
+        _ => None,
+    };
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    payload.hash(&mut hasher); // &[u8]'s Hash impl is a single bulk write, not per-byte — cheap even at 40MB+
+    format!("{nr:?}").hash(&mut hasher);
+    demosaic_algo.hash(&mut hasher);
+    fast.hash(&mut hasher);
+    film_source.hash(&mut hasher);
+    auto_lens.hash(&mut hasher);
+    lens_override.map(|(l, f)| (l, f.to_bits())).hash(&mut hasher);
+    let decode_key = hasher.finish();
+    let mut _st = std::time::Instant::now(); // per-stage RAW_DIAG op=v2 lines (CS_DIAG_RAW_STAGES=1)
+    let decoded: std::sync::Arc<raw_decode::DecodedRaw> = {
+        let cached = RAW_DECODE_CACHE
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().filter(|e| e.key == decode_key).map(|e| e.decoded.clone()));
+        match cached {
+            Some(d) => d,
+            None => {
+                let interactive = json["lutKey"].as_str().is_some();
+                let run = || raw_decode::decode_rw2_bytes_film(payload, auto_lens, nr, demosaic_algo, fast, lens_override, 1.0, None, None, film_source);
+                let d = std::sync::Arc::new(if interactive { on_interactive_pool(run)? } else { run()? });
+                if let Ok(mut guard) = RAW_DECODE_CACHE.lock() {
+                    *guard = Some(RawDecodeCacheEntry { key: decode_key, decoded: d.clone() });
+                }
+                d
+            }
+        }
+    };
+    if mode == "sampleFilmBase" {
+        let nx = json["nx"].as_f64().ok_or("film base: missing x")?;
+        let ny = json["ny"].as_f64().ok_or("film base: missing y")?;
+        let source = match json["lutKey"].as_str() { Some(key) => lut_input_rgb16(key, payload, &decoded), None => std::borrow::Cow::Borrowed(decoded.rgb16.as_slice()) };
+        let (rgb, n) = film_negative::sample_rgb16(&source, decoded.width as usize, decoded.height as usize, nx, ny)?;
+        return Ok(tauri::ipc::Response::new(serde_json::to_vec(&serde_json::json!({"rgb":rgb,"n":n,"nx":nx,"ny":ny,"domain":"camera-linear16-v1","sourceKey":film_source_key(payload,&json)})).map_err(|e|e.to_string())?));
+    }
+    // usedLut in the response header tells JS whether its requested mode was actually honored,
+    // since the body FORMAT differs (RGBA8 for lut/srgb vs raw u16 for linear16) and it needs to
+    // parse the right one. See effective_dcp_mode's doc comment for the "why a backstop" reasoning.
+    let lut_key = json["lutKey"].as_str();
+    diag::stage("v2", "-", "decode_or_cached", &mut _st);
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
+    // docs/ROADMAP.md R1 (scene-referred), desktop path: JS asks for the extended-range companion
+    // buffer only when it's actually going to use it (a real DCP LUT apply, not srgb/linear16 —
+    // see desktop-native.js's open()). Kept fully opt-in so every existing caller/response shape
+    // is untouched when absent — `ext` is None unless want_ext AND the lut branch is taken.
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"]["bw"].as_bool() != Some(true);
+    let mut ext: Option<Vec<f32>> = None;
+    let body: Vec<u8> = match effective_mode {
+        "lut" => {
+            let key = lut_key.ok_or("missing lutKey")?;
+            let lut = {
+                let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+                guard
+                    .as_ref()
+                    .and_then(|m| m.get(key).cloned())
+                    .ok_or_else(|| format!("LUT '{key}' not registered"))?
+            };
+            let n = (lut.len() / 3) as f64;
+            let n = n.cbrt().round() as usize;
+            let src = on_interactive_pool(|| lut_input_rgb16(key, payload, &decoded));
+            let src = film_negative_input(&src, &json)?;
+            if want_ext {
+                let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&src, &lut, n))?;
+                ext = Some(e);
+                rgba
+            } else {
+                on_interactive_pool(|| raw_decode::apply_lut_rgba(&src, &lut, n))?
+            }
+        }
+        "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
+        _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect(),
+    };
+    let body = film_negative_bw(body, effective_mode, &json);
+    diag::stage("v2", "-", "lut_apply", &mut _st);
+    // HDR preview asked for the unquantized companion, but JS only uses it when some value is
+    // measurably above white (chromasmith-22.html: any > 1.05). When none is, the RGBA8 body is
+    // the whole story: drop the companion (JS then sees "no headroom", same as before) so the
+    // frame is cacheable like any SDR decode, and leave a marker so later opens may take the
+    // cache instead of re-decoding every time (HDR preview used to bypass every cache).
+    let mut hdr_clear = false;
+    if want_ext {
+        if let Some(e) = ext.as_ref() {
+            if !e.iter().any(|v| *v > 1.05) { hdr_clear = true; }
+        }
+        if hdr_clear { ext = None; }
+    }
+    // Persistent decode cache for an interactive open (desktop-native.js sends cachePath +
+    // recipeKey only on the call whose pixels are FINAL, and only for a real on-disk source).
+    // Only the RGBA8 display-referred body is cacheable — same shape cache_raw_decode writes; a
+    // linear16 or HDR-companion decode keeps today's uncached behaviour. The size check refuses
+    // a request whose bytes aren't that file's (e.g. a stale path from another open path).
+    if let (Some(cache_path), Some(recipe_key)) = (json["cachePath"].as_str(), json["recipeKey"].as_str()) {
+        // The RGBA8 body is the frame whether or not the unquantized companion rode along; the
+        // companion (real headroom only) is persisted sparsely beside it (library.rs hdrext).
+        let rgba_body = matches!(effective_mode, "lut" | "srgb");
+        if rgba_body && !cache_path.is_empty() && !recipe_key.is_empty() {
+            if let Ok(meta) = std::fs::metadata(cache_path) {
+                if meta.len() == payload.len() as u64 {
+                    // Not also inserted into RAW_EDITOR_CACHE: the WebView already holds this frame
+                    // for promotion (imgCache fullImg), and a second 96MB-per-photo copy here was
+                    // measurable extra swap on an 8GB Mac. The Arc is dropped once persisted.
+                    let frame = std::sync::Arc::new(body.clone());
+                    let hdr_ext = ext.as_ref().and_then(|e| library::build_hdr_ext_blob(cache_path, recipe_key, decoded.width, decoded.height, e));
+                    persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame, hdr_clear, hdr_ext);
+                }
+            }
+        }
+    }
+    diag::stage("v2", "-", "persist_prep", &mut _st);
+    let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
+    let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
+    let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
+    let mut out = Vec::with_capacity(24 + body.len() + ext_bytes.len());
+    out.extend_from_slice(&decoded.width.to_le_bytes());
+    out.extend_from_slice(&decoded.height.to_le_bytes());
+    out.extend_from_slice(&decoded.iso.to_le_bytes());
+    out.extend_from_slice(&used_lut.to_le_bytes());
+    out.extend_from_slice(&lens_applied.to_le_bytes());
+    out.extend_from_slice(&has_ext.to_le_bytes());
+    out.extend_from_slice(&body);
+    out.extend_from_slice(&ext_bytes);
+    diag::stage("v2", "-", "response_build", &mut _st);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Warms the persistent editor cache without opening photos in the WebView. One native full
+/// decode is used per photo; future opens use the lossless in-process pixels instead of paying
+/// the RAW demosaic cost again. The persistent PNG remains the restart fallback.
+#[tauri::command(async)]
+fn cache_raw_decode(
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    display_only: Option<bool>,
+) -> Result<String, String> {
+    let display_only = display_only.unwrap_or(false);
+    let file_name = Path::new(&path)
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("?")
+        .to_string();
+    let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
+    let mut stage_t = std::time::Instant::now();
+    let ext = Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !formats::is_raw_ext(&ext) {
+        return Err("selected file is not a RAW photo".into());
+    }
+    if library::decode_cache_exists(&path, &recipe_key)? {
+        diag::stage("cache", &file_name, "already_cached_check", &mut stage_t);
+        let display_path =
+            library::get_display_decode_cache(path.clone(), recipe_key.clone(), 2560)?;
+        diag::stage(
+            "cache",
+            &file_name,
+            "display_proxy_from_existing",
+            &mut stage_t,
+        );
+        if display_only {
+            return Ok(display_path);
+        }
+        // CHR-120: this shortcut used to return without ever touching RAW_EDITOR_CACHE — so a
+        // "Cache RAWs" batch action on a photo already cached from an earlier app launch (the
+        // common case: the on-disk PNG persists across relaunches, RAW_EDITOR_CACHE does not)
+        // warmed nothing, and the very next interactive open fell through to the much slower
+        // asset-protocol PNG-decode path instead of the fast in-process path — confirmed live:
+        // this exact case measured ~9s to full quality vs ~6s when the in-process cache really
+        // was warm. Best-effort: read the existing PNG back in and populate the in-process
+        // cache from it, same shape as the fresh-decode path below; a failure here just means
+        // the interactive open falls back to the PNG path as it always did, no regression.
+        if let Ok(meta) = std::fs::metadata(&path) {
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            // CHR-120: skip the PNG read+decode entirely when RAW_EDITOR_CACHE already holds
+            // this exact (path, recipe, mtime, size) — this branch used to pay it every single
+            // call regardless, so calling "Cache RAWs" twice on the same already-cached photo in
+            // one session (or an interactive reopen right after a batch cache, which takes this
+            // same shortcut) re-read and re-decoded a PNG it had JUST put in memory moments
+            // earlier. Confirmed live via tools/diagnostics/raw_bench.py's "cached" scenario.
+            let already_in_process = RAW_EDITOR_CACHE
+                .lock()
+                .ok()
+                .map(|g| {
+                    g.iter().any(|e| {
+                        e.path == path
+                            && e.recipe_key == recipe_key
+                            && e.mtime == mtime
+                            && e.size == meta.len()
+                    })
+                })
+                .unwrap_or(false);
+            if already_in_process {
+                diag::stage(
+                    "cache",
+                    &file_name,
+                    "already_in_process_cache",
+                    &mut stage_t,
+                );
+            } else if let Ok(rgba_img) = library::read_decode_cache_rgba(&path, &recipe_key) {
+                let (w, h) = (rgba_img.width(), rgba_img.height());
+                raw_editor_cache_insert(
+                    &path,
+                    &recipe_key,
+                    mtime,
+                    meta.len(),
+                    w,
+                    h,
+                    std::sync::Arc::new(rgba_img.into_raw()),
+                );
+                diag::stage(
+                    "cache",
+                    &file_name,
+                    "reread_cache_into_process_cache",
+                    &mut stage_t,
+                );
+            }
+        }
+        return Ok("cached".into());
+    }
+    if display_only {
+        if let Ok(display_path) =
+            library::get_display_decode_cache_path(path.clone(), recipe_key.clone(), 2560)
+        {
+            return Ok(display_path);
+        }
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    diag::stage("cache", &file_name, "read_file", &mut stage_t);
+    // decode_rw2_bytes emits its own finer-grained RAW_DIAG stage= lines (demosaic_or_cache,
+    // high_nr, false_color, hue_defringe, orientation, lens, native_nr — raw_decode.rs) under
+    // op=decode; this coarser "decode_total" line below lets a consumer that only wants the
+    // top-level breakdown skip summing those without losing them for one that wants the detail.
+    let develop = || -> Result<(raw_decode::DecodedRaw, Vec<u8>, bool, Option<Vec<u8>>), String> {
+        let result = develop_raw_frame(
+            &path,
+            &recipe_key,
+            &bytes,
+            &mode,
+            &lut_key,
+            &raw_nr,
+            auto_lens,
+            &demosaic_algo,
+            &lens_override,
+            lens_override_focal,
+            true,
+        )?;
+        diag::stage("cache", &file_name, "decode_total", &mut stage_t);
+        diag::stage("cache", &file_name, "colour_convert", &mut stage_t);
+        Ok(result)
+    };
+    // Batch/full-cache work keeps its existing global-pool behavior. Only the explicitly
+    // user-waiting display-only review decode and its full-frame color conversion are promoted.
+    let (decoded, rgba, hdr_clear, hdr_blob) = run_raw_cache_development(display_only, develop)?;
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
+        .ok_or("decoded RGBA dimensions do not match")?;
+    let rgba = img.into_raw();
+    if display_only {
+        // RAW review needs only a bounded display asset. Keep the developed pixels transient:
+        // this branch must not write the full decode cache or warm RAW_EDITOR_CACHE.
+        return library::write_display_cache_from_rgba(
+            &path,
+            &recipe_key,
+            decoded.width,
+            decoded.height,
+            &rgba,
+            2560,
+            &file_name,
+            &mut stage_t,
+        );
+    }
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let rgba = std::sync::Arc::new(rgba);
+    raw_editor_cache_insert(
+        &path,
+        &recipe_key,
+        mtime,
+        meta.len(),
+        decoded.width,
+        decoded.height,
+        rgba.clone(),
+    );
+    diag::stage("cache", &file_name, "in_process_cache_insert", &mut stage_t);
+    // Persistent fallback for the next launch (PNG) + the display-sized proxy — the in-process
+    // cache above is the fast path. Same helper the interactive open uses (decode_raw_v2).
+    persist_decoded_rgba(
+        &path,
+        &recipe_key,
+        decoded.width,
+        decoded.height,
+        &rgba,
+        &file_name,
+        &mut stage_t,
+    )?;
+    if hdr_clear {
+        library::write_hdr_clear_marker(&path, &recipe_key);
+    } else if let Some(b) = hdr_blob.as_ref() {
+        library::write_hdr_ext_blob(&path, &recipe_key, b);
+    }
+    Ok("written".into())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawFaceCropHeader {
+    face_id: i64,
+    width: u32,
+    height: u32,
+    offset: usize,
+    length: usize,
+}
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawFaceDetailHeader {
+    source_width: u32,
+    source_height: u32,
+    lens_correction_applied: bool,
+    crops: Vec<RawFaceCropHeader>,
+}
+
+/// Develop one full RAW once with the caller's explicit recipe settings, then return only bounded
+/// face JPEGs. Unlike cache_raw_decode, this path never writes a full-frame cache or editor frame.
+#[tauri::command(async)]
+async fn catalog_raw_face_detail(
+    app: tauri::AppHandle,
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    face_ids: Vec<i64>,
+) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        catalog_raw_face_detail_run(
+            app, path, recipe_key, mode, lut_key, raw_nr, auto_lens, demosaic_algo,
+            lens_override, lens_override_focal, face_ids,
+        )
+    })
+    .await
+    .map_err(|e| format!("catalog_raw_face_detail task panicked: {e}"))?
+}
+
+fn catalog_raw_face_detail_run(
+    app: tauri::AppHandle,
+    path: String,
+    recipe_key: String,
+    mode: String,
+    lut_key: String,
+    raw_nr: String,
+    auto_lens: bool,
+    demosaic_algo: String,
+    lens_override: String,
+    lens_override_focal: f64,
+    face_ids: Vec<i64>,
+) -> Result<tauri::ipc::Response, String> {
+    if recipe_key.trim().is_empty() {
+        return Err("RAW face detail recipe key is empty".into());
+    }
+    if !matches!(mode.as_str(), "srgb" | "lut") {
+        return Err("RAW face detail mode must be srgb or lut".into());
+    }
+    if !matches!(raw_nr.as_str(), "off" | "fast" | "chroma") {
+        return Err("unsupported RAW face detail NR tier".into());
+    }
+    if !lens_override_focal.is_finite() || lens_override_focal < 0.0 {
+        return Err("invalid RAW face detail focal length".into());
+    }
+    let state = app.state::<catalog::CatalogState>();
+    let source = catalog::raw_face_detail_source(&state, &path, &face_ids)?;
+    let ext = Path::new(&source.path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !formats::is_raw_ext(&ext) {
+        return Err("face detail source is not RAW".into());
+    }
+    let before =
+        std::fs::metadata(&source.path).map_err(|e| format!("stat RAW face source: {e}"))?;
+    let before_modified = before
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos());
+    let before_size = before.len();
+    let bytes = std::fs::read(&source.path).map_err(|e| format!("read RAW face source: {e}"))?;
+    if bytes.len() as u64 != before_size {
+        return Err("RAW source changed while reading".into());
+    }
+    let source_path = source.path.clone();
+    let recipe = recipe_key.clone();
+    let mode_for_decode = mode.clone();
+    let lut = lut_key.clone();
+    let nr = raw_nr.clone();
+    let algo = demosaic_algo.clone();
+    let lens = lens_override.clone();
+    let (decoded, rgba, _, _) = run_raw_cache_development(true, move || {
+        develop_raw_frame(
+            &source_path,
+            &recipe,
+            &bytes,
+            &mode_for_decode,
+            &lut,
+            &nr,
+            auto_lens,
+            &algo,
+            &lens,
+            lens_override_focal,
+            false,
+        )
+    })?;
+    let after =
+        std::fs::metadata(&source.path).map_err(|e| format!("restat RAW face source: {e}"))?;
+    let after_modified = after
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos());
+    if before_size != after.len() || before_modified != after_modified {
+        return Err("RAW source changed during face detail decode".into());
+    }
+    let crops =
+        catalog::encode_raw_face_details(&rgba, decoded.width, decoded.height, &source.faces)?;
+    let mut payload = Vec::new();
+    let mut descriptors = Vec::with_capacity(crops.len());
+    for (face_id, width, height, jpeg) in crops {
+        let offset = payload.len();
+        let length = jpeg.len();
+        payload.extend_from_slice(&jpeg);
+        descriptors.push(RawFaceCropHeader {
+            face_id,
+            width,
+            height,
+            offset,
+            length,
+        });
+    }
+    let header = serde_json::to_vec(&RawFaceDetailHeader {
+        source_width: decoded.width,
+        source_height: decoded.height,
+        lens_correction_applied: decoded.lens_applied,
+        crops: descriptors,
+    })
+    .map_err(|e| format!("serialize RAW face detail header: {e}"))?;
+    let header_len = u32::try_from(header.len()).map_err(|_| "RAW face detail header too large")?;
+    let mut response = Vec::with_capacity(4 + header.len() + payload.len());
+    response.extend_from_slice(&header_len.to_le_bytes());
+    response.extend_from_slice(&header);
+    response.extend_from_slice(&payload);
+    Ok(tauri::ipc::Response::new(response))
+}
+
+/// Returns the lossless in-process RAW cache populated by cache_raw_decode.
+#[tauri::command(async)]
+fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs()).unwrap_or(0);
+    let hit = {
+        let guard = RAW_EDITOR_CACHE.lock().map_err(|_| "RAW editor cache lock poisoned".to_string())?;
+        guard.iter().rev().find(|entry| entry.path == path && entry.recipe_key == recipe_key
+            && entry.mtime == mtime && entry.size == meta.len())
+            .map(|e| (e.width, e.height, e.rgba.clone()))
+    };
+    // After a relaunch the in-process cache is empty: decode the persistent cache natively
+    // (QOI, a fraction of a second) instead of making the WebView decode a 24MP PNG (3-4s).
+    // Not inserted into RAW_EDITOR_CACHE — the WebView keeps its own copy of this frame.
+    let (width, height, rgba) = match hit {
+        Some(v) => v,
+        None => {
+            let img = library::read_decode_cache_rgba(&path, &recipe_key).map_err(|_| "no cached decode".to_string())?;
+            (img.width(), img.height(), std::sync::Arc::new(img.into_raw()))
+        }
+    };
+    let mut out = Vec::with_capacity(8 + rgba.len());
+    out.extend_from_slice(&width.to_le_bytes());
+    out.extend_from_slice(&height.to_le_bytes());
+    out.extend_from_slice(rgba.as_ref());
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Decode a still the WebView can't (formats::STILL_RUST_EXTS — EXR/HDR/TGA/DDS/QOI/FF/PNM*/
+/// JXL) to display-ready RGBA8. Same framed-request wire format as decode_raw_v2, but a JSON
+/// *response* header (same idiom as faceparse_run above) rather than decode_raw_v2's fixed
+/// 12-byte layout, because this one carries variable metadata (dpi, dpiKnown, a human-readable
+/// note) and there's no reason to invent a second fixed layout for that.
+///
+/// Request : [u32 jsonLen][json {"ext":"exr"}][file bytes]
+/// Response: [u32 hdrLen][json {"w","h","dpi","dpiKnown","note"}][RGBA8 w*h*4]
+#[tauri::command(async)]
+fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let ext = json["ext"].as_str().unwrap_or("").to_lowercase();
+    // docs/ROADMAP.md F6: optional 0-based frame index for a multi-frame ICO/CUR — absent (the
+    // overwhelming majority of calls) reproduces today's exact "largest entry" behaviour via
+    // still_decode::open_any_bytes_at's own None-is-open_any_bytes contract.
+    let frame = json["frame"].as_u64().map(|v| v as usize);
+    let decoded = still_decode::open_any_bytes_at(payload, &ext, frame)?;
+    let frame_count = still_decode::frame_count(payload, &ext);
+    // docs/ROADMAP.md F4: an EXR/HDR source that actually clipped carries a real-headroom companion
+    // buffer (see still_decode::hdr_to_srgb8's doc comment) — surfaced via a `hasExt` header
+    // flag + a trailing w*h*3 f32 LE segment, same shape as decode_raw_v2's `has_ext`/ext body,
+    // so desktop-native.js's chromasmithDecodeStill can build the SAME `_sceneLinear`/
+    // `_sceneLinearPresent` stash FX.setImage already knows how to upload as HDR. Every existing
+    // caller that doesn't read past the RGBA8 body is completely unaffected — `hasExt` defaults
+    // false and the extra bytes are only appended when Some.
+    #[derive(serde::Serialize)]
+    struct Header {
+        w: u32,
+        h: u32,
+        dpi: u32,
+        #[serde(rename = "dpiKnown")]
+        dpi_known: bool,
+        note: Option<String>,
+        #[serde(rename = "hasExt")]
+        has_ext: bool,
+        #[serde(rename = "frameCount")]
+        frame_count: Option<usize>,
+    }
+    let ext_bytes: Vec<u8> = decoded
+        .ext
+        .as_ref()
+        .map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect())
+        .unwrap_or_default();
+    let header = Header {
+        w: decoded.w,
+        h: decoded.h,
+        dpi: decoded.dpi,
+        dpi_known: decoded.dpi_known,
+        note: decoded.note,
+        has_ext: decoded.ext.is_some(),
+        frame_count,
+    };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("decode_image_v1 header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + decoded.rgba.len() + ext_bytes.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&decoded.rgba);
+    out.extend_from_slice(&ext_bytes);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Cancel flags for in-flight denoise_raw_high calls, keyed by the caller-supplied token.
+/// Entries are removed by the SAME call that inserted them once it returns (success, error, or
+/// cancelled) — cancel_denoise_high only ever flips a flag that may or may not still be there
+/// (a token for a call that already finished is a harmless no-op, not an error).
+static NR_CANCEL_FLAGS: Mutex<Option<HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>> = Mutex::new(None);
+
+/// The High-tier neural RAW denoiser (RawNIND UtNet2 — see rawdenoise.rs), deliberately a
+/// SEPARATE command from decode_raw_v2 so the Library's thumbnail-decode path is structurally
+/// unable to trigger it (decode_raw_v2 only ever accepts "off"/"fast" — see its own comment).
+/// Same framed-request shape and 20-byte response header as decode_raw_v2 so the JS side
+/// (desktop-native.js's NativeLibRawShim.denoiseHigh()) can swap the canvas through the exact
+/// mechanism refine() already uses. Emits "raw-nr-progress" ({token,done,total}) once per tile
+/// row (~15 events at 24MP, not per tile — see the denoiser design doc §A4).
+#[tauri::command(async)]
+fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    check_film_source(payload, &json)?;
+    let _raw_diag = diag::raw_op(format!("denoise_raw_high bytes={}", payload.len()));
+    let token = json["token"].as_str().unwrap_or("").to_string();
+    let mode = json["mode"].as_str().unwrap_or("linear16");
+    let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
+    let demosaic_algo_raw = json["demosaicAlgo"].as_str().unwrap_or("");
+    let demosaic_algo = match demosaic_algo_raw {
+        "" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3" => demosaic_algo_raw,
+        other => {
+            eprintln!("denoise_raw_high: unknown demosaicAlgo={other:?} — defaulting to standard (PPG)");
+            ""
+        }
+    };
+    let lens_override = match (json["lensOverride"].as_str(), json["lensOverrideFocal"].as_f64()) {
+        (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
+        _ => None
+    };
+    // Blend-toward-original amount (0-100 from the UI slider, default 100 = full strength for
+    // any caller that doesn't send it) — see rawdenoise::denoise_frame_high's doc comment.
+    let high_strength = (json["highStrength"].as_f64().unwrap_or(100.0) as f32 / 100.0).clamp(0.0, 1.0);
+
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    if !token.is_empty() {
+        let mut guard = NR_CANCEL_FLAGS.lock().map_err(|_| "NR cancel-flag lock poisoned".to_string())?;
+        guard.get_or_insert_with(HashMap::new).insert(token.clone(), cancel.clone());
+    }
+    let app_for_progress = app.clone();
+    let token_for_progress = token.clone();
+    let progress = move |done: usize, total: usize| {
+        let _ = app_for_progress.emit("raw-nr-progress", &serde_json::json!({"token": token_for_progress, "done": done, "total": total}));
+    };
+
+    let result = raw_decode::decode_rw2_bytes_film(
+        payload,
+        auto_lens,
+        raw_decode::NrTier::High,
+        demosaic_algo,
+        false, // never the `fast` pass — High is always the full-quality decode
+        lens_override,
+        high_strength,
+        Some(&progress),
+        Some(&cancel),
+        json["filmSource"].as_bool().unwrap_or(false) || json["filmNegative"].is_object()
+    );
+
+    if !token.is_empty() {
+        if let Ok(mut guard) = NR_CANCEL_FLAGS.lock() {
+            if let Some(map) = guard.as_mut() {
+                map.remove(&token);
+            }
+        }
+    }
+    let decoded = result?;
+
+    let lut_key = json["lutKey"].as_str();
+    let (effective_mode, used_lut) = effective_dcp_mode(mode, &decoded.make, lut_key);
+    // docs/ROADMAP.md R1 — same opt-in extended-range companion as decode_raw_v2, same reasoning:
+    // this IS the path a user actually views once NR finishes, so it matters at least as much
+    // here.
+    let want_ext = json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"]["bw"].as_bool() != Some(true);
+    let mut ext: Option<Vec<f32>> = None;
+    let body: Vec<u8> = match effective_mode {
+        "lut" => {
+            let key = lut_key.ok_or("missing lutKey")?;
+            let lut = {
+                let guard = DCP_LUTS.lock().map_err(|_| "DCP LUT cache lock poisoned".to_string())?;
+                guard
+                    .as_ref()
+                    .and_then(|m| m.get(key).cloned())
+                    .ok_or_else(|| format!("LUT '{key}' not registered"))?
+            };
+            let n = (lut.len() / 3) as f64;
+            let n = n.cbrt().round() as usize;
+            let src = lut_input_rgb16(key, payload, &decoded);
+            let src = film_negative_input(&src, &json)?;
+            if want_ext {
+                let (rgba, e) = raw_decode::apply_lut_rgba_ext(&src, &lut, n)?;
+                ext = Some(e);
+                rgba
+            } else {
+                raw_decode::apply_lut_rgba(&src, &lut, n)?
+            }
+        }
+        "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
+        _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect()
+    };
+    let body = film_negative_bw(body, effective_mode, &json);
+    let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
+    let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
+    let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
+    let mut out = Vec::with_capacity(24 + body.len() + ext_bytes.len());
+    out.extend_from_slice(&decoded.width.to_le_bytes());
+    out.extend_from_slice(&decoded.height.to_le_bytes());
+    out.extend_from_slice(&decoded.iso.to_le_bytes());
+    out.extend_from_slice(&used_lut.to_le_bytes());
+    out.extend_from_slice(&lens_applied.to_le_bytes());
+    out.extend_from_slice(&has_ext.to_le_bytes());
+    out.extend_from_slice(&body);
+    out.extend_from_slice(&ext_bytes);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command(async)]
+fn cancel_denoise_high(token: String) {
+    if let Ok(guard) = NR_CANCEL_FLAGS.lock() {
+        if let Some(map) = guard.as_ref() {
+            if let Some(flag) = map.get(&token) {
+                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+}
+
+#[tauri::command(async)]
+fn list_lens_profiles() -> Vec<lens_correct::LensProfileEntry> {
+    lens_correct::list_lens_profiles()
+}
+
+// Open a URL in the user's default system browser. Needed because the WKWebView shell has no
+// browser chrome — `window.open()`/`<a target="_blank">` (the Google Photos picker's normal
+// web-build fallback chain) silently do nothing here, exactly like the OAuth consent screen
+// would if it used the same approach (google_oauth_loopback already spawns `open` for that
+// reason). Same fix, generalized: the Photos Picker's "Tap to open" link goes through this too.
+#[tauri::command]
+fn open_url_native(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("refusing to open a non-http(s) URL".into());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("couldn't open the system browser: {e}"))
+}
+
+// Trackpad haptic feedback — hapt() (chromasmith-22.html) previously ONLY fired on
+// window.Capacitor (the iOS shell), so the desktop build had zero haptic feedback on slider
+// detents/flag toggles/etc despite Macs with a Force Touch trackpad supporting exactly this via
+// NSHapticFeedbackManager. .generic is Apple's own "neutral UI event" pattern (same one Finder
+// uses for e.g. snapping icons to a grid) — .alignment/.levelChange read as more specific
+// gestures than a slider nudge or a flag toggle actually are. Silently a no-op on a non-Force-
+// Touch trackpad or an external mouse (defaultPerformer() itself handles that — nothing to
+// detect here). macOS-only; see the JS-side hapt() for the window.__TAURI__ branch that calls
+// this, and Cargo.toml's target.'cfg(target_os = "macos")' dependencies for objc2-app-kit.
+// AppKit calls are main-thread-only — a #[tauri::command] otherwise runs on Tauri's async
+// runtime (not guaranteed to be the main thread), so this dispatches via run_on_main_thread
+// (the same pattern Tauri's own macOS window code uses internally, per app.rs) rather than
+// calling NSHapticFeedbackManager directly from whatever thread invoked this command.
+/// Swiss Kinetic redesign: the frontend draws its own close/minimise/full-screen squares
+/// (chromasmith-22.html #cs-win, wired in desktop-native.js), so the native traffic lights are
+/// hidden. The Overlay title bar itself stays (drag region, rounded corners, resizing). AppKit
+/// re-shows the standard buttons after some transitions (leaving full screen), so this is also
+/// re-run on resize/focus. Windows keeps its native frame, so this is macOS-only.
+#[cfg(target_os = "macos")]
+fn hide_traffic_lights(window: &tauri::WebviewWindow) {
+    let w = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        use objc2_app_kit::{NSWindow, NSWindowButton};
+        let Ok(ptr) = w.ns_window() else { return };
+        let ns: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+        for b in [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton] {
+            if let Some(btn) = ns.standardWindowButton(b) {
+                btn.setHidden(true);
+            }
+        }
+    });
+}
+#[cfg(not(target_os = "macos"))]
+fn hide_traffic_lights(_window: &tauri::WebviewWindow) {}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn haptic_feedback(app: tauri::AppHandle) {
+    let _ = app.run_on_main_thread(|| {
+        use objc2_app_kit::{NSHapticFeedbackManager, NSHapticFeedbackPattern, NSHapticFeedbackPerformer};
+        let performer = NSHapticFeedbackManager::defaultPerformer();
+        performer.performFeedbackPattern_performanceTime(
+            NSHapticFeedbackPattern::Generic,
+            objc2_app_kit::NSHapticFeedbackPerformanceTime::Default,
+        );
+    });
+}
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+fn haptic_feedback(_app: tauri::AppHandle) {}
+
+/// The single source of truth for every macOS-vs-Windows difference the frontend needs to know
+/// about (docs/windows-port.md ground rule 1: "one frontend, capability-gated, never OS-gated").
+/// `desktop-native.js` exposes this once as `window.CS_PLATFORM`; shared JS in library-ui.js
+/// checks a capability field, never `os` directly, so a feature that's macOS-only today shows up
+/// on Windows as either working or cleanly hidden the moment the Rust side gains it — never
+/// broken or silently wrong (the `split('/')` / "Reveal in Finder" / hard-coded ⌘-label class of
+/// bug this fixes, G12).
+#[derive(serde::Serialize)]
+struct PlatformCapabilities {
+    os: &'static str,
+    // macOS keeps its Core Image HEIC gain-map path (write_gainmap_heic/_from_map); Windows
+    // (and, if ever wanted, macOS too) gets pure-Rust Ultra HDR JPEG instead
+    // (write_gainmap_uhdr_from_map, gainmap_uhdr.rs — docs/windows-port.md Phase 4). Only the
+    // RAW-headroom export path (fxSaveGainMapHeic's `_hdrHeadroom` branch in
+    // chromasmith-22.html) is wired to "uhdr" so far — non-RAW sources still need
+    // `source_has_hdr`, which stays macOS-only (Core Image's expand-to-HDR).
+    #[serde(rename = "hdrExport", skip_serializing_if = "Option::is_none")]
+    hdr_export: Option<&'static str>,
+    eject: bool,
+    haptics: bool,
+    #[serde(rename = "fastThumb")]
+    fast_thumb: bool,
+    #[serde(rename = "videoPoster")]
+    video_poster: bool,
+    #[serde(rename = "revealLabel")]
+    reveal_label: &'static str,
+    #[serde(rename = "modKey")]
+    mod_key: &'static str,
+}
+
+#[tauri::command]
+fn platform_capabilities() -> PlatformCapabilities {
+    let macos = cfg!(target_os = "macos");
+    PlatformCapabilities {
+        os: if macos { "macos" } else { "windows" },
+        hdr_export: Some(if macos { "heic" } else { "uhdr" }),
+        // Both platforms implement eject (platform::eject) — macOS via diskutil-equivalent
+        // APIs, Windows via the KB165721 volume-handle sequence (docs/windows-port.md G9).
+        eject: true,
+        haptics: macos,
+        // Both platforms implement a fast (non-`image`-crate) thumbnail decode: ImageIO on
+        // macOS (fastthumb.rs), WIC on Windows (winthumb.rs).
+        fast_thumb: true,
+        // Both platforms implement video posters: AVFoundation on macOS (videothumb.rs),
+        // IShellItemImageFactory on Windows (winvideothumb.rs).
+        video_poster: true,
+        reveal_label: if macos { "Finder" } else { "Explorer" },
+        mod_key: if macos { "⌘" } else { "Ctrl" },
+    }
+}
+
+// Native HTTP download, bypassing the WKWebView network stack. The Google Photos Picker's
+// media bytes live on the `*.googleusercontent.com` user-content CDN; a cross-origin GET with
+// the required `Authorization: Bearer` header forces a CORS preflight the CDN never answers
+// for the `tauri://localhost` origin — so BOTH fetch() and XHR fail identically ("Load
+// failed"/"XHR network error"), transport-independently. Doing the GET natively in Rust (same
+// pattern as google_oauth_loopback/open_url_native) sidesteps CORS, redirects, and any
+// WKWebView blob-size limit entirely. On a non-2xx the error string carries the HTTP status,
+// so an auth/scope problem (401/403) is distinguishable from the transport problem this fixes.
+// `headers`: optional extra request headers (e.g. Lightroom's X-API-Key) — existing callers
+// that don't pass it are unaffected (Tauri maps a missing invoke arg to None).
+#[tauri::command(async)]
+fn download_url_native(
+    app: tauri::AppHandle,
+    url: String,
+    bearer: String,
+    headers: Option<Vec<(String, String)>>,
+) -> Result<tauri::ipc::Response, String> {
+    use std::io::Read;
+    if !url.starts_with("https://") {
+        return Err("refusing to download a non-https URL".into());
+    }
+    let mut req = ureq::get(&url).set("Authorization", &format!("Bearer {bearer}"));
+    for (k, v) in headers.unwrap_or_default() {
+        req = req.set(&k, &v);
+    }
+    match req.call() {
+        Ok(resp) => {
+            let content_type = resp.header("content-type").unwrap_or("?").to_string();
+            let mut buf = Vec::new();
+            resp.into_reader()
+                .take(500 * 1024 * 1024) // 500MB cap — a sane ceiling for a single photo
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("read body: {e}"))?;
+            // Diagnostic for the DNG "no decoder found" report: confirms whether the download
+            // itself is intact (right size, right magic bytes) before blaming rawler's DNG
+            // support — a truncated/wrong-content-type response would explain an empty
+            // make/model just as well as a genuine rawler gap. Emitted as an app event (not
+            // just eprintln!) so it lands in the app's OWN log panel — the packaged .app has
+            // no attached terminal, so eprintln! output was invisible to anyone not running
+            // `cargo run`/`tauri dev` themselves, which is why this diagnostic never actually
+            // got read despite being added a session ago.
+            let head: String = buf.iter().take(16).map(|b| format!("{b:02x}")).collect();
+            let msg = format!("[gphotos download] {} bytes, content-type={content_type}, head={head}", buf.len());
+            eprintln!("{msg}");
+            let _ = app.emit("gphotos-download-diag", &msg);
+            Ok(tauri::ipc::Response::new(buf))
+        }
+        Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code}")),
+        Err(e) => Err(format!("network: {e}")),
+    }
+}
+
+#[derive(serde::Serialize)]
+struct CameraIdent {
+    make: String,
+    model: String,
+    // Lens model, with the RW2 kamadak-exif fallback applied (rawler's own parse misses it on
+    // Panasonic RW2 — see lens_correct::exif_lens_model_fallback). Attached here so the editor's
+    // decode shim can populate the metadata panel's lens on EVERY open path, not only the single
+    // library-card path that separately calls get_meta.
+    lens: String,
+    // Panasonic PhotoStyle (docs/ROADMAP.md's F2), value 17 = V-Log — lets JS auto-enable the V-Log
+    // input transform on load instead of the user having to notice flat/green footage and find
+    // the toggle themselves. None on every non-Panasonic file and instantly-cheap to compute
+    // (kamadak-exif already parsed for the lens fallback above), so no separate command needed.
+    #[serde(rename = "photoStyle", skip_serializing_if = "Option::is_none")]
+    photo_style: Option<u32>,
+}
+
+// Cheap EXIF-only peek (no demosaic) so the JS side can pick the right DCP profile file
+// BEFORE committing to a full 'lut'-mode decode — NativeLibRawShim.open() only receives raw
+// bytes (not a filesystem path), so it can't just call library::get_meta(path) for this.
+#[tauri::command(async)]
+fn peek_raw_camera(request: tauri::ipc::Request) -> Result<CameraIdent, String> {
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.as_slice(),
+        _ => return Err("expected raw body".into()),
+    };
+    peek_raw_camera_bytes(bytes)
+}
+
+/// Same as peek_raw_camera, but Rust reads the file itself — a Library open no longer ships the
+/// whole RAW into the WebView and straight back just to read its EXIF.
+#[tauri::command(async)]
+fn peek_raw_camera_path(path: String) -> Result<CameraIdent, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    peek_raw_camera_bytes(&bytes)
+}
+
+fn peek_raw_camera_bytes(bytes: &[u8]) -> Result<CameraIdent, String> {
+    let source = rawler::rawsource::RawSource::new_from_slice(bytes);
+    let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
+    let md = decoder
+        .raw_metadata(&source, &rawler::decoders::RawDecodeParams::default())
+        .map_err(|e| format!("metadata: {e}"))?;
+    let lens = md
+        .exif
+        .lens_model
+        .clone()
+        .or_else(|| md.lens.as_ref().map(|l| l.lens_model.clone()))
+        .or_else(|| lens_correct::exif_lens_model_fallback(bytes))
+        .unwrap_or_default();
+    let photo_style = if md.make.eq_ignore_ascii_case("panasonic") { lens_correct::panasonic_photo_style(bytes) } else { None };
+    Ok(CameraIdent { make: md.make.clone(), model: md.model.clone(), lens, photo_style })
+}
+
+// A visible way to confirm the RUNNING app actually has today's Rust changes compiled in —
+// unlike chromasmith-22.html/desktop/*.js (read from desktop/dist/ off disk at runtime, so a
+// plain in-app reload picks up JS/CSS edits), any change to desktop/src-tauri/src/*.rs needs a
+// full `cargo build` + app RESTART (quitting a running `tauri dev`/.app and relaunching, not
+// just Cmd+R) before it takes effect. Bump this string whenever a native fix ships, and check
+// it (Guide/Info panel, or the startup log) BEFORE concluding a native-side fix "didn't work".
+#[tauri::command]
+fn native_build_tag() -> &'static str {
+    "2026-07-22a"
+}
+
+// Read a file's raw bytes for the Library view to open a selected photo into the editor (a
+// plain File-shaped object, same as picking it from the OS file dialog or dragging it in).
+#[tauri::command(async)]
+fn read_file_bytes(path: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+// Export reads the authoritative sidecar, including metadata added during ingest.
+// Missing sidecars are normal; unreadable existing sidecars must not silently lose metadata.
+#[tauri::command(async)]
+fn read_export_sidecar(path: String) -> Result<Option<String>, String> {
+    let Some(sidecar) = canon::find_sidecar(Path::new(&path)) else { return Ok(None); };
+    std::fs::read_to_string(&sidecar)
+        .map(Some)
+        .map_err(|e| format!("read export metadata {}: {e}", sidecar.display()))
+}
+
+/// The first `len` bytes of a file plus its real size: [u64 LE size][head bytes]. A Library RAW
+/// open only needs the header in the WebView (format sniffing) — the native decode reads the
+/// file by path (decode_raw_v2's sourcePath), so the full ~30MB never crosses IPC.
+#[tauri::command(async)]
+fn read_file_head(path: String, len: u32) -> Result<tauri::ipc::Response, String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(&path).map_err(|e| format!("open {path}: {e}"))?;
+    let size = f.metadata().map_err(|e| format!("stat {path}: {e}"))?.len();
+    let mut head = Vec::with_capacity(len as usize);
+    (&mut f).take(len as u64).read_to_end(&mut head).map_err(|e| format!("read {path}: {e}"))?;
+    let mut out = Vec::with_capacity(8 + head.len());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&head);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+// Overwrites a file in place with rendered export bytes — used by "Save to Lightroom" (see
+// library-ui.js's Edit-In handoff wiring) to write the finished render straight back over the
+// TIFF Lightroom handed us, so Lightroom's own file-watcher re-imports and cloud-syncs it.
+// data_b64 (not a raw-bytes IPC body) mirrors the "recipe" base64 round-trip already used
+// elsewhere in this codebase (get_export_history/set_sidecar) — a proven-simple pattern here,
+// at the cost of ~33% transfer overhead which is a non-issue for a single-photo TIFF write.

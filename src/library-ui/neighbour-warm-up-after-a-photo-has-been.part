@@ -1,0 +1,37 @@
+  // ── Neighbour warm-up: after a photo has been open ~1.5s, prepare the NEXT photo in the
+  // direction the user is moving (one photo, one at a time, on the native side) so the arrow key
+  // lands on a cache hit instead of a 4-6s decode. Lightroom/Capture One do the same. Cancelled
+  // by the next open; an open of the photo being warmed waits for it instead of decoding twice.
+  // localStorage chromasmithNeighbourWarm = '0' turns it off.
+  let _warmToken = 0, _warmInflight = null, _lastOpenIdx = -1, _warmDir = 1;
+  function warmNeighbour(path) {
+    const token = ++_warmToken;
+    let off = false; try { off = localStorage.getItem('chromasmithNeighbourWarm') === '0'; } catch (_) {}
+    if (off) return;
+    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
+    const idx = sorted.indexOf(path);
+    if (idx < 0) { rawPerf('neighbour-warm-skip', path, { reason: 'not-in-view', entries: state.entries.length }); return; }
+    if (_lastOpenIdx >= 0 && idx !== _lastOpenIdx) _warmDir = idx > _lastOpenIdx ? 1 : -1;
+    _lastOpenIdx = idx;
+    // The next RAW in the direction of travel: RAW+JPEG pairs put a JPG (or other non-RAW) next to
+    // every RAW in the grid, which used to end the warm-up before it started (neighbour = JPG).
+    const stemOf = (q) => q.replace(/\.[^./]+$/, '');
+    let target = null;
+    for (let step = 1; step <= 4; step++) {
+      const q = sorted[idx + _warmDir * step];
+      if (!q) break;
+      if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) { target = q; break; }
+    }
+    if (!target) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
+    setTimeout(async () => {
+      if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
+      for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
+        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); return; } catch (_) {}
+      }
+      const t0 = performance.now();
+      const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
+      _warmInflight = { path: target, promise };
+      try { await promise; } finally { _warmInflight = null; }
+      rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
+    }, +window.chromasmithWarmDelayMs || 1500);
+  }

@@ -1,0 +1,169 @@
+// ── Named subjects ("remember this dog") — see subject.rs for the method and its measured
+// limits. These commands add no model and no encode of their own: they run over whichever
+// embedding sam_encode/sam2_encode already cached for the open photo, so learning or finding a
+// subject costs a few thousand dot products, not an inference pass.
+
+/// Picks the feature grid for the photo identified by `token`, preferring SAM 2.1.
+///
+/// ⚠️ Selection is by MATCHING TOKEN, not merely "is a SAM 2.1 embedding cached". The frontend
+/// encodes with EdgeSAM first and SAM 2.1 in the background, so right after a photo switch the
+/// SAM 2.1 slot still holds the PREVIOUS photo while EdgeSAM already holds the current one.
+/// Preferring the sam2 slot unconditionally there returns a grid for the wrong photo, whose token
+/// then fails the caller's equality check — so the feature would intermittently refuse to work
+/// on a photo EdgeSAM could have handled perfectly well, in a way that looks random to the user
+/// because it depends on how fast they clicked after switching.
+fn subject_grid<'a>(
+    sam2: &'a Option<Sam2EmbedCache>,
+    edge: &'a Option<SamEmbedCache>,
+    token: &str,
+) -> Option<subject::FeatureGrid<'a>> {
+    if let Some(c) = sam2.as_ref().filter(|c| c.token == token) {
+        return Some(subject::FeatureGrid::sam2(&c.embedding));
+    }
+    edge.as_ref()
+        .filter(|c| c.token == token)
+        .map(|c| subject::FeatureGrid::edgesam(&c.embedding))
+}
+
+#[derive(serde::Deserialize)]
+struct SubjectLearnIn {
+    id: String,
+    name: String,
+    token: String,
+    /// Identifies the reference PHOTO, so re-teaching from the same one replaces it instead of
+    /// stacking a near-duplicate that would silently double its weight.
+    #[serde(default)]
+    ref_id: String,
+    #[serde(default)]
+    ref_label: String,
+}
+
+/// Teaches (or reinforces) a subject from the CURRENT photo plus a mask of the subject in it —
+/// the same raster sam_points already returns for a scribble. Body is the mask, one byte per
+/// pixel of the encoded image; the JSON header carries the subject id/name/token.
+#[tauri::command(async)]
+fn subject_learn(request: tauri::ipc::Request) -> Result<subject::Subject, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let opts: SubjectLearnIn = serde_json::from_value(json).map_err(|e| format!("subject_learn args: {e}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let grid = subject_grid(&sam2, &edge, &opts.token)
+        .ok_or("subject_learn: this photo is not encoded — run AI Select on it first")?;
+    let prototype = subject::learn(grid, payload)?;
+    let ref_id = if opts.ref_id.is_empty() { opts.token.clone() } else { opts.ref_id.clone() };
+    let ref_label = if opts.ref_label.is_empty() { ref_id.clone() } else { opts.ref_label.clone() };
+    subject::upsert_subject(&opts.id, &opts.name, prototype, grid.encoder_tag(), &ref_id, &ref_label)
+}
+
+#[derive(serde::Serialize)]
+struct SubjectLocateResult {
+    x: f32,
+    y: f32,
+    score: f32,
+    width: u32,
+    height: u32,
+}
+
+/// Finds a taught subject in the current photo and segments it, returning the mask as the raw
+/// body and the point/score as the JSON header — the same framed shape as sam_points, so the
+/// frontend reuses that reader.
+#[tauri::command(async)]
+fn subject_locate(token: String, id: String) -> Result<tauri::ipc::Response, String> {
+    let subjects = subject::load_subjects();
+    let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let grid = subject_grid(&sam2, &edge, &token)
+        .ok_or("subject_locate: this photo is not encoded — run AI Select on it first")?;
+    let found = subject::locate_subject(grid, subj)?;
+    // The mask always comes from EdgeSAM's decoder: the POINT is what a prototype transfers, and
+    // EdgeSAM decodes it in a few ms against an embedding that is always present, whereas the
+    // SAM 2.1 decode would need its own cache slot checked for the same photo.
+    let edge_cache = edge.as_ref().ok_or("subject_locate: EdgeSAM embedding not ready")?;
+    let points = [(found.x, found.y, true), (found.neg_x, found.neg_y, false)];
+    let mask = sam::decode_points(&edge_cache.embedding, &points)?;
+    let header = SubjectLocateResult {
+        x: found.x,
+        y: found.y,
+        score: found.score,
+        width: edge_cache.embedding.orig_w,
+        height: edge_cache.embedding.orig_h,
+    };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("subject_locate header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[derive(serde::Serialize)]
+struct SubjectMultiHit {
+    x: f32,
+    y: f32,
+    score: f32,
+}
+
+/// Up to `max_n` distinct-looking matches for a taught subject in the current photo, for the
+/// "more than one in this frame" case a plain argmax `subject_locate` can't handle (a litter, two
+/// dogs, etc — see subject::locate_topk's doc comment). Returns points/scores ONLY, no mask: the
+/// frontend already has a well-tested single-point decoder (sam_points/sam2_points, the same one
+/// manual scribbling uses) and can hand any of these points straight to it, so this stays a plain
+/// JSON command rather than a second framed mask-response format to maintain.
+#[tauri::command(async)]
+fn subject_locate_multi(token: String, id: String, max_n: u32, min_cell_dist: Option<u32>) -> Result<Vec<SubjectMultiHit>, String> {
+    let subjects = subject::load_subjects();
+    let subj = subjects.iter().find(|s| s.id == id).ok_or_else(|| format!("no subject named {id}"))?;
+    let (sam2, edge) = (SAM2_EMBED.lock().unwrap(), SAM_EMBED.lock().unwrap());
+    let grid = subject_grid(&sam2, &edge, &token)
+        .ok_or("subject_locate_multi: this photo is not encoded — run AI Select on it first")?;
+    // 6 cells (of 64) apart by default — close enough to allow two genuinely separate small
+    // subjects in frame, far enough that the same blob's own neighbouring high-similarity cells
+    // don't count as two. Overridable from the frontend ("Instance separation": Close/Normal/Far)
+    // since a litter of small, closely-packed puppies wants a tighter default than two large dogs
+    // at opposite ends of a frame.
+    let dist = min_cell_dist.unwrap_or(6).clamp(1, 63);
+    let hits = subject::locate_topk_subject(grid, subj, max_n.max(1) as usize, dist)?;
+    Ok(hits.into_iter().map(|h| SubjectMultiHit { x: h.x, y: h.y, score: h.score }).collect())
+}
+
+#[tauri::command(async)]
+fn subject_list() -> Vec<subject::Subject> {
+    subject::load_subjects()
+}
+
+/// Merges a previously-exported subject list (subject_list's own JSON shape) into the local store
+/// — for moving taught subjects to another machine or restoring a backup. Additive: see
+/// import_subjects's doc comment for why this can't delete anything.
+#[tauri::command(async)]
+fn subject_import(subjects: Vec<subject::Subject>) -> Result<Vec<subject::Subject>, String> {
+    subject::import_subjects(subjects)
+}
+
+#[tauri::command(async)]
+fn subject_delete(id: String) -> Result<(), String> {
+    subject::delete_subject(&id)
+}
+
+#[tauri::command(async)]
+fn subject_rename(id: String, name: String) -> Result<(), String> {
+    subject::rename_subject(&id, &name)
+}
+
+#[tauri::command(async)]
+fn subject_rename_ref(id: String, ref_id: String, label: String) -> Result<(), String> {
+    subject::rename_reference(&id, &ref_id, &label)
+}
+
+/// Drops one reference photo from a subject and re-merges. Returns the updated subject, or null
+/// when that was its last reference (in which case the subject itself is gone).
+#[tauri::command(async)]
+fn subject_remove_ref(id: String, ref_id: String) -> Result<Option<subject::Subject>, String> {
+    subject::remove_reference(&id, &ref_id)
+}
+
+/// Merges `other_id`'s references into `keep_id` and deletes `other_id` — for the "taught the same
+/// dog twice under two names" case: subject_locate has no presence signal, so a user experimenting
+/// with Find is expected to sometimes duplicate a subject before noticing.
+#[tauri::command(async)]
+fn subject_merge(keep_id: String, other_id: String) -> Result<subject::Subject, String> {
+    subject::merge_subjects(&keep_id, &other_id)
+}

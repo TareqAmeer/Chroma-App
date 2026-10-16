@@ -1,0 +1,438 @@
+  // ── Decoded-thumbnail cache, keyed by path+mtime ────────────────────────────────────────────
+  // The windowed grid rebuilds its whole DOM (`grid.innerHTML=''`) every time the mounted row
+  // range changes, and each rebuilt card called loadThumb again. With no cache that meant a fresh
+  // Tauri IPC round trip, Blob and createObjectURL for every card in the window on every row
+  // boundary crossed — scroll down and back up and the grid visibly re-loaded photos already on
+  // screen a moment earlier. The Rust side caches to disk, so this was never a re-decode, but it
+  // was still a round trip and an <img> decode per card, which is exactly what the flicker was.
+  //
+  // ⚠️ The cache OWNS its URLs, and nothing else may revoke them. Getting this wrong is precisely
+  // what broke video posters: a cached URL was also pushed into a per-generation revoke list, so a
+  // grid rebuild revoked a URL the cache kept handing out, and every one of those cards became a
+  // permanent broken-image "?". Eviction below is the ONLY place a cached URL is revoked, and it
+  // only ever evicts entries that are no longer in the map.
+  //
+  // Keyed on mtime as well as path so a re-exported or re-edited file misses the cache rather than
+  // showing its old thumbnail forever.
+  const THUMB_CACHE_MAX = 1200; // ~360px JPEGs, so roughly 25-50MB retained at the cap
+  const _thumbCache = new Map(); // "path@mtime" -> objectURL (insertion-ordered = LRU order)
+  const _thumbFetches = new Map(); // key -> one native offline-capable thumbnail request shared by boot + mounted cards
+  function thumbCacheGet(key) {
+    const url = _thumbCache.get(key);
+    if (url === undefined) return null;
+    // Re-insert so the Map's insertion order stays a true recency order for the eviction below.
+    _thumbCache.delete(key);
+    _thumbCache.set(key, url);
+    return url;
+  }
+  function thumbCachePut(key, url) {
+    const prev = _thumbCache.get(key);
+    if (prev && prev !== url) URL.revokeObjectURL(prev);
+    _thumbCache.delete(key);
+    _thumbCache.set(key, url);
+    while (_thumbCache.size > THUMB_CACHE_MAX) {
+      const oldest = _thumbCache.keys().next().value;
+      const dead = _thumbCache.get(oldest);
+      _thumbCache.delete(oldest);
+      if (dead) URL.revokeObjectURL(dead);
+    }
+  }
+  function requestThumbnail(path, key) {
+    const existing = _thumbFetches.get(key);
+    if (existing) return existing;
+    const request = invoke('get_thumbnail_or_offline', { path }).then((buf) => {
+      if (!thumbCacheGet(key)) thumbCachePut(key, URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })));
+      return buf;
+    }).finally(() => {
+      if (_thumbFetches.get(key) === request) _thumbFetches.delete(key);
+    });
+    _thumbFetches.set(key, request);
+    return request;
+  }
+  /// Drops a path's cached thumbnail across every mtime it was cached under — called after an
+  /// in-app edit writes a new render, so the grid picks the new pixels up.
+  function thumbCacheInvalidate(path) {
+    for (const key of Array.from(_thumbCache.keys())) {
+      if (key.slice(0, key.lastIndexOf('@')) === path) {
+        const dead = _thumbCache.get(key);
+        _thumbCache.delete(key);
+        if (dead) URL.revokeObjectURL(dead);
+      }
+    }
+  }
+  // Per-generation failure tracking for a single summary toast once the batch settles, instead
+  // of a silent CSS class per broken thumbnail (easy to miss on a large grid).
+  let _thumbFailCount = 0;
+  let _thumbTotalCount = 0;
+  let _thumbFailToastShown = false;
+  const _thumbIO = (typeof IntersectionObserver === 'function')
+    ? new IntersectionObserver((ents) => {
+        for (const en of ents) {
+          const q = _thumbQueue.find((t) => t.imgEl === en.target);
+          if (q) q.visible = en.isIntersecting;
+        }
+      }, { rootMargin: '200px' })
+    : null;
+  // Priority: visible non-video first, then any non-video (JPEG tier-1/2 and RAW share the same
+  // Rust get_thumbnail* path and are cheap either way), and only once no non-video job remains do
+  // videos get picked — capped separately at THUMB_POOL_VIDEO regardless of visibility, so a
+  // scrolled-into-view video can't blow past the small video concurrency budget.
+  function _pickNextIdx() {
+    let i = _thumbQueue.findIndex((t) => t.visible && !t.isVideo);
+    if (i >= 0) return i;
+    i = _thumbQueue.findIndex((t) => !t.isVideo);
+    if (i >= 0) return i;
+    if (_thumbActiveVideo >= THUMB_POOL_VIDEO) return -1;
+    i = _thumbQueue.findIndex((t) => t.visible);
+    if (i >= 0) return i;
+    return _thumbQueue.length ? 0 : -1;
+  }
+  function _thumbPump() {
+    while (_thumbActive < THUMB_POOL && _thumbQueue.length) {
+      const i = _pickNextIdx();
+      if (i < 0) break; // only videos left and the video pool is already full — wait for a slot
+      const job = _thumbQueue.splice(i, 1)[0];
+      // NOTE: job.imgEl.isConnected requires the card to already be in the DOM by the time
+      // loadThumb() is called — renderGrid() must appendChild(card) BEFORE calling loadThumb(),
+      // or every job is silently dropped here (this was the "thumbnails never load" bug: the
+      // pump ran synchronously while cards were still detached, so isConnected was false for
+      // every single job and _thumbActive never even incremented).
+      if (job.gen !== _thumbGen || !job.imgEl.isConnected) {
+        // ⚠️ This job is never going to run — its card is gone (scrolled off a virtualized grid
+        // before its turn, or a whole re-render/generation bump). It's already spliced out of
+        // _thumbQueue above, so if it's also not counted as "settled" here, _thumbDoneCount can
+        // never reach _thumbTotalCount and "Loading photos… N/M" (updateThumbProgress) sticks at
+        // whatever N was when the last card that DID load happened to be the last one counted —
+        // confirmed live: a real session showed "Loading photos… 703/1214" frozen for minutes
+        // with the app otherwise completely idle (0% CPU, no backend work in flight). Counting a
+        // dropped job as done is the correct fix, not a workaround: from this readout's own
+        // perspective, "will never complete" and "completed" both mean "nothing left to wait for".
+        _thumbDoneCount++;
+        updateThumbProgress();
+        continue;
+      }
+      _thumbActive++;
+      if (job.isVideo) _thumbActiveVideo++;
+      setPhotoWorkBadge(job.imgEl.closest('.lib-card'), 'Loading preview…', 'thumb');
+      updateThumbProgress();
+      // Tier 1 (get_thumbnail_fast): pulls the camera's own embedded JPEG preview straight out
+      // of the EXIF thumbnail IFD — no full-image decode, so it paints almost instantly. Falls
+      // back to Err for RAWs and anything without an embedded preview, or if the read fails for
+      // any reason; either way we fall through to the real tier-2 decode below, which also
+      // replaces whatever tier-1 painted so the final thumbnail is always the accurate one.
+      // ⚠️ Video takes this identical path — get_thumbnail_fast declines it on extension, so a
+      // clip simply skips tier 1 and lands on tier 2, where library.rs generates the poster with
+      // AVFoundation. There is deliberately no video branch here any more: the previous one
+      // decoded clips in a hidden <video> and cached the resulting blob URL while ALSO handing it
+      // to the per-generation revoke list below, so any grid rebuild revoked a URL the cache kept
+      // serving and every video card became a permanent broken-image "?".
+      invoke('get_thumbnail_fast', { path: job.path })
+        .catch(() => null)
+        .then((fastBuf) => {
+          if (fastBuf && job.imgEl.isConnected) {
+            // Tier 1 is deliberately NOT cached: tier 2 below replaces it a moment later with the
+            // accurate render, and caching the embedded preview would mean serving the rougher
+            // image from then on. Revoked as soon as tier 2 paints over it.
+            const fastUrl = URL.createObjectURL(new Blob([fastBuf], { type: 'image/jpeg' }));
+            job.imgEl.src = fastUrl;
+            job.imgEl.classList.add('loaded');
+            job._fastUrl = fastUrl;
+          }
+          // get_thumbnail_or_offline: falls back to the catalog's never-pruned offline
+          // thumbnail tier when a direct decode fails (the common trigger being the volume
+          // is unplugged) — a plain folder photo that decodes fine takes the exact same path
+          // it always did, this only changes behavior for a catalog entry whose file isn't
+          // currently reachable.
+          return requestThumbnail(job.path, job.key);
+        })
+        .then((buf) => {
+          const url = thumbCacheGet(job.key) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+          if (!_thumbCache.has(job.key)) thumbCachePut(job.key, url);
+          if (job.imgEl.isConnected) {
+            job.imgEl.src = url;
+            job.imgEl.classList.add('loaded');
+          }
+          if (job._fastUrl) { URL.revokeObjectURL(job._fastUrl); job._fastUrl = null; }
+        })
+        .catch((err) => {
+          console.warn('get_thumbnail failed for', job.path, err);
+          _thumbFailCount++;
+          if (job.imgEl.isConnected) {
+            job.imgEl.classList.add('thumb-error');
+            // "file not found on this machine" (library.rs's get_thumbnail_or_offline) means the
+            // catalog row points at a file that was never copied to this computer's volumes — not
+            // a real decode failure. Distinct icon/tooltip so it doesn't read as "this file is
+            // broken" when the fix is "copy it over and rescan", not "check the file".
+            const missing = /file not found on this machine/.test(String(err));
+            job.imgEl.parentElement?.classList.add(missing ? 'thumb-missing' : 'thumb-broken');
+            if (missing) job.imgEl.parentElement?.setAttribute('title', 'File not found on this machine — it may only exist on another computer or drive. Copy it here and rescan the folder.');
+          }
+        })
+        .finally(() => {
+          setPhotoWorkBadge(job.imgEl.closest('.lib-card'), '', 'thumb');
+          if (_thumbIO) _thumbIO.unobserve(job.imgEl);
+          _thumbActive--;
+          if (job.isVideo) _thumbActiveVideo--;
+          _thumbDoneCount++;
+          updateThumbProgress();
+          // ⚠️ Keeps the OUTER watchdog (chromasmith-22.html) alive while real per-card decode
+          // progress is happening. Without this, only the SINGLE synthetic 'paint' phase event at
+          // the start of firstPaintReady()'s wait ever bumped it — so on a real, slow decode batch
+          // (contended cores, cold RAW demosaic) the outer watchdog's own 8s grace ran out and
+          // force-revealed the library BEFORE this inner gate's wait finished, even though real
+          // progress was actively happening the whole time. Confirmed live: fixing only the
+          // starvation (deferring catalogRunBackgroundPhases) shrank the empty-grid window but
+          // didn't close it, because this gap was still racing it independently. A no-op once the
+          // splash element is gone (updateBootSplashProgress's own guard).
+          if (typeof updateBootSplashProgress === 'function') {
+            updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount });
+          }
+          _resolveThumbPaintWaiters();
+          _thumbPump();
+          // Batch settled (this generation's queue drained and no job still in flight): show
+          // ONE summary toast if anything failed, instead of a silent per-thumbnail CSS class.
+          if (_thumbActive === 0 && _thumbQueue.length === 0 && _thumbFailCount > 0 && !_thumbFailToastShown) {
+            _thumbFailToastShown = true;
+            if (typeof toast === 'function') toast(`${_thumbFailCount} of ${_thumbTotalCount} thumbnails failed to load`, false);
+          }
+        });
+    }
+  }
+  // Small "Loading photos… N/M" readout in the bottom bar while the thumb pool is still
+  // draining a large folder — cleared once every job in this generation has settled (loaded or
+  // failed), so it never lingers after a folder finishes loading.
+  let _thumbDoneCount = 0;
+  function updateThumbProgress() {
+    const el = document.getElementById('lib-thumb-progress');
+    if (!el) return;
+    if (_thumbDoneCount >= _thumbTotalCount || _thumbTotalCount < 8) { el.textContent = ''; return; }
+    el.textContent = `Loading photos… ${fmtN(_thumbDoneCount)}/${fmtN(_thumbTotalCount)}`;
+  }
+  const PHOTO_STAGE_LABELS = { faces: 'Finding faces…', pets: 'Finding pets…', embed: 'Analyzing faces…', clip: 'Indexing for search…' };
+  function setPhotoWorkBadge(card, label, kind = 'analysis') {
+    const wrap = card && card.querySelector('.lib-thumb-wrap');
+    if (!wrap) return;
+    let badge = wrap.querySelector(`.lib-photo-work[data-photo-work="${kind}"]`);
+    if (!label) { if (badge) badge.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'lib-photo-work';
+      badge.dataset.photoWork = kind;
+      badge.innerHTML = '<span class="lib-photo-work-spin" aria-hidden="true"></span><span></span>';
+      wrap.appendChild(badge);
+    }
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+    badge.lastElementChild.textContent = label;
+  }
+  function syncPhotoWorkBadges() {
+    const labelsByPath = new Map();
+    const addWork = (work) => {
+      const label = PHOTO_STAGE_LABELS[work.stage] || (work.kind === 'thumb' ? 'Loading preview…' : 'Working…');
+      for (const path of work.photoPaths || []) {
+        const labels = labelsByPath.get(path) || [];
+        if (!labels.includes(label)) labels.push(label);
+        labelsByPath.set(path, labels);
+      }
+    };
+    addWork(activity);
+    if (typeof _activityQueue !== 'undefined') for (const [kind, work] of _activityQueue) addWork({ ...work, kind });
+    const gridEl = document.getElementById('lib-grid');
+    if (!gridEl) return;
+    gridEl.querySelectorAll('.lib-card').forEach((card) => {
+      const labels = [...new Set([card.dataset.path, card.dataset.thumbPath].filter(Boolean).flatMap((p) => labelsByPath.get(p) || []))];
+      setPhotoWorkBadge(card, labels.join(' · '));
+    });
+  }
+  /// The real readiness gate for the boot splash: resolves once every card mounted in the
+  /// CURRENT grid generation has settled — loaded OR failed, `_thumbDoneCount >= _thumbTotalCount`
+  /// exactly mirrors updateThumbProgress's own "batch settled" condition above, which is the
+  /// existing, already-correct completion check for this queue. This replaces the old boot gate
+  /// (toggleLibrary().then(...)), which resolved once cards existed in the DOM, not once they had
+  /// pixels — the root reason 12 prior fixes never closed this bug: they all sped up or
+  /// instrumented that promise chain without changing what it actually measured.
+  /// `_thumbPaintWaiters` is checked in loadThumb's job `.finally()` below, the one place every
+  /// job (success or failure) is guaranteed to pass through.
+  let _thumbPaintWaiters = [];
+  function firstPaintReady(timeoutMs) {
+    return new Promise((resolve) => {
+      // Nothing queued yet (e.g. an empty folder, or every card was already a cache hit and
+      // painted synchronously in loadThumb before this is even called) — already ready.
+      if (_thumbTotalCount === 0 || _thumbDoneCount >= _thumbTotalCount) { resolve(); return; }
+      const gen = _thumbGen;
+      let settled = false;
+      const done = () => { if (settled) return; settled = true; resolve(); };
+      _thumbPaintWaiters.push({ gen, done });
+      if (timeoutMs) setTimeout(done, timeoutMs); // never let a stuck/slow card hang the caller forever
+    });
+  }
+  function _resolveThumbPaintWaiters() {
+    if (_thumbDoneCount < _thumbTotalCount || !_thumbPaintWaiters.length) return;
+    const waiters = _thumbPaintWaiters;
+    _thumbPaintWaiters = [];
+    for (const w of waiters) w.done();
+  }
+  function fmtDuration(sec) {
+    if (!sec || !isFinite(sec)) return '';
+    const m = Math.floor(sec / 60), r = Math.round(sec % 60);
+    return m + ':' + String(r).padStart(2, '0');
+  }
+  function loadThumb(path, imgEl, isVideo, mtime) {
+    const key = path + '@' + (mtime || 0);
+    // Already decoded and still retained — paint it synchronously and skip the pool entirely.
+    // This is what stops a scroll that re-mounts a row from re-fetching every card in it.
+    const hit = thumbCacheGet(key);
+    if (hit) {
+      imgEl.src = hit;
+      imgEl.classList.add('loaded');
+      return;
+    }
+    _thumbQueue.push({ path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
+    _thumbTotalCount++;
+    if (_thumbIO) _thumbIO.observe(imgEl);
+    _thumbPump();
+  }
+  function thumbQueueReset() {
+    _thumbGen++;
+    if (_thumbIO) _thumbQueue.forEach((t) => _thumbIO.unobserve(t.imgEl));
+    _thumbQueue = [];
+    _thumbActive = 0; // defensive: never let a stale count strand future pumps
+    _thumbActiveVideo = 0;
+    // ⚠️ Deliberately does NOT touch _thumbCache. Its URLs are owned by the cache and are still
+    // valid for whatever the grid re-mounts a moment later — revoking them here is exactly the
+    // mistake that made cached video posters render as permanent broken images, and it would also
+    // reintroduce the full re-fetch on every sort/filter/search that this cache exists to remove.
+    // Retention is bounded by THUMB_CACHE_MAX's LRU eviction instead.
+    _thumbFailCount = 0;
+    _thumbTotalCount = 0;
+    _thumbDoneCount = 0;
+    _thumbFailToastShown = false;
+    updateThumbProgress();
+    // Any waiter armed for the generation just discarded can never see its own queue reach
+    // done>=total (that queue is gone) — resolve them now rather than making them ride out their
+    // own timeout for no reason (e.g. a boot that immediately switches folders again).
+    if (_thumbPaintWaiters.length) {
+      const waiters = _thumbPaintWaiters;
+      _thumbPaintWaiters = [];
+      for (const w of waiters) w.done();
+    }
+  }
+
+  // Small orange pen icon for the "edited" corner badge — replaces the old EDITED text pill.
+  // Color matches the app's accent orange (--acc, e.g. #e8a33d) used elsewhere in the UI.
+  const EDITED_BADGE_HTML = '<div class="lib-edited-badge" title="Edited"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M14.5 4.5l5 5L8 21H3v-5L14.5 4.5z" fill="#e8a33d"/>' +
+    '<path d="M12.5 6.5l5 5" stroke="#00000055" stroke-width="1"/></svg></div>';
+  const FLAG_SVG_GREEN = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#46a758" stroke-width="2.4"><path d="M5 21V4" stroke-linecap="round"/><path d="M5 4h13l-3.2 4.5L18 13H5z" fill="#46a758" stroke="none"/></svg>';
+  const FLAG_SVG_RED = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#e5484d" stroke-width="2.6"><path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/></svg>';
+  const HEART_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="#e5484d" stroke="none"><path d="M12 20.5s-7.5-4.6-10-9.1C.6 8.1 2 4.8 5.2 4c2-.5 4 .3 5.3 2 1.3-1.7 3.3-2.5 5.3-2 3.2.8 4.6 4.1 3.2 7.4-2.5 4.5-10 9.1-10 9.1z"/></svg>';
+  // Shown only on a card whose own volume is unreachable right now (CatalogEntry.offline,
+  // Rust-computed per row) — the thumbnail is real, but it's coming from the cache, not a live
+  // read of the original. A drive-disconnected glyph, not a text label, per the approved
+  // boot-sequence storyboard.
+  const OFFLINE_BADGE_HTML = '<div class="lib-offline-badge" title="Original not reachable right now — showing the cached preview">'
+    + '<svg viewBox="0 0 24 24" width="10" height="10"><rect x="7" y="1" width="10" height="6" fill="#f2f0ea"/>'
+    + '<rect x="4" y="7" width="16" height="16" rx="5" fill="#f2f0ea"/>'
+    + '<line x1="8.5" y1="11.5" x2="15.5" y2="18.5" stroke="#00000090" stroke-width="2.3" stroke-linecap="round"/>'
+    + '<line x1="15.5" y1="11.5" x2="8.5" y2="18.5" stroke="#00000090" stroke-width="2.3" stroke-linecap="round"/></svg></div>';
+  // entry.edited_ts (library.rs's get_export_history-adjacent field) is the .xmp sidecar's own
+  // mtime, 0 if no sidecar exists yet (never edited) — the list-view "Edited on" column.
+  function fmtEditedTs(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+  }
+  // A grid of blank shimmering placeholder cards, shown while a folder/collection/album is
+  // being fetched, instead of the previous "Loading…" text — swapping the entire grid for one
+  // line of text (then swapping it back for real cards moments later) was a visible flash on
+  // every folder switch. 24 is enough to fill the tallest common viewport at default thumb size
+  // without generating an unbounded number of shimmering nodes for a huge folder.
+  function libSkeletonHtml(n = 24) {
+    return '<div class="lib-loading" role="status" aria-live="polite">Loading photos…</div>' + Array.from({ length: n }, () => '<div class="lib-card lib-skel"><div class="lib-thumb-wrap"></div></div>').join('');
+  }
+  function showLibraryError(message, actionLabel, action) {
+    const grid = document.getElementById('lib-grid'); if (!grid) return;
+    grid.innerHTML = `<div id="lib-empty" role="alert"><div>${message}</div><button class="lib-btn" id="lib-empty-retry">${actionLabel}</button></div>`;
+    const button = grid.querySelector('#lib-empty-retry'); if (button) button.onclick = action;
+  }
+  /// Nothing has ever been added to the Library — the true first-launch state. Two distinct
+  /// actions, not one: "Add photos" loads loose files straight into the editor (fxPickPhotos,
+  /// chromasmith-22.html), "Add a folder" registers a folder with the Library so it's browsable
+  /// and kept in sync (the same #lib-pick trigger pickFolder() already wires up elsewhere).
+  function renderLibraryNoRoot() {
+    const grid = document.getElementById('lib-grid');
+    if (!grid) return;
+    // Same hero pattern as showLrEmptyState's approved wireframe (icon, bold heading, muted
+    // subtitle, ONE filled primary button) — this used to give "Add photos" and "Add a folder"
+    // equal visual weight side by side, with no clear first action for a brand-new Library.
+    // "Add a folder" is primary: it's the action that actually builds an ongoing, browsable
+    // Library (what this tab is for); "Add photos" only feeds loose files straight to the
+    // Editor, so it — and Google Photos — read as subordinate alternatives underneath.
+    grid.innerHTML = `<div id="lib-empty" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:60px 20px;min-height:50vh">
+      <div style="font-weight:600;font-size:16px;color:var(--txt)">Welcome. Let's find your photos.</div>
+      <div style="font-size:12px;color:var(--mut);max-width:340px;line-height:1.5">Choose the folder where your photos live. Chromasmith reads it in the background, so you can start editing right away while it indexes. Your original files are never changed, and nothing is uploaded.</div>
+      <button class="lib-btn" id="lib-empty-addfolder" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;padding:9px 20px;font-size:13px">Choose your photo folder</button>
+      <div style="font-size:11px;color:var(--mut)">Or drop a folder or photos anywhere on this window · <a id="lib-empty-addphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Open a single photo</a> · <a id="lib-empty-gphotos" style="color:var(--acc);cursor:pointer;text-decoration:underline">Google Photos…</a></div>
+    </div>`;
+    const addPhotos = document.getElementById('lib-empty-addphotos');
+    if (addPhotos) addPhotos.onclick = () => { if (typeof window.fxPickPhotos === 'function') window.fxPickPhotos(); };
+    const addFolder = document.getElementById('lib-empty-addfolder');
+    if (addFolder) addFolder.onclick = () => pickFolder();
+    const gphotos = document.getElementById('lib-empty-gphotos');
+    if (gphotos) gphotos.onclick = () => { const b = document.getElementById('lib-gphotos'); if (b) b.click(); };
+  }
+  /// Persistent, not a toast — this is a standing fact about the current folder, not a one-off
+  /// event. The point of the cache: the grid stays fully browsable (every card its cached
+  /// preview) while a volume is unreachable, so this bar names what's true instead of blocking
+  /// anything. Sticky-positioned inside #lib-main (already the scroll container) rather than a
+  /// second fixed-position layer, so it never needs its own resize/scroll bookkeeping.
+  function renderLibOfflineBar(offline) {
+    const main = document.getElementById('lib-main');
+    if (!main) return;
+    let bar = document.getElementById('lib-offline-bar');
+    if (!offline) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'lib-offline-bar';
+      bar.style.cssText = 'position:sticky;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:8px;'
+        + 'padding:7px 14px;margin-top:12px;font-size:11.5px;color:#e3b3a2;'
+        + 'background:rgba(201,106,79,.16);border-top:1px solid rgba(201,106,79,.35);backdrop-filter:blur(6px)';
+      bar.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:#c96a4f;flex-shrink:0"></span>'
+        + '<span id="lib-offline-bar-text"></span>';
+      main.appendChild(bar);
+    }
+    const label = state.currentFolder ? baseName(state.currentFolder) : 'This folder';
+    document.getElementById('lib-offline-bar-text').textContent =
+      `${label} — drive not connected · showing cached previews. Reconnect to edit or export the originals.`;
+  }
+  const COLOR_LABELS = ['Red', 'Yellow', 'Green', 'Blue', 'Purple'];
+  let COLOR_LABELS_ENABLED = localStorage.getItem('chromasmith_color_labels_enabled') !== '0';
+  function colorLabelHtml(value) {
+    if (!COLOR_LABELS_ENABLED || !COLOR_LABELS.includes(value)) return '';
+    const colors = { Red: '#e05252', Yellow: '#e0c04a', Green: '#5cb85c', Blue: '#4a90d9', Purple: '#9b6dd0' };
+    return `<span class="lib-color-dot" style="background:${colors[value]}" title="Colour label: ${value}" aria-label="Colour label: ${value}"></span>`;
+  }
+  function syncColorLabelVisibility() {
+    if (!COLOR_LABELS_ENABLED) {
+      state.colorLabelFilter = 'all';
+      const filterSelect = document.getElementById('lib-color-label-filter');
+      if (filterSelect) filterSelect.value = 'all';
+      closeContextMenu();
+    }
+    document.body.classList.toggle('lib-hide-color-labels', !COLOR_LABELS_ENABLED);
+    const filter = document.getElementById('lib-color-label-filter-wrap');
+    if (filter) filter.style.display = COLOR_LABELS_ENABLED ? '' : 'none';
+    const control = document.getElementById('lib-color-labels-toggle');
+    if (control) control.checked = COLOR_LABELS_ENABLED;
+    if (typeof window.fxUpdateColorLabelControl === 'function') window.fxUpdateColorLabelControl();
+    window.dispatchEvent(new CustomEvent('chromasmith-color-label-visibility', { detail: { enabled: COLOR_LABELS_ENABLED } }));
+  }
+  // Reject/Pick remain xmp:Label flags; the independent Chromasmith colour-label dot is a status indicator.
+  function flagsHtml(label, favorite, colorLabel) {
+    return `<span class="lib-flag${label === 'Red' ? ' on' : ''}" data-flag="Red" title="Reject (X)">${FLAG_SVG_RED}</span>` +
+           `<span class="lib-flag${label === 'Green' ? ' on' : ''}" data-flag="Green" title="Pick (flag)">${FLAG_SVG_GREEN}</span>` +
+           `<span class="lib-flag lib-fav${favorite ? ' on' : ''}" data-flag="Favorite" title="Favorite (F)">${HEART_SVG}</span>` + colorLabelHtml(colorLabel);
+  }
+
+  /// Five stars, filled to `n`. Click sets that rating; clicking the current rating clears it,
+  /// which is the Lightroom behaviour and the only way to get back to unrated with the mouse.

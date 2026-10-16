@@ -1,0 +1,715 @@
+  // ── Activity indicator ────────────────────────────────────────────────────────────────────
+  // One chained pipeline, not three silent subsystems — a copy/scan that's actually running
+  // has to be visible somewhere, or "why hasn't All Photos updated yet" has no answer. Backed
+  // by the SAME progress events the Rust side already emits for every scan phase
+  // (catalog-scan: {phase,done,total,current}) and card import (ingest-progress:
+  // {done,total,current,bytes_done,bytes_total}) — nothing new on the Rust side, this just
+  // gives those events somewhere to land.
+  const STAGE_LABELS = { walk: 'Scanning folders', subfolders: 'Scanning subfolders', metadata: 'Reading photo info', sidecar: 'Syncing ratings', cache: 'Loading thumbnails', thumb: 'Generating thumbnails', focus: 'Checking focus', hash: 'Hashing new photos', verify: 'Checking for corruption', copy: 'Copying', faces: 'Finding faces', pets: 'Finding pets', embed: 'Analyzing faces', clip: 'Indexing for search', paint: 'Loading thumbnails', hq_offline: 'Preparing full-res cache' };
+  // ⚠️ Every `phase` string catalog.rs's `progress()` callbacks can emit via the generic
+  // 'catalog-scan' event MUST have an entry here — verified live 2026-09-16: hq_offline_run
+  // (catalog.rs) emits phase:"hq_offline", which was missing from this list, so
+  // STAGE_ORDER.indexOf('hq_offline') was always -1. renderActivity's `activeIdx` (the "which
+  // stage are we on" index) landed on -1 too, and since no stage index ever equals -1, EVERY
+  // row in the popover rendered as "queued" forever — a real, indefinitely-running scan looked
+  // identical to one that had never started. Confirmed by inspecting the live `activity` state
+  // via window._activityDebugSnapshot() (see its own comment) rather than guessing from the UI.
+  const STAGE_ORDER = ['copy', 'walk', 'metadata', 'sidecar', 'thumb', 'focus', 'hash', 'verify', 'faces', 'pets', 'embed', 'clip', 'hq_offline'];
+  let activity = { visible: false, expanded: false, kind: '', stage: '', done: 0, total: 0, current: '', doneAt: 0 };
+  let compactJobsOpen = false;
+  syncJobsHost(); // initial mount after the Jobs disclosure state has been initialized
+  // BEGIN LIBRARY_JOB_HISTORY_HELPERS
+  const ACTIVITY_HISTORY_KEY = 'chromasmith-job-history-v1';
+  const ACTIVITY_ACTIVE_KEY = 'chromasmith-active-jobs-v1';
+  const ACTIVITY_HISTORY_LIMIT = 40;
+  const CATALOG_RECOVERY_VERSION = 1;
+  const CATALOG_RECOVERY_PHASES = ['hash', 'faces', 'embed', 'clip', 'pets'];
+  const CATALOG_REQUESTED_PHASES = ['stack', 'thumbnails', 'focus', 'hash', 'faces', 'embed', 'cluster', 'clip', 'autotag', 'pets'];
+  const CATALOG_PHASE_LABELS = { stack: 'photo grouping', thumbnails: 'thumbnails', focus: 'focus previews', hash: 'file hashes', faces: 'face detection', embed: 'face analysis', cluster: 'people grouping', clip: 'smart tags', autotag: 'automatic tags', pets: 'pet detection' };
+  function catalogPhaseNames(phases) { return phases.map(phase => CATALOG_PHASE_LABELS[phase] || phase).join(', '); }
+  function catalogBackgroundStartupActions(isRecoveryRun, paused, stopped) { return { backfill: !isRecoveryRun, startHeavy: !paused && !stopped }; }
+  function catalogRecoveryExecutionPlan(isRecoveryRun, recovery) {
+    return isRecoveryRun
+      // Completion records are progress hints only. Sources may change after restart, so every
+      // retry must re-run native marker checks; unchanged successes are skipped there while
+      // stale rows (including faces before embeddings) are recomputed safely.
+      ? recovery.requestedPhases.filter(phase => CATALOG_RECOVERY_PHASES.includes(phase))
+      : [...CATALOG_REQUESTED_PHASES];
+  }
+  function catalogRecoveryForRetry(recovery) { return { ...recovery, completedPhases: [] }; }
+  async function runCatalogPhasePlan(phases, handlers, shouldContinue, onError, onComplete) {
+    for (const phase of phases) {
+      if (!(await shouldContinue(phase))) break;
+      try {
+        const exhausted = await handlers[phase]();
+        if (onComplete) await onComplete(phase, exhausted);
+      } catch (error) { await onError(phase, error); }
+    }
+  }
+  function normalizeCatalogRecovery(value) {
+    if (!value || value.version !== CATALOG_RECOVERY_VERSION || !Array.isArray(value.roots) || !Array.isArray(value.requestedPhases) || !Array.isArray(value.completedPhases)) return null;
+    const roots = value.roots.filter(root => root && Number.isSafeInteger(root.id) && root.id > 0 && typeof root.added === 'string' && /^\d+$/.test(root.added) && typeof root.volume === 'string' && root.volume.length && typeof root.path === 'string' && root.path.length).map(root => ({ id: root.id, added: root.added, volume: root.volume, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') })).sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+    const requestedPhases = value.requestedPhases.filter(phase => CATALOG_REQUESTED_PHASES.includes(phase));
+    const completedPhases = value.completedPhases.filter(phase => requestedPhases.includes(phase));
+    if (!roots.length || roots.length !== value.roots.length || !requestedPhases.length || requestedPhases.length !== value.requestedPhases.length || completedPhases.length !== value.completedPhases.length) return null;
+    return { version: CATALOG_RECOVERY_VERSION, roots, requestedPhases, completedPhases: [...new Set(completedPhases)] };
+  }
+  function catalogRootIdentity(rows) {
+    if (!Array.isArray(rows)) return [];
+    const roots = rows.filter(root => root && Number.isSafeInteger(root.id) && typeof root.added === 'string' && /^\d+$/.test(root.added) && typeof root.volume === 'string' && typeof root.path === 'string').map(root => ({ id: root.id, added: root.added, volume: root.volume, path: root.path.replace(/\\/g, '/').replace(/\/$/, '') }));
+    return [...new Map(roots.map(root => [`${root.id}:${root.added}:${root.volume}:${root.path}`, root])).values()].sort((a, b) => a.id - b.id || a.path.localeCompare(b.path));
+  }
+  function activityIdentity(kind, patch) { return String(patch.jobId || patch.batchId || kind); }
+  function activityTerminalPatch(patch) {
+    if (!['failed', 'interrupted', 'cancelled'].includes(patch.stage)) return patch;
+    return { ...patch, outcome: patch.stage, stage: 'done' };
+  }
+  const activityHistory = (() => { try { const rows = JSON.parse(localStorage.getItem(ACTIVITY_HISTORY_KEY) || '[]'); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === 'string').slice(0, ACTIVITY_HISTORY_LIMIT) : []; } catch (e) { return []; } })();
+  function saveActivityHistory() { try { localStorage.setItem(ACTIVITY_HISTORY_KEY, JSON.stringify(activityHistory.slice(0, ACTIVITY_HISTORY_LIMIT))); } catch (e) {} }
+  function readActiveActivity() { try { const rows = JSON.parse(localStorage.getItem(ACTIVITY_ACTIVE_KEY) || '[]'); return Array.isArray(rows) ? rows.filter(row => row && typeof row.id === 'string') : []; } catch (e) { return []; } }
+  function saveActiveActivity(rows) { try { localStorage.setItem(ACTIVITY_ACTIVE_KEY, JSON.stringify(rows)); } catch (e) {} }
+  function persistActiveActivity(job) {
+    if (job.batchId || job.rawReviewJobId) return; // Native journals own restart recovery.
+    const active = readActiveActivity();
+    const id = String(job.jobId || job.id || job.kind || 'background-job');
+    const row = { id, kind: String(job.kind || ''), label: String(job.label || job.kind || 'Background job'), done: Number(job.done || 0), total: Number(job.total || 0), lastProgressAt: Number.isFinite(job.lastProgressAt) ? job.lastProgressAt : Date.now(), recovery: normalizeCatalogRecovery(job.recovery) };
+    const index = active.findIndex(item => item.id === id);
+    if (index >= 0) active[index] = row; else active.unshift(row);
+    saveActiveActivity(active.slice(0, ACTIVITY_HISTORY_LIMIT));
+  }
+  function clearActiveActivity(job) {
+    const id = String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
+    saveActiveActivity(readActiveActivity().filter(item => item.id !== id));
+  }
+  function recordActivityHistory(job) {
+    const status = job.outcome === 'cancelled' || job.stage === 'cancelled' ? 'Cancelled' : job.outcome === 'interrupted' || job.stage === 'interrupted' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
+    const id = job.rawReviewJobId ? `raw-review-job-${job.rawReviewJobId}` : String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
+    const failedItems = Array.isArray(job.failed) ? job.failed.filter(item => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 240)) : [];
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Number(job.finishedAt) || Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, rawReviewJobId: Number.isSafeInteger(job.rawReviewJobId) && job.rawReviewJobId > 0 ? job.rawReviewJobId : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery) };
+    const existing = activityHistory.findIndex(item => item.id === id);
+    if (existing >= 0) activityHistory.splice(existing, 1);
+    activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
+    clearActiveActivity(job);
+  }
+  for (const prior of readActiveActivity()) recordActivityHistory({ ...prior, stage: 'interrupted', outcome: 'interrupted', current: prior.recovery ? 'App restarted; catalog indexing can resume after source verification' : 'App restarted; recovery depends on this job type' });
+  saveActiveActivity([]);
+  // END LIBRARY_JOB_HISTORY_HELPERS
+  // Debug hook — `activity`/`_activityQueue` are closure-private, so a stuck "Indexing library"
+  // panel (every stage permanently "queued") was otherwise only diagnosable by reading the whole
+  // module or adding a throwaway console.log + rebuild. window.__TAURI__.core.invoke calls made
+  // directly from DevTools (bypassing the normal openFolder/runRescanFlags JS wrappers) still
+  // fire this app's own 'catalog-scan'/'registry-rescan' Tauri event listeners, so activityUpdate
+  // can be inspected without needing to reproduce through the real UI flow.
+  window._activityDebugSnapshot = () => ({ activity: { ...activity }, queued: [..._activityQueue.entries()] });
+  let _activityClearTimer = null;
+  // Stall watchdog: distinguishes "still working" from "stopped working" — before this, a
+  // wedged native call or crashed worker looked IDENTICAL to a healthy long-running scan,
+  // because the pill only ever reflected the last event it got, never how long ago that was.
+  let _activityStalled = false;
+  let _activityStallTimer = null;
+  // ⚠️ Must stay comfortably above the WORST-CASE gap between two real progress events, not the
+  // typical one. faces_run (catalog.rs) reports progress once per CHUNK of 4 photos, each photo
+  // individually bounded by a 30s timeout — but the decode work runs on decode_batch_pool, which
+  // on an 8-core machine sizes itself to only 3 workers ((cores-2)/2). CHUNK=4 into a 3-worker
+  // pool means the 4th photo queues behind the first 3, so a chunk with multiple genuinely slow
+  // photos can take up to ~2x the per-photo timeout (~60s) before the NEXT progress event fires —
+  // confirmed live: the pill showed "Not responding…" while faces_scanned_at was demonstrably
+  // climbing steadily in the database the whole time (verified via direct sqlite queries over a
+  // 6-minute window with zero stalls). 25s was tuned before the per-photo timeout/chunking
+  // existed and was never revisited when that landed — this is 90s specifically to clear the
+  // ~60s worst case with real margin, not just enough to paper over one measurement.
+  const ACTIVITY_STALL_MS = 90000;
+  // BEGIN LIBRARY_JOB_PROGRESS_HELPERS
+  function activityNoRecentProgress(job, now = Date.now()) {
+    return !!job && job.stage !== 'done' && Number.isFinite(job.lastProgressAt) && now - job.lastProgressAt > ACTIVITY_STALL_MS;
+  }
+  function activityRecoveryCopy(job) {
+    if(job.rawReviewJobId)return 'Cancel stops after the active RAW and preserves prepared previews. Resume checks sources and development settings, skips valid previews and rebuilds evicted previews.';
+    if(job.batchId)return 'Cancelling a recipe batch keeps photos already applied and leaves remaining eligible photos available to resume.';
+    if(job.kind==='import')return 'Cancel stops after the current file and preserves completed files in the destination. To continue after restarting, select the card and import again; existing files are checked for duplicates.';
+    if(job.kind==='catalog')return 'Cancel preserves saved hashes, face detections and embeddings, CLIP results, and pet scans. Retry supported phases checks native markers and skips unchanged completed work; stack, thumbnail, focus, grouping, and auto-tag stages continue through a normal library scan.';
+    if(job.kind==='export')return 'Cancel preserves completed output files. Restart continuation is unavailable for this export; reselect the photos before trying again.';
+    return 'Completed-work recovery and restart continuation depend on this job type.';
+  }
+  // END LIBRARY_JOB_PROGRESS_HELPERS
+  function _activityStallTick() {
+    // ⚠️ Previously skipped entirely while total===0, reasoning that a full-library scan primes
+    // the pill at total:0 and "if there's genuinely nothing to scan, that first event never
+    // comes" — but every phase in this chain (faces_run's worker, and catalog_cluster_faces
+    // right after it) DOES always settle, either with a real progress event or a final `done`
+    // one, even for an empty scan. So total staying 0 past ACTIVITY_STALL_MS isn't proof of "an
+    // idle library, nothing to report" — it's equally consistent with the whole chain being
+    // genuinely wedged (e.g. blocked forever on a lock elsewhere), which is exactly what this
+    // watchdog exists to catch. Confirmed live: a real session showed the pill stuck on
+    // "Working…" indefinitely with the backend at 0% CPU and no worker process running — a dead
+    // chain, not a slow one — and this exemption was the reason it never got flagged as stalled.
+    const now=Date.now();let changed=false;
+    const stalledNow=activity.visible&&activityNoRecentProgress(activity,now);
+    if(stalledNow!==_activityStalled){_activityStalled=stalledNow;changed=true;}
+    for(const job of _activityQueue.values()){const stalled=activityNoRecentProgress(job,now);if(stalled!==!!job.noRecentProgress){job.noRecentProgress=stalled;changed=true;}}
+    if(changed)renderActivity();
+    if ((!activity.visible || activity.stage === 'done') && !_activityQueue.size && _activityStallTimer) { clearInterval(_activityStallTimer); _activityStallTimer = null; }
+  }
+
+  function activityFrac() {
+    if (activity.kind === 'import' && activity.total) return activity.done / activity.total;
+    if (activity.total) return activity.done / activity.total;
+    return 0;
+  }
+
+  function positionCompactJobsPopover() {
+    const historyPop = document.getElementById('sk2-act-pop');
+    const activityWrap = document.getElementById('sk2-act');
+    if (!historyPop || historyPop.hidden || !activityWrap) return;
+    const wr = activityWrap.getBoundingClientRect();
+    const pw = historyPop.offsetWidth || 360;
+    const margin = 8;
+    const left = Math.max(margin, Math.min(wr.right - pw, window.innerWidth - pw - margin));
+    historyPop.style.left = `${left - wr.left}px`;
+    historyPop.style.right = 'auto';
+    historyPop.style.top = `${wr.height + 6}px`;
+    historyPop.style.maxHeight = `${Math.max(120, window.innerHeight - wr.bottom - 16)}px`;
+  }
+
+  function renderActivity() {
+    const el = document.getElementById('lib-activity');
+    if (!el) return;
+    const historyPop = document.getElementById('sk2-act-pop');
+    const jobsButton = document.getElementById('sk2-act-jobs');
+    const activityWrap = document.getElementById('sk2-act');
+    const activityDot = activityWrap && activityWrap.querySelector('.sk2-act-dot');
+    if (historyPop) historyPop.hidden = !compactJobsOpen;
+    if (jobsButton) {
+      jobsButton.textContent = 'Jobs';
+      jobsButton.setAttribute('aria-label', activityHistory.length ? `Recent background jobs, ${activityHistory.length}` : 'Recent background jobs');
+      jobsButton.setAttribute('aria-expanded', String(compactJobsOpen));
+    }
+    if (activityWrap) activityWrap.classList.toggle('busy', activity.visible && activity.stage !== 'done');
+    if (activityDot) activityDot.hidden = !(activity.visible && activity.stage !== 'done');
+    if (!activity.visible) {
+      el.innerHTML = '';
+      if (historyPop) {
+        historyPop.innerHTML = renderActivityHistory(compactJobsOpen) || '<div style="padding:12px;font-size:11px;color:var(--mut)">No recent jobs yet.</div>';
+        wireActivityHistoryActions(historyPop);
+        positionCompactJobsPopover();
+      } else {
+        el.innerHTML = renderActivityHistory();
+        wireActivityHistoryActions(el);
+      }
+      syncPhotoWorkBadges(); return;
+    }
+    const pct = Math.round(activityFrac() * 100);
+    // While the initial directory walk is still running, `total` is genuinely unknown (it's
+    // only known once the whole tree has been enumerated — see walk_root's own comment) — so
+    // there is nothing to show a percentage OF. Showing the running count instead ("Indexing…
+    // 4,213 found") is what actually answers "is this doing something or stuck", which a
+    // permanently-0% ring cannot.
+    // 'job' is the generic lane (N3.2): merges, the named-subject library scan, and any future
+    // one-off long op that doesn't fit the catalog/import stage lists. It carries its OWN label
+    // (activity.label) and cancel callback (activity.cancelFn) instead of STAGE_LABELS/a fixed
+    // cancel command — unifying the SCHEMA (kind/stage/done/total/current + one visible place)
+    // without forcing every job through the catalog-scan-shaped stage list it doesn't have.
+    const isGenericJob = activity.kind !== 'import' && activity.kind !== 'catalog';
+    const label = _activityStalled
+      ? 'No recent progress'
+      : isGenericJob
+      ? (activity.stage === 'done' ? (activity.outcome === 'failed' || (!activity.outcome && activity.failed && activity.failed.length) ? (activity.label || 'Job') + ' failed' : ['interrupted','cancelled','partial'].includes(activity.outcome) ? (activity.label || 'Job') + ' ' + activity.outcome : (activity.label || 'Job') + ' done') : (activity.label || 'Working') + '…')
+      : activity.stage === 'done'
+      ? (['failed','interrupted','cancelled','partial'].includes(activity.outcome) ? (activity.kind === 'import' ? 'Import' : 'Indexing') + ' ' + activity.outcome : (activity.kind === 'import' ? 'Imported' : 'Indexed') + (activity.total ? ` ${activity.total}` : ''))
+      : activity.stage === 'walk' && !activity.total && activity.done
+      ? `Indexing… ${activity.done.toLocaleString()} found`
+      : (STAGE_LABELS[activity.stage] || 'Working') + '…';
+    // ⚠️ The ring + "· NN%" text alone doesn't read as "there's a progress bar" — a real user
+    // testing N4 didn't recognize it as one and had to be told to click-to-expand to see the
+    // actual `.lib-act-bar`. Show that same bar markup in the COLLAPSED pill too, not only once
+    // expanded, so "is this doing something" is answerable at a glance. Kept out of the `<span>`
+    // pill itself (a bar under inline text needs its own block) — sits directly under the pill.
+    const collapsedBar = !activity.expanded && activity.stage !== 'done' && activity.total
+      ? `<div class="lib-act-bar" style="position:absolute;left:0;right:0;top:100%;margin:2px 0 0"><div style="width:${pct}%"></div></div>` : '';
+    // Other jobs queued behind this one (item 24: one tray for every progress bar) — a compact
+    // label+percent row each, appended into whichever popover branch below actually renders.
+    // Visible as a "+N" badge even collapsed, so "something else is running" doesn't require
+    // opening the pill to discover.
+    const queuedEntries = [..._activityQueue.entries()];
+    const queuedBadge = queuedEntries.length ? `<span class="lib-act-queued-badge" title="${queuedEntries.length} more job${queuedEntries.length > 1 ? 's' : ''} running">+${queuedEntries.length}</span>` : '';
+    const queuedHtml = queuedEntries.length
+      ? `<div class="lib-act-queued">` + queuedEntries.map(([qKind, q]) => {
+          const qPct = q.total ? Math.round(((q.done || 0) / q.total) * 100) : null;
+          const qLabel = q.label || (q.kind || qKind).charAt(0).toUpperCase() + (q.kind || qKind).slice(1);
+          return `<div class="lib-act-stage" data-activity-job-id="${escAttr2(qKind)}"><span style="width:12px;display:inline-block;text-align:center">›</span><span>${esc(qLabel)}${q.noRecentProgress ? ' · No recent progress' : ''}</span><span class="lib-act-stage-n">${qPct != null ? `${q.done} of ${q.total}` : ''}</span>${q.noRecentProgress ? '<span class="lib-act-stage-n" role="status">Warning; not a confirmed failure.</span>' : ''}</div>`;
+        }).join('') + `</div>`
+      : '';
+    let html = `<span class="lib-act-pill" id="lib-act-pill" title="Working in the background. You can keep editing. ${historyPop ? 'Open Jobs for details.' : 'Click for details.'}" style="position:relative${_activityStalled ? ';color:var(--red,#e5484d)' : ''}">
+      <span class="lib-act-ring" style="--p:${pct}%"></span><span>${esc(label)}${!_activityStalled && activity.stage !== 'done' && activity.total ? ` · ${pct}%` : ''}</span>${queuedBadge}${collapsedBar}`;
+    let activityDetails = '';
+    if (activity.expanded && isGenericJob) {
+      const bar = activity.stage !== 'done' && activity.total
+        ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
+      activityDetails = `<div class="lib-act-pop" onclick="event.stopPropagation()">
+        <div class="lib-act-pop-head"><span>${esc(activity.label || 'Job')}</span>
+          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : _activityStalled ? 'Cancel' : (activity.cancelFn ? 'Cancel' : '')}</span></div>
+        <div class="lib-act-pop-body">
+          ${activity.batchId ? `<button class="btn bgh" id="lib-act-batch-results">Results / retry / undo</button>` : ''}
+          <div class="lib-act-stage active"><span style="width:12px;display:inline-block;text-align:center">${activity.stage === 'done' ? '✓' : '›'}</span><span>${esc(activity.current || activity.label || 'Working')}</span><span class="lib-act-stage-n">${activity.stage === 'done' ? '' : (activity.total ? `${activity.done} of ${activity.total}` : '')}</span></div>${bar}
+          ${_activityStalled ? `<div class="lib-act-stage-n" role="status">No recent progress. The job has not been confirmed as failed; you can wait or cancel it.</div>` : ''}
+          ${activity.stage !== 'done' ? `<div class="lib-act-stage-n">${esc(activityRecoveryCopy(activity))}</div>` : ''}
+        </div>${queuedHtml}${historyPop ? '' : renderActivityHistory()}</div>`;
+    } else if (activity.expanded) {
+      const stages = STAGE_ORDER.filter((s) => s === 'copy' ? activity.kind === 'import' : activity.kind === 'catalog');
+      const activeIdx = stages.indexOf(activity.stage);
+      activityDetails = `<div class="lib-act-pop" onclick="event.stopPropagation()">
+        <div class="lib-act-pop-head"><span>${activity.stage === 'done'
+            ? esc(label)
+            : _activityStalled
+            ? (activity.kind === 'import' ? 'Import: no recent progress' : 'Indexing: no recent progress')
+            : (activity.kind === 'import' ? 'Importing' : 'Indexing library')}</span>
+          <span class="lib-act-pop-cancel" id="lib-act-cancel">${activity.stage === 'done' ? 'Dismiss' : 'Cancel'}</span></div>
+        <div class="lib-act-pop-body">`
+        + (activity.stage !== 'done' ? `<div class="lib-act-stage-n">${esc(activityRecoveryCopy(activity))}</div>` : '')
+        + (_activityStalled
+          ? `<div style="padding:8px 11px;font-size:11px;color:var(--mut)" role="status">No recent progress. This is a warning, not a confirmed failure. ${activity.kind === 'catalog' ? 'You can wait or cancel; indexing can continue on a later scan.' : 'You can wait or cancel; completed-work recovery depends on this job type.'}</div>`
+          : '')
+        + stages.map((s, i) => {
+          const cls = activity.stage === 'done' || i < activeIdx ? '' : i === activeIdx ? 'active' : '';
+          const icon = activity.stage === 'done' || i < activeIdx ? '✓' : i === activeIdx ? '›' : '·';
+          const n = i === activeIdx && activity.stage !== 'done' ? `${activity.done} of ${activity.total}` : (i < activeIdx || activity.stage === 'done' ? '' : 'queued');
+          const bar = i === activeIdx && activity.stage !== 'done' && activity.total
+            ? `<div class="lib-act-bar"><div style="width:${Math.round((activity.done / activity.total) * 100)}%"></div></div>` : '';
+          return `<div class="lib-act-stage ${cls}"><span style="width:12px;display:inline-block;text-align:center">${icon}</span><span>${STAGE_LABELS[s]}</span><span class="lib-act-stage-n">${n}</span></div>${bar}`;
+        }).join('')
+        + `</div>`
+        + (activity.stage !== 'done' && !_activityStalled ? `<div style="padding:7px 11px;font-size:11px;color:var(--mut);border-top:1px solid var(--bdr);line-height:1.4">Indexing runs in the background. You can keep browsing and editing while it works.</div>` : '')
+        // Pause background indexing — the persistent escape hatch. There was previously NO way
+        // to reclaim the machine from background work short of quitting the app.
+        + `<div style="padding:7px 11px;border-top:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;gap:8px">
+             <span style="font-size:11px;color:var(--mut)">Pause background indexing</span>
+             <button type="button" id="lib-act-pause" class="btn bgh" style="font-size:11px;padding:2px 9px">${bgPaused() ? 'Resume' : 'Pause'}</button>
+           </div>`
+        + (activity.failed && activity.failed.length
+          ? `<div style="padding:8px 11px;border-top:1px solid var(--bdr);background:rgba(229,72,77,.08)">`
+            + activity.failed.slice(0, 8).map((f) => `<div style="font-size:10px;color:var(--mut);padding:1px 0">${esc(f)}</div>`).join('')
+            + (activity.failed.length > 8 ? `<div style="font-size:10px;color:var(--mut)">…and ${activity.failed.length - 8} more</div>` : '')
+            + `</div>`
+          : '')
+        + queuedHtml
+        + (historyPop ? '' : renderActivityHistory())
+        + `</div>`;
+    }
+    if (!historyPop) html += activityDetails;
+    html += `</span>`;
+    el.innerHTML = html;
+    if (historyPop) {
+      historyPop.innerHTML = `${activityDetails}${renderActivityHistory(compactJobsOpen) || '<div style="padding:12px;font-size:11px;color:var(--mut)">No recent jobs yet.</div>'}`;
+      historyPop.hidden = !compactJobsOpen;
+      // The active pill's details markup normally floats above its footer anchor. In SK2 it is
+      // content inside the one top-anchored Jobs popover, so restore it to normal flow here.
+      historyPop.querySelectorAll('.lib-act-pop').forEach((panel) => {
+        panel.style.position = 'static'; panel.style.bottom = 'auto'; panel.style.right = 'auto';
+        panel.style.width = 'auto'; panel.style.maxWidth = 'none'; panel.style.boxShadow = 'none';
+        panel.style.border = '0'; panel.style.borderRadius = '0'; panel.style.background = 'transparent';
+        panel.style.zIndex = 'auto';
+      });
+      wireActivityHistoryActions(historyPop);
+      positionCompactJobsPopover();
+    } else wireActivityHistoryActions(el);
+    syncPhotoWorkBadges();
+    const pill = document.getElementById('lib-act-pill');
+    if (pill) pill.onclick = (e) => {
+      e.stopPropagation();
+      if (historyPop) document.getElementById('sk2-act-jobs')?.click();
+      else { activity.expanded = !activity.expanded; renderActivity(); }
+    };
+    // The pill sits near the LEFT of the bottom bar (lib-count/thumb-progress/status-labels all
+    // come before it), but .lib-act-pop's CSS was a plain right:0 — meaning "align the popover's
+    // right edge to the pill's right edge", i.e. extend LEFTWARD from a pill that's often close
+    // to x=0. A 260px-wide popover from a pill near the left edge runs straight off the left side
+    // of the window — reported live, not hypothetical. #lib-filters-panel's right:0 is safe
+    // because its own trigger button is anchored at the far right of its row; this pill has no
+    // such guarantee, so it needs a real viewport clamp instead of a fixed-corner CSS assumption.
+    const pop = pill && pill.querySelector('.lib-act-pop');
+    if (pop) {
+      const pr = pill.getBoundingClientRect();
+      const pw = pop.offsetWidth || 260;
+      const margin = 8;
+      let desiredLeft = pr.right - pw; // default: right-aligned to the pill, same as before
+      desiredLeft = Math.max(margin, Math.min(desiredLeft, window.innerWidth - pw - margin));
+      pop.style.left = (desiredLeft - pr.left) + 'px';
+      pop.style.right = 'auto';
+      // The shared shell mounts this pill in the top bar; its old footer anchor
+      // opens above the viewport. Keep footer behavior and open header details below.
+      if (pill.closest('#sk2-act')) {
+        pop.style.top = (pr.height + 6) + 'px';
+        pop.style.bottom = 'auto';
+        pop.style.maxHeight = Math.max(120, window.innerHeight - pr.bottom - 20) + 'px';
+        pop.style.overflowY = 'auto';
+      }
+    }
+    const detailHost = historyPop || el;
+    const resultsBtn = detailHost.querySelector('#lib-act-batch-results');
+    if (resultsBtn) resultsBtn.onclick = () => recipeBatchResults(activity.batchId).catch(e => toast(humanizeErr('open batch results', e), 'err'));
+    const pauseBtn = detailHost.querySelector('#lib-act-pause');
+    if (pauseBtn) {
+      pauseBtn.onclick = (e) => { e.stopPropagation(); bgSetPaused(!bgPaused()); };
+    }
+    const cancelBtn = detailHost.querySelector('#lib-act-cancel');
+    if (cancelBtn) {
+      cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (activity.stage === 'done') { activity.visible = false; renderActivity(); return; }
+        // bgStopAll, not a bare catalog_scan_cancel: the Rust flag alone cannot stop a paced
+        // drain loop (see drainCatalogThumbnails' comment on why this button did nothing).
+        if (activity.kind === 'catalog') bgStopAll();
+        else if (typeof activity.cancelFn === 'function') { try { activity.cancelFn(); } catch (e) {} }
+        // ⚠️ A job with no cancelFn (e.g. the merge/HDR/focus/astro/panorama lane — it has no
+        // cancel token, see main.rs's emit_job doc comment) previously left this button a no-op:
+        // it showed "Cancel" once the stall watchdog fired, but clicking it only closed the
+        // popover, so a wedged job stayed visible forever with no way to dismiss it. Since there's
+        // nothing to actually cancel, treat the click as a dismiss instead — the pill can no
+        // longer get permanently stuck no matter what the backend does or fails to emit.
+        else if (activity.kind !== 'catalog') { activity.visible = false; }
+        activity.expanded = false;
+        renderActivity();
+      };
+    }
+  }
+
+  function wireActivityHistoryActions(container) {
+    if (!container) return;
+    container.querySelectorAll('[data-job-reveal-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobRevealId);
+        if (row && row.revealPath) invoke('reveal_in_finder', { path: row.revealPath }).catch((err) => toast(humanizeErr('show exported file', err), 'err'));
+      };
+    });
+    container.querySelectorAll('[data-job-batch-results-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobBatchResultsId);
+        if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
+      };
+    });
+    container.querySelectorAll('[data-job-index-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find((item) => item.id === button.dataset.jobIndexResumeId);
+        if (row) resumeCatalogIndex(row);
+      };
+    });
+    container.querySelectorAll('[data-job-raw-resume-id]').forEach((button) => {
+      button.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const row = activityHistory.find(item => item.id === button.dataset.jobRawResumeId);
+        if (row?.rawReviewJobId) void prepareRawReviewPreviews([], row.rawReviewJobId);
+      };
+    });
+  }
+
+  function renderActivityHistory(open = activity.visible) {
+    if (!activityHistory.length) return '';
+    return `<details class="lib-act-history" aria-label="Recent job history" ${open ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
+      <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.rawReviewJobId && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-raw-resume-id="${esc(row.id)}">Resume RAW preparation</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+      ).join('')}</details>`;
+  }
+
+  // Wireframe review item 24 (unified progress): activity used to be ONE slot — a second
+  // concurrent job (export running while faces are still indexing, say) simply overwrote
+  // whatever the pill was already showing, so the earlier job's progress silently vanished
+  // from view even though it kept running. _activityQueue holds any job that arrives while a
+  // DIFFERENT kind already owns the visible pill, keyed by kind, so it can still be seen (as a
+  // compact row in the expanded popover) and is promoted into the full pill — stall-watchdog,
+  // cancel button and all — the moment the current one clears. Same-kind updates (the
+  // overwhelmingly common case: one scan reporting its own repeated progress) are completely
+  // unaffected — they still go straight to `activity` exactly as before.
+  const _activityQueue = new Map(); // stable job identity -> last patch, including same-kind jobs
+  function activityUpdate(kind, patch, promoted = false) {
+    patch = activityTerminalPatch({ ...patch, jobId: activityIdentity(kind, patch), lastProgressAt: promoted && Number.isFinite(patch.lastProgressAt) ? patch.lastProgressAt : Date.now(), noRecentProgress: false });
+    if (typeof patch.current === 'string' && patch.current.startsWith('@photos:')) {
+      let photoPaths = [];
+      try {
+        const parsed = JSON.parse(patch.current.slice(8));
+        if (Array.isArray(parsed)) photoPaths = parsed.filter((p) => typeof p === 'string');
+      } catch (e) {}
+      patch = { ...patch, photoPaths, current: `Processing ${photoPaths.length} photo${photoPaths.length === 1 ? '' : 's'}` };
+    } else if ((patch.current !== undefined && patch.photoPaths === undefined) || patch.stage === 'done') {
+      patch = { ...patch, photoPaths: [] };
+    }
+    const isDone = patch && patch.stage === 'done';
+    if (isDone && patch.failed && patch.failed.length && !patch.outcome) patch.outcome = 'failed';
+    const activeId = activity.jobId || activity.batchId || activity.kind;
+    if (activity.visible && activity.stage !== 'done' && activeId && activeId !== patch.jobId) {
+      // Keep independent jobs distinct, even when they share a lane such as export or catalog.
+      if (isDone) {
+        const queued = _activityQueue.get(patch.jobId);
+        recordActivityHistory({ ...queued, ...patch, kind });
+        clearActiveActivity({ ...queued, ...patch, kind });
+        _activityQueue.delete(patch.jobId);
+      } else {
+        const queued = { ...(_activityQueue.get(patch.jobId) || {}), ...patch, kind };
+        _activityQueue.set(patch.jobId, queued);
+        persistActiveActivity(queued);
+      }
+      renderActivity();
+      return;
+    }
+    if (_activityClearTimer) { clearTimeout(_activityClearTimer); _activityClearTimer = null; }
+    // Any real event landing — regardless of whether done/total actually moved — is proof the
+    // pipeline is alive, so it always resets the stall clock and clears a stalled state.
+    activity = { ...activity, ...(activeId !== patch.jobId ? { batchId: null, rawReviewJobId: null, failed: [], cancelFn: null, outcome: null, label: null, revealPath: null } : {}), kind, visible: true, ...patch };
+    _activityStalled = activityNoRecentProgress(activity);
+    if (activity.stage === 'done') clearActiveActivity(activity);
+    else persistActiveActivity(activity);
+    if (activity.visible && activity.stage !== 'done' && !_activityStallTimer) {
+      _activityStallTimer = setInterval(_activityStallTick, 5000);
+    }
+    renderActivity();
+    if (activity.stage === 'done') {
+      recordActivityHistory(activity);
+      // The first render above paints the terminal activity before its history row exists.
+      // Refresh the open jobs popover now so completion is visible immediately, without waiting
+      // for the auto-dismiss timer or another job to trigger a render.
+      renderActivity();
+      if (_activityStallTimer && !_activityQueue.size) { clearInterval(_activityStallTimer); _activityStallTimer = null; }
+      // Failures (a nonempty failure list on the import side) don't auto-clear — the whole
+      // point of surfacing this at all is so "3 files failed" isn't something only the console
+      // saw. A clean finish clears itself after a few seconds so it doesn't linger forever.
+      const hasFailures = !!activity.batchId || (activity.failed && activity.failed.length);
+      if (!hasFailures) {
+        _activityClearTimer = setTimeout(() => {
+          activity.visible = false;
+          // Promote whichever queued job has been waiting longest (Map preserves insertion
+          // order) into the now-empty primary slot, so it picks up full stall/cancel tracking
+          // instead of staying a second-class queued row forever.
+          const next = _activityQueue.entries().next();
+          if (!next.done) {
+            const [nextId, nextPatch] = next.value;
+            _activityQueue.delete(nextId);
+            activityUpdate(nextPatch.kind || nextId, nextPatch, true);
+          } else {
+            renderActivity();
+          }
+        }, 8000);
+      }
+    }
+  }
+
+  if (LIBTEST) {
+    window.__libtestPrepareBatchRawFiles = prepareBatchRawFiles;
+    window.__libtestSetOriginalAvailable = (available) => { window.__libtestOriginalAvailable = !!available; };
+    window.__libtestOriginalSourceState = (path) => ({
+      openedPath: state.openedPath,
+      openedPaths: [...(state.openedPaths || [])],
+      sourceMode: state.photoSourceModes.get(path) || null,
+      queueRequired: state.originalUnavailableEditPaths.has(path),
+    });
+    window.__libtestSeedHqOfflineCache = (originalPath, cachePath, bytes) => {
+      if (!/[?&]libhqcache=1/.test(location.search)) throw new Error('libtest HQ cache fixture requires ?libhqcache=1');
+      if (!(/^\/test\/(?:Photos|AllPhotos)\//.test(String(originalPath || '')))
+        || !String(cachePath || '').startsWith('/test/offline-cache/')) throw new Error('libtest HQ cache fixture paths must stay under /test');
+      const value = bytes instanceof ArrayBuffer ? bytes
+        : (ArrayBuffer.isView(bytes) ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : null);
+      if (!value || !value.byteLength) throw new Error('libtest HQ cache fixture requires image bytes');
+      _hqOfflineByPath.set(originalPath, { path: cachePath, reason: 'libtest' });
+      (window.__libtestFileBytes ||= Object.create(null))[cachePath] = value;
+      return { originalPath, cachePath };
+    };
+    // No real backend under libtest to fire real catalog-scan/ingest-progress events — this is
+    // the same "manual debug trigger" pattern window.libtestLrConnect() already uses, so the
+    // indicator's in-progress/done/failed states are screenshot-verifiable without one.
+    window.libtestFireActivity = (state) => {
+      if (state === 'progress') activityUpdate('catalog', { stage: 'metadata', done: 40, total: 120 });
+      else if (state === 'done') activityUpdate('catalog', { stage: 'done', done: 120, total: 120 });
+      else if (state === 'import-failed') activityUpdate('import', { stage: 'done', done: 21, total: 24, failed: ['P1000512.RW2: read error', 'P1000513.RW2: read error', 'P1000889.RW2: disk full'] });
+    };
+    window.libtestPhotoActivity = (path, stage = 'faces') => {
+      if (stage === 'clear') activityUpdate('catalog', { stage: 'done', current: '' });
+      else activityUpdate('catalog', { stage, done: 0, total: 1, current: '@photos:' + JSON.stringify([path]) });
+    };
+    // Same reasoning: the info panel's own trigger is the 'i' keyboard shortcut, gated on
+    // state.open (the docked/deskx harness never goes through toggleLibrary(), so state.open
+    // is never true here) — this is what makes the keyword-chip editor screenshot-verifiable.
+    window.libtestShowInfoPanel = (path) => { state._kbCursor = path; state.showInfo = true; renderInfoPanel(); };
+    // Same reasoning: Quick Look's real trigger (Space) is gated on state.open, which the
+    // docked/deskx harness never sets.
+    window.libtestShowQuickLook = (path) => showQuickLook(path);
+    // Same reasoning again (S6d chunk C, imp-bar): openImportPanel() is real and reachable from
+    // a real DOM row (.lib-card-row[data-card]), but that row only appears once a removable
+    // volume with a DCIM folder shows up via refreshVolumes()'s own invoke('list_volumes'),
+    // which this file has no mock for — so under libtest a card can never actually mount. This
+    // calls the exact same real function with a synthetic path instead of inventing a UI. The
+    // progress fill itself still can't be exercised for real: the real fill comes from a Tauri
+    // 'ingest-progress' event this mock's window.__TAURI__.event.listen stub never fires, so the
+    // bar renders at 0% width after a real Import click — call libtestFillImportBar() right
+    // after to see what a mid-import frame looks like.
+    window.libtestOpenImportPanel = (path) => openImportPanel(path || '/test/CARD_A');
+    window.libtestFillImportBar = (pct) => { const el = document.getElementById('imp-bar'); if (el) el.style.width = `${pct ?? 42}%`; };
+    // Same reasoning again (S6d chunk C, lib-astro-modal/lib-collage-modal): both are real,
+    // reachable only from the multi-select context menu's Merge submenu (astro) or the
+    // create-collage action (collage) — many real clicks deep through a dynamically-built menu
+    // tree for what's ultimately a plain synchronous <dialog>.showModal() either way. These call
+    // the exact real functions with no menu/selection prerequisite.
+    window.libtestAstroModal = () => { astroStackModeModal(); };
+    window.libtestCollageModal = (n) => { collageTemplateModal(n || 2); };
+    // Same reasoning again (S6d chunk C, lib-empty/-addphotos/-addfolder/-gphotos): the true
+    // first-launch empty state is real (renderLibraryNoRoot) and IS reachable at boot time via
+    // ?libnoroot=1 (state.root's own init above), but there's no way to reach it later in an
+    // already-booted page without a full reload — this calls the exact same real function.
+    window.libtestClearRoot = () => { state.root = ''; renderLibraryNoRoot(); };
+    // Same reasoning again (S6d chunk C, hq-offline-quit-modal / lib-offq-modal): both are real
+    // plain functions, gated only on the NATIVE event that normally opens them (a Tauri
+    // window-close intercept, and a reconnect-conflict poll) which this file explicitly never
+    // wires up under LIBTEST/no-__TAURI__ — not on anything about the dialog itself. Calling the
+    // function directly is the real modal, just skipping the native trigger a browser can't fire.
+    window.libtestHqOfflineQuitModal = () => { hqOfflineQuitBlockedModal(); };
+    window.libtestOfflineQueueConflictModal = (n) => { offlineQueueConflictModal(n || 3); };
+  }
+
+  /// Mirrors a catalog-scan progress event onto the BOOT SPLASH specifically — separate from the
+  /// ordinary activity pill, which only exists once the app's own chrome has rendered. A no-op
+  /// once `#boot-splash` is gone (the common case: every scan after the first one during a
+  /// session), so this costs nothing outside the one moment it exists for.
+  window._bootStageLabelFor = (phase) => STAGE_LABELS[phase] || phase || 'Indexing';
+  // ⚠️ One bar for the whole boot sequence — chromasmith-22.html's bootProgressSet owns the
+  // actual bar width (weighted phase slices + a monotonic guard so it can never visibly regress
+  // or restart; see its own comment). This function's job is now just: forward the raw event
+  // there, and render a label that reads as ONE ongoing process rather than a new phase starting
+  // over each time — "Preparing your library… 62%", not "Reading photo info… 4,201 / 9,800" that
+  // then jumps to a differently-worded, differently-scaled line a moment later.
+  function updateBootSplashProgress(p) {
+    const wrap = document.getElementById('boot-splash-progress');
+    if (!wrap) return;
+    // Read by chromasmith-22.html's watchdog if it fires while this splash is still up, so the
+    // stall banner can name the actual stage instead of a generic "startup".
+    window._bootLastPhase = p.phase;
+    if (typeof window.bumpBootSplashWatchdog === 'function') window.bumpBootSplashWatchdog(8000);
+    if (typeof window.bootProgressSet === 'function') window.bootProgressSet(p.phase, p.done || 0, p.total || 0);
+    const label = document.getElementById('boot-splash-label');
+    if (!label) return;
+    const shown = typeof window._bootShownPct === 'number' ? Math.round(window._bootShownPct) : 0;
+    label.textContent = shown > 0 ? `Preparing your gallery… ${shown}%` : 'Preparing your gallery…';
+  }
+  // The pause choice lives in localStorage (JS) but is ENFORCED in Rust, so it has to be
+  // re-asserted on every launch — otherwise a user who paused and quit would find indexing
+  // running again the moment they reopened the app.
+  if (!LIBTEST) {
+    try { invoke('catalog_bg_set_paused', { paused: bgPaused() }).catch(() => {}); } catch (e) {}
+  }
+  function wireActivityListeners() {
+    if (!window.__TAURI__ || !window.__TAURI__.event) return; // LIBTEST's mock listen() is a harmless no-op
+    window.__TAURI__.event.listen('catalog-scan', (ev) => {
+      const p = ev.payload || {};
+      // ⚠️ CONFIRMED root cause of the panel showing "0%" while remaining genuinely dropped:
+      // catalog_thumbnails (catalog.rs) ALSO emits a raw catalog-scan event for phase:'thumb'
+      // with done=result.generated (~20-32, one batch) and total=remaining (~40,000, the whole
+      // backlog) — 32/40000 rounds to 0%. That event and drainCatalogThumbnails' own
+      // activityUpdate call (library-ui.js, which correctly accumulates done across the whole
+      // session) both write the SAME 'thumb' stage on every single batch, racing each other —
+      // whichever the browser's event queue delivers last wins the display, so it flickered
+      // between the two. drainCatalogThumbnails already owns this stage's display authoritatively
+      // (it fires right after the same invoke() this event is a byproduct of), so the raw event
+      // is skipped here rather than fixed to agree with it — one writer, not two kept in sync.
+      // hqOfflineDrainLoop polls catalog_hq_offline on its OWN 90s setInterval, fully independent
+      // of catalogRunBackgroundPhases' walk/thumb/focus/hash chain, yet both report through this
+      // SAME 'catalog' activity kind — so an hq_offline report can land mid-way through a real,
+      // still-genuinely-pending walk/thumb pass (routine: the two run on unrelated timers).
+      // `otherStageActive` catches that: if some OTHER real stage already owns the pill, an
+      // hq_offline report (progress or its total:0 "nothing pending" signal) must not touch it at
+      // all — hq_offline may only ever update/clear its OWN turn with the pill. Confirmed live
+      // 2026-09-16 alongside a stuck "not scanned" count: an hq_offline total:0 report force-
+      // cleared a genuine walk/thumb pass to stage:'done' (which then auto-hid the whole panel
+      // after 8s), reading as "the indexing panel is empty" while pending-thumbs/pending-faces
+      // counts stayed nonzero and CPU sat at 0%.
+      const otherStageActive = activity.visible && activity.stage !== 'done' && activity.stage !== 'hq_offline' && activity.kind === 'catalog';
+      if (p.phase !== 'thumb' && !(p.phase === 'hq_offline' && otherStageActive) && !(p.phase === 'done' && _catalogActiveJobId)) {
+        activityUpdate('catalog', { jobId: _catalogActiveJobId || 'catalog', recovery: _catalogActiveRecovery, label: 'Indexing library', stage: p.phase, done: p.done || 0, total: p.total || 0, current: p.current || '' });
+      }
+      updateBootSplashProgress(p);
+      if (p.phase === 'done') refreshCatalogCounts();
+      // While tagging runs, refresh the Keywords progress line and counts every 15s (not per
+      // event — the worker emits several per second).
+      if (p.phase === 'clip' && Date.now() - _tagProgressAt > 15000) {
+        _tagProgressAt = Date.now();
+        invoke('catalog_counts').then((c) => { catalogCounts = c; renderCollections(); }).catch(() => {});
+        invoke('catalog_keywords').then((n) => { keywordTree = n || []; renderCollections(); }).catch(() => {});
+      }
+      // ⚠️ hq_offline is the LAST entry in STAGE_ORDER, and hq_offline_run (catalog.rs) emits
+      // phase:"hq_offline" with total:0 specifically to mean "nothing in the last-100-edited/
+      // added set is pending right now" — a legitimate terminal state, not a stage still running.
+      // Nothing else in the automatic chain ever follows hq_offline with its own 'done' event, so
+      // without this the pill parked on "Preparing full-res cache…" forever after every
+      // genuinely-finished session. total:1 (below) means hq_offline just STARTED real work on
+      // one item, so only a total:0 report counts as done. Gated on `activity.stage ===
+      // 'hq_offline'` (not unconditional) for the same otherStageActive reasoning above — hq_offline
+      // may only declare ITSELF done, never whatever unrelated stage happens to occupy the pill.
+      if (p.phase === 'hq_offline' && !p.total && activity.stage === 'hq_offline') {
+        activityUpdate('catalog', { stage: 'done', done: 0, total: 0 });
+      }
+    }).catch(() => {});
+    window.__TAURI__.event.listen('ingest-progress', (ev) => {
+      const p = ev.payload || {};
+      const done = p.total && p.done >= p.total ? p.total : p.done;
+      activityUpdate('import', { stage: p.total && done >= p.total ? 'done' : 'copy', done, total: p.total || 0, current: p.current || '' });
+    }).catch(() => {});
+    // rescan_edited_registry_recursive (library.rs) — throttled progress (every 200 folders,
+    // not per-folder, matching catalog-scan's own IPC-flooding guard) while it walks the whole
+    // library rebuilding the flagged/favorites/edited/rejected registries. Total folder count
+    // isn't known ahead of time, so this shows an indeterminate "N folders scanned" count rather
+    // than a percentage — same shape merge.rs's job-progress jobs use for the same reason.
+    window.__TAURI__.event.listen('registry-rescan', (ev) => {
+      const p = ev.payload || {};
+      activityUpdate('registry-rescan', {
+        label: 'Rescanning gallery flags…',
+        stage: p.done ? 'done' : 'scanning',
+        done: p.folders_scanned || 0,
+        total: 0,
+        current: `${p.added || 0} newly registered`,
+        cancelFn: p.done ? undefined : () => { invoke('cancel_registry_rescan').catch(() => {}); },
+      });
+      if (p.done) {
+        renderCollectionCounts();
+        if (typeof toast === 'function') {
+          toast(p.cancelled
+            ? `Rescan cancelled — ${p.added} newly registered so far`
+            : `Rescan complete — ${p.added} newly registered`, true);
+        }
+      }
+    }).catch(() => {});
+    // N3.2: the generic lane for anything that isn't a catalog scan or a card import — today
+    // that's merge.rs's HDR/focus/astro/panorama commands (main.rs emits this alongside them,
+    // coarse phase-level since their inner loops are numerical pyramids not worth instrumenting
+    // per-pixel — see ROADMAP.md's N3 writeup). Schema is the SAME {phase,done,total,current}
+    // shape as catalog-scan, plus a `job`/`label` so this one event name can carry many kinds of
+    // work without a new event per feature.
+    window.__TAURI__.event.listen('job-progress', (ev) => {
+      const p = ev.payload || {};
+      activityUpdate(p.job || 'job', { jobId: p.jobId || p.job, label: p.label || p.job, stage: p.phase || 'working', done: p.done || 0, total: p.total || 0, current: p.current || '' });
+    }).catch(() => {});
+  }
+
+  /// Public entry point for JS-side long-running ops that aren't Rust events — the Named-Subject
+  /// "Find across library" scan (chromasmith-22.html's subjFindAll) previously ran a bespoke
+  /// _subjScanBusy/_subjScanProgress pair with its own inline panel and nothing in the shared
+  /// activity indicator, so it was invisible from anywhere else in the app (ROADMAP N3.2). It
+  /// keeps its own inline per-photo results list (that UI has no equivalent in this generic
+  /// pill), but now ALSO mirrors progress here so there's one consistent place showing "is
+  /// anything running" regardless of which feature started it. `patch.cancelFn`, if given, wires
+  /// the pill's own Cancel button; omit it for a job with no cancel path.
+  async function recoverInterruptedRecipeBatch() {
+    const batches = await invoke('recipe_batch_list');
+    const unfinished = batches.find(b => ['running', 'undoing'].includes(b.status) || b.pending || b.failed);
+    if (!unfinished) return null;
+    let batch = await invoke('recipe_batch_get', { id: unfinished.id });
+    // A renderer restart has no worker for this journal. Persist interruption so native
+    // undo and the report agree; Resume explicitly restarts its remaining items.
+    if (['running', 'undoing'].includes(batch.status)) batch = await invoke('recipe_batch_cancel', { id: batch.id });
+    showRecipeBatch(batch);
+    toast('Unfinished batch edits are available in Edit → Batch edit history');
+    return batch;
+  }
+  if (LIBTEST) window.libtestRecoverInterruptedRecipeBatch = recoverInterruptedRecipeBatch;
+  if (!LIBTEST || /[?&]libtestBatchRecovery=1/.test(location.search))
+    setTimeout(() => recoverInterruptedRecipeBatch().catch(e => console.error('batch recovery', e)), 0);
+  if (!LIBTEST) _rawReviewRecovery = recoverRawReviewJobs().catch(e => console.error('RAW preparation recovery', e));
+  window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
+  window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };

@@ -1,0 +1,256 @@
+  // ── wiring ──────────────────────────────────────────────────────────────────
+  // Sidebar starts OPEN — in the full-mode left-sidebar layout it IS the navigation
+  // (Collections/Cloud/Folders, per the approved wireframe); collapsing is the occasional
+  // choice now, not the default.
+  // ⚠️ NEW KEY, deliberate: the pre-redesign key ('chromasmith_lib_tree_collapsed') has '1'
+  // persisted on real machines (collapsed WAS the old default, so any toggle round-trip stored
+  // it) — merely changing the default couldn't un-hide the sidebar there, which is exactly how
+  // build 23c still looked "old layout, no sidebar". A redesign must MIGRATE persisted UI
+  // state, not just change defaults: everyone gets the open sidebar once, then the toggle
+  // persists under the new key.
+  const treeToggleBtn = overlay.querySelector('#lib-tree-toggle');
+  try { localStorage.removeItem('chromasmith_lib_tree_collapsed'); } catch (e) {}
+  let treeCollapsed = localStorage.getItem('chromasmith_lib_sidebar') === 'collapsed';
+  function syncTreeToggle() {
+    overlay.classList.toggle('tree-collapsed', treeCollapsed);
+    treeToggleBtn.classList.toggle('on', !treeCollapsed);
+  }
+  syncTreeToggle();
+  treeToggleBtn.onclick = () => {
+    treeCollapsed = !treeCollapsed;
+    localStorage.setItem('chromasmith_lib_sidebar', treeCollapsed ? 'collapsed' : 'open');
+    syncTreeToggle();
+  };
+  overlay.querySelector('#lib-pick').onclick = pickFolder;
+  { const qs = overlay.querySelector('#lib-quickstart'); if (qs) qs.onclick = () => { if (typeof window.chromasmithShowTour === 'function') window.chromasmithShowTour(); }; }
+  wireGridFileDrop();
+  wireNativeFileDrop();
+  wireScrollPersist();
+  overlay.querySelector('#lib-gphotos').onclick = () => {
+    // gpImportClick lives in chromasmith-22.html (the web-app half); it's exposed on window.
+    if (typeof window.gpImportClick === 'function') window.gpImportClick();
+  };
+  overlay.querySelector('#lib-recent').onclick = toggleRecentMenu;
+  // #lib-close removed: the top-bar Library button is the single control for this.
+  overlay.querySelector('#lib-expand').onclick = () => toggleExpandedView();
+  const starsToggle = overlay.querySelector('#lib-stars-toggle');
+  if (starsToggle) {
+    starsToggle.checked = STARS_ENABLED;
+    starsToggle.onchange = () => {
+      const wasEnabled = STARS_ENABLED;
+      STARS_ENABLED = starsToggle.checked;
+      localStorage.setItem('chromasmith_lib_stars_enabled', STARS_ENABLED ? '1' : '0');
+      if (STARS_ENABLED && !wasEnabled) {
+        let sortOption = overlay.querySelector('#lib-sort option[value="rating"]');
+        if (!sortOption) {
+          sortOption = document.createElement('option');
+          sortOption.value = 'rating'; sortOption.textContent = 'Rating';
+          overlay.querySelector('#lib-sort').appendChild(sortOption);
+        }
+        overlay.querySelector('#lib-rating-filter-wrap').style.display = '';
+      } else if (!STARS_ENABLED && wasEnabled) {
+        const sortOption = overlay.querySelector('#lib-sort option[value="rating"]');
+        if (sortOption) sortOption.remove();
+        if (state.sortBy === 'rating') {
+          state.sortBy = 'date';
+          localStorage.setItem('chromasmith_lib_sort', 'date');
+        }
+        state.ratingFilter = 'all';
+        overlay.querySelector('#lib-rating-filter').value = 'all';
+        overlay.querySelector('#lib-rating-filter-wrap').style.display = 'none';
+      }
+      const sortLabel = overlay.querySelector('#lib-sort-label');
+      if (sortLabel) sortLabel.textContent = overlay.querySelector('#lib-sort').selectedOptions[0]?.textContent || 'Date taken';
+      renderGrid();
+      if (typeof syncFilterUI === 'function') syncFilterUI();
+    };
+  }
+  const colorLabelsToggle = overlay.querySelector('#lib-color-labels-toggle');
+  syncColorLabelVisibility();
+  if (colorLabelsToggle) colorLabelsToggle.onchange = () => {
+    COLOR_LABELS_ENABLED = colorLabelsToggle.checked;
+    localStorage.setItem('chromasmith_color_labels_enabled', COLOR_LABELS_ENABLED ? '1' : '0');
+    if (!COLOR_LABELS_ENABLED) {
+      state.colorLabelFilter = 'all';
+      const select = overlay.querySelector('#lib-color-label-filter');
+      if (select) select.value = 'all';
+    }
+    syncColorLabelVisibility();
+    if (state._catalogPaged && (state.source === 'catalog' || state.source === 'folder')) applyCatalogFilterChange();
+    else renderGrid();
+    syncFilterUI();
+  };
+  const storedUnifiedView = initialUnifiedPreference && document.body.classList.contains('deskx');
+  // Bug #2 fix: discoverable Info-panel trigger — window.__libInfo(true) already existed and
+  // worked, it just had no button anywhere pointing at it. Uses the same _kbCursor/openedPath/
+  // selected fallback renderInfoPanel already reads, so no new "what's the target" logic needed.
+  // HANDOVER §3.3: was hardcoded to `true`, so a second click couldn't close the panel it just
+  // opened — only the I key (which does toggle, below) could. Toggle here too.
+  overlay.querySelector('#lib-info-btn').onclick = () => window.__libInfo(!state.showInfo);
+  function toggleExpandedView(force) {
+    const goingFull = force !== undefined ? force : !state.expanded_view;
+    const leavingGallery = state.open && state.expanded_view && !goingFull;
+    const enteringGallery = state.open && goingFull && !state.expanded_view;
+    if (leavingGallery) rememberGalleryScrollPosition();
+    // Full mode's sidebar (--lib-side-w, 150-420px, default 230) and the docked filmstrip
+    // (--dock-w-user, 90-420px, default 120) are two independently-resizable widths — so
+    // switching the Library/Develop tabs (full <-> docked) previously made the left column
+    // visibly jump every time, even though nothing the user did asked for a resize. Carry the
+    // width that's actually ON SCREEN right now across the switch instead of falling back to
+    // the OTHER mode's own last-saved value. Clamped to each mode's own floor/ceiling — same
+    // numbers as LIB_DOCK_MIN/MAX and the #lib-side-resizer range below, since neither is in
+    // scope yet at this point in the file (both are consts declared further down, resolved by
+    // closure only once this function is actually CALLED, well after setup finishes).
+    if (state.unified_view) setUnifiedView(false);
+    if (goingFull !== state.expanded_view) {
+      // --dock-w-user lives on <body>: chromasmith-22.html resolves --dock-w on body, so a value
+      // set on .fx-layout never reached the grid track (strip 188px wide, track 120px).
+      const fxLayoutEl = document.body;
+      if (goingFull) {
+        const dockW = fxLayoutEl ? parseInt(getComputedStyle(fxLayoutEl).getPropertyValue('--dock-w-user'), 10) : NaN;
+        if (dockW) {
+          const w = Math.max(150, Math.min(420, dockW));
+          overlay.style.setProperty('--lib-side-w', w + 'px');
+          localStorage.setItem('chromasmith_lib_side_w', w);
+        }
+      } else {
+        const sideW = parseInt(getComputedStyle(overlay).getPropertyValue('--lib-side-w'), 10);
+        if (fxLayoutEl && sideW) {
+          const w = Math.max(90, Math.min(420, sideW));
+          fxLayoutEl.style.setProperty('--dock-w-user', w + 'px');
+          localStorage.setItem('chromasmith_lib_dock_w', w);
+        }
+      }
+    }
+    state.expanded_view = goingFull;
+    if (leavingGallery) galleryScrollSnapshotLocked = false;
+    state.unified_view = false;
+    document.body.classList.remove('lib-unified-view');
+    localStorage.removeItem('chromasmith_lib_unified_view');
+    if (unifiedToggle) unifiedToggle.checked = false;
+    overlay.classList.toggle('full', state.expanded_view);
+    document.body.classList.toggle('lib-full', state.expanded_view);
+    syncDockPadding();
+    syncListViewAvailability(); // HANDOVER §3.12 — docked-ness just changed, re-sync the list button
+    syncSideTabs(); // the Library/Develop tab pair's active state was static — see that function
+    syncJobsHost(); // keep the one persistent Jobs control reachable in Gallery and Studio
+    // renderGrid() itself detects docked vs. full (the `docked` const inside it) and re-lays-out
+    // #lib-grid accordingly — but nothing forced a rebuild when THIS toggle is what changes that
+    // detection. Without it, #lib-grid kept whatever markup/columns it had from the mode you were
+    // just in (often empty, if the grid never rendered while full-view was still loading), so the
+    // docked filmstrip could read as "no photos in this folder" for a folder that plainly has some.
+    const gridReady = renderGrid();
+    if (enteringGallery && state.currentFolder && galleryScrollByFolder.has(state.currentFolder)) {
+      galleryScrollTransitionPending = true;
+      const folder = state.currentFolder;
+      const token = ++galleryScrollRestoreToken;
+      Promise.resolve(gridReady).then(() => restoreGalleryScrollAnchor(folder, token)).catch(() => {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+      });
+    } else if (enteringGallery) {
+      galleryScrollRestoreToken++;
+      galleryScrollTransitionPending = false;
+    } else if (!state.expanded_view) {
+      galleryScrollRestoreToken++;
+    }
+    renderBatchBar(); // CHR-118: bar is suppressed while docked; restore/remove it when the mode flips
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  }
+  // The Library/Develop tabs (#lib-side header) previously had a hardcoded `on` class on Library
+  // and no handler at all — meaning they showed "Library" as active even while docked next to an
+  // open photo (i.e. actually in Develop), the exact inconsistency between the two views this
+  // fixes. Docked (expanded_view false, photo open) = Develop is the active one; full library
+  // grid = Library is. Called on every toggleExpandedView AND once at setup for the initial state.
+  function syncSideTabs() {
+    const libTab = overlay.querySelector('#lib-side-tab-library'), devTab = overlay.querySelector('#lib-side-tab-develop');
+    if (!libTab || !devTab) return;
+    const inDevelop = !state.expanded_view && !state.unified_view && !!state.openedPath;
+    libTab.classList.toggle('on', !inDevelop);
+    devTab.classList.toggle('on', inDevelop);
+  }
+  function syncJobsHost() {
+    const wrap = document.getElementById('sk2-act');
+    if (!wrap || !document.body.classList.contains('sk2')) return;
+    const gallery = state.open && state.expanded_view;
+    const galleryHost = overlay.querySelector('#lib-top-right');
+    const studioHost = document.getElementById('fx-deskbar-tools');
+    const host = gallery ? galleryHost : (studioHost || galleryHost);
+    if (!host || wrap.parentElement === host) return;
+    // A moved popover would otherwise keep its old viewport anchor. Close it during the
+    // transition, then mount the original node (and its existing listeners) at the new host.
+    compactJobsOpen = false;
+    activity.expanded = false;
+    const button = wrap.querySelector('#sk2-act-jobs');
+    if (button) {
+      button.className = gallery ? 'lib-btn' : 'fx-db';
+      button.setAttribute('aria-expanded', 'false');
+    }
+    wrap.classList.remove('open');
+    wrap.style.cssText = gallery
+      ? 'display:inline-flex;position:relative;align-items:center;gap:8px;max-width:360px;min-width:0;flex:0 1 auto'
+      : 'display:inline-flex;position:relative;align-items:center;gap:6px;max-width:min(360px,32vw);min-width:0;flex:0 1 auto;margin-left:8px';
+    const live = wrap.querySelector('.sk2-act-body');
+    if (live) live.style.cssText = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:clamp(72px,18vw,220px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis';
+    const dot = wrap.querySelector('.sk2-act-dot');
+    if (dot) dot.style.cssText = 'width:8px;height:8px;flex:none;background:var(--k-color-accent-a);border-radius:50%';
+    const thumb = wrap.querySelector('#lib-thumb-progress');
+    if (thumb) thumb.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--mut)';
+    host.appendChild(wrap);
+    const pop = wrap.querySelector('#sk2-act-pop');
+    if (pop) { pop.hidden = true; pop.style.left = ''; pop.style.right = '0'; }
+  }
+  window.chromasmithMenuContext = () => ({ galleryFull: state.open && state.expanded_view, selectionCount: cmKbTargets().length });
+  window.chromasmithToggleExpandedView = () => { if (state.open) toggleExpandedView(); }; // menu-bar "Toggle Full Library" — no-op if the Library isn't even open
+
+  // ⚠️ Boot-time safety valve (chromasmith-22.html's bumpBootSplashWatchdog) — the reported "blank
+  // editor on launch" bug. The normal startup chain (toggleLibrary().then(() => toggleExpandedView
+  // (true) ...)) only calls toggleExpandedView AFTER renderTree()/openFolder() and the catalog-scan
+  // promise all resolve — on a large library (measured: 57k photos) that can legitimately run long
+  // enough to freeze the main thread past the splash watchdog's grace period. When the watchdog
+  // fires, hideBootSplash() runs regardless of whether that chain ever finished — so the app landed
+  // on the untouched default DOM: the bare editor, Library still only docked (not expanded) or not
+  // even opened, because the awaited chain was still stuck. This forces the SAME visual end state
+  // the happy path reaches — Library open + expanded — synchronously and unconditionally, so the
+  // splash is NEVER hidden while leaving the editor as the visible fallback. Safe to call even mid-
+  // load: it only touches state.open/expanded_view/overlay/body classes, never re-fetches, so it
+  // can't race or duplicate the in-flight toggleLibrary() call — that call keeps running and will
+  // still populate the grid once it finishes.
+  window.chromasmithForceLibraryReady = function () {
+    if (!state.open) {
+      state.open = true;
+      overlay.classList.add('on');
+      document.body.classList.add('lib-docked');
+      syncDockPadding();
+    }
+    if (!state.expanded_view && !state.unified_view) toggleExpandedView(true);
+  };
+
+  // Standalone copy/paste-edit for the Photo menu (menu-copy-edit/menu-paste-edit in
+  // desktop-native.js) — same __copiedRecipe clipboard as the right-click context menu's Copy/
+  // Paste edit items (buildPathsMenu, below), just reachable without right-clicking anything,
+  // and scoped to whichever photo/batch is CURRENTLY open in the editor.
+  window.chromasmithMenuCopyEdit = async () => {
+    const path = state.openedPath || (state.openedPaths && state.openedPaths[fxCurIdx]);
+    if (!path) { toast('No photo open', false); return; }
+    const sc = await getSidecar(path);
+    window.__copiedRecipe = sc.recipe || snapshotToB64(getUISnapshot());
+    toast('Edit copied', true);
+  };
+  window.chromasmithMenuPasteEdit = async () => {
+    if (!window.__copiedRecipe) { toast('Nothing copied yet', false); return; }
+    const targets = state.openedPath ? [state.openedPath] : (state.openedPaths || []);
+    if (!targets.length) { toast('No photo open', false); return; }
+    await libPasteEdit(targets);
+  };
+  // Column count of the CURRENT grid layout, read from the resolved CSS grid template rather
+  // than recomputed from thumb size + container width — the auto-fill/minmax track count is
+  // exactly what the browser used to place cards, so this can never drift from the real layout
+  // (including the docked single-column filmstrip, which naturally reports 1). List view is a
+  // single visual column of rows despite its multi-column CSS grid template (one row = one
+  // photo), so it's special-cased to 1.
+  function gridCols() {
+    if (!grid) return 1;
+    if (grid.classList.contains('list-view')) return 1;
+    const parts = getComputedStyle(grid).gridTemplateColumns.trim().split(/\s+/).filter(Boolean);
+    return Math.max(1, parts.length);
+  }

@@ -1,0 +1,593 @@
+// ── Query ────────────────────────────────────────────────────────────────────────────────────
+
+/// A superset of `library::DirEntry` — every field that struct has, plus catalog additions.
+/// `catalog_query` is designed to drop straight into the frontend's `state.entries`, which is
+/// what lets the existing grid (virtualization, selection, drag, sort) work completely
+/// unchanged for a catalog view. See `catalog_entry_is_a_direntry_superset`.
+#[derive(Serialize, Clone, Default)]
+pub struct CatalogEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub is_image: bool,
+    pub is_video: bool,
+    pub kind: String,
+    pub mtime: u64,
+    /// EXIF/QuickTime capture timestamp in epoch seconds. Missing metadata stays `None`;
+    /// culling must never substitute file mtime for capture time.
+    pub captured: Option<i64>,
+    pub size: u64,
+    pub missing: bool,
+    pub edited_ts: u64,
+    // catalog additions
+    pub id: i64,
+    pub offline: bool,
+    pub volume: String,
+    pub color_label: String,
+    pub sharpness: Option<f64>,
+    pub blurry: bool,
+    /// True once faces_run has scanned this photo at its CURRENT mtime — mirrors the exact
+    /// "up to date" predicate faces_run itself uses to decide what's still pending (see
+    /// catalog_counts' faces_scanned/faces_pending, which this field must stay consistent
+    /// with). Always false for videos, which faces_run never processes.
+    pub faces_scanned: bool,
+    /// >1 when this row represents a stack (RAW + its exports) rather than a single photo.
+    /// 0 or 1 means "no badge" — both an unstacked photo and a stack that's shrunk to just its
+    /// leader render identically to the frontend, deliberately.
+    pub stack_n: u32,
+    /// Set only when this row IS a stack leader with more than one present member: the path of
+    /// the newest export, for the THUMBNAIL only — `path`/`id` above always stay the RAW leader,
+    /// which is what opening the card and every mutation (rating, delete, ...) acts on. Showing
+    /// the finished look while still editing the RAW is the plan's own explicit design call.
+    pub thumb_path: Option<String>,
+    /// Reverse-geocoded place name from the photo's GPS, when it has one.
+    pub place: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+pub struct CatalogPage {
+    pub total: u64,
+    pub capped: bool,
+    pub entries: Vec<CatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogQuery {
+    pub kind: Option<String>,
+    pub text: Option<String>,
+    #[serde(default = "default_true")]
+    pub include_offline: bool,
+    pub limit: Option<u32>,
+    /// A live, saved user smart album. Its versioned allow-listed AST is resolved from the
+    /// catalog and compiled to fixed SQL fragments with bound values in query_run.
+    #[serde(default)]
+    pub smart_album_id: Option<String>,
+    /// Date-browser scoping. `year` alone = that whole year; `year`+`month` = that month;
+    /// all three = one day. `month`/`day` without `year` are ignored (not a valid scope).
+    /// ⚠️ `#[serde(default)]` on all three: an older/simpler frontend payload (or a test) that
+    /// omits these keys entirely must still deserialize — `Option<T>` does NOT auto-default to
+    /// `None` for an absent JSON key, only for an explicit `null`, unless told to.
+    #[serde(default)]
+    pub year: Option<i32>,
+    #[serde(default)]
+    pub month: Option<i32>,
+    #[serde(default)]
+    pub day: Option<i32>,
+    /// The date browser's "No date" bucket — mutually exclusive with year/month/day, checked
+    /// first below.
+    #[serde(default)]
+    pub no_date: bool,
+    /// Focus-review scope: only rows already scored below `FOCUS_BLUR_THRESHOLD`. Never applied
+    /// automatically — this is what feeds the explicit "Review blurry photos" surface, same
+    /// posture as phash duplicate clustering: flag for the user, never auto-act.
+    #[serde(default)]
+    pub blurry_only: bool,
+    /// When set, ignore every other filter and return exactly the present members of this ONE
+    /// stack (leader first, then derivatives newest-first) — the "expand in place" behavior a
+    /// stack's badge triggers. Takes a leader's `photos.id` (== that stack's `stack_id`).
+    #[serde(default)]
+    pub expand_stack: Option<i64>,
+    /// Full keyword paths, AND-ed — each matches a photo tagged with that keyword OR any
+    /// descendant (clicking "Travel" in the tag tree must also show "Travel|Iceland" photos).
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    /// AI stack Phase C: filter to photos with at least one detected face assigned to this
+    /// `people.id` — the People sidebar's equivalent of a keyword scope. Single value, not a
+    /// Vec like `keywords`: unlike keywords (which can legitimately co-occur, "Travel" AND
+    /// "Portrait"), the People sidebar is a one-at-a-time "photos of this person" view, same as
+    /// clicking one date-browser row.
+    #[serde(default)]
+    pub person_id: Option<i64>,
+    /// AI stack Phase D: fetch exactly these photos (any that still exist/are present), ignoring
+    /// every other filter — same override shape as `expand_stack`. This is how a CLIP search's
+    /// ranked `{id, score}` list (from `catalog_clip_search`, which has no other row data) turns
+    /// into real grid rows: the frontend re-sorts the returned entries by the score list itself,
+    /// since SQL's `IN (...)` does not preserve input order.
+    #[serde(default)]
+    pub photo_ids: Option<Vec<i64>>,
+    /// Ordinary folder browsing's own scope — the Library's ordinary "open this folder" view,
+    /// as opposed to the Date/Search/Duplicates views the other filters above serve. `rel_dir`
+    /// is matched against `photos.rel_dir` (already indexed, `ix_photos_dir`): exact match for a
+    /// single-level browse, or itself-or-any-descendant when `recursive` is set (mirrors
+    /// `is_ancestor_rel`'s own segment-aware prefix rule, not a bare string prefix — see below).
+    #[serde(default)]
+    pub folder: Option<FolderScope>,
+    /// EXIF fields, moved server-side because they're immutable once ingested — camera/lens/iso
+    /// never change after a scan, unlike rating/favorite/edited below, so there is no staleness
+    /// risk in filtering on the stored column directly.
+    #[serde(default)]
+    pub camera: Option<String>,
+    #[serde(default)]
+    pub lens: Option<String>,
+    #[serde(default)]
+    pub iso: Option<i64>,
+    /// "indexed" | "pending" — mirrors catalog_counts' faces_scanned/faces_pending predicate
+    /// exactly (see that function's own comment) so a sidebar count and a grid filtered by this
+    /// value can never disagree the way they did before this field existed.
+    #[serde(default)]
+    pub faces: Option<String>,
+    /// "N or more", except 0 which means exactly unrated — same convention passesFilters' own
+    /// ratingFilter uses client-side, kept identical so a rating filter behaves the same whether
+    /// or not the current view happens to be paged.
+    #[serde(default)]
+    pub rating: Option<i32>,
+    #[serde(default)]
+    pub favorite: Option<bool>,
+    #[serde(default)]
+    pub edited: Option<bool>,
+    /// "Red" | "Green" — the flag/pick label, same values `set_sidecar`'s own `label` uses.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Chromasmith colour label, independent of the pick/reject `xmp:Label` field.
+    #[serde(default)]
+    pub color_label: Option<String>,
+    /// ⚠️ rating/favorite/edited/label were NOT safe to add here until `set_sidecar`
+    /// (library.rs) started calling `sync_sidecar_fields_run` on every write: before that, these
+    /// four columns were only refreshed when a sidecar was re-parsed during a full scan, so
+    /// filtering on the DB copy would have shown STALE results for anything touched in the
+    /// current session — worse than the bug this migration fixes. Now that write path keeps them
+    /// live, so they're as safe as camera/lens/iso above. `passesFilters` still re-checks them
+    /// client-side too (from `state.sidecars`, which updates even faster — no round trip) —
+    /// harmless double-filtering, not a second source of truth, since both read the same
+    /// underlying edit.
+    /// Pagination: fetch a page starting after this many matching rows (in the query's own
+    /// ORDER BY), rather than the whole filtered set in one call — see openCatalogView's
+    /// incremental-fetch loop. `None`/0 is page one.
+    #[serde(default)]
+    pub offset: Option<u32>,
+}
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderScope {
+    pub volume_id: i64,
+    pub rel_dir: String,
+    #[serde(default)]
+    pub recursive: bool,
+}
+
+// ⚠️ Hand-written, not `#[derive(Default)]`: a derived Default gives `include_offline: false`
+// (bool's own default), which SILENTLY DISAGREES with `#[serde(default = "default_true")]` —
+// that attribute only fires when a JSON field is missing during deserialize, never for
+// `CatalogQuery::default()`. Two defaulting mechanisms that disagree is exactly the kind of
+// thing that reads correct at a glance; caught here by a test using `::default()` and getting
+// every entry silently filtered as if it were offline.
+impl Default for CatalogQuery {
+    fn default() -> Self {
+        CatalogQuery {
+            kind: None, text: None, include_offline: true, limit: None, smart_album_id: None, year: None, month: None, day: None,
+            no_date: false, blurry_only: false, expand_stack: None, keywords: Vec::new(), person_id: None, photo_ids: None,
+            folder: None, camera: None, lens: None, iso: None, faces: None,
+            rating: None, favorite: None, edited: None, label: None, color_label: None, offset: None,
+        }
+    }
+}
+
+const QUERY_LIMIT_CAP: u32 = 50_000;
+
+#[tauri::command]
+pub async fn catalog_query(q: CatalogQuery, app: tauri::AppHandle) -> Result<CatalogPage, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    // ⚠️ async + spawn_blocking: a sync command runs on the macOS MAIN thread, so any slow query
+    // (or a wait on read_conn behind another one) froze the whole app — see
+    // person_query_is_fast_and_stack_aware.
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+        query_run(&conn, q)
+    })
+    .await
+    .map_err(|e| format!("catalog_query task panicked: {e}"))?
+}
+
+pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, String> {
+    let limit = q.limit.unwrap_or(QUERY_LIMIT_CAP).min(QUERY_LIMIT_CAP);
+    let offset = q.offset.unwrap_or(0);
+
+    // Bound parameters throughout — `kind`/`text` are frontend-supplied strings and string-
+    // interpolating them into SQL would be a real injection surface even though today's only
+    // caller is this app's own UI (CLAUDE.md's "avoid OWASP top 10" applies regardless of who
+    // the current caller happens to be).
+    // ⚠️ "offline" is NOT a SQL-expressible predicate — `v.last_path` is a `NOT NULL` column
+    // that always holds SOME path; whether that path currently exists is a filesystem fact, not
+    // a stored one. `include_offline: false` is therefore applied AFTER the row is built, below
+    // (where `offline` is computed via `Path::is_dir()`), not in this WHERE clause.
+    let mut where_parts = vec!["p.present = 1".to_string()];
+    let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+    if let Some(stack_id) = q.expand_stack {
+        // Expand-in-place: every other filter is ignored on purpose — a stack's own members
+        // are exactly what this call is for, regardless of what date/kind/text scope the grid
+        // behind it happens to be showing.
+        where_parts = vec!["p.present = 1".to_string(), "p.stack_id = ?1".to_string()];
+        values.push(Box::new(stack_id));
+    } else if let Some(ids) = &q.photo_ids {
+        // Same override posture as expand_stack — a CLIP search result is exactly these rows,
+        // regardless of whatever scope the grid behind it was showing.
+        if ids.is_empty() {
+            where_parts = vec!["0".to_string()]; // no ids requested — return nothing, not everything
+        } else {
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            where_parts = vec!["p.present = 1".to_string(), format!("p.id IN ({})", placeholders.join(","))];
+            for id in ids {
+                values.push(Box::new(*id));
+            }
+        }
+    } else {
+        // Grouped view: only a stack's LEADER (or an unstacked photo) is a top-level row — its
+        // derivatives are folded into `stack_n`/`thumb_path` below, not listed separately. A
+        // leader satisfies `stack_id = p.id` by construction (see the stacking module's own doc
+        // comment: stack_id is always the CURRENT leader's own id).
+        where_parts.push("(p.stack_id IS NULL OR p.stack_id = p.id)".to_string());
+
+        if let Some(id) = &q.smart_album_id {
+            let predicate = crate::smart_albums::append_query_scope(conn, id, &mut values)?;
+            where_parts.push(format!("({predicate})"));
+        }
+
+        if let Some(f) = &q.folder {
+            where_parts.push(format!("p.volume_id = ?{}", values.len() + 1));
+            values.push(Box::new(f.volume_id));
+            if f.rel_dir.is_empty() {
+                // The volume's own root — every photo's rel_dir is a descendant (or, for a
+                // photo sitting directly at the volume root, exactly ""), same convention
+                // is_ancestor_rel uses ("empty is an ancestor of everything"). Non-recursive
+                // still means "exactly this dir", i.e. rel_dir == "".
+                if !f.recursive {
+                    where_parts.push("p.rel_dir = ''".to_string());
+                }
+            } else if f.recursive {
+                where_parts.push(format!("(p.rel_dir = ?{a} OR p.rel_dir LIKE ?{b})", a = values.len() + 1, b = values.len() + 2));
+                values.push(Box::new(f.rel_dir.clone()));
+                values.push(Box::new(format!("{}/%", f.rel_dir)));
+            } else {
+                where_parts.push(format!("p.rel_dir = ?{}", values.len() + 1));
+                values.push(Box::new(f.rel_dir.clone()));
+            }
+        }
+
+        if let Some(k) = &q.kind {
+            // CHR-161: a comma-separated list ("raw,jpeg") is a multi-select type filter.
+            let kinds: Vec<&str> = k.split(',').map(str::trim).filter(|s| !s.is_empty() && *s != "all").collect();
+            if !kinds.is_empty() {
+                let marks: Vec<String> = kinds.iter().enumerate().map(|(i, _)| format!("?{}", values.len() + 1 + i)).collect();
+                where_parts.push(format!("p.kind IN ({})", marks.join(",")));
+                for kd in kinds { values.push(Box::new(kd.to_string())); }
+            }
+        }
+        if let Some(t) = &q.text {
+            if !t.is_empty() {
+                // Filename, place ("london" -> every photo whose GPS resolves inside London) or
+                // any keyword path segment. One bound value reused three times.
+                let n = values.len() + 1;
+                where_parts.push(format!(
+                    "(p.name_lc LIKE ?{n} OR lower(p.place) LIKE ?{n} OR EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id WHERE pk.photo_id = p.id AND lower(k.path) LIKE ?{n}) OR EXISTS (SELECT 1 FROM photo_auto_tags at WHERE at.photo_id = p.id AND (' ' || at.term || ' ') LIKE ?{m}))",
+                    m = n + 1
+                ));
+                values.push(Box::new(format!("%{}%", t.to_lowercase())));
+                // Auto tags match on whole words ("cat" must not pull in "cathedral"); a trailing
+                // plural is dropped so "dogs"/"trees" still find "dog"/"tree".
+                let w = t.trim().to_lowercase();
+                let w = if w.len() > 3 && w.ends_with('s') && !w.ends_with("ss") { w[..w.len() - 1].to_string() } else { w };
+                values.push(Box::new(format!("% {w} %")));
+            }
+        }
+        if let Some(c) = &q.camera {
+            if c != "all" {
+                where_parts.push(format!("p.camera = ?{}", values.len() + 1));
+                values.push(Box::new(c.clone()));
+            }
+        }
+        if let Some(l) = &q.lens {
+            if l != "all" {
+                where_parts.push(format!("p.lens = ?{}", values.len() + 1));
+                values.push(Box::new(l.clone()));
+            }
+        }
+        if let Some(iso) = q.iso {
+            where_parts.push(format!("p.iso = ?{}", values.len() + 1));
+            values.push(Box::new(iso));
+        }
+        if let Some(f) = &q.faces {
+            // Same predicate as catalog_counts' faces_pending/faces_scanned, and the same
+            // kind != 'video' exclusion (a video can never carry faces_scanned_at, so without
+            // this every video would count as permanently "pending").
+            match f.as_str() {
+                "pending" => where_parts.push("p.kind != 'video' AND (p.faces_scanned_at IS NULL OR p.faces_scanned_at != p.mtime)".to_string()),
+                "indexed" => where_parts.push("p.kind != 'video' AND p.faces_scanned_at IS NOT NULL AND p.faces_scanned_at = p.mtime".to_string()),
+                _ => {}
+            }
+        }
+        if let Some(r) = q.rating {
+            // Mirrors passesFilters' own "N or more, except 0 which means exactly unrated".
+            if r == 0 {
+                where_parts.push("p.rating = 0".to_string());
+            } else {
+                where_parts.push(format!("p.rating >= ?{}", values.len() + 1));
+                values.push(Box::new(r));
+            }
+        }
+        if let Some(fav) = q.favorite {
+            where_parts.push(format!("p.favorite = ?{}", values.len() + 1));
+            values.push(Box::new(fav as i64));
+        }
+        if let Some(ed) = q.edited {
+            where_parts.push(format!("p.edited = ?{}", values.len() + 1));
+            values.push(Box::new(ed as i64));
+        }
+        if let Some(l) = &q.label {
+            where_parts.push(format!("p.label = ?{}", values.len() + 1));
+            values.push(Box::new(l.clone()));
+        }
+        if let Some(color) = &q.color_label {
+            where_parts.push(format!("p.color_label = ?{}", values.len() + 1));
+            values.push(Box::new(color.clone()));
+        }
+        // Date-browser scope. `month`/`day` are meaningless without `year` (there's no "every
+        // March" cross-year view in this design), so they're only applied once year is set.
+        if q.blurry_only {
+            // Excludes anything the user already dismissed via catalog_dismiss_review — a
+            // "Not blurry" click that still shows the photo on the very next visit would read
+            // as broken, not as a review surface.
+            where_parts.push("p.blurry = 1 AND p.reviewed = 0".to_string());
+        }
+        for kw in &q.keywords {
+            // Same substr-prefix check as `keywords_run` (not the ASCII-range shorthand — see
+            // its own doc comment for the false-positive that rules that out), applied per
+            // keyword and AND-ed, so tagging "Travel" AND "Portrait" narrows correctly.
+            where_parts.push(format!(
+                "EXISTS (SELECT 1 FROM photo_keywords pk JOIN keywords k ON k.id = pk.keyword_id                  WHERE pk.photo_id = p.id AND (k.path = ?{a} OR substr(k.path, 1, length(?{b}) + 1) = ?{c} || '|'))",
+                a = values.len() + 1,
+                b = values.len() + 2,
+                c = values.len() + 3,
+            ));
+            values.push(Box::new(kw.clone()));
+            values.push(Box::new(kw.clone()));
+            values.push(Box::new(kw.clone()));
+        }
+        if let Some(person_id) = q.person_id {
+            // A face's `photo_id` is the ORIGINAL (possibly-derivative) photo it was detected
+            // on, but this WHERE runs against `p` after the stack-leader filter above — so match
+            // through EITHER the leader itself or any of its stacked derivatives, same reasoning
+            // the keyword filter doesn't need (keywords are read from the leader's own XMP,
+            // faces are detected per concrete file).
+            // ⚠️ An uncorrelated IN-list, not `EXISTS (... fp.id = p.id OR fp.stack_id = p.id)`:
+            // that OR defeated every index and re-walked the person's faces once per library
+            // photo (3m52s for one person on a 57k catalog, hanging the app). SQLite builds this
+            // set once. Test: person_query_is_fast_and_stack_aware.
+            where_parts.push(format!(
+                "p.id IN (SELECT COALESCE(fp.stack_id, fp.id) FROM photo_faces f JOIN photos fp ON fp.id = f.photo_id \
+                 WHERE f.person_id = ?{a} UNION SELECT f.photo_id FROM photo_faces f WHERE f.person_id = ?{a})",
+                a = values.len() + 1,
+            ));
+            values.push(Box::new(person_id));
+        }
+        if q.no_date {
+            where_parts.push("(p.cap_y IS NULL OR p.cap_m IS NULL OR p.cap_d IS NULL)".to_string());
+        } else if let Some(y) = q.year {
+            where_parts.push(format!("p.cap_y = ?{}", values.len() + 1));
+            values.push(Box::new(y));
+            if let Some(m) = q.month {
+                where_parts.push(format!("p.cap_m = ?{}", values.len() + 1));
+                values.push(Box::new(m));
+                if let Some(d) = q.day {
+                    where_parts.push(format!("p.cap_d = ?{}", values.len() + 1));
+                    values.push(Box::new(d));
+                }
+            }
+        }
+    }
+    let where_clause = where_parts.join(" AND ");
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
+
+    let total: i64 = conn
+        .query_row(
+            &format!("SELECT COUNT(*) FROM photos p JOIN volumes v ON v.id = p.volume_id WHERE {where_clause}"),
+            param_refs.as_slice(),
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    // `edited_ts` mirrors library.rs's `edited_ts_of`: the sidecar's own mtime, already tracked
+    // per-row as `sidecar_mtime` (walk_root populates it, 0 when no sidecar exists — see
+    // walk_root_sidecar_lookup_matches_the_old_per_file_stat_behavior). Selected directly rather
+    // than the literal 0 this used to be, now that a folder-scoped query needs the grid's
+    // "date edited" badge/sort to behave the same as the live list_dir path did.
+    //
+    // `stack_n`/`newest_deriv_rel` are correlated subqueries, not a JOIN+GROUP BY: a stack's
+    // members can span at most a handful of rows (a RAW plus its exports), so a per-row scalar
+    // subquery is both simpler and, per `every_ui_filter_combination_uses_an_index`'s own
+    // reasoning, still index-backed (`ix_photos_present`/the table's own rowid) rather than a
+    // full scan. In the expand-stack branch every row IS a member of the SAME stack, so both
+    // subqueries are harmless but unused by the frontend there (see `stack_n: 0` override below).
+    let order_by = if q.expand_stack.is_some() {
+        "ORDER BY (p.id != p.stack_id) ASC, p.mtime DESC"
+    } else {
+        "ORDER BY p.captured DESC, p.mtime DESC"
+    };
+    let sql = format!(
+        "SELECT p.id, p.name, p.rel_path, p.kind, p.mtime, p.size, p.sidecar_mtime,
+                v.last_path, v.is_local, v.label, p.color_label, p.sharpness, p.blurry,
+                (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
+                (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
+                 ORDER BY p2.mtime DESC LIMIT 1),
+                p.stack_id, p.faces_scanned_at, p.place, p.captured
+         FROM photos p JOIN volumes v ON v.id = p.volume_id
+         WHERE {where_clause}
+         {order_by}
+         LIMIT {limit} OFFSET {offset}"
+    );
+
+    let expanding = q.expand_stack.is_some();
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    // Every row on a given (non-local) volume shares the exact same `last_path` (the volume's
+    // mount root) — a boot-time "All Photos" query over 57k rows on one external drive used to
+    // call `Path::is_dir()` on that IDENTICAL path 57,422 times. This memoizes it to one stat per
+    // distinct volume path, cutting a 57k-syscall stall (and the long read-transaction it held
+    // open, which is what was blocking WAL auto-checkpoint — see CLAUDE.md-style plan doc) down to
+    // a handful of checks. `RefCell` because `query_map`'s row closure only borrows `Fn`, not
+    // `FnMut`.
+    let online_cache: std::cell::RefCell<std::collections::HashMap<String, bool>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    let mut entries = stmt
+        .query_map(param_refs.as_slice(), |r| {
+            let id: i64 = r.get(0)?;
+            let name: String = r.get(1)?;
+            let rel_path: String = r.get(2)?;
+            let kind: String = r.get(3)?;
+            let mtime: i64 = r.get(4)?;
+            let size: i64 = r.get(5)?;
+            let sidecar_mtime: i64 = r.get(6)?;
+            let last_path: String = r.get(7)?;
+            let is_local: i64 = r.get(8)?;
+            let label: String = r.get(9)?;
+            let color_label: String = r.get(10)?;
+            let sharpness: Option<f64> = r.get(11)?;
+            let blurry: i64 = r.get(12)?;
+            let stack_n: i64 = r.get(13)?;
+            let newest_deriv_rel: Option<String> = r.get(14)?;
+            let stack_id: Option<i64> = r.get(15)?;
+            let faces_scanned_at: Option<i64> = r.get(16)?;
+            let place: Option<String> = r.get(17)?;
+            let captured: Option<i64> = r.get(18)?;
+            let is_photo = kind != "video";
+            let online = is_local != 0 || {
+                let mut cache = online_cache.borrow_mut();
+                *cache.entry(last_path.clone()).or_insert_with(|| Path::new(&last_path).is_dir())
+            };
+            Ok(CatalogEntry {
+                name,
+                path: abs_path(&last_path, is_local != 0, &rel_path),
+                is_dir: false,
+                is_image: kind != "video",
+                is_video: kind == "video",
+                kind,
+                mtime: mtime as u64,
+                captured,
+                size: size as u64,
+                missing: false,
+                edited_ts: sidecar_mtime as u64,
+                id,
+                offline: !online,
+                volume: label,
+                color_label,
+                sharpness,
+                blurry: blurry != 0,
+                faces_scanned: is_photo && faces_scanned_at.map_or(false, |t| t == mtime),
+                // While expanded, only the LEADER row (id == stack_id) still carries a real
+                // stack_n — that's what lets the frontend keep a "collapse" badge visible on it
+                // instead of stranding the user with no way back. Every derivative member gets 0
+                // (no badge, no thumbnail substitution — it's just a regular row here).
+                stack_n: if expanding && stack_id != Some(id) { 0 } else { stack_n as u32 },
+                thumb_path: if expanding { None } else { newest_deriv_rel.map(|rel| abs_path(&last_path, is_local != 0, &rel)) },
+                place,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    if !q.include_offline {
+        // A page-level filter, not a query-level one: `total` still describes the SQL result
+        // before this, which slightly overstates the true count when offline entries exist.
+        // Acceptable at this stage — this module doesn't yet track a volume's online state IN
+        // the database (that lands with the mount-poll work), so there is no cheap SQL-side way
+        // to exclude it up front without a per-row filesystem stat inside COUNT(*).
+        entries.retain(|e| !e.offline);
+    }
+    // `capped`: true when THIS page didn't reach the end of the filtered set — i.e. there is
+    // more to fetch at the next offset. Distinct from "the whole result exceeds one page's
+    // limit": with paging, that's the normal, expected case on every page but the last one.
+    let capped = (offset as u64) + (entries.len() as u64) < total as u64;
+    Ok(CatalogPage { total: total as u64, capped, entries })
+}
+
+#[tauri::command(async)]
+pub fn catalog_counts(state: tauri::State<CatalogState>) -> Result<std::collections::HashMap<String, u64>, String> {
+    // Read-only — the dedicated read connection, so this never waits behind a running scan.
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    catalog_counts_run(&conn)
+}
+
+/// Split out of catalog_counts for the same reason query_run is split from catalog_query: a
+/// plain `&Connection` is testable without standing up a `tauri::State`, which is what lets
+/// `query_run_faces_filter_matches_catalog_counts_predicate_exactly` assert the two functions
+/// agree instead of just trusting they were written to match.
+pub fn catalog_counts_run(conn: &Connection) -> Result<std::collections::HashMap<String, u64>, String> {
+    let mut m = std::collections::HashMap::new();
+    // `(stack_id IS NULL OR stack_id = id)` matches query_run's own grouped-view predicate — the
+    // "All Photos" row must count exactly what the grid shows when you click it (top-level
+    // leaders/unstacked photos only), not every stacked derivative underneath (see
+    // date_counts_run's identical fix and its doc comment for the live incident this covers).
+    let all: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND (stack_id IS NULL OR stack_id = id)", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("all".to_string(), all as u64);
+    let blurry: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND blurry = 1", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("blurry".to_string(), blurry as u64);
+    // Bug #1 fix: lets the JS side tell "nothing has been CLIP-analyzed yet" apart from "analyzed,
+    // but nothing scored above catalog_clip_search's real-similarity cutoff" — the same zero-hits
+    // result from catalog_clip_search was ambiguous between those two very different situations.
+    let clip_scanned: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND clip_embedding IS NOT NULL", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("clip_scanned".to_string(), clip_scanned as u64);
+    // Mirrors the exact predicate faces_run uses to build its work queue (see the
+    // "faces_scanned_at IS NULL OR faces_scanned_at != mtime" clause above) so "not indexed" in
+    // the UI can never drift from what the backend actually considers pending. Counted over top-level
+    // rows only (leaders / unstacked), exactly what the grid lists when this row is opened — the 7,106
+    // unscanned edited-copy derivatives used to inflate it while the grid showed nothing. Videos are
+    // excluded from face scanning entirely (kind != 'video'), so they're excluded here too —
+    // otherwise every video would show up as permanently "not indexed".
+    let faces_pending: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (stack_id IS NULL OR stack_id = id) AND (faces_scanned_at IS NULL OR faces_scanned_at != mtime)",
+        [], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    m.insert("faces_pending".to_string(), faces_pending as u64);
+    let faces_scanned: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM photos WHERE present = 1 AND kind != 'video' AND (stack_id IS NULL OR stack_id = id) AND faces_scanned_at IS NOT NULL AND faces_scanned_at = mtime",
+        [], |r| r.get(0)
+    ).map_err(|e| e.to_string())?;
+    m.insert("faces_scanned".to_string(), faces_scanned as u64);
+    // HANDOVER 2026-09-08 item #14: the sidebar's Raw/Videos shortcut rows rendered no count at
+    // all, unlike every other row in renderCollections() — there was no backend field to feed
+    // one. `kind` already distinguishes 'raw'/'video' (see is_raw above, media_kind()), so this
+    // reuses the same column rather than adding a new one.
+    // Auto-tag progress for the Keywords sidebar ("Tagged X of Y"): same predicate clip_embed_run
+    // uses to pick work (present, not video), so "done" here means exactly "nothing left to tag".
+    let (tag_done, tag_total): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(CASE WHEN clip_embedding IS NOT NULL AND clip_scanned_at = mtime THEN 1 END), COUNT(*)
+             FROM photos WHERE present = 1 AND kind != 'video'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))
+        )
+        .map_err(|e| e.to_string())?;
+    m.insert("tag_done".to_string(), tag_done as u64);
+    m.insert("tag_total".to_string(), tag_total as u64);
+    let raw: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'raw'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("raw".to_string(), raw as u64);
+    let video: i64 = conn.query_row("SELECT COUNT(*) FROM photos WHERE present = 1 AND kind = 'video'", [], |r| r.get(0)).map_err(|e| e.to_string())?;
+    m.insert("video".to_string(), video as u64);
+    Ok(m)
+}

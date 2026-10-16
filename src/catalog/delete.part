@@ -1,0 +1,13 @@
+// ── Delete ───────────────────────────────────────────────────────────────────────────────────
+//
+// The mechanism (moving the file + its sidecar to ~/.Trash) already exists — library.rs's
+// `trash_file` — and already works from the Library context menu. What's missing is the catalog
+// side: a trashed photo must stop appearing in a catalog view IMMEDIATELY, not wait for the next
+// scan to notice it's gone. This is the same `UPDATE present = 0, never DELETE` rule scan phase
+// A already follows — a photo's rating/keywords must survive a delete exactly as they survive a
+// temporarily-moved file, since ~/.Trash is recoverable.
+
+/// Resolves an absolute path back to (photo_id, volume_id) by checking it against every known
+/// volume's current mount point, longest prefix first — the local volume's own prefix ("/") is
+/// a prefix of EVERY absolute path, so it has to be tried last or it would "match" everything
+/// before a real external-volume prefix ever gets a chance.

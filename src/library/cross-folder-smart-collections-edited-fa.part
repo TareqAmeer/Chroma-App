@@ -1,0 +1,126 @@
+// ── Cross-folder smart collections (Edited/Favorites/Flagged/Rejected) ───────────────────
+// One flat JSON list PER collection of every photo path currently in it, kept in the app
+// cache dir (NOT next to the photos — this is app-internal bookkeeping, not a portable
+// sidecar). Lets the library show a collection regardless of which folder a photo lives in,
+// without re-scanning the whole disk: updated incrementally every time set_sidecar changes
+// the relevant flag (add on true, remove on false), and backfilled once at startup by
+// scanning recently-used folders for existing .xmp sidecars (see backfill_edited_registry).
+// `name` is one of "edited"/"favorites"/"flagged"/"rejected" — a small fixed set, not
+// user-supplied, so no path-traversal concern in the cache filename.
+fn registry_path(name: &str) -> PathBuf {
+    cache_dir().join(format!("{name}_registry.json"))
+}
+fn registry_read(name: &str) -> Vec<String> {
+    // Case-duplicate entries (".RW2" + ".rw2") collapse on every read; the next write persists it.
+    crate::canon::dedupe_paths(
+        std::fs::read_to_string(registry_path(name))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default(),
+    )
+}
+fn registry_write(name: &str, list: &[String]) {
+    if let Ok(text) = serde_json::to_string(list) {
+        let _ = std::fs::write(registry_path(name), text);
+    }
+}
+/// JS-facing entry point for registries beyond the fixed set (`edited`/`favorites`/`flagged`/
+/// `rejected`) written internally by set_sidecar above — used for the C2 "duplicates" and C3
+/// "gphotos" (Google-Photos-synced) smart collections, which are driven from library-ui.js/
+/// chromasmith-22.html rather than from a sidecar write. Same underlying mechanism, just named
+/// so a small fixed extra set of collection names can be set directly. `name` is not arbitrary
+/// user input from a network source — it's a small fixed set from our own frontend code — but
+/// validate anyway since this fn, unlike registry_set, is reachable directly from JS.
+#[tauri::command(async)]
+pub fn registry_set_cmd(name: String, path: String, present: bool) -> Result<(), String> {
+    if !matches!(name.as_str(), "duplicates" | "gphotos") {
+        return Err(format!("registry_set_cmd: unknown registry '{name}'"));
+    }
+    registry_set(&name, &path, present);
+    Ok(())
+}
+
+fn registry_set(name: &str, path: &str, present_target: bool) {
+    let mut list = registry_read(name);
+    let key = crate::canon::canonical_key(path);
+    let present = list.iter().any(|p| crate::canon::canonical_key(p) == key);
+    if present_target && !present {
+        list.push(path.to_string());
+        registry_write(name, &list);
+    } else if !present_target && present {
+        list.retain(|p| crate::canon::canonical_key(p) != key);
+        registry_write(name, &list);
+    }
+}
+
+/// Batched form of `registry_set_cmd` — the whole reason it exists is the O(n²) it replaces.
+/// The frontend used to call `registry_set_cmd` once PER PHOTO (`Promise.all(paths.map(...))` in
+/// library-ui.js's runDupeDetection/markFolderSyncedIfGphotosDownloads), and every single one of
+/// those calls independently did registry_read (parse the WHOLE registry file) + a linear
+/// `.iter().any()` scan + a full registry_write. Measured on a real ~30k-photo library with a
+/// ~29k-entry duplicates registry: 29,663 IPC calls, ~47GB of file reads, ~0.9 BILLION string
+/// comparisons — on every single folder open. This does one read, one HashSet, one write.
+#[tauri::command(async)]
+pub fn registry_set_many(
+    name: String,
+    present: Vec<String>,
+    absent: Vec<String>,
+) -> Result<(), String> {
+    if !matches!(name.as_str(), "duplicates" | "gphotos" | "edited") {
+        return Err(format!("registry_set_many: unknown registry '{name}'"));
+    }
+    // Durable recipe completion must never treat an unreadable registry as an empty one.
+    if name == "edited" {
+        match std::fs::read_to_string(registry_path(&name)) {
+            Ok(text) => {
+                serde_json::from_str::<Vec<String>>(&text)
+                    .map_err(|e| format!("read registry: {e}"))?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("read registry: {e}")),
+        }
+    }
+    use crate::canon::canonical_key as ck;
+    let mut map: HashMap<String, String> = registry_read(&name)
+        .into_iter()
+        .map(|p| (ck(&p), p))
+        .collect();
+    let before: std::collections::HashSet<String> = map.keys().cloned().collect();
+    for p in present {
+        map.entry(ck(&p)).or_insert(p);
+    }
+    for p in &absent {
+        map.remove(&ck(p));
+    }
+    if map.len() == before.len() && map.keys().all(|k| before.contains(k)) {
+        return Ok(()); // membership genuinely unchanged — skip the write, not just the count
+    }
+    let mut list: Vec<String> = map.into_values().collect();
+    list.sort();
+    let text = serde_json::to_string(&list).map_err(|e| format!("serialize registry: {e}"))?;
+    use std::io::Write;
+    let dest = registry_path(&name);
+    let tmp = dest.with_extension(format!(
+        "json.{}.{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let result = (|| -> std::io::Result<()> {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+        drop(f);
+        std::fs::rename(&tmp, &dest)
+    })();
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write registry: {e}"));
+    }
+    Ok(())
+}

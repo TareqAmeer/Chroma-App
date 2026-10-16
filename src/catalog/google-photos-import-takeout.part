@@ -1,0 +1,466 @@
+// ── Google Photos import (Takeout) ─────────────────────────────────────────────────────────────
+//
+// Google Photos' face groups can't be read through any API, but a Google Takeout export writes a
+// JSON sidecar next to every photo, and it lists the names of the people Google tagged in it
+// ("people": [{"name": "..."}]) — names only, no face boxes. So: match each sidecar to a catalog
+// photo (file name + capture time), then attach the name to our own detected face: directly when
+// the photo has one face, and by best match to that person's other photos when it has several.
+
+#[derive(Serialize, Clone, Default)]
+pub struct TakeoutImportResult {
+    pub sidecars_with_people: usize,
+    pub photos_matched: usize,
+    pub photos_not_in_library: usize,
+    pub faces_tagged: usize,
+    pub people_created: usize,
+    pub auto_assigned: usize,
+}
+
+#[tauri::command]
+pub async fn catalog_import_google_takeout(app: tauri::AppHandle, dir: String) -> Result<TakeoutImportResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        import_google_takeout_run(&conn, Path::new(&dir))
+    })
+    .await
+    .map_err(|e| format!("catalog_import_google_takeout task panicked: {e}"))?
+}
+
+fn takeout_sidecars(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            takeout_sidecars(&p, out);
+        } else if p.extension().map_or(false, |x| x.eq_ignore_ascii_case("json")) {
+            out.push(p);
+        }
+    }
+}
+
+fn import_google_takeout_run(conn: &Connection, dir: &Path) -> Result<TakeoutImportResult, String> {
+    let mut res = TakeoutImportResult::default();
+    let mut files = Vec::new();
+    takeout_sidecars(dir, &mut files);
+    // (photo_id, names)
+    let mut tagged: Vec<(i64, Vec<String>)> = Vec::new();
+    let mut find = conn.prepare("SELECT id, captured FROM photos WHERE name_lc = ?1 AND present = 1").map_err(|e| e.to_string())?;
+    for f in files {
+        let Ok(text) = std::fs::read_to_string(&f) else { continue };
+        let Ok(j) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+        let names: Vec<String> = j["people"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|p| p["name"].as_str()).map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).collect())
+            .unwrap_or_default();
+        if names.is_empty() {
+            continue;
+        }
+        res.sidecars_with_people += 1;
+        let title = j["title"].as_str().map(str::to_string).unwrap_or_else(|| {
+            // "IMG_1.JPG.json" / "IMG_1.JPG.supplemental-metadata.json" -> "IMG_1.JPG"
+            let n = f.file_name().unwrap_or_default().to_string_lossy().to_string();
+            n.split(".supplemental").next().unwrap_or(&n).trim_end_matches(".json").to_string()
+        });
+        let ts: Option<i64> = j["photoTakenTime"]["timestamp"].as_str().and_then(|t| t.parse().ok());
+        let cands: Vec<(i64, Option<i64>)> = find
+            .query_map(params![title.to_lowercase()], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        // Same file name AND taken within 36h (Google stores UTC, the catalog camera-local time),
+        // or the only file with that name when either side lacks a time.
+        let pick = match ts {
+            Some(ts) => cands
+                .iter()
+                .filter_map(|(id, c)| c.map(|c| (*id, (c - ts).abs())))
+                .filter(|(_, d)| *d <= 36 * 3600)
+                .min_by_key(|(_, d)| *d)
+                .map(|(id, _)| id)
+                .or_else(|| (cands.len() == 1).then(|| cands[0].0)),
+            None => (cands.len() == 1).then(|| cands[0].0),
+        };
+        match pick {
+            Some(id) => tagged.push((id, names)),
+            None => res.photos_not_in_library += 1,
+        }
+    }
+    drop(find);
+    res.photos_matched = tagged.len();
+
+    let now = now_secs() as i64;
+    let mut person_ids: std::collections::HashMap<String, i64> = Default::default();
+    let mut person_for = |conn: &Connection, name: &str, res: &mut TakeoutImportResult| -> Result<i64, String> {
+        if let Some(id) = person_ids.get(&name.to_lowercase()) {
+            return Ok(*id);
+        }
+        let id = match conn
+            .query_row("SELECT id FROM people WHERE lower(name) = lower(?1) AND kind = 'person'", params![name], |r| r.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?
+        {
+            Some(id) => {
+                conn.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+                id
+            }
+            None => {
+                conn.execute("INSERT INTO people (name, cover_face_id, created, auto) VALUES (?1, NULL, ?2, 0)", params![name, now])
+                    .map_err(|e| e.to_string())?;
+                res.people_created += 1;
+                conn.last_insert_rowid()
+            }
+        };
+        person_ids.insert(name.to_lowercase(), id);
+        Ok(id)
+    };
+    let faces_of = |conn: &Connection, photo_id: i64| -> Result<Vec<(i64, Vec<f32>, Option<i64>, i64)>, String> {
+        let mut st = conn
+            .prepare("SELECT id, embedding, person_id, confirmed FROM photo_faces WHERE photo_id = ?1 AND species IS NULL")
+            .map_err(|e| e.to_string())?;
+        let v = st
+            .query_map(params![photo_id], |r| Ok((r.get(0)?, r.get::<_, Option<Vec<u8>>>(1)?, r.get(2)?, r.get(3)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        Ok(v.into_iter().map(|(id, b, p, c)| (id, b.map(|b| blob_to_f32_vec(&b)).unwrap_or_default(), p, c)).collect())
+    };
+    let set = |conn: &Connection, fid: i64, pid: i64| -> Result<(), String> {
+        conn.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2", params![pid, fid]).map_err(|e| e.to_string())?;
+        conn.execute("UPDATE people SET cover_face_id = COALESCE(cover_face_id, ?1) WHERE id = ?2", params![fid, pid]).map_err(|e| e.to_string())?;
+        Ok(())
+    };
+
+    // Pass 1: one name, one face — unambiguous. A face the user already confirmed is never moved.
+    let mut multi: Vec<(i64, Vec<String>)> = Vec::new();
+    for (photo_id, names) in &tagged {
+        let faces = faces_of(conn, *photo_id)?;
+        if names.len() == 1 && faces.len() == 1 {
+            if faces[0].3 == 1 {
+                continue;
+            }
+            let pid = person_for(conn, &names[0], &mut res)?;
+            set(conn, faces[0].0, pid)?;
+            res.faces_tagged += 1;
+        } else if !faces.is_empty() {
+            multi.push((*photo_id, names.clone()));
+        }
+    }
+    // Pass 2: several faces — each name takes its best-matching free face, once pass 1 has given
+    // that person a profile. Strongest pairings are made first.
+    let profiles = person_profiles(conn, "person")?;
+    for (photo_id, names) in multi {
+        let faces = faces_of(conn, photo_id)?;
+        let mut pairs: Vec<(f32, i64, i64)> = Vec::new();
+        for n in &names {
+            let pid = person_for(conn, n, &mut res)?;
+            let Some(prof) = profiles.iter().find(|p| p.id == pid) else { continue };
+            for (fid, emb, _, conf) in &faces {
+                if *conf != 1 && !emb.is_empty() {
+                    pairs.push((profile_sim(emb, prof), *fid, pid));
+                }
+            }
+        }
+        pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let (mut used_f, mut used_p) = (std::collections::HashSet::new(), std::collections::HashSet::new());
+        for (sim, fid, pid) in pairs {
+            if sim < 0.3 || used_f.contains(&fid) || used_p.contains(&pid) {
+                continue;
+            }
+            used_f.insert(fid);
+            used_p.insert(pid);
+            set(conn, fid, pid)?;
+            res.faces_tagged += 1;
+        }
+    }
+    res.auto_assigned = auto_assign_run(conn)?.assigned;
+    Ok(res)
+}
+
+fn is_pet_kind(kind: &str) -> bool {
+    kind == "pet"
+}
+
+struct PersonProfile {
+    id: i64,
+    kind: String,
+    name: String,
+    centroid: Vec<f32>,
+    exemplars: Vec<Vec<f32>>,
+}
+
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+fn unit_mean<'a>(vs: impl Iterator<Item = &'a [f32]>) -> Vec<f32> {
+    let mut acc: Vec<f32> = Vec::new();
+    for v in vs {
+        if acc.is_empty() {
+            acc = vec![0.0; v.len()];
+        }
+        for (a, x) in acc.iter_mut().zip(v) {
+            *a += x;
+        }
+    }
+    let n = acc.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if n > 0.0 {
+        acc.iter_mut().for_each(|x| *x /= n);
+    }
+    acc
+}
+
+/// Similarity of a face to a profile: the better of (centroid match) and (mean of its 3 closest
+/// confirmed faces). The centroid captures "typical you"; the nearest-exemplar term is what finds
+/// the unusual photos — a side profile matches your other side profiles, not your average face.
+fn profile_sim(emb: &[f32], p: &PersonProfile) -> f32 {
+    let c = dot(emb, &p.centroid);
+    let mut sims: Vec<f32> = p.exemplars.iter().map(|e| dot(emb, e)).collect();
+    sims.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    let k = sims.len().min(3);
+    let near = if k == 0 { c } else { sims[..k].iter().sum::<f32>() / k as f32 };
+    c.max(near)
+}
+
+/// Best-matching profile and its similarity, requiring a `FACE_SUGGEST_MARGIN` lead over the
+/// runner-up. `only` restricts the winner to one person (the runner-up still counts).
+fn best_profile_match(emb: &[f32], profiles: &[PersonProfile], only: Option<i64>) -> Option<(i64, f32)> {
+    let margin = if profiles.first().map_or(false, |p| is_pet_kind(&p.kind)) { PET_SUGGEST_MARGIN } else { FACE_SUGGEST_MARGIN };
+    let mut scored: Vec<(i64, f32)> = profiles.iter().map(|p| (p.id, profile_sim(emb, p))).collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let (best_id, best) = *scored.first()?;
+    if let Some(want) = only {
+        if best_id != want {
+            return None;
+        }
+    }
+    let runner = scored.get(1).map(|x| x.1).unwrap_or(-1.0);
+    (best - runner >= margin).then_some((best_id, best))
+}
+
+fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)>, String> {
+    let mut stmt = conn.prepare("SELECT embedding FROM photo_faces WHERE id = ?1 AND length(embedding) > 0").map_err(|e| e.to_string())?;
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(b) = stmt.query_row(params![id], |r| r.get::<_, Vec<u8>>(0)).optional().map_err(|e| e.to_string())? {
+            out.push((*id, blob_to_f32_vec(&b)));
+        }
+    }
+    Ok(out)
+}
+
+/// Profiles for every named (non-auto), non-ignored person or pet, in one embedding SPACE:
+/// "person" = ArcFace face rows (`species IS NULL`), "pet" = CLIP animal-crop rows. Space, not
+/// `people.kind`: a pet can own face-detector rows (SCRFD happily finds dog faces — that's how
+/// most of a named dog's photos got tagged), and must be matchable through those too. Built from
+/// confirmed faces; a named one with none confirmed yet falls back to all assigned faces.
+fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
+             JOIN photo_faces f ON f.person_id = p.id
+             WHERE p.auto = 0 AND p.ignored = 0 AND length(f.embedding) > 0
+               AND ((?1 = 'pet') = (f.species IS NOT NULL)) AND ((?1 = 'pet') = (p.kind = 'pet'))",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, String, Vec<u8>, i64)> = stmt
+        .query_map(params![kind], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut by: std::collections::BTreeMap<i64, (String, Vec<Vec<f32>>, Vec<Vec<f32>>)> = Default::default();
+    for (pid, name, blob, confirmed) in rows {
+        let e = by.entry(pid).or_insert_with(|| (name, Vec::new(), Vec::new()));
+        // Only faces the USER confirmed (1) define a person — auto-assigned ones (2) never feed
+        // back into the profile, so one wrong auto-tag can't drag in more like it.
+        if confirmed == 1 { e.1.push(blob_to_f32_vec(&blob)) } else { e.2.push(blob_to_f32_vec(&blob)) }
+    }
+    Ok(by
+        .into_iter()
+        .map(|(id, (name, conf, rest))| {
+            let mut exemplars = if conf.is_empty() { rest } else { conf };
+            // Evenly thinned to MAX_EXEMPLARS: matching cost is faces x exemplars, and 64 spread
+            // across someone's whole library already covers their angles/ages.
+            if exemplars.len() > MAX_EXEMPLARS {
+                let step = exemplars.len() as f32 / MAX_EXEMPLARS as f32;
+                exemplars = (0..MAX_EXEMPLARS).map(|i| exemplars[(i as f32 * step) as usize].clone()).collect();
+            }
+            let mut centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+            // Pets: drop exemplars that don't look like the rest (an old wrong tag on sky or a
+            // passer-by) so one bad confirmation can't pull in more like it. Same-dog crops sit
+            // >= 0.6 from their centroid; such junk sits near 0.2.
+            if kind == "pet" && exemplars.len() >= 4 {
+                let kept: Vec<Vec<f32>> = exemplars.iter().filter(|e| dot(e, &centroid) >= PET_OUTLIER_SIM).cloned().collect();
+                if !kept.is_empty() && kept.len() < exemplars.len() {
+                    exemplars = kept;
+                    centroid = unit_mean(exemplars.iter().map(|v| v.as_slice()));
+                }
+            }
+            PersonProfile { id, kind: kind.to_string(), name, centroid, exemplars }
+        })
+        .filter(|p| !p.exemplars.is_empty())
+        .collect())
+}
+
+#[derive(Serialize, Clone)]
+pub struct FaceSuggestion {
+    pub face_id: i64,
+    pub photo_id: i64,
+    pub similarity: f32,
+    /// Other suggested faces from the same moment (photos seconds apart). Shown as one tile;
+    /// the answer for this face applies to all of them.
+    pub also: Vec<i64>,
+}
+
+#[tauri::command]
+pub async fn catalog_person_suggestions(
+    app: tauri::AppHandle,
+    person_id: i64,
+    min_similarity: Option<f32>,
+    limit: Option<usize>,
+) -> Result<Vec<FaceSuggestion>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        person_suggestions_run(&conn, person_id, min_similarity, limit.unwrap_or(300))
+    })
+    .await
+    .map_err(|e| format!("catalog_person_suggestions task panicked: {e}"))?
+}
+
+fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32>, limit: usize) -> Result<Vec<FaceSuggestion>, String> {
+    let kind: String = match conn.query_row("SELECT kind FROM people WHERE id = ?1", params![person_id], |r| r.get(0)).optional().map_err(|e| e.to_string())? {
+        Some(k) => k,
+        None => return Ok(Vec::new()),
+    };
+    let _ = kind;
+    // Days (y, m, d) this person already has a confirmed photo from — see SAME_DAY_BOOST.
+    let mut dstmt = conn
+        .prepare(
+            "SELECT DISTINCT p.cap_y, p.cap_m, p.cap_d FROM photo_faces f JOIN photos p ON p.id = f.photo_id
+             WHERE f.person_id = ?1 AND f.confirmed = 1 AND p.cap_d IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let days: std::collections::HashSet<(i64, i64, i64)> = dstmt
+        .query_map(params![person_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(dstmt);
+    let mut out: Vec<FaceSuggestion> = Vec::new();
+    for space in ["person", "pet"] {
+    let pet = space == "pet";
+    let profiles = person_profiles(conn, space)?;
+    if !profiles.iter().any(|p| p.id == person_id) {
+        continue;
+    }
+    let min_sim = if pet { PET_SUGGEST_SIM } else { min_sim.unwrap_or(FACE_SUGGEST_SIM) };
+    // Candidates: any unconfirmed face not already this person's, not in an ignored group, and
+    // not previously rejected for this person. Faces in other auto "Person N" groups and the
+    // unclustered pile are exactly what this is meant to reach.
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.photo_id, f.embedding, ph.cap_y, ph.cap_m, ph.cap_d FROM photo_faces f
+             JOIN photos ph ON ph.id = f.photo_id
+             LEFT JOIN people o ON o.id = f.person_id
+             WHERE length(f.embedding) > 0 AND f.confirmed = 0
+               AND ((?2 = 1) = (f.species IS NOT NULL))
+               AND (f.person_id IS NULL OR (f.person_id != ?1 AND o.ignored = 0))
+               AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)",
+        )
+        .map_err(|e| e.to_string())?;
+    type Row = (i64, i64, Vec<u8>, Option<i64>, Option<i64>, Option<i64>);
+    let rows: Vec<Row> = stmt
+        .query_map(params![person_id, pet as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    out.extend(rows
+        .into_iter()
+        .filter_map(|(face_id, photo_id, blob, y, m, d)| {
+            let emb = blob_to_f32_vec(&blob);
+            let (_, sim) = best_profile_match(&emb, &profiles, Some(person_id))?;
+            let same_day = matches!((y, m, d), (Some(y), Some(m), Some(d)) if days.contains(&(y, m, d)));
+            let sim = if same_day { sim + SAME_DAY_BOOST } else { sim };
+            (sim >= min_sim).then_some(FaceSuggestion { face_id, photo_id, similarity: sim.min(1.0), also: Vec::new() })
+        }));
+    // Unassigned pending faces too: the person's OWN unconfirmed faces (from a cluster that
+    // majority-voted into them) are also worth a yes/no, ranked in with the rest.
+    let mut own = conn
+        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND length(embedding) > 0 AND ((?2 = 1) = (species IS NOT NULL))")
+        .map_err(|e| e.to_string())?;
+    let own_rows: Vec<(i64, i64)> = own
+        .query_map(params![person_id, pet as i64], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let target = profiles.iter().find(|p| p.id == person_id).unwrap();
+    for (fid, pid) in own_rows {
+        if let Some((_, e)) = face_embeddings(conn, &[fid])?.into_iter().next() {
+            out.push(FaceSuggestion { face_id: fid, photo_id: pid, similarity: profile_sim(&e, target), also: Vec::new() });
+        }
+    }
+    }
+    out.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+    // One face per photo is enough to tag the photo — keep the strongest.
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|s| seen.insert(s.photo_id));
+    // Collapse each moment to its best face; the rest ride along in `also`.
+    let mut cap = conn.prepare("SELECT captured FROM photos WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut items = Vec::with_capacity(out.len());
+    for sg in &out {
+        let t: Option<i64> = cap.query_row(params![sg.photo_id], |r| r.get(0)).optional().map_err(|e| e.to_string())?.flatten();
+        items.push((sg.face_id, t));
+    }
+    drop(cap);
+    let by_face: std::collections::HashMap<i64, FaceSuggestion> = out.into_iter().map(|s| (s.face_id, s)).collect();
+    let mut out: Vec<FaceSuggestion> = group_into_moments(&items)
+        .into_iter()
+        .filter_map(|g| {
+            let mut head = by_face.get(&g[0])?.clone();
+            head.also = g[1..].to_vec();
+            Some(head)
+        })
+        .collect();
+    out.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+    out.truncate(limit);
+    Ok(out)
+}
+
+/// Resolves a batch of suggestions in one go: `accept` faces move to the person as confirmed,
+/// `reject` faces are remembered as "not this person" and never offered to them again.
+#[tauri::command(async)]
+pub fn catalog_resolve_suggestions(
+    state: tauri::State<CatalogState>,
+    person_id: i64,
+    accept: Vec<i64>,
+    reject: Vec<i64>,
+) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    resolve_suggestions_run(&conn, person_id, &accept, &reject)
+}
+
+fn resolve_suggestions_run(conn: &Connection, person_id: i64, accept: &[i64], reject: &[i64]) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for fid in accept {
+        tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2", params![person_id, fid])
+            .map_err(|e| e.to_string())?;
+    }
+    for fid in reject {
+        tx.execute("INSERT OR IGNORE INTO face_rejections (face_id, person_id) VALUES (?1, ?2)", params![fid, person_id])
+            .map_err(|e| e.to_string())?;
+        // A rejected face under this person goes back to Unnamed — pending, auto-tagged (2) or,
+        // via the review page's Back, one the user had just accepted (1).
+        tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1 AND person_id = ?2", params![fid, person_id])
+            .map_err(|e| e.to_string())?;
+    }
+    if !accept.is_empty() {
+        tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    if !accept.is_empty() {
+        auto_assign_run(conn)?;
+    }
+    Ok(())
+}

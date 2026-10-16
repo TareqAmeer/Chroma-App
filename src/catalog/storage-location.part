@@ -1,0 +1,118 @@
+// ── Storage location ─────────────────────────────────────────────────────────────────────────
+
+/// Application Support (never Caches, never the SSD itself): the catalog is user work — stack
+/// choices, keywords, and the id→offline-thumbnail mapping are not regenerable from a rescan
+/// alone once a volume is gone — matching the existing `albums.json`/`subjects.json` split.
+///
+/// ⚠️ `CS_CATALOG_DIR` overrides this for tests. Without it, `library_perf.mjs`'s synthetic
+/// 50,000-entry catalog runs (and any future Rust test) would scan/migrate/rebuild against the
+/// REAL library. Only the shipped app relies on the default.
+pub(crate) fn catalog_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("CS_CATALOG_DIR") {
+        let p = PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    crate::platform::data_root()
+}
+
+/// Persisted DCP LUT bytes, keyed the same way `store_dcp_lut`'s in-memory `DCP_LUTS` cache is
+/// (e.g. `"dcp:Panasonic DC-S9:Standard"`) — a background job (the offline full-res cache, see
+/// `library::hq_offline_run`) needs the SAME LUT the interactive editor uses, but can't depend on
+/// the editor having been open recently to have warmed the in-memory-only cache. Baking a LUT
+/// needs no photo pixels at all (it's a pure function of the camera model + profile name), so
+/// this only ever needs to exist once per (camera, profile) pair actually used, not once per
+/// photo — see `chromasmith-22.html`'s `ensureDcpLutsPersisted` for what proactively warms it.
+pub(crate) fn dcp_lut_dir() -> PathBuf {
+    let dir = catalog_dir().join("dcp_luts");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+fn dcp_lut_file_name(key: &str) -> String {
+    format!("{:016x}.bin", fnv1a_str(key))
+}
+
+/// Same FNV-1a used everywhere else in this codebase for stable on-disk keys (library.rs's own
+/// copy is private to that module) — small, dependency-free, deterministic.
+fn fnv1a_str(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+pub(crate) fn persist_dcp_lut(key: &str, lut: &[f32]) {
+    let path = dcp_lut_dir().join(dcp_lut_file_name(key));
+    let mut bytes = Vec::with_capacity(lut.len() * 4);
+    for v in lut {
+        bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    // Same tempfile+rename atomicity as library.rs's write_cache_atomic — a bake only ever
+    // happens once per (camera, profile) pair, so contention is unlikely, but a torn write here
+    // would poison every future read of this LUT with silently wrong colors, not just a cache
+    // miss, so it's worth the same care regardless.
+    let tmp = path.with_extension(format!("bin.tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, &bytes).is_ok() {
+        let _ = std::fs::rename(&tmp, &path).or_else(|_| std::fs::remove_file(&tmp));
+    }
+}
+
+pub(crate) fn load_persisted_dcp_lut(key: &str) -> Option<Vec<f32>> {
+    let path = dcp_lut_dir().join(dcp_lut_file_name(key));
+    let bytes = std::fs::read(&path).ok()?;
+    if bytes.is_empty() || bytes.len() % 4 != 0 {
+        return None;
+    }
+    Some(bytes.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+}
+
+fn dcp_manifest_path() -> PathBuf {
+    dcp_lut_dir().join("manifest.json")
+}
+
+fn dcp_manifest_read() -> std::collections::HashMap<String, String> {
+    std::fs::read_to_string(dcp_manifest_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// `make_lower` (trimmed, lowercased) -> the exact `lutKey` string to look up in
+/// `load_persisted_dcp_lut`. Written whenever the interactive editor bakes a LUT for a RAW file
+/// (`store_dcp_lut`, main.rs) — a photo the user has ever opened and edited already has an entry
+/// by construction, which covers the "last 100 edited" half of the hot-200 set for free. The
+/// "last 100 added" half can still miss if a fresh import has never been opened; hq_offline_run
+/// treats that as a normal, retriable skip rather than an error (see its own doc comment).
+pub(crate) fn record_dcp_lut_for_make(make: &str, key: &str) {
+    let make_lower = make.trim().to_lowercase();
+    if make_lower.is_empty() {
+        return;
+    }
+    let mut m = dcp_manifest_read();
+    if m.get(&make_lower).map(|k| k.as_str()) == Some(key) {
+        return; // already recorded, avoid a pointless write on every RAW open
+    }
+    m.insert(make_lower, key.to_string());
+    if let Ok(json) = serde_json::to_string(&m) {
+        let path = dcp_manifest_path();
+        let tmp = path.with_extension(format!("json.tmp.{}", std::process::id()));
+        if std::fs::write(&tmp, json).is_ok() {
+            let _ = std::fs::rename(&tmp, &path).or_else(|_| std::fs::remove_file(&tmp));
+        }
+    }
+}
+
+pub(crate) fn dcp_lut_key_for_make(make: &str) -> Option<String> {
+    let make_lower = make.trim().to_lowercase();
+    if make_lower.is_empty() {
+        return None;
+    }
+    dcp_manifest_read().get(&make_lower).cloned()
+}
+
+pub(crate) fn catalog_db_path() -> PathBuf {
+    catalog_dir().join("catalog.db")
+}

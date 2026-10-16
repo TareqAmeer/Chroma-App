@@ -1,0 +1,853 @@
+  // ── Rotate/flip on stored recipes (unopened photos). Pure mirror of chromasmith-22.html's
+  // geomRotate/geomFlip + _cropRot90 + mskRemapForGeom, applied to a snapshot instead of the
+  // live editor item. Keep the two in step if either changes.
+  function geomOpOnSnap(snap, op) {
+    const g = snap.geom ? { ...snap.geom } : { rot: 0, flipH: false, flipV: false, angle: 0, crop: null };
+    const remap = (kind) => {
+      const f = kind === 'cw' ? (x, y) => [1 - y, x] : kind === 'ccw' ? (x, y) => [y, 1 - x] : kind === 'mx' ? (x, y) => [1 - x, y] : (x, y) => [x, 1 - y];
+      (snap.masks || []).forEach((m) => {
+        if (m.type === 'radial') {
+          [m.cx, m.cy] = f(m.cx, m.cy);
+          if (kind === 'cw' || kind === 'ccw') { const t = m.rx; m.rx = m.ry; m.ry = t; } else if (m.rot) m.rot = -m.rot;
+        } else if (m.type === 'linear') {
+          [m.x0, m.y0] = f(m.x0, m.y0); [m.x1, m.y1] = f(m.x1, m.y1);
+        }
+      });
+    };
+    if (op.rot) {
+      g.rot = ((((g.rot || 0) + op.rot) % 360) + 360) % 360;
+      const n = (((op.rot % 360) + 360) % 360) / 90;
+      for (let i = 0; i < n; i++) {
+        const c = g.crop;
+        if (c) g.crop = { x: 1 - (c.y + c.h), y: c.x, w: c.h, h: c.w };
+        remap('cw');
+      }
+    } else if (op.flip) {
+      const ax = op.flip;
+      if (ax === 'h') g.flipH = !g.flipH; else g.flipV = !g.flipV;
+      const sw = g.rot === 90 || g.rot === 270;
+      const horiz = (ax === 'h') !== sw;
+      if (g.crop) { const c = g.crop; g.crop = horiz ? { x: 1 - (c.x + c.w), y: c.y, w: c.w, h: c.h } : { x: c.x, y: 1 - (c.y + c.h), w: c.w, h: c.h }; }
+      remap(horiz ? 'mx' : 'my');
+    }
+    snap.geom = g;
+    return snap;
+  }
+  async function libGeomOp(paths, op) {
+    if (!paths.length) return;
+    await Promise.all(paths.map(async (p) => {
+      if (p === state.openedPath && typeof window.geomRotate === 'function') {
+        if (op.rot) window.geomRotate(op.rot); else window.geomFlip(op.flip);
+        return;
+      }
+      const cur = await getSidecar(p);
+      let snap;
+      try {
+        snap = cur.recipe ? snapshotFromB64(cur.recipe)
+          : (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) ? JSON.parse(JSON.stringify(_fxPristineDefault)) : {};
+      } catch (e) { toast(`Couldn't read the edit for ${baseName(p)}`, 'err'); return; }
+      const recipe = snapshotToB64(geomOpOnSnap(snap, op));
+      const updated = { ...cur, edited: true, recipe };
+      state.sidecars.set(p, updated);
+      await invoke('set_sidecar', { path: p, rating: updated.rating, label: updated.label, edited: true, recipe }).catch((e) => sidecarWriteFailed(p, cur, e));
+      markCardEdited(p);
+      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const img = card && card.querySelector('.lib-thumb-wrap img');
+      if (img) { delete img.dataset.canvasThumb; applyThumbGeom(img, p); }
+    }));
+  }
+  // Disk thumbnails are the unedited camera image, so a stored rotation/flip is shown with a CSS
+  // transform (flip in source space, then rotate — same order as the editor). Canvas-refreshed
+  // thumbs (refreshCardThumbFromCanvas) are already oriented and get no transform.
+  const thumbGeomCache = new Map(); // recipe b64 -> transform string
+  function thumbGeomTransform(recipe) {
+    if (!recipe) return '';
+    if (thumbGeomCache.has(recipe)) return thumbGeomCache.get(recipe);
+    let t = '';
+    try {
+      const g = snapshotFromB64(recipe).geom;
+      if (g && (g.rot || g.flipH || g.flipV)) t = `rotate(${g.rot || 0}deg) scale(${g.flipH ? -1 : 1},${g.flipV ? -1 : 1})`;
+    } catch (e) {}
+    if (thumbGeomCache.size > 2000) thumbGeomCache.clear();
+    thumbGeomCache.set(recipe, t);
+    return t;
+  }
+  function applyThumbGeom(img, path) {
+    if (!img || img.dataset.canvasThumb) return;
+    img.style.transform = thumbGeomTransform((state.sidecars.get(path) || {}).recipe);
+  }
+  async function libResetEdit(paths) {
+    if (!paths.length) return;
+    const n = paths.length;
+    // No confirmation dialog: Undo last reset (same menu, ⌘⇧R) recovers it — matches the
+    // in-editor fxResetAll() (see E3).
+    await Promise.all(paths.map(async (p) => {
+      const cur = await getSidecar(p);
+      try {
+        const updated = await invoke('reset_edit', { path: p });
+        state.sidecars.set(p, updated);
+      } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+      const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
+      const badge = card && card.querySelector('.lib-edited-badge');
+      if (badge) badge.remove();
+      if (p === state.openedPath) { openInEditor(p); }
+    }));
+    libMetaUndo.push([{ kind: 'reset', paths: [...paths] }]);
+    toast(n > 1 ? `Reset ${n} photos — ⌘Z to undo` : 'Reset edit — ⌘Z to undo');
+  }
+  async function libUndoLastReset(paths) {
+    const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
+    if (!restorable.length) return;
+    await Promise.all(restorable.map(async (p) => {
+      const cur = await getSidecar(p);
+      let updated;
+      try {
+        updated = await invoke('undo_reset_edit', { path: p });
+        state.sidecars.set(p, updated);
+      } catch (e) { sidecarWriteFailed(p, cur, e); return; }
+      if (updated.edited) markCardEdited(p);
+      if (p === state.openedPath) { openInEditor(p); }
+    }));
+    toast(restorable.length > 1 ? `Restored ${restorable.length} photos' edits` : 'Restored the edit');
+  }
+  async function libDuplicatePaths(paths) {
+    if (!paths.length) return;
+    for (const p of paths) { try { await invoke('duplicate_file', { path: p }); } catch (e) { console.error('duplicate_file', p, e); toast('Could not duplicate ' + baseName(p)); } }
+    await refreshView();
+  }
+  async function libDeletePaths(paths, opts = {}) {
+    if (!paths.length) return [];
+    const origin = libTrashOriginSnapshot();
+    const selectedBefore = [...state.selected];
+    const entryBefore = new Map(paths.map((p) => [p, {
+      entry: state.entries.find((e) => e.path === p), sidecar: state.sidecars.get(p), meta: state.meta.get(p),
+    }]));
+    const n = paths.length;
+    const label = n > 1 ? `these ${n} photos` : `"${baseName(paths[0])}"`;
+    if (!await window.confirmModal(opts.message || `Move ${label} to the Trash?`, opts.confirmLabel || 'Move to Trash')) return [];
+    const trashed = [], undoEntries = [];
+    let missing = 0;
+    for (const p of paths) {
+      try {
+        // false = file not found (deleted elsewhere / drive offline): nothing to trash, still drop it from the Library.
+        const { entry, sidecar, meta } = entryBefore.get(p) || {};
+        const receipt = await invoke('trash_file_with_undo', { path: p });
+        if (!receipt) missing++;
+        else {
+          undoEntries.push({ path: p, receipt, entry: entry ? { ...entry } : { path: p }, sidecar: sidecar ? { ...sidecar } : null, meta: meta ? { ...meta } : null });
+          if (receipt.warning) toast(`Photo moved to Trash, but its sidecar needs attention: ${receipt.warning}`, 'err');
+        }
+        imgCache.delete(p);
+        trashed.push(p);
+      }
+      catch (e) { console.error('trash_file_with_undo', p, e); toast('Could not delete ' + baseName(p)); }
+    }
+    if (trashed.length) {
+      try { await invoke('catalog_note_deleted', { paths: trashed }); } catch (e) { console.error('catalog_note_deleted', e); }
+      if (libTrashOriginMatches(origin)) {
+        // Drop deleted rows locally and repaint at once (no folder reopen / catalog_add_root / rescan);
+        // the targeted catalog update is awaited afterwards so a later refresh can't resurrect them.
+        state.selected.clear();
+        const gone = new Set(trashed);
+        state.entries = state.entries.filter((e) => !gone.has(e.path));
+        for (const p of trashed) { state.sidecars.delete(p); state.meta.delete(p); }
+        if (state._catalogTotal != null) state._catalogTotal = Math.max(0, state._catalogTotal - trashed.length);
+        renderGrid();
+      } else {
+        await refreshView();
+      }
+      if (missing) toast(`Removed ${missing} missing photo${missing === 1 ? '' : 's'} from the Gallery — file${missing === 1 ? ' was' : 's were'} not found on this machine`, false);
+      if (undoEntries.length) libMetaRecord({ kind: 'trash_delete', entries: undoEntries, selectedBefore, origin, cullUndoState: opts.cullUndoState || null });
+    }
+    return trashed;
+  }
+  async function libExportPaths(paths) {
+    if (!paths.length) return;
+    const n = paths.length;
+    const files = await readPathsAsFiles(paths);
+    if (!files.length) return;
+    const okPaths = files.okPaths || paths;
+    state.openedPath = '';
+    window.chromasmithSourcePath = null;
+    state.openedPaths = okPaths;
+    await libLoadFX(files);
+    try {
+      const firstSc = await getSidecar(okPaths[0]);
+      if (firstSc.recipe) {
+        applyUISnapshot(snapshotFromB64(firstSc.recipe));
+        if (typeof applyRawDefaults === 'function') applyRawDefaults();
+      }
+    } catch (e) { console.error('seed shared FX for batch export', e); }
+    for (let i = 0; i < okPaths.length; i++) {
+      const sc = await getSidecar(okPaths[i]);
+      if (!sc.recipe || !fxImages[i]) continue;
+      try {
+        const snap = snapshotFromB64(sc.recipe);
+        if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+        if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
+        if (snap.adjustIndependent && snap.sliders) {
+          const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
+          fxImages[i].adjustOverride = v;
+        }
+      } catch (e) { console.error('restore recipe', e); }
+    }
+    setExportScope(n > 1 ? 'all' : 'current');
+    await exportFX();
+  }
+  // Same target-resolution order the grid's own kbTargets() (further down) uses — duplicated
+  // rather than shared because it's needed before kbTargets' own `const` declaration runs
+  // (temporal dead zone) on every keydown.
+  function cmKbTargets() {
+    return state.selected.size ? [...state.selected] : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : []));
+  }
+
+  let ctxMenu = null;
+  function closeContextMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
+  document.addEventListener('click', closeContextMenu);
+  async function showContextMenu(e, entry, shown) {
+    e.preventDefault();
+    if (!state.selected.has(entry.path)) {
+      state.selected.clear();
+      state.selected.add(entry.path);
+      selectAnchor = shown.indexOf(entry);
+      updateCardSelClasses();
+    }
+    buildPathsMenu(e.clientX, e.clientY, Array.from(state.selected), { includeOpen: true });
+  }
+
+  const LIB_RENAME_TEMPLATE_KEY = 'cs.library.rename-template.v1';
+  const LIB_RENAME_SEQUENCE_KEY = 'cs.library.rename-sequence-start.v1';
+  async function openBatchRename(paths) {
+    if (state.source !== 'catalog' || !paths.length) return;
+    const viewOrder = new Map((state.entries || []).map((entry, index) => [entry.path, index]));
+    paths = [...new Set(paths)].sort((a, b) => (viewOrder.get(a) ?? Number.MAX_SAFE_INTEGER) - (viewOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b));
+    const d = document.createElement('dialog');
+    d.style.cssText = 'width:min(620px,92vw);max-height:86vh;padding:18px;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2);font:12px var(--sans)';
+    d.innerHTML = `<h3 style="margin:0 0 4px;font-size:15px">Rename ${paths.length} selected photo${paths.length===1?'':'s'}</h3>
+      <div style="color:var(--mut);margin-bottom:10px">Tokens: {name}, {date}, {camera}, {seq}. Extensions and RAW/JPEG pairs are preserved.</div>
+      <div style="display:flex;gap:8px;align-items:center"><input data-template aria-label="Filename template" value="${esc(localStorage.getItem(LIB_RENAME_TEMPLATE_KEY) || '{date}_{camera}_{seq}')}" style="box-sizing:border-box;flex:1;min-width:0;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:7px;padding:8px;font:13px var(--mono)">
+      <label style="white-space:nowrap;color:var(--mut)">Start # <input data-sequence type="number" min="0" step="1" value="${esc(localStorage.getItem(LIB_RENAME_SEQUENCE_KEY) || '1')}" style="width:70px;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:6px;padding:7px"></label></div>
+      <div data-status style="min-height:20px;margin:8px 0;color:var(--mut)">Preparing preview…</div>
+      <div data-list style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:7px;padding:6px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button data-cancel class="btn bgh">Cancel</button><button data-apply class="btn" disabled>Rename files</button></div>`;
+    document.body.appendChild(d);
+    const template = d.querySelector('[data-template]');
+    const sequence = d.querySelector('[data-sequence]');
+    const status = d.querySelector('[data-status]');
+    const list = d.querySelector('[data-list]');
+    const apply = d.querySelector('[data-apply]');
+    d.querySelector('[data-cancel]').onclick = () => d.close();
+    let revision = 0, previewRows = [];
+    const renderPreview = async () => {
+      const current = ++revision;
+      apply.disabled = true;
+      status.textContent = 'Updating preview…';
+      try {
+        const sequenceStart = Math.max(0, Math.trunc(Number(sequence.value) || 0));
+        const rows = await invoke('catalog_rename_preview', { paths, template: template.value, sequenceStart });
+        if (current !== revision) return;
+        previewRows = rows || [];
+        const collisions = previewRows.filter((r) => r.collision).length;
+        status.textContent = collisions ? `${collisions} target${collisions===1?'':'s'} already exist or collide. Change the template to continue.` : `${previewRows.length} files and companions will be renamed.`;
+        status.style.color = collisions ? 'var(--acc)' : 'var(--mut)';
+        list.innerHTML = previewRows.map((r) => `<div style="display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);gap:6px;align-items:center;padding:4px 2px;color:${r.collision?'var(--acc)':'var(--txt)'}"><span title="${esc(r.oldPath)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(r.oldPath))}</span><span aria-hidden="true">→</span><strong title="${esc(r.newPath)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(r.newPath))}</strong></div>`).join('');
+        apply.disabled = !previewRows.length || collisions > 0;
+      } catch (e) {
+        if (current !== revision) return;
+        previewRows = [];
+        list.textContent = '';
+        status.textContent = humanizeErr('preview this rename', e);
+        status.style.color = 'var(--acc)';
+      }
+    };
+    let timer;
+    template.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderPreview, 160); });
+    sequence.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(renderPreview, 160); });
+    apply.onclick = async () => {
+      apply.disabled = true;
+      status.textContent = 'Renaming files…';
+      try {
+        const sequenceStart = Math.max(0, Math.trunc(Number(sequence.value) || 0));
+        const result = await invoke('catalog_rename_apply', { paths, template: template.value, sequenceStart });
+        localStorage.setItem(LIB_RENAME_TEMPLATE_KEY, template.value);
+        localStorage.setItem(LIB_RENAME_SEQUENCE_KEY, String(sequenceStart));
+        const mapping = new Map((result || []).map((r) => [r.oldPath, r.newPath]));
+        const wasOpen = mapping.has(state.openedPath);
+        const reopened = mapping.get(state.openedPath);
+        state.selected = new Set([...state.selected].map((p) => mapping.get(p) || p));
+        if (reopened) state.openedPath = reopened;
+        if (Array.isArray(state.openedPaths)) state.openedPaths = state.openedPaths.map((p) => mapping.get(p) || p);
+        for (const [oldPath, newPath] of mapping) {
+          if (state.sidecars.has(oldPath)) { state.sidecars.set(newPath, state.sidecars.get(oldPath)); state.sidecars.delete(oldPath); }
+          if (state.meta.has(oldPath)) { state.meta.set(newPath, state.meta.get(oldPath)); state.meta.delete(oldPath); }
+          imgCache.delete(oldPath);
+        }
+        d.close();
+        await refreshAlbums();
+        await refreshView();
+        if (wasOpen && reopened) await openInEditor(reopened);
+        toast(`Renamed ${mapping.size} files`, true);
+      } catch (e) {
+        status.textContent = humanizeErr('rename these files', e);
+        status.style.color = 'var(--acc)';
+        apply.disabled = false;
+      }
+    };
+    d.addEventListener('close', () => { clearTimeout(timer); d.remove(); });
+    d.showModal();
+    template.focus();
+    template.select();
+    renderPreview();
+  }
+
+  // Shared right-click menu for a set of photo paths — used by the library grid cards
+  // (with an "Open" item) AND the editor preview itself (the currently-opened photo, no
+  // "Open"). One builder so the two menus never drift apart.
+  function buildPathsMenu(x, y, paths, opts = {}) {
+    closeContextMenu();
+    const n = paths.length;
+    ctxMenu = document.createElement('div');
+    ctxMenu.className = 'cs-ctx'; // Swiss v2 menu look lives in chromasmith-22.html (body.sk2 .cs-ctx)
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);' +
+      'border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
+    // mkItem is the base row builder, targeting whatever container is passed (the top-level
+    // menu, or a submenu's own popout) — a leaf row optionally shows a right-aligned keyboard
+    // shortcut hint, same flex layout the wireframe review settled on.
+    const mkItem = (container, label, fn, shortcut) => {
+      const el = document.createElement('div');
+      el.className = 'cs-ctx-it';
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px';
+      el.innerHTML = `<span>${label}</span>` + (shortcut ? `<span style="font-family:var(--mono);font-size:10px;color:var(--mut);white-space:nowrap">${shortcut}</span>` : '');
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
+      container.appendChild(el);
+      return el;
+    };
+    const item = (label, fn, shortcut) => mkItem(ctxMenu, label, fn, shortcut);
+    const sep = (container = ctxMenu) => { const s = document.createElement('div'); s.className = 'cs-ctx-sep'; s.style.cssText = 'height:1px;background:var(--bdr);margin:4px 0'; container.appendChild(s); };
+    // Nested submenu (grouping pass, wireframe item 27): related actions collapse behind one
+    // hover-revealed row instead of ~20 flat entries. Opens to the right on hover, with a small
+    // close delay so crossing the gap between the row and its popout doesn't dismiss it, and
+    // flips to the left if it would run off the right edge of the screen.
+    const submenu = (label) => {
+      const row = document.createElement('div');
+      row.className = 'cs-ctx-it cs-ctx-sub';
+      row.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:default;display:flex;justify-content:space-between;align-items:center;gap:14px;position:relative';
+      row.innerHTML = `<span>${label}</span><span style="color:var(--mut);font-size:10px">▸</span>`;
+      const pop = document.createElement('div');
+      pop.className = 'cs-ctx cs-ctx-pop';
+      pop.style.cssText = 'position:absolute;left:100%;top:-5px;margin-left:4px;display:none;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;min-width:190px;box-shadow:var(--lift-2);z-index:1';
+      row.appendChild(pop);
+      let closeT;
+      const openPop = () => {
+        clearTimeout(closeT);
+        ctxMenu.querySelectorAll(':scope > div > div[data-cs-pop]').forEach((p) => { if (p !== pop) p.style.display = 'none'; });
+        pop.style.display = 'block';
+        pop.dataset.csPop = '1';
+        row.style.background = 'var(--row-hover, rgba(128,128,128,.18))';
+        const r = pop.getBoundingClientRect();
+        if (r.right > window.innerWidth - 8) { pop.style.left = 'auto'; pop.style.right = '100%'; pop.style.marginLeft = '0'; pop.style.marginRight = '4px'; }
+      };
+      const scheduleClose = () => { closeT = setTimeout(() => { pop.style.display = 'none'; }, 180); };
+      row.onmouseenter = openPop;
+      row.onmouseleave = () => { row.style.background = ''; scheduleClose(); };
+      pop.onmouseenter = () => clearTimeout(closeT);
+      pop.onmouseleave = scheduleClose;
+      ctxMenu.appendChild(row);
+      return { row, pop, subItem: (label2, fn2, shortcut2) => mkItem(pop, label2, fn2, shortcut2), subSep: () => sep(pop) };
+    };
+    if (opts.includeOpen) {
+      item(`Edit ${n > 1 ? n + ' photos' : ''}`.trim(), async () => {
+        if (n <= 1) { await openInEditor(paths[0]); return; }
+        await openPathsInEditor(paths); // batch: no single auto-persist target
+      });
+      sep();
+    }
+    if (n === 1) item('Face close-ups…', () => openPhotoPeopleEditor(paths, { closeups: true }));
+    item(`People${n > 1 ? ` in ${n} photos` : ''}…`, () => openPhotoPeopleEditor(paths));
+    const scopedPerson = /^person:(\d+)$/.exec(state.catalogScope || '');
+    if (state.source === 'catalog' && scopedPerson) {
+      const pid = parseInt(scopedPerson[1], 10);
+      const who = (peopleList.find((x) => x.id === pid) || {}).name || 'this person';
+      item(`Not ${esc(who)}${n > 1 ? ` (${n})` : ''}`, async () => {
+        const ids = [];
+        for (const path of paths) {
+          const faces = await invoke('catalog_faces_for_path', { path, stack: true }).catch(() => []);
+          (faces || []).filter((f) => f.person_id === pid).forEach((f) => ids.push(f.face_id));
+        }
+        if (!ids.length) return;
+        try {
+          await invoke('catalog_untag_faces', { faceIds: ids });
+          await refreshPeople(); refreshView();
+          toast(`Removed "${who}" from ${n} photo${n === 1 ? '' : 's'}`, true);
+        } catch (err) { toast(humanizeErr('remove this tag', err), 'err'); }
+      });
+    }
+    sep();
+    if (state.source === 'catalog') {
+      item(`Rename ${n > 1 ? `${n} photos` : 'photo'}…`, () => openBatchRename(paths));
+      sep();
+    }
+    // Persistent RAW caching must be reachable from the same right-click selection workflow
+    // as the rest of the batch actions. The floating selection bar is easy to miss in a large
+    // grid or when it is covered by the cursor/context menu.
+    const rawCount = paths.filter((p) => RAW_EXT_RE.test(p)).length;
+    const cacheRawItem = item(`Cache RAWs${rawCount > 1 ? ` (${rawCount})` : ''}`, () => cacheSelectedRaws(paths));
+    if (!rawCount) {
+      cacheRawItem.style.opacity = '.4';
+      cacheRawItem.style.pointerEvents = 'none';
+      cacheRawItem.title = 'The selected photos do not include a supported RAW file';
+    } else {
+      cacheRawItem.title = 'Build exact full-quality studio caches for the selected RAW photos';
+    }
+    const reviewRawItem = item(`Prepare RAW review previews${rawCount > 1 ? ` (${rawCount})` : ''}`, () => prepareRawReviewPreviews(paths));
+    if (!rawCount) {
+      reviewRawItem.style.opacity = '.4';
+      reviewRawItem.style.pointerEvents = 'none';
+      reviewRawItem.title = 'The selected photos do not include a supported RAW file';
+    } else {
+      reviewRawItem.title = 'Prepare display-sized developed previews for RAW review';
+    }
+    sep();
+    // Only offered while actually looking at Needs review — elsewhere it's a confusing no-op
+    // (dismissing a photo that was never flagged does nothing visible), and "blurry" itself
+    // stays true either way; this only ever hides it from THIS specific review list.
+    if (state.source === 'catalog' && state.catalogScope === 'blurry') {
+      item(`Not blurry — dismiss${n > 1 ? ` (${n})` : ''}`, async () => {
+        try {
+          await invoke('catalog_dismiss_review', { paths });
+          toast(`Dismissed ${n} photo${n > 1 ? 's' : ''} from Needs review`);
+          refreshView();
+        } catch (e) { toast(humanizeErr('dismiss from review', e), 'err'); }
+      });
+      sep();
+    }
+
+    // ── Rate ▸ — Reject/Pick/Clear flag (matching the grid's own X/P/U keys) + Favorite (3.2.1:
+    // renamed from "Rate & flag" and given a hearting row — favorite was previously only
+    // reachable from the flag icons on the card itself / the deskbar's flag button, not here).
+    const rateMenu = submenu('Rate');
+    rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
+    rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
+    rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+    if (COLOR_LABELS_ENABLED) {
+      const colorMenu = submenu('Colour label');
+      COLOR_LABELS.forEach((color) => colorMenu.subItem(color, () => Promise.all(paths.map((p) => setColorLabel(p, color)))));
+      colorMenu.subItem('Clear colour label', () => Promise.all(paths.map((p) => setColorLabel(p, ''))));
+    }
+    rateMenu.subSep();
+    const allFavorited = paths.every((p) => (state.sidecars.get(p) || {}).favorite);
+    rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
+      () => Promise.all(paths.map((p) => setFavorite(p, !allFavorited))));
+
+    // ── Rotate & flip ▸ — the OPEN photo goes through the editor's own geomRotate/geomFlip
+    // (chromasmith-22.html: history, crop/mask remap, autosave); every other selected photo gets
+    // the same transform applied to its stored recipe's `geom` via libGeomOp (same per-path
+    // sidecar write loop as libPasteEdit), so opening it later restores the rotation through
+    // applyUISnapshot like any other saved edit. Works on a multi-selection.
+    const rotFlipMenu = submenu('Rotate &amp; flip');
+    rotFlipMenu.subItem('Rotate 90° CW', () => libGeomOp(paths, { rot: 90 }));
+    rotFlipMenu.subItem('Rotate 90° CCW', () => libGeomOp(paths, { rot: -90 }));
+    rotFlipMenu.subItem('Flip horizontal', () => libGeomOp(paths, { flip: 'h' }));
+    rotFlipMenu.subItem('Flip vertical', () => libGeomOp(paths, { flip: 'v' }));
+
+    // ── Versions & edit ▸ — copy/paste/virtual copies/reset, everything about the RECIPE
+    // rather than the file itself.
+    const verMenu = submenu(`Edit${n > 1 ? ` (${n})` : ''}`); // 3.2.2 rename (was "Versions & edit") — see "Undo last reset" below for the other half of this item
+    verMenu.subItem('Copy edit', () => libCopyEdit(paths), kbd('shift', 'C'));
+    // CHR-178: pin this photo (original file) as the Editor's floating reference.
+    if (n === 1 && typeof window.chromasmithSetReference === 'function') {
+      // CHR-221: send to Colour Copy. Uses the large preview (decodes for RAW too), not the file.
+      const toCC = async (which) => {
+        try {
+          const buf = await quicklookPreview(paths[0]);
+          const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+          if (state.open) await toggleLibrary();
+          window.chromasmithColourCopySet(which, file, which === 'src' ? paths : undefined);
+        } catch (e) { toast(humanizeErr('load this photo for Colour Copy', e)); }
+      };
+      if (typeof window.chromasmithColourCopySet === 'function') {
+        verMenu.subItem('Colour Copy: match this photo…', () => toCC('src'));
+        verMenu.subItem('Colour Copy: use as reference', () => toCC('ref'));
+      }
+      verMenu.subItem('Use as editor reference', async () => {
+        try { const f = await readPathsAsFiles([paths[0]]); if (f[0]) window.chromasmithSetReference(f[0], f[0].name); }
+        catch (e) { toast(humanizeErr('pin reference', e)); }
+      });
+    }
+    if (n > 1 && typeof window.chromasmithColourCopySet === 'function') {
+      verMenu.subItem(`Colour Copy: match selection (${n})…`, async () => {
+        try {
+          const buf = await quicklookPreview(paths[0]);
+          const file = new File([buf], baseName(paths[0]).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+          if (state.open) await toggleLibrary();
+          window.chromasmithColourCopySet('src', file, paths);
+        } catch (e) { toast(humanizeErr('load selection for Colour Copy', e)); }
+      });
+    }
+    const pasteRow = verMenu.subItem('Paste edit', () => libPasteEdit(paths), kbd('shift', 'V'));
+    const pasteSelRow = verMenu.subItem('Paste edit (selective)…', async () => {
+      if (typeof window.chromasmithPasteEditSelective !== 'function') return;
+      window.chromasmithPasteEditSelective(window.__copiedRecipe, async (_merged, selection) => {
+        try {
+          await startRecipeBatch('Selective paste', paths, cur => {
+            const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+            return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, selection.source, selection.keys));
+          }, true);
+        } catch (e) { toast(humanizeErr('paste selected settings', e), 'err'); }
+      });
+    });
+    verMenu.subItem('Batch edit history…', () => window.chromasmithRecipeBatchHistory());
+    verMenu.subItem('Sync sensor dust (review each photo)…', () => libSyncDust(paths));
+    if (!window.__copiedRecipe) {
+      pasteRow.style.opacity = '.4'; pasteRow.style.pointerEvents = 'none';
+      pasteSelRow.style.opacity = '.4'; pasteSelRow.style.pointerEvents = 'none';
+    }
+    // ── Virtual copies: a second set of edits over the SAME file (no pixels duplicated).
+    // Single selection only — "make a virtual copy of these 40 photos" is a different feature
+    // with a different confirmation, and quietly doing it to a whole selection is not it.
+    if (n === 1) {
+      verMenu.subSep();
+      const vcPath = paths[0];
+      const vsc = state.sidecars.get(vcPath) || {};
+      const vers = vsc.versions || [];
+      verMenu.subItem(vers.length ? `New virtual copy… (${vers.length} versions)` : 'New virtual copy…', async () => {
+        // askTextModal (a global from chromasmith-22.html), never window.prompt: prompt() is a
+        // silent no-op under the Tauri/WKWebView shell — and this file ONLY runs there, so the
+        // row appeared to do nothing at all. Fall back to prompt() only if the host page somehow
+        // predates the helper, which is strictly better than throwing.
+        const ask = window.askTextModal
+          ? window.askTextModal('Name this version', '', vers.length ? `Copy ${vers.length}` : 'Copy 1')
+          : Promise.resolve(window.prompt('Name this version', vers.length ? `Copy ${vers.length}` : 'Copy 1'));
+        const name = await ask;
+        if (name === null) return;
+        try {
+          const sc = await invoke('sidecar_add_version', { path: vcPath, name });
+          state.sidecars.set(vcPath, sc);
+          await renderGrid();
+          if (vcPath === state.openedPath) openInEditor(vcPath);
+          toast(`Created "${sc.versions[sc.active].name}"`, true);
+        } catch (e) { toast('Could not create a virtual copy — ' + (e.message || e), false); }
+      });
+      // Switching versions is the common action once copies exist, so each gets its own row
+      // rather than hiding behind yet another submenu.
+      vers.forEach((v, i) => {
+        const row = verMenu.subItem(`${i === vsc.active ? '● ' : '○ '}${v.name}`, async () => {
+          try {
+            const sc = await invoke('sidecar_set_active_version', { path: vcPath, index: i });
+            state.sidecars.set(vcPath, sc);
+            await renderGrid();
+            if (vcPath === state.openedPath) openInEditor(vcPath);  // re-open so the editor shows this version's edits
+          } catch (e) { toast('Could not switch version — ' + (e.message || e), false); }
+        });
+        row.oncontextmenu = async (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+          // confirmModal, never window.confirm — real destructive action, no undo path.
+          if (!await window.confirmModal(`Delete version "${v.name}"? This cannot be undone.`, 'Delete')) return;
+          try {
+            const sc = await invoke('sidecar_delete_version', { path: vcPath, index: i });
+            state.sidecars.set(vcPath, sc);
+            closeContextMenu(); await renderGrid();
+          } catch (e) { toast('Could not delete version — ' + (e.message || e), false); }
+        };
+        row.title = 'Switch to this version — right-click to delete it';
+      });
+    }
+    verMenu.subSep();
+    // No confirmation dialog: undoable via "Undo last reset" below (see E3), matching the
+    // in-editor "Reset all" (fxResetAll). Only ONE level and only until the next real edit or
+    // the next reset overwrites the buffer — closing the app between now and using the undo
+    // item is fine (the buffer lives in the .xmp sidecar, not in-memory), but leaving it too
+    // long is still a real way to lose the edit for good.
+    const resetItem = verMenu.subItem('Reset edit', () => libResetEdit(paths), kbd('shift', 'R'));
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).edited)) { resetItem.style.opacity = '.4'; resetItem.style.pointerEvents = 'none'; }
+    // Enabled only when at least one selected photo actually has a pending buffer —
+    // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
+    // reset can be partially undone: reset 3, then export 1, then undo the other 2).
+    const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), kbd([], 'Z'));
+    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
+      undoResetItem.style.opacity = '.4';
+      undoResetItem.style.pointerEvents = 'none';
+    }
+
+    // ── Merge into ▸ — HDR/focus/astro/panorama/collage (ROADMAP R12/R13). Each writes an
+    // ordinary new PNG next to the first selected photo (merge.rs's merge_output_path) and
+    // refreshes the grid so it shows up as a normal library photo, not a special file type.
+    // Dimmed (not hidden — §10.13's lesson: a permanently hidden control is a permanently
+    // unaudited one) below the photo count each merge needs.
+    const mergeMenu = submenu('Merge into (beta)'); // 3.2.3: HDR/focus/astro/panorama/collage merge is new/unproven enough to flag
+    const mergeHdrItem = mergeMenu.subItem('Merge exposures (HDR)…', async () => {
+      const prog = toastProgress(`Merging ${n} exposures…`);
+      try {
+        const outPath = await invoke('merge_hdr_photos', { paths });
+        prog.resolve('HDR merge saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { prog.fail(humanizeErr('merge exposures', e)); }
+    });
+    const mergeFocusItem = mergeMenu.subItem('Focus stack…', async () => {
+      const prog = toastProgress(`Stacking ${n} photos…`);
+      try {
+        const outPath = await invoke('merge_focus_photos', { paths });
+        prog.resolve('Focus stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { prog.fail(humanizeErr('focus stack', e)); }
+    });
+    // ── Astro stacking (ROADMAP R13 part 2) — same batch-action shape as HDR/focus above,
+    // reusing merge.rs's translation-only aligner + a new per-pixel mean/median blend.
+    const mergeAstroItem = mergeMenu.subItem('Astro stack…', async () => {
+      const mode = await astroStackModeModal();
+      if (!mode) return;
+      const prog = toastProgress(`Stacking ${n} photos (${mode})…`);
+      try {
+        const outPath = await invoke('merge_astro_photos', { paths, mode });
+        prog.resolve('Astro stack saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { prog.fail(humanizeErr('astro stack', e)); }
+    });
+    // ── Panorama (ROADMAP R13 part 3) — SCOPED to exactly 2 photos (see merge.rs's `pano`
+    // module doc for why: a real similarity-transform aligner, validated on a known synthetic
+    // transform, but not full feature-matching stitching — 3+ photos would need pairwise
+    // chaining this pass didn't build). Only enabled at exactly 2 selected, not just >=2.
+    const mergePanoItem = mergeMenu.subItem('Stitch panorama (2 photos)…', async () => {
+      const prog = toastProgress('Stitching panorama…');
+      try {
+        const outPath = await invoke('merge_panorama_photos', { paths });
+        prog.resolve('Panorama saved — added to library');
+        refreshView();
+        openInEditor(outPath);
+      } catch (e) { prog.fail(humanizeErr('stitch panorama', e)); }
+    });
+    // ── Collage (ROADMAP R13 part 1) — pure client-side canvas compositing, no alignment.
+    const collageItem = mergeMenu.subItem('Create collage…', () => createCollage(paths));
+    if (n < 2) {
+      mergeHdrItem.style.opacity = '.4'; mergeHdrItem.style.pointerEvents = 'none';
+      mergeFocusItem.style.opacity = '.4'; mergeFocusItem.style.pointerEvents = 'none';
+      mergeAstroItem.style.opacity = '.4'; mergeAstroItem.style.pointerEvents = 'none';
+      collageItem.style.opacity = '.4'; collageItem.style.pointerEvents = 'none';
+    }
+    if (n !== 2) { mergePanoItem.style.opacity = '.4'; mergePanoItem.style.pointerEvents = 'none'; }
+
+    // ── Add to album ▸ — UI_SPEC's context-menu shape names this as one of the 4 top-level
+    // groups; until now albums were reachable only by dragging a card onto the sidebar row
+    // (wireAlbumRows' ondrop, above) with no menu equivalent for a right-click or keyboard flow.
+    // Lists existing albums (each via the same album_add path the drag-drop uses) plus a "New
+    // album…" row that creates one and adds the selection to it in the same action.
+    const albumMenu = submenu('Add to album');
+    const addToAlbum = async (id, name) => {
+      const added = await albumAddUndoable(id, name, paths);
+      await refreshAlbums();
+      const dup = n - added;
+      toast(added ? `${added} added to "${name}"${dup ? `, ${dup} already there` : ''}` : `Already in "${name}"`, true);
+    };
+    _albums.forEach((a) => albumMenu.subItem(a.name, () => addToAlbum(a.id, a.name)));
+    if (_albums.length) albumMenu.subSep();
+    albumMenu.subItem('New album…', async () => {
+      const name = await window.askTextModal('Album name', '', '');
+      if (!name) return;
+      try {
+        const al = await invoke('album_create', { name });
+        revealAlbums();
+        await refreshAlbums();
+        await addToAlbum(al.id, al.name);
+      } catch (e) { toast(humanizeErr('create the album', e), 'err'); }
+    });
+
+    // ── File ▸ — actions about the file on disk rather than its recipe.
+    const fileMenu = submenu('File');
+    fileMenu.subItem(`Reveal in ${window.CS_PLATFORM ? window.CS_PLATFORM.revealLabel : 'Finder'}`, () => invoke('reveal_in_finder', { path: paths[0] }).catch((e) => console.error('reveal_in_finder', e)));
+    // ── Get Info (Bug #2 fix): the Info panel (renderInfoPanel) was fully built and functional
+    // but had no discoverable trigger anywhere in the UI — only an undiscoverable 'i'/'I' keydown
+    // shortcut (itself duplicated, with a second copy gated on state.source==='lr' that never
+    // fired for local photos) and a dead `window.__libInfo` nobody called. Right-click → File →
+    // Get Info is the conventional macOS/Lightroom entry point. Targets the first (or only)
+    // selected photo via `_kbCursor`, same as the keyboard shortcut, so the panel shows THIS
+    // photo rather than whatever was focused before the right-click.
+    fileMenu.subItem('Get Info', () => { state._kbCursor = paths[0]; window.__libInfo(true); }, 'I');
+    fileMenu.subItem(`Duplicate ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDuplicatePaths(paths), kbd([], 'D'));
+
+    sep();
+    // ── Scoped face/CLIP analysis (N4) — the sidebar's People search icon
+    // ("Analyze photos — find faces and enable AI search") always scans the WHOLE library,
+    // which stalled for hours on a 49,802-photo library. This scopes the exact same
+    // faces_run → embed_run → cluster_run → clip_embed_run chain (runFindFaces) to just the
+    // selected photos. Valid for any n>=1 (the menu only opens with a selection), so — unlike
+    // the merge/pano items above — there's nothing to dim.
+    // 3.2.4: renamed "Find faces in selection" -> "Scan photos" (clearer, matches what it
+    // actually does — faces_run -> embed_run -> cluster_run -> clip_embed_run, not just faces).
+    // Greying it out once a photo is already scanned needs persisted per-photo scan state —
+    // backlogged, not done here (see plan's Backlog section).
+    item(`Scan${n > 1 ? ` (${n})` : ''}`, async () => {
+      // Paths → ids: state.entries already carries `.id` alongside `.path` for everything
+      // currently shown in the grid (the same field catalog_query/expandStack/photoIds results
+      // use elsewhere), so no new lookup command is needed — just match on path.
+      const byPath = new Map(state.entries.map((e) => [e.path, e.id]));
+      let ids = paths.map((p) => byPath.get(p)).filter((id) => id > 0);
+      if (ids.length < paths.length) {
+        try { ids = await invoke('catalog_photo_ids_for_paths', { paths }); } catch (e) { console.error('catalog_photo_ids_for_paths', e); }
+      }
+      if (!ids.length) { toast('Could not resolve the selected photos', 'err'); return; }
+      await runFindFaces(ids);
+    });
+    // 3.2.5: split into Quick (unchanged libExportPaths — loads the recipe and fires exportFX()
+    // immediately with whatever export settings are already configured) and Custom (opens the
+    // photo(s) in the editor and reveals the Export section instead of firing right away, so
+    // quality/scope/etc can be changed first).
+    const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
+    exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
+    exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
+    exportMenu.subItem('Export custom…', async () => {
+      if (n <= 1) await openInEditor(paths[0]);
+      else await openPathsInEditor(paths);
+      const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
+      if (card) {
+        card.classList.remove('fx-sec-collapsed');
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    sep();
+    // Was prefixed with a 🗑️ emoji — every other row in this same menu is plain text, and
+    // CLAUDE.md §3b is explicit: no emoji in desktop chrome, they render per-platform and never
+    // match this menu's own stroke-icon language. Kept alone at the top level, never nested —
+    // the one destructive action here is never a hover away from an accidental click.
+    const deleteItem = item(`Delete ${n > 1 ? n + ' photos' : ''}`.trim(), () => libDeletePaths(paths), '⌫');
+    deleteItem.style.color = 'var(--danger, #e5484d)';
+    document.body.appendChild(ctxMenu);
+    const { innerWidth: vw, innerHeight: vh } = window;
+    const r = ctxMenu.getBoundingClientRect();
+    ctxMenu.style.left = Math.min(x, vw - r.width - 8) + 'px';
+    ctxMenu.style.top = Math.min(y, vh - r.height - 8) + 'px';
+  }
+
+  // Right-click on the EDITOR preview: same menu for the photo currently open from the
+  // library. chromasmith-22.html already preventDefault()s contextmenu on #fx-wrap (its
+  // native long-press suppression), so this listener only has to build the menu. Capture
+  // phase so it runs regardless of that handler; no-op when nothing library-opened.
+  {
+    // This script is injected right before </body>, so the DOM is already parsed here.
+    const wrap = document.getElementById('fx-wrap');
+    // e.target===wrap means the click landed on the empty background AROUND the photo, not the
+    // photo itself — chromasmith-22.html's own contextmenu handler on #fx-wrap owns that case now
+    // (a background-color picker), so defer to it instead of covering the background with this
+    // photo-edit menu too.
+    if (wrap) wrap.addEventListener('contextmenu', (e) => {
+      if (!state.openedPath || e.target === wrap) return;
+      e.preventDefault();
+      buildPathsMenu(e.clientX, e.clientY, [state.openedPath], { includeOpen: false });
+    });
+  }
+
+  async function renderGrid() {
+    // Cloud album on screen: every filter/sort/search/view-mode handler funnels through here,
+    // and rebuilding from state.entries (the previous FOLDER's files) would silently replace
+    // the cloud grid. Delegate to the cloud renderer instead (lrState.assets, no refetch).
+    if (state.source === 'lr') { if (typeof renderLrGrid === 'function') await renderLrGrid(); return; }
+    // No folder added yet: every re-render (dock/expand toggles, resizes) must keep the
+    // first-launch empty state, not replace it with "No photos in this folder".
+    if (!state.root && state.source === 'folder' && !state.entries.length) { renderLibraryNoRoot(); return; }
+    grid = document.getElementById('lib-grid');
+    // A virtual grid is a spacer plus a small mounted window. Clearing it during a harmless
+    // refresh (for example when background metadata finishes) collapses the spacer and makes
+    // the browser clamp scrollTop to zero. Remember the first visible photo so the rebuilt
+    // window can restore the user's place even if sorting moved that photo to another row.
+    let scrollAnchor = null;
+    if (state._virtOn && grid && state._virtMetrics) {
+      const scroller = grid.parentElement && grid.parentElement.scrollHeight > grid.parentElement.clientHeight
+        ? grid.parentElement : (grid.closest('#lib-overlay') || document.documentElement);
+      const viewportTop = scroller.getBoundingClientRect().top;
+      const cards = [...grid.querySelectorAll('.lib-card[data-path]')];
+      const anchor = cards.find((card) => card.getBoundingClientRect().bottom > viewportTop) || cards[0];
+      if (anchor) scrollAnchor = {
+        path: anchor.dataset.path,
+        viewportOffset: anchor.getBoundingClientRect().top - viewportTop,
+        scroller,
+      };
+    }
+    grid.innerHTML = '';
+    thumbQueueReset(); // drop queued thumbnail jobs from the previous grid/folder
+    const overlayEl = document.getElementById('lib-overlay');
+    const docked = document.body.classList.contains('deskx') && overlayEl && !overlayEl.classList.contains('full') && !document.body.classList.contains('lib-unified-view');
+    const isList = state.viewMode === 'list' && !docked;
+    grid.classList.toggle('list-view', isList);
+    grid.classList.toggle('lib-mat', !!state.gridMat);
+    grid.style.setProperty('--lib-thumb', state.thumbSize + 'px');
+    const listHead = document.getElementById('lib-list-head');
+    if (listHead) { listHead.classList.toggle('on', isList); syncListHead(); }
+    const shown = libraryNavigationOrder(true).entries;
+    // ── Virtualisation ────────────────────────────────────────────────────────────────────
+    // Measured (test/probe_grid.mjs, before this): 200 files = 5,114 DOM nodes, 1,000 = 17,914,
+    // and 5,000 never finished loading at all — the page timed out at 30s. About 18 nodes per
+    // card is fine for a shoot and fatal for a library, and "a year of photos" is the normal
+    // case for the folder this tool points at.
+    //
+    // ⚠️ Below VIRT_MIN the OLD path runs unchanged. Virtualising a 40-photo folder buys nothing
+    // and would put a scroll listener, a measurement pass and two spacer nodes between every
+    // existing behaviour (drag-select, keyboard nav, the dupe badges) and its DOM. Small folders
+    // keep exactly the code they had.
+    state._virtAll = shown;
+    state._virtPathIndex = navigationCache.index;
+    const virtOn = shown.length >= VIRT_MIN && !isList;
+    state._virtOn = virtOn;
+    // Item 31: aspect-ratio thumbnails only below VIRT_MIN — virtualization's row/col windowing
+    // (virtMetrics) assumes a uniform CSS grid, which the flex-wrap ragged-right layout is not.
+    grid.classList.toggle('aspect-view', state.gridAspect && !isList && !virtOn);
+    grid.classList.toggle('aspect-fit', state.gridAspect && !isList && virtOn);
+    const aspectBtn = document.getElementById('lib-aspect-toggle');
+    if (aspectBtn) aspectBtn.classList.toggle('on', state.gridAspect);
+    // Build every card into a detached DocumentFragment and append ONCE, instead of one
+    // appendChild() per card — on a large folder that was one reflow per photo. Wiring
+    // (thumbnail load, click/drag handlers) still has to happen in a SEPARATE pass after the
+    // fragment lands in the live grid: loadThumb()'s pump checks img.isConnected synchronously
+    // (see its comment above), so calling it on a still-detached card silently drops the job.
+    renderCards(grid, virtOn ? [] : shown, shown, isList, { offset: 0 });
+    if (virtOn) {
+      // Mount one screenful first so the live grid can be MEASURED (column count and row pitch
+      // both come from the browser's own auto-fill layout — see virtMetrics), then window to the
+      // real scroll position.
+      renderCards(grid, shown.slice(0, Math.min(shown.length, 60)), shown, isList, { offset: 0 });
+      state._virtMetrics = virtMetrics(grid);
+      state._virtRange = null;
+      virtUpdate(true);
+      const scroller = grid.parentElement || document.documentElement;
+      if (_virtScrollBound) _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
+      // rAF-coalesced: a scroll fires far more often than a row boundary is crossed, and
+      // virtUpdate already no-ops when the row range has not changed.
+      let queued = false;
+      const fn = () => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; virtUpdate(false); }); };
+      scroller.addEventListener('scroll', fn, { passive: true });
+      _virtScrollBound = { el: scroller, fn };
+      if (_virtRO) _virtRO.disconnect();
+      let roW = -1;
+      _virtRO = new ResizeObserver(() => {
+        const w = grid.clientWidth;
+        const live = virtMetrics(grid), measured = state._virtMetrics;
+        const geometryChanged = live && measured && (live.cols !== measured.cols || Math.abs(live.rowH - measured.rowH) > 0.5);
+        if (((roW >= 0 && w !== roW) || geometryChanged) && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure();
+        roW = w;
+      });
+      _virtRO.observe(grid);
+    } else if (_virtScrollBound) {
+      _virtScrollBound.el.removeEventListener('scroll', _virtScrollBound.fn);
+      _virtScrollBound = null;
+    }
+    renderGridTail(shown);
+    gridTitleIndex(shown);
+    gridTitleUpdate();
+    if (scrollAnchor && state._virtOn && state._virtMetrics) {
+      const index = (state._virtAll || []).findIndex((entry) => entry.path === scrollAnchor.path);
+      if (index >= 0) {
+        // Reuse the Library's geometry-aware path scroll: a refresh can coincide with a dock
+        // or width change, so the old pixel-to-row conversion may no longer match this grid.
+        scrollLibraryToPath(scrollAnchor.path);
+        const card = grid.querySelector(`.lib-card[data-path="${CSS.escape(scrollAnchor.path)}"]`);
+        if (card) {
+          const actualOffset = card.getBoundingClientRect().top - scrollAnchor.scroller.getBoundingClientRect().top;
+          scrollAnchor.scroller.scrollTop += actualOffset - scrollAnchor.viewportOffset;
+          virtUpdate(true);
+        }
+      }
+    }
+  }

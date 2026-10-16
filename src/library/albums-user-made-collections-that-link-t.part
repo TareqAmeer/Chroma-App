@@ -1,0 +1,1152 @@
+// ── Albums: user-made collections that LINK to photos rather than copying them ───────────────
+//
+// The gap this closes: every existing collection here is *derived* (edited, favorites, exported,
+// rejected — each computed from a per-photo fact). There was no way to say "these 40 frames are
+// the Geneva set" without moving files on disk, which is what a folder would mean.
+//
+// ⚠️ An album stores PATHS, never pixels. That is the whole point — a photo can be in any number
+// of albums, appears at full quality in each, and deleting an album cannot lose a photograph.
+// The cost of that choice is that an album can go stale when a file is moved or renamed outside
+// the app, which is why `list_album` marks missing entries (`DirEntry::missing`) rather than
+// dropping them: a photo you can see and fix is better than one that silently disappeared.
+//
+// Stored in Application Support, NOT Caches — an album is user work that cannot be regenerated
+// from anything on disk. Same reasoning as subject.rs's prototypes.
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct Album {
+    pub id: String,
+    pub name: String,
+    /// Absolute photo paths, in the order the user added them.
+    pub paths: Vec<String>,
+    /// Unix seconds, for "recently used" ordering in the sidebar.
+    pub updated: u64,
+}
+
+fn albums_path() -> PathBuf {
+    crate::platform::data_root().join("albums.json")
+}
+
+// Serialize every album read-modify-write operation so concurrent commands cannot overwrite
+// each other's updates or race through the shared albums.json.tmp path.
+static ALBUMS_MUTATION_LOCK: Mutex<()> = Mutex::new(());
+
+fn albums_read() -> Vec<Album> {
+    std::fs::read_to_string(albums_path())
+        .ok()
+        .and_then(|t| serde_json::from_str::<Vec<Album>>(&t).ok())
+        .unwrap_or_default()
+}
+
+fn albums_write(v: &[Album]) -> Result<(), String> {
+    let path = albums_path();
+    let text = serde_json::to_string_pretty(v).map_err(|e| format!("serialise albums: {e}"))?;
+    // Write-then-rename, so an interrupted write cannot truncate the file every album lives in.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("write albums: {e}"))?;
+    replace_album_file(&tmp, &path).map_err(|e| format!("commit albums: {e}"))
+}
+
+#[cfg(not(windows))]
+fn replace_album_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    std::fs::rename(tmp, path)
+}
+
+#[cfg(windows)]
+fn replace_album_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH};
+
+    let from: Vec<u16> = tmp.as_os_str().encode_wide().chain(Some(0)).collect();
+    let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    // MoveFileEx with REPLACE_EXISTING performs the replacement without first removing the
+    // current albums file. If it fails, Windows leaves that file in place and the temp remains
+    // available for diagnosis/retry.
+    unsafe {
+        MoveFileExW(
+            windows::core::PCWSTR(from.as_ptr()),
+            windows::core::PCWSTR(to.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    }
+}
+
+/// Keeps every persisted album path aligned when a catalogued file is renamed in place.
+/// This is deliberately narrow: membership and order are preserved exactly, only path strings
+/// present in the rename map are replaced.
+pub(crate) fn rewrite_album_paths(mapping: &[(String, String)]) -> Result<(), String> {
+    if mapping.is_empty() { return Ok(()); }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let mut changed = false;
+    for album in &mut all {
+        for path in &mut album.paths {
+            if let Some((_, next)) = mapping.iter().find(|(old, _)| old == path) {
+                *path = next.clone();
+                changed = true;
+                album.updated = now_secs();
+            }
+        }
+    }
+    if changed { albums_write(&all) } else { Ok(()) }
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+#[tauri::command(async)]
+pub fn album_list() -> Vec<Album> {
+    let mut v = albums_read();
+    v.sort_by(|a, b| b.updated.cmp(&a.updated));
+    v
+}
+
+#[tauri::command(async)]
+pub fn album_create(name: String) -> Result<Album, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("an album needs a name".into());
+    }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    if all.iter().any(|a| a.name.eq_ignore_ascii_case(&name)) {
+        return Err(format!("an album called \"{name}\" already exists"));
+    }
+    let album = Album { id: format!("alb{}", now_secs()), name, paths: Vec::new(), updated: now_secs() };
+    all.push(album.clone());
+    albums_write(&all)?;
+    Ok(album)
+}
+
+#[tauri::command(async)]
+pub fn album_rename(id: String, name: String) -> Result<(), String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("an album needs a name".into());
+    }
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    a.name = name;
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+#[tauri::command(async)]
+pub fn album_delete(id: String) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    all.retain(|a| a.id != id);
+    // ⚠️ Deletes the LIST only. Nothing here touches a photo, which is what makes an album safe
+    // to throw away — the opposite of a folder.
+    albums_write(&all)
+}
+
+/// Adds photos to an album, skipping ones already in it. Returns how many were actually added so
+/// the UI can say "3 added, 2 already there" instead of a silent no-op on a re-drag.
+#[tauri::command(async)]
+pub fn album_add(id: String, paths: Vec<String>) -> Result<usize, String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    let before = a.paths.len();
+    for p in paths {
+        if !a.paths.iter().any(|q| q == &p) {
+            a.paths.push(p);
+        }
+    }
+    let added = a.paths.len() - before;
+    a.updated = now_secs();
+    albums_write(&all)?;
+    Ok(added)
+}
+
+#[tauri::command(async)]
+pub fn album_remove(id: String, paths: Vec<String>) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    a.paths.retain(|p| !paths.iter().any(|q| q == p));
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+/// Reorders one album's contents wholesale — the drag-to-reorder gesture. Paths not currently in
+/// the album are ignored rather than added, so a stale drag can't quietly grow it.
+#[tauri::command(async)]
+pub fn album_set_order(id: String, paths: Vec<String>) -> Result<(), String> {
+    let _guard = ALBUMS_MUTATION_LOCK.lock().map_err(|e| format!("lock album updates: {e}"))?;
+    let mut all = albums_read();
+    let a = all.iter_mut().find(|a| a.id == id).ok_or("no such album")?;
+    let existing: Vec<String> = a.paths.clone();
+    let mut next: Vec<String> = paths.into_iter().filter(|p| existing.contains(p)).collect();
+    // Anything the caller didn't mention keeps its old relative position at the end.
+    for p in existing {
+        if !next.contains(&p) {
+            next.push(p);
+        }
+    }
+    a.paths = next;
+    a.updated = now_secs();
+    albums_write(&all)
+}
+
+#[cfg(test)]
+mod registry_rescan_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_registry_rescan_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // ⚠️ Deliberately does NOT call registry_read/registry_write/backfill_edited_registry/
+    // rescan_registries_recursive_inner — those hit this machine's REAL cache_dir() (there is no
+    // test-injectable override), so a test calling them would read/write the developer's actual
+    // flagged/favorites/edited/rejected registry files. scan_folder_for_registry itself is pure
+    // (the four Vec<String> collections are passed in by the caller, never touching disk), so it
+    // alone is what's safe to exercise directly.
+
+    #[test]
+    fn scan_folder_matches_green_flag_and_favorite_independently() {
+        let dir = scratch("basic");
+        std::fs::write(dir.join("pick.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("pick.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+        std::fs::write(dir.join("fav.jpg"), b"y").unwrap();
+        std::fs::write(dir.join("fav.xmp"), br#"<x><rdf:Description chromasmith:Favorite="True"/></x>"#).unwrap();
+        std::fs::write(dir.join("plain.jpg"), b"z").unwrap();
+        std::fs::write(dir.join("plain.xmp"), br#"<x><rdf:Description xmp:Rating="0"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 2, "only pick.jpg and fav.jpg should register — plain.jpg matches nothing");
+        assert!(flagged.iter().any(|p| p.ends_with("pick.jpg")));
+        assert!(favorites.iter().any(|p| p.ends_with("fav.jpg")));
+        assert!(edited.is_empty());
+        assert!(rejected.is_empty());
+    }
+
+    /// The RAW+JPEG-sibling case that mattered in practice: sidecar_path() replaces the
+    /// extension (with_extension), so a RAW and its JPEG sibling share ONE .xmp file. Both must
+    /// resolve back to a real photo path when scanning — this pins that with_extension's
+    /// extension-guessing loop (crate::formats::all_image_exts()) finds whichever sibling
+    /// actually exists on disk, given only the shared sidecar's stem.
+    #[test]
+    fn scan_folder_resolves_shared_sidecar_to_existing_sibling() {
+        let dir = scratch("raw_jpeg_sibling");
+        // Lowercase extension deliberately — `all_image_exts()` tries each candidate extension
+        // exactly as listed (lowercase), and `Path::exists()` only resolves a case MISMATCH on a
+        // case-INSENSITIVE filesystem, which isn't guaranteed (this test's own tmp dir turned
+        // out to be case-sensitive when first written with an uppercase extension). Matching
+        // case here tests the actual matching logic, not incidental OS/filesystem behavior.
+        std::fs::write(dir.join("__tm4224.rw2"), b"raw").unwrap();
+        // Deliberately no __tm4224.jpg on disk — only the RAW sibling exists here.
+        std::fs::write(dir.join("__tm4224.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 1);
+        assert!(flagged.iter().any(|p| p.ends_with("__tm4224.rw2")));
+        let _ = (edited, favorites, rejected);
+    }
+
+    #[test]
+    fn scan_folder_registers_the_real_case_extension() {
+        let dir = scratch("real_case_ext");
+        std::fs::write(dir.join("__TM6559 (2).RW2"), b"raw").unwrap();
+        std::fs::write(dir.join("__TM6559 (2).xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+        let (mut e, mut f, mut fl, mut r) = (vec![], vec![], vec![], vec![]);
+        scan_folder_for_registry(&dir.to_string_lossy(), &mut e, &mut f, &mut fl, &mut r);
+        assert!(fl.iter().any(|p| p.ends_with("__TM6559 (2).RW2")), "got {fl:?}");
+    }
+
+    /// A sidecar whose photo doesn't exist under ANY known extension must be skipped rather than
+    /// registering a path to a nonexistent file — an orphaned .xmp (photo since deleted/moved)
+    /// shouldn't poison the flagged/favorites/edited/rejected collections with dead entries.
+    #[test]
+    fn scan_folder_skips_orphaned_sidecar() {
+        let dir = scratch("orphan");
+        std::fs::write(dir.join("gone.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let added = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(added, 0);
+        assert!(flagged.is_empty());
+        let _ = (edited, favorites, rejected);
+    }
+
+    /// Re-scanning a folder whose entries are already present in the collections must add
+    /// nothing new — this is what makes re-running a rescan (or resuming after a cancel) safe
+    /// and idempotent rather than accumulating duplicate entries on every run.
+    #[test]
+    fn scan_folder_is_idempotent_on_already_registered_entries() {
+        let dir = scratch("idempotent");
+        std::fs::write(dir.join("pick.jpg"), b"x").unwrap();
+        std::fs::write(dir.join("pick.xmp"), br#"<x><rdf:Description xmp:Label="Green"/></x>"#).unwrap();
+
+        let (mut edited, mut favorites, mut flagged, mut rejected) = (vec![], vec![], vec![], vec![]);
+        let first = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+        let second = scan_folder_for_registry(&dir.to_string_lossy(), &mut edited, &mut favorites, &mut flagged, &mut rejected);
+
+        assert_eq!(first, 1);
+        assert_eq!(second, 0, "already-registered entry must not be re-added or double-counted");
+        assert_eq!(flagged.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod cache_key_tests {
+    use super::*;
+
+    /// Pins FNV-1a's exact output for a known input. If this ever changes — a different hash
+    /// algorithm, a different part-separator, a Rust-version-dependent detail sneaking back in
+    /// — this fails LOUDLY in CI instead of silently reassigning every cache key in production.
+    #[test]
+    fn cache_key_is_a_hardcoded_literal() {
+        assert_eq!(cache_key("/x/y.RW2"), format!("{:016x}.jpg", fnv1a(&["/x/y.RW2", THUMB_RENDER_VER])));
+    }
+
+    /// The coupling bug this refactor exists to fix, pinned directly: bumping the thumbnail
+    /// tier's version must not move the metadata or phash tier's key, and vice versa. Before
+    /// this, all three shared one hash via a `.replace(".jpg", "...")` filename trick, so a
+    /// thumbnail-only rendering fix silently invalidated every cached EXIF read and perceptual
+    /// hash too.
+    #[test]
+    fn bumping_one_tier_version_does_not_move_another() {
+        let path = "/x/y.RW2";
+        let (mtime, size) = (1_700_000_000u64, 12_345u64);
+        let thumb_before = cache_key(path);
+        let meta_before = meta_cache_path(path, mtime, size);
+        let phash_before = phash_cache_path(path, mtime, size);
+
+        // Simulate "bump THUMB_RENDER_VER" by hashing with a different thumbnail-tier literal
+        // directly (the const itself can't be mutated at runtime) — meta/phash must be
+        // unaffected since they never reference THUMB_RENDER_VER.
+        let thumb_after = format!("{:016x}.jpg", fnv1a(&[path, "thumb-v3-hypothetical"]));
+        assert_ne!(thumb_before, thumb_after, "sanity: the simulated bump must actually change the thumbnail key");
+        assert_eq!(meta_cache_path(path, mtime, size), meta_before, "metadata key must not move when only the thumbnail tier's version changes");
+        assert_eq!(phash_cache_path(path, mtime, size), phash_before, "phash key must not move when only the thumbnail tier's version changes");
+    }
+
+    /// ⚠️ STABLE means STABLE: unlike meta/phash (still keyed by path+mtime+size), the thumbnail
+    /// key must depend on PATH ONLY — this is the actual fix for the measured 3.04x orphan
+    /// redundancy (174,399 files for 57,422 photos on the real library this shipped against).
+    /// Staleness now lives entirely in the separate validity sidecar (see the tests below), never
+    /// in the filename.
+    #[test]
+    fn cache_key_is_stable_across_mtime_and_size() {
+        let a = cache_key("/x/y.RW2");
+        let b = cache_key("/x/y.RW2");
+        assert_eq!(a, b, "same path must hash identically across calls");
+        assert_eq!(a, cache_key("/x/y.RW2"), "the key must not depend on mtime or size at all");
+        assert_ne!(a, cache_key("/x/z.RW2"), "path must still be part of the key");
+    }
+}
+
+#[cfg(test)]
+mod stable_cache_validity_tests {
+    use super::*;
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("cs_cachekey_{}_{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// The actual bug fix, proven directly: writing under one (mtime, size) then writing AGAIN
+    /// under a DIFFERENT (mtime, size) — simulating a touch/edit/resync — must land on the SAME
+    /// filename both times, not create a second file. This is the property the old per-
+    /// (mtime, size) key structurally could not have.
+    #[test]
+    fn same_path_different_mtime_writes_to_the_same_file() {
+        let dir = scratch_dir("same_file");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"generation one, over the 128-byte truncation floor....................................................................................................", 1000, 500);
+        write_cache_atomic(&cache_path, b"generation two, over the 128-byte truncation floor....................................................................................................", 2000, 600);
+        let entries: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).collect();
+        // Exactly the data file + its validity sidecar — never two generations of either.
+        assert_eq!(entries.len(), 2, "a second write under a different mtime/size must overwrite, not orphan: {:?}", entries.iter().map(|e| e.file_name()).collect::<Vec<_>>());
+        let bytes = read_cache_if_current(&cache_path, 2000, 600).expect("the second generation must read back as current");
+        assert_eq!(bytes, b"generation two, over the 128-byte truncation floor....................................................................................................".to_vec());
+    }
+
+    /// A cached entry written against an OLD (mtime, size) must be treated as a miss once the
+    /// live file has moved on — this is what `read_cache_if_current` replaces the filename-
+    /// encoded staleness check with, and it must not silently serve stale pixels.
+    #[test]
+    fn stale_mtime_reads_as_a_miss_not_stale_content() {
+        let dir = scratch_dir("stale");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"old generation, over the 128-byte truncation floor....................................................................................................", 1000, 500);
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_some(), "sanity: matching mtime/size must hit");
+        assert!(read_cache_if_current(&cache_path, 9999, 500).is_none(), "a changed mtime must miss, not serve the old bytes");
+        assert!(read_cache_if_current(&cache_path, 1000, 9999).is_none(), "a changed size must miss, not serve the old bytes");
+    }
+
+    /// A file with no validity sidecar at all — an old-format leftover from before this fix, or
+    /// any other stray file that happens to collide with a computed key — must read as a miss,
+    /// never get served as if it were a validated hit.
+    #[test]
+    fn missing_sidecar_reads_as_a_miss() {
+        let dir = scratch_dir("no_sidecar");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        std::fs::write(&cache_path, b"bytes with no sidecar next to them at all, over 128 bytes.").unwrap();
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_none());
+    }
+
+    /// The truncated-file floor (crash / full disk mid-write) must still apply under the new
+    /// read path exactly as it did under the old inline check.
+    #[test]
+    fn truncated_file_reads_as_a_miss_even_with_a_matching_sidecar() {
+        let dir = scratch_dir("truncated");
+        let cache_path = dir.join(cache_key("/vol/photo.jpg"));
+        write_cache_atomic(&cache_path, b"short", 1000, 500); // under the 128-byte floor on purpose
+        assert!(read_cache_if_current(&cache_path, 1000, 500).is_none(), "a file at/under the truncation floor must never be served");
+    }
+
+    /// The one-time migration sweep is destructive by design (every old-format thumbnail becomes
+    /// permanently unreachable the instant the key format changes) — this pins the ONE thing that
+    /// must never be true: it must not touch the registries/export-history files living in the
+    /// SAME directory, and it must not re-run once its marker exists.
+    #[test]
+    fn migration_sweep_clears_stale_entries_but_never_registries() {
+        let dir = scratch_dir("migration");
+        // Simulate an old-format orphan (opaque hash, indistinguishable from a valid one by name).
+        std::fs::write(dir.join("aaaaaaaaaaaaaaaa.jpg"), b"old orphaned thumbnail bytes").unwrap();
+        std::fs::write(dir.join("bbbbbbbbbbbbbbbb.meta.json"), b"{}").unwrap();
+        // Files that must survive no matter what.
+        std::fs::write(dir.join("favorites_registry.json"), b"[\"/a.jpg\"]").unwrap();
+        std::fs::write(dir.join("export_history.json"), b"[]").unwrap();
+
+        migrate_thumb_cache_v2_in(&dir);
+
+        assert!(!dir.join("aaaaaaaaaaaaaaaa.jpg").exists(), "old-format entries must be cleared");
+        assert!(!dir.join("bbbbbbbbbbbbbbbb.meta.json").exists(), "old-format meta entries must be cleared");
+        assert!(dir.join("favorites_registry.json").exists(), "the migration must never touch a registry");
+        assert!(dir.join("export_history.json").exists(), "the migration must never touch export history");
+        assert!(dir.join(THUMB_CACHE_MIGRATION_MARKER).exists(), "the marker must be written so this never re-runs");
+
+        // Second call must be a no-op (marker present) — write a fresh file and confirm it survives.
+        std::fs::write(dir.join("cccccccccccccccc.jpg"), b"post-migration thumbnail").unwrap();
+        migrate_thumb_cache_v2_in(&dir);
+        assert!(dir.join("cccccccccccccccc.jpg").exists(), "a second call after the marker exists must be a true no-op");
+    }
+}
+
+#[cfg(test)]
+mod sidecar_preservation_tests {
+    use super::*;
+
+    fn scratch(tag: &str) -> String {
+        let dir = std::env::temp_dir().join(format!("cs_sidecar_{}_{}", std::process::id(), tag));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("photo.jpg");
+        std::fs::write(&p, b"x").unwrap();
+        p.to_string_lossy().into_owned()
+    }
+
+    /// The single most important test in this module: a sidecar written by another tool
+    /// (Lightroom, Bridge) carries develop settings and IPTC fields Chromasmith doesn't
+    /// understand. Before this fix, `write_sidecar` rebuilt the file from scratch on every
+    /// write and silently discarded them. This asserts they survive a real rating change.
+    #[test]
+    fn write_sidecar_preserves_unknown_fields() {
+        let path = scratch("foreign");
+        let _iso = isolate_cache_dir("foreign");
+        let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35" crs:Contrast2012="+10">
+   <photoshop:City>Geneva</photoshop:City>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), foreign).unwrap();
+
+        set_sidecar_run(path.clone(), 4, "Green".into(), true, Some("RECIPE_X".into()), Some(true), None).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains(r#"crs:Exposure2012="+0.35""#), "foreign attribute lost:\n{text}");
+        assert!(text.contains(r#"crs:Contrast2012="+10""#), "foreign attribute lost:\n{text}");
+        assert!(text.contains("<photoshop:City>Geneva</photoshop:City>"), "foreign child element lost:\n{text}");
+
+        // And our own fields actually landed.
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 4);
+        assert_eq!(sc.label, "Green");
+        assert!(sc.edited);
+        assert!(sc.favorite);
+        assert_eq!(sc.recipe, "RECIPE_X");
+    }
+
+    /// A Chromasmith-only sidecar (no foreign content) still round-trips correctly through the
+    /// merge path, not just the from-scratch fallback — the common case, exercised on a second
+    /// write so it goes through `find_description_attrs` rather than `plain_template`.
+    #[test]
+    fn a_chromasmith_only_sidecar_round_trips_on_a_second_write() {
+        let path = scratch("own");
+        let _iso = isolate_cache_dir("own");
+        set_sidecar_run(path.clone(), 2, "Red".into(), false, Some("A".into()), Some(false), None).unwrap();
+        set_sidecar_run(path.clone(), 5, "".into(), true, Some("B".into()), Some(true), None).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.rating, 5);
+        assert_eq!(sc.label, "", "label must be CLEARED, not left as the stale 'Red'");
+        assert!(sc.edited);
+        assert!(sc.favorite);
+        assert_eq!(sc.recipe, "B");
+    }
+
+    /// Clearing a field that was previously set must remove the attribute, not just fail to
+    /// add it — otherwise unsetting a rating/favorite/label after the fact would leave the old
+    /// value live in the file while the app believes it was cleared.
+    #[test]
+    fn clearing_a_field_removes_its_attribute_not_just_skips_it() {
+        let path = scratch("clear");
+        let _iso = isolate_cache_dir("clear");
+        set_sidecar_run(path.clone(), 3, "Star".into(), true, Some("R".into()), Some(true), None).unwrap();
+        set_sidecar_run(path.clone(), 0, "".into(), false, Some("".into()), Some(false), None).unwrap();
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("xmp:Label="), "cleared label attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Edited="), "cleared edited attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Favorite="), "cleared favorite attribute must be removed:\n{text}");
+        assert!(!text.contains("chromasmith:Recipe="), "cleared recipe attribute must be removed:\n{text}");
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 0);
+        assert_eq!(sc.label, "");
+    }
+
+    /// No existing sidecar at all: must fall back to the plain template exactly as before —
+    /// this is the "no file" half of the fallback the preservation logic is built around.
+    #[test]
+    fn no_existing_sidecar_falls_back_to_the_plain_template() {
+        let path = scratch("none");
+        let _iso = isolate_cache_dir("none");
+        set_sidecar_run(path.clone(), 3, "".into(), false, None, None, None).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 3);
+    }
+
+    /// A sidecar that exists but doesn't contain a locatable `<rdf:Description>` tag (corrupt,
+    /// truncated, or some non-XMP text) must not panic or write garbage — it falls back to the
+    /// plain template rather than trying to surgically edit something it can't find.
+    #[test]
+    fn an_unparseable_existing_sidecar_falls_back_safely() {
+        let path = scratch("corrupt");
+        let _iso = isolate_cache_dir("corrupt");
+        std::fs::write(sidecar_path(&path), b"not xml at all").unwrap();
+        let res = set_sidecar_run(path.clone(), 2, "".into(), false, None, None, None);
+        assert!(res.is_ok());
+        let sc = get_sidecar(path);
+        assert_eq!(sc.rating, 2);
+    }
+
+    /// Parses a real Lightroom-written sidecar if one exists in the repo (present at time of
+    /// writing: 20260731-__TM3682.xmp at the repo root), skipped cleanly otherwise. Guards the
+    /// no-XML-crate decision against an actual real-world file rather than only a hand-built one.
+    #[test]
+    fn xmp_bag_parses_a_real_sidecar_from_the_repo_root() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Some(sample) = std::fs::read_dir(&root).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| ext_lower(p) == "xmp")
+        }) else {
+            eprintln!("skipping: no .xmp at repo root");
+            return;
+        };
+        let text = std::fs::read_to_string(&sample).expect("read sample xmp");
+        let (start, end, _) = find_description_attrs(&text).expect("must locate rdf:Description in a real sidecar");
+        assert!(end > start || text[start..end].is_empty(), "attrs span must be well-formed");
+    }
+
+    // ── Keywords ─────────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn hierarchical_keywords_round_trip_through_xmp() {
+        let path = scratch("keywords");
+        let _iso = isolate_cache_dir("keywords");
+        set_keywords(path.clone(), vec!["Travel|Iceland|Reykjavik".into(), "Portrait".into()]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("xmlns:dc="), "the dc namespace must be declared once keywords are written");
+        assert!(text.contains("xmlns:lr="), "the lr namespace must be declared once keywords are written");
+
+        // dc:subject carries LEAVES only, matching real Lightroom output.
+        let subjects = xmp_bag(&text, "subject");
+        assert_eq!(subjects, vec!["Reykjavik".to_string(), "Portrait".to_string()]);
+
+        // lr:hierarchicalSubject carries every full path AND every ancestor, so the tag tree
+        // has something to build "Travel" and "Travel|Iceland" nodes from.
+        let hier = xmp_bag(&text, "hierarchicalSubject");
+        assert_eq!(hier, vec!["Travel".to_string(), "Travel|Iceland".to_string(), "Travel|Iceland|Reykjavik".to_string(), "Portrait".to_string()]);
+
+        // And the round trip back through get_sidecar must reproduce the exact input paths —
+        // not the exploded ancestor list, which is a lr:hierarchicalSubject writing detail, not
+        // what the caller asked to be tagged.
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel|Iceland|Reykjavik".to_string(), "Portrait".to_string()]);
+    }
+
+    /// A photo tagged only via a flat `dc:subject` list (no hierarchicalSubject at all — a
+    /// sidecar from a tool that doesn't do hierarchy) must still read back as single-segment
+    /// keyword paths, per the plan's own documented fallback.
+    #[test]
+    fn flat_subject_falls_back_to_single_segment_keywords() {
+        let path = scratch("flat-subject");
+        let _iso = isolate_cache_dir("flat-subject");
+        let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Other Tool">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+   <dc:subject><rdf:Bag><rdf:li>Wildlife</rdf:li><rdf:li>Kenya</rdf:li></rdf:Bag></dc:subject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), xmp).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Wildlife".to_string(), "Kenya".to_string()]);
+    }
+
+    /// Clearing every keyword must remove the elements entirely, not leave an empty bag —
+    /// otherwise a re-tag after a full clear would see stale (empty) markup and could confuse a
+    /// hand-inspection of the file.
+    #[test]
+    fn clearing_all_keywords_removes_the_elements() {
+        let path = scratch("clear-keywords");
+        let _iso = isolate_cache_dir("clear-keywords");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_keywords(path.clone(), vec![]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("dc:subject"), "an empty keyword list must remove the element, not leave it empty");
+        assert!(!text.contains("hierarchicalSubject"));
+        let sc = get_sidecar(path);
+        assert!(sc.keywords.is_empty());
+    }
+
+    // ── People & Pets XMP regions (CLAUDE.md failure #11) ───────────────────────────────────
+
+    #[test]
+    fn person_regions_round_trip_into_mwg_rs_xmp() {
+        let path = scratch("people-regions");
+        let _iso = isolate_cache_dir("people-regions");
+        set_people_regions(
+            path.clone(),
+            vec![
+                PersonRegion { name: "Sofia".into(), kind: "person".into(), x0: 0.1, y0: 0.2, x1: 0.3, y1: 0.5 },
+                PersonRegion { name: "Juno".into(), kind: "pet".into(), x0: 0.5, y0: 0.5, x1: 0.7, y1: 0.8 },
+            ],
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("xmlns:mwg-rs="), "the mwg-rs namespace must be declared");
+        assert!(text.contains("xmlns:Iptc4xmpExt="), "the Iptc4xmpExt namespace must be declared");
+        assert!(text.contains("<mwg-rs:Name>Sofia</mwg-rs:Name>"));
+        assert!(text.contains("<mwg-rs:Type>Face</mwg-rs:Type>"), "a person region must be typed Face");
+        assert!(text.contains("<mwg-rs:Type>Pet</mwg-rs:Type>"), "a pet region must be typed Pet");
+        // Sofia's box is [0.1,0.2]-[0.3,0.5]: centre (0.2, 0.35), size (0.2, 0.3). Compared
+        // with a tolerance, not a literal string match — f32 arithmetic on 0.1/0.2/0.3 doesn't
+        // round-trip through Display exactly (0.1 + (0.3-0.1)/2.0 prints as "0.20000002").
+        let cx: f32 = xmp_get(&text, "stArea:x").expect("stArea:x must be present").parse().unwrap();
+        let w: f32 = xmp_get(&text, "stArea:w").expect("stArea:w must be present").parse().unwrap();
+        assert!((cx - 0.2).abs() < 1e-5, "area x must be the box CENTRE (0.2), not the corner (0.1): got {cx}");
+        assert!((w - 0.2).abs() < 1e-5, "area w must be 0.2: got {w}");
+        let names = xmp_bag(&text, "PersonInImage");
+        assert_eq!(names, vec!["Sofia".to_string(), "Juno".to_string()]);
+    }
+
+    #[test]
+    fn person_regions_never_touch_existing_keywords_or_rating() {
+        let path = scratch("people-regions-preserve");
+        let _iso = isolate_cache_dir("people-regions-preserve");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
+            .unwrap();
+
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel".to_string()], "writing person regions must not clobber existing keywords");
+    }
+
+    #[test]
+    fn clearing_all_people_removes_the_regions_elements() {
+        let path = scratch("people-regions-clear");
+        let _iso = isolate_cache_dir("people-regions-clear");
+        set_people_regions(path.clone(), vec![PersonRegion { name: "Alice".into(), kind: "person".into(), x0: 0.0, y0: 0.0, x1: 0.1, y1: 0.1 }])
+            .unwrap();
+        set_people_regions(path.clone(), vec![]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(!text.contains("mwg-rs:Regions"), "an empty people list must remove the element, not leave it empty");
+        assert!(!text.contains("PersonInImage"));
+    }
+
+    /// Setting keywords must not disturb third-party fields already in the file — the same
+    /// preservation guarantee `write_sidecar_preserves_unknown_fields` pins for attributes, now
+    /// exercised through the keyword-writing path specifically since it does its own separate
+    /// pass over the file's children.
+    #[test]
+    fn setting_keywords_preserves_foreign_attributes_and_children() {
+        let path = scratch("keywords-foreign");
+        let _iso = isolate_cache_dir("keywords-foreign");
+        let foreign = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/" crs:Exposure2012="+0.35">
+   <photoshop:City>Geneva</photoshop:City>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+"#;
+        std::fs::write(sidecar_path(&path), foreign).unwrap();
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+
+        let text = std::fs::read_to_string(sidecar_path(&path)).unwrap();
+        assert!(text.contains("crs:Exposure2012=\"+0.35\""), "foreign attributes must survive a keyword write");
+        assert!(text.contains("<photoshop:City>Geneva</photoshop:City>"), "foreign child elements must survive a keyword write");
+        assert!(text.contains("dc:subject"));
+    }
+
+    /// A keyword containing XML-significant characters must round-trip exactly — the escape/
+    /// unescape pair is the entire correctness surface of the hand-rolled parser (see the
+    /// module doc comment on `xmp_bag`), and this is what proves it holds both directions.
+    #[test]
+    fn a_keyword_with_special_characters_round_trips() {
+        let path = scratch("keywords-escape");
+        let _iso = isolate_cache_dir("keywords-escape");
+        set_keywords(path.clone(), vec!["Rock & Roll|Q&A <live>".into()]).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Rock & Roll|Q&A <live>".to_string()]);
+    }
+
+    /// A rating/label click through `set_sidecar` must never drop existing keywords — the
+    /// exact class of bug phase 0a fixed for foreign XMP fields, now guarded for this app's OWN
+    /// keyword feature too.
+    #[test]
+    fn set_sidecar_preserves_existing_keywords() {
+        let path = scratch("keywords-survive-rating");
+        let _iso = isolate_cache_dir("keywords-survive-rating");
+        set_keywords(path.clone(), vec!["Travel".into()]).unwrap();
+        set_sidecar_run(path.clone(), 3, "Green".into(), false, None, None, None).unwrap();
+        let sc = get_sidecar(path);
+        assert_eq!(sc.keywords, vec!["Travel".to_string()]);
+    }
+
+    #[test]
+    fn color_label_round_trips_without_changing_existing_photo_metadata() {
+        let path = scratch("color-label-independent");
+        let _iso = isolate_cache_dir("color-label-independent");
+        set_sidecar_run(path.clone(), 4, "Green".into(), true, Some("RATING_RECIPE".into()), Some(true), None).unwrap();
+        set_color_label_run(&path, Some("Blue"), None).unwrap();
+
+        // Generic edit/preset writes must preserve the independent colour label and flags.
+        set_sidecar_run(path.clone(), 2, "Red".into(), true, Some("EDIT_RECIPE".into()), Some(false), None).unwrap();
+        let sc = get_sidecar(path.clone());
+        assert_eq!(sc.color_label, "Blue");
+        assert_eq!(sc.rating, 2);
+        assert_eq!(sc.label, "Red");
+        assert!(sc.edited);
+        assert!(!sc.favorite);
+
+        // Omitted values are a true no-op; an explicit empty value clears only the colour.
+        set_color_label_run(&path, None, None).unwrap();
+        assert_eq!(get_sidecar(path.clone()).color_label, "Blue");
+        set_color_label_run(&path, Some(""), None).unwrap();
+        let cleared = get_sidecar(path.clone());
+        assert_eq!(cleared.color_label, "");
+        assert_eq!(cleared.rating, 2);
+        assert_eq!(cleared.label, "Red");
+        assert!(!cleared.favorite);
+    }
+}
+
+/// One album's photos as grid entries. Mirrors list_exported's stat-fresh/missing-tolerant
+/// mapping so an album renders through exactly the same grid path as a folder.
+#[tauri::command(async)]
+pub fn list_album(id: String) -> Vec<DirEntry> {
+    let all = albums_read();
+    let Some(a) = all.into_iter().find(|a| a.id == id) else { return Vec::new() };
+    a.paths
+        .into_iter()
+        .map(|path| {
+            let p = Path::new(&path);
+            let file_name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
+            let ext = ext_lower(p);
+            let is_video = is_video_ext(&ext);
+            let kind = if is_video { "video" } else { kind_of(&ext) };
+            let edited_ts = edited_ts_of(&path);
+            match std::fs::metadata(&path) {
+                Ok(m) => {
+                    let mtime = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+                    DirEntry { name: file_name, path, is_dir: false, is_image: !is_video, is_video, kind, mtime, size: m.len(), missing: false, edited_ts }
+                }
+                // Kept, and flagged. An album pointing at a moved file should show the gap, not
+                // pretend the photo was never added.
+                Err(_) => DirEntry { name: file_name, path, is_dir: false, is_image: !is_video, is_video, kind, mtime: 0, size: 0, missing: true, edited_ts },
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod album_tests {
+    use super::*;
+
+    /// Albums are a real file on disk shared by every test in this module, so each test works on
+    /// its own HOME to stay independent of the developer's actual albums.
+    fn with_temp_home<T>(f: impl FnOnce() -> T) -> T {
+        let dir = std::env::temp_dir().join(format!("cs_alb_{}_{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let prev = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &dir);
+        let out = f();
+        if let Some(p) = prev { std::env::set_var("HOME", p); }
+        std::fs::remove_dir_all(&dir).ok();
+        out
+    }
+
+    #[test]
+    fn albums_link_without_copying_and_survive_a_missing_file() {
+        with_temp_home(|| {
+            let photos = std::env::temp_dir().join(format!("cs_albphotos_{}", std::process::id()));
+            std::fs::create_dir_all(&photos).unwrap();
+            let a1 = photos.join("a.jpg");
+            let a2 = photos.join("b.jpg");
+            std::fs::write(&a1, vec![1u8; 64]).unwrap();
+            std::fs::write(&a2, vec![2u8; 64]).unwrap();
+
+            let al = album_create("Geneva".into()).expect("create");
+            assert_eq!(album_create("geneva".into()).is_err(), true, "names are case-insensitively unique");
+
+            let added = album_add(al.id.clone(), vec![
+                a1.to_string_lossy().into_owned(), a2.to_string_lossy().into_owned(),
+            ]).expect("add");
+            assert_eq!(added, 2);
+            // Re-adding the same photos is a no-op, not a duplicate.
+            assert_eq!(album_add(al.id.clone(), vec![a1.to_string_lossy().into_owned()]).unwrap(), 0);
+
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2);
+            assert!(listed.iter().all(|e| !e.missing));
+            // ⚠️ The photos themselves must be untouched — an album is a list, not a copy.
+            assert!(a1.exists() && a2.exists(), "album operations must never move or copy a photo");
+
+            // A file moved outside the app: the entry stays, marked missing.
+            std::fs::remove_file(&a2).unwrap();
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2, "a missing file stays listed so it can be seen and fixed");
+            assert_eq!(listed.iter().filter(|e| e.missing).count(), 1);
+
+            // Order is the user's, and set_order cannot smuggle in a path that isn't a member.
+            album_set_order(al.id.clone(), vec![
+                a2.to_string_lossy().into_owned(),
+                "/nowhere/ghost.jpg".into(),
+                a1.to_string_lossy().into_owned(),
+            ]).expect("reorder");
+            let listed = list_album(al.id.clone());
+            assert_eq!(listed.len(), 2, "a non-member path must not be added by a reorder");
+            assert_eq!(listed[0].name, "b.jpg");
+
+            album_remove(al.id.clone(), vec![a1.to_string_lossy().into_owned()]).expect("remove");
+            assert_eq!(list_album(al.id.clone()).len(), 1);
+            assert!(a1.exists(), "removing from an album must not delete the photo");
+
+            album_delete(al.id.clone()).expect("delete");
+            assert!(album_list().is_empty());
+            assert!(a1.exists(), "deleting an album must not delete photos");
+
+            std::fs::remove_dir_all(&photos).ok();
+        });
+    }
+}
+
+#[cfg(test)]
+mod quicklook_tests {
+    use super::*;
+    use tauri::ipc::IpcResponse;
+
+    /// The whole point of Quick Look: a RAW must return the embedded preview (no demosaic),
+    /// same source `get_preview` already uses — this just pins that the two stay in sync and
+    /// that the result is a real, decodable JPEG at roughly the requested size.
+    #[test]
+    fn quicklook_preview_of_a_raw_is_a_real_jpeg_near_the_target_size() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| is_raw_ext(&ext_lower(p)))
+        }) else {
+            eprintln!("skipping: no RAW present in geneva/");
+            return;
+        };
+        let resp = get_quicklook_preview(sample.to_string_lossy().into_owned()).expect("quicklook preview");
+        let bytes = match resp.body().unwrap() {
+            tauri::ipc::InvokeResponseBody::Raw(b) => b,
+            _ => panic!("expected raw bytes"),
+        };
+        assert!(bytes.len() > 1000, "suspiciously small preview: {} bytes", bytes.len());
+        let img = image::load_from_memory(&bytes).expect("must decode as a real JPEG");
+        assert!(img.width().max(img.height()) <= 1600, "must not exceed the requested long edge");
+    }
+
+    /// A non-RAW still (JPEG) must go through the large ImageIO decode path, not the RAW
+    /// embedded-preview path — and must actually come back BIGGER than the 360px grid thumbnail
+    /// tier, or this command is pointless (a culling preview that's the same size as the grid
+    /// thumbnail buys nothing).
+    #[test]
+    fn quicklook_preview_of_a_jpeg_is_larger_than_the_grid_thumbnail() {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../geneva");
+        let Some(sample) = std::fs::read_dir(&dir).ok().and_then(|rd| {
+            rd.flatten().map(|e| e.path()).find(|p| matches!(ext_lower(p).as_str(), "jpg" | "jpeg"))
+        }) else {
+            eprintln!("skipping: no JPEG present in geneva/");
+            return;
+        };
+        let resp = get_quicklook_preview(sample.to_string_lossy().into_owned()).expect("quicklook preview");
+        let bytes = match resp.body().unwrap() {
+            tauri::ipc::InvokeResponseBody::Raw(b) => b,
+            _ => panic!("expected raw bytes"),
+        };
+        let img = image::load_from_memory(&bytes).expect("must decode as a real JPEG");
+        assert!(img.width().max(img.height()) > 360, "quicklook must be larger than the 360px grid thumbnail, got {}x{}", img.width(), img.height());
+    }
+
+    #[test]
+    fn quicklook_preview_declines_video_cleanly() {
+        let err = get_quicklook_preview("/nonexistent/clip.mp4".to_string());
+        assert!(err.is_err(), "video must be refused, not attempted");
+    }
+}
+
+#[cfg(test)]
+mod case_canon_tests {
+    use super::*;
+    fn entry(ts: u64) -> ExportHistoryEntry { ExportHistoryEntry { ts, version: "v".into(), recipe: String::new(), dest: String::new() } }
+
+    #[test]
+    fn export_history_migration_merges_case_variant_keys() {
+        let mut m = HashMap::new();
+        m.insert("/nope/A.RW2".to_string(), vec![entry(1), entry(3)]);
+        m.insert("/nope/A.rw2".to_string(), vec![entry(2)]);
+        m.insert("/nope/B.rw2".to_string(), vec![entry(9)]);
+        let out = merge_export_history_keys(m);
+        assert_eq!(out.len(), 2);
+        let k = crate::canon::find_key(&out, "/nope/a.RW2").unwrap();
+        assert_eq!(out[k].iter().map(|e| e.ts).collect::<Vec<_>>(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn scan_registers_uppercase_xmp_and_resolves_real_photo_case() {
+        let d = std::env::temp_dir().join(format!("scan_reg_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("P1.RW2"), b"").unwrap();
+        std::fs::write(d.join("p1.jpg"), b"").unwrap();
+        std::fs::write(d.join("P1.XMP"), r#"<x chromasmith:Edited="True" xmp:Label="Green"/>"#).unwrap();
+        let (mut e, mut f, mut fl, mut r) = (vec![], vec![], vec![], vec![]);
+        let n = scan_folder_for_registry(d.to_str().unwrap(), &mut e, &mut f, &mut fl, &mut r);
+        assert_eq!(n, 1, "edited={e:?}");
+        assert!(e[0].ends_with("P1.RW2"), "RAW preferred, real case: {e:?}");
+        assert_eq!(fl.len(), 1);
+        e[0] = e[0].replace("P1.RW2", "p1.rw2");
+        scan_folder_for_registry(d.to_str().unwrap(), &mut e, &mut f, &mut fl, &mut r);
+        assert_eq!(e.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod decode_rgb8_probe {
+    use super::*;
+    /// Live probe: `PROBE_LIST=/path/to/list.txt cargo test --release probe_decode_list -- --ignored --nocapture`
+    /// decodes every listed file via `decode_rgb8_capped` (what all background scans use) and
+    /// prints OK/ERR per file. Fails if any file errors.
+    #[test]
+    #[ignore]
+    fn probe_decode_list() {
+        let list = std::fs::read_to_string(std::env::var("PROBE_LIST").expect("PROBE_LIST")).unwrap();
+        let mut bad = 0;
+        for p in list.lines().filter(|l| !l.is_empty()) {
+            let t = std::time::Instant::now();
+            match decode_rgb8_capped(p, 640) {
+                Ok((b, w, h)) => println!("OK  {:.2}s {w}x{h} len={} {p}", t.elapsed().as_secs_f64(), b.len()),
+                Err(e) => { bad += 1; println!("ERR {:.2}s {e} {p}", t.elapsed().as_secs_f64()) }
+            }
+        }
+        assert_eq!(bad, 0, "{bad} files failed decode_rgb8_capped");
+    }
+}
+
+#[cfg(test)]
+mod dng_ifd0_preview_tests {
+    use super::*;
+    /// iPhone ProRAW DNGs keep their only JPEG preview in IFD0 (NewSubFileType=1). rawler's
+    /// preview_image/full_image find nothing there, so every background scan used to fail
+    /// these (367 real files). Fixture is a minimal DNG-flagged TIFF with just that layout.
+    #[test]
+    fn decode_rgb8_capped_reads_ifd0_only_dng_preview() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/iphone_ifd0_preview.dng");
+        let (rgb, w, h) = decode_rgb8_capped(p, 640).expect("IFD0-only DNG must decode via thumbnail fallback");
+        assert_eq!((w, h), (64, 48));
+        assert_eq!(rgb.len(), 64 * 48 * 3);
+    }
+}
+
+#[cfg(test)]
+mod hdr_clear_marker_tests {
+    use super::*;
+
+    /// HDR-preview opens only reach the frame caches via the ".hdrclear" marker; it must be
+    /// LRU-evictable with its frame or orphans accumulate forever.
+    #[test]
+    fn hdrclear_marker_is_evictable_with_decode_cache() {
+        assert!(is_evictable_decode_file("0123456789abcdef.hdrclear"));
+        assert!(is_evictable_decode_file("0123456789abcdef.qoi"));
+        assert!(!is_evictable_decode_file("notahexstem.hdrclear"));
+        assert!(is_evictable_decode_file("0123456789abcdef.hdrext"));
+        assert!(!is_evictable_decode_file("notahexstem.hdrext"));
+    }
+
+    #[test]
+    fn hdr_companion_round_trip_and_mismatch_rejection() {
+        let (w, h) = (4u32, 2u32);
+        let mut ext = vec![0.5f32; (w * h * 3) as usize];
+        ext[3 * 5] = 1.08; ext[3 * 5 + 1] = 1.02; ext[3 * 5 + 2] = 1.0; // pixel 5: headroom
+        ext[3 * 1] = 1.02; // pixel 1: visible excess, stored
+        ext[3 * 2] = 1.003; // pixel 2: under HDR_EXT_STORE_MIN, dropped
+        let tmp = std::env::temp_dir().join(format!("hdrext_test_{}.rw2", std::process::id()));
+        std::fs::write(&tmp, b"x").unwrap();
+        let p = tmp.to_string_lossy().into_owned();
+        let blob = build_hdr_ext_blob(&p, "rk", w, h, &ext).expect("headroom present");
+        let (_, stem) = hdr_ext_stem(&p, "rk").unwrap();
+        assert_eq!(validate_hdr_ext_blob(&blob, stem, w, h).unwrap(), 2);
+        assert_eq!(&blob[0..4], b"CHX2");
+        assert_eq!(blob.len(), HDR_EXT_HEADER + 2 * 7);
+        // reconstruct pixel 5 red/green like the JS overlay does and bound the quantisation error
+        let scale = f32::from_le_bytes(blob[24..28].try_into().unwrap());
+        let vals = &blob[HDR_EXT_HEADER + 8..];
+        let recon = |q: u8| 1.0 + q as f32 / 255.0 * scale;
+        assert!((recon(vals[3]) - 1.08).abs() <= scale / 255.0);
+        assert!((recon(vals[4]) - 1.02).abs() <= scale / 255.0);
+        assert_eq!(vals[5], 0); // exactly-white channel falls back to the frame
+        // stale key, wrong frame size, truncation, out-of-range index, old format are rejected
+        assert!(validate_hdr_ext_blob(&blob, stem ^ 1, w, h).is_err());
+        assert!(validate_hdr_ext_blob(&blob, stem, w + 1, h).is_err());
+        assert!(validate_hdr_ext_blob(&blob[..blob.len() - 1], stem, w, h).is_err());
+        let mut bad = blob.clone(); bad[HDR_EXT_HEADER..HDR_EXT_HEADER + 4].copy_from_slice(&99u32.to_le_bytes());
+        assert!(validate_hdr_ext_blob(&bad, stem, w, h).is_err());
+        let mut old = blob.clone(); old[3] = b'1';
+        assert!(validate_hdr_ext_blob(&old, stem, w, h).is_err());
+        // no headroom -> nothing to persist
+        assert!(build_hdr_ext_blob(&p, "rk", w, h, &vec![0.9f32; (w * h * 3) as usize]).is_none());
+        assert_ne!(hdr_ext_stem(&p, "other").unwrap().1, stem);
+        let _ = std::fs::remove_file(&tmp);
+    }
+}
+
+
+#[cfg(test)]
+mod cache_prune_tests {
+    use super::{is_evictable_decode_file, prune_cache_dir, DecodePruneSchedule};
+    use std::fs::{File, FileTimes};
+    use std::path::PathBuf;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+    fn scratch() -> (PathBuf, PathBuf) {
+        let tag = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("cs_prune_budget_{}_{}", std::process::id(), tag));
+        let outside = dir.with_extension("outside");
+        std::fs::create_dir_all(&dir).unwrap();
+        (dir, outside)
+    }
+
+    fn set_age(path: &std::path::Path, seconds: u64) {
+        let when = SystemTime::now().checked_sub(Duration::from_secs(seconds)).unwrap();
+        File::options().write(true).open(path).unwrap().set_times(FileTimes::new().set_accessed(when).set_modified(when)).unwrap();
+    }
+
+    #[test]
+    fn decode_prune_removes_only_known_regular_entries_and_preserves_active_temps() {
+        let (dir, external) = scratch();
+        let display = dir.join("0123456789abcdef.display-2560.jpg");
+        let full = dir.join("fedcba9876543210.qoi");
+        let active_tmp = dir.join("fedcba9876543210.qoi.tmp.123");
+        let registry = dir.join("favorites_registry.json");
+        let unknown = dir.join("do-not-prune.bin");
+        for path in [&display, &full, &active_tmp, &registry, &unknown] { std::fs::write(path, vec![1u8; 64]).unwrap(); }
+        std::fs::write(&external, vec![2u8; 64]).unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&external, dir.join("0011223344556677.qoi")).unwrap();
+
+        let recent_now = SystemTime::now();
+        let (fresh_freed, deferred) = prune_cache_dir(&dir, 1, is_evictable_decode_file, true, Duration::from_secs(30), recent_now);
+        assert_eq!(fresh_freed, 0);
+        assert!(deferred, "overage explained by grace-protected entries must request a trailing pass");
+        let now = recent_now + Duration::from_secs(31);
+        let (freed, deferred) = prune_cache_dir(&dir, 1, is_evictable_decode_file, true, Duration::from_secs(30), now);
+        assert_eq!(freed, 128);
+        assert!(!deferred);
+        assert!(!display.exists());
+        assert!(!full.exists());
+        assert!(active_tmp.exists());
+        assert!(registry.exists());
+        assert!(unknown.exists());
+        #[cfg(unix)]
+        assert!(std::fs::symlink_metadata(dir.join("0011223344556677.qoi")).is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_file(external).unwrap();
+    }
+
+    #[test]
+    fn prune_evicts_oldest_accessed_entry_only_to_cap() {
+        let (dir, outside) = scratch();
+        let oldest = dir.join("1111111111111111.qoi");
+        let middle = dir.join("2222222222222222.display-2560.jpg");
+        let newest = dir.join("3333333333333333.qoi");
+        for path in [&oldest, &middle, &newest] { std::fs::write(path, vec![7u8; 40]).unwrap(); }
+        set_age(&oldest, 300);
+        set_age(&middle, 200);
+        set_age(&newest, 100);
+
+        let (freed, deferred) = prune_cache_dir(&dir, 80, is_evictable_decode_file, true, Duration::ZERO, SystemTime::now());
+        assert_eq!(freed, 40);
+        assert!(!deferred);
+        assert!(!oldest.exists(), "LRU entry should be evicted first");
+        assert!(middle.exists());
+        assert!(newest.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!outside.exists());
+    }
+
+    #[test]
+    fn grace_deferred_eviction_queues_a_retry_without_another_write() {
+        let t0 = Instant::now();
+        let mut s = DecodePruneSchedule::default();
+        assert!(s.request());
+        assert_eq!(s.next_delay(t0, Duration::from_secs(60)), Some(Duration::ZERO));
+        s.begin_scan(t0);
+        s.defer_recent_eviction();
+        assert_eq!(s.next_delay(t0, Duration::from_secs(60)), Some(Duration::from_secs(60)));
+        s.begin_scan(t0 + Duration::from_secs(60));
+        assert_eq!(s.next_delay(t0 + Duration::from_secs(60), Duration::from_secs(60)), None);
+    }
+
+    #[test]
+    fn prune_schedule_retains_requests_during_scan_and_cooldown() {
+        let t0 = Instant::now();
+        let interval = Duration::from_secs(60);
+        let mut s = DecodePruneSchedule::default();
+        assert!(s.request());
+        assert_eq!(s.next_delay(t0, interval), Some(Duration::ZERO));
+        s.begin_scan(t0);
+        assert!(!s.request());
+        assert_eq!(s.next_delay(t0 + Duration::from_secs(5), interval), Some(Duration::from_secs(55)));
+        assert!(!s.request());
+        s.begin_scan(t0 + interval);
+        assert_eq!(s.next_delay(t0 + interval, interval), None);
+        assert!(!s.pending);
+        assert!(s.request());
+    }
+}

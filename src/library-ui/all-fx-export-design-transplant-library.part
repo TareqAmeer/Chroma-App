@@ -1,0 +1,20 @@
+  // ── All FX / Export (design transplant: Library View.html's #btn-allfx/.btn-export) ──
+  // All FX (batch look-apply across a selection) is net-new functionality out of scope for this
+  // visual-match pass (see the plan's Phase 4) — the button is real and placed correctly, but
+  // gives honest feedback rather than silently doing nothing.
+  const allFxBtn = overlay.querySelector('#lib-allfx-btn');
+  // Applies the user's All FX recipe (chosen in the Editor's All FX ▾ / right-click settings)
+  // to every selected photo: merged over each photo's own saved edit, or over factory defaults.
+  if (allFxBtn) allFxBtn.onclick = async () => {
+    const paths = cmKbTargets();
+    if (!paths.length) { toast('Select photos to apply All FX to'); return; }
+    if (typeof window.chromasmithAllFxApplyTo !== 'function') return;
+    try {
+      await startRecipeBatch('Apply All FX', paths, cur => {
+        const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
+        return snapshotToB64(window.chromasmithAllFxApplyTo(base));
+      });
+    } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
+  };
+  const exportBtn = overlay.querySelector('#lib-export-btn');
+  if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());

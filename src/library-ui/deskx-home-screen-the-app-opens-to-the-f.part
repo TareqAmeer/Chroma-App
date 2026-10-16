@@ -1,0 +1,78 @@
+  // ── deskx home screen: the app opens to the full-window Library, not the editor (matches
+  // the approved DRK-style wireframe). desktop-native.js sets body.deskx synchronously
+  // before this script runs (build-desktop.sh loads it first), so the class is already present
+  // here. Runs once at startup only — afterward the user's own open/close/expand actions own
+  // the state. ──
+  if (document.body.classList.contains('deskx')) {
+    // Boot splash (chromasmith-22.html's #boot-splash, shown by default with no JS needed):
+    // covers the flicker between the web layout's first paint, deskx switching in, and this
+    // async open+expand actually landing — previously the user watched all of that happen
+    // live. Hidden here, right after the Library has actually settled into its final
+    // full-window state, not a moment earlier.
+    toggleLibrary({ prefetchThumbs: true }).then(async () => {
+      if (localStorage.getItem('chromasmith_lib_unified_view') === '1') {
+        state.unified_view = false; // startup helper reads the persisted preference below
+        setUnifiedView(true);
+      }
+      else toggleExpandedView(true);
+      // ⚠️ Wait for the actual catalog SCAN (not just the folder listing toggleLibrary's own
+      // promise already covers) before doing anything else. openFolder (called from inside
+      // toggleLibrary, above) kicks off catalogRegisterFolder — historically fire-and-forget —
+      // and stashes its promise on window._lastCatalogRegisterPromise once it settles into a
+      // real invoke() chain. Without this await, the splash used to hide as soon as the folder's
+      // file LISTING was ready (fast), while the actual indexing work (the walk + metadata read
+      // that this whole session's fixes are about) kept running invisibly behind an app that
+      // already looked ready — which is exactly what made it look "stuck" once you tried to use
+      // it. The progress bar wired into updateBootSplashProgress (this file, wireActivityListeners)
+      // is what the user sees while this await is in flight.
+      bootMark('lib:open');
+      if (window._lastCatalogRegisterPromise) { try { await window._lastCatalogRegisterPromise; } catch (e) {} }
+      bootMark('register:done');
+      // ⚠️ THE readiness fix. Everything above this line only guarantees CARDS exist in the DOM
+      // — renderGrid() resolves once it has appended elements, not once their <img>s have pixels
+      // (loadThumb queues each card's decode and returns immediately). Twelve prior attempts at
+      // this exact bug all sped up or better-instrumented the chain above without ever changing
+      // that fact, which is why the Library kept revealing itself full of empty grey cards no
+      // matter how fast/reliable the scan got. firstPaintReady() (this file) resolves once every
+      // card mounted in the CURRENT grid generation has actually settled — loaded or failed —
+      // which is the one thing the old gate never measured. Bounded to 8s so a single
+      // pathological card (matches the outer watchdog's own grace) can't hang the splash forever;
+      // the outer bumpBootSplashWatchdog safety net still applies on top of this.
+      // ⚠️ Seed with the REAL counts already sitting in _thumbDoneCount/_thumbTotalCount (set by
+      // renderGrid()'s own loadThumb() calls, just above), not total:0. A fake total:0 here
+      // forces updateBootSplashProgress into its indeterminate "trickle" branch — which RESETS
+      // the bar to 0% on every phase-key change — for a phase that already has a real number
+      // available, producing exactly the "bar reaches the end and restarts" flash this replaces.
+      updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount, current: '' });
+      await firstPaintReady(8000);
+      bootMark('firstpaint');
+      // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
+      // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not
+      // just heavy: it has NO progress events wired to it (unlike the catalog scan above, which
+      // feeds updateBootSplashProgress/bumpBootSplashWatchdog), so on a busy launch — the scan
+      // and this RAW decode competing for I/O on the same external drive — it could easily run
+      // long enough for the watchdog's own no-progress timeout to fire and reveal the app BEFORE
+      // the photo had finished loading, landing on the empty "Add photos" placeholder while the
+      // background scan kept running — confirmed live: exactly the symptom reported. On top of
+      // that, it forced a full RAW demosaic + WebGL render on every single cold launch whether or
+      // not the user wanted to keep editing that photo. The app now opens straight to the
+      // Library, matching most photo apps' own "you land in the browser, not mid-edit" default;
+      // opening a specific photo is one click away, same as it's always been.
+      if (typeof window.hideBootSplash === 'function') window.hideBootSplash();
+      // Guaranteed-offline tier: warm the index immediately (cheap, just a DB read — so the
+      // editor can already treat a cached photo as local even before this launch's drain loop
+      // does any new work), then start the paced drain AFTER the splash is down, same gating
+      // reasoning as catalogRunBackgroundPhases — this must never compete with first paint.
+      // ⚠️ The background chain (thumbnails/focus/hash/faces/CLIP tags/pets) normally starts from
+      // openFolder after a catalog_scan. A launch that restores a catalog view (All Photos, a
+      // date, a keyword) never calls openFolder, so the chain never started: "Tagged X of Y"
+      // sat frozen forever with the app idle. Start it here when openFolder didn't.
+      if (!window._lastCatalogRegisterPromise) catalogRunBackgroundPhases();
+      refreshHqOfflineIndex().then(() => hqOfflineDrainLoop());
+    });
+  }
+  // "Live, re-evaluated set" (the user's own explicit requirement): re-check periodically while
+  // the app is open, not just once at boot, so an edit or import made mid-session promotes a
+  // photo into the guaranteed-offline set without waiting for the next relaunch. 90s, not
+  // continuous — a full drain pass touches the DB and (when there's real work) does full RAW
+  // decodes, so this stays a background heartbeat, not a tight poll.

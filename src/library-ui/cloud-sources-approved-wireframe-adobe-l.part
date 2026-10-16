@@ -1,0 +1,275 @@
+  // ── Cloud sources (approved wireframe): Adobe Lightroom lives in the sidebar between the
+  // smart collections and the folder tree. Albums render as tree children once connected;
+  // selecting one fills the normal grid with cloud thumbnails (see openLrAlbum below). The
+  // auth/API layer stays in chromasmith-22.html, exposed as window.lrCloud. ──
+  const lrState = { albums: null, album: null, assets: [], loading: false };
+  let lrDirCache = null;
+  async function lrDownloadsDir() {
+    if (!lrDirCache) { try { lrDirCache = await invoke('lr_downloads_dir'); } catch (e) { console.error('lr_downloads_dir', e); } }
+    return lrDirCache;
+  }
+  const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 19a4 4 0 1 1 .4-7.98A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H6z"/></svg>';
+  function cloudSectionHtml() {
+    if (!window.lrCloud) return '';
+    const connected = window.lrCloud.connected();
+    let rows = `
+      <div class="lib-coll-row${lrState.album === null && state.source === 'lr' ? ' on' : ''}" data-lr-root="1" title="${connected ? 'Connected — click an album below, right-click to sign out' : 'Sign in to browse your Lightroom cloud photos'}">
+        <span class="lib-coll-ic">${CLOUD_SVG}</span><span class="lib-coll-lb">Adobe Lightroom</span>
+        <span class="lib-coll-count">${connected ? '✓' : (lrState.loading ? '…' : '')}</span>
+      </div>`;
+    if (connected && lrState.albums) {
+      rows += lrState.albums.map((a) => `
+        <div class="lib-coll-row lib-lr-album${state.source === 'lr' && lrState.album === a.id ? ' on' : ''}" data-lr-album="${a.id}" style="padding-left:26px">
+          <span class="lib-coll-lb">${String(a.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>
+        </div>`).join('');
+    }
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('cloud', 'Cloud', rows);
+  }
+  async function lrConnectAndLoad() {
+    if (!window.lrCloud || lrState.loading) return; // in-flight guard: double-click fired two OAuth flows
+    lrState.loading = true; renderCollections();
+    try {
+      if (!window.lrCloud.connected()) await window.lrCloud.connect();
+      lrState.albums = await window.lrCloud.albums();
+      lrState.loading = false; renderCollections();
+      if (lrState.albums && lrState.albums.length) openLrAlbum(lrState.albums[0].id);
+      else showLrEmptyState('No albums found in this catalog.');
+    } catch (e) {
+      lrState.loading = false; renderCollections();
+      console.error('lr connect', e);
+      showLrEmptyState('Connection failed — see the log in the studio view.');
+    }
+  }
+  function lrSignOut() {
+    if (!(window.lrCloud && window.lrCloud.connected())) return;
+    window.lrCloud.connect(); // toggle: disconnects when connected
+    lrState.albums = null; lrState.album = null; lrState.assets = [];
+    renderCollections();
+    showLrEmptyState();
+  }
+  // Disconnected (or error) empty state in the MAIN area, per the approved wireframe — the
+  // sidebar row alone silently kicking off OAuth was undiscoverable and gave errors nowhere
+  // to land.
+  function showLrEmptyState(msg) {
+    state.source = 'lr'; lrState.album = null;
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    grid = document.getElementById('lib-grid');
+    thumbQueueReset();
+    grid.classList.remove('list-view');
+    grid.innerHTML = `
+      <div id="lib-empty" style="grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:60px 20px;min-height:50vh">
+        <div style="color:var(--mut)">${CLOUD_SVG.replace('width="14" height="14"', 'width="34" height="34"')}</div>
+        <div style="font-weight:600;font-size:14px;color:var(--txt)">Browse your Lightroom cloud photos</div>
+        <div style="font-size:11px;color:var(--mut)">${msg ? String(msg).replace(/</g, '&lt;') : 'Sign in with Adobe. Albums and photos appear here.'}</div>
+        <button class="lib-btn" id="lib-lr-connect" style="background:var(--acc);color:#000;border-color:var(--acc);font-weight:600">Connect Lightroom</button>
+        <a id="lib-lr-clientid" style="font-size:10px;color:var(--mut);cursor:pointer;text-decoration:underline">API ID…</a>
+      </div>`;
+    const btn = grid.querySelector('#lib-lr-connect');
+    if (btn) btn.onclick = () => lrConnectAndLoad();
+    const cid = grid.querySelector('#lib-lr-clientid');
+    if (cid) cid.onclick = () => window.lrCloud && window.lrCloud.askClientId(true);
+    const count = document.getElementById('lib-count');
+    if (count) count.textContent = 'Adobe Lightroom — not connected';
+    renderCollections();
+  }
+  // Simple bounded-concurrency thumb loader for cloud cards (the disk thumb pool is keyed on
+  // file paths; cloud thumbs are API blobs, so they get their own tiny pump).
+  let lrThumbGen = 0;
+  async function lrThumbPump(cards) {
+    const gen = ++lrThumbGen;
+    const queue = cards.slice();
+    const setImg = (img, blob) => {
+      if (gen !== lrThumbGen || !img.isConnected) return;
+      const url = URL.createObjectURL(blob);
+      img.onload = () => URL.revokeObjectURL(url);
+      img.onerror = () => URL.revokeObjectURL(url); // decode failure must not leak the URL
+      img.src = url;
+    };
+    const worker = async () => {
+      while (queue.length && gen === lrThumbGen) {
+        const { asset, img } = queue.shift();
+        if (!img.isConnected) continue;
+        try {
+          // Disk cache first (renditions are immutable → keyed by asset id). Re-opening an album
+          // reads thumbs off disk instead of re-hitting the Adobe API every time.
+          let bytes = null;
+          try { bytes = await invoke('get_lr_thumb', { assetId: asset.id }); } catch (e) { /* miss */ }
+          if (bytes) { setImg(img, new Blob([bytes], { type: 'image/jpeg' })); continue; }
+          const blob = await window.lrCloud.thumbBlob(asset.id);
+          setImg(img, blob);
+          try {
+            const buf = new Uint8Array(await blob.arrayBuffer());
+            let bin = ''; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+            await invoke('save_lr_thumb', { assetId: asset.id, dataB64: btoa(bin) });
+          } catch (e) { /* cache write is best-effort */ }
+        } catch (e) { /* thumb failure is cosmetic */ }
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+  }
+  // Cloud multi-select (by asset id) + the import quality chooser. Kept separate from the local
+  // `state.selected` (which is disk paths). One import action can carry several assets.
+  lrState.selected = lrState.selected || new Set();
+  function lrUpdateCloudSel() {
+    document.querySelectorAll('#lib-grid .lib-card[data-lr-id]').forEach((c) => c.classList.toggle('multi', lrState.selected.has(c.dataset.lrId)));
+  }
+  // Small centered chooser → resolves 'raw' | 'fullsize' | null(cancel). Remembers the last
+  // pick as the session default (still shown so the user can change it per import).
+  let lrLastQuality = null;
+  function lrChooseQuality(count) {
+    return new Promise((resolve) => {
+      closeContextMenu();
+      const back = document.createElement('div');
+      back.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--bg);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;min-width:300px;font-family:var(--sans);color:var(--txt);box-shadow:var(--lift-2)';
+      box.innerHTML = `<div style="font-weight:600;font-size:14px;margin-bottom:4px">Import ${count > 1 ? count + ' photos' : 'photo'} from Lightroom</div>
+        <div style="font-size:12px;color:var(--mut);margin-bottom:14px">Choose what to download.</div>`;
+      const mk = (label, desc, val) => {
+        const b = document.createElement('button');
+        b.style.cssText = 'display:block;width:100%;text-align:left;background:var(--sur2);border:1px solid var(--bdr);color:var(--txt);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer';
+        b.innerHTML = `<div style="font-weight:600;font-size:13px">${label}</div><div style="font-size:11px;color:var(--mut)">${desc}</div>`;
+        b.onclick = () => { lrLastQuality = val; cleanup(); resolve(val); };
+        box.appendChild(b);
+      };
+      mk('Original RAW', 'Untouched RW2 — full RAW pipeline, no Lightroom edits.', 'raw');
+      mk('Edited full-size (JPEG)', 'Lightroom develop edits baked in, full resolution.', 'fullsize');
+      const cancel = document.createElement('div');
+      cancel.textContent = 'Cancel';
+      cancel.style.cssText = 'text-align:center;font-size:12px;color:var(--mut);cursor:pointer;padding:6px';
+      cancel.onclick = () => { cleanup(); resolve(null); };
+      box.appendChild(cancel);
+      const cleanup = () => { document.removeEventListener('keydown', onKey); back.remove(); };
+      const onKey = (ev) => { if (ev.key === 'Escape') { cleanup(); resolve(null); } };
+      document.addEventListener('keydown', onKey);
+      back.onclick = (ev) => { if (ev.target === back) { cleanup(); resolve(null); } };
+      back.appendChild(box); document.body.appendChild(back);
+    });
+  }
+  async function lrImportAssets(assets) {
+    if (!assets.length) return;
+    const quality = await lrChooseQuality(assets.length);
+    if (!quality) return;
+    for (const a of assets) {
+      const card = document.querySelector(`#lib-grid .lib-card[data-lr-id="${(window.CSS && CSS.escape) ? CSS.escape(a.id) : a.id}"]`);
+      const prog = card && card.querySelector('.lib-lr-prog');
+      if (card) card.style.opacity = '0.7'; if (prog) prog.style.display = 'block';
+      try { await window.lrCloud.importAsset(a.id, a.name, quality, { albumId: lrState.album, albumName: (lrState.albums || []).find((al) => al.id === lrState.album)?.name || '', meta: a.meta }); }
+      finally { if (card) card.style.opacity = ''; if (prog) prog.style.display = 'none'; }
+      const nameEl = card && card.querySelector('.lib-name');
+      if (nameEl && !/✓/.test(nameEl.innerHTML)) nameEl.innerHTML += ' <span title="Downloaded" style="color:var(--ok,#59c98a)">✓</span>';
+    }
+  }
+  async function openLrAlbum(albumId) {
+    state.source = 'lr';
+    state._catalogPaged = false; // not catalog-backed: a previous catalog view's paged total must not leak into this one
+    lrState.album = albumId;
+    state.selected.clear();
+    grid = document.getElementById('lib-grid');
+    thumbQueueReset();
+    grid.classList.remove('list-view');
+    grid.innerHTML = libSkeletonHtml();
+    renderCollections();
+    let assets;
+    try { assets = await window.lrCloud.assets(albumId); }
+    catch (e) { showLibraryError('Couldn’t load this album.', 'Try again', () => openLrAlbum(albumId)); console.error('lr assets', e); return; }
+    if (state.source !== 'lr' || lrState.album !== albumId) return; // user navigated away mid-fetch
+    lrState.assets = assets;
+    await renderLrGrid();
+    rememberLibraryView({ kind: 'lr', albumId });
+  }
+  // Renders the current cloud album from lrState.assets (no refetch) — ALSO what renderGrid()
+  // delegates to while state.source==='lr', so a filter/sort/search handler re-running
+  // renderGrid can't clobber the cloud view with the previous folder's entries.
+  async function renderLrGrid() {
+    grid = document.getElementById('lib-grid');
+    grid.classList.remove('list-view');
+    const assets = lrState.assets || [];
+    const albumName = (lrState.albums || []).find((a) => a.id === lrState.album)?.name || '';
+    const count = document.getElementById('lib-count');
+    if (count) count.textContent = `${fmtN(assets.length)} cloud ${assets.length === 1 ? 'photo' : 'photos'}${albumName ? ' — ' + albumName : ''} · connected to Adobe Lightroom`;
+    // "on disk" badge: compare against what's already in ~/Documents/Lightroom Download.
+    const onDisk = new Set();
+    try {
+      const dir = await lrDownloadsDir();
+      const listing = await invoke('list_dir', { path: dir });
+      (listing.entries || listing || []).forEach((en) => { const n = String(en.name || '').replace(/\.[^.]+$/, ''); if (n) onDisk.add(n); });
+    } catch (e) { /* fresh install: no dir yet */ }
+    grid.innerHTML = '';
+    if (!assets.length) { grid.innerHTML = '<div id="lib-empty">No photos in this album.</div>'; return; }
+    lrState.selected.clear();
+    const cards = [];
+    assets.forEach((a) => {
+      const stem = String(a.name || a.id).replace(/\.[^.]+$/, '');
+      const card = document.createElement('div');
+      card.className = 'lib-card';
+      card.dataset.lrStem = stem;
+      card.dataset.lrId = a.id;
+      card.innerHTML = `<div class="lib-thumb-wrap" style="position:relative"><img loading="lazy" alt="">
+          <div class="lib-lr-prog" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;overflow:hidden"><div style="height:100%;width:40%;background:var(--acc);animation:lib-lr-slide 1s linear infinite"></div></div>
+        </div>
+        <div class="lib-name">${String(a.name).replace(/&/g, '&amp;').replace(/</g, '&lt;')}${onDisk.has(stem) ? ' <span title="Already in Lightroom Download" style="color:var(--ok,#59c98a)">✓</span>' : ''}</div>`;
+      card.title = a.name + (onDisk.has(stem) ? ' — already downloaded' : ' — tap to select, click to import');
+      const wrap = card.querySelector('.lib-thumb-wrap');
+      // Same select-vs-open model as local cards: tap (or click-once) selects, firm press (or
+      // click-the-selected-again / double-click) imports. cmd/shift extend the cloud selection.
+      wrap.onclick = (e) => {
+        if (e.metaKey || e.ctrlKey) { if (lrState.selected.has(a.id)) lrState.selected.delete(a.id); else lrState.selected.add(a.id); lrUpdateCloudSel(); return; }
+        const cls = classifyPress(e);
+        const selectIt = () => { lrState.selected.clear(); lrState.selected.add(a.id); lrUpdateCloudSel(); };
+        if (cls === 'press') { lrImportAssets([a]); return; }
+        if (cls === 'tap') { selectIt(); return; }
+        if (lrState.selected.size === 1 && lrState.selected.has(a.id)) lrImportAssets([a]); else selectIt();
+      };
+      wrap.ondblclick = (e) => { e.stopPropagation(); lrImportAssets([a]); };
+      card.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (!lrState.selected.has(a.id)) { lrState.selected.clear(); lrState.selected.add(a.id); lrUpdateCloudSel(); }
+        const chosen = assets.filter((x) => lrState.selected.has(x.id));
+        buildCloudMenu(e.clientX, e.clientY, chosen);
+      };
+      grid.appendChild(card);
+      cards.push({ asset: a, img: card.querySelector('img') });
+    });
+    lrThumbPump(cards);
+  }
+  function buildCloudMenu(x, y, assets) {
+    closeContextMenu();
+    const n = assets.length;
+    ctxMenu = document.createElement('div');
+    ctxMenu.style.cssText = 'position:fixed;z-index:9999;background:var(--glass-bg);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:180px;box-shadow:var(--lift-2)';
+    const item = (label, fn) => {
+      const el = document.createElement('div');
+      el.textContent = label;
+      el.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+      el.onmouseenter = () => { el.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+      el.onmouseleave = () => { el.style.background = ''; };
+      el.onclick = async (ev) => { ev.stopPropagation(); closeContextMenu(); await fn(); };
+      ctxMenu.appendChild(el);
+    };
+    item(`Import ${n > 1 ? n + ' photos' : 'photo'}`, () => lrImportAssets(assets));
+    ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px';
+    document.body.appendChild(ctxMenu);
+  }
+  window.addEventListener('lr-cloud-state', () => { if (!window.lrCloud || !window.lrCloud.connected()) { lrState.albums = null; lrState.album = null; } renderCollections(); });
+  // Background full-size upgrade indicator (chromasmith-22.html's lrUpgradeToFullsize
+  // dispatches these): mini badge on the matching card while the higher-quality rendition
+  // is being generated/downloaded.
+  window.addEventListener('lr-fullsize-state', (e) => {
+    const d = e.detail || {};
+    const card = document.querySelector(`.lib-card[data-lr-stem="${(CSS && CSS.escape) ? CSS.escape(d.stem || '') : (d.stem || '')}"]`);
+    if (!card) return;
+    let badge = card.querySelector('.lib-lr-full');
+    if (d.phase === 'start') {
+      if (!badge) {
+        badge = document.createElement('div');
+        badge.className = 'lib-lr-full';
+        badge.style.cssText = 'position:absolute;top:6px;right:6px;font-size:9px;padding:2px 7px;border-radius:8px;background:rgba(0,0,0,.6);color:var(--acc)';
+        badge.textContent = 'fetching full-size…';
+        card.querySelector('.lib-thumb-wrap').appendChild(badge);
+      }
+    } else if (badge) {
+      if (d.phase === 'done') { badge.textContent = 'full-size ✓'; badge.style.color = 'var(--ok,#59c98a)'; setTimeout(() => badge.remove(), 4000); }
+      else badge.remove();
+    }
+  });

@@ -1,0 +1,249 @@
+  // ── provisional preview: while a RAW's full native decode (PPG demosaic + DCP LUT,
+  // several seconds) runs, show the camera's own embedded JPEG immediately over the preview
+  // canvas so opening a photo doesn't look frozen. Its own <img>, not the WebGL canvas
+  // (fx-canvas already owns a WebGL2 context — a 2D drawImage onto it isn't possible), so it
+  // can't interfere with FXR state; removed the moment loadFXImages finishes (or fails). ────
+  let provisionalImg = null, provisionalToken = 0;
+  function ensureProvisionalEl() {
+    if (provisionalImg) return provisionalImg;
+    const wrap = document.getElementById('fx-zoom-wrap');
+    if (!wrap) return null;
+    provisionalImg = document.createElement('img');
+    provisionalImg.id = 'lib-provisional';
+    wrap.appendChild(provisionalImg);
+    return provisionalImg;
+  }
+  // Extension list lives in chromasmith-22.html's FORMAT REGISTRY (RAW_FILE_EXT_RE) — this file
+  // loads AFTER that script (build-desktop.sh injects <script src="library-ui.js"> right after
+  // the main page script), so the global is already in scope. Referencing it directly, not a
+  // narrower literal fallback, is deliberate: a silent fallback here is exactly the kind of
+  // drift test/lint_formats.mjs exists to catch, and on desktop RAW_FILE_EXT_RE already
+  // includes formats (like .ari) that a narrower local copy would silently exclude.
+  const RAW_EXT_RE = RAW_FILE_EXT_RE;
+  const STILL_META_RE = /\.(jpe?g|tiff?|hei[cf])$/i; // formats library.rs read_meta parses via EXIF
+  // Minimal framed raw-body invoke (JSON header + binary payload) — same wire format
+  // desktop-native.js's framedInvoke uses for store_dcp_lut, duplicated here (not exposed on
+  // window there) since it's a one-liner and this file is meant to stay self-contained.
+  // A File for a RAW the native side reads by path: it carries only the header bytes (enough for
+  // loadFXImages' format sniff) but reports the real size, so every "same photo" key built from
+  // file.size is unchanged. `__csSourcePath` tells loadRw2/NativeLibRawShim to decode by path;
+  // arrayBuffer() still returns the WHOLE file (read on demand) for the later consumers that
+  // really need the bytes — High-tier NR, Full cleanup, the Diagnostics DCP re-decode.
+  function makePathRawFile(path, head, size, type) {
+    const file = new File([head], baseName(path), { type, lastModified: 0 });
+    Object.defineProperty(file, 'size', { value: size });
+    file.__csSourcePath = path;
+    file.__csHead = head;
+    file.arrayBuffer = () => invoke('read_file_bytes', { path });
+    return file;
+  }
+  function framedInvoke(cmd, jsonObj, payload) {
+    const json = new TextEncoder().encode(JSON.stringify(jsonObj));
+    const framed = new Uint8Array(4 + json.length + payload.length);
+    new DataView(framed.buffer).setUint32(0, json.length, true);
+    framed.set(json, 4);
+    framed.set(payload, 4 + json.length);
+    return invoke(cmd, framed);
+  }
+  // Everything that changes what a RAW decode actually PRODUCES — the persistent decode cache
+  // (see get_decode_cache/save_decode_cache in library.rs) is keyed on this alongside
+  // path+mtime+size, so switching RAW profile / native NR / demosaic algo / auto-lens can never
+  // serve a stale cached decode.
+  function rawRecipeKey(forceFull, path, settings = null) {
+    const profile = settings ? settings.profile : ((typeof rawProfile === 'function') ? rawProfile() : '');
+    const opts = settings || { rawNr: window.chromasmithRawNr, demosaicAlgo: window.chromasmithDemosaicAlgo, autoLens: window.chromasmithAutoLens, lensOverride: window.chromasmithLensOverride, lensOverrideFocal: window.chromasmithLensOverrideFocal, fullCleanup: window.chromasmithRawFullCleanup };
+    // Must include every setting that changes the NATIVE decode's pixels (see decode_raw_v2's
+    // params in main.rs) — a manual lens pick (window.chromasmithLensOverride/Focal) changes the
+    // distortion-correction geometry baked into the cached JPEG just like autoLens does, so it
+    // was missing here: switching manual lenses used to silently serve a stale cache decoded
+    // with the PREVIOUS lens's correction.
+    // Fast and High are DECODE-TIME identical (High's extra neural pass runs out of band via
+    // denoise_raw_high, never through decode_raw_v2 — see raw_decode.rs's NrTier) — the disk
+    // cache only needs to distinguish Off from not-Off, same 2-way key as the old boolean.
+    return [profile, opts.rawNr !== 'off' ? 1 : 0,
+      opts.demosaicAlgo || '', opts.autoLens ? 1 : 0,
+      opts.lensOverride || '', opts.lensOverrideFocal || 0,
+      (forceFull || opts.fullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
+      + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
+  }
+  let embeddedUrl = '';
+  async function showDisplayProvisional(path, recipeKey, embeddedOnly = false) {
+    const myToken = ++provisionalToken;
+    const el = ensureProvisionalEl();
+    if (!el) return () => {};
+    try {
+      // embeddedOnly: HDR-preview opens never use the SDR display proxy, but a cold open should
+      // still not sit blank for seconds — go straight to the camera JPEG stand-in below.
+      if (embeddedOnly) throw new Error('embedded-only');
+      const img = await displayAssetImage(path, recipeKey);
+      if (myToken !== provisionalToken) return () => {};
+      if (myToken !== provisionalToken) return () => {};
+      el.src = img.src;
+      el.style.cssText = '';
+      el.classList.add('on');
+      document.body.classList.add('lib-provisional-on');
+      rawPerf('open-display-overlay', path, { width: img.naturalWidth, height: img.naturalHeight });
+    } catch (e) {
+      rawPerf('open-display-overlay-miss', path, { error: String(e) });
+      // Cold open (nothing cached yet): the full RAW decode takes seconds, so put the camera's own
+      // embedded JPEG up at once — Lightroom's trick. It is a stand-in only (it can carry the
+      // camera's colour rendering, and the real develop replaces it when the decode lands).
+      // chromasmithEditorInstantPreview='0' turns it off.
+      let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+      let shown = false;
+      if (!off && myToken === provisionalToken && RAW_EXT_RE.test(path)) {
+        try {
+          const bytes = await invoke('get_quicklook_preview', { path });
+          if (myToken === provisionalToken) {
+            if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
+            embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+            el.src = embeddedUrl;
+            // Before the first render of a session #fx-zoom-wrap is still the default 300x150 (or
+            // the previous photo's box): fill the preview column instead so the stand-in is
+            // actually legible (object-fit:contain keeps the aspect).
+            try {
+              const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
+              if (zw && col) {
+                const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
+                const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
+                if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
+                  el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
+                }
+              }
+            } catch (_) {}
+            el.classList.add('on');
+            document.body.classList.add('lib-provisional-on');
+            rawPerf('open-embedded-overlay', path);
+            shown = true;
+          }
+        } catch (err) {
+          rawPerf('open-embedded-overlay-miss', path, { error: String(err) });
+        }
+      }
+      if (!shown && myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+    }
+    return () => {
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+      if (embeddedUrl && myToken === provisionalToken) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; el.style.cssText = ''; }
+    };
+  }
+  async function loadAssetImage(assetPath) {
+    const img = new Image();
+    // The asset protocol is a separate origin from cs://localhost. Without anonymous CORS,
+    // WebGL rejects the full cached image at texImage2D with SecurityError even though <img>
+    // can display it; that silently prevents the quality promotion.
+    img.crossOrigin = 'anonymous';
+    img.src = window.__TAURI__.core.convertFileSrc(assetPath);
+    if (img.decode) await img.decode();
+    else await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+    // A few canvas-oriented helpers read width/height while WebGL uses naturalWidth/naturalHeight.
+    // Keep both representations populated without materializing a full-resolution canvas.
+    img.width = img.naturalWidth; img.height = img.naturalHeight;
+    return img;
+  }
+  async function loadNativeCachedImage(path, recipeKey) {
+    const nativeBuf = await invoke('get_cached_raw_decode', { path, recipeKey });
+    const head = new Uint32Array(nativeBuf, 0, 2);
+    const width = head[0], height = head[1];
+    if (!width || !height || nativeBuf.byteLength < 8 + width * height * 4) throw new Error('invalid native RAW cache');
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), width, height), 0, 0);
+    return canvas;
+  }
+  // A 2560px lossless proxy is large enough to make an unbounded path->Promise map
+  // expensive in long Library sessions. Keep the decoded tier bounded by estimated
+  // RGBA memory, and include the catalog's source signature so a replaced RAW cannot
+  // reuse an older decoded image.
+  const displayPrefetch = new Map();
+  const DISPLAY_CACHE_BUDGET = 96 * 1024 * 1024;
+  // CHR-120 (c): was 1 (next photo only). Culling is bidirectional (arrow-key back-and-forth is
+  // as common as forward-only), so widen to the 2 previous + 3 next around wherever the user
+  // currently is — still bounded by DISPLAY_CACHE_BUDGET (96MB) via trimDisplayCache, so this
+  // only changes what gets warmed ahead of time, not how much stays resident.
+  const DISPLAY_PREFETCH_BACK = 2;
+  const DISPLAY_PREFETCH_FORWARD = 3;
+  let displayPinnedKey = '';
+  function displayCacheKey(path, recipeKey) {
+    const entry = (state.entries || []).find((e) => e.path === path);
+    return `${path}\u0000${recipeKey || ''}\u0000${entry?.mtime || 0}\u0000${entry?.size || 0}`;
+  }
+  function trimDisplayCache(excludeKey) {
+    let total = 0;
+    for (const [key, record] of displayPrefetch) total += record.bytes || 0;
+    if (total <= DISPLAY_CACHE_BUDGET) return;
+    const candidates = [...displayPrefetch.entries()]
+      .filter(([key, record]) => key !== excludeKey && key !== displayPinnedKey && record.ready)
+      .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    for (const [key, record] of candidates) {
+      if (total <= DISPLAY_CACHE_BUDGET) break;
+      displayPrefetch.delete(key);
+      total -= record.bytes || 0;
+      rawPerf('display-cache-evict', key, { bytes: record.bytes || 0, totalBytes: total });
+    }
+  }
+  function displayCacheHas(path, recipeKey) {
+    return displayPrefetch.has(displayCacheKey(path, recipeKey));
+  }
+  function displayAssetImage(path, recipeKey, generate = true) {
+    const key = displayCacheKey(path, recipeKey);
+    const existing = displayPrefetch.get(key);
+    if (existing) {
+      existing.lastUsed = performance.now();
+      rawPerf('display-cache-hit', path);
+      return existing.promise;
+    }
+    rawPerf('display-cache-miss', path);
+    const job = (async () => {
+      const command = generate ? 'get_display_decode_cache' : 'get_display_decode_cache_path';
+      const displayPath = await invoke(command, { path, recipeKey, longEdge: 2560 });
+      return loadAssetImage(displayPath);
+    })().then((img) => {
+      const record = displayPrefetch.get(key);
+      if (record) {
+        record.ready = true;
+        record.bytes = (img.naturalWidth || img.width || 0) * (img.naturalHeight || img.height || 0) * 4;
+        record.lastUsed = performance.now();
+        trimDisplayCache(key);
+      }
+      return img;
+    }).catch((e) => { displayPrefetch.delete(key); throw e; });
+    displayPrefetch.set(key, { promise: job, bytes: 0, lastUsed: performance.now(), ready: false });
+    return job;
+  }
+  function prefetchDisplayProxies(paths) {
+    // Do not precompute the currently-open RAW itself: that one's display-tier request is
+    // already in flight (or done) via the real open path, and competing with it recreates the
+    // exact cold-reopen stall this cache is meant to remove. Batch caching remains responsible
+    // for the full selected set.
+    const pinnedPath = state.openedPath || paths[0] || '';
+    displayPinnedKey = displayCacheKey(pinnedPath, rawRecipeKey(false, pinnedPath));
+    // CHR-120 (c): window around the current position, not just forward from the start of
+    // `paths` — culling moves both directions (arrow-key back-and-forth), and `paths` here is
+    // the grid's own sort order so the opened photo's index tells us where "around" actually is.
+    const openIdx = pinnedPath ? paths.indexOf(pinnedPath) : -1;
+    const from = openIdx >= 0 ? openIdx : 0;
+    const around = openIdx >= 0
+      ? paths.slice(Math.max(0, from - DISPLAY_PREFETCH_BACK), from)
+          .concat(paths.slice(from + 1, from + 1 + DISPLAY_PREFETCH_FORWARD))
+      // Before anything is open, the first visible card is a likely first click. The old
+      // `slice(1, …)` skipped it as though its open request were already in flight, making a
+      // freshly launched Library pay the JPEG proxy decode on that exact first selection.
+      : paths.slice(0, DISPLAY_PREFETCH_FORWARD);
+    const queue = around.filter((p) => RAW_EXT_RE.test(p) && !displayCacheHas(p, rawRecipeKey(false, p)));
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < queue.length) {
+        const p = queue[cursor++];
+        const job = displayAssetImage(p, rawRecipeKey(false, p), false).catch(() => null);
+        await job;
+      }
+    };
+    worker();
+  }

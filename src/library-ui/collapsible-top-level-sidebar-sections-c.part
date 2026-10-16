@@ -1,0 +1,761 @@
+  // ── Collapsible top-level sidebar sections (Collections/Albums/People/Devices/Cloud/Folders)
+  // — the sidebar used to stack all of these with no way to close any of them, so on an average
+  // window the folder tree (what gets used most) started below the fold. One open/closed Set,
+  // persisted so a closed section stays closed across restarts, same shape as dateExpanded/
+  // kwExpanded above but keyed by section name rather than a tree node. Collections and Folders
+  // start open (the two everyday jumping-off points); the rest start closed.
+  const SIDEBAR_SEC_KEY = 'chromasmith_lib_sec_open_v1';
+  const SIDEBAR_SEC_DEFAULT = ['collections', 'folders', 'drives'];
+  let sidebarSecOpen;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SIDEBAR_SEC_KEY));
+    sidebarSecOpen = new Set(Array.isArray(saved) ? saved : SIDEBAR_SEC_DEFAULT);
+  } catch (e) { sidebarSecOpen = new Set(SIDEBAR_SEC_DEFAULT); }
+  function saveSidebarSecOpen() {
+    try { localStorage.setItem(SIDEBAR_SEC_KEY, JSON.stringify([...sidebarSecOpen])); } catch (e) { /* quota — session-only fallback */ }
+  }
+  function revealAlbums() {
+    if (sidebarSecOpen.has('albums')) return;
+    sidebarSecOpen.add('albums');
+    saveSidebarSecOpen();
+  }
+  // Renders a heading as a disclosure row; `bodyHtml` is included only when open, matching the
+  // existing dateExpanded/kwExpanded convention elsewhere in this file (conditional inclusion,
+  // not a CSS display:none toggle) so a collapsed section costs nothing to keep in the DOM.
+  function sidebarSection(key, label, bodyHtml, opts = {}) {
+    const open = sidebarSecOpen.has(key);
+    const count = opts.count != null && opts.count !== '' ? `<span class="lib-coll-count">${fmtN(opts.count)}</span>` : '';
+    return `<div class="lib-coll-heading lib-sec-h" data-sec-toggle="${key}"${opts.extraHeaderAttrs || ''} role="button" tabindex="0" aria-expanded="${open}">
+        <span class="lib-tree-chev${open ? ' open' : ''}">${ic('chevron', 11)}</span><span class="lib-sec-label">${label}</span>${opts.trail ? `<span class="lib-sec-trail">${opts.trail}</span>` : ''}${count}
+      </div>${open ? bodyHtml : ''}`;
+  }
+
+  let keywordTree = []; // flat KeywordNode list from catalog_keywords — nested client-side, same as dateCounts
+  const kwExpanded = new Set(); // keyed by keyword id (a stable primary key, unlike a path a rename would change)
+
+  // AI stack Phase C — People sidebar. Flat, not a tree like Keywords: `people` has no hierarchy.
+  let peopleList = []; // PersonNode[] from catalog_people
+  function refreshPeople() {
+    return invoke('catalog_people').then((nodes) => { peopleList = nodes || []; renderCollections(); }).catch(() => {});
+  }
+
+  function refreshCatalogCounts() {
+    catalogAutoTagBackfill(); // once per session; runs even with no folder scan / paused indexing
+    invoke('catalog_counts').then((counts) => { catalogCounts = counts; renderCollections(); }).catch(() => {});
+    invoke('catalog_date_counts').then((counts) => { dateCounts = counts; renderCollections(); }).catch(() => {});
+    invoke('catalog_volumes').then((vols) => { catalogVolumes = vols || []; renderCollections(); }).catch(() => {});
+    invoke('catalog_keywords').then((nodes) => { keywordTree = nodes || []; renderCollections(); }).catch(() => {});
+    refreshSmartAlbums();
+    refreshPlaces();
+    refreshPeople();
+    refreshCacheUsage();
+  }
+
+  /// Manual, on-demand — same posture as "Verify library…": face detection/embedding AND CLIP
+  /// embedding are each a real per-photo decode+inference cost (unlike thumb/focus/hash, which
+  /// are cheap enough to auto-chain in catalogRunBackgroundPhases), so this only runs when
+  /// explicitly asked for, not on every folder open. One trigger for both AI-stack features
+  /// (People AND search) rather than two separate buttons — a user who wants one almost always
+  /// wants the other, and both need the same expensive per-photo decode anyway. Chains detect →
+  /// face-embed → cluster, then CLIP-embed; re-clustering is cheap (pure math over already-
+  /// embedded vectors) so it's safe to always re-run after a scan turns up anything new.
+  /// `photoIds` (optional): scope the scan to exactly these photo ids instead of the whole
+  /// library — the context-menu "Find faces in selection" path (N4). Undefined/omitted
+  /// reproduces the sidebar button's existing full-library behavior exactly: Tauri's `invoke`
+  /// drops an `undefined` property before serializing, so `{ photo_ids: undefined }` arrives on
+  /// the Rust side indistinguishable from no `photo_ids` key at all, and `Option<Vec<i64>>`
+  /// defaults to `None` either way. Clustering is always unscoped (cheap pure math over
+  /// already-embedded vectors — see cluster_run's own doc comment for why it must see the whole
+  /// DB), so it is never passed photoIds.
+  async function runFindFaces(photoIds) {
+    toast(photoIds ? `Analyzing ${photoIds.length} photo${photoIds.length > 1 ? 's' : ''}…` : 'Analyzing photos…');
+    // ⚠️ Before this, a scoped (N4) scan showed only the toast above — the real per-phase
+    // progress ('catalog-scan' events from catalog_faces_scan/catalog_embed_faces/
+    // catalog_clip_embed) already reaches wireActivityListeners' generic 'catalog-scan' handler
+    // regardless of scope, but there was no IMMEDIATE feedback the moment the button is clicked:
+    // catalog_faces_scan's first progress event doesn't fire until after the first photo has
+    // decoded+run through SCRFD, which can be a visible beat on a single scoped photo. Priming
+    // the pill here (same 'catalog' kind + 'faces' stage the real events use) means the bar is
+    // already showing before the first real event arrives, not just after.
+    activityUpdate('catalog', { stage: 'faces', done: 0, total: photoIds ? photoIds.length : 0, current: '' });
+    try {
+      await invoke('catalog_faces_scan', { photoIds });
+      await invoke('catalog_embed_faces', { photoIds });
+      const r = await invoke('catalog_cluster_faces');
+      // Pets (RT-DETR, petdetect.rs) piggyback on the same "Analyze photos" action — one button,
+      // one People & Pets section, matching the wireframes' whole point of unifying the two.
+      // No embed/cluster step: a detection has no re-identification embedding to group sightings
+      // on, so each one becomes its own auto pet-person directly (see pets_run's own comment) —
+      // it shows up in the SAME Unnamed review queue faces do, ready for the user to name via
+      // the ordinary review-mode flow (which, for a pet, is the fast path INTO subject.rs's
+      // Teach/Find loop rather than a replacement for it).
+      const rp = await invoke('catalog_pets_scan', { photoIds }).catch(() => ({ pets_found: 0 }));
+      await invoke('catalog_clip_embed', { photoIds });
+      // Tag photos that were already indexed before auto-tagging existed (clip_embed skips them).
+      await invoke('catalog_auto_tag').catch(() => {});
+      refreshAutoTags(); state.clipTags.clear(); refreshCatalogCounts();
+      if (photoIds) { const scanned = new Set(photoIds); for (const e of state.entries || []) if (scanned.has(e.id)) state.sidecars.delete(e.path); }
+      if (photoIds) await getSidecarsBatch((state.entries || []).filter((e) => photoIds.includes(e.id)).map((e) => e.path)).catch(() => {});
+      if (state.showInfo) renderInfoPanel();
+      if (typeof window.fxRefreshAutoTags === 'function') window.fxRefreshAutoTags();
+      await refreshPeople();
+      activityUpdate('catalog', { stage: 'done', done: photoIds ? photoIds.length : 0, total: photoIds ? photoIds.length : 0 });
+      const parts = [];
+      if (r.people) parts.push(`${r.people} ${r.people === 1 ? 'person' : 'people'}`);
+      if (r.auto_assigned) parts.push(`${r.auto_assigned} photos tagged automatically`);
+      if (rp.pets_found) parts.push(`${rp.pets_found} ${rp.pets_found === 1 ? 'pet' : 'pets'}`);
+      toast(parts.length ? `Found ${parts.join(' and ')}` : 'Photos analyzed — try searching by description', true);
+    } catch (e) {
+      activity.visible = false; renderActivity();
+      toast(humanizeErr('analyze photos', e), 'err');
+    }
+  }
+
+  /// AI stack Phase D: natural-language photo search. Two round trips, not one — `catalog_clip_search`
+  /// only returns `{id, score}` (it doesn't have full row data to hand back), so `catalog_query`'s
+  /// new `photoIds` override filter (mirrors `expandStack`'s own override shape) fetches the real
+  /// grid rows for those exact ids. SQL's `IN (...)` does not preserve input order, so the
+  /// returned entries are re-sorted here by the score list — the whole point of a ranked search.
+  /// Live (type-to-filter) match: filename, where the photo was taken, or any keyword segment —
+  /// so typing "london" narrows the view to London photos without pressing Enter.
+  function entryMatchesSearch(entry, sc, q) {
+    if (entry.name.toLowerCase().includes(q)) return true;
+    const place = entry.place || (state.meta.get(entry.path) || {}).place;
+    if (place && place.toLowerCase().includes(q)) return true;
+    return (sc.keywords || []).some((k) => k.toLowerCase().includes(q));
+  }
+
+  let placeList = []; // [{place, count}] from catalog_places — refreshed with the keyword tree
+  function refreshPlaces() { invoke('catalog_places').then((p) => { placeList = p || []; }).catch(() => {}); refreshAutoTags(); }
+  let autoTagList = []; // [{term, count}] from catalog_auto_tag_counts
+  function refreshAutoTags() { invoke('catalog_auto_tag_counts').then((t) => { autoTagList = t || []; }).catch(() => {}); }
+
+  /// Suggestions under the search box: places (with photo counts) and keywords whose name
+  /// contains the typed text. Picking one runs the full search for it.
+  function renderSearchSuggest(q) {
+    const box = document.getElementById('lib-search-suggest');
+    if (!box) return;
+    q = (q || '').trim().toLowerCase();
+    if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+    // Collapse "London, Greater London, …" rows into one entry per matching name segment.
+    const places = new Map();
+    for (const { place, count } of placeList) {
+      const parts = place.split(', ');
+      const hit = parts.find((seg) => seg.toLowerCase().includes(q));
+      if (!hit) continue;
+      const i = parts.indexOf(hit);
+      const label = parts.slice(i, i + 1).concat(parts.slice(-1)).filter((v, j, a) => a.indexOf(v) === j).join(', ');
+      const cur = places.get(label) || { term: hit, count: 0 };
+      cur.count += count;
+      places.set(label, cur);
+    }
+    const placeRows = [...places.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5)
+      .map(([label, v]) => ({ kind: 'place', label, term: v.term, count: v.count }));
+    const kwRows = keywordTree.filter((n) => n.leaf && n.leaf.toLowerCase().includes(q)).slice(0, 5)
+      .map((n) => ({ kind: 'kw', label: n.path.split('|').join(' › '), term: n.leaf }));
+    const qs = q.length > 3 && q.endsWith('s') && !q.endsWith('ss') ? q.slice(0, -1) : q;
+    const thingRows = autoTagList.filter((t) => t.term.split(' ').some((w) => w.startsWith(qs))).slice(0, 5)
+      .map((t) => ({ kind: 'thing', label: t.term, term: t.term, count: t.count }));
+    const rows = [...thingRows, ...placeRows, ...kwRows];
+    const all = { kind: 'ai', label: `Photos that look like “${q}”`, term: q };
+    box.innerHTML = [...rows, all].map((r, i) => `<div class="lib-ss-row" data-ss="${i}" data-kind="${r.kind}">`
+      + `<span class="lib-ss-ic">${r.kind === 'place' ? ic('pin', 13) : r.kind === 'kw' ? ic('tag', 13) : r.kind === 'thing' ? ic('image', 13) : ic('search', 13)}</span>`
+      + `<span class="lib-ss-label">${esc(r.label)}</span>`
+      + (r.count ? `<span class="lib-ss-n">${r.count}</span>` : '') + `</div>`).join('');
+    box.hidden = false;
+    const list = [...rows, all];
+    box.querySelectorAll('[data-ss]').forEach((el) => {
+      el.onmousedown = (e) => {
+        e.preventDefault();
+        const r = list[+el.dataset.ss];
+        const input = document.getElementById('lib-search');
+        if (input) input.value = r.term;
+        box.hidden = true;
+        runClipTextSearch(r.term);
+      };
+    });
+  }
+
+  async function runClipTextSearch(text) {
+    state.source = 'catalog';
+    state.catalogScope = `search:${text}`;
+    state.selected.clear();
+    // The AI query text lives in the SAME #lib-search box the live filename filter reads from
+    // (state.search) — clear it here or renderGrid() re-applies it as a substring filter on top
+    // of the CLIP results and (almost always) filters every single one back out.
+    state.search = '';
+    const grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    // Two kinds of result, exact first: photos whose place / keyword / filename contains the
+    // text ("london" -> every photo GPS-tagged in London), then photos CLIP thinks LOOK like it
+    // (landmarks, "dog on a beach") — the "and any that could be" half.
+    let hits = [];
+    let exact = [];
+    const [clipRes, exactRes] = await Promise.allSettled([
+      invoke('catalog_clip_search', { text, limit: 200 }),
+      invoke('catalog_query', { q: { text } }),
+    ]);
+    if (clipRes.status === 'fulfilled') hits = clipRes.value || [];
+    if (exactRes.status === 'fulfilled') exact = (exactRes.value && exactRes.value.entries) || [];
+    if (clipRes.status === 'rejected' && exactRes.status === 'rejected') { grid.innerHTML = '<div id="lib-empty">Could not search photos.</div>'; return; }
+    if (exact.length) {
+      const exactIds = new Set(exact.map((e) => e.id));
+      const extraIds = hits.map((h) => h.id).filter((id) => !exactIds.has(id));
+      let extra = [];
+      if (extraIds.length) {
+        try {
+          const page = await invoke('catalog_query', { q: { photoIds: extraIds } });
+          const order = new Map(extraIds.map((id, i) => [id, i]));
+          extra = page.entries.slice().sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+        } catch (e) {}
+      }
+      state.entries = [...exact, ...extra];
+      toast(`${exact.length} matching “${text}”` + (extra.length ? ` · ${extra.length} that look similar` : ''));
+      const paths = state.entries.filter((e) => !e.offline).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+      await renderGrid();
+      renderCollections();
+      return;
+    }
+    if (!hits.length) {
+      // Bug #1 fix: catalog_clip_search now drops photos scoring below a real minimum-similarity
+      // cutoff (see catalog.rs's CLIP_SEARCH_MIN_SCORE), so an empty result is no longer proof
+      // that nothing has been analyzed — it's now the ALSO-correct "your query genuinely matched
+      // nothing" case (e.g. a nonsense string). Disambiguate via catalog_counts' clip_scanned,
+      // rather than showing the "click the search icon first" message when photos WERE analyzed
+      // and the search is just working correctly.
+      let analyzedAny = false;
+      try { const counts = await invoke('catalog_counts'); analyzedAny = (counts.clip_scanned || 0) > 0; } catch (e) {}
+      grid.innerHTML = analyzedAny
+        ? '<div id="lib-empty">No matching photos found.</div>'
+        : '<div id="lib-empty">No photos have been analyzed for search yet — click the search icon next to "People" in the sidebar first.</div>';
+      state.entries = [];
+      renderCollections();
+      return;
+    }
+    const order = new Map(hits.map((h, i) => [h.id, i]));
+    let page;
+    try { page = await invoke('catalog_query', { q: { photoIds: hits.map((h) => h.id) } }); }
+    catch (e) { grid.innerHTML = '<div id="lib-empty">Could not load search results.</div>'; return; }
+    const entries = page.entries.slice().sort((a, b) => (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9));
+    state.entries = entries;
+    if (!entries.length) {
+      grid.innerHTML = '<div id="lib-empty">No matching photos found.</div>';
+      renderCollections();
+      return;
+    }
+    {
+      const paths = entries.filter((e) => !e.offline).map((e) => e.path);
+      await Promise.all([getSidecarsBatch(paths), getMetaBatch(paths)]);
+    }
+    await renderGrid();
+    renderCollections();
+  }
+
+  let cacheUsage = null; // {offline_thumbs_bytes, decode_cache_bytes, working_thumbs_bytes, budget_bytes}
+  // Backlog item 4/15, v1 (warn-only): the offline-thumbnail tier is documented as never
+  // auto-cleared, so a single big shoot can fill the whole 20GB budget with no automatic relief
+  // and no warning before it's full — the user only ever finds out reactively via "Free up
+  // space…". This adds a one-time-per-session proactive nudge once usage crosses 90%, so the
+  // budget doesn't fill silently. Full LRU eviction (with the "don't evict an offline thumbnail
+  // for a currently-unplugged volume" guard) is a deliberate fast-follow, not done here — that's
+  // the riskier half of this item and warrants its own pass.
+  const CACHE_WARN_PCT = 90;
+  let _cacheWarnShown = false;
+  function refreshCacheUsage() {
+    invoke('cache_usage').then((u) => {
+      cacheUsage = u;
+      renderCollections();
+      if (!_cacheWarnShown && u.budget_bytes > 0) {
+        // Includes working_thumbs — the row below used to omit it entirely, so the number shown
+        // ("using ~1.1GB of 20GB") disagreed with what was actually on disk (that tier alone
+        // measured 1.2GB on a real ~30k-photo library) and made the warning threshold too.
+        const pct = Math.round(((u.offline_thumbs_bytes + u.decode_cache_bytes + u.working_thumbs_bytes) / u.budget_bytes) * 100);
+        if (pct >= CACHE_WARN_PCT) {
+          _cacheWarnShown = true;
+          if (typeof toast === 'function') toast(`Approaching your ${fmtGB(u.budget_bytes)}GB cache budget (${pct}% used) — free up space in Drives`, false);
+        }
+      }
+    }).catch(() => {});
+  }
+  function fmtGB(bytes) { return (bytes / (1024 * 1024 * 1024)).toFixed(1); }
+
+  /// "using X of 20GB" (the plan's own wireframe wording) — local cache usage, not a per-volume
+  /// fact, so it renders even with zero external volumes catalogued (a purely-local-photos user
+  /// still has an offline-thumbnail tier and a decode cache). Placed inside Drives because the
+  /// budget IS what makes offline browsing of an unplugged drive possible — this is where a user
+  /// looking for "why is this taking up space" would look first.
+  function cacheUsageRowHtml() {
+    if (!cacheUsage) return '';
+    // ⚠️ Was offline_thumbs + decode ONLY — the working-thumbnails tier (thumbnail/meta/phash
+    // cache) is real disk usage the pruner enforces a cap on, and omitting it here made this
+    // number actively misleading: it read "~1.1GB of 20GB" while that tier alone sat at 1.2GB.
+    const used = cacheUsage.offline_thumbs_bytes + cacheUsage.decode_cache_bytes + cacheUsage.working_thumbs_bytes;
+    const pct = Math.min(100, Math.round((used / cacheUsage.budget_bytes) * 100));
+    const nearFull = pct >= CACHE_WARN_PCT; // persistent visual cue alongside the one-shot toast
+    return `<div class="lib-coll-row" style="cursor:default" title="Offline thumbnails: ${fmtGB(cacheUsage.offline_thumbs_bytes)} GB (never auto-cleared) · Decode cache: ${fmtGB(cacheUsage.decode_cache_bytes)} GB (auto-managed) · Working thumbnails: ${fmtGB(cacheUsage.working_thumbs_bytes)} GB (auto-managed)">
+        <span class="lib-coll-ic">${ic('drive', 13)}</span>
+        <span class="lib-coll-lb" style="color:${nearFull ? 'var(--err,#e05454)' : 'var(--mut)'}">Using ${fmtGB(used)} of ${fmtGB(cacheUsage.budget_bytes)} GB${nearFull ? ' — approaching budget' : ''}</span>
+      </div>
+      <div style="padding:0 10px 6px"><div style="height:3px;border-radius:2px;background:var(--sur2);overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${nearFull ? 'var(--err,#e05454)' : 'var(--acc)'}"></div>
+      </div></div>
+      <div class="lib-coll-row sk2-manage" data-lib-roots="1" style="cursor:pointer" title="Every folder the gallery is indexing — remove any of them (files are never deleted)">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Gallery folders…</span>
+      </div>
+      <div class="lib-coll-row sk2-manage" data-cache-free="1" style="cursor:pointer">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Free up space…</span>
+      </div>
+      <div class="lib-coll-row sk2-manage" data-verify-library="1" style="cursor:pointer" title="Re-checks every already-hashed photo against its stored hash — flags any that changed WITHOUT its file date moving, which is what silent corruption looks like. New/never-hashed photos are already covered automatically in the background.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Verify gallery…</span>
+      </div>
+      <div class="lib-coll-row sk2-manage" data-find-duplicates="1" style="cursor:pointer" title="Perceptual-hash duplicate detection for the CURRENT folder — deliberately manual, same as digiKam's own Find Duplicates tool, rather than an automatic pass on every folder open.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Find duplicates…</span>
+      </div>
+      <div class="lib-coll-row sk2-manage" data-rescan-flags="1" style="cursor:pointer" title="The Flagged/Favorites/Edited/Rejected smart collections only see .xmp sidecars in folders you've opened or that are in Recents — a sidecar changed elsewhere (by this app in a subfolder you've never browsed, or by an external tool) can be invisible to them even though a plain folder browse shows it correctly. This walks the WHOLE library once to catch up.">
+        <span class="lib-coll-ic"></span><span class="lib-coll-lb" style="color:var(--mut)">Rescan flags…</span>
+      </div>`;
+  }
+
+  /// Manual, on-demand — see runDupeDetection's own call site in openFolder for why this is no
+  /// longer automatic. Scoped to the currently-open folder (state.entries), matching what the
+  /// automatic version used to cover; a whole-catalog version (using the indexed photos.phash
+  /// column instead of this per-folder file-cache path) is a real future improvement but a
+  /// separate, larger change.
+  async function runDupeDetectionOnDemand() {
+    if (state.source !== 'folder' || !state.entries.length) {
+      toast('Open a folder first');
+      return;
+    }
+    activityUpdate('catalog', { stage: 'hash', done: 0, total: state.entries.length, current: 'Finding duplicates…' });
+    try {
+      await runDupeDetection(state.entries.map((e) => e.path), state._openToken);
+      const dupeCount = new Set(state.dupeClusters.values()).size;
+      toast(dupeCount ? `Found ${dupeCount} duplicate group${dupeCount === 1 ? '' : 's'}` : 'No duplicates found');
+    } finally {
+      activityUpdate('catalog', { stage: 'done', done: state.entries.length, total: state.entries.length });
+    }
+  }
+
+  /// Manual, on-demand — see the plan's own logged decision: hashing a NEW file is cheap and
+  /// already auto-chained (catalogRunBackgroundPhases), but re-verifying every ALREADY-hashed
+  /// photo is a full re-read of the whole archive, so it only runs when explicitly asked for.
+  async function runVerifyLibrary() {
+    toast('Verifying gallery…');
+    let result;
+    try { result = await invoke('catalog_verify'); }
+    catch (e) { toast(humanizeErr('verify the library', e), 'err'); return; }
+    if (!result.corrupt || !result.corrupt.length) {
+      toast(`Verified ${result.checked} photo${result.checked === 1 ? '' : 's'} — none corrupted` + (result.changed ? ` (${result.changed} edited since last check, re-baselined)` : ''));
+      return;
+    }
+    // A real finding — never bury this in a toast that auto-dismisses. Same popover shape the
+    // cache-tier menu uses, but a read-only report rather than clickable actions: this isn't a
+    // "pick one" decision, it's "here is what needs your attention."
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:9999;left:50%;top:50%;transform:translate(-50%,-50%);'
+      + 'background:var(--sur2);border:1px solid var(--bdr);border-radius:9px;padding:14px;'
+      + 'min-width:320px;max-width:480px;max-height:60vh;overflow:auto;box-shadow:none;font-size:12px';
+    const esc2 = (s2) => String(s2 || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    menu.innerHTML = `<div style="font-weight:600;margin-bottom:8px;color:#e5484d">${result.corrupt.length} photo${result.corrupt.length === 1 ? '' : 's'} may be corrupted</div>`
+      + `<div style="color:var(--mut);margin-bottom:10px">Content changed without the file's own modified date changing — the pattern real bit rot looks like, not an edit.</div>`
+      + result.corrupt.map((c) => `<div style="padding:4px 0;border-top:1px solid var(--bdr);word-break:break-all">${esc2(c.name)}</div>`).join('')
+      + `<div style="margin-top:10px;text-align:right"><button class="lib-btn" id="lib-verify-close">Close</button></div>`;
+    document.body.appendChild(menu);
+    document.getElementById('lib-verify-close').onclick = () => menu.remove();
+  }
+
+  /// Manual, on-demand — see the "Rescan flags…" row's title text for why this exists
+  /// (backfill_edited_registry only ever sees the root + Recents, not the whole tree). Progress
+  /// arrives via the 'registry-rescan' event listener (wireActivityListeners), which also calls
+  /// renderCollectionCounts() and shows the completion toast — this function only kicks it off
+  /// and surfaces immediate errors (e.g. no folder open yet).
+  async function runRescanFlags() {
+    if (!state.root) {
+      toast('Open a gallery folder first');
+      return;
+    }
+    activityUpdate('registry-rescan', {
+      label: 'Rescanning gallery flags…',
+      stage: 'scanning',
+      done: 0,
+      total: 0,
+      current: '',
+      cancelFn: () => { invoke('cancel_registry_rescan').catch(() => {}); },
+    });
+    try {
+      await invoke('rescan_edited_registry_recursive', { root: state.root });
+    } catch (e) {
+      activityUpdate('registry-rescan', { stage: 'done' });
+      toast(humanizeErr('rescan the library', e), 'err');
+    }
+  }
+
+  function drivesSectionHtml() {
+    // "This Mac" itself is always online and isn't the thing this section exists to show —
+    // only external volumes (an SSD that may or may not currently be plugged in) are worth a
+    // row here. The cache-usage row below is unrelated to any specific volume and renders
+    // regardless.
+    const external = catalogVolumes.filter((v) => !v.is_local);
+    const rows = external.map((v) => `
+      <div class="lib-coll-row${v.online ? '' : ' offline'}" title="${esc(v.last_path)}${v.online ? '' : ' — not connected'}">
+        <span class="lib-coll-ic" style="${v.online ? '' : 'opacity:.5'}">${ic('drive', 13)}</span>
+        <span class="lib-coll-lb"${v.online ? '' : ' style="color:var(--mut)"'}>${esc(v.label)}</span>
+        <span class="lib-coll-count">${v.online ? '' : '·'}</span>
+      </div>`).join('');
+    const cacheRow = cacheUsageRowHtml();
+    if (!rows && !cacheRow) return '';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('drives', 'Drives', rows + cacheRow);
+  }
+
+  /// Nests the flat (y,m,d,n) rows catalog_date_counts returns into a Year › Month › Day tree
+  /// and renders it with the exact same .lib-tree-* classes/chevron the real folder tree uses
+  /// (buildTreeNode, above) — one fetch already has every count at every level, so no lazy
+  /// per-node loading is needed even across many years.
+  function dateTreeHtml() {
+    const years = new Map();
+    for (const row of dateCounts.days) {
+      if (!years.has(row.y)) years.set(row.y, { n: 0, months: new Map() });
+      const y = years.get(row.y);
+      y.n += row.n;
+      if (!y.months.has(row.m)) y.months.set(row.m, { n: 0, days: [] });
+      const mo = y.months.get(row.m);
+      mo.n += row.n;
+      mo.days.push(row);
+    }
+    const sortedYears = Array.from(years.keys()).sort((a, b) => b - a);
+    // ⚠️ The chevron carries its OWN data-chev-toggle marker and is a separate click target from
+    // the rest of the row (wired below) — expanding a year/month to see its children must never
+    // fire a catalog_query. It used to: one shared row.onclick did both unconditionally, so
+    // merely expanding "2025" to look at its months also queried and loaded every photo in all of
+    // 2025 (openCatalogView's limit:null result set, plus a getSidecarsBatch/getMetaBatch pass
+    // over every path) before the tree even finished opening — on a large library that reads as
+    // the whole app freezing just from browsing the tree.
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
+    // HANDOVER §8 item #4: a leaf's slot used to be a bare empty <span class="lib-tree-chev">
+    // with no children — an empty inline-flex box collapsed to 0 width in practice (measured:
+    // getBoundingClientRect().width 0 vs the CSS rule's own declared 14px), while an expandable
+    // sibling's real chevron rendered at its icon's intrinsic 11px. Same nesting depth, two
+    // different indents. Rendering the SAME chevron markup, just visibility:hidden, guarantees
+    // byte-identical layout regardless of whatever caused the empty span to collapse.
+    const leafChevSlot = `<span class="lib-tree-chev" style="visibility:hidden">${ic('chevron', 11)}</span>`;
+    // toggleKey is the BARE year or "year:month" string dateExpanded is actually keyed by
+    // (yOpen/mOpen below read dateExpanded.has(`${y}`) / has(`${y}:${m}`)) — deliberately NOT
+    // the same string as `scope` (which is the full "date:..." catalog_query scope).
+    // Library View.html's date-tree hierarchy has a size step per level (.row.datehead 13px,
+    // .row.monthhead 12px, .row.sub/day 11px) — `lvl` picks the matching class so each level
+    // gets its own font-size instead of silently inheriting the sidebar's 16px base font.
+    const row = (scope, toggleKey, label, count, hasChildren, open, lvl) => `
+      <div class="lib-tree-row lib-tree-row-${lvl}${state.source === 'catalog' && state.catalogScope === scope ? ' on' : state.source === 'catalog' && String(state.catalogScope).startsWith(scope + ':') && !open ? ' on-within' : ''}" data-date-scope="${scope}" data-date-toggle="${hasChildren ? toggleKey : ''}">
+        ${hasChildren ? chev(open) : leafChevSlot}
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(count)}</span>
+      </div>`;
+    let html = '';
+    for (const y of sortedYears) {
+      const yOpen = dateExpanded.has(`${y}`);
+      const yData = years.get(y);
+      html += row(`date:${y}`, `${y}`, y, yData.n, true, yOpen, 'year');
+      if (yOpen) {
+        html += '<div class="lib-tree-children">';
+        const sortedMonths = Array.from(yData.months.keys()).sort((a, b) => b - a);
+        for (const m of sortedMonths) {
+          const mKey = `${y}:${m}`;
+          const mOpen = dateExpanded.has(mKey);
+          const mData = yData.months.get(m);
+          html += row(`date:${y}:${m}`, mKey, MONTH_NAMES[m - 1] || m, mData.n, true, mOpen, 'month');
+          if (mOpen) {
+            html += '<div class="lib-tree-children">';
+            const sortedDays = mData.days.slice().sort((a, b) => b.d - a.d);
+            for (const dRow of sortedDays) {
+              // Weekday suffix ("6 · Sun") — Library View.html:306-307's `.dayname` span, missing
+              // here until the wireframe-diff repair loop flagged it (diffDayRowWeekday).
+              const weekday = new Date(y, m - 1, dRow.d).toLocaleDateString('en-US', { weekday: 'short' });
+              const dayLabel = `${dRow.d} <span class="dayname">· ${weekday}</span>`;
+              html += row(`date:${y}:${m}:${dRow.d}`, '', dayLabel, dRow.n, false, false, 'day');
+            }
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+      }
+    }
+    if (dateCounts.no_date) {
+      html += row('date-nodate', '', 'No date', dateCounts.no_date, false, false, 'year');
+    }
+    return html;
+  }
+
+  /// Nests the flat KeywordNode list into a tree by parent_id and renders it with the same
+  /// .lib-tree-* markup dateTreeHtml uses. Own top-level section (per the plan's wireframe:
+  /// "[Collections] [Albums] [Keywords] [Devices] [Cloud] [Folders]") rather than folded into
+  /// the Library section the way By Date is — keywords are a user-built taxonomy, not a
+  /// built-in browse axis, and a photo can carry many of them at once instead of exactly one.
+  function keywordsSectionHtml() {
+    if (!keywordTree.length) return '';
+    // #4: this used to render its own ad-hoc header (a bare .lib-tree-row with a session-only
+    // kwExpanded('__root__') flag) instead of going through sidebarSection() like every other
+    // sidebar section — no shared collapse chrome, no entry in sidebarSecOpen, no persistence
+    // across restarts the way Collections/People/Albums/Drives/Devices/Folders/Cloud all get.
+    // Now built exactly like them; data-kw-tree-toggle stays on the header for the existing
+    // click-target tests, but the open/closed state itself is sidebarSecOpen's, same Set/key as
+    // every sibling. Also drops the header's leading tag icon — no other section header in this
+    // app or the wireframe carries one, so it was its own inconsistency.
+    const byParent = new Map();
+    for (const n of keywordTree) {
+      const key = n.parent_id == null ? '__root__' : n.parent_id;
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key).push(n);
+    }
+    const chev = (open) => `<span class="lib-tree-chev${open ? ' open' : ''}" data-chev-toggle="1">${ic('chevron', 11)}</span>`;
+    // HANDOVER §8 item #4: a leaf's slot used to be a bare empty <span class="lib-tree-chev">
+    // with no children — an empty inline-flex box collapsed to 0 width in practice (measured:
+    // getBoundingClientRect().width 0 vs the CSS rule's own declared 14px), while an expandable
+    // sibling's real chevron rendered at its icon's intrinsic 11px. Same nesting depth, two
+    // different indents. Rendering the SAME chevron markup, just visibility:hidden, guarantees
+    // byte-identical layout regardless of whatever caused the empty span to collapse.
+    const leafChevSlot = `<span class="lib-tree-chev" style="visibility:hidden">${ic('chevron', 11)}</span>`;
+    const renderLevel = (parentKey) => {
+      const kids = (byParent.get(parentKey) || []).slice().sort((a, b) => a.leaf.localeCompare(b.leaf));
+      return kids.map((n) => {
+        const hasChildren = byParent.has(n.id);
+        const open = kwExpanded.has(n.id);
+        const scope = `kw:${n.path}`;
+        return `<div class="lib-tree-row${state.source === 'catalog' && state.catalogScope === scope ? ' on' : ''}" data-kw-scope="${scope}" data-kw-id="${n.id}" data-kw-toggle="${hasChildren ? n.id : ''}" data-kw-path="${esc(n.path)}">
+            ${hasChildren ? chev(open) : leafChevSlot}
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.leaf)}</span><span class="coll-count" style="font-family:var(--mono);font-size:10px;color:var(--mut);flex:none">${fmtN(n.n) || ''}</span>
+          </div>${hasChildren && open ? `<div class="lib-tree-children">${renderLevel(n.id)}</div>` : ''}`;
+      }).join('');
+    };
+    // Auto-tag progress: shown until every photo has been through the tagger, so a short "dog"
+    // count reads as "still tagging", not "missing" (catalog_counts' tag_done/tag_total).
+    const tDone = catalogCounts.tag_done || 0, tTotal = catalogCounts.tag_total || 0;
+    const tagging = tTotal > 0 && tDone < tTotal;
+    const progress = tagging
+      ? `<div class="lib-kw-progress" id="lib-kw-progress">Tagged ${fmtN(tDone)} of ${fmtN(tTotal)}${bgPaused() ? ' · paused' : ''}<div class="lib-kw-progress-bar"><span style="width:${(100 * tDone / tTotal).toFixed(1)}%"></span></div></div>`
+      : '';
+    const body = progress + `<div class="lib-tree-node lib-people-scroll lib-kw-scroll" id="lib-keyword-tree">${renderLevel('__root__')}</div>`;
+    const trail = tagging ? `<span class="lib-kw-progress-pct">${Math.floor(100 * tDone / tTotal)}%</span>` : '';
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('keywords', 'Keywords', body, { extraHeaderAttrs: ' data-kw-tree-toggle="1"', trail });
+    // No trailing separator of its own — the next section (People & Pets) supplies its own
+    // leading one. This used to double up into two adjacent dividers whenever both a keyword
+    // tree AND named people existed (notes §2.3.14, "duplicated separators").
+  }
+
+  /// Loads one person's face crop lazily via `catalog_face_crop` and fades it into the given
+  /// <img>. Fire-and-forget: a scan that hasn't run, an offline volume, or a person with no
+  /// `cover_face_id` all just leave the avatar's plain background showing — see people-pets
+  /// wireframes screen A ("no face thumbnails anywhere" was the #1 cited defect; this is the
+  /// backend call that already existed — `catalog_photo_faces`'s sibling — and was never wired
+  /// to anything on the frontend before this).
+  /// Crops are cached per face id (a face's crop never changes) so a sidebar re-render paints the
+  /// avatar synchronously — refetching each time left every rebuilt <img> hidden for one IPC
+  /// round trip, which is what made People & Pets flicker (test/probe_people_sidebar_flicker.mjs).
+  const faceCropUrls = new Map();
+  function loadFaceCrop(faceId, imgEl) {
+    if (faceId == null) return;
+    const cached = faceCropUrls.get(faceId);
+    if (cached) { if (imgEl.getAttribute('src') !== cached) imgEl.src = cached; imgEl.classList.add('loaded'); return; }
+    invoke('catalog_face_crop', { faceId }).then((buf) => {
+      let url = faceCropUrls.get(faceId);
+      if (!url) { url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' })); faceCropUrls.set(faceId, url); }
+      if (!imgEl.isConnected) return;
+      imgEl.src = url;
+      imgEl.classList.add('loaded');
+    }).catch(() => {});
+  }
+  function faceAvaHtml(person, size) {
+    let cls = 'lib-face-ava';
+    if (person.kind === 'pet') cls += ' pet';
+    if (person.auto) cls += ' unnamed';
+    const style = size ? ` style="width:${size}px;height:${size}px"` : '';
+    return `<span class="${cls}"${style} data-face-id="${person.cover_face_id ?? ''}"><img alt=""></span>`;
+  }
+  /// Named people are the section — sorted by descending face count, own bounded/scrolling list
+  /// so it can never push Folders/Keywords off screen (people-pets wireframes screen A, failure
+  /// 14: a scan used to render "Person 1..Person N" as flat rows and flood the sidebar). Every
+  /// still-machine-generated cluster (`auto:true`, see catalog.rs's `people.auto`) collapses
+  /// behind one pinned, counted "Unnamed" row instead of appearing as a row of its own — naming
+  /// a cluster is what promotes it into the named list above.
+  function peopleSectionHtml() {
+    const scanLabel = 'Analyze photos — find faces and enable AI search';
+    const takeoutRow = ''; // "Import names from Google Photos…" lives in Settings › Library now
+    const scanGlyph = `<span id="lib-people-scan" title="${scanLabel}" style="cursor:pointer;padding:0 4px">${ic('search', 13)}</span>`;
+    if (!peopleList.length) {
+      return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets',
+        `<div class="lib-coll-row" style="opacity:.5;cursor:default">No people found yet</div>` + takeoutRow, { trail: scanGlyph });
+    }
+    const named = peopleList.filter((p) => !p.auto).sort((a, b) => (b.face_count - a.face_count) || a.name.localeCompare(b.name));
+    const unnamedCount = peopleList.filter((p) => p.auto).reduce((n, p) => n + (p.face_count || 0), 0);
+    const row = (p) => {
+      const scope = `person:${p.id}`;
+      return `<div class="lib-coll-row${state.catalogScope === scope && state.source === 'catalog' ? ' on' : ''}" data-person="${p.id}">
+        ${faceAvaHtml(p)}<span class="lib-coll-lb">${esc(p.name)}</span>
+        <span class="lib-coll-count">${fmtN(p.face_count ?? '')}</span>
+      </div>`;
+    };
+    const namedRows = named.length
+      ? `<div class="lib-people-scroll">${named.map(row).join('')}</div>`
+      : `<div class="lib-coll-row" style="opacity:.5;cursor:default">Review faces to name people</div>`;
+    const unnamedRow = `<div class="lib-coll-row${state.source === 'catalog' && state.catalogScope === 'person:unnamed' ? ' on' : ''}" data-people-review="1">
+        <span class="lib-face-ava unnamed"></span><span class="lib-coll-lb">Unnamed</span>
+        <span class="lib-coll-count">${fmtN(unnamedCount ?? '')}</span>
+      </div>`;
+    return '<div class="lib-coll-sep"></div>' + sidebarSection('people', 'People &amp; Pets', namedRows + unnamedRow + takeoutRow, { trail: scanGlyph });
+  }
+  function wirePeopleRows(host) {
+    const scanBtn = host.querySelector('#lib-people-scan');
+    if (scanBtn) scanBtn.onclick = (e) => { e.stopPropagation(); runFindFaces(); };
+    host.querySelectorAll('.lib-face-ava[data-face-id]').forEach((ava) => {
+      const faceId = parseInt(ava.dataset.faceId, 10);
+      const img = ava.querySelector('img');
+      if (img && Number.isFinite(faceId)) loadFaceCrop(faceId, img);
+    });
+    host.querySelectorAll('.lib-coll-row[data-person]').forEach((row) => {
+      const id = parseInt(row.dataset.person, 10);
+      row.onclick = () => openCatalogView(`person:${id}`);
+      row.oncontextmenu = (e) => { e.preventDefault(); showPersonMenu(e, id); };
+    });
+    const reviewRow = host.querySelector('[data-people-review]');
+    if (reviewRow) reviewRow.onclick = () => openReviewFaces();
+    const takeout = host.querySelector('[data-people-takeout]');
+    if (takeout) takeout.onclick = () => importGoogleTakeout();
+  }
+  /// Google Takeout writes a JSON file next to every photo listing who Google Photos recognised in
+  /// it. Importing matches those files to this library by name + date and names our own faces.
+  async function importGoogleTakeout() {
+    let dir;
+    try { dir = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose your unzipped Google Takeout folder' } }); }
+    catch (e) { return; }
+    if (!dir) return;
+    toast('Reading Google Photos names…');
+    try {
+      const r = await invoke('catalog_import_google_takeout', { dir });
+      await refreshPeople();
+      if (!r.sidecars_with_people) { toast('No people found in that folder — choose the unzipped "Takeout" folder from a Google Photos export', 'err'); return; }
+      const extra = r.photos_not_in_library ? ` · ${r.photos_not_in_library} of their photos aren't in this gallery` : '';
+      toast(`Tagged ${r.faces_tagged} faces from Google Photos (${r.people_created} new people)${r.auto_assigned ? ` + ${r.auto_assigned} more automatically` : ''}${extra}`, true);
+    } catch (err) { toast(humanizeErr('import from Google Photos', err), 'err'); }
+  }
+
+  // RAW close-up crops must originate from the same developed display proxy used by Quick Look.
+  // One proxy request is shared across every face in this photo's panel; native keeps its
+  // recipe-aware face-crop cache, while these returned crop bytes are never put in the legacy
+  // face-id-only People avatar cache.
+  function loadRawReviewFaceCrop(session, faceId, imgEl) {
+    if (session.mode === 'detail') { loadRawDetailFaceCrop(session, faceId, imgEl); return; }
+    const revision = session.modeRevision || 0;
+    const isSessionCurrent = () => !session.cancelled && rawFaceReviewSession === session;
+    const isImageCurrent = () => isSessionCurrent() && imgEl.isConnected && session.mode !== 'detail' && (session.modeRevision || 0) === revision;
+    imgEl.alt = 'Developed RAW face crop loading';
+    if (!session.proxyPromise) {
+      session.proxyPromise = (async () => {
+        const settings = await rawCacheSettings(session.path, 'review');
+        if (!isSessionCurrent()) return null;
+        try {
+          const asset = await queueRawReview(session.path,
+            () => session.cancelled ? null : cacheOneRaw(session.path, 'review', settings),
+            'face-review', session.jobId);
+          return asset && isSessionCurrent() ? settings.recipeKey : null;
+        } catch (error) {
+          if (!isSessionCurrent()) return null;
+          throw error;
+        }
+      })();
+    }
+    session.proxyPromise.then((rawReviewRecipeKey) => {
+      if (!rawReviewRecipeKey || !isImageCurrent()) return null;
+      return invoke('catalog_face_crop', { faceId, rawReviewRecipeKey });
+    }).then((buf) => {
+      if (!buf || !isImageCurrent()) return;
+      const url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      session.urls.add(url);
+      imgEl.src = url;
+      imgEl.alt = 'Developed RAW face crop';
+      imgEl.classList.add('loaded');
+      const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+      if (quality) quality.textContent = 'Fit preview';
+    }).catch(() => {
+      if (!isImageCurrent()) return;
+      imgEl.alt = 'Developed RAW face crop unavailable';
+      imgEl.classList.add('failed');
+      const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+      if (quality) quality.textContent = 'Fit preview unavailable';
+    });
+  }
+
+  // BEGIN RAW_FACE_DETAIL_HELPERS
+  function parseRawFaceDetail(buf, expectedFaceIds) {
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    if (bytes.byteLength < 4 || bytes.byteLength > 16 * 1024 * 1024 + 65540) throw new Error('Invalid RAW detail response size');
+    const size = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, true);
+    if (!size || size > 65536 || 4 + size > bytes.byteLength) throw new Error('Invalid RAW detail header');
+    const info = JSON.parse(new TextDecoder().decode(bytes.subarray(4, 4 + size)));
+    if (!Number.isSafeInteger(info.sourceWidth) || !Number.isSafeInteger(info.sourceHeight) || info.sourceWidth < 1 || info.sourceHeight < 1 || !Array.isArray(info.crops) || info.crops.length !== expectedFaceIds.length) throw new Error('Invalid RAW detail geometry');
+    const expected = new Set(expectedFaceIds), seen = new Set();
+    let end = 0;
+    const crops = info.crops.map(crop => {
+      if (!expected.has(crop.faceId) || seen.has(crop.faceId) || !Number.isSafeInteger(crop.width) || !Number.isSafeInteger(crop.height) || crop.width < 1 || crop.height < 1 || crop.width > 2048 || crop.height > 2048 || !Number.isSafeInteger(crop.offset) || crop.offset !== end || !Number.isSafeInteger(crop.length) || crop.length < 4 || crop.offset + crop.length > bytes.byteLength - 4 - size) throw new Error('Invalid RAW face crop');
+      seen.add(crop.faceId); end = crop.offset + crop.length;
+      const jpeg = bytes.subarray(4 + size + crop.offset, 4 + size + end);
+      if (jpeg[0] !== 255 || jpeg[1] !== 216 || jpeg[jpeg.length - 2] !== 255 || jpeg[jpeg.length - 1] !== 217) throw new Error('Invalid RAW face JPEG');
+      return { ...crop, jpeg };
+    });
+    if (end !== bytes.byteLength - 4 - size) throw new Error('Unexpected RAW detail payload');
+    return { sourceWidth: info.sourceWidth, sourceHeight: info.sourceHeight, lensCorrectionApplied: info.lensCorrectionApplied === true, crops };
+  }
+  function loadRawDetailFaceCrop(session, faceId, imgEl) {
+    const revision = session.modeRevision;
+    const sessionCurrent = () => !session.cancelled && rawFaceReviewSession === session;
+    const imageCurrent = () => sessionCurrent() && session.mode === 'detail' && session.modeRevision === revision && imgEl.isConnected;
+    const quality = imgEl.closest('figure')?.querySelector('.lib-face-closeup-quality');
+    imgEl.alt = 'Full-resolution RAW face detail loading';
+    if (quality) quality.textContent = 'Detail loading';
+    if (!session.detailFaceIds.includes(faceId)) {
+      imgEl.alt = 'RAW detail unavailable for this face';
+      if (quality) quality.textContent = 'Fit preview only';
+      return;
+    }
+    if (!session.detailPromise) {
+      session.detailPromise = (async () => {
+        const settings = await rawCacheSettings(session.path, 'full');
+        const params = await rawNativeDecodeSettings(session.path, settings);
+        if (!sessionCurrent()) return null;
+        const buf = await queueRawReview(session.path,
+          () => session.cancelled ? null : invoke('catalog_raw_face_detail', { ...params, faceIds: session.detailFaceIds }),
+          'face-review-detail', session.jobId);
+        if (!buf || !sessionCurrent()) return null;
+        const info = parseRawFaceDetail(buf, session.detailFaceIds);
+        const results = new Map();
+        for (const crop of info.crops) {
+          const url = URL.createObjectURL(new Blob([crop.jpeg], { type: 'image/jpeg' }));
+          session.urls.add(url);
+          results.set(crop.faceId, { url, width: crop.width, height: crop.height, sourceWidth: info.sourceWidth, sourceHeight: info.sourceHeight, lensCorrectionApplied: info.lensCorrectionApplied === true });
+        }
+        return results;
+      })();
+    }
+    session.detailPromise.then(results => {
+      if (!imageCurrent()) return;
+      const crop = results?.get(faceId);
+      if (!crop) throw new Error('RAW detail unavailable');
+      imgEl.src = crop.url;
+      imgEl.style.objectFit = 'contain';
+      imgEl.alt = 'Developed RAW face detail from full-resolution source';
+      imgEl.classList.add('loaded');
+      const inspect = imgEl.closest('figure')?.querySelector('[data-inspect-face]');
+      if (inspect) inspect.disabled = false;
+      if (quality) {
+        quality.textContent = `Full-resolution source · ${crop.width} × ${crop.height} crop${crop.lensCorrectionApplied ? ' · Check face position' : ''}`;
+        quality.title = `Developed from ${crop.sourceWidth} × ${crop.sourceHeight} RAW pixels; large crops may be resized. Creative adjustments are excluded.${crop.lensCorrectionApplied ? ' Lens correction may shift detected face positions; inspect the crop.' : ''}`;
+      }
+    }).catch(() => {
+      if (!imageCurrent()) return;
+      session.detailFailed = true;
+      const retry = session.wrap?.querySelector('[data-raw-face-mode="detail"]');
+      if (retry) retry.textContent = 'Retry RAW detail';
+      imgEl.alt = 'Full-resolution RAW face detail unavailable';
+      imgEl.classList.add('failed');
+      if (quality) quality.textContent = 'Detail unavailable';
+    });
+  }
+  // END RAW_FACE_DETAIL_HELPERS

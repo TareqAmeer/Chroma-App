@@ -1,0 +1,86 @@
+{
+ "target": "desktop/src-tauri/src/main.rs",
+ "join": "\n",
+ "parts": [
+  "head.part",
+  "native-rw2-decode-develop-no-base64-anyw.part",
+  "ai-tap-to-select-masks-panel-see-sam-rs.part",
+  "sam-2-1-phase-3-background-quality-upgra.part",
+  "named-subjects-remember-this-dog-see-sub.part",
+  "face-detection-ai-stack-phase-a-see-scrf.part",
+  "face-feature-auto-exclusion-skin-selecto.part",
+  "depth-estimation-roadmap-r7-see-depth-rs.part",
+  "hdr-merge-focus-stacking-roadmap-r12.part",
+  "gain-map-hdr-export-iso-21496-1.part",
+  "normal-photo-export.part",
+  "streaming-save-for-large-video-exports-v.part",
+  "google-oauth-for-the-desktop-shell-the-w.part"
+ ],
+ "info": [
+  {
+   "file": "head.part",
+   "firstLine": 1,
+   "lines": 141
+  },
+  {
+   "file": "native-rw2-decode-develop-no-base64-anyw.part",
+   "firstLine": 142,
+   "lines": 291
+  },
+  {
+   "file": "ai-tap-to-select-masks-panel-see-sam-rs.part",
+   "firstLine": 433,
+   "lines": 97
+  },
+  {
+   "file": "sam-2-1-phase-3-background-quality-upgra.part",
+   "firstLine": 530,
+   "lines": 48
+  },
+  {
+   "file": "named-subjects-remember-this-dog-see-sub.part",
+   "firstLine": 578,
+   "lines": 170
+  },
+  {
+   "file": "face-detection-ai-stack-phase-a-see-scrf.part",
+   "firstLine": 748,
+   "lines": 22
+  },
+  {
+   "file": "face-feature-auto-exclusion-skin-selecto.part",
+   "firstLine": 770,
+   "lines": 38
+  },
+  {
+   "file": "depth-estimation-roadmap-r7-see-depth-rs.part",
+   "firstLine": 808,
+   "lines": 52
+  },
+  {
+   "file": "hdr-merge-focus-stacking-roadmap-r12.part",
+   "firstLine": 860,
+   "lines": 1240
+  },
+  {
+   "file": "gain-map-hdr-export-iso-21496-1.part",
+   "firstLine": 2100,
+   "lines": 530
+  },
+  {
+   "file": "normal-photo-export.part",
+   "firstLine": 2630,
+   "lines": 107
+  },
+  {
+   "file": "streaming-save-for-large-video-exports-v.part",
+   "firstLine": 2737,
+   "lines": 107
+  },
+  {
+   "file": "google-oauth-for-the-desktop-shell-the-w.part",
+   "firstLine": 2844,
+   "lines": 1391
+  }
+ ]
+}

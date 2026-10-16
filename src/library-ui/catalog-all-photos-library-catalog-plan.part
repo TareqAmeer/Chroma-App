@@ -1,0 +1,19 @@
+  // ── Catalog: "All Photos" (library-catalog plan, phase 1) ────────────────────────────────
+  // Minimal wiring for now — a live count + a grid fed by catalog_query. No date browser,
+  // stacking, keywords or offline-thumbnail UI yet; those build on this once the backend
+  // supports them (see catalog.rs's own top-of-file scope comment).
+  let catalogCounts = { all: 0, blurry: 0 };
+  let _tagProgressAt = 0;
+  let catalogVolumes = [];
+
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  let dateCounts = { days: [], no_date: 0 };
+  // Own expansion Set, not state.expanded (that's keyed by folder path) — keyed by scope
+  // string ('2026', '2026:8') so it survives a renderCollections() re-render the same way the
+  // real folder tree's state.expanded does.
+  // Seeded OPEN at the root: this tree answers a year/month/day click with a single indexed
+  // catalog query — no directory walk, no per-file stat, no rescan — which is exactly what
+  // navigating a <root>/<year>/<month>/<day> archive wants. Collapsed by default it was easy to
+  // miss entirely below the filesystem folder tree, so the slow path got used for a job the fast
+  // one already did better. Still a plain toggle; closing it sticks for the session.
+  const dateExpanded = new Set(['__root__']);

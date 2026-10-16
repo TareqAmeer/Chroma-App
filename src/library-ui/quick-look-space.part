@@ -1,0 +1,416 @@
+  // ── Quick Look (Space) ──────────────────────────────────────────────────────────────────
+  // RAW review uses our native development pipeline and bounded fit-size proxies.
+  // Cold files show a loading state; camera JPEGs never substitute for review pixels.
+  const quicklook = { active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
+  function queueQuickLookNeighbors(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const nav = libraryNavigationOrder(), shown = nav.entries;
+    const index = nav.index.get(path) ?? -1;
+    if (index < 0) return;
+    const generation = quicklook.generation;
+    quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
+      .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    const pump = () => {
+      if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
+      const next = quicklook.prefetchQueue.shift();
+      quicklook.prefetchActive++;
+      quicklookPreview(next).catch(() => {}).finally(() => {
+        quicklook.prefetchActive--;
+        if (quicklook.active && quicklook.generation === generation) pump();
+        else if (quicklook.active) queueQuickLookNeighbors(quicklook.path);
+      });
+    };
+    pump();
+  }
+  function quicklookEl() {
+    let el = document.getElementById('lib-quicklook');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'lib-quicklook';
+    el.innerHTML = `<img id="lib-ql-img" alt="">
+      <div id="lib-ql-caption"></div>
+      <button id="lib-ql-peak" type="button" aria-pressed="false" title="Focus peaking (E) — red marks the sharpest edges">Focus peaking</button>`;
+    document.body.appendChild(el);
+    el.querySelector('#lib-ql-peak').onclick = (ev) => { ev.stopPropagation(); toggleQuickLookPeak(); };
+    el.querySelector('#lib-ql-img').addEventListener('load', () => qlPeakSync());
+    window.addEventListener('resize', () => { if (quicklook.active) qlPeakSync(); });
+    return el;
+  }
+  // CHR-172: focus peaking in the Quick Look loupe. Reuses the Editor's fxPeakRender (Sobel on a
+  // <=900px copy, strongest ~4% of edges in red) so both surfaces mark identical edges; the overlay
+  // is a separate canvas over the <img>, so toggling off removes it and leaves the photo untouched.
+  let qlPeakOn = false;
+  function qlPeakSync() {
+    const img = document.getElementById('lib-ql-img');
+    const btn = document.getElementById('lib-ql-peak');
+    if (btn) { btn.classList.toggle('on', qlPeakOn); btn.setAttribute('aria-pressed', String(qlPeakOn)); }
+    let o = document.getElementById('lib-ql-peakcv');
+    if (!qlPeakOn || !quicklook.active || !img || !img.complete || !img.naturalWidth || typeof window.fxPeakRender !== 'function') { if (o) o.remove(); return; }
+    if (!o) {
+      o = document.createElement('canvas');
+      o.id = 'lib-ql-peakcv';
+      o.style.cssText = 'position:fixed;pointer-events:none;z-index:4701;image-rendering:auto';
+      document.getElementById('lib-quicklook').appendChild(o);
+    }
+    window.fxPeakRender(img, img.naturalWidth, img.naturalHeight, o);
+    const r = img.getBoundingClientRect();
+    o.style.left = r.left + 'px'; o.style.top = r.top + 'px'; o.style.width = r.width + 'px'; o.style.height = r.height + 'px';
+  }
+  function toggleQuickLookPeak() {
+    qlPeakOn = !qlPeakOn;
+    qlPeakSync();
+    toast(qlPeakOn ? 'Focus peaking on — red marks the sharpest edges' : 'Focus peaking off');
+  }
+  async function showQuickLook(path, developed = false) {
+    if (!path) return;
+    const isRawPath = RAW_EXT_RE.test(path);
+    const wantDeveloped = isRawPath && (developed || quicklookAlwaysDeveloped());
+    const generation = ++quicklook.generation;
+    quicklook.prefetchQueue = [];
+    quicklook.active = true;
+    quicklook.path = path;
+    const el = quicklookEl();
+    el.classList.add('on');
+    const img = document.getElementById('lib-ql-img');
+    const caption = document.getElementById('lib-ql-caption');
+    caption.textContent = baseName(path) + (wantDeveloped ? ' — developing RAW…' : ' — loading…');
+    img.dataset.previewSource = '';
+    caption.title = '';
+    img.classList.remove('loaded');
+    try {
+      const buf = await quicklookPreview(path, developed);
+      const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
+      if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
+      if (quicklook.url) URL.revokeObjectURL(quicklook.url);
+      quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      img.src = quicklook.url;
+      img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      img.classList.add('loaded');
+      const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
+      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
+      caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
+      queueQuickLookNeighbors(path);
+    } catch (e) {
+      if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
+    }
+  }
+  function hideQuickLook() {
+    quicklook.generation++;
+    quicklook.prefetchQueue = [];
+    quicklook.active = false;
+    quicklook.path = '';
+    const el = document.getElementById('lib-quicklook');
+    if (el) el.classList.remove('on');
+    if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }
+  }
+
+  function isNativeActivationTarget(target) {
+    const el = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    return !!(el && el.closest && el.closest(
+      'button,a[href],input,textarea,select,summary,label,[contenteditable="true"],[role="button"],[role="link"],[role="checkbox"],[role="radio"],[role="switch"],[role="tab"],[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'
+    ));
+  }
+  // Pointer hover over a grid card, for Space (Quick Look). Tracked at document level so every
+  // grid (local, filmstrip, cloud) is covered without per-grid wiring. Cleared when the pointer
+  // leaves a card for non-card space.
+  state._hoverPath = null;
+  document.addEventListener('mouseover', (e) => {
+    const card = e.target && e.target.closest ? e.target.closest('.lib-card[data-path]') : null;
+    state._hoverPath = card ? card.dataset.path : null;
+  }, true);
+  document.addEventListener('mouseout', (e) => {
+    const next = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('.lib-card[data-path]') : null;
+    if (!next) state._hoverPath = null;
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (!state.open) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('input,textarea,[contenteditable]')) return;
+    // Native controls own Enter/Space activation. In particular, don't let the Library's
+    // image-open / Quick Look bindings consume activation of the persistent Studio Jobs button.
+    if ((e.key === 'Enter' || e.key === ' ') && isNativeActivationTarget(t)) return;
+    // HANDOVER §3.5: the sort menu, gear menu and filters panel each closed on outside click
+    // but ignored Escape entirely. Close whichever transient layer is open and stop — placed
+    // BEFORE the full-window-exit Escape below (:5719ish) so Escape dismisses the topmost menu
+    // first rather than closing the whole Library out from under it.
+    if (e.key === 'Escape') {
+      const sortMenuEl = document.getElementById('lib-sort-menu');
+      const gearMenuEl = document.getElementById('lib-view-menu');
+      const filtersPanelEl = document.getElementById('lib-filters-panel');
+      const filterRowEl = document.getElementById('lib-filter-row');
+      // The gear now opens the Studio's shared #fx-settings-menu (class "on"), not #lib-view-menu. The
+      // Studio's own Escape handler (chromasmith-22.html) runs first and closes it with preventDefault, so
+      // by the time we get here the menu already looks closed — bail on defaultPrevented, otherwise the
+      // same keypress also exits the full-window Library behind it.
+      // The Editor's global Escape listener marks this key as handled even when its own menus
+      // are closed. Compare/Survey are Library-owned top-level views, so let their dedicated
+      // Escape branches run after checking the Library's transient menus below.
+      if (e.defaultPrevented && !(compareState.active && (state.viewMode === 'compare' || state.viewMode === 'survey'))) return;
+      const settingsMenuEl = document.getElementById('fx-settings-menu');
+      if (settingsMenuEl && settingsMenuEl.classList.contains('on')) { if (window.settingsClose) window.settingsClose(); e.preventDefault(); return; }
+      if (sortMenuEl && sortMenuEl.classList.contains('open')) { sortMenuEl.classList.remove('open'); e.preventDefault(); return; }
+      if (gearMenuEl && gearMenuEl.classList.contains('open')) { gearMenuEl.classList.remove('open'); e.preventDefault(); return; }
+      if (filtersPanelEl && filtersPanelEl.classList.contains('open')) {
+        filtersPanelEl.classList.remove('open');
+        e.preventDefault();
+        return;
+      }
+      // #5: the chip row is now what the Filters button itself opens/closes — same Escape
+      // contract every other transient layer in this list gets.
+      if (filterRowEl && filterRowEl.classList.contains('open')) {
+        filterRowEl.classList.remove('open');
+        const filtersBtnEl = document.getElementById('lib-filters-btn');
+        if (filtersBtnEl) filtersBtnEl.classList.remove('active');
+        e.preventDefault();
+        return;
+      }
+    }
+    // Own early-return branch, same pattern as the Compare-mode branch below — Quick Look's
+    // arrows/space/escape/enter/rating-flag keys must never also fall through to the grid's
+    // OWN cursor-movement handling further down.
+    if (quicklook.active) {
+      const navQl = libraryNavigationOrder(), shownQl = navQl.entries;
+      const idxQl = navQl.index.get(quicklook.path) ?? -1;
+      const gotoQl = (delta) => {
+        if (!shownQl.length) return;
+        const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
+        showQuickLook(shownQl[next].path);
+      };
+      if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); gotoQl(-1); return; }
+      if (e.key === 'Enter') { e.preventDefault(); const p = quicklook.path; hideQuickLook(); openInEditor(p); return; }
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault(); setRating(quicklook.path, parseInt(e.key, 10)); toast(`Rated ${e.key} star${e.key === '1' ? '' : 's'}`); return;
+      }
+      if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); toggleQuickLookPeak(); return; }
+      if ((e.key === 'd' || e.key === 'D') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (RAW_EXT_RE.test(quicklook.path)) showQuickLook(quicklook.path, true);
+        return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(quicklook.path, 'Red'); toast('Rejected'); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(quicklook.path, 'Green'); toast('Picked'); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(quicklook.path, ''); toast('Flag cleared'); return; }
+      return;
+    }
+    // Space opens Quick Look: the photo under the pointer first, then the selected photo, then
+    // the keyboard cursor / open photo as a last resort.
+    if (e.key === ' ' && state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey') {
+      const target = state._hoverPath || (state.selected.size === 1 ? [...state.selected][0] : '') || state._kbCursor || state.openedPath || '';
+      if (target) { e.preventDefault(); showQuickLook(target); return; }
+    }
+    // ⌘A/Ctrl+A select-all, ahead of the generic modifier-key bailout below (every other
+    // shortcut here is unmodified).
+    if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey) && !e.altKey && state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey') {
+      e.preventDefault();
+      selectAllCatalogEntries();
+      return;
+    }
+    // Culling labels use the same undo history as grid actions. Keep undo reachable while the
+    // survey owns arrow/key focus instead of silently disabling the ticket's undo contract.
+    if (state.source !== 'lr' && state.viewMode === 'survey' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault(); libUndoLast(); return;
+    }
+    // Copy/Paste/Reset/Undo/Export/Duplicate — keyboard shortcuts backing the context menu's
+    // grouped "Versions & edit"/"File" items (wireframe review item 27), borrowing Lightroom
+    // Classic's own bindings (⌘⇧C/⌘⇧V/⌘⇧R/⌘E) where one exists, plus ⌘Z for the one undo concept
+    // the Library grid has today and ⌘D matching Finder's Duplicate. Same guard as ⌘A above —
+    // meaningless in the LR cloud view or mid-compare — and every target comes from
+    // cmKbTargets() (selection → keyboard cursor → the open photo), the same resolution the
+    // context menu uses when it opens from a right-click instead of a key.
+    if (state.source !== 'lr' && state.viewMode !== 'compare' && state.viewMode !== 'survey' && (e.metaKey || e.ctrlKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'c' && e.shiftKey) { e.preventDefault(); libCopyEdit(cmKbTargets()); return; }
+      if (k === 'v' && e.shiftKey) { e.preventDefault(); libPasteEdit(cmKbTargets()); return; }
+      if (k === 'r' && e.shiftKey) { e.preventDefault(); libResetEdit(cmKbTargets()); return; }
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); libUndoLast(); return; }
+      if (k === 'e' && !e.shiftKey) { e.preventDefault(); libExportPaths(cmKbTargets()); return; }
+      if (k === 'd' && !e.shiftKey) { e.preventDefault(); libDuplicatePaths(cmKbTargets()); return; }
+    }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // Cloud album view: state.entries still holds the previous FOLDER's files — arrows/Enter/
+    // X/P/U would act on invisible photos (Enter even opened one; X/P wrote its sidecar).
+    // Only the view toggles stay live.
+    if (state.source === 'lr') {
+      if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
+    if (e.key === 'g' || e.key === 'G') toggleExpandedView();
+      else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
+      return;
+    }
+    // ── Survey mode: focus stays on one visible cell, so culling and rating always target it.
+    if (state.viewMode === 'survey' && compareState.active) {
+      if (surveyState.cullGroupPicker) {
+        if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); }
+        return;
+      }
+      if (e.key === 'ArrowRight') { e.preventDefault(); surveyFocus(1); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); surveyFocus(-1); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); surveyFocusVertical(1); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); surveyFocusVertical(-1); return; }
+      if (e.key === 'Tab') { e.preventDefault(); surveyFocus(e.shiftKey ? -1 : 1); return; }
+      if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      if (compareState.mode === 'cull' && e.key === 'Enter') { e.preventDefault(); cullAdvance('Green'); return; }
+      if (compareState.mode === 'cull' && e.shiftKey && (e.key === 'P' || e.key === 'p')) { e.preventDefault(); cullAdvance('Green'); return; }
+      if (compareState.mode === 'cull' && e.shiftKey && (e.key === 'X' || e.key === 'x')) { e.preventDefault(); cullAdvance('Red'); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); surveyRemove(); return; }
+      const cell = surveyState.cells[surveyState.focus];
+      if (!cell) return;
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault(); setRating(cell.path, parseInt(e.key, 10)).then(() => surveySyncPath(cell.path)); return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); setLabel(cell.path, 'Red').then(() => surveySyncPath(cell.path)); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setLabel(cell.path, 'Green').then(() => surveySyncPath(cell.path)); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); setLabel(cell.path, '').then(() => surveySyncPath(cell.path)); return; }
+      return;
+    }
+    // ── Compare mode: ←/→ cycle pane B, ⏎ promotes B to A, Esc exits back to the previous
+    // view mode. Own branch so the grid-culling arrows/Enter below don't also fire.
+    if (state.viewMode === 'compare' && compareState.active) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); compareCycleB(-1); return; }
+      if (e.key === 'ArrowRight') { e.preventDefault(); compareCycleB(1); return; }
+      if (e.key === 'Enter') { e.preventDefault(); comparePromoteB(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); exitCompareMode(); return; }
+      // ROADMAP 14 — grid parity. Culling is the whole point of Compare, and until now the one
+      // thing you could not do here was the culling verb itself: X/P/U and the colour labels were
+      // grid-only, so judging two frames side by side meant leaving Compare to act on the answer.
+      // Same setLabel() the grid calls, so there is no second write path to keep in sync.
+      const targetPane = compareState.focus;
+      const target = comparePathForIdx(compareState[targetPane === 'A' ? 'paneA' : 'paneB'].idx);
+      if (!target || !comparePaneReady(targetPane)) return;
+      // Ratings work here exactly as they do in the grid — that parity IS ROADMAP Library 14,
+      // and compare is where a rating is most useful, since it is the mode built for choosing
+      // between two frames.
+      if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const n = parseInt(e.key, 10);
+        e.preventDefault(); if (target) setRating(target, n); return;
+      }
+      if (e.key === 'x' || e.key === 'X') { e.preventDefault(); compareApplyLabel(target, 'Red'); return; }
+      if (e.key === 'p' || e.key === 'P') { e.preventDefault(); compareApplyLabel(target, 'Green'); return; }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); compareApplyLabel(target, ''); return; }
+      // Tab swaps which pane the above applies to — without it, B's rating is reachable and A's
+      // is not, which is exactly the asymmetry this item was filed about.
+      if (e.key === 'Tab') { e.preventDefault(); compareState.focus = compareState.focus === 'A' ? 'B' : 'A'; compareSyncFocus(); return; }
+      return;
+    }
+    if ((e.key === 'c' || e.key === 'C') && (state.selected.size >= 1 || state.openedPath)) { enterCompareMode(); return; }
+    if ((e.key === 'n' || e.key === 'N') && state.selected.size >= 2) { enterSurveyMode(); return; }
+    // ── Grid keyboard culling (Lightroom idiom): arrows move a highlight through the CURRENT
+    // sorted/filtered order, Enter opens it, X rejects / P picks / U clears the flag on it (or
+    // on the multi-selection when one exists). The highlight rides on state.openedPath when a
+    // photo is open, else an internal cursor.
+    const nav = libraryNavigationOrder(), sorted = nav.entries;
+    const curIdx = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
+    // moveTo(next, extend): jump the cursor to an absolute index. extend=true (shift held)
+    // range-selects from the last non-shift anchor to the new cursor, mirroring the mouse's
+    // shift-click range select (handleCardClick above) instead of collapsing to a single card.
+    const moveTo = (next, extend) => {
+      if (!sorted.length) return;
+      next = Math.max(0, Math.min(sorted.length - 1, next));
+      state._kbCursor = sorted[next].path;
+      scrollLibraryToPath(state._kbCursor);
+      if (extend) {
+        if (selectAnchor < 0) selectAnchor = curIdx >= 0 ? curIdx : next;
+        const [lo, hi] = [selectAnchor, next].sort((a, b) => a - b);
+        state.selected.clear();
+        for (let i = lo; i <= hi; i++) state.selected.add(sorted[i].path);
+      } else {
+        selectAnchor = next;
+        state.selected.clear(); state.selected.add(state._kbCursor);
+      }
+      updateCardSelClasses();
+      e.preventDefault();
+      // CHR-119: in the docked Editor filmstrip an arrow key opens the neighbour, not just selects it.
+      if (!extend && document.body.classList.contains('deskx') && overlay && !overlay.classList.contains('full')) {
+        openInEditor(state._kbCursor);
+      }
+    };
+    const move =(delta, extend) => moveTo((curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx) + delta, extend);
+    const kbTargets = () => (state.selected.size ? [...state.selected] : (state._kbCursor ? [state._kbCursor] : (state.openedPath ? [state.openedPath] : [])));
+    if (e.key === 'ArrowLeft') { move(-1, e.shiftKey); return; }
+    if (e.key === 'ArrowRight') { move(1, e.shiftKey); return; }
+    if (e.key === 'ArrowUp') { move(-gridCols(), e.shiftKey); return; }
+    if (e.key === 'ArrowDown') { move(gridCols(), e.shiftKey); return; }
+    if (e.key === 'Home') { moveTo(0, e.shiftKey); return; }
+    if (e.key === 'End') { moveTo(sorted.length - 1, e.shiftKey); return; }
+    if (e.key === 'Enter' && (state._kbCursor || state.selected.size === 1)) {
+      e.preventDefault(); openInEditor(state._kbCursor || [...state.selected][0]); return;
+    }
+    // 0-5 set a rating on the same targets X/P/U flag — ROADMAP Library 2, which had been
+    // recorded as shipped but never was.
+    if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const n = parseInt(e.key, 10);
+      e.preventDefault(); kbTargets().forEach((p) => setRating(p, n)); return;
+    }
+    if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
+    if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
+    // Clear flag — the context menu's "Rate & flag ▸" submenu has always documented U for this
+    // (the comment right above this block already says "X/P/U"), and Quick Look/Compare both
+    // bind it, but the main grid never did. Added alongside the U-labeled menu item above rather
+    // than leaving the menu's own shortcut hint pointing at a key that did nothing.
+    if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
+    if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
+    if (e.key === 'g' || e.key === 'G') toggleExpandedView();
+    else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
+    // Move to Trash — backs the "File ▸" context menu's Delete row. Bare Delete/Backspace,
+    // same convention Photos.app and Finder use; the confirm dialog inside libDeletePaths is
+    // what keeps a stray keypress from being destructive.
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); libDeletePaths(kbTargets()); return; }
+  });
+  // Shared by the Filters panel's "Clear all" button AND the empty-grid "Clear filters" link
+  // (renderGrid's no-matches state) — one place so the two can't drift on what "clear" means.
+  // Also resets the search box: a search term hiding every photo is as much a "filter" to a
+  // user staring at an empty grid as the dropdowns are.
+  function clearAllLibFilters() {
+    FILTER_SELECT_IDS.forEach((id) => { const sel = document.getElementById(id); if (sel) sel.value = 'all'; });
+    state.typeFilter = 'all'; state.cameraFilter = 'all'; state.lensFilter = 'all'; state.isoFilter = 'all';
+    state.dupeFilter = 'all'; state.syncedFilter = 'all'; state.tagFilter = 'all'; state.facesFilter = 'all';
+    state.ratingFilter = 'all'; // HANDOVER §3.9: the <select> was reset but this field wasn't
+    state.colorLabelFilter = 'all';
+    const searchEl = document.getElementById('lib-search');
+    if (searchEl) searchEl.value = '';
+    state.search = '';
+    // #5: keep the chip row's own selection in sync — it drives the same state fields but has
+    // no <select> for FILTER_SELECT_IDS to reset.
+    const fr = document.getElementById('lib-filter-row');
+    if (fr) {
+      fr.querySelectorAll('.lib-chip.lib-sel').forEach((c) => c.classList.remove('lib-sel'));
+      const allTypeChip = fr.querySelector('.lib-chip[data-fgrp="type"][data-fval="all"]');
+      if (allTypeChip) allTypeChip.classList.add('lib-sel');
+    }
+    applyCatalogFilterChange();
+  }
+  function syncFilterChips() {
+    const fr = document.getElementById('lib-filter-row');
+    if (!fr) return;
+    const types = state.typeFilter === 'all' ? ['all'] : state.typeFilter.split(',');
+    fr.querySelectorAll('.lib-chip[data-fgrp="type"]').forEach((c) => c.classList.toggle('lib-sel', types.includes(c.dataset.fval)));
+    fr.querySelectorAll('.lib-chip[data-fgrp="flag"]').forEach((c) => c.classList.toggle('lib-sel', c.dataset.fval === state.tagFilter));
+    // A selected type hidden behind "…" keeps the extra types expanded so the selection is visible.
+    if (types.some((t) => fr.querySelector(`.lib-more-type[data-fval="${t}"]`))) fr.classList.add('types-expanded');
+  }
+  overlay.querySelector('#lib-type-filter').onchange = (e) => { state.typeFilter = e.target.value; syncFilterChips(); syncFilterUI(); applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-camera-filter').onchange = (e) => { state.cameraFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-lens-filter').onchange = (e) => { state.lensFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-iso-filter').onchange = (e) => { state.isoFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-dupe-filter').onchange = (e) => { state.dupeFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-synced-filter').onchange = (e) => { state.syncedFilter = e.target.value; renderGrid(); };
+  overlay.querySelector('#lib-faces-filter').onchange = (e) => { state.facesFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-tag-filter').onchange = (e) => { state.tagFilter = e.target.value; applyCatalogFilterChange(); };
+  overlay.querySelector('#lib-color-label-filter').onchange = (e) => { state.colorLabelFilter = e.target.value; applyCatalogFilterChange(); };
+  if (!STARS_ENABLED) {
+    // Sort option and list column are the two surfaces that are pure markup rather than a
+    // starsHtml() call, so they need removing explicitly or the grid offers a sort by a value
+    // nothing displays.
+    const so = overlay.querySelector('#lib-sort option[value="rating"]');
+    if (so) so.remove();
+    if (state.sortBy === 'rating') { state.sortBy = 'date'; try { localStorage.setItem('chromasmith_lib_sort', 'date'); } catch {} }
+  }
+  const _rf = overlay.querySelector('#lib-rating-filter');
+  if (_rf) {
+    _rf.onchange = (e) => { state.ratingFilter = e.target.value; renderGrid(); };
+    // Hide the control AND its label row, not just the <select> — a stray "Rating" label above an
+    // invisible dropdown is worse than either.
+    if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
+    else { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = ''; }
+  }

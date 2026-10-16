@@ -1,0 +1,158 @@
+  // ── C2: duplicate detection (perceptual-hash clustering) ─────────────────────────────
+  // 64-bit dHashes come back as 16-char hex strings (see phash_batch's Rust doc comment — a
+  // raw u64 JSON number can exceed JS's 2^53 safe-integer range and silently corrupt Hamming
+  // distance). Compared as BigInt.
+  function hammingHex(a, b) {
+    let x = BigInt('0x' + a) ^ BigInt('0x' + b);
+    let n = 0n;
+    while (x) { n += x & 1n; x >>= 1n; }
+    return Number(n);
+  }
+  /// Population count of a 32-bit int — the standard SWAR bit-twiddle, no allocation, no loop.
+  function popcount32(v) {
+    v = v - ((v >>> 1) & 0x55555555);
+    v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
+    return (((v + (v >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+  }
+  const DUPE_HAMMING_THRESHOLD = 6;
+  // Union-find over the folder's hashes.
+  //
+  // ⚠️ The union-find is not the expensive part — the PAIRWISE HAMMING is, and it is O(n^2).
+  // Measured: opening a synthetic 5,000-file folder took 41.9s, effectively all of it here,
+  // because the original inner comparison called hammingHex, which allocated TWO BigInts from
+  // hex strings per pair and then counted bits one at a time in a `while (x)` loop — about 64
+  // BigInt operations and 2 allocations, 12.5 million times.
+  //
+  // The fix is entirely constant-factor: parse each 64-bit hash ONCE into a hi/lo pair of plain
+  // 32-bit ints, then compare with two XORs and two SWAR popcounts. Same clusters out, no
+  // allocation in the loop. hammingHex is kept because the hex form is what phash_batch returns
+  // and it remains the readable reference for what this is computing.
+  // ⚠️ EXACT, not approximate — banded/pigeonhole, not LSH-with-misses. Splitting the 64-bit
+  // hash into BANDS=8 non-overlapping 8-bit segments guarantees (pigeonhole principle: BANDS >
+  // DUPE_HAMMING_THRESHOLD=6) that any TRUE pair — Hamming distance <= threshold — must have AT
+  // LEAST ONE band with zero differing bits, i.e. an identical band value. So comparing only
+  // pairs that share a band value in common can never miss a real duplicate; it only skips pairs
+  // that share NO band, which are provably >6 bits apart and would have failed the exact check
+  // anyway. This was the plain O(n^2) nested loop over every pair — the same shape of bug this
+  // session already fixed once in Rust (registry_set_cmd) — measured at ~1.7s for a real ~30k-
+  // photo library's worth of pairs (444M comparisons). Banding turns the common case back toward
+  // O(n): for uniformly-distributed hashes each band bucket holds roughly n/256 items, so the
+  // total candidate-pair count collapses from n²/2 to roughly n²/256 per band. A `checked` Set
+  // dedupes a pair that happens to share more than one band, so it's never verified twice.
+  function clusterByHash(pairs) {
+    const parent = new Map();
+    const find = (p) => { while (parent.get(p) !== p) { parent.set(p, parent.get(parent.get(p))); p = parent.get(p); } return p; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+    pairs.forEach(([p]) => parent.set(p, p));
+    const n = pairs.length;
+    const hi = new Int32Array(n), lo = new Int32Array(n);
+    const hex = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const h = (pairs[i][1] || '').padStart(16, '0');
+      hex[i] = h;
+      hi[i] = parseInt(h.slice(0, 8), 16) | 0;
+      lo[i] = parseInt(h.slice(8, 16), 16) | 0;
+    }
+    const BANDS = 8; // 8 bands * 8 bits = 64 bits; BANDS(8) > DUPE_HAMMING_THRESHOLD(6) is the pigeonhole requirement
+    const buckets = []; // one Map<bandValue, index[]> per band
+    for (let b = 0; b < BANDS; b++) buckets.push(new Map());
+    for (let i = 0; i < n; i++) {
+      for (let b = 0; b < BANDS; b++) {
+        const key = hex[i].slice(b * 2, b * 2 + 2);
+        let arr = buckets[b].get(key);
+        if (!arr) { arr = []; buckets[b].set(key, arr); }
+        arr.push(i);
+      }
+    }
+    // ⚠️ Deliberately NO dedup Set for a pair verified via more than one shared band. A first
+    // version used a Set keyed on the string `i+','+j` — on a library with a large cluster of
+    // near-identical photos (a burst sequence, brackets, timelapse frames — exactly the material
+    // real libraries accumulate), those hashes tend to share MANY of the 8 bands at once, so the
+    // SAME large candidate set got re-verified repeatedly, and EVERY check allocated a new heap
+    // string as a Set key. Measured live on a real 57k-photo library via a stack sample of the
+    // WebContent process: 71% of all samples were inside JavaScriptCore's `operationSetGet` doing
+    // STRING equality comparisons — millions of ad-hoc string allocations froze the whole JS
+    // thread (buttons unresponsive) for minutes. `union(a,b)` is already idempotent, so verifying
+    // the same pair twice just costs a little redundant `popcount32` arithmetic on typed-array
+    // values — cheap, no allocation — nowhere near the cost of the string Set it replaces.
+    //
+    // ⚠️ That reasoning held for SCATTERED near-duplicates but not for one huge tightly-packed
+    // cluster: measured on a synthetic 3,000-photo cluster of fully-identical hashes (worst
+    // case — every pair shares all 8 bands), dropping the dedup Set alone still took ~5.1s,
+    // because every one of the 8 bands independently re-verified and re-unioned the SAME
+    // ~4.5M pairs.
+    //
+    // Two layers fix this, and BOTH matter — a per-pair `find()` check alone (tried first, still
+    // measured ~6.4s) doesn't help, because the x/y double loop over a huge bucket is O(k^2) in
+    // ITERATION COUNT regardless of how cheap each iteration's body is; 31.5M redundant loop
+    // iterations across 7 bands still costs real time even doing nothing per iteration.
+    //   1. Per-BUCKET short-circuit: before even entering the double loop, an O(k) pass checks
+    //      whether every item in this bucket already shares one root (fully connected by an
+    //      earlier band) — if so, skip the whole O(k^2) re-verification for this band. Once a
+    //      cluster is fully unioned (which happens on the FIRST band that processes it), every
+    //      later band's copy of the same bucket collapses to a cheap O(k) walk instead of O(k^2).
+    //   2. Per-PAIR `find()` check (kept from the first attempt): still worth having for the
+    //      partially-connected case a bucket short-circuit alone can't catch — e.g. two SEPARATE
+    //      sub-clusters that only merge into one root partway through a band's own loop.
+    // No extra memory, no string keys — both layers just reuse state this algorithm already
+    // maintains (the union-find structure itself).
+    for (let b = 0; b < BANDS; b++) {
+      for (const arr of buckets[b].values()) {
+        if (arr.length < 2) continue;
+        const root0 = find(pairs[arr[0]][0]);
+        let allSame = true;
+        for (let k = 1; k < arr.length; k++) {
+          if (find(pairs[arr[k]][0]) !== root0) { allSame = false; break; }
+        }
+        if (allSame) continue; // whole bucket already one cluster — nothing new to learn here
+        for (let x = 0; x < arr.length; x++) {
+          const i = arr[x], ai = hi[i], bi = lo[i], pi = pairs[i][0];
+          for (let y = x + 1; y < arr.length; y++) {
+            const j = arr[y];
+            const pj = pairs[j][0];
+            if (find(pi) === find(pj)) continue; // already known to cluster together
+            if (popcount32(ai ^ hi[j]) + popcount32(bi ^ lo[j]) <= DUPE_HAMMING_THRESHOLD) union(pi, pj);
+          }
+        }
+      }
+    }
+    const groups = new Map(); // root -> [paths]
+    pairs.forEach(([p]) => {
+      const r = find(p);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(p);
+    });
+    return groups;
+  }
+  let _dupeToken = 0;
+  // Runs in the background after openFolder's meta pass, behind the same staleness guard
+  // (_openToken/currentFolder/source) so switching folders fast never lets a stale batch
+  // overwrite the new folder's clusters.
+  async function runDupeDetection(paths, openToken) {
+    const myToken = ++_dupeToken;
+    if (!paths.length) { state.dupeClusters.clear(); state.dupeClusterSizes.clear(); return; }
+    let pairs;
+    try { pairs = await invoke('phash_batch', { paths }); } catch (e) { console.error('phash_batch', e); return; }
+    if (myToken !== _dupeToken || state._openToken !== openToken || state.source !== 'folder') return; // user moved on
+    const groups = clusterByHash(pairs);
+    state.dupeClusters.clear(); state.dupeClusterSizes.clear();
+    let clusterId = 0;
+    groups.forEach((members) => {
+      if (members.length < 2) return;
+      clusterId++;
+      state.dupeClusterSizes.set(clusterId, members.length);
+      members.forEach((p) => state.dupeClusters.set(p, clusterId));
+    });
+    // Cross-folder registry mirrors the current view — a passive record only, never destructive.
+    // ⚠️ ONE batched call, not one invoke() per photo. The per-path version (Promise.all over
+    // registry_set_cmd) measured at 29,663 IPC calls / ~47GB of registry re-reads / ~0.9 BILLION
+    // string comparisons on a real ~30k-photo folder — registry_set_cmd's own registry_read does
+    // a full parse of the whole list and a linear scan on EVERY call. registry_set_many does one
+    // read, one HashSet, one write for the whole batch.
+    const present = [], absent = [];
+    for (const p of paths) (state.dupeClusters.has(p) ? present : absent).push(p);
+    invoke('registry_set_many', { name: 'duplicates', present, absent })
+      .catch(() => {})
+      .then(() => renderCollectionCounts());
+    renderGrid();
+  }

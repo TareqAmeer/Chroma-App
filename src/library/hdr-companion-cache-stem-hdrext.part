@@ -1,0 +1,421 @@
+// ── HDR companion cache (`<stem>.hdrext`) ────────────────────────────────────────────────────
+// A RAW WITH real highlight headroom (some scene-linear value > 1.05) cannot use the plain frame
+// cache under HDR preview, because the unquantized companion lived only in the decode response.
+// The companion equals rgba8/255 wherever the value is <= 1.0 (the u8 body is round(clamp(v)*255)),
+// so only the EXCESS over white is persisted, and only for pixels whose excess is visible:
+// a channel above HDR_EXT_STORE_MIN (1.005 — 0.5% over white, ~1.3/255; measured on real RAWs this
+// is ~1.4M of 24M pixels where "above 1.0" was 18M and a 184MB file). Excess is a u8 per channel
+// scaled by the file's max excess (step <= 0.0002 for the real <=1.09 headroom seen). JS rebuilds
+// the dense buffer from the cached RGBA8 frame + this overlay (no second RAM copy in native).
+// Layout (LE): "CHX2" | stem u64 | w u32 | h u32 | count u32 | scale f32 | idx u32*count | u8*3*count.
+const HDR_EXT_MAGIC: &[u8; 4] = b"CHX2";
+const HDR_EXT_HEADER: usize = 28;
+const HDR_EXT_STORE_MIN: f32 = 1.005;
+
+fn hdr_ext_stem(path: &str, recipe_key: &str) -> Result<(PathBuf, u64), String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let stem = fnv1a(&[path, &mtime.to_string(), &meta.len().to_string(), recipe_key, DECODE_RENDER_VER, "hdrext"]);
+    Ok((decode_cache_dir().join(format!("{}.hdrext", png_key.trim_end_matches(".png"))), stem))
+}
+
+/// Sparse blob for `ext` (w*h*3 f32) or None when no value exceeds the 1.05 headroom threshold.
+pub(crate) fn build_hdr_ext_blob(path: &str, recipe_key: &str, w: u32, h: u32, ext: &[f32]) -> Option<Vec<u8>> {
+    if ext.len() != (w as usize) * (h as usize) * 3 { return None; }
+    if !ext.iter().any(|v| *v > 1.05) { return None; }
+    let (_, stem) = hdr_ext_stem(path, recipe_key).ok()?;
+    let max_excess = ext.iter().fold(0f32, |m, v| m.max(*v - 1.0)).max(0.01);
+    let mut idx: Vec<u32> = Vec::new();
+    let mut vals: Vec<u8> = Vec::new();
+    for (i, px) in ext.chunks_exact(3).enumerate() {
+        if px[0] > HDR_EXT_STORE_MIN || px[1] > HDR_EXT_STORE_MIN || px[2] > HDR_EXT_STORE_MIN {
+            idx.push(i as u32);
+            for v in px {
+                // 0 = "no excess, use the frame"; a stored 1 is the smallest real excess.
+                let e = ((*v - 1.0).max(0.0) / max_excess * 255.0).round() as u32;
+                vals.push(if *v > 1.0 { e.clamp(1, 255) as u8 } else { 0 });
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(HDR_EXT_HEADER + idx.len() * 4 + vals.len());
+    out.extend_from_slice(HDR_EXT_MAGIC);
+    out.extend_from_slice(&stem.to_le_bytes());
+    out.extend_from_slice(&w.to_le_bytes());
+    out.extend_from_slice(&h.to_le_bytes());
+    out.extend_from_slice(&(idx.len() as u32).to_le_bytes());
+    out.extend_from_slice(&max_excess.to_le_bytes());
+    for i in &idx { out.extend_from_slice(&i.to_le_bytes()); }
+    out.extend_from_slice(&vals);
+    Some(out)
+}
+
+/// Persists the companion (atomic rename) and retires a contradicting `.hdrclear` marker.
+pub(crate) fn write_hdr_ext_blob(path: &str, recipe_key: &str, blob: &[u8]) {
+    let Ok((p, _)) = hdr_ext_stem(path, recipe_key) else { return };
+    let tmp = p.with_extension(format!("hdrext.tmp.{}", std::process::id()));
+    if std::fs::write(&tmp, blob).is_err() { return; }
+    if std::fs::rename(&tmp, &p).is_err() { let _ = std::fs::remove_file(&tmp); return; }
+    if let Ok(m) = hdr_clear_marker_path(path, recipe_key) { let _ = std::fs::remove_file(m); }
+}
+
+/// Validates a blob against the expected stem and frame size; returns the pixel count on success.
+fn validate_hdr_ext_blob(blob: &[u8], stem: u64, w: u32, h: u32) -> Result<usize, String> {
+    if blob.len() < HDR_EXT_HEADER || &blob[0..4] != HDR_EXT_MAGIC { return Err("bad hdr companion".into()); }
+    let rd = |o: usize| u32::from_le_bytes(blob[o..o + 4].try_into().unwrap());
+    if u64::from_le_bytes(blob[4..12].try_into().unwrap()) != stem { return Err("hdr companion key mismatch".into()); }
+    if rd(12) != w || rd(16) != h { return Err("hdr companion size mismatch".into()); }
+    let count = rd(20) as usize;
+    if blob.len() != HDR_EXT_HEADER + count * 7 { return Err("hdr companion truncated".into()); }
+    let scale = f32::from_le_bytes(blob[24..28].try_into().unwrap());
+    if !(scale.is_finite() && scale > 0.0 && scale < 64.0) { return Err("hdr companion scale invalid".into()); }
+    let total = (w as usize) * (h as usize);
+    for i in 0..count { if rd(HDR_EXT_HEADER + 4 * i) as usize >= total { return Err("hdr companion index out of range".into()); } }
+    Ok(count)
+}
+
+fn qoi_dims(file: &Path) -> Option<(u32, u32)> {
+    use std::io::Read;
+    let mut hdr = [0u8; 14];
+    std::fs::File::open(file).ok()?.read_exact(&mut hdr).ok()?;
+    if &hdr[0..4] != b"qoif" { return None; }
+    Some((u32::from_be_bytes(hdr[4..8].try_into().unwrap()), u32::from_be_bytes(hdr[8..12].try_into().unwrap())))
+}
+
+/// The validated sparse HDR companion for this photo+recipe, or Err (no cache / stale / mismatched
+/// — callers treat Err as "decode it"). Validation pins the blob to this file's path+mtime+size+
+/// recipe AND to the dimensions of the QOI frame it overlays.
+#[tauri::command(async)]
+pub fn get_hdr_companion(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
+    let (p, stem) = hdr_ext_stem(&path, &recipe_key)?;
+    let frame = decode_cache_file(&path, &recipe_key)?.ok_or("no cached decode")?;
+    let (w, h) = qoi_dims(&frame).ok_or("frame is not QOI")?;
+    let blob = std::fs::read(&p).map_err(|_| "no hdr companion".to_string())?;
+    validate_hdr_ext_blob(&blob, stem, w, h)?;
+    Ok(tauri::ipc::Response::new(blob))
+}
+
+/// True when a headroom-free marker AND the full-resolution cache both exist for this recipe.
+#[tauri::command(async)]
+pub fn hdr_headroom_clear(path: String, recipe_key: String) -> Result<bool, String> {
+    let marker = hdr_clear_marker_path(&path, &recipe_key)?;
+    Ok(marker.is_file() && decode_cache_exists(&path, &recipe_key)?)
+}
+
+/// Decodes the full-resolution cache (either format) to RGBA8.
+pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<image::RgbaImage, String> {
+    let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
+    let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
+    let fmt = if file.extension().and_then(|e| e.to_str()) == Some("qoi") { image::ImageFormat::Qoi } else { image::ImageFormat::Png };
+    Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.to_rgba8())
+}
+
+/// Encodes and writes the full-resolution cache (QOI). Written to a temp name and renamed so a
+/// reader never sees a half-written frame.
+pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
+    use image::ImageEncoder;
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let mut out = Vec::with_capacity(rgba.len() / 2);
+    image::codecs::qoi::QoiEncoder::new(&mut out)
+        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("encode decode cache: {e}"))?;
+    let dir = decode_cache_dir();
+    let name = decode_cache_qoi_name(&png_key);
+    let tmp = dir.join(format!("{name}.tmp.{}", std::process::id()));
+    std::fs::write(&tmp, &out).map_err(|e| format!("write decode cache: {e}"))?;
+    std::fs::rename(&tmp, dir.join(&name)).map_err(|e| format!("write decode cache: {e}"))?;
+    // The legacy PNG under the same stem is now dead weight.
+    let _ = std::fs::remove_file(dir.join(&png_key));
+    request_decode_cache_prune();
+    Ok(())
+}
+
+/// Writes the decode cache — framed raw body (JSON header + PNG bytes) like store_dcp_lut, to
+/// avoid a multi-megabyte JSON-array argument. Best-effort: the caller (library-ui.js) fires
+/// this in the background after a successful decode and doesn't block on it; a write failure
+/// just means the next open re-decodes, same as today.
+#[tauri::command(async)]
+pub fn save_decode_cache(request: tauri::ipc::Request) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("expected raw invoke body".into());
+    };
+    if bytes.len() < 4 {
+        return Err("framed body too short".into());
+    }
+    let jlen = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
+    if bytes.len() < 4 + jlen {
+        return Err("framed body truncated".into());
+    }
+    let json: serde_json::Value = serde_json::from_slice(&bytes[4..4 + jlen]).map_err(|e| format!("frame json: {e}"))?;
+    let payload = &bytes[4 + jlen..];
+    let path = json["path"].as_str().ok_or("missing path")?;
+    let recipe_key = json["recipeKey"].as_str().unwrap_or("");
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    std::fs::write(decode_cache_dir().join(&key), payload).map_err(|e| format!("write decode cache: {e}"))
+}
+
+/// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
+/// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a
+/// full RAW demosaic. Three sources, in the same priority order `get_thumbnail_inner` already
+/// established, just at a much bigger size than the 360px grid thumbnail:
+/// - RAW: the camera's own embedded preview (same `extract_preview_pixels` as `get_preview`
+///   above) — no demosaic, exactly what makes this fast.
+/// - Ordinary stills (JPEG/PNG/TIFF) on macOS: ImageIO's scaled decode (`fastthumb::thumbnail_jpeg`),
+///   which decodes at a reduced DCT scale rather than the `image` crate's full-then-downsize —
+///   see fastthumb.rs's own measured numbers for why this matters at 24MP.
+/// - HEIC: `sips`, same tool `get_thumbnail_inner` already shells out to, just a bigger `-Z`.
+///
+/// Not cached (same reasoning as `get_preview`: a one-shot provisional frame, not reused) and
+/// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
+/// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
+/// Look never triggers a decode, only actually opening the editor (an explicit action) does.
+const QUICKLOOK_LONG_EDGE: u32 = 1600;
+
+/// The actual decode logic behind `get_quicklook_preview` (below), factored out to plain bytes so
+/// `catalog.rs`'s `catalog_face_crop` can reuse it too — a `#[tauri::command]` can't be called as
+/// a normal function. Face crops used to come out of `get_thumbnail_inner`'s 360px grid thumbnail
+/// (a face bounding box is typically a small fraction of a frame, so cropping THAT and upscaling
+/// to 200x200 meant real source detail well under 100px being stretched — confirmed live: faces
+/// were "so pixelated it's hard to tell who it is"). This is the same 1600px-long-edge tier
+/// Quick Look already uses for fast culling: RAW gets the camera's own embedded preview (no full
+/// demosaic, still fast), everything else gets a scaled decode — a real, sharp improvement over
+/// the 360px source without paying for a full-resolution RAW decode per face.
+pub(crate) fn quicklook_preview_bytes(path: &str) -> Result<Vec<u8>, String> {
+    // Cached: face-crop generation (catalog_face_crop) hits this once per face, and a review
+    // session walks many faces from the same few photos — re-decoding a 1600px preview per face
+    // was pure waste. Falls back to an uncached decode if the file can't be stat'd.
+    cached_preview_bytes_at(path, QUICKLOOK_LONG_EDGE)
+        .or_else(|_| quicklook_preview_bytes_at(path, QUICKLOOK_LONG_EDGE))
+}
+
+/// The actual, now-parameterized decode logic. Added for the offline reference tier (catalog::
+/// thumbnail_run, bumped from a hardcoded 360px grid-thumbnail reuse to its own explicit target)
+/// which needs a DIFFERENT size (800px) from Quick Look/face-crop's 1600px — both share this one
+/// implementation rather than diverging into two near-identical decode paths. ⚠️ The RAW branch
+/// now explicitly downscales to `long_edge`: the camera's own embedded preview is returned as-is
+/// regardless of what's asked for (often 1600-2000px+ on modern cameras), which was fine when the
+/// only caller wanted "as big as free," but would silently blow the offline tier's whole per-photo
+/// disk budget if reused unchanged at a smaller target.
+fn quicklook_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, String> {
+    let ext = ext_lower(Path::new(path));
+    if is_raw_ext(&ext) {
+        // ⚠️ Measured live: extract_preview_pixels (preview -> full, no thumbnail tier) fails
+        // outright on real iPhone ProRAW DNGs that extract_thumbnail_pixels (thumbnail -> preview
+        // -> full — what get_thumbnail_inner used before this function existed) handles fine.
+        // Confirmed the regression directly: those exact files had thumb=1 (a working 360px
+        // offline preview) before this function replaced get_thumbnail_inner on this code path,
+        // and generated=0 on every batch after, because DNG's `thumbnail_image` and
+        // `preview_image` IFDs can genuinely differ (unlike RW2, where both calls hit the same
+        // embedded JPEG — see quicklook_preview_bytes_at's own siblings). Falling back to the
+        // thumbnail tier instead of failing keeps every caller of this function (Quick Look,
+        // face crops, the offline reference tier) working for exactly the files that regressed.
+        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
+            .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
+            .map_err(|e| format!("preview decode: {e}"))?;
+        let img = apply_orientation_dynamic(img, raw_orientation(path));
+        let (w, h) = (img.width(), img.height());
+        let scale = long_edge as f32 / w.max(h) as f32;
+        let out_img = if scale < 1.0 {
+            img.resize(
+                (w as f32 * scale).round().max(1.0) as u32,
+                (h as f32 * scale).round().max(1.0) as u32,
+                image::imageops::FilterType::Triangle,
+            )
+        } else {
+            img
+        };
+        let mut out = Cursor::new(Vec::new());
+        out_img
+            .to_rgb8()
+            .write_to(&mut out, image::ImageFormat::Jpeg)
+            .map_err(|e| format!("jpeg encode: {e}"))?;
+        return Ok(out.into_inner());
+    }
+    #[cfg(windows)]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(path, long_edge) {
+                return Ok(bytes);
+            }
+        }
+        // No HEIC fallback here (unlike macOS's sips shell-out below) — Windows only decodes
+        // HEIC at all with the optional Store HEIF/HEVC extensions installed, and there is no
+        // bundled/guaranteed decoder to shell out to the way sips is guaranteed present on
+        // macOS. Falls through to still_decode below, which fails cleanly for HEIC it can't read.
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, long_edge) {
+                return Ok(bytes);
+            }
+        }
+        if is_heic_ext(&ext) {
+            let tmp = cache_dir().join(format!("quicklook-{}-{}.jpg", fnv1a(&[path]), long_edge));
+            let ok = std::process::Command::new("/usr/bin/sips")
+                .args(["-s", "format", "jpeg", "-Z", &long_edge.to_string(), path, "--out"])
+                .arg(&tmp)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if ok {
+                if let Ok(bytes) = std::fs::read(&tmp) {
+                    let _ = std::fs::remove_file(&tmp);
+                    return Ok(bytes);
+                }
+            }
+            let _ = std::fs::remove_file(&tmp);
+            return Err("heic quicklook: sips could not decode this file".into());
+        }
+    }
+    if is_video_ext(&ext) {
+        return Err("no quicklook preview for video".into());
+    }
+    // Non-macOS / anything ImageIO didn't take: still_decode, same fallback
+    // `get_thumbnail_inner` uses, just at the requested long_edge.
+    let img = crate::still_decode::open_any_path(Path::new(path))?;
+    let (w, h) = (img.width(), img.height());
+    let scale = long_edge as f32 / w.max(h) as f32;
+    let thumb = if scale < 1.0 {
+        img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let mut out = Cursor::new(Vec::new());
+    thumb.to_rgb8().write_to(&mut out, image::ImageFormat::Jpeg).map_err(|e| format!("jpeg encode: {e}"))?;
+    Ok(out.into_inner())
+}
+
+/// The offline REFERENCE tier's own entry point (catalog::thumbnail_run) — 800px, view-quality,
+/// not the guaranteed-editable hq_offline tier. `pub(crate)` since only catalog.rs calls it.
+/// ⚠️ Disk-CACHED, unlike bare `quicklook_preview_bytes_at`. Swapping this path off
+/// `get_thumbnail_inner` (which read AND wrote `cache_dir()`) onto the uncached quicklook
+/// decoder silently removed all reuse: every retry, and every other caller wanting the same
+/// pixels, re-paid the full decode. Restored here with the same
+/// `read_cache_if_current`/`write_cache_atomic` machinery the 360px tier uses, keyed by
+/// resolution so the two tiers can't collide.
+pub(crate) fn offline_reference_bytes(path: &str) -> Result<Vec<u8>, String> {
+    cached_preview_bytes_at(path, OFFLINE_REFERENCE_LONG_EDGE)
+}
+
+pub(crate) fn cached_preview_bytes_at(path: &str, long_edge: u32) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let size = meta.len();
+    let cache_path = cache_dir().join(cache_key_at(path, long_edge));
+    if let Some(bytes) = read_cache_if_current(&cache_path, mtime, size) {
+        return Ok(bytes);
+    }
+    let bytes = quicklook_preview_bytes_at(path, long_edge)?;
+    write_cache_atomic(&cache_path, &bytes, mtime, size);
+    Ok(bytes)
+}
+pub(crate) const OFFLINE_REFERENCE_LONG_EDGE: u32 = 800;
+
+/// The Library's full-screen Quick Look (Space bar): a fast, LARGE preview for rapid culling —
+/// Photo Mechanic's whole trick, judge sharpness/composition at speed without ever paying for a
+/// full RAW demosaic. Three sources, in the same priority order `get_thumbnail_inner` already
+/// established, just at a much bigger size than the 360px grid thumbnail — see
+/// `quicklook_preview_bytes` above for the actual decode logic.
+///
+/// Not cached (same reasoning as `get_preview`: a one-shot provisional frame, not reused) and
+/// deliberately NEVER reached by opening a photo into the actual editor — that path keeps doing
+/// its normal full decode unchanged. This is a separate, non-destructive view: leaving Quick
+/// Look never triggers a decode, only actually opening the editor (an explicit action) does.
+#[tauri::command(async)]
+pub fn get_quicklook_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    quicklook_preview_bytes(&path).map(tauri::ipc::Response::new)
+}
+
+/// Decodes `path` to RGB8 pixels capped at `long_edge` on the long side — the same three-tier
+/// priority `get_quicklook_preview` above uses (RAW embedded preview / ImageIO scaled decode on
+/// macOS / `image` crate fallback), just returning raw pixels instead of a re-encoded JPEG, for
+/// callers that feed a model rather than a UI. Used by the face-detection scan phase
+/// (`catalog::faces_run`) — detection doesn't need full-resolution pixels, and SCRFD's own input
+/// is capped at 640px regardless (see `scrfd.rs`), so a decode this size costs far less than a
+/// full RAW demosaic while losing nothing SCRFD could have used anyway.
+pub(crate) fn decode_rgb8_capped(path: &str, long_edge: u32) -> Result<(Vec<u8>, u32, u32), String> {
+    let ext = ext_lower(Path::new(path));
+    if is_raw_ext(&ext) {
+        // iPhone ProRAW DNGs keep their (4032x3024 JPEG) preview in IFD0 flagged
+        // NewSubFileType=1, with the only SubIFD "reduced" entries being a semantic mask — so
+        // rawler's preview_image/full_image find nothing and extract_preview_pixels errors for
+        // every one of them. thumbnail_image DOES read IFD0, so fall through to the
+        // thumbnail→preview→full chain before giving up. Still no RAW demosaic.
+        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
+            .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
+            .map_err(|e| format!("preview decode: {e}"))?;
+        let img = apply_orientation_dynamic(img, raw_orientation(path));
+        let (w, h) = (img.width(), img.height());
+        let scale = long_edge as f32 / w.max(h) as f32;
+        let thumb = if scale < 1.0 {
+            img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+        } else {
+            img
+        };
+        let rgb = thumb.to_rgb8();
+        let (w, h) = rgb.dimensions();
+        return Ok((rgb.into_raw(), w, h));
+    }
+    #[cfg(windows)]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::winthumb::thumbnail_jpeg(path, long_edge) {
+                let img = image::load_from_memory(&bytes).map_err(|e| format!("thumb decode: {e}"))?.to_rgb8();
+                let (w, h) = img.dimensions();
+                return Ok((img.into_raw(), w, h));
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if !is_video_ext(&ext) && is_image_ext(&ext) && !is_heic_ext(&ext) {
+            if let Some(bytes) = crate::fastthumb::thumbnail_jpeg(path, long_edge) {
+                let img = image::load_from_memory(&bytes).map_err(|e| format!("thumb decode: {e}"))?.to_rgb8();
+                let (w, h) = img.dimensions();
+                return Ok((img.into_raw(), w, h));
+            }
+        }
+        if is_heic_ext(&ext) {
+            let tmp = cache_dir().join(format!("facedet-{}.jpg", fnv1a(&[path])));
+            let ok = std::process::Command::new("/usr/bin/sips")
+                .args(["-s", "format", "jpeg", "-Z", &long_edge.to_string(), path, "--out"])
+                .arg(&tmp)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            let result = if ok {
+                std::fs::read(&tmp)
+                    .map_err(|e| format!("sips read: {e}"))
+                    .and_then(|bytes| image::load_from_memory(&bytes).map_err(|e| format!("heic decode: {e}")))
+                    .map(|img| {
+                        let rgb = img.to_rgb8();
+                        let (w, h) = rgb.dimensions();
+                        (rgb.into_raw(), w, h)
+                    })
+            } else {
+                Err("heic decode: sips could not decode this file".into())
+            };
+            let _ = std::fs::remove_file(&tmp);
+            return result;
+        }
+    }
+    if is_video_ext(&ext) {
+        return Err("no rgb8 decode for video".into());
+    }
+    let img = crate::still_decode::open_any_path(Path::new(path))?;
+    let (w, h) = (img.width(), img.height());
+    let scale = long_edge as f32 / w.max(h) as f32;
+    let thumb = if scale < 1.0 {
+        img.resize((w as f32 * scale).round().max(1.0) as u32, (h as f32 * scale).round().max(1.0) as u32, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+    let rgb = thumb.to_rgb8();
+    let (w, h) = rgb.dimensions();
+    Ok((rgb.into_raw(), w, h))
+}

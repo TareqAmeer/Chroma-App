@@ -1,0 +1,136 @@
+  // ── Gear / View menu popover (design transplant: Library View.html's #btn-view-menu) ──
+  const viewMenuBtn = overlay.querySelector('#lib-view-menu-btn');
+  const viewMenu = overlay.querySelector('#lib-view-menu');
+  // One settings menu (CHR: gallery + Studio were two drifting copies): the gallery panes live in
+  // the Studio's #fx-settings-menu, so the gear here just opens that same menu.
+  const takeoutOpt = viewMenu.querySelector('#lib-takeout-names');
+  if (takeoutOpt) takeoutOpt.onclick = () => { if (window.settingsClose) settingsClose(); importGoogleTakeout(); };
+  if (window.libSettingsAdopt) window.libSettingsAdopt(viewMenu);
+  viewMenu.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((opt) => {
+    opt.onclick = () => { const b = viewSeg.querySelector(`[data-v="${opt.dataset.viewval}"]`); if (b && !b.disabled) b.onclick(); syncViewMenuChecks(); };
+  });
+  viewMenuBtn.onclick = (e) => { sortMenu.classList.remove('open'); if (window.settingsToggle) settingsToggle(e); syncViewMenuChecks(); };
+  function syncViewMenuChecks() {
+    document.querySelectorAll('.fx-ovf-item[data-metaval]').forEach((o) => o.classList.toggle('on', o.dataset.metaval === state.metaDisplay));
+    document.querySelectorAll('.fx-ovf-item[data-viewval]').forEach((o) => o.classList.toggle('on', o.dataset.viewval === state.viewMode));
+    const lv = document.getElementById('lib-listview-opt'); if (lv) lv.classList.toggle('dis', !!viewSeg.querySelector('[data-v="list"]')?.disabled);
+  }
+  // libSettingsAdopt() moved the Library panes into #fx-settings-page above, so resolve these
+  // actions from document after the move rather than from the now-empty holder.
+  const backupLastLabel = document.querySelector('#lib-backup-last');
+  const backupTimestamp = () => new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').replace(/Z$/, '');
+  const backupJoin = (parent, name) => `${parent.replace(/[\\/]$/, '')}${parent.includes('\\') ? '\\' : '/'}${name}`;
+  async function refreshBackupStatus() {
+    if (!backupLastLabel) return;
+    try {
+      const last = await invoke('library_backup_last');
+      backupLastLabel.textContent = last?.verified ? `Last verified backup: ${last.path}` : 'Last backup: none yet';
+      backupLastLabel.title = last?.verified ? `${last.path} · ${new Date(last.createdUnixSecs * 1000).toLocaleString()}` : '';
+    } catch (e) { backupLastLabel.textContent = 'Last backup status unavailable'; }
+  }
+  function portablePreferences() {
+    const values = {};
+    const portableKeys=new Set([
+      'chromasmith-styles-v1','chromasmith-styles-recent-v1','chromasmith-export-presets-v1','chromasmith-session-v1',
+      'chromasmith-shortcuts-v1','chromasmith-shortcuts-single-disabled-v1','chromasmith-paste-fields-v1',
+      'chromasmith-collage-layouts-v1','chromasmith-adv-tabs-v1','chromasmith-tour-seen-v1',
+      'chromasmith-first-edit-guide-v1','chromasmith-first-edit-stage-v1','chromasmithGpuPreference',
+      'chromasmithPhotoTransitions','chromasmithRevealLab','chromasmith.allfx.v1','chromasmith.prevfx.v1'
+    ]);
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !(portableKeys.has(key)||(/^(chromasmith_|csTheme$|cs[A-Z]|cs[._-])/).test(key)) || /(token|secret|oauth|auth|credential|client.?id|code.?verifier)/i.test(key)) continue;
+      values[key] = localStorage.getItem(key);
+    }
+    return { formatVersion: 1, source: 'Chromasmith desktop preferences', values };
+  }
+  const backupCreate = document.querySelector('#lib-backup-create');
+  if (backupCreate) backupCreate.onclick = async () => {
+    try {
+      const chosen = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose where to save the library backup' } });
+      const parent = Array.isArray(chosen) ? chosen[0] : chosen;
+      if (!parent) return;
+      const destination = backupJoin(parent, `Chromasmith Library Backup ${backupTimestamp()}`);
+      if(typeof csBackupUserAssets!=='function')throw new Error('User asset backup is unavailable. Reopen the app before backing up.');
+      const userAssets=await csBackupUserAssets();
+      const result = await invoke('library_backup_create', { destination, preferencesJson: JSON.stringify(portablePreferences()), userAssetsJson: JSON.stringify(userAssets) });
+      if (!result?.verified) throw new Error('The backup did not pass verification.');
+      toast(`Verified library backup saved. ${result.photoCount} catalog photos; ${result.sidecarsIncluded} edit sidecars included${result.sidecarsMissing ? `, ${result.sidecarsMissing} missing` : ''}. Originals and regenerated caches are excluded.`);
+      await refreshBackupStatus();
+    } catch (e) { toast(`Library backup failed: ${humanizeErr('create library backup', e)}`, 'err'); }
+  };
+  const backupRestore = document.querySelector('#lib-backup-restore');
+  if (backupRestore) backupRestore.onclick = async () => {
+    try {
+      const selected = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a Chromasmith library backup to verify' } });
+      const source = Array.isArray(selected) ? selected[0] : selected;
+      if (!source) return;
+      const manifest = await invoke('library_backup_verify', { path: source });
+      const roots = Array.isArray(manifest.roots) && manifest.roots.length
+        ? manifest.roots.map((root) => `• ${root.sourcePath} (${root.volumeUuid})`).join('\n')
+        : '• No source folders were recorded';
+      const preflight = [
+        'This backup passed verification.',
+        '',
+        `Catalog photos: ${manifest.photoCount}`,
+        `Edit sidecars: ${manifest.sidecarsIncluded} included; ${manifest.sidecarsMissing} unavailable when backed up`,
+        'Original folders recorded in the backup:',
+        roots,
+        '',
+        'Original photo/video files and regenerated caches are not included. The next step creates a verified copy in a separate folder; it will not replace or activate the current library.',
+        '',
+        'Continue to choose a restore destination?'
+      ].join('\n');
+      if (!window.confirm(preflight)) return;
+      const parentChoice = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a separate folder for the verified restore' } });
+      const parent = Array.isArray(parentChoice) ? parentChoice[0] : parentChoice;
+      if (!parent) return;
+      const destination = backupJoin(parent, `Chromasmith Restored Library ${backupTimestamp()}`);
+      const result = await invoke('library_backup_restore', { path: source, destination });
+      if (!result?.verified) throw new Error('The restored copy did not pass verification.');
+      toast(`Verified restore copy created at ${result.path}. ${manifest.photoCount} catalog photos are preserved; reconnect original folders before editing.`);
+    } catch (e) { toast(`Library restore failed: ${humanizeErr('restore library backup', e)}`, 'err'); }
+  };
+  refreshBackupStatus();
+  document.querySelectorAll('.fx-ovf-item[data-metaval]').forEach((opt) => {
+    opt.onclick = () => { metaSel.value = opt.dataset.metaval; metaSel.onchange({ target: metaSel }); syncViewMenuChecks(); };
+  });
+  // Theme: dark is the default (Library View.html's own default state + Tareq's call), .lib-light
+  // is the alternate — see the #lib-overlay / #lib-overlay.lib-light token remap in the injected
+  // <style> above, which is what makes this one class flip every existing rule's palette.
+  // Shares 'csTheme' with the Editor (chromasmith-22.html L4467/L20124) rather than its own key —
+  // both apps live in the same page/localStorage, and 'chromasmith_lib_theme' used to drift out of
+  // sync with the Editor's own toggle since they were two independent keys for one visual setting.
+  // One-time migration: an existing legacy value wins over the Editor's default so switching to
+  // the shared key doesn't silently flip anyone's already-chosen Library theme.
+  try {
+    const legacy = localStorage.getItem('chromasmith_lib_theme');
+    if (legacy && !localStorage.getItem('csTheme')) localStorage.setItem('csTheme', legacy);
+    if (legacy) localStorage.removeItem('chromasmith_lib_theme');
+  } catch {}
+  // ⚠️ 2026-09-09 FIX: sharing the 'csTheme' KEY is not the same as staying in sync. Before this,
+  // #lib-overlay's OWN .lib-light class (and state.libTheme) were only ever set here at init and
+  // from THIS menu's own opt.onclick below — never when the EDITOR's toggleTheme()/fxSetTheme()
+  // (chromasmith-22.html) ran. Result: switching theme from the Editor's gear menu flipped
+  // body.light (and the Editor itself repainted correctly) but left the docked filmstrip
+  // (#lib-overlay) stuck on whichever theme it booted into — confirmed live by
+  // editor_wireframe_diff.mjs's corrected harness (editor_ux_spec.json E6). Fix: a reusable sync
+  // function, exposed on window so the Editor's own theme functions can call it — same
+  // cross-file-hook pattern this codebase already uses for chromasmithForceLibraryReady/
+  // chromasmithToggleLibrary.
+  function syncLibThemeFromShared() {
+    state.libTheme = (localStorage.getItem('csTheme') || 'dark');
+    overlay.classList.toggle('lib-light', state.libTheme === 'light');
+    syncViewMenuChecks();
+  }
+  window.chromasmithSyncLibTheme = syncLibThemeFromShared;
+  syncLibThemeFromShared();
+  syncViewMenuChecks();
+  // Action rows (Choose folder…, Get Info, Full-window view, etc.) close the popover after
+  // firing their own (unrelated, ID-attached) click handler — checkboxes/theme opts stay open
+  // so several can be flipped in one visit, matching the wireframe's own opt vs toggle split.
+  // HANDOVER §8 item #21: #lib-tree-toggle/#lib-aspect-toggle carry BOTH `opt-action` and
+  // `opt-toggle` (they're persistent toggles by role, not one-shot actions), and this selector
+  // used to catch them too, wrongly closing the menu on every "Show sidebar"/"Real aspect
+  // ratio" click. `:not(.opt-toggle)` exempts them, same split the checkboxes above already get.
+  document.querySelectorAll('#fx-settings-menu .opt-action').forEach((btn) => btn.addEventListener('click', () => window.settingsClose && settingsClose()));

@@ -1,0 +1,364 @@
+// ── Scan phase C: sidecar contents ──────────────────────────────────────────────────────────
+//
+// ⚠️ The .xmp is the source of truth (this whole module's own top-of-file comment). This phase
+// exists purely to make what's already in the sidecar QUERYABLE — it reads FROM the file into
+// the catalog, never the other way. `set_sidecar` (library.rs) stays the only writer of XMP.
+
+#[derive(Default)]
+pub struct SidecarResult {
+    pub read: usize,
+}
+
+/// Same shape as `metadata_run`: chunked, resumable (via `sidecar_mtime != sidecar_parsed_mtime`
+/// — a photo whose sidecar hasn't changed since it was last parsed is skipped for free, and a
+/// sidecar that was deleted naturally resets rating/label/edited/favorite to their defaults,
+/// since `get_sidecar` on a missing file returns `Sidecar::default()`), and offline-safe for the
+/// same reason phase B is: a row on an unmounted volume must not be marked "parsed" with
+/// defaults it never actually read, or it would never be retried once the volume returns.
+/// Ensures every ancestor segment of `full_path` (`"Travel|Iceland|Reykjavik"` → `Travel`,
+/// `Travel|Iceland`, `Travel|Iceland|Reykjavik`) exists as its own row in `keywords`, linked
+/// parent→child, and returns the LEAF's own id — the only one `photo_keywords` ever links to.
+/// Ancestor rows exist purely so the sidebar tag tree has something to render "Travel" as a
+/// node from, even before any photo is tagged with exactly that path (descendant lookups find
+/// photos through their own keyword's path prefix, not by walking a photo_keywords link on
+/// every ancestor — see `catalog_keywords`/`query_run`'s own keyword filter).
+fn upsert_keyword_path(conn: &Connection, full_path: &str) -> Result<i64, String> {
+    let mut parent_id: Option<i64> = None;
+    let mut acc = String::new();
+    let mut leaf_id = 0i64;
+    for seg in full_path.split('|') {
+        if seg.is_empty() {
+            continue; // a stray "||" or leading/trailing "|" in hand-edited XMP — skip, don't crash
+        }
+        if !acc.is_empty() {
+            acc.push('|');
+        }
+        acc.push_str(seg);
+        let existing: Option<i64> = conn.query_row("SELECT id FROM keywords WHERE path = ?1", params![acc], |r| r.get(0)).ok();
+        leaf_id = match existing {
+            Some(id) => id,
+            None => {
+                conn.execute("INSERT INTO keywords (path, leaf, parent_id) VALUES (?1, ?2, ?3)", params![acc, seg, parent_id])
+                    .map_err(|e| e.to_string())?;
+                conn.last_insert_rowid()
+            }
+        };
+        parent_id = Some(leaf_id);
+    }
+    Ok(leaf_id)
+}
+
+pub fn sidecar_run(
+    conn: &Connection,
+    progress: &mut dyn FnMut(ScanProgress),
+    cancel: &AtomicBool,
+) -> Result<SidecarResult, String> {
+    let mut result = SidecarResult::default();
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.id, p.rel_path, p.sidecar_mtime, v.last_path, v.is_local
+                 FROM photos p JOIN volumes v ON v.id = p.volume_id
+                 WHERE p.present = 1 AND p.sidecar_mtime != p.sidecar_parsed_mtime
+                 LIMIT 512",
+            )
+            .map_err(|e| e.to_string())?;
+        let batch: Vec<(i64, Option<String>, i64)> = stmt
+            .query_map([], |r| {
+                let id: i64 = r.get(0)?;
+                let rel_path: String = r.get(1)?;
+                let sidecar_mtime: i64 = r.get(2)?;
+                let last_path: String = r.get(3)?;
+                let is_local: i64 = r.get(4)?;
+                let online = is_local != 0 || Path::new(&last_path).is_dir();
+                Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, sidecar_mtime))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        drop(stmt);
+        let batch: Vec<(i64, String, i64)> = batch.into_iter().filter_map(|(id, abs, sm)| abs.map(|a| (id, a, sm))).collect();
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "sidecar".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+
+        let read: Vec<(i64, i64, crate::library::Sidecar)> = batch
+            .par_iter()
+            .map(|(id, abs, sidecar_mtime)| (*id, *sidecar_mtime, crate::library::get_sidecar(abs.clone())))
+            .collect();
+
+        let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+        for (id, sidecar_mtime, sc) in &read {
+            tx.execute(
+                "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5, sidecar_parsed_mtime = ?6 WHERE id = ?7",
+                params![sc.rating, sc.label, sc.color_label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id],
+            )
+            .map_err(|e| e.to_string())?;
+            // Full re-link each pass rather than a diff — the sidecar is authoritative (see the
+            // module's own XMP-wins rule) and a photo carries at most a handful of keywords, so
+            // "delete then re-insert" is simpler than computing an add/remove set and costs
+            // nothing measurable at that size.
+            tx.execute("DELETE FROM photo_keywords WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+            for kw in &sc.keywords {
+                let kw_id = upsert_keyword_path(&tx, kw)?;
+                tx.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        result.read += read.len();
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
+/// Same batch shape as `metadata_run` above, but re-locks `state.conn` fresh each batch instead
+/// of holding one guard for the whole (potentially minutes-long, first-scan) sweep — see
+/// `verify_run_scoped`'s doc comment for the exact class of bug this avoids. `metadata_run`
+/// itself is kept for the test suite (small in-memory DBs, single connection).
+pub fn metadata_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<MetadataResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = MetadataResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND (p.meta_mtime IS NULL OR p.meta_mtime != p.mtime)
+                     LIMIT 512"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, mtime)| abs.map(|a| (id, a, mtime))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "metadata".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+        pacer.start_chunk();
+        let read: Vec<(i64, i64, crate::library::PhotoMeta, Option<VideoDate>)> = batch
+            .par_iter()
+            .map(|(id, abs, mtime)| {
+                let ext = Path::new(abs).extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                let video_date = if matches!(ext.as_str(), "mp4" | "mov" | "m4v") { video_capture_date(abs) } else { None };
+                (*id, *mtime, crate::library::read_meta_public(abs), video_date)
+            })
+            .collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, mtime, meta, video_date) in &read {
+                let (captured, cap_y, cap_m, cap_d) = if let Some(vd) = video_date {
+                    (Some(vd.captured), Some(vd.y), Some(vd.m), Some(vd.d))
+                } else {
+                    meta.date
+                        .as_deref()
+                        .and_then(parse_exif_datetime)
+                        .map(|(s, y, mo, d)| (Some(s), Some(y), Some(mo), Some(d)))
+                        .unwrap_or((None, None, None, None))
+                };
+                let shutter_sec = meta.shutter.as_deref().and_then(shutter_to_sec);
+                let aperture_f = meta.aperture.as_deref().and_then(leading_float);
+                let focal_mm = meta.focal_len.as_deref().and_then(leading_float);
+                tx.execute(
+                    "UPDATE photos SET
+                        camera = ?1, make = ?2, model = ?3, lens = ?4, iso = ?5,
+                        shutter = ?6, shutter_sec = ?7, aperture = ?8, aperture_f = ?9,
+                        focal = ?10, focal_mm = ?11,
+                        captured = ?12, cap_y = ?13, cap_m = ?14, cap_d = ?15,
+                        meta_mtime = ?16, gps_lat = ?18, gps_lon = ?19, place = ?20
+                     WHERE id = ?17",
+                    params![
+                        meta.camera, meta.make, meta.model, meta.lens, meta.iso,
+                        meta.shutter, shutter_sec, meta.aperture, aperture_f,
+                        meta.focal_len, focal_mm,
+                        captured, cap_y, cap_m, cap_d,
+                        mtime, id, meta.lat, meta.lon, meta.place,
+                    ]
+                )
+                .map_err(|e| e.to_string())?;
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        result.read += read.len();
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
+/// Same batch shape as `sidecar_run` above, re-locking per batch — see `metadata_run_scoped`.
+pub fn sidecar_run_scoped(state: &CatalogState, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<SidecarResult, String> {
+    crate::bgwork::mark_current_thread_background();
+    let mut result = SidecarResult::default();
+    let mut pacer = crate::bgwork::ChunkPacer::new(std::time::Duration::from_secs(2));
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(pause) = crate::bgwork::throttle_pause() {
+            std::thread::sleep(pause);
+        }
+        let batch: Vec<(i64, String, i64)> = {
+            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT p.id, p.rel_path, p.sidecar_mtime, v.last_path, v.is_local
+                     FROM photos p JOIN volumes v ON v.id = p.volume_id
+                     WHERE p.present = 1 AND p.sidecar_mtime != p.sidecar_parsed_mtime
+                     LIMIT 512"
+                )
+                .map_err(|e| e.to_string())?;
+            let raw: Vec<(i64, Option<String>, i64)> = stmt
+                .query_map([], |r| {
+                    let id: i64 = r.get(0)?;
+                    let rel_path: String = r.get(1)?;
+                    let sidecar_mtime: i64 = r.get(2)?;
+                    let last_path: String = r.get(3)?;
+                    let is_local: i64 = r.get(4)?;
+                    let online = is_local != 0 || Path::new(&last_path).is_dir();
+                    Ok((id, if online { Some(abs_path(&last_path, is_local != 0, &rel_path)) } else { None }, sidecar_mtime))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            raw.into_iter().filter_map(|(id, abs, sm)| abs.map(|a| (id, a, sm))).collect()
+        };
+        if batch.is_empty() {
+            break;
+        }
+        progress(ScanProgress { phase: "sidecar".into(), done: result.read, total: result.read + batch.len(), current: String::new() });
+        pacer.start_chunk();
+        let read: Vec<(i64, i64, crate::library::Sidecar)> = batch
+            .par_iter()
+            .map(|(id, abs, sidecar_mtime)| (*id, *sidecar_mtime, crate::library::get_sidecar(abs.clone())))
+            .collect();
+        {
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+            let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+            for (id, sidecar_mtime, sc) in &read {
+                tx.execute(
+                    "UPDATE photos SET rating = ?1, label = ?2, color_label = ?3, edited = ?4, favorite = ?5, sidecar_parsed_mtime = ?6 WHERE id = ?7",
+                    params![sc.rating, sc.label, sc.color_label, sc.edited as i64, sc.favorite as i64, sidecar_mtime, id]
+                )
+                .map_err(|e| e.to_string())?;
+                tx.execute("DELETE FROM photo_keywords WHERE photo_id = ?1", params![id]).map_err(|e| e.to_string())?;
+                for kw in &sc.keywords {
+                    let kw_id = upsert_keyword_path(&tx, kw)?;
+                    tx.execute("INSERT OR IGNORE INTO photo_keywords (photo_id, keyword_id) VALUES (?1, ?2)", params![id, kw_id])
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            tx.commit().map_err(|e| e.to_string())?;
+        }
+        result.read += read.len();
+        let pause = pacer.end_chunk();
+        if pause > std::time::Duration::ZERO {
+            std::thread::sleep(pause);
+        }
+    }
+    progress(ScanProgress { phase: "done".into(), done: result.read, total: result.read, current: String::new() });
+    Ok(result)
+}
+
+// ⚠️ These catalog_* commands are the ones that actually walk/hash/embed/cluster a whole
+// library, so they are the ones that must never run on Tauri's main/IPC thread. In Tauri 2 a
+// plain sync `#[tauri::command]` is invoked ON the calling thread, not dispatched to a worker
+// pool automatically (that was N3.1's incomplete root-cause read — it fixed lock contention via
+// the conn/read_conn Mutex split but left every one of these commands genuinely blocking).
+// `async fn` + `tauri::async_runtime::spawn_blocking` moves the actual work onto Tauri's blocking
+// pool, matching the pattern `ingest.rs::scan_card` already established (see its doc comment).
+// The `app.state::<CatalogState>()` lookup happens INSIDE the closure — `tauri::State<'_,T>`
+// itself isn't `'static` and can't be moved across the spawn_blocking boundary, but `AppHandle`
+// is `Send + Clone + 'static` and can hand back the same managed state from any thread.
+#[tauri::command]
+pub async fn catalog_scan(app: tauri::AppHandle, volume_id: Option<i64>) -> Result<ScanResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::{Emitter, Manager};
+        let state = app.state::<CatalogState>();
+        state.cancel.store(false, Ordering::Relaxed);
+        let mut emit = |p: ScanProgress| { let _ = app.emit("catalog-scan", p); };
+        // scan_run needs one held connection for its whole walk (scan_gen must stay consistent
+        // from the first row read to the final "mark absent" sweep — see its own doc comment on
+        // why re-locking mid-walk would be a correctness risk, not just a perf one), but it's a
+        // directory walk + stat, not a per-file content read, so it's the cheap phase here.
+        let t_scan = std::time::Instant::now();
+        let result = scan_run_scoped(&state, volume_id, &mut emit, &state.cancel)?;
+        crate::diag::log("info", format!("SCAN_TIMING phase_A_total_ms={} scanned={}", t_scan.elapsed().as_millis(), result.scanned));
+        // Phases B and C chained automatically: one catalog_scan call from the frontend (fired from
+        // openFolder's catalogRegisterFolder) gets a walked, metadata-read AND sidecar-synced
+        // catalog, with no extra round trips from JS.
+        //
+        // ⚠️ Content hashing (phase E, below) is deliberately NOT chained here. Reading an EXIF
+        // header or a small XMP file is cheap; hashing a whole RAW or video is a full-file read —
+        // chaining it into the scan that fires on every ordinary folder-open would make routine
+        // browsing noticeably slower on a large archive. It runs as its own explicit/background
+        // pass (catalog_hash) instead.
+        //
+        // ⚠️ metadata_run_scoped/sidecar_run_scoped, NOT metadata_run/sidecar_run — the plain
+        // versions hold one connection guard for their WHOLE sweep (documented at up to 5-7
+        // minutes on a real archive's first scan), blocking every other catalog write the entire
+        // time. The _scoped versions re-lock per batch instead — see verify_run_scoped's doc
+        // comment for the incident that made this worth auditing across every scan phase, not
+        // just the one a user happened to report first.
+        let t_b = std::time::Instant::now();
+        let mr = metadata_run_scoped(&state, &mut emit, &state.cancel)?;
+        let t_c = std::time::Instant::now();
+        let sr = sidecar_run_scoped(&state, &mut emit, &state.cancel)?;
+        crate::diag::log("info", format!("SCAN_TIMING phase_B_ms={} read={} phase_C_ms={} read={} catalog_scan_total_ms={}", (t_c - t_b).as_millis(), mr.read, t_c.elapsed().as_millis(), sr.read, t_scan.elapsed().as_millis()));
+        // Background: notice in-place sidecar rewrites (rating/label edits) library-wide without
+        // making this call — and so the pill — wait for ~45k sidecar stats. Single-flight.
+        static SWEEP_RUNNING: AtomicBool = AtomicBool::new(false);
+        if !SWEEP_RUNNING.swap(true, Ordering::AcqRel) {
+            let app2 = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                use tauri::{Emitter, Manager};
+                let st = app2.state::<CatalogState>();
+                let cancel = AtomicBool::new(false);
+                let t = std::time::Instant::now();
+                match sidecar_sweep_scoped(&st, volume_id, &cancel) {
+                    Ok(r) => {
+                        crate::diag::log("info", format!("SCAN_TIMING sidecar_sweep_ms={} dirs={} changed={} paused={}", t.elapsed().as_millis(), r.dirs, r.changed, bg_is_paused()));
+                        if r.changed > 0 {
+                            let mut emit = |p: ScanProgress| { let _ = app2.emit("catalog-scan", p); };
+                            let _ = sidecar_run_scoped(&st, &mut emit, &cancel);
+                        }
+                    }
+                    Err(e) => crate::diag::log("warn", format!("sidecar sweep failed: {e}")),
+                }
+                SWEEP_RUNNING.store(false, Ordering::Release);
+            });
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("catalog_scan task panicked: {e}"))?
+}

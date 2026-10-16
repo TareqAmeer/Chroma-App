@@ -1,0 +1,270 @@
+// ── "Find more of this person" suggestions ─────────────────────────────────────────────────────
+//
+// Clustering is deliberately strict (eps=0.6 ≈ cosine 0.82) so auto-groups rarely mix two
+// people — but that leaves every harder photo of someone (profile angle, harsh light, years
+// apart, glasses) either alone in the unclustered pile or in its own "Person N". Confirmed faces
+// are also excluded from clustering, so naming someone never pulled more of their photos in.
+// This is the second, looser tier: each named person gets a profile from their confirmed faces,
+// and every other unconfirmed face is scored against it. Nothing is assigned without the user's
+// yes; a "no" is remembered in `face_rejections`.
+
+/// Cosine similarity at/above which an unconfirmed face is offered as "is this X?". ArcFace
+/// same-identity pairs typically score above ~0.4; different people rarely exceed ~0.3.
+const FACE_SUGGEST_SIM: f32 = 0.42;
+/// Cluster-centroid bar for "Person N looks like X" in review mode — centroids are less noisy
+/// than single faces, so a slightly higher bar keeps the pre-fill trustworthy.
+const CLUSTER_SUGGEST_SIM: f32 = 0.5;
+/// A face must beat the next-best named person by this much, so a face that looks equally like
+/// two siblings is not confidently offered to either.
+const FACE_SUGGEST_MARGIN: f32 = 0.05;
+/// Same-day context: a candidate taken on a day this person already has a confirmed photo from
+/// gets this added to its score — enough to lift a borderline face over the bar, never enough
+/// to pull in a clear stranger.
+const SAME_DAY_BOOST: f32 = 0.04;
+/// Pets are compared with CLIP image embeddings of the animal crop, not ArcFace — a much denser
+/// space (two different tabbies still score ~0.8), so the bars sit far higher.
+/// DINOv2 bars, measured on the user's own 164 confirmed crops of three dogs (profile_sim, 5th/
+/// 95th percentiles): same dog >= 0.63, a different dog <= 0.47, web photos of other dogs <= 0.24.
+const PET_SUGGEST_SIM: f32 = 0.55;
+const PET_CLUSTER_SUGGEST_SIM: f32 = 0.6;
+const PET_SUGGEST_MARGIN: f32 = 0.05;
+/// pets_run files a new sighting straight into an existing pet group at/above this.
+const PET_AUTO_JOIN_SIM: f32 = 0.78;
+const PET_OUTLIER_SIM: f32 = 0.35;
+/// A sighting is filed into a NAMED pet without asking only at/above this against the pet's
+/// confirmed profile (never against its auto-filed members — matching those let each new
+/// sighting pull in the next one, drifting into other dogs and junk). Below it the sighting
+/// stays out and "Find more photos of" offers it for a yes/no instead.
+const PET_NAMED_JOIN_SIM: f32 = 0.7;
+/// Second, looser DBSCAN pass over faces the strict pass left alone ("maybe the same person"),
+/// eps 0.9 ≈ cosine 0.6. Only ever shown for review; never assigned on its own.
+const LOOSE_CLUSTER_EPS: f64 = 0.9;
+
+const MAX_EXEMPLARS: usize = 64;
+/// "Sure enough to just do it": at/above this (with `AUTO_ASSIGN_MARGIN` over the runner-up) a
+/// face is tagged without asking. ArcFace cosine 0.5 sits well inside the same-person range
+/// (different people rarely pass ~0.3), which is roughly the "70% sure" the user asked for.
+const AUTO_ASSIGN_SIM: f32 = 0.5;
+const AUTO_ASSIGN_MARGIN: f32 = 0.08;
+/// Same moment as a photo already tagged with this person: the bar drops to this. A burst of 50
+/// frames of the same face then needs one answer, not 50.
+const BURST_ASSIGN_SIM: f32 = 0.35;
+/// Photos captured within this many seconds of each other (chained, capped at BURST_MAX_SPAN)
+/// are one "moment".
+const BURST_GAP_SECS: i64 = 30;
+const BURST_MAX_SPAN_SECS: i64 = 180;
+
+/// Splits (id, captured) items into moments: sorted by time, a new moment starts after a
+/// `BURST_GAP_SECS` gap or once the moment spans `BURST_MAX_SPAN_SECS`. Items without a capture
+/// time are each their own moment. Returns groups of ids, each in input order of rank.
+fn group_into_moments(items: &[(i64, Option<i64>)]) -> Vec<Vec<i64>> {
+    let mut timed: Vec<(usize, i64, i64)> = items.iter().enumerate().filter_map(|(i, (id, t))| t.map(|t| (i, *id, t))).collect();
+    timed.sort_by_key(|x| x.2);
+    let mut moment_of: std::collections::HashMap<usize, usize> = Default::default();
+    let mut m = 0usize;
+    let (mut start, mut last) = (i64::MIN, i64::MIN);
+    for (i, _, t) in &timed {
+        if last == i64::MIN || t - last > BURST_GAP_SECS || t - start > BURST_MAX_SPAN_SECS {
+            m += 1;
+            start = *t;
+        }
+        last = *t;
+        moment_of.insert(*i, m);
+    }
+    let mut groups: Vec<Vec<i64>> = Vec::new();
+    let mut idx_of_moment: std::collections::HashMap<usize, usize> = Default::default();
+    for (i, (id, _)) in items.iter().enumerate() {
+        match moment_of.get(&i) {
+            Some(mm) => {
+                let gi = *idx_of_moment.entry(*mm).or_insert_with(|| {
+                    groups.push(Vec::new());
+                    groups.len() - 1
+                });
+                groups[gi].push(*id);
+            }
+            None => groups.push(vec![*id]),
+        }
+    }
+    groups
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct AutoAssignResult {
+    pub assigned: usize,
+    pub people: usize,
+}
+
+/// Tags every face the app is sure about, without asking: faces matching one named person at
+/// `AUTO_ASSIGN_SIM`, plus faces in the same moment as a photo already tagged with that person at
+/// the lower `BURST_ASSIGN_SIM`. Written as `confirmed = 2` ("auto") — survives re-clustering
+/// like a confirmed face, is shown as that person's photo, never trains the profile, and is
+/// undoable per person (`catalog_undo_auto_assign`). Rejected pairs are never auto-assigned.
+pub fn auto_assign_run(conn: &Connection) -> Result<AutoAssignResult, String> {
+    let mut res = AutoAssignResult::default();
+    let mut touched = std::collections::HashSet::new();
+    // Face-detector rows (people, and the dog/cat faces SCRFD finds) and CLIP animal crops are
+    // two separate embedding spaces with their own bars.
+    for (space, bar_sim, margin, burst_sim) in [
+        ("person", AUTO_ASSIGN_SIM, AUTO_ASSIGN_MARGIN, BURST_ASSIGN_SIM),
+        ("pet", PET_AUTO_JOIN_SIM, PET_SUGGEST_MARGIN, PET_SUGGEST_SIM),
+    ] {
+        res.assigned += auto_assign_space(conn, space, bar_sim, margin, burst_sim, &mut touched)?;
+    }
+    res.people = touched.len();
+    Ok(res)
+}
+
+fn auto_assign_space(
+    conn: &Connection,
+    space: &str,
+    bar_sim: f32,
+    margin: f32,
+    burst_sim: f32,
+    touched: &mut std::collections::HashSet<i64>,
+) -> Result<usize, String> {
+    let profiles = person_profiles(conn, space)?;
+    let mut assigned = 0usize;
+    if profiles.is_empty() {
+        return Ok(0);
+    }
+    // Moments anchored on faces the USER confirmed only: anchoring on auto tags too let one
+    // auto tag widen the moment for the next, chaining through a whole outing.
+    // (person, captured).
+    let mut tstmt = conn
+        .prepare(
+            "SELECT f.person_id, p.captured FROM photo_faces f JOIN photos p ON p.id = f.photo_id
+             JOIN people pp ON pp.id = f.person_id
+             WHERE f.confirmed = 1 AND pp.auto = 0 AND p.captured IS NOT NULL",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut tagged_times: std::collections::HashMap<i64, Vec<i64>> = Default::default();
+    for r in tstmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))).map_err(|e| e.to_string())? {
+        let (pid, t) = r.map_err(|e| e.to_string())?;
+        tagged_times.entry(pid).or_default().push(t);
+    }
+    drop(tstmt);
+    for v in tagged_times.values_mut() {
+        v.sort_unstable();
+    }
+    // Pets never get the same-moment discount. Their face-detector rows are matched with a
+    // HUMAN face model, where a dog's face and a patch of gravel can score alike, so "taken
+    // seconds after a photo of Lucifer" pulled sky, rocks and passers-by into Lucifer.
+    let pet_ids: std::collections::HashSet<i64> = {
+        let mut st = conn.prepare("SELECT id FROM people WHERE kind = 'pet'").map_err(|e| e.to_string())?;
+        let v = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        v
+    };
+    let near_tagged = |pid: i64, t: Option<i64>| -> bool {
+        if pet_ids.contains(&pid) {
+            return false;
+        }
+        let (Some(t), Some(v)) = (t, tagged_times.get(&pid)) else { return false };
+        let i = v.partition_point(|x| *x < t - BURST_GAP_SECS);
+        v.get(i).map_or(false, |x| (x - t).abs() <= BURST_GAP_SECS)
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.id, f.photo_id, f.embedding, ph.captured FROM photo_faces f
+             JOIN photos ph ON ph.id = f.photo_id
+             LEFT JOIN people o ON o.id = f.person_id
+             WHERE f.confirmed = 0 AND length(f.embedding) > 0 AND ((?1 = 'pet') = (f.species IS NOT NULL))
+               AND (f.person_id IS NULL OR o.auto = 1) AND COALESCE(o.ignored, 0) = 0",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, i64, Vec<u8>, Option<i64>)> = stmt
+        .query_map(params![space], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let rejected: std::collections::HashSet<(i64, i64)> = {
+        let mut st = conn.prepare("SELECT face_id, person_id FROM face_rejections").map_err(|e| e.to_string())?;
+        let v = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        v
+    };
+    // Best (face, sim) per (photo, person): a person appears at most once per photo.
+    let mut best: std::collections::HashMap<(i64, i64), (i64, f32)> = Default::default();
+    for (fid, photo_id, blob, t) in rows {
+        let emb = blob_to_f32_vec(&blob);
+        let mut scored: Vec<(i64, f32)> = profiles.iter().map(|p| (p.id, profile_sim(&emb, p))).collect();
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let Some(&(pid, sim)) = scored.first() else { continue };
+        let runner = scored.get(1).map_or(-1.0, |x| x.1);
+        if rejected.contains(&(fid, pid)) || sim - runner < margin {
+            continue;
+        }
+        let bar = if near_tagged(pid, t) { burst_sim } else { bar_sim };
+        if sim < bar {
+            continue;
+        }
+        let e = best.entry((photo_id, pid)).or_insert((fid, sim));
+        if sim > e.1 {
+            *e = (fid, sim);
+        }
+    }
+    // Don't give a person a second face in a photo that already has them tagged.
+    let mut has = conn
+        .prepare("SELECT 1 FROM photo_faces WHERE photo_id = ?1 AND person_id = ?2 AND confirmed IN (1, 2)")
+        .map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for ((photo_id, pid), (fid, _)) in best {
+        if has.exists(params![photo_id, pid]).map_err(|e| e.to_string())? {
+            continue;
+        }
+        tx.execute("UPDATE photo_faces SET person_id = ?1, confirmed = 2 WHERE id = ?2", params![pid, fid]).map_err(|e| e.to_string())?;
+        assigned += 1;
+        touched.insert(pid);
+    }
+    drop(has);
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(assigned)
+}
+
+#[tauri::command]
+pub async fn catalog_auto_assign(app: tauri::AppHandle) -> Result<AutoAssignResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        auto_assign_run(&conn)
+    })
+    .await
+    .map_err(|e| format!("catalog_auto_assign task panicked: {e}"))?
+}
+
+/// "Not this person" for specific faces (the photo right-click People editor): each face leaves
+/// its person and is remembered as rejected for them, so auto-tagging never puts it back.
+#[tauri::command(async)]
+pub fn catalog_untag_faces(state: tauri::State<CatalogState>, face_ids: Vec<i64>) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for fid in &face_ids {
+        tx.execute(
+            "INSERT OR IGNORE INTO face_rejections (face_id, person_id) SELECT id, person_id FROM photo_faces WHERE id = ?1 AND person_id IS NOT NULL",
+            params![fid],
+        )
+        .map_err(|e| e.to_string())?;
+        n += tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1", params![fid]).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(n)
+}
+
+/// Undo for auto-tagging: every face auto-assigned to this person goes back to Unnamed, and is
+/// remembered as "not them" so it isn't auto-assigned again.
+#[tauri::command(async)]
+pub fn catalog_undo_auto_assign(state: tauri::State<CatalogState>, person_id: i64) -> Result<usize, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT OR IGNORE INTO face_rejections (face_id, person_id) SELECT id, person_id FROM photo_faces WHERE person_id = ?1 AND confirmed IN (0, 2)",
+        params![person_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let n = tx
+        .execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE person_id = ?1 AND confirmed IN (0, 2)", params![person_id])
+        .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(n)
+}

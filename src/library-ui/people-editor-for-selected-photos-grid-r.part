@@ -1,0 +1,144 @@
+  // ── People editor for selected photos (grid right-click ▸ People…) ────────────────────────
+  // Every face in the selection, grouped by person: rename a face, remove a wrong tag (remembered,
+  // so auto-tagging never re-adds it), or remove one person from all selected photos at once.
+  async function openPhotoPeopleEditor(paths, { closeups = false } = {}) {
+    // A close-up panel is a photo-scoped review session. Retiring it invalidates outstanding
+    // async work and removes any queued (not yet decoding) proxy request; an active decode may
+    // finish and populate the shared disk proxy, but cannot paint a later panel.
+    retireRawFaceReviewSession();
+    const reviewPath = closeups ? paths[0] : '';
+    const reviewSession = closeups && RAW_EXT_RE.test(reviewPath)
+      ? { jobId: `raw-face-review-${++rawFaceReviewSessionId}`, path: reviewPath, mode: 'fit', modeRevision: 0, cancelled: false, urls: new Set(), detailFaceIds: [] }
+      : null;
+    rawFaceReviewSession = reviewSession;
+    const MAX = 200;
+    const faces = [];
+    for (const path of paths.slice(0, MAX)) {
+      // A close-up panel means this exact photo; the separate People editor intentionally
+      // includes a collapsed stack so its bulk tag edits can reach every member.
+      const fs = await invoke('catalog_faces_for_path', { path, stack: !closeups }).catch(() => []);
+      (fs || []).forEach((f) => faces.push(f));
+    }
+    if (closeups && reviewSession && (reviewSession.cancelled || rawFaceReviewSession !== reviewSession)) return;
+    if (reviewSession) reviewSession.detailFaceIds = faces.slice(0, 128).map(f => f.face_id);
+    const wrap = document.createElement('div');
+    wrap.id = 'lib-people-edit';
+    if (reviewSession) reviewSession.wrap = wrap;
+    if (closeups) wrap.classList.add('lib-face-closeups');
+    wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.6);display:flex;align-items:center;justify-content:center';
+    const render = () => {
+      const groups = new Map();
+      faces.forEach((f) => {
+        const key = f.person_id && !f.person_auto ? `p${f.person_id}` : 'unnamed';
+        if (!groups.has(key)) groups.set(key, { name: key === 'unnamed' ? 'Unnamed' : f.name, pid: key === 'unnamed' ? null : f.person_id, faces: [] });
+        groups.get(key).faces.push(f);
+      });
+      const tile = (f, i) => closeups
+        ? `<figure class="lib-face-closeup-item" data-face-id="${f.face_id}"><div class="lib-face-closeup-viewport"><img alt="Face crop ${i + 1}${f.name ? `, ${esc(f.name)}` : ', unnamed'}"></div><figcaption>${esc(f.name || `Face ${i + 1} · unnamed`)}${reviewSession ? `<div class="lib-face-closeup-quality" style="font-size:11px;color:var(--mut);padding-top:3px">Fit preview</div>${reviewSession.mode === 'detail' ? '<button type="button" class="lib-btn" data-inspect-face disabled title="Inspect decoded crop pixels at their native display size">Inspect crop</button>' : ''}` : ''}</figcaption></figure>`
+        : `<div class="lib-pe-face" data-face-id="${f.face_id}" title="Click to rename or remove">
+            <img alt="">${f.auto_tagged ? '<span class="lib-pe-auto">Auto</span>' : ''}</div>`;
+      const sections = closeups
+        ? `<section class="lib-face-closeup-grid" aria-label="Detected face close-ups">${faces.map((f, i) => tile(f, i)).join('')}</section>`
+        : [...groups.values()].sort((a, b) => (a.pid == null) - (b.pid == null) || b.faces.length - a.faces.length).map((g) => `
+        <div class="lib-pe-group">
+          <div class="lib-pe-head"><span class="lib-pe-name">${esc(g.name)}</span><span class="mut">${g.faces.length} face${g.faces.length === 1 ? '' : 's'}</span>
+            ${g.pid ? `<span class="lib-btn" data-remove-person="${g.pid}">Remove ${esc(g.name)} from ${paths.length > 1 ? 'these photos' : 'this photo'}</span>` : ''}</div>
+          <div class="lib-pe-grid">${g.faces.map((f, i) => tile(f, i)).join('')}</div>
+        </div>`).join('');
+      wrap.innerHTML = `<div class="lib-pe-card" role="dialog" aria-modal="true" aria-label="${closeups ? 'Face close-ups' : 'People in selected photos'}">
+          <div class="lib-pe-top"><span>${closeups ? `Face close-ups — ${esc(baseName(paths[0]))}` : `People in ${paths.length > 1 ? `${paths.length} photos` : 'this photo'}`}</span><button type="button" class="lib-btn" data-close aria-label="${closeups ? 'Close face close-ups' : 'Close people editor'}">Done</button></div>
+          ${closeups ? `<p class="lib-face-closeup-note">Review the detected crops for yourself. Eye openness and face sharpness are not scored by Chroma.${reviewSession ? ' Fit previews are quick; RAW detail develops the full-resolution source and may take longer. Creative adjustments are excluded; large crops may be resized.' : ''}</p>` : ''}
+          ${reviewSession && faces.length ? `<div style="display:flex;gap:8px;margin-bottom:14px"><button type="button" class="lib-btn" data-raw-face-mode="fit" aria-pressed="${reviewSession.mode === 'fit'}">Fit previews</button><button type="button" class="lib-btn" data-raw-face-mode="detail" aria-pressed="${reviewSession.mode === 'detail'}">RAW detail</button>${faces.length > 128 ? '<span class="mut">Detail shows the first 128 faces.</span>' : ''}</div>` : ''}
+          ${faces.length ? sections : `<div class="mut" style="padding:20px 0">${closeups ? 'No faces have been scanned in this photo yet.' : 'No faces found in the selected photos.'}</div>`}
+          ${paths.length > MAX ? `<div class="mut" style="font-size:11px">Showing the first ${MAX} photos.</div>` : ''}
+        </div>`;
+      wrap.querySelectorAll('.lib-pe-face').forEach((el) => {
+        loadFaceCrop(parseInt(el.dataset.faceId, 10), el.querySelector('img'));
+        const openMenu = (ev) => faceMenu(ev, faces.find((f) => f.face_id === parseInt(el.dataset.faceId, 10)));
+        el.onclick = openMenu;
+        el.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openMenu(ev); } };
+      });
+      wrap.querySelectorAll('.lib-face-closeup-item').forEach((el) => {
+        const faceId = parseInt(el.dataset.faceId, 10), img = el.querySelector('img');
+        if (!reviewSession) { loadFaceCrop(faceId, img); return; }
+        loadRawReviewFaceCrop(reviewSession, faceId, img);
+      });
+      wrap.querySelectorAll('[data-raw-face-mode]').forEach(button => {
+        button.onclick = () => {
+          if (button.dataset.rawFaceMode === 'detail' && reviewSession.detailFailed) {
+            reviewSession.detailPromise = null;
+            reviewSession.detailFailed = false;
+          } else if (reviewSession.mode === button.dataset.rawFaceMode) return;
+          reviewSession.mode = button.dataset.rawFaceMode;
+          reviewSession.modeRevision++;
+          render();
+        };
+      });
+      wrap.querySelectorAll('[data-inspect-face]').forEach(button => {
+        button.onclick = () => {
+          const figure = button.closest('figure');
+          const inspecting = figure.dataset.inspecting !== 'true';
+          figure.dataset.inspecting = String(inspecting);
+          button.textContent = inspecting ? 'Fit crop' : 'Inspect crop';
+        };
+      });
+      wrap.querySelectorAll('[data-remove-person]').forEach((b) => {
+        b.onclick = async () => {
+          const pid = parseInt(b.dataset.removePerson, 10);
+          const ids = faces.filter((f) => f.person_id === pid).map((f) => f.face_id);
+          await untag(ids);
+        };
+      });
+      wrap.querySelector('[data-close]').onclick = close;
+    };
+    const close = () => {
+      wrap.remove();
+      if (reviewSession && rawFaceReviewSession === reviewSession) retireRawFaceReviewSession();
+      for (const url of reviewSession?.urls || []) URL.revokeObjectURL(url);
+      if (!closeups) { refreshPeople(); refreshView(); }
+    };
+    const untag = async (ids) => {
+      try {
+        await invoke('catalog_untag_faces', { faceIds: ids });
+        faces.forEach((f) => { if (ids.includes(f.face_id)) { f.person_id = null; f.name = null; f.auto_tagged = false; f.person_auto = false; } });
+        render();
+      } catch (err) { toast(humanizeErr('remove this tag', err), 'err'); }
+    };
+    const faceMenu = (ev, f) => {
+      ev.stopPropagation();
+      document.querySelectorAll('.lib-pe-menu').forEach((m) => m.remove());
+      const m = document.createElement('div');
+      m.className = 'lib-pe-menu';
+      m.style.cssText = `position:fixed;left:${ev.clientX}px;top:${ev.clientY}px;z-index:10000;background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:4px;min-width:170px;font-size:12px`;
+      const add = (label, fn) => {
+        const it = document.createElement('div');
+        it.textContent = label;
+        it.style.cssText = 'padding:7px 10px;border-radius:5px;cursor:pointer';
+        it.onmouseenter = () => { it.style.background = 'var(--row-hover, rgba(128,128,128,.18))'; };
+        it.onmouseleave = () => { it.style.background = ''; };
+        it.onclick = () => { m.remove(); fn(); };
+        m.appendChild(it);
+      };
+      add(f.person_id && !f.person_auto ? 'Change name…' : 'Name this face…', async () => {
+        const name = await window.askTextModal('Who is this?', '', f.person_auto ? '' : (f.name || ''));
+        if (!name) return;
+        const existing = peopleList.find((p) => !p.auto && p.name.toLowerCase() === name.toLowerCase());
+        try {
+          const id = await invoke('catalog_split_faces', { faceIds: [f.face_id], intoId: existing ? existing.id : null, intoName: existing ? null : name });
+          Object.assign(f, { person_id: existing ? existing.id : id, name: existing ? existing.name : name, auto_tagged: false, person_auto: false });
+          if (!existing) await refreshPeople();
+          render();
+        } catch (err) { toast(humanizeErr('name this face', err), 'err'); }
+      });
+      if (f.person_id) add(`Not ${f.person_auto ? 'this group' : f.name} — remove tag`, () => untag([f.face_id]));
+      if (f.auto_tagged) add('Confirm — yes, this is them', async () => {
+        await invoke('catalog_confirm_person', { personId: f.person_id, faceIds: [f.face_id] }).catch(() => {});
+        f.auto_tagged = false; render();
+      });
+      document.body.appendChild(m);
+      setTimeout(() => document.addEventListener('mousedown', function h(e2) { if (!m.contains(e2.target)) { m.remove(); document.removeEventListener('mousedown', h); } }), 0);
+    };
+    wrap.onclick = (e) => { if (e.target === wrap) close(); };
+    render();
+    document.body.appendChild(wrap);
+  }

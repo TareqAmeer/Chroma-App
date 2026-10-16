@@ -1,0 +1,60 @@
+// ── Rebuild ──────────────────────────────────────────────────────────────────────────────────
+//
+// The property that makes this whole SQLite dependency safe to have taken on: the catalog is a
+// derived index of disk + XMP, and a rebuild is a rescan away from being exactly right again —
+// never data loss the way a corrupt sidecar would be. This is the explicit, user-triggered
+// version of that guarantee (the automatic version lives in `CatalogState::new`, which already
+// renames a corrupt file aside and starts fresh); this one wipes everything on purpose and
+// proves ratings/labels/favorites survive because they were never really stored HERE, only
+// mirrored from the files that actually hold them.
+//
+// ⚠️ `photos.id` is NOT preserved across a rebuild — every row is genuinely new. That is fine
+// FOR THIS OPERATION SPECIFICALLY (a rare, explicit, user-initiated reset) and is exactly why
+// the "ids must never be reassigned" rule elsewhere in this file is scoped to ordinary
+// migrations, not this one: a migration runs silently and often, so an id change there would
+// orphan the offline-thumbnail tier without the user ever knowing; a rebuild is a deliberate
+// action whose whole point is starting over.
+
+pub fn rebuild_run(conn: &Connection, progress: &mut dyn FnMut(ScanProgress), cancel: &AtomicBool) -> Result<ScanResult, String> {
+    // ⚠️ Deliberately NOT re-locked per batch like verify_run_scoped/hash_run_scoped — this wipes
+    // the whole catalog first (DELETE FROM photos/roots/volumes below), so a re-lock mid-rebuild
+    // would let some OTHER command observe the catalog in that wiped, half-rebuilt state, which
+    // is a correctness risk worse than the perf one. Rare, explicit, user-initiated ("rebuild
+    // catalog from scratch") — QoS-marked so it can't starve the UI thread while it runs.
+    crate::bgwork::mark_current_thread_background();
+    // Capture every root's absolute path + kind BEFORE wiping (volumes/roots are about to be
+    // deleted too — this is what we re-derive from, since there is nothing else to derive it
+    // from once the tables are empty).
+    let mut stmt = conn
+        .prepare("SELECT v.last_path, v.is_local, r.rel_path, r.kind FROM roots r JOIN volumes v ON v.id = r.volume_id")
+        .map_err(|e| e.to_string())?;
+    let roots: Vec<(String, i64, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(stmt);
+    let root_abs_paths: Vec<(String, String)> = roots
+        .iter()
+        .map(|(last_path, is_local, rel_path, kind)| (abs_path(last_path, *is_local != 0, rel_path), kind.clone()))
+        .collect();
+
+    conn.execute_batch(
+        "DELETE FROM photo_keywords; DELETE FROM keywords; DELETE FROM photos; DELETE FROM roots; DELETE FROM volumes;",
+    )
+    .map_err(|e| e.to_string())?;
+
+    let mut result = ScanResult::default();
+    for (abs, kind) in root_abs_paths {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let Ok(root) = add_root_run(conn, &abs, Some(kind)) else { continue }; // a root that vanished since — skip, don't fail the whole rebuild
+        let r = scan_run(conn, Some(root.volume_id), progress, cancel)?;
+        result.scanned += r.scanned;
+        result.added += r.added;
+        metadata_run(conn, progress, cancel)?;
+        sidecar_run(conn, progress, cancel)?;
+    }
+    Ok(result)
+}

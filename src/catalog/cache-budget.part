@@ -1,0 +1,154 @@
+// ── Cache budget ─────────────────────────────────────────────────────────────────────────────
+//
+// The three tiers (§CLAUDE.md-style plan doc "Local cache: 20GB, three tiers") all work
+// correctly today but report nothing anywhere — this is the read side (usage) and the one
+// user-facing lever (clear a tier), surfaced in the Drives section as "using X of 20GB".
+
+fn dir_size_recursive(dir: &Path) -> u64 {
+    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    rd.flatten()
+        .map(|e| match e.metadata() {
+            Ok(m) if m.is_dir() => dir_size_recursive(&e.path()),
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+#[derive(Serialize, Clone)]
+pub struct CacheUsage {
+    /// Never-pruned tier — an unplugged drive's whole reason to be browsable offline, so this
+    /// number is the one worth watching; it only ever grows until the user clears it by hand.
+    pub offline_thumbs_bytes: u64,
+    /// 14GB LRU (full-size decoded renders of recently-edited photos) — self-managing, shown
+    /// for visibility only.
+    pub decode_cache_bytes: u64,
+    /// 500MB LRU (grid thumbnails for whatever folder is currently open) — self-managing, shown
+    /// for visibility only.
+    pub working_thumbs_bytes: u64,
+    /// Never-pruned — the last-100-edited + last-100-added guaranteed-offline tier (full
+    /// resolution, DCP-accurate for RAW sources). See library::hq_offline_run. Membership-evicted
+    /// (a photo dropping out of the live set deletes its own entry), not LRU-capped like the
+    /// tiers above, so this is expected to stay small and roughly constant regardless of library
+    /// size — it tracks a fixed ~200-photo window, not the whole catalog.
+    pub hq_offline_bytes: u64,
+    /// The plan's own stated total (offline thumbs + decode cache + hq_offline combine toward
+    /// this; working thumbnails are a separate, much smaller LRU tier and aren't counted against
+    /// it). Raised 20GB -> 30GB alongside the offline reference tier's 360px -> 800px bump and
+    /// the new hq_offline tier — see the plan doc's own sizing math (measured: 800px x ~70k
+    /// photos ~= 6-10.5GB, hq_offline's 200 photos ~= 2.4-4GB, both comfortably inside the
+    /// existing working/decode caps' remaining headroom in realistic, not worst-case, usage).
+    pub budget_bytes: u64,
+}
+
+fn compute_cache_usage() -> CacheUsage {
+    CacheUsage {
+        offline_thumbs_bytes: dir_size_recursive(&thumb_dir()),
+        decode_cache_bytes: dir_size_recursive(&crate::library::decode_cache_dir()),
+        working_thumbs_bytes: dir_size_recursive(&crate::library::cache_dir()),
+        hq_offline_bytes: dir_size_recursive(&hq_offline_dir()),
+        budget_bytes: 30 * 1024 * 1024 * 1024,
+    }
+}
+
+static CACHE_USAGE_MEMO: Mutex<Option<(std::time::Instant, CacheUsage)>> = Mutex::new(None);
+static CACHE_USAGE_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// Drops the memo so the next `cache_usage` call re-walks (called after a tier is cleared).
+fn invalidate_cache_usage() {
+    *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// ⚠️ Four recursive stat walks over ~60k+ thumbnail/decode-cache files, each costing tens of
+/// seconds on a big library. This is a `command(async)` that runs on Tauri's CAPPED blocking pool
+/// (`max_blocking_threads(workers)` in main.rs), and the UI refreshes it on every folder open, so
+/// up to 3 concurrent walks parked most of that pool — live-sampled: every other IPC (get_meta,
+/// peek_raw_camera_path, get_display_decode_cache_path) queued behind them for 5-13 s. Now
+/// single-flight with a 90 s memo: a repeat call returns the memo (stale-while-revalidate, the
+/// refresh runs on ONE named background thread, never the pool); only the very first call walks
+/// inline, and concurrent callers during it get zeros rather than starting another walk.
+#[tauri::command(async)]
+pub fn cache_usage() -> CacheUsage {
+    const TTL: std::time::Duration = std::time::Duration::from_secs(90);
+    let memo = CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match memo {
+        Some((at, v)) if at.elapsed() < TTL => v,
+        Some((_, v)) => {
+            if !CACHE_USAGE_BUSY.swap(true, Ordering::AcqRel) {
+                let spawned = std::thread::Builder::new().name("cs-cache-usage".into()).spawn(|| {
+                    crate::bgwork::mark_current_thread_background();
+                    let fresh = compute_cache_usage();
+                    *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), fresh));
+                    CACHE_USAGE_BUSY.store(false, Ordering::Release);
+                });
+                if spawned.is_err() {
+                    CACHE_USAGE_BUSY.store(false, Ordering::Release);
+                }
+            }
+            v
+        }
+        None => {
+            if CACHE_USAGE_BUSY.swap(true, Ordering::AcqRel) {
+                return CacheUsage { offline_thumbs_bytes: 0, decode_cache_bytes: 0, working_thumbs_bytes: 0, hq_offline_bytes: 0, budget_bytes: 30 * 1024 * 1024 * 1024 };
+            }
+            let fresh = compute_cache_usage();
+            *CACHE_USAGE_MEMO.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), fresh.clone()));
+            CACHE_USAGE_BUSY.store(false, Ordering::Release);
+            fresh
+        }
+    }
+}
+
+/// Wipes one cache tier entirely (not per-root yet — the plan's original per-root
+/// `roots.keep_thumbs` refinement is deferred; this is the global "Free up space" v1). Clearing
+/// `offline_thumbs` also resets every `photos.thumb` marker to 0, or the DB would keep claiming
+/// a thumbnail exists for a file that's just been deleted — `offline_thumb_bytes` degrades
+/// gracefully either way (a missing file just reads as no thumbnail), but leaving the marker set
+/// would mean nothing ever regenerates it on a later `catalog_thumbnails` pass.
+///
+/// ⚠️ `working_thumbs` (`crate::library::cache_dir()`) is NOT a cache-only directory — it also
+/// holds the cross-folder smart-collection registries and export history (see
+/// `library::registry_path`'s doc comment). A `remove_dir_all` on the whole thing — what this
+/// used to do — deletes favorites/flags/rejects/duplicates/edited status/recents AND export
+/// history right along with the JPEGs, and this command is wired to a live "Free up space"
+/// button in the UI. `offline_thumbs`/`decode` hold no user data and keep the fast
+/// `remove_dir_all` path; only `working_thumbs` walks the directory and deletes file-by-file
+/// through `library::is_evictable_cache_file`.
+#[tauri::command(async)]
+pub fn clear_cache_tier(tier: String, state: tauri::State<CatalogState>) -> Result<u64, String> {
+    let dir = match tier.as_str() {
+        "offline_thumbs" => thumb_dir(),
+        "decode" => crate::library::decode_cache_dir(),
+        "working_thumbs" => crate::library::cache_dir(),
+        other => return Err(format!("unknown cache tier: {other}")),
+    };
+    let freed = if tier == "working_thumbs" {
+        let mut freed = 0u64;
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for entry in rd.flatten() {
+                let name = entry.file_name();
+                if !crate::library::is_evictable_cache_file(&name.to_string_lossy()) {
+                    continue; // registries / export history — never touched by this tier
+                }
+                if let Ok(m) = entry.metadata() {
+                    if m.is_file() && std::fs::remove_file(entry.path()).is_ok() {
+                        freed += m.len();
+                    }
+                }
+            }
+        }
+        freed
+    } else {
+        let freed = dir_size_recursive(&dir);
+        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        freed
+    };
+    if tier == "offline_thumbs" {
+        if let Ok(conn) = state.conn.lock() {
+            let _ = conn.execute("UPDATE photos SET thumb = 0", []);
+        }
+    }
+    invalidate_cache_usage();
+    Ok(freed)
+}

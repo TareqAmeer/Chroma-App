@@ -1,0 +1,203 @@
+  // ── Background preview building (Lightroom's "Build Previews"): once you have settled on a
+  // folder, develop the 2560px display preview for every RAW in view — nearest to where you are
+  // first — one photo at a time and only while you are idle. By the time you cull, opening a photo
+  // finds a prepared proxy instead of a cold decode. Serial (shares rawReviewQueue's one-at-a-time
+  // lane), pauses on any input / editor open / Quick Look / manual Cache RAWs or Prepare job, and
+  // photos that already have a matching proxy are a quick native hit (display-only reuses it).
+  // localStorage chromasmithAutoPreviews='0' turns it off.
+  const AUTO_PREVIEW_IDLE_MS = 2500, AUTO_PREVIEW_MAX = 400;
+  let _autoPrevLastInput = performance.now(), _autoPrevRunning = false;
+  const _autoPrevDone = new Set(), _autoPrevFailed = new Set();
+  const _autoPrevTouch = () => { _autoPrevLastInput = performance.now(); };
+  ['keydown', 'mousedown', 'wheel', 'touchstart', 'mousemove'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  function autoPreviewsEnabled() {
+    try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
+  }
+  function autoPreviewUserBusy() {
+    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive)
+      || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
+  }
+  function autoPreviewCandidates() {
+    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
+    const anchor = state.openedPath || state._kbCursor || [...state.selected][0] || sorted[0];
+    const at = Math.max(0, sorted.indexOf(anchor));
+    return sorted.map((p, i) => [p, i])
+      .filter(([p]) => RAW_EXT_RE.test(p) && !_autoPrevDone.has(p) && !_autoPrevFailed.has(p))
+      .sort((a, b) => Math.abs(a[1] - at) - Math.abs(b[1] - at) || a[1] - b[1])
+      .slice(0, AUTO_PREVIEW_MAX).map(([p]) => p);
+  }
+  async function autoPreviewTick() {
+    if (_autoPrevRunning || !autoPreviewsEnabled() || !state.open || state.source === 'lr') return;
+    if (autoPreviewUserBusy()) return;
+    _autoPrevRunning = true;
+    let built = 0;
+    try {
+      for (const next of autoPreviewCandidates()) {
+        if (autoPreviewUserBusy() || !state.open) break;
+        try {
+          await queueRawReview(next, () => cacheOneRaw(next, 'review'), 'auto-prep');
+          _autoPrevDone.add(next); built++;
+        } catch (_) { _autoPrevFailed.add(next); }
+        // Let the review lane release (its finally runs after our resolution) before re-checking
+        // busy, or rawReviewActive would still read true and end the run after one photo.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    } finally {
+      _autoPrevRunning = false;
+      if (built) rawPerf('auto-previews-built', '', { count: built });
+    }
+  }
+  setInterval(() => { void autoPreviewTick(); }, 3000);
+  if (LIBTEST) {
+    window.libtestAutoPreviewTick = autoPreviewTick;
+    window.libtestAutoPreviewIdle = () => { _autoPrevLastInput = -1e9; };
+    window.libtestAutoPreviewTouch = _autoPrevTouch;
+  }
+
+  // Warm the persistent full-resolution RAW cache without opening photos in the editor.
+  let _cacheWarmCancel = null;
+  let _rawReviewPrep = null;
+  let _rawReviewRecovery = null;
+  // BEGIN RAW_REVIEW_JOB_HELPERS
+  async function recoverRawReviewJobs() {
+    const jobs = await invoke('raw_review_jobs_list');
+    for (let job of jobs.slice(0, ACTIVITY_HISTORY_LIMIT).reverse()) {
+      if (_rawReviewPrep?.rawReviewJobId === job.id) continue;
+      if (job.status === 'running') {
+        await invoke('raw_review_jobs_interrupt', { id: job.id });
+        job = { ...job, status: 'interrupted' };
+      }
+      recordActivityHistory({ jobId: `raw-review-job-${job.id}`, rawReviewJobId: job.id,
+        label: job.label, stage: 'done', outcome: job.status, done: job.completed,
+        total: job.total, failedCount: job.failed, failed: job.failedItems || [], finishedAt: job.updatedAt * 1000, current: job.status === 'completed'
+          ? 'RAW review preparation completed' : 'Resume checks sources, settings and prepared previews before continuing' });
+    }
+    renderActivity();
+  }
+  async function prepareRawReviewPreviews(paths, resumeId = null) {
+    if (_rawReviewPrep) return _rawReviewPrep.promise;
+    const rawPaths = [...new Set((paths || []).filter((p) => RAW_EXT_RE.test(p)))];
+    if (!resumeId && !rawPaths.length) { toast('Select at least one RAW photo to prepare', false); return; }
+    if (rawPaths.length > 50000) { toast('Prepare up to 50,000 RAW photos at a time', false); return; }
+    const record = { jobId: `raw-review-prep-${Date.now()}`, stage: 'working', done: 0, total: rawPaths.length,
+      current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelled: false };
+    record.cancel = () => {
+      record.cancelled = true;
+      // A not-yet-started prep request can be removed; an active native decode is allowed to
+      // finish so its completed proxy remains useful, then the loop stops before the next photo.
+      const queued = rawReviewQueue.findIndex((job) => job.kind === 'prep' && job.ownerJobId === record.jobId);
+      if (queued >= 0) rawReviewQueue.splice(queued, 1)[0].reject(new Error('RAW review preparation cancelled'));
+    };
+    _rawReviewPrep = record;
+    const update = (patch) => {
+      Object.assign(record, patch);
+      const activityPatch = { jobId: record.jobId, rawReviewJobId: record.rawReviewJobId || null, stage: record.stage, done: record.done, total: record.total,
+        current: record.current, kind: 'raw-review-prep', label: 'Preparing RAW review previews',
+        cancelFn: record.stage === 'done' ? null : record.cancel };
+      if (record.outcome !== undefined) activityPatch.outcome = record.outcome;
+      if (record.failed !== undefined) activityPatch.failed = record.failed;
+      activityUpdate('raw-review-prep', activityPatch);
+    };
+    update({});
+    record.promise = (async () => {
+      let prepared = 0, failed = [], journal = null, interrupted = false;
+      try {
+        if (_rawReviewRecovery) await _rawReviewRecovery;
+        let items;
+        if (resumeId) {
+          const saved = await invoke('raw_review_jobs_get', { id: resumeId });
+          const expectedRecipeKeys = [];
+          for (const item of saved.items) expectedRecipeKeys.push({ index: item.index, recipeKey: (await rawCacheSettings(item.path, 'review')).recipeKey });
+          journal = await invoke('raw_review_jobs_resume', { id: resumeId, expectedRecipeKeys });
+          items = journal.items;
+        } else {
+          items = [];
+          for (const path of rawPaths) {
+            if (record.cancelled) return;
+            const settings = await rawCacheSettings(path, 'review');
+            items.push({ index: items.length, path, recipeKey: settings.recipeKey, settingsJson: JSON.stringify(settings), status: 'pending' });
+          }
+          if (record.cancelled) return;
+          if (!LIBTEST) journal = await invoke('raw_review_jobs_create', { label: 'Preparing RAW review previews', items: items.map(({ path, recipeKey, settingsJson }) => ({ path, recipeKey, settingsJson })) });
+          if (journal) items = journal.items;
+        }
+        if (journal) {
+          clearActiveActivity(record);
+          record.rawReviewJobId = journal.id;
+        }
+        prepared = items.filter(item => item.status === 'completed').length;
+        failed = items.filter(item => item.status === 'failed').map(item => `${baseName(item.path)}: ${item.error || 'Prepare this RAW again'}`);
+        update({ total: items.length, done: prepared + failed.length });
+        for (const item of items) {
+          if (record.cancelled) break;
+          if (item.status === 'completed' || item.status === 'failed') continue;
+          const path = item.path;
+          update({ current: baseName(path) });
+          let completed = false;
+          try {
+            const settings = JSON.parse(item.settingsJson);
+            if (record.cancelled) break;
+            if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'working' });
+            const result = await queueRawReview(path, () => record.cancelled ? null : cacheOneRaw(path, 'review', settings), 'prep', record.jobId);
+            if (result === null) break; // cancelled after dequeue but before native work dispatched
+            if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'completed' });
+            prepared++;
+            completed = true;
+          } catch (error) {
+            if (!record.cancelled) {
+              const detail = humanizeErr('prepare preview', error);
+              if (journal) await invoke('raw_review_jobs_checkpoint', { id: journal.id, index: item.index, status: 'failed', error: detail });
+              failed.push(`${baseName(path)}: ${detail}`);
+            }
+          }
+          if (record.cancelled && !completed) break;
+          update({ done: prepared + failed.length, current: baseName(path) });
+        }
+        if (journal) await invoke(record.cancelled ? 'raw_review_jobs_cancel' : 'raw_review_jobs_finish', { id: journal.id });
+      } catch (error) {
+        interrupted = !!journal;
+        failed.push(humanizeErr('RAW review preparation', error));
+        // Leave an interrupted journal recoverable if persistence or checkpointing failed.
+        if (journal) await invoke('raw_review_jobs_interrupt', { id: journal.id }).catch(() => {});
+      } finally {
+        const cancelled = record.cancelled;
+        const summary = cancelled ? `Preparation stopped — ${prepared} of ${record.total} ready` : `Prepared ${prepared} RAW review preview${prepared === 1 ? '' : 's'}`;
+        record.stage = 'done';
+        const outcome = cancelled ? 'cancelled' : interrupted ? 'interrupted' : failed.length ? (prepared ? 'partial' : 'failed') : 'completed';
+        update({ stage: 'done', outcome, done: record.done, current: summary, failed: failed.length ? failed : undefined });
+        toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
+        if (_rawReviewPrep === record) _rawReviewPrep = null;
+      }
+    })();
+    return record.promise;
+  }
+  // END RAW_REVIEW_JOB_HELPERS
+  async function cacheSelectedRaws(paths) {
+    const rawPaths = paths.filter((p) => RAW_EXT_RE.test(p));
+    if (!rawPaths.length) { toast('Select at least one RAW photo to cache', false); return; }
+    let cancelled = false;
+    _cacheWarmCancel = () => { cancelled = true; };
+    activityUpdate('raw-cache', { label: 'Caching RAW previews', stage: 'working', done: 0, total: rawPaths.length,
+      current: `Preparing ${rawPaths.length} photo${rawPaths.length === 1 ? '' : 's'}`, cancelFn: () => { cancelled = true; } });
+    let written = 0, cached = 0, failed = [], batchT0 = performance.now();
+    rawPerf('cache-batch-start', `${rawPaths.length} RAWs`, { count: rawPaths.length });
+    try {
+      for (let i = 0; i < rawPaths.length && !cancelled; i++) {
+        const path = rawPaths[i];
+        const itemT0 = performance.now(); rawPerf('cache-item-start', path);
+        try {
+          const result = await cacheOneRaw(path, 'full');
+          if (result === 'cached') cached++; else written++;
+        } catch (e) { failed.push(`${baseName(path)}: ${humanizeErr('cache', e)}`); }
+        rawPerf('cache-item-complete', path, { ms: performance.now() - itemT0 });
+        activityUpdate('raw-cache', { stage: 'working', done: i + 1, total: rawPaths.length, current: baseName(path) });
+      }
+    } finally {
+      _cacheWarmCancel = null;
+      const ready = written + cached;
+      const summary = cancelled ? `Caching stopped — ${ready} of ${rawPaths.length} ready` : `Cached ${ready} RAW preview${ready === 1 ? '' : 's'}`;
+      activityUpdate('raw-cache', { stage: 'done', done: ready, total: rawPaths.length, current: summary, failed: failed.length ? failed : undefined });
+      rawPerf('cache-batch-complete', `${rawPaths.length} RAWs`, { ms: performance.now() - batchT0, ready, failed: failed.length });
+      toast(failed.length ? `${summary}; ${failed.length} failed` : summary, !failed.length);
+    }
+  }

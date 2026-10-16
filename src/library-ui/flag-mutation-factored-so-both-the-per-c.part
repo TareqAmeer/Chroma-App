@@ -1,0 +1,118 @@
+  // ── flag mutation, factored so both the per-card flag clicks AND the
+  // multi-select context menu can apply the same write+cache+redraw logic. ─────────────────
+  // A failed sidecar write (read-only volume, permissions, disk full) used to be swallowed by
+  // `.catch(() => {})` while the UI updated optimistically — the flag LOOKED set but silently
+  // vanished on relaunch, losing culling work with no hint why. Surface it and roll back.
+  function sidecarWriteFailed(path, prev, e) {
+    state.sidecars.set(path, prev);
+    console.error('set_sidecar failed', path, e);
+    if (typeof toast === 'function') toast('Could not save flag/edit state — is this folder writable?', false);
+    else if (typeof log === 'function') log(`Sidecar write failed for ${path}: ${e}`, 'warn');
+  }
+  async function setLabel(path, label) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
+    const updated = { ...cur, label };
+    state.sidecars.set(path, updated);
+    let saved = true;
+    await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
+      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) {
+      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite, updated.color_label);
+      // HANDOVER §8 item #12: this optimistic patch updated the flag ICONS but never the
+      // card's own lbl-red/lbl-green class — the .lbl-red rule that dims a rejected thumbnail
+      // (UI_SPEC.md's deliberate black-overlay design, :1173-1183) only ever applied correctly
+      // after a full renderGrid() rebuilt card.className from sc.label. A flag click, which
+      // goes through exactly this path, never dimmed anything until the next unrelated re-render.
+      card.classList.remove('lbl-red', 'lbl-green');
+      if (label === 'Red') card.classList.add('lbl-red');
+      else if (label === 'Green') card.classList.add('lbl-green');
+    }
+    if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
+    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel is the ONE canonical write path every
+    // flag UI funnels through (grid click, right-click menu, keyboard X/P/U, compare pane, the
+    // docked filmstrip's own flag row) — but none of them ever told the Editor's topbar flag
+    // buttons (fxUpdateFlagBtns, chromasmith-22.html) to re-read state, so flagging the
+    // CURRENTLY OPEN photo from anywhere in the Library left the topbar showing stale state
+    // ("updates in the sidebar but not the top bar"). Fixing it here once covers every entry
+    // point instead of patching each call site.
+    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
+    return saved;
+  }
+  async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
+    if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
+    if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', color_label: '', edited: false };
+    const prev = cur.color_label || '';
+    if (prev === colorLabel) return true;
+    const updated = { ...cur, color_label: colorLabel };
+    state.sidecars.set(path, updated);
+    let saved = true;
+    await invoke('set_color_label', { path, colorLabel }).catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+    if (!saved) return false;
+    libMetaRecord({ kind: 'color_label', path, prev });
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) {
+      const flags = card.querySelector('.lib-flags');
+      if (flags) flags.innerHTML = flagsHtml(updated.label, updated.favorite, updated.color_label);
+    }
+    if (path === state.openedPath && typeof window.fxUpdateColorLabelControl === 'function') window.fxUpdateColorLabelControl();
+    if (state.colorLabelFilter !== 'all') applyCatalogFilterChange(); else renderGrid();
+    return true;
+  }
+  // Mirrors setLabel() above but for the favorite heart — same optimistic-update +
+  // sidecar-write + rollback pattern, kept separate since favorite is independent of
+  // (and can coexist with) a Red/Green flag.
+  async function setFavorite(path, favorite) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
+    const updated = { ...cur, favorite };
+    state.sidecars.set(path, updated);
+    await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
+      .catch((e) => sidecarWriteFailed(path, cur, e));
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite, updated.color_label);
+    renderCollectionCounts();
+    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see setLabel's comment
+  }
+  // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
+  // CURRENTLY OPEN photo without needing the Library panel open — same underlying
+  // setLabel() the grid's own flag icons and context menu use, so it stays in sync either way.
+  window.chromasmithToggleFlag = async (label) => {
+    const path = state.openedPath;
+    if (!path) return;
+    const cur = await getSidecar(path);
+    await setLabel(path, cur.label === label ? '' : label);
+  };
+  window.chromasmithHasOpenedPhoto = () => !!state.openedPath;
+  window.chromasmithOpenedColorLabel = () => (state.sidecars.get(state.openedPath) || {}).color_label || '';
+  window.chromasmithColorLabelsEnabled = () => COLOR_LABELS_ENABLED;
+  window.chromasmithSetColorLabel = (colorLabel) => state.openedPath ? setColorLabel(state.openedPath, colorLabel) : Promise.resolve(false);
+  // A photo that reaches the Editor any other way (drag-drop, Open File) is not the Gallery photo
+  // that was open before it — forget that one, or the topbar flag/favorite (and the export's
+  // source-path lookups) kept acting on the previous Gallery photo. Called by loadFXImages
+  // unless the load came through libLoadFX. Found by test/control_sweep.mjs triage.
+  window.chromasmithForgetOpened = () => {
+    if (!state.openedPath && !(state.openedPaths || []).length) return;
+    state.openedPath = ''; state.openedPaths = [];
+    window.chromasmithSourcePath = null;
+    if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
+    if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+  };
+  window.chromasmithOpenedFlag = () => {
+    const path = state.openedPath;
+    return path ? (state.sidecars.get(path) || {}).label || '' : '';
+  };
+  // Same open-photo bridge as chromasmithToggleFlag/chromasmithOpenedFlag above, for the
+  // favorite heart.
+  window.chromasmithToggleFavorite = async () => {
+    const path = state.openedPath;
+    if (!path) return;
+    const cur = await getSidecar(path);
+    await setFavorite(path, !cur.favorite);
+  };
+  window.chromasmithOpenedFavorite = () => {
+    const path = state.openedPath;
+    return path ? !!(state.sidecars.get(path) || {}).favorite : false;
+  };

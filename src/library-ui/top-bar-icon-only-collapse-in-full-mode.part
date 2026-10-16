@@ -1,0 +1,17 @@
+  // ── Top-bar icon-only collapse in .full mode (Library View.html's fitTopbar()) — stays ONE
+  // row and hides labels instead of wrapping to a second one. Docked (:not(.full)) mode is
+  // always this narrow already (handled structurally by the CSS above); this only has to act
+  // when a .full window is resized down. Measures the bar's own overflow rather than a fixed
+  // window-width breakpoint, since #lib-top's available width also depends on the sidebar's
+  // (user-resizable) column. */
+  const libTop = overlay.querySelector('#lib-top');
+  // Compact and the deskx overflow1-3 passes below are ONE staged fold: each measurement must
+  // start from the fully-unfolded bar. Run separately, one pass measured with the other's stale
+  // classes still applied, and a window widened from 700px to 1400px kept .lib-top-compact and
+  // re-added .lib-top-overflow1 (hiding the flags) even though the unfolded bar fits.
+  function syncTopCompact() {
+    if (!overlay.classList.contains('full')) return; // :not(.full) covers itself via CSS
+    syncTopOverflow();
+  }
+  new ResizeObserver(syncTopCompact).observe(libTop);
+  window.addEventListener('resize', syncTopCompact);

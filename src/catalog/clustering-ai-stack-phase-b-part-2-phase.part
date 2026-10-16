@@ -1,0 +1,548 @@
+// ── Clustering (AI stack Phase B, part 2 / Phase C reconciliation) — DBSCAN over every embedded
+// face into "Person N" groups. Embeddings are L2-normalized (see arcface::embed), so plain
+// Euclidean distance is monotonic with cosine distance and linfa-clustering's default L2 metric
+// needs no customization.
+//
+// ⚠️ Phase B's first version wiped and rebuilt EVERY `people` row on every run — fine when there
+// was no naming UI to lose anything, but Phase C adds one, and a rename the very next re-cluster
+// silently discards is a real defect, not a rough edge. `people.auto` (0 = the user has renamed
+// this person or merged another into it) is what makes reconciliation possible: a machine-
+// generated ("auto") person is always fair game to delete and regenerate, but a NAMED person is
+// preserved by majority vote — if most of a new DBSCAN cluster's faces previously belonged to
+// the same named person, that cluster is folded back into it (id and name kept, cover_face_id
+// untouched) rather than becoming a fresh "Person N". A named person with no faces left after a
+// re-cluster is NOT deleted — it just sits empty, visible for the user to clean up manually
+// (`catalog_delete_person`) rather than the tool silently discarding a name they chose.
+fn reconcile_person_for_cluster(
+    tx: &rusqlite::Transaction,
+    cluster_face_ids: &[i64],
+    old_person_of: &std::collections::HashMap<i64, i64>,
+    named_people: &std::collections::HashMap<i64, bool>, // person_id -> auto
+    next_auto_num: &mut usize,
+    now: i64
+) -> Result<i64, String> {
+    let mut votes: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    for fid in cluster_face_ids {
+        if let Some(&pid) = old_person_of.get(fid) {
+            if named_people.get(&pid) == Some(&false) {
+                // false == NOT auto, i.e. a user-named/touched person
+                *votes.entry(pid).or_insert(0) += 1;
+            }
+        }
+    }
+    if let Some((&best_pid, &count)) = votes.iter().max_by_key(|(_, c)| **c) {
+        if count * 2 > cluster_face_ids.len() {
+            return Ok(best_pid);
+        }
+    }
+    // No majority-named match — a fresh auto person. Skip any name already taken (a named person
+    // could legitimately be called "Person 3").
+    loop {
+        let name = format!("Person {}", *next_auto_num);
+        *next_auto_num += 1;
+        let exists: bool =
+            tx.query_row("SELECT 1 FROM people WHERE name = ?1", params![name], |_| Ok(true)).optional().map_err(|e| e.to_string())?.unwrap_or(false);
+        if exists {
+            continue;
+        }
+        tx.execute("INSERT INTO people (name, cover_face_id, created, auto) VALUES (?1, ?2, ?3, 1)", params![name, cluster_face_ids[0], now])
+            .map_err(|e| e.to_string())?;
+        return Ok(tx.last_insert_rowid());
+    }
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct ClusterResult {
+    /// Faces tagged to a named person without asking (see `auto_assign_run`).
+    pub auto_assigned: usize,
+    pub people: usize,
+    pub clustered_faces: usize,
+    pub unclustered_faces: usize,
+}
+
+/// `eps` is a EUCLIDEAN distance threshold on L2-normalized 512-dim embeddings — for reference,
+/// `eps=0.6` corresponds to a cosine similarity of about `1 - eps²/2 ≈ 0.82`, a reasonable
+/// starting point for ArcFace embeddings (published verification thresholds for this model
+/// family typically sit in the 0.3-0.4 cosine-distance range for same/different-person
+/// decisions). `min_points=2` means a person needs at least 2 photos to form a named group — a
+/// single face is left unclustered (noise) rather than becoming its own "Person" of one, since
+/// DBSCAN's whole value here is refusing to force outliers into groups.
+pub fn cluster_run(conn: &Connection, eps: f64, min_points: usize) -> Result<ClusterResult, String> {
+    // ⚠️ CONFIRMED faces (the user reviewed and accepted them — see screen B / people-pets
+    // wireframes) are excluded from clustering ENTIRELY, not just protected from the wipe below.
+    // Before `confirmed` existed, every run nulled every assignment and re-derived it from
+    // scratch, which is failure #5 in the people-pets plan: a re-cluster could silently move a
+    // face you had already confirmed belonged to someone. Now a confirmed face's `person_id` is
+    // never touched by this function again — DBSCAN only ever proposes fresh/unconfirmed faces.
+    let mut stmt = conn
+        .prepare("SELECT id, embedding, person_id FROM photo_faces WHERE embedding IS NOT NULL AND confirmed = 0 AND species IS NULL
+                  AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE ignored = 1))")
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, Vec<f32>, Option<i64>)> = stmt
+        .query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let blob: Vec<u8> = r.get(1)?;
+            let person_id: Option<i64> = r.get(2)?;
+            Ok((id, blob, person_id))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, blob, pid)| (id, blob_to_f32_vec(&blob), pid))
+        .collect();
+    drop(stmt);
+
+    let old_person_of: std::collections::HashMap<i64, i64> =
+        rows.iter().filter_map(|(fid, _, pid)| pid.map(|p| (*fid, p))).collect();
+
+    let mut pstmt = conn.prepare("SELECT id, auto FROM people").map_err(|e| e.to_string())?;
+    let named_people: std::collections::HashMap<i64, bool> = pstmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)? != 0)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+    drop(pstmt);
+
+    let mut result = ClusterResult::default();
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    // Only UNCONFIRMED assignments are cleared — a confirmed face keeps its person_id through
+    // this wipe (it was never selected by the query above, so it can't be reassigned below either).
+    // ⚠️ Human rows only (same scope as the query above): pet sightings are filed by pets_run, and
+    // clearing them here orphaned every unconfirmed pet sighting on each people re-cluster.
+    tx.execute(
+        "UPDATE photo_faces SET person_id = NULL WHERE confirmed = 0 AND species IS NULL
+         AND (person_id IS NULL OR person_id NOT IN (SELECT id FROM people WHERE kind = 'pet' OR ignored = 1))",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    // Only AUTO people are cleared wholesale — a named (user-renamed/merged-into) person survives
+    // even if this run assigns it zero faces, so a rename is never silently lost. ⚠️ Also spared:
+    // any still-`auto` person who owns at least one CONFIRMED face — `photo_faces.person_id` is
+    // `ON DELETE SET NULL`, so deleting the person row here would silently null out a face the
+    // user already reviewed even though the wipe above explicitly left it alone. A person only
+    // ever gets a confirmed face through `catalog_confirm_person`/`catalog_split_faces`, both of
+    // which also clear `auto` — this is defense in depth for any future caller that confirms a
+    // face without remembering to do the same (a real gap caught by
+    // confirmed_faces_survive_a_recluster_untouched's own test setup, which does exactly that).
+    tx.execute(
+        // ⚠️ `kind = 'person'`: pet groups are made by pets_run, not by this function — wiping
+        // them here orphaned every pet sighting (person_id -> NULL) on each re-cluster.
+        // ⚠️ `ignored = 0`: an ignored ("not someone I know") group keeps its faces so a rescan
+        // can't rebuild it and suggest those strangers again.
+        "DELETE FROM people WHERE auto = 1 AND kind = 'person' AND ignored = 0
+         AND id NOT IN (SELECT DISTINCT person_id FROM photo_faces WHERE confirmed = 1 AND person_id IS NOT NULL)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    if rows.is_empty() {
+        tx.commit().map_err(|e| e.to_string())?;
+        return Ok(result);
+    }
+
+    let n = rows.len();
+    let dim = rows[0].1.len();
+    let mut data = ndarray::Array2::<f64>::zeros((n, dim));
+    for (i, (_, emb, _)) in rows.iter().enumerate() {
+        for (j, v) in emb.iter().enumerate() {
+            data[[i, j]] = *v as f64;
+        }
+    }
+
+    use linfa::traits::Transformer;
+    let labels = linfa_clustering::Dbscan::params(min_points).tolerance(eps).transform(&data).map_err(|e| e.to_string())?;
+
+    let now = now_secs() as i64;
+    let mut cluster_faces: std::collections::HashMap<usize, Vec<i64>> = std::collections::HashMap::new();
+    for (i, (face_id, _, _)) in rows.iter().enumerate() {
+        match labels[i] {
+            None => result.unclustered_faces += 1,
+            Some(cluster_idx) => cluster_faces.entry(cluster_idx).or_default().push(*face_id),
+        }
+    }
+
+    let mut next_auto_num = 1usize;
+    let mut people_seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    for (_, face_ids) in cluster_faces.iter() {
+        let person_id = reconcile_person_for_cluster(&tx, face_ids, &old_person_of, &named_people, &mut next_auto_num, now)?;
+        people_seen.insert(person_id);
+        for fid in face_ids {
+            tx.execute(
+                "UPDATE photo_faces SET person_id = ?1, confirmed = 0 WHERE id = ?2",
+                params![person_id, fid],
+            )
+            .map_err(|e| e.to_string())?;
+            result.clustered_faces += 1;
+        }
+    }
+    result.people = people_seen.len();
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command(async)]
+pub fn catalog_rename_person(state: tauri::State<CatalogState>, person_id: i64, name: String) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    // Renaming is exactly the "the user has touched this" signal that protects a person from
+    // `cluster_run`'s wholesale auto-person cleanup (see its own doc comment).
+    conn.execute("UPDATE people SET name = ?1, auto = 0 WHERE id = ?2", params![name, person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Folds `from_id` entirely into `into_id`: every face reassigned, `from_id` deleted, `into_id`
+/// marked named (a merge is exactly as deliberate a signal as a rename). The "inevitable cluster-
+/// merge UI" the AI-stack plan flagged from the start — clustering never lands perfectly.
+#[tauri::command(async)]
+pub fn catalog_merge_people(state: tauri::State<CatalogState>, from_id: i64, into_id: i64) -> Result<(), String> {
+    if from_id == into_id {
+        return Err("cannot merge a person into themselves".into());
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE photo_faces SET person_id = ?1 WHERE person_id = ?2", params![into_id, from_id]).map_err(|e| e.to_string())?;
+    tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![into_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM people WHERE id = ?1", params![from_id]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Deletes a person outright (e.g. a junk/misclustered group) — their faces are unassigned
+/// (`person_id = NULL`), never deleted or re-clustered automatically; a future `cluster_run`
+/// will freely re-group them since an unassigned face carries no "named" protection.
+#[tauri::command(async)]
+pub fn catalog_set_person_cover(state: tauri::State<CatalogState>, person_id: i64, face_id: i64) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let n = conn
+        .execute(
+            "UPDATE people SET cover_face_id = ?2 WHERE id = ?1 AND EXISTS (SELECT 1 FROM photo_faces WHERE id = ?2 AND person_id = ?1)",
+            params![person_id, face_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if n == 0 { Err("that face isn't in this group".into()) } else { Ok(()) }
+}
+
+/// A group's faces for the cover picker: confirmed first, then by detector score.
+#[tauri::command(async)]
+pub fn catalog_person_face_ids(state: tauri::State<CatalogState>, person_id: i64, limit: Option<i64>) -> Result<Vec<i64>, String> {
+    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+    let mut st = conn
+        .prepare("SELECT id FROM photo_faces WHERE person_id = ?1 ORDER BY (confirmed = 1) DESC, score DESC LIMIT ?2")
+        .map_err(|e| e.to_string())?;
+    let ids = st.query_map(params![person_id, limit.unwrap_or(120)], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+    Ok(ids)
+}
+
+#[tauri::command(async)]
+pub fn catalog_delete_person(state: tauri::State<CatalogState>, person_id: i64) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tx.execute("UPDATE photo_faces SET person_id = NULL WHERE person_id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM people WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Marks a person's faces as reviewed-and-accepted, without changing who they're assigned to.
+/// This is the "Confirm" side of screen B's permanent confirmed/suggested split, and it's what
+/// takes a face out of `cluster_run`'s reach for good (see that function's own comment).
+#[tauri::command(async)]
+pub fn catalog_confirm_person(state: tauri::State<CatalogState>, person_id: i64, face_ids: Option<Vec<i64>>) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    match face_ids {
+        Some(ids) if !ids.is_empty() => {
+            let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 2)).collect();
+            let sql = format!(
+                "UPDATE photo_faces SET confirmed = 1 WHERE person_id = ?1 AND id IN ({})",
+                placeholders.join(",")
+            );
+            let mut p: Vec<&dyn rusqlite::ToSql> = vec![&person_id];
+            for id in &ids {
+                p.push(id);
+            }
+            conn.execute(&sql, p.as_slice()).map_err(|e| e.to_string())?;
+        }
+        _ => {
+            conn.execute("UPDATE photo_faces SET confirmed = 1 WHERE person_id = ?1", params![person_id])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    conn.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The inverse of merge (CLAUDE.md failure #4: "catalog_merge_people has no inverse. A wrong
+/// merge is permanent."). Moves the given faces out of their current person entirely: into a
+/// brand new person if `into_name` is given, into an existing one if `into_id` is given, or back
+/// to Unnamed (`person_id = NULL`, `confirmed = 0`) if neither is given — screen D's "Send back
+/// to Unnamed", the safest of its four options.
+#[tauri::command(async)]
+pub fn catalog_split_faces(
+    state: tauri::State<CatalogState>,
+    face_ids: Vec<i64>,
+    into_id: Option<i64>,
+    into_name: Option<String>,
+) -> Result<i64, String> {
+    if face_ids.is_empty() {
+        return Err("no faces selected".into());
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let target_id = if let Some(id) = into_id {
+        tx.execute("UPDATE people SET auto = 0 WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        id
+    } else if let Some(name) = into_name {
+        let now = now_secs() as i64;
+        tx.execute(
+            "INSERT INTO people (name, cover_face_id, created, auto) VALUES (?1, ?2, ?3, 0)",
+            params![name, face_ids[0], now],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.last_insert_rowid()
+    } else {
+        for fid in &face_ids {
+            tx.execute("UPDATE photo_faces SET person_id = NULL, confirmed = 0 WHERE id = ?1", params![fid])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        return Ok(0);
+    };
+    for fid in &face_ids {
+        tx.execute(
+            "UPDATE photo_faces SET person_id = ?1, confirmed = 1 WHERE id = ?2",
+            params![target_id, fid],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(target_id)
+}
+
+/// Sets/unsets the "not a real person, stop suggesting this" flag (screen A's pinned Ignored
+/// row). An ignored person's faces stay assigned to it — they're deliberately NOT unassigned the
+/// way `catalog_delete_person` does, so they don't resurface as a fresh unnamed cluster on the
+/// next scan.
+#[tauri::command(async)]
+pub fn catalog_set_person_ignored(state: tauri::State<CatalogState>, person_id: i64, ignored: bool) -> Result<(), String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE people SET ignored = ?1, auto = 0 WHERE id = ?2", params![ignored as i64, person_id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Person / Pet toggle (screen B). No automatic pet detector exists yet — see this file's
+/// PetDetection note — so this is presently the only way a pet person gets created: by hand,
+/// from an existing (human-pipeline-detected — i.e. probably useless) or manually-taught entry.
+#[tauri::command(async)]
+pub fn catalog_set_person_kind(state: tauri::State<CatalogState>, person_id: i64, kind: String) -> Result<(), String> {
+    if kind != "person" && kind != "pet" {
+        return Err(format!("unknown kind {kind:?} (expected \"person\" or \"pet\")"));
+    }
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute("UPDATE people SET kind = ?1 WHERE id = ?2", params![kind, person_id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// One face-embedding cluster from the Unnamed backlog, for the review-mode screen (screen C):
+/// a `cover_face_id` to show, the rest of the cluster's face ids, a face count, and — when the
+/// cluster's nearest confirmed centroid is close enough — a `suggested_person_id`/`name` so
+/// review mode can pre-fill the name field instead of asking the user to type a stranger's name
+/// from scratch. Distinct from `catalog_people`: those are the NAMED people; this is exactly the
+/// backlog CLAUDE.md failure #6 describes as "computed, returned, and thrown away" today.
+#[derive(Serialize, Clone)]
+pub struct UnnamedCluster {
+    pub person_id: i64,
+    pub cover_face_id: Option<i64>,
+    pub face_ids: Vec<i64>,
+    pub face_count: i64,
+    /// Set only for a pet detection (petdetect.rs) — a hint the review UI can show before the
+    /// user has named the cluster ("Dog", screen P's own "Dog · 91%" chip). Always None for a
+    /// human face cluster.
+    pub species: Option<String>,
+    /// The named person this cluster most resembles, when close enough to be worth offering
+    /// ("Looks like Sofia · 71%") — review mode pre-fills the name so Enter merges it in.
+    pub suggested_person_id: Option<i64>,
+    pub suggested_name: Option<String>,
+    pub suggested_similarity: Option<f32>,
+    /// A "maybe the same person" group from the loose second pass over faces the strict
+    /// clustering left alone (`person_id` is 0 — these faces belong to nobody yet). Naming one
+    /// moves its faces into a person; nothing happens to them until then.
+    pub tentative: bool,
+    /// `face_ids` split into moments (photos seconds apart), best face first in each. Review
+    /// shows one tile per moment; excluding a tile excludes its whole moment.
+    pub moments: Vec<Vec<i64>>,
+}
+
+fn moments_for_faces(conn: &Connection, face_ids: &[i64]) -> Result<Vec<Vec<i64>>, String> {
+    let mut st = conn
+        .prepare("SELECT p.captured FROM photo_faces f JOIN photos p ON p.id = f.photo_id WHERE f.id = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut items = Vec::with_capacity(face_ids.len());
+    for id in face_ids {
+        let t: Option<i64> = st.query_row(params![id], |r| r.get(0)).optional().map_err(|e| e.to_string())?.flatten();
+        items.push((*id, t));
+    }
+    Ok(group_into_moments(&items))
+}
+
+/// Groups the strict clustering left as noise, re-clustered at `LOOSE_CLUSTER_EPS`. Bounded to
+/// the best-detected faces so a huge backlog can't make the review screen slow to open.
+fn loose_clusters(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, embedding FROM photo_faces
+             WHERE person_id IS NULL AND confirmed = 0 AND species IS NULL AND embedding IS NOT NULL AND score >= 0.6
+             ORDER BY score DESC LIMIT 1500",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows: Vec<(i64, Vec<f32>)> = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, b)| (id, blob_to_f32_vec(&b)))
+        .collect();
+    if rows.len() < 2 {
+        return Ok(Vec::new());
+    }
+    let dim = rows[0].1.len();
+    let mut data = ndarray::Array2::<f64>::zeros((rows.len(), dim));
+    for (i, (_, e)) in rows.iter().enumerate() {
+        for (j, v) in e.iter().enumerate() {
+            data[[i, j]] = *v as f64;
+        }
+    }
+    use linfa::traits::Transformer;
+    let labels = linfa_clustering::Dbscan::params(2).tolerance(LOOSE_CLUSTER_EPS).transform(&data).map_err(|e| e.to_string())?;
+    let mut groups: std::collections::BTreeMap<usize, Vec<i64>> = Default::default();
+    for (i, (id, _)) in rows.iter().enumerate() {
+        if let Some(l) = labels[i] {
+            groups.entry(l).or_default().push(*id);
+        }
+    }
+    let mut out: Vec<UnnamedCluster> = groups
+        .into_values()
+        .map(|ids| UnnamedCluster {
+            person_id: 0,
+            cover_face_id: ids.first().copied(),
+            face_count: ids.len() as i64,
+            face_ids: ids,
+            species: None,
+            suggested_person_id: None,
+            suggested_name: None,
+            suggested_similarity: None,
+            tentative: true,
+            moments: Vec::new(),
+        })
+        .collect();
+    out.sort_by(|a, b| b.face_count.cmp(&a.face_count));
+    Ok(out)
+}
+
+#[tauri::command]
+pub async fn catalog_unnamed_clusters(app: tauri::AppHandle) -> Result<Vec<UnnamedCluster>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<CatalogState>();
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        catalog_unnamed_clusters_run(&conn)
+    })
+    .await
+    .map_err(|e| format!("catalog_unnamed_clusters task panicked: {e}"))?
+}
+
+/// Unnamed groups smaller than this (in distinct photos) are left out of review and the People
+/// & Pets page — they're almost always strangers in the background.
+pub(crate) const REVIEW_MIN_PHOTOS: usize = 20;
+
+fn distinct_photo_count(conn: &Connection, face_ids: &[i64]) -> Result<usize, String> {
+    let mut st = conn.prepare("SELECT photo_id FROM photo_faces WHERE id = ?1").map_err(|e| e.to_string())?;
+    let mut set = std::collections::HashSet::new();
+    for id in face_ids {
+        if let Some(p) = st.query_row(params![id], |r| r.get::<_, i64>(0)).optional().map_err(|e| e.to_string())? {
+            set.insert(p);
+        }
+    }
+    Ok(set.len())
+}
+
+fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>, String> {
+    let mut pstmt = conn
+        .prepare("SELECT id, cover_face_id FROM people WHERE auto = 1 AND ignored = 0 ORDER BY id")
+        .map_err(|e| e.to_string())?;
+    let people: Vec<(i64, Option<i64>)> = pstmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    drop(pstmt);
+
+    let mut out = Vec::with_capacity(people.len());
+    for (pid, cover) in people {
+        let mut fstmt = conn
+            .prepare("SELECT id, species FROM photo_faces WHERE person_id = ?1 ORDER BY score DESC")
+            .map_err(|e| e.to_string())?;
+        let rows: Vec<(i64, Option<String>)> = fstmt
+            .query_map(params![pid], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        if rows.is_empty() {
+            continue;
+        }
+        let species = rows.iter().find_map(|(_, s)| s.clone());
+        let face_ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
+        out.push(UnnamedCluster {
+            person_id: pid,
+            cover_face_id: cover,
+            face_count: face_ids.len() as i64,
+            face_ids,
+            species,
+            suggested_person_id: None,
+            suggested_name: None,
+            suggested_similarity: None,
+            tentative: false,
+            moments: Vec::new(),
+        });
+    }
+    out.extend(loose_clusters(conn)?);
+    // Strangers in the background show up a handful of times; only someone in at least
+    // REVIEW_MIN_PHOTOS distinct photos is worth asking about.
+    let mut keep = Vec::with_capacity(out.len());
+    for c in out {
+        if distinct_photo_count(conn, &c.face_ids)? >= REVIEW_MIN_PHOTOS {
+            keep.push(c);
+        }
+    }
+    let mut out = keep;
+    for c in out.iter_mut() {
+        c.moments = moments_for_faces(conn, &c.face_ids)?;
+    }
+    if out.is_empty() {
+        return Ok(out);
+    }
+    let people = person_profiles(conn, "person")?;
+    let pets = person_profiles(conn, "pet")?;
+    for c in out.iter_mut() {
+        let (profiles, bar) = if c.species.is_some() { (&pets, PET_CLUSTER_SUGGEST_SIM) } else { (&people, CLUSTER_SUGGEST_SIM) };
+        if profiles.is_empty() {
+            continue;
+        }
+        let embs = face_embeddings(conn, &c.face_ids)?;
+        if embs.is_empty() {
+            continue;
+        }
+        let centroid = unit_mean(embs.iter().map(|(_, e)| e.as_slice()));
+        if let Some((pid, sim)) = best_profile_match(&centroid, profiles, None) {
+            if sim >= bar {
+                c.suggested_person_id = Some(pid);
+                c.suggested_name = profiles.iter().find(|p| p.id == pid).map(|p| p.name.clone());
+                c.suggested_similarity = Some(sim);
+            }
+        }
+    }
+    Ok(out)
+}

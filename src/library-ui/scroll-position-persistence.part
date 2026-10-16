@@ -1,0 +1,384 @@
+  // ── scroll-position persistence ───────────────────────────────────────────────────────────
+  // openFolder() rebuilds #lib-grid from scratch (grid.innerHTML = libSkeletonHtml()) on every
+  // call, INCLUDING re-opening the same folder — e.g. toggleLibrary() re-runs openFolder every
+  // time the dock is shown again, so simply editing a photo and coming back used to always land
+  // back at the top of the grid. Keyed by folder path (not a single "last scroll") so hopping
+  // between folders in the tree/recents doesn't clobber each folder's own position.
+  const scrollByFolder = new Map();
+  // Studio's docked layout can clamp #lib-main while its width animates down, destroying the
+  // Gallery's useful position if we persist those synthetic scroll events as the same value.
+  // Keep a path+viewport-offset anchor for Gallery independently of docked browsing pixels.
+  const galleryScrollByFolder = new Map();
+  let galleryScrollRestoreToken = 0;
+  let galleryScrollTransitionPending = false;
+  let galleryScrollSnapshotLocked = false;
+  function captureGalleryScrollAnchor() {
+    const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+    if (!main || !gridEl) return null;
+    const top = main.getBoundingClientRect().top;
+    const cards = gridEl.querySelectorAll('.lib-card[data-path]');
+    let card = null;
+    for (const candidate of cards) {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.bottom > top) { card = candidate; break; }
+    }
+    return card ? { path: card.dataset.path, viewportOffset: card.getBoundingClientRect().top - top } : null;
+  }
+  function rememberGalleryScrollPosition() {
+    if (!state.currentFolder) return null;
+    if (galleryScrollSnapshotLocked) return galleryScrollByFolder.get(state.currentFolder) || null;
+    const anchor = captureGalleryScrollAnchor();
+    if (anchor) {
+      galleryScrollByFolder.set(state.currentFolder, anchor);
+      galleryScrollSnapshotLocked = true;
+      galleryScrollTransitionPending = true;
+    }
+    return anchor;
+  }
+  function restoreGalleryScrollAnchor(folder, token) {
+    const anchor = galleryScrollByFolder.get(folder);
+    if (!anchor || !anchor.path) return;
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const pendingLayoutAnimations = () => {
+      const layout = document.querySelector('.fx-layout');
+      const overlay = document.getElementById('lib-overlay');
+      const layoutAnimations = layout?.getAnimations?.({ subtree: false }) || [];
+      const overlayAnimations = overlay?.getAnimations?.({ subtree: false }) || [];
+      return [
+        ...layoutAnimations.filter(animation => animation.playState === 'running' && animation.transitionProperty === 'grid-template-columns'),
+        ...overlayAnimations.filter(animation => animation.playState === 'running' && ['width', 'grid-template-columns', 'grid-template-rows'].includes(animation.transitionProperty)),
+      ];
+    };
+    const galleryGeometry = () => {
+      const main = document.getElementById('lib-main'), grid = document.getElementById('lib-grid'), overlay = document.getElementById('lib-overlay');
+      if (!main || !grid || !overlay) return '';
+      return [overlay.clientWidth, overlay.clientHeight, main.clientWidth, main.clientHeight, grid.clientWidth,
+        getComputedStyle(grid).gridTemplateColumns, main.scrollTop.toFixed(2)].join('|');
+    };
+    const waitForStableLayout = async () => {
+      let previous = '';
+      for (let frame = 0; frame < 12; frame++) {
+        if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return false;
+        const animations = pendingLayoutAnimations();
+        if (animations.length) await Promise.allSettled(animations.map(animation => animation.finished));
+        await nextFrame();
+        const current = galleryGeometry();
+        if (current && current === previous && pendingLayoutAnimations().length === 0) return true;
+        previous = current;
+      }
+      return false;
+    };
+    const afterLayout = async () => {
+      if (token !== galleryScrollRestoreToken) return;
+      if (!state.open || !state.expanded_view) return;
+      if (state.currentFolder !== folder) { galleryScrollTransitionPending = false; return; }
+      if (!await waitForStableLayout()) {
+        if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false;
+        return;
+      }
+      if (token !== galleryScrollRestoreToken || !state.open || !state.expanded_view || state.currentFolder !== folder) return;
+      scrollLibraryToPath(anchor.path);
+      const main = document.getElementById('lib-main'), gridEl = document.getElementById('lib-grid');
+      const card = gridEl && gridEl.querySelector(`.lib-card[data-path="${CSS.escape(anchor.path)}"]`);
+      if (main && card) {
+        main.scrollTop += card.getBoundingClientRect().top - main.getBoundingClientRect().top - anchor.viewportOffset;
+        galleryScrollByFolder.set(folder, captureGalleryScrollAnchor() || anchor);
+      }
+      galleryScrollTransitionPending = false;
+    };
+    afterLayout().catch(() => { if (token === galleryScrollRestoreToken) galleryScrollTransitionPending = false; });
+  }
+  function wireScrollPersist() {
+    const libMain = document.getElementById('lib-main');
+    if (!libMain) return;
+    const cancelGalleryRestoreForInput = () => {
+      if (!galleryScrollTransitionPending || !state.open || !state.expanded_view) return;
+      galleryScrollTransitionPending = false;
+      galleryScrollRestoreToken++;
+    };
+    libMain.addEventListener('wheel', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('touchstart', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('pointerdown', cancelGalleryRestoreForInput, { passive: true });
+    libMain.addEventListener('dblclick', (event) => {
+      if (!state.open || !state.expanded_view || state.unified_view) return;
+      if (event.target.closest?.('.lib-card[data-path]')) {
+        rememberGalleryScrollPosition();
+      }
+    }, true);
+    libMain.addEventListener('keydown', (event) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) cancelGalleryRestoreForInput();
+    });
+    let raf = 0;
+    libMain.addEventListener('scroll', () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (state.currentFolder) {
+          scrollByFolder.set(state.currentFolder, libMain.scrollTop);
+          if (state.open && state.expanded_view && !state.unified_view && !galleryScrollTransitionPending) {
+            const anchor = captureGalleryScrollAnchor();
+            if (anchor) galleryScrollByFolder.set(state.currentFolder, anchor);
+          }
+        }
+      });
+    }, { passive: true });
+  }
+  /// Recursive listing for the "Include Photos from Subfolders" toggle. Deliberately a frontend
+  /// BFS over the same list_dir the tree already uses (not a new Rust command) — this is plain
+  /// folder browsing, not the SQLite catalog.
+  /// ⚠️ Measured, not assumed: a naive one-at-a-time version of this (await list_dir in a serial
+  /// loop) took 29 SECONDS to walk 4000 directories in a pure-mock test harness with ZERO real
+  /// disk I/O — pure per-call/IPC overhead. That is the exact "silent multi-second freeze" class
+  /// of bug this session already found and fixed once (scan_card) — reusing a naive serial walk
+  /// here would have reintroduced it in a different place. Fixed with (1) bounded concurrency so
+  /// several list_dir calls are in flight at once instead of one at a time, and (2) a progress
+  /// toast every 50 directories so a genuinely large tree still gives feedback instead of going
+  /// quiet. The directory cap is lower than a first pass (1000, not 4000) — a personal photo
+  /// library's date-folder tree is realistically dozens to a few hundred directories; 1000 is
+  /// generous headroom, not a wall anyone should realistically hit.
+  const SUBFOLDER_WALK_CAP = 1000;
+  const SUBFOLDER_WALK_CONCURRENCY = 8;
+  async function listDirRecursive(rootPath) {
+    const collected = [];
+    let queue = [rootPath];
+    let dirsWalked = 0;
+    let capHit = false;
+    // Pinned for the life of the walk instead of a fresh toast() every 50 dirs — the old form
+    // let each progress pill time out on its own 1.9s clock regardless of whether the walk was
+    // still running, so on a slow tree the pill would read "Scanning… 50 folders" long after the
+    // walk had moved past 200 (backlog #5). update() just replaces the same pill's text.
+    const prog = toastProgress('Scanning subfolders…');
+    // Fire one update BEFORE the first batch even starts. The boot splash's watchdog
+    // (chromasmith-22.html's bumpBootSplashWatchdog) force-hides the splash if nothing bumps it
+    // within its grace period — if the first slow stretch of this walk (a contended external
+    // drive, cold OS file-cache) took longer than that grace period, the splash would vanish
+    // with the bar never having rendered even once. This ping alone can't fix a walk that's
+    // genuinely slow throughout, but it closes the specific window where the FIRST update never
+    // arrives in time — measured to be exactly what was happening (see the plan's Root Cause 1).
+    if (typeof updateBootSplashProgress === 'function') {
+      updateBootSplashProgress({ phase: 'subfolders', done: 0, total: 0, current: '' });
+    }
+    while (queue.length) {
+      const batch = queue.splice(0, SUBFOLDER_WALK_CONCURRENCY);
+      const results = await Promise.all(batch.map((dir) => invoke('list_dir', { path: dir }).catch(() => [])));
+      const nextQueue = [];
+      for (let i = 0; i < batch.length; i++) {
+        const dir = batch[i], entries = results[i];
+        if (dir === rootPath) _treeListCache.set(rootPath, entries); // keep the tree's own cache in sync, same as the non-recursive path
+        dirsWalked++;
+        for (const e of entries) {
+          if (e.is_dir) { if (dirsWalked + nextQueue.length < SUBFOLDER_WALK_CAP) nextQueue.push(e.path); else capHit = true; }
+          else collected.push(e);
+        }
+      }
+      queue = queue.concat(nextQueue);
+      // Feed the boot splash's progress bar on EVERY batch (a no-op once #boot-splash-progress
+      // is gone, same guard updateBootSplashProgress already uses for catalog-scan events) — not
+      // throttled to every 50 dirs like the toast below. The watchdog only stays open as long as
+      // updates keep arriving inside its grace window, so a throttle here directly controls
+      // whether the splash survives a slow stretch, not just how chatty the UI looks.
+      if (typeof updateBootSplashProgress === 'function') {
+        updateBootSplashProgress({ phase: 'subfolders', done: collected.length, total: 0, current: '' });
+      }
+      if (dirsWalked % 50 < SUBFOLDER_WALK_CONCURRENCY) {
+        prog.update(`Scanning subfolders… ${dirsWalked} folders, ${collected.length} photos found`);
+      }
+    }
+    if (capHit) prog.fail(`Stopped after ${SUBFOLDER_WALK_CAP} subfolders — this tree is unusually large`);
+    else prog.resolve(`Found ${collected.length} photo${collected.length === 1 ? '' : 's'} in ${dirsWalked} subfolder${dirsWalked === 1 ? '' : 's'}`);
+    return collected;
+  }
+  // Loads thumbnails STRAIGHT INTO `_thumbCache` (thumbCachePut, the same LRU the ordinary grid
+  // read from) BEFORE any card exists — unlike the lazy `_thumbPump` above, which needs a live,
+  // DOM-connected <img> per job and so can't run ahead of renderGrid(). This is what makes the
+  // boot sequence's "Loading thumbnails…" phase real: once this resolves, renderGrid()'s own
+  // loadThumb() calls hit thumbCacheGet() synchronously for everything it warmed, instead of each
+  // card firing its own fresh IPC round trip.
+  // ⚠️ Bounded TWO ways, both required — this has been wrong in both directions on this exact
+  // library, so don't "simplify" either one away again:
+  //   1. PREFETCH_CAP — the first N entries, a real screenful, not a whole folder page (an earlier
+  //      version capped at 800, which no wall clock could realistically clear).
+  //   2. PREFETCH_BUDGET_MS — a wall-clock deadline on the whole phase. A version WITHOUT this
+  //      (reasoning that PREFETCH_CALL_TIMEOUT_MS alone bounds each call) was shipped and measured
+  //      live against this user's real library: the status bar showed "Generating thumbnails… 0%"
+  //      — a genuinely COLD on-disk thumbnail cache doing full RAW demosaic/decode for the first
+  //      time, competing with this very prefetch for CPU cores against catalog.rs's own background
+  //      bulk thumbnail pass. Each `get_thumbnail_or_offline` call can legitimately take far longer
+  //      than a "fast fetch," so the per-item timeout alone let the loop keep dispatching new
+  //      native decodes for MINUTES, never reaching renderGrid().
+  //      That specific contention is now fixed at its root: catalog.rs's bulk thumbnail_run/focus-
+  //      scoring batches run on their OWN smaller `decode_batch_pool()` (half of the app's already-
+  //      reduced `cores-2` global rayon budget) instead of saturating every core, leaving real
+  //      headroom for this prefetch's interactive `get_thumbnail_or_offline` calls (dispatched via
+  //      Tauri's separate tokio pool). Measured live post-fix: the ordinary lazy per-card pump,
+  //      hitting the exact same call, went from stuck at 0 progress for 50+s to steady ~7-8
+  //      items/sec. The wall clock stays as a safety net (never remove it again without live
+  //      re-measurement) but is now sized to let a genuinely cold 100-item batch actually finish —
+  //      at ~7-8/s that's ~13-15s; 20s leaves real margin without reintroducing an unbounded stall.
+  const PREFETCH_CAP = 100;
+  const PREFETCH_BUDGET_MS = 20000;
+  const PREFETCH_CONCURRENCY = 8;
+  // A WARM cache fetch is fast (CLAUDE.md: RAW embedded-preview extraction measured at 97-175ms; a
+  // cached JPEG is faster still) — 1200ms is generous headroom over that. This bounds the cost of
+  // ONE stuck/slow item so a single pathological file can't hang its worker past the next
+  // PREFETCH_BUDGET_MS check; it does NOT by itself bound the whole phase (see above) — a cold
+  // cache generating real thumbnails can validly take longer than this per item, which is why the
+  // wall-clock budget above is sized in whole seconds, not this constant scaled up.
+  const PREFETCH_CALL_TIMEOUT_MS = 1200;
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => { const error = new Error(`timed out after ${ms}ms`); error.code = 'PREFETCH_TIMEOUT'; reject(error); }, ms);
+      promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+    });
+  }
+  async function prefetchThumbnails(entries, onProgress) {
+    const targets = entries.filter((e) => e.is_image || e.is_video).slice(0, PREFETCH_CAP)
+      .filter((e) => !thumbCacheGet(e.path + '@' + (e.mtime || 0)));
+    const total = targets.length;
+    if (!total) return;
+    // ⚠️ `done` counts CACHE HITS only, never attempts. A version that incremented on every
+    // attempt (success or timeout) reported "100%" while a cold RAW-decode batch cached ZERO
+    // thumbnails — every call rejected inside the try/catch below, `done++` still ran, and the
+    // splash/pill read complete having warmed nothing. `attempted` drives the loop's own
+    // termination bookkeeping only; `onProgress` gets the honest number.
+    let done = 0;
+    let attempted = 0;
+    let stopPrefetch = false;
+    const deadline = Date.now() + PREFETCH_BUDGET_MS;
+    onProgress(0, total);
+    let next = 0;
+    async function worker() {
+      while (!stopPrefetch && next < targets.length && Date.now() < deadline) {
+        const e = targets[next++];
+        try {
+          const key = e.path + '@' + (e.mtime || 0);
+          await withTimeout(requestThumbnail(e.path, key), PREFETCH_CALL_TIMEOUT_MS);
+          done++;
+        } catch (err) {
+          // A timeout does not cancel native IPC. Stop this prefetch wave immediately so we do
+          // not dispatch more decodes behind work that is still running; mounted cards share the
+          // original promise through requestThumbnail instead of starting duplicate IPC.
+          if (err?.code === 'PREFETCH_TIMEOUT') stopPrefetch = true;
+        }
+        attempted++;
+        onProgress(done, total);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
+    return { done, attempted, total };
+  }
+  async function openFolder(path, opts) {
+    if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
+    state.currentFolder = path;
+    state.source = 'folder'; // leaving a collection/cloud view — clears their sidebar highlight below
+    state.selected.clear();
+    const grid = document.getElementById('lib-grid');
+    grid.innerHTML = libSkeletonHtml();
+    let entries;
+    try {
+      // The catalog is now the grid's own data source, not a side-effect kicked off after a
+      // separate live filesystem walk — see catalogRegisterFolder's doc comment and the plan's
+      // Fix 1. Awaited (not fire-and-forget): the catalog_query right below depends on it having
+      // actually registered/scanned this folder. Still captured on `window` so the cold-boot
+      // sequence can await the same promise it always has.
+      const regPromise = catalogRegisterFolder(path);
+      window._lastCatalogRegisterPromise = regPromise;
+      const reg = await regPromise;
+      state._folderScope = reg
+        ? { volumeId: reg.volumeId, relDir: reg.relDir }
+        : { path };
+      state.includeSubfolders = subfoldersForScope(state._folderScope);
+      const subfoldersCheckbox = document.getElementById('lib-subfolders');
+      if (subfoldersCheckbox) subfoldersCheckbox.checked = state.includeSubfolders;
+      if (reg) {
+        const q = { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders },
+          limit: CATALOG_PAGE_SIZE, offset: 0, ...catalogFilterFields() };
+        const page = await invoke('catalog_query', { q });
+        entries = page.entries;
+        state._catalogPaged = true;
+        state._catalogBaseQuery = { ...q, offset: undefined };
+        state._catalogTotal = page.total;
+        state._catalogCapped = page.capped;
+      } else {
+        // Fallback only: the catalog couldn't register this folder (e.g. a permissions error a
+        // plain read_dir would also hit) — fall back to the live walk so the grid still shows
+        // something rather than nothing. Not catalog-backed, so paging/server-side filters don't
+        // apply here — same as albums/exported/Lightroom below.
+        state._catalogPaged = false;
+        if (state.includeSubfolders) {
+          entries = await listDirRecursive(path);
+        } else {
+          entries = await invoke('list_dir', { path });
+          _treeListCache.set(path, entries); // opening a folder is the natural "refresh its listing" moment
+        }
+      }
+    } catch (e) {
+      showLibraryError('Couldn’t open this folder.', 'Choose another folder', () => pickFolder());
+      return;
+    }
+    state.entries = entries.filter((e) => e.is_image || e.is_video);
+    // Record a successfully opened folder, even when it is empty.  It is one possible Library
+    // destination among collections and catalog scopes, rather than the sole startup state.
+    rememberLibraryView({ kind: 'folder', path });
+    if (!LIBTEST) { try { localStorage.setItem(LS_LAST_FOLDER, path); } catch (e) {} }
+    // A folder's entries all share one volume, so any one of them (CatalogEntry.offline, a
+    // per-row field the SQL query already computes) says whether THIS folder's drive is
+    // reachable right now. Undefined (the list_dir/listDirRecursive fallback path) reads as
+    // false — that path only runs when the catalog itself failed to register the folder, an
+    // edge case where "can't tell" is the honest answer anyway.
+    renderLibOfflineBar(state.entries.length > 0 && !!state.entries[0].offline);
+    // Boot's own initial folder open (see the toggleLibrary() call site) waits for the FIRST
+    // screenful's worth of thumbnails to actually be in memory before it clears the splash — so
+    // reopening whatever you were last editing paints instantly instead of a placeholder that
+    // fills in a beat later. Never runs for an ordinary click; the lazy per-card pump already
+    // handles that case well and prefetching on every folder switch would slow down browsing.
+    if (opts && opts.prefetchThumbs) {
+      await prefetchThumbnails(state.entries, (done, total) => {
+        if (typeof updateBootSplashProgress === 'function') updateBootSplashProgress({ phase: 'cache', done, total });
+      });
+    }
+    // Sidecars are cheap (small JSON reads) and flags/edited badges need them for first paint —
+    // await those. Metadata is NOT cheap on a cold folder (a get_meta cache miss reads the whole
+    // RAW file for the lens fallback), and awaiting it for EVERY file kept the grid on
+    // "Loading…" until the last file finished — a big folder took tens of seconds before
+    // showing anything. Render immediately instead and let meta land in the background, then
+    // refresh filters + grid once so sort-by-ISO/camera-filter pick it up.
+    await getSidecarsBatch(state.entries.map((e) => e.path));
+    const openToken = (state._openToken = (state._openToken || 0) + 1);
+    state.dupeClusters.clear(); state.dupeClusterSizes.clear();
+    await renderGrid();
+    // The bulk catalog phases (thumbnails/focus/hash) wait for THIS generation's own interactive
+    // decode queue to settle before they're allowed to start competing for the same CPU pools —
+    // see catalogRegisterFolder's doc comment for why firstPaintReady() has to be called here,
+    // after renderGrid() has actually built the queue, and not any earlier.
+    if (_catalogBgPending) {
+      _catalogBgPending = false;
+      firstPaintReady(15000).then(() => catalogRunBackgroundPhases());
+    }
+    const libMain = document.getElementById('lib-main');
+    if (libMain) libMain.scrollTop = scrollByFolder.get(path) || 0;
+    if (typeof renderCollections === 'function') renderCollections(); // drop stale collection/album highlight
+    // Sync-status backfill runs in the background, gated on the same openToken so a fast
+    // folder switch never lets stale results overwrite the new grid.
+    //
+    // ⚠️ Duplicate detection is DELIBERATELY NOT run here any more. It used to fire
+    // automatically on every folder open — three rounds of fixes to make that fast enough
+    // (batching the registry write, then the O(n^2) clustering, then a string-Set dedup inside
+    // THAT fix) each bought headroom that the library's own growth ate right back, because the
+    // real problem was never how fast the algorithm was: no mature photo app eagerly recomputes
+    // a duplicate graph on every view. PhotoPrism hashes once at import time and persists it;
+    // digiKam's duplicate MATCHING is an explicit "Find Duplicates" tool, not automatic. This
+    // app now follows the same model — see the "Find duplicates…" row in the Drives panel
+    // (runDupeDetectionOnDemand) — so whatever the real-world worst case turns out to be (a
+    // huge burst of near-identical photos, a much bigger library, anything not yet seen) it can
+    // only ever block when the user explicitly asks for it, not silently gate ordinary browsing.
+    loadSyncedForFolder(state.entries, openToken);
+    markFolderSyncedIfGphotosDownloads(path, state.entries);
+    getMetaBatch(state.entries.map((e) => e.path)).then(() => {
+      // source check: without it, opening a folder then clicking a Lightroom album while this
+      // background meta pass was still running clobbered the cloud grid seconds later.
+      if (state._openToken !== openToken || state.currentFolder !== path || state.source !== 'folder') return; // user moved on
+      refreshFacetSelects();
+      renderGrid();
+    });
+  }
