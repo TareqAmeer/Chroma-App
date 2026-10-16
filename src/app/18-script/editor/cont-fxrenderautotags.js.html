@@ -1,3 +1,47 @@
+async function fxRenderAutoTags(path,keywords){
+  const el=document.getElementById('fx-autotags');if(!el||!window.__TAURI__)return;
+  const inv=window.__TAURI__.core.invoke;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div><div class="fx-autotag-hint">Checking…</div>`;
+  let info;
+  try{info=await inv('catalog_photo_tag_info',{path});}catch(e){info=null;}
+  if(_fxKeywordsPathToken!==path||!document.body.contains(el))return;
+  // Detected tags were just saved as real keywords — redraw the keyword chips from the sidecar.
+  if(info&&info.keywords_added){_fxKeywordsPathToken='';fxRenderKeywordsPanel();return;}
+  const have=new Set((keywords||[]).map(k=>k.split('|').pop().toLowerCase()));
+  const tags=((info&&info.tags)||[]).filter(t=>!have.has(t.term.toLowerCase()));
+  const place=info&&info.place;
+  const placeBits=place?[place.split(', ')[0],place.split(', ').pop()].filter((v,i,a)=>a.indexOf(v)===i&&!have.has(v.toLowerCase())):[];
+  let body;
+  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Gallery to auto-tag it.</div>`;
+  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Gallery tags photos in the background.</div>`
+    +`<button class="fx-autotag-btn" id="fx-autotag-analyze">Analyze now</button>`;
+  else if(!tags.length&&!placeBits.length)body=`<div class="fx-autotag-hint">${(info.tags||[]).length?'All detected tags are saved as keywords.':'Nothing recognised with confidence.'}</div>`;
+  else body=`<div style="display:flex;flex-wrap:wrap;gap:4px">`
+    +placeBits.map(p=>`<span class="fx-autotag-chip" data-add="${esc(p)}" title="Taken in ${esc(place)} — click to save as a keyword">⌖ ${esc(p)} +</span>`).join('')
+    +tags.map(t=>`<span class="fx-autotag-chip" data-add="${esc(t.term)}" title="Detected automatically (${Math.round(t.score*100)}%) — click to save as a keyword">${esc(t.term)} +</span>`).join('')
+    +`</div>`+(tags.length+placeBits.length>1?`<button class="fx-autotag-btn" id="fx-autotag-all">Add all</button>`:'');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div>`+body;
+  const save=async(add)=>{
+    const sc=await inv('get_sidecar',{path});
+    const cur=sc.keywords||[];
+    const next=[...cur,...add.filter(a=>!cur.includes(a))];
+    await inv('set_keywords',{path,keywords:next});
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+  el.querySelectorAll('[data-add]').forEach(c=>{c.onclick=()=>save([c.dataset.add]).catch(()=>{if(typeof toast==='function')toast('Could not add that keyword','err');});});
+  const all=document.getElementById('fx-autotag-all');
+  if(all)all.onclick=()=>save([...placeBits,...tags.map(t=>t.term)]).catch(()=>{});
+  const an=document.getElementById('fx-autotag-analyze');
+  if(an)an.onclick=async()=>{
+    an.disabled=true;an.textContent='Analyzing…';
+    try{await inv('catalog_clip_embed',{photoIds:[info.photo_id]});}catch(e){if(typeof toast==='function')toast('Could not analyze this photo','err');}
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+}
+window.fxRefreshAutoTags=()=>{_fxKeywordsPathToken='';if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();};
+// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
+// carries one (RAW opens on a display proxy first), else the loaded image itself.
 function fxFullDimsText(it){
   const f=(it&&(it.fullImg||it.img))||null;
   const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
@@ -214,47 +258,3 @@ function fxRefMatchCurrent(){
   toast(off.exp||off.temp||off.tint?`Matched toward the reference (exposure ${off.exp>=0?'+':''}${off.exp}, temp ${off.temp>=0?'+':''}${off.temp}, tint ${off.tint>=0?'+':''}${off.tint})`:'Already close to the reference',true);
   return off;
 }
-function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
-function fxRefSnapshot(){
-  const cv=FX&&FX.cv;if(!cv||!cv.width){toast('Open a photo first');return;}
-  renderPreview();cv.toBlob(b=>{if(!b){toast('Could not capture the preview');return;}
-    const it=curItem();fxRefShow(URL.createObjectURL(b),(it&&it.name?it.name+' — ':'')+'as edited');},'image/jpeg',0.92);
-}
-window.chromasmithSetReference=(blob,label)=>fxRefShow(URL.createObjectURL(blob),label);
-function fxRefMenu(btn){
-  if(document.getElementById('fx-ref-win')){fxRefClose();return;}
-  const r=btn.getBoundingClientRect();
-  const m=document.createElement('div');m.className='cs-ctx';
-  m.style.cssText=`position:fixed;left:${r.left}px;top:${r.bottom+6}px;z-index:9999;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;min-width:200px;box-shadow:var(--lift-2)`;
-  [['Pin this photo as edited',fxRefSnapshot],['Choose a photo…',fxRefPickFile]].forEach(([t,fn])=>{const it=document.createElement('div');it.className='cs-ctx-it';it.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer';it.textContent=t;it.onclick=()=>{m.remove();fn();};m.appendChild(it);});
-  document.body.appendChild(m);setTimeout(()=>document.addEventListener('click',()=>m.remove(),{once:true}),0);
-}
-async function matchSeriesToReference(refIdx){
-  if(fxImages.length<2){toast('Load a set of photos first');return;}
-  refIdx=(refIdx==null)?fxCurIdx:refIdx;
-  const ref=fxImages[refIdx];
-  if(!ref||!ref.img){toast('Reference photo is not loaded');return;}
-  const base=domAdjustVals();                 // the shared grade every photo starts from
-  const refStat=_matchStats(ref.img);
-  let changed=0;
-  for(let i=0;i<fxImages.length;i++){
-    const it=fxImages[i];
-    if(!it||!it.img||it.kind==='video')continue;
-    if(i===refIdx){it.adjustOverride=null;continue;}   // the reference itself follows the batch
-    const off=_matchOffsets(refStat,_matchStats(it.img));
-    // Offsets ride ON TOP of the shared grade rather than replacing it — the look stays, only the
-    // capture drift is corrected.
-    const v={...base};
-    v.exp=Math.max(-100,Math.min(100,(base.exp||0)+off.exp));
-    v.temp=Math.max(-100,Math.min(100,(base.temp||0)+off.temp));
-    v.tint=Math.max(-100,Math.min(100,(base.tint||0)+off.tint));
-    it.adjustOverride=v;
-    if(off.exp||off.temp||off.tint)changed++;
-  }
-  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
-  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
-  toast(`Matched ${changed} photo(s) to ${ref.name}`,true);
-  log(`Match series: ${changed} photo(s) adjusted to reference "${ref.name}"`,'ok');
-}
-/// Undoes it: every photo goes back to following the shared batch values.

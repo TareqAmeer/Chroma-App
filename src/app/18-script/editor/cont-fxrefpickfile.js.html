@@ -1,3 +1,47 @@
+function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
+function fxRefSnapshot(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width){toast('Open a photo first');return;}
+  renderPreview();cv.toBlob(b=>{if(!b){toast('Could not capture the preview');return;}
+    const it=curItem();fxRefShow(URL.createObjectURL(b),(it&&it.name?it.name+' — ':'')+'as edited');},'image/jpeg',0.92);
+}
+window.chromasmithSetReference=(blob,label)=>fxRefShow(URL.createObjectURL(blob),label);
+function fxRefMenu(btn){
+  if(document.getElementById('fx-ref-win')){fxRefClose();return;}
+  const r=btn.getBoundingClientRect();
+  const m=document.createElement('div');m.className='cs-ctx';
+  m.style.cssText=`position:fixed;left:${r.left}px;top:${r.bottom+6}px;z-index:9999;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;min-width:200px;box-shadow:var(--lift-2)`;
+  [['Pin this photo as edited',fxRefSnapshot],['Choose a photo…',fxRefPickFile]].forEach(([t,fn])=>{const it=document.createElement('div');it.className='cs-ctx-it';it.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer';it.textContent=t;it.onclick=()=>{m.remove();fn();};m.appendChild(it);});
+  document.body.appendChild(m);setTimeout(()=>document.addEventListener('click',()=>m.remove(),{once:true}),0);
+}
+async function matchSeriesToReference(refIdx){
+  if(fxImages.length<2){toast('Load a set of photos first');return;}
+  refIdx=(refIdx==null)?fxCurIdx:refIdx;
+  const ref=fxImages[refIdx];
+  if(!ref||!ref.img){toast('Reference photo is not loaded');return;}
+  const base=domAdjustVals();                 // the shared grade every photo starts from
+  const refStat=_matchStats(ref.img);
+  let changed=0;
+  for(let i=0;i<fxImages.length;i++){
+    const it=fxImages[i];
+    if(!it||!it.img||it.kind==='video')continue;
+    if(i===refIdx){it.adjustOverride=null;continue;}   // the reference itself follows the batch
+    const off=_matchOffsets(refStat,_matchStats(it.img));
+    // Offsets ride ON TOP of the shared grade rather than replacing it — the look stays, only the
+    // capture drift is corrected.
+    const v={...base};
+    v.exp=Math.max(-100,Math.min(100,(base.exp||0)+off.exp));
+    v.temp=Math.max(-100,Math.min(100,(base.temp||0)+off.temp));
+    v.tint=Math.max(-100,Math.min(100,(base.tint||0)+off.tint));
+    it.adjustOverride=v;
+    if(off.exp||off.temp||off.tint)changed++;
+  }
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(`Matched ${changed} photo(s) to ${ref.name}`,true);
+  log(`Match series: ${changed} photo(s) adjusted to reference "${ref.name}"`,'ok');
+}
+/// Undoes it: every photo goes back to following the shared batch values.
 function matchSeriesClear(){
   let n=0;
   fxImages.forEach(it=>{if(it.adjustOverride){it.adjustOverride=null;n++;}});
@@ -205,54 +249,3 @@ function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include t
   const cs=getComputedStyle(w);
   return{w:w.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0),h:w.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0)};
 }
-function fxPreviewMaxH(){
-  if(window.innerWidth<=700){
-    const wrap=document.getElementById('fx-wrap');
-    const h=wrap?fxWrapInner().h:0;
-    // fallback derives from --app-h (the JS-owned true visible height) so CSS and JS agree
-    const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
-    return Math.max(220,h||appH*0.42);
-  }
-  if(document.body.classList.contains('deskx')){
-    // deskx: the wrap is a flex cell that IS the available space — measure it live, same as
-    // the mobile branch, so JS sizing can never drift from the CSS grid.
-    const wrap=document.getElementById('fx-wrap');
-    return Math.max(360,(wrap&&fxWrapInner().h)||window.innerHeight-52);
-  }
-  return Math.max(360,window.innerHeight-150);
-}
-// Full-res zoomed preview = render ONLY the visible crop at native scale (the 1:1 loupe's
-// recipe: FX.setImage(crop) + uvOff/uvScale for grain/artifact continuity + scOverride so
-// halation/grain blur at true export scale). The previous approach — render the ENTIRE image
-// (24MP+) through the whole FX chain, then let CSS scale it — was seconds-per-frame on an
-// Intel iGPU AND looked mushy: the giant canvas got GPU-minified into the viewport, aliasing
-// the grain. Cost is now proportional to the viewport, so pans re-render quickly too.
-// A 30% padding halo around the visible region keeps small pans showing real pixels until the
-// debounced re-render lands. Returns false if the crop degenerates (caller falls through).
-// Coarse full-frame underlay for smooth full-res panning. The crisp crop (renderFullResCrop)
-// only covers the visible viewport + a small halo, so during a pan the CSS transform used to
-// drag that small tile across the BLACK preview background (the "void"), and the crisp
-// re-render only fired ~180ms AFTER motion stopped — the felt "slowness". Instead we render the
-// WHOLE frame through the FX chain ONCE at a moderate resolution into a 2D underlay canvas that
-// lives inside the zoom wrapper (so it rides the same scale·translate). During a pan the
-// underlay always shows content (soft but present, GPU-FX-free); the crisp native crop lands on
-// top the moment motion settles. Rebuilt only when the image/params/geometry change (dirty flag).
-let _fxFullBase={canvas:null,dirty:true,w:0,h:0};
-function fxInvalidateFullBase(){_fxFullBase.dirty=true;}
-function _fxEnsureFullResBase(iw,ih){
-  if(!_fxFullBase.dirty&&_fxFullBase.canvas&&_fxFullBase.w===iw&&_fxFullBase.h===ih)return _fxFullBase.canvas;
-  // Moderate cap: 2560px long edge is enough to look reasonable while dragging, cheap to render
-  // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path.
-  const cap=2560,sc=Math.min(1,cap/Math.max(iw,ih));
-  const bw=Math.max(1,Math.round(iw*sc)),bh=Math.max(1,Math.round(ih*sc));
-  const P=fxCompare?fxCompareParams():getFXParams();
-  FX.render(P,bw,bh,{glowScale:fxGlowScale()}); // whole frame, moderate res, one time
-  let c=_fxFullBase.canvas;
-  if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
-  c.width=bw;c.height=bh;
-  c.getContext('2d').drawImage(FX.cv,0,0,FX.cv.width,FX.cv.height,0,0,bw,bh);
-  _fxFullBase.dirty=false;_fxFullBase.w=iw;_fxFullBase.h=ih;
-  return c;
-}
-// Show the coarse underlay at the full-frame footprint (cw×ch) so any pan keeps content on
-// screen. Sits behind FX.cv inside the zoom wrapper, inheriting its transform.

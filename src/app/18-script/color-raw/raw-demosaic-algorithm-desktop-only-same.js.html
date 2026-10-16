@@ -94,6 +94,7 @@ function cropGridOverlaySync(){
   const it=typeof curItem==='function'?curItem():null;
   const on=cropGridShown&&cropGrid!=='off'&&!cropMode&&!!(it&&it.img);
   ov.style.display=on?'block':'none';if(!on){ov.innerHTML='';return;}
+  fxPlacePhotoOverlay(ov);
   const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667];
   const ls=stops.map(p=>`<line x1="${p}" y1="0" x2="${p}" y2="100"/><line x1="0" y1="${p}" x2="100" y2="${p}"/>`).join('');
   ov.innerHTML=`<g fill="none" vector-effect="non-scaling-stroke"><g stroke="rgba(0,0,0,.4)" stroke-width="3">${ls}</g><g stroke="rgba(255,255,255,.85)" stroke-width="1">${ls}</g></g>`;

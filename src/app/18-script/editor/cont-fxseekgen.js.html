@@ -87,7 +87,7 @@ function fxVideoMuteToggle(){
 function fxVideoGuidesToggle(){
   const ov=document.getElementById('fx-guides-overlay');if(!ov)return;
   const on=ov.style.display==='none';
-  ov.style.display=on?'block':'none';
+  ov.style.display=on?'block':'none';fxPlacePhotoOverlay(ov);
   const btn=document.getElementById('btn-vid-guides');if(btn)btn.classList.toggle('bsec',on);
 }
 // Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at

@@ -7276,7 +7276,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016Y';
+const BUILD='1.1016Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11173,6 +11173,7 @@ function cropGridOverlaySync(){
   const it=typeof curItem==='function'?curItem():null;
   const on=cropGridShown&&cropGrid!=='off'&&!cropMode&&!!(it&&it.img);
   ov.style.display=on?'block':'none';if(!on){ov.innerHTML='';return;}
+  fxPlacePhotoOverlay(ov);
   const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667];
   const ls=stops.map(p=>`<line x1="${p}" y1="0" x2="${p}" y2="100"/><line x1="0" y1="${p}" x2="100" y2="${p}"/>`).join('');
   ov.innerHTML=`<g fill="none" vector-effect="non-scaling-stroke"><g stroke="rgba(0,0,0,.4)" stroke-width="3">${ls}</g><g stroke="rgba(255,255,255,.85)" stroke-width="1">${ls}</g></g>`;
@@ -12276,7 +12277,7 @@ function fxVideoMuteToggle(){
 function fxVideoGuidesToggle(){
   const ov=document.getElementById('fx-guides-overlay');if(!ov)return;
   const on=ov.style.display==='none';
-  ov.style.display=on?'block':'none';
+  ov.style.display=on?'block':'none';fxPlacePhotoOverlay(ov);
   const btn=document.getElementById('btn-vid-guides');if(btn)btn.classList.toggle('bsec',on);
 }
 // Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at
@@ -22487,6 +22488,26 @@ function _videoInfoRows(it){
 // catalog_faces_for_path round trips showExif's several call sites would otherwise fire on every
 // zoom/pan re-render of the SAME photo — only a genuine photo change re-queries.
 let _fxPeoplePathToken='';
+// On-screen rect of the PHOTO itself (zoom/pan included). With Borders / Canvas matte on, the canvas
+// on screen is the composited #fx-canvas-bd and #fx-canvas is display:none (zero rect), so the photo is
+// the inset box inside it — every overlay that maps 0..1 photo fractions must use this, not #fx-canvas.
+function fxPhotoClientRect(){
+  const bd=document.getElementById('fx-canvas-bd');
+  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
+    const vr=bd.getBoundingClientRect();if(!vr.width)return null;const k=vr.width/bd.width;
+    return{left:vr.left+_fxDisplayMap.offX*k,top:vr.top+_fxDisplayMap.offY*k,width:_fxDisplayMap.w*k,height:_fxDisplayMap.h*k};
+  }
+  const cv=document.getElementById('fx-canvas');if(!cv)return null;
+  const r=cv.getBoundingClientRect();return r.width?r:null;
+}
+// Size/position a 0..1-viewBox SVG overlay inside #fx-zoom-wrap onto the photo (inset by borders/matte).
+function fxPlacePhotoOverlay(ov){
+  if(!ov)return;
+  const b=typeof mskOverlayBox==='function'?mskOverlayBox():null;
+  if(b){ov.style.left=b.left+'px';ov.style.top=b.top+'px';ov.style.width=b.width+'px';ov.style.height=b.height+'px';}
+  else{ov.style.left='0px';ov.style.top='0px';ov.style.width='100%';ov.style.height='100%';}
+}
+function fxPlacePhotoOverlays(){['fx-ahroi-overlay','fx-grid-overlay','fx-guides-overlay'].forEach(id=>fxPlacePhotoOverlay(document.getElementById(id)));}
 // Outlines face `f` (0..1 box of the whole photo) on the editor canvas. The canvas's on-screen
 // rect already includes zoom/pan transforms, so fractions map straight onto it. Skipped in crop
 // mode, where the canvas no longer shows the whole frame.
@@ -22495,7 +22516,7 @@ function fxShowFaceBox(f,chip){
   if(!f||!cv||(typeof cropMode!=='undefined'&&cropMode))return;
   let box=document.getElementById('fx-face-box');
   if(!box){box=document.createElement('div');box.id='fx-face-box';document.body.appendChild(box);}
-  const r=cv.getBoundingClientRect();
+  const r=fxPhotoClientRect();if(!r)return;
   const pad=0.15*Math.max(f.x1-f.x0,f.y1-f.y0);
   const x0=Math.max(0,f.x0-pad),y0=Math.max(0,f.y0-pad),x1=Math.min(1,f.x1+pad),y1=Math.min(1,f.y1+pad);
   Object.assign(box.style,{left:(r.left+x0*r.width)+'px',top:(r.top+y0*r.height)+'px',
@@ -24099,7 +24120,7 @@ function applyPreviewBorders(P,pw,ph){
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
   const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
   const bAny=bordersAny(P,b1t,b2t);
-  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
+  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;fxPlacePhotoOverlays();return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
   // stage 1: bordered image (or the bare render when borders are off)
   const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
@@ -24129,6 +24150,7 @@ function applyPreviewBorders(P,pw,ph){
   const inset=b1t+b2t;
   _fxDisplayMap={el:bd,offX:Math.round((bd.width-(pw+2*inset))/2)+inset,
                        offY:Math.round((bd.height-(ph+2*inset))/2)+inset,w:pw,h:ph};
+  fxPlacePhotoOverlays();
 }
 
 // ═══════════════════════════
@@ -24749,7 +24771,7 @@ function ahRoiSyncUI(){
   const ov=document.getElementById('fx-ahroi-overlay'),rect=document.getElementById('fx-ahroi-rect');
   const clearBtn=document.getElementById('btn-ah-roi-clear');
   if(clearBtn)clearBtn.style.display=roi?'':'none';
-  if(ov)ov.style.display=roi?'':'none';
+  if(ov){ov.style.display=roi?'':'none';fxPlacePhotoOverlay(ov);}
   if(rect&&roi){rect.setAttribute('x',roi.x0);rect.setAttribute('y',roi.y0);
     rect.setAttribute('width',Math.max(0.001,roi.x1-roi.x0));rect.setAttribute('height',Math.max(0.001,roi.y1-roi.y0));}
 }

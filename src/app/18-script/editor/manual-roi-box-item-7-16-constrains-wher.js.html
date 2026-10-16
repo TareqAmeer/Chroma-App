@@ -9,7 +9,7 @@ function ahRoiSyncUI(){
   const ov=document.getElementById('fx-ahroi-overlay'),rect=document.getElementById('fx-ahroi-rect');
   const clearBtn=document.getElementById('btn-ah-roi-clear');
   if(clearBtn)clearBtn.style.display=roi?'':'none';
-  if(ov)ov.style.display=roi?'':'none';
+  if(ov){ov.style.display=roi?'':'none';fxPlacePhotoOverlay(ov);}
   if(rect&&roi){rect.setAttribute('x',roi.x0);rect.setAttribute('y',roi.y0);
     rect.setAttribute('width',Math.max(0.001,roi.x1-roi.x0));rect.setAttribute('height',Math.max(0.001,roi.y1-roi.y0));}
 }

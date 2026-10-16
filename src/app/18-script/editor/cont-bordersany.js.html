@@ -28,7 +28,7 @@ function applyPreviewBorders(P,pw,ph){
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
   const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
   const bAny=bordersAny(P,b1t,b2t);
-  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
+  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;fxPlacePhotoOverlays();return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
   // stage 1: bordered image (or the bare render when borders are off)
   const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
@@ -58,6 +58,7 @@ function applyPreviewBorders(P,pw,ph){
   const inset=b1t+b2t;
   _fxDisplayMap={el:bd,offX:Math.round((bd.width-(pw+2*inset))/2)+inset,
                        offY:Math.round((bd.height-(ph+2*inset))/2)+inset,w:pw,h:ph};
+  fxPlacePhotoOverlays();
 }
 
 // ═══════════════════════════

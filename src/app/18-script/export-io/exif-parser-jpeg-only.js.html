@@ -96,6 +96,26 @@ function _videoInfoRows(it){
 // catalog_faces_for_path round trips showExif's several call sites would otherwise fire on every
 // zoom/pan re-render of the SAME photo — only a genuine photo change re-queries.
 let _fxPeoplePathToken='';
+// On-screen rect of the PHOTO itself (zoom/pan included). With Borders / Canvas matte on, the canvas
+// on screen is the composited #fx-canvas-bd and #fx-canvas is display:none (zero rect), so the photo is
+// the inset box inside it — every overlay that maps 0..1 photo fractions must use this, not #fx-canvas.
+function fxPhotoClientRect(){
+  const bd=document.getElementById('fx-canvas-bd');
+  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
+    const vr=bd.getBoundingClientRect();if(!vr.width)return null;const k=vr.width/bd.width;
+    return{left:vr.left+_fxDisplayMap.offX*k,top:vr.top+_fxDisplayMap.offY*k,width:_fxDisplayMap.w*k,height:_fxDisplayMap.h*k};
+  }
+  const cv=document.getElementById('fx-canvas');if(!cv)return null;
+  const r=cv.getBoundingClientRect();return r.width?r:null;
+}
+// Size/position a 0..1-viewBox SVG overlay inside #fx-zoom-wrap onto the photo (inset by borders/matte).
+function fxPlacePhotoOverlay(ov){
+  if(!ov)return;
+  const b=typeof mskOverlayBox==='function'?mskOverlayBox():null;
+  if(b){ov.style.left=b.left+'px';ov.style.top=b.top+'px';ov.style.width=b.width+'px';ov.style.height=b.height+'px';}
+  else{ov.style.left='0px';ov.style.top='0px';ov.style.width='100%';ov.style.height='100%';}
+}
+function fxPlacePhotoOverlays(){['fx-ahroi-overlay','fx-grid-overlay','fx-guides-overlay'].forEach(id=>fxPlacePhotoOverlay(document.getElementById(id)));}
 // Outlines face `f` (0..1 box of the whole photo) on the editor canvas. The canvas's on-screen
 // rect already includes zoom/pan transforms, so fractions map straight onto it. Skipped in crop
 // mode, where the canvas no longer shows the whole frame.
@@ -104,7 +124,7 @@ function fxShowFaceBox(f,chip){
   if(!f||!cv||(typeof cropMode!=='undefined'&&cropMode))return;
   let box=document.getElementById('fx-face-box');
   if(!box){box=document.createElement('div');box.id='fx-face-box';document.body.appendChild(box);}
-  const r=cv.getBoundingClientRect();
+  const r=fxPhotoClientRect();if(!r)return;
   const pad=0.15*Math.max(f.x1-f.x0,f.y1-f.y0);
   const x0=Math.max(0,f.x0-pad),y0=Math.max(0,f.y0-pad),x1=Math.min(1,f.x1+pad),y1=Math.min(1,f.y1+pad);
   Object.assign(box.style,{left:(r.left+x0*r.width)+'px',top:(r.top+y0*r.height)+'px',
@@ -240,47 +260,3 @@ async function fxRenderKeywordsPanel(){
 // Auto tags ("In this photo": dog, beach, park…) + where it was taken, from the catalog's AI
 // index (catalog_photo_tag_info). Click a tag to save it as a keyword; "Analyze now" indexes this
 // one photo when the background pass hasn't reached it yet. Always renders a real state.
-async function fxRenderAutoTags(path,keywords){
-  const el=document.getElementById('fx-autotags');if(!el||!window.__TAURI__)return;
-  const inv=window.__TAURI__.core.invoke;
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div><div class="fx-autotag-hint">Checking…</div>`;
-  let info;
-  try{info=await inv('catalog_photo_tag_info',{path});}catch(e){info=null;}
-  if(_fxKeywordsPathToken!==path||!document.body.contains(el))return;
-  // Detected tags were just saved as real keywords — redraw the keyword chips from the sidecar.
-  if(info&&info.keywords_added){_fxKeywordsPathToken='';fxRenderKeywordsPanel();return;}
-  const have=new Set((keywords||[]).map(k=>k.split('|').pop().toLowerCase()));
-  const tags=((info&&info.tags)||[]).filter(t=>!have.has(t.term.toLowerCase()));
-  const place=info&&info.place;
-  const placeBits=place?[place.split(', ')[0],place.split(', ').pop()].filter((v,i,a)=>a.indexOf(v)===i&&!have.has(v.toLowerCase())):[];
-  let body;
-  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Gallery to auto-tag it.</div>`;
-  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Gallery tags photos in the background.</div>`
-    +`<button class="fx-autotag-btn" id="fx-autotag-analyze">Analyze now</button>`;
-  else if(!tags.length&&!placeBits.length)body=`<div class="fx-autotag-hint">${(info.tags||[]).length?'All detected tags are saved as keywords.':'Nothing recognised with confidence.'}</div>`;
-  else body=`<div style="display:flex;flex-wrap:wrap;gap:4px">`
-    +placeBits.map(p=>`<span class="fx-autotag-chip" data-add="${esc(p)}" title="Taken in ${esc(place)} — click to save as a keyword">⌖ ${esc(p)} +</span>`).join('')
-    +tags.map(t=>`<span class="fx-autotag-chip" data-add="${esc(t.term)}" title="Detected automatically (${Math.round(t.score*100)}%) — click to save as a keyword">${esc(t.term)} +</span>`).join('')
-    +`</div>`+(tags.length+placeBits.length>1?`<button class="fx-autotag-btn" id="fx-autotag-all">Add all</button>`:'');
-  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div>`+body;
-  const save=async(add)=>{
-    const sc=await inv('get_sidecar',{path});
-    const cur=sc.keywords||[];
-    const next=[...cur,...add.filter(a=>!cur.includes(a))];
-    await inv('set_keywords',{path,keywords:next});
-    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
-  };
-  el.querySelectorAll('[data-add]').forEach(c=>{c.onclick=()=>save([c.dataset.add]).catch(()=>{if(typeof toast==='function')toast('Could not add that keyword','err');});});
-  const all=document.getElementById('fx-autotag-all');
-  if(all)all.onclick=()=>save([...placeBits,...tags.map(t=>t.term)]).catch(()=>{});
-  const an=document.getElementById('fx-autotag-analyze');
-  if(an)an.onclick=async()=>{
-    an.disabled=true;an.textContent='Analyzing…';
-    try{await inv('catalog_clip_embed',{photoIds:[info.photo_id]});}catch(e){if(typeof toast==='function')toast('Could not analyze this photo','err');}
-    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
-  };
-}
-window.fxRefreshAutoTags=()=>{_fxKeywordsPathToken='';if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();};
-// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
-// carries one (RAW opens on a display proxy first), else the loaded image itself.
