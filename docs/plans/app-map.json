@@ -1,0 +1,8436 @@
+{
+ "source": "chromasmith-22.html",
+ "totalLines": 32159,
+ "blocks": [
+  {
+   "index": 0,
+   "start": 30,
+   "end": 35,
+   "lines": 6,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 1,
+   "start": 39,
+   "end": 39,
+   "lines": 1,
+   "external": true,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 2,
+   "start": 3079,
+   "end": 3089,
+   "lines": 11,
+   "external": false,
+   "declCount": 4,
+   "decls": [
+    {
+     "name": "sync",
+     "kind": "function",
+     "line": 3080
+    },
+    {
+     "name": "go",
+     "kind": "function",
+     "line": 3082
+    },
+    {
+     "name": "br",
+     "kind": "var",
+     "line": 3085
+    },
+    {
+     "name": "fit",
+     "kind": "function",
+     "line": 3086
+    }
+   ]
+  },
+  {
+   "index": 3,
+   "start": 3090,
+   "end": 3108,
+   "lines": 19,
+   "external": false,
+   "declCount": 4,
+   "decls": [
+    {
+     "name": "br",
+     "kind": "var",
+     "line": 3095
+    },
+    {
+     "name": "K",
+     "kind": "var",
+     "line": 3101
+    },
+    {
+     "name": "isLib",
+     "kind": "function",
+     "line": 3102
+    },
+    {
+     "name": "apply",
+     "kind": "function",
+     "line": 3104
+    }
+   ]
+  },
+  {
+   "index": 4,
+   "start": 3109,
+   "end": 3198,
+   "lines": 90,
+   "external": false,
+   "declCount": 7,
+   "decls": [
+    {
+     "name": "CS_NAMES",
+     "kind": "const",
+     "line": 3114
+    },
+    {
+     "name": "CS_ALIASES",
+     "kind": "const",
+     "line": 3119
+    },
+    {
+     "name": "SK2_SUB",
+     "kind": "const",
+     "line": 3124
+    },
+    {
+     "name": "sk2SubTabs",
+     "kind": "function",
+     "line": 3125
+    },
+    {
+     "name": "sk2Focus",
+     "kind": "function",
+     "line": 3166
+    },
+    {
+     "name": "sk2Jump",
+     "kind": "function",
+     "line": 3172
+    },
+    {
+     "name": "sk2Spy",
+     "kind": "function",
+     "line": 3186
+    }
+   ]
+  },
+  {
+   "index": 5,
+   "start": 3199,
+   "end": 3325,
+   "lines": 127,
+   "external": false,
+   "declCount": 9,
+   "decls": [
+    {
+     "name": "FXSoftProof",
+     "kind": "let",
+     "line": 3202
+    },
+    {
+     "name": "fxSoftProofEstimate",
+     "kind": "function",
+     "line": 3203
+    },
+    {
+     "name": "fxSoftProofInvalidate",
+     "kind": "function",
+     "line": 3207
+    },
+    {
+     "name": "fxSoftProofSchedule",
+     "kind": "function",
+     "line": 3215
+    },
+    {
+     "name": "fxSoftProofRender",
+     "kind": "function",
+     "line": 3222
+    },
+    {
+     "name": "sk2ExportBuild",
+     "kind": "function",
+     "line": 3282
+    },
+    {
+     "name": "sk2ExportOpen",
+     "kind": "function",
+     "line": 3307
+    },
+    {
+     "name": "sk2ExportClose",
+     "kind": "function",
+     "line": 3317
+    },
+    {
+     "name": "sk2ExportWire",
+     "kind": "function",
+     "line": 3318
+    }
+   ]
+  },
+  {
+   "index": 6,
+   "start": 3326,
+   "end": 3376,
+   "lines": 51,
+   "external": false,
+   "declCount": 1,
+   "decls": [
+    {
+     "name": "ready",
+     "kind": "function",
+     "line": 3328
+    }
+   ]
+  },
+  {
+   "index": 7,
+   "start": 3377,
+   "end": 3458,
+   "lines": 82,
+   "external": false,
+   "declCount": 1,
+   "decls": [
+    {
+     "name": "ready",
+     "kind": "function",
+     "line": 3379
+    }
+   ]
+  },
+  {
+   "index": 8,
+   "start": 3505,
+   "end": 3532,
+   "lines": 28,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 9,
+   "start": 3533,
+   "end": 3743,
+   "lines": 211,
+   "external": false,
+   "declCount": 1,
+   "decls": [
+    {
+     "name": "_bootPaintPct",
+     "kind": "function",
+     "line": 3551
+    }
+   ]
+  },
+  {
+   "index": 10,
+   "start": 5355,
+   "end": 5359,
+   "lines": 5,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 11,
+   "start": 5360,
+   "end": 7010,
+   "lines": 1651,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 12,
+   "start": 7011,
+   "end": 7266,
+   "lines": 256,
+   "external": false,
+   "declCount": 7,
+   "decls": [
+    {
+     "name": "LUT_PRESETS",
+     "kind": "const",
+     "line": 7017
+    },
+    {
+     "name": "LUT_META",
+     "kind": "const",
+     "line": 7029
+    },
+    {
+     "name": "SPEKTRA_SHOULDER_KEYS",
+     "kind": "const",
+     "line": 7169
+    },
+    {
+     "name": "_stockShoulderCache",
+     "kind": "const",
+     "line": 7179
+    },
+    {
+     "name": "stockShoulderBytes",
+     "kind": "function",
+     "line": 7183
+    },
+    {
+     "name": "LUT_FX_DEFAULTS",
+     "kind": "const",
+     "line": 7193
+    },
+    {
+     "name": "PRINT_PRESETS",
+     "kind": "const",
+     "line": 7262
+    }
+   ]
+  },
+  {
+   "index": 13,
+   "start": 7267,
+   "end": 31808,
+   "lines": 24542,
+   "external": false,
+   "declCount": 1588,
+   "decls": [
+    {
+     "name": "BUILD",
+     "kind": "const",
+     "line": 7270
+    },
+    {
+     "name": "WHATSNEW",
+     "kind": "const",
+     "line": 7275
+    },
+    {
+     "name": "whatsNewHtml",
+     "kind": "function",
+     "line": 7315
+    },
+    {
+     "name": "csAbout",
+     "kind": "function",
+     "line": 7323
+    },
+    {
+     "name": "_GP_CB",
+     "kind": "const",
+     "line": 7380
+    },
+    {
+     "name": "s2l",
+     "kind": "const",
+     "line": 7394
+    },
+    {
+     "name": "l2s",
+     "kind": "const",
+     "line": 7395
+    },
+    {
+     "name": "r2hsv",
+     "kind": "function",
+     "line": 7396
+    },
+    {
+     "name": "hsv2r",
+     "kind": "function",
+     "line": 7397
+    },
+    {
+     "name": "sat",
+     "kind": "const",
+     "line": 7398
+    },
+    {
+     "name": "lum",
+     "kind": "const",
+     "line": 7399
+    },
+    {
+     "name": "gm",
+     "kind": "function",
+     "line": 7400
+    },
+    {
+     "name": "contrast",
+     "kind": "function",
+     "line": 7401
+    },
+    {
+     "name": "applyHSL",
+     "kind": "function",
+     "line": 7402
+    },
+    {
+     "name": "pcWeight",
+     "kind": "function",
+     "line": 7417
+    },
+    {
+     "name": "applyPointColors",
+     "kind": "function",
+     "line": 7430
+    },
+    {
+     "name": "CG_K",
+     "kind": "const",
+     "line": 7450
+    },
+    {
+     "name": "cgTint",
+     "kind": "function",
+     "line": 7451
+    },
+    {
+     "name": "applyCG",
+     "kind": "function",
+     "line": 7455
+    },
+    {
+     "name": "applyTone",
+     "kind": "function",
+     "line": 7467
+    },
+    {
+     "name": "applyGrade",
+     "kind": "function",
+     "line": 7475
+    },
+    {
+     "name": "SZ",
+     "kind": "const",
+     "line": 7485
+    },
+    {
+     "name": "li",
+     "kind": "const",
+     "line": 7486
+    },
+    {
+     "name": "sampleLUT",
+     "kind": "function",
+     "line": 7487
+    },
+    {
+     "name": "writeCube",
+     "kind": "function",
+     "line": 7497
+    },
+    {
+     "name": "sampleLUTn",
+     "kind": "function",
+     "line": 7503
+    },
+    {
+     "name": "parseCube",
+     "kind": "function",
+     "line": 7517
+    },
+    {
+     "name": "identLUT",
+     "kind": "function",
+     "line": 7543
+    },
+    {
+     "name": "applyLUTtoPx",
+     "kind": "function",
+     "line": 7544
+    },
+    {
+     "name": "parseXMP",
+     "kind": "function",
+     "line": 7553
+    },
+    {
+     "name": "HEIC_RE",
+     "kind": "const",
+     "line": 7578
+    },
+    {
+     "name": "loadImg",
+     "kind": "function",
+     "line": 7579
+    },
+    {
+     "name": "unsupportedFormatMessage",
+     "kind": "function",
+     "line": 7596
+    },
+    {
+     "name": "getPx",
+     "kind": "function",
+     "line": 7606
+    },
+    {
+     "name": "resizePx",
+     "kind": "function",
+     "line": 7607
+    },
+    {
+     "name": "buildCorrLUT",
+     "kind": "function",
+     "line": 7612
+    },
+    {
+     "name": "propFill",
+     "kind": "function",
+     "line": 7622
+    },
+    {
+     "name": "composeLUTs",
+     "kind": "function",
+     "line": 7632
+    },
+    {
+     "name": "analyzeChanges",
+     "kind": "function",
+     "line": 7642
+    },
+    {
+     "name": "solveLinSys",
+     "kind": "function",
+     "line": 7677
+    },
+    {
+     "name": "deriveXMP",
+     "kind": "function",
+     "line": 7690
+    },
+    {
+     "name": "histMatch",
+     "kind": "function",
+     "line": 7803
+    },
+    {
+     "name": "cpAdjustLUT",
+     "kind": "function",
+     "line": 7828
+    },
+    {
+     "name": "cpOpts",
+     "kind": "function",
+     "line": 7844
+    },
+    {
+     "name": "_cpPrev",
+     "kind": "let",
+     "line": 7848
+    },
+    {
+     "name": "_cpPoints",
+     "kind": "let",
+     "line": 7852
+    },
+    {
+     "name": "cpPairPick",
+     "kind": "function",
+     "line": 7853
+    },
+    {
+     "name": "cpSampleAverage",
+     "kind": "function",
+     "line": 7874
+    },
+    {
+     "name": "cpPairsRender",
+     "kind": "function",
+     "line": 7881
+    },
+    {
+     "name": "cpLutSample",
+     "kind": "function",
+     "line": 7894
+    },
+    {
+     "name": "cpPairResidual",
+     "kind": "function",
+     "line": 7901
+    },
+    {
+     "name": "cpPairCorrect",
+     "kind": "function",
+     "line": 7907
+    },
+    {
+     "name": "cpPairWarnings",
+     "kind": "function",
+     "line": 7923
+    },
+    {
+     "name": "cpPairsApply",
+     "kind": "function",
+     "line": 7937
+    },
+    {
+     "name": "cpPairsClear",
+     "kind": "function",
+     "line": 7946
+    },
+    {
+     "name": "cpRefPool",
+     "kind": "function",
+     "line": 7949
+    },
+    {
+     "name": "cpRefExtraRender",
+     "kind": "function",
+     "line": 7957
+    },
+    {
+     "name": "cpRefExtraAdd",
+     "kind": "function",
+     "line": 7963
+    },
+    {
+     "name": "cpRefFromVideo",
+     "kind": "function",
+     "line": 7967
+    },
+    {
+     "name": "cpSliderModel",
+     "kind": "function",
+     "line": 7984
+    },
+    {
+     "name": "cpQuantiles",
+     "kind": "function",
+     "line": 7997
+    },
+    {
+     "name": "cpStatDistance",
+     "kind": "function",
+     "line": 8001
+    },
+    {
+     "name": "cpFitSliders",
+     "kind": "function",
+     "line": 8005
+    },
+    {
+     "name": "cpUseSliders",
+     "kind": "function",
+     "line": 8023
+    },
+    {
+     "name": "cpPreviewBuild",
+     "kind": "function",
+     "line": 8043
+    },
+    {
+     "name": "cpPreviewUpdate",
+     "kind": "function",
+     "line": 8061
+    },
+    {
+     "name": "cpPreviewSplit",
+     "kind": "function",
+     "line": 8067
+    },
+    {
+     "name": "runColourCopy",
+     "kind": "function",
+     "line": 8071
+    },
+    {
+     "name": "genBlindLUT",
+     "kind": "function",
+     "line": 8128
+    },
+    {
+     "name": "GPU_PREF_KEY",
+     "kind": "const",
+     "line": 8143
+    },
+    {
+     "name": "gpuPreference",
+     "kind": "function",
+     "line": 8144
+    },
+    {
+     "name": "gpuContextOptions",
+     "kind": "function",
+     "line": 8150
+    },
+    {
+     "name": "FXR",
+     "kind": "class",
+     "line": 8153
+    },
+    {
+     "name": "float",
+     "kind": "const",
+     "line": 8396
+    },
+    {
+     "name": "float",
+     "kind": "const",
+     "line": 8397
+    },
+    {
+     "name": "float",
+     "kind": "const",
+     "line": 8478
+    },
+    {
+     "name": "mat3",
+     "kind": "const",
+     "line": 9482
+    },
+    {
+     "name": "mat3",
+     "kind": "const",
+     "line": 9487
+    },
+    {
+     "name": "mat3",
+     "kind": "const",
+     "line": 9492
+    },
+    {
+     "name": "mat3",
+     "kind": "const",
+     "line": 9497
+    },
+    {
+     "name": "al",
+     "kind": "const",
+     "line": 10022
+    },
+    {
+     "name": "hexRGB",
+     "kind": "function",
+     "line": 10495
+    },
+    {
+     "name": "FX",
+     "kind": "const",
+     "line": 10580
+    },
+    {
+     "name": "FXExport",
+     "kind": "let",
+     "line": 10597
+    },
+    {
+     "name": "fxPrepareExportRenderer",
+     "kind": "function",
+     "line": 10598
+    },
+    {
+     "name": "FXDisplay",
+     "kind": "let",
+     "line": 10605
+    },
+    {
+     "name": "fxSecondDisplayOpen",
+     "kind": "function",
+     "line": 10606
+    },
+    {
+     "name": "fxSecondDisplayUpdate",
+     "kind": "function",
+     "line": 10626
+    },
+    {
+     "name": "fxState",
+     "kind": "const",
+     "line": 10662
+    },
+    {
+     "name": "fxImg",
+     "kind": "let",
+     "line": 10668
+    },
+    {
+     "name": "_fxAmtTouched",
+     "kind": "let",
+     "line": 10669
+    },
+    {
+     "name": "_fxPristineDefault",
+     "kind": "let",
+     "line": 10670
+    },
+    {
+     "name": "fxFormatLabel",
+     "kind": "function",
+     "line": 10675
+    },
+    {
+     "name": "fxDimsFmt",
+     "kind": "function",
+     "line": 10676
+    },
+    {
+     "name": "fxDeskbarTitle",
+     "kind": "function",
+     "line": 10689
+    },
+    {
+     "name": "_fxPhotoActivitySeq",
+     "kind": "let",
+     "line": 10712
+    },
+    {
+     "name": "fxPhotoActivityInvalidate",
+     "kind": "function",
+     "line": 10713
+    },
+    {
+     "name": "fxPhotoActivity",
+     "kind": "function",
+     "line": 10714
+    },
+    {
+     "name": "fxToggleFlag",
+     "kind": "function",
+     "line": 10731
+    },
+    {
+     "name": "fxUpdateFlagBtns",
+     "kind": "function",
+     "line": 10737
+    },
+    {
+     "name": "fxSetColorLabel",
+     "kind": "function",
+     "line": 10758
+    },
+    {
+     "name": "fxUpdateColorLabelControl",
+     "kind": "function",
+     "line": 10762
+    },
+    {
+     "name": "fxToggleFavorite",
+     "kind": "function",
+     "line": 10773
+    },
+    {
+     "name": "fxUpdateHistoryBtn",
+     "kind": "function",
+     "line": 10784
+    },
+    {
+     "name": "fxClampPopoverToViewport",
+     "kind": "function",
+     "line": 10797
+    },
+    {
+     "name": "fxLensStatusRefresh",
+     "kind": "function",
+     "line": 10824
+    },
+    {
+     "name": "fxLensAutoToggled",
+     "kind": "function",
+     "line": 10853
+    },
+    {
+     "name": "_fxLensProfiles",
+     "kind": "let",
+     "line": 10890
+    },
+    {
+     "name": "fxLensManualInit",
+     "kind": "function",
+     "line": 10891
+    },
+    {
+     "name": "fxLensManualChanged",
+     "kind": "function",
+     "line": 10922
+    },
+    {
+     "name": "fxLensManualFocalChanged",
+     "kind": "function",
+     "line": 10943
+    },
+    {
+     "name": "fxLensManualApply",
+     "kind": "function",
+     "line": 10948
+    },
+    {
+     "name": "fxRawNrSyncUI",
+     "kind": "function",
+     "line": 10978
+    },
+    {
+     "name": "fxRawNrChanged",
+     "kind": "function",
+     "line": 11001
+    },
+    {
+     "name": "fxRawNrHighStrengthChanged",
+     "kind": "function",
+     "line": 11021
+    },
+    {
+     "name": "_fxDenoiseToken",
+     "kind": "let",
+     "line": 11030
+    },
+    {
+     "name": "fxDenoiseNowClicked",
+     "kind": "function",
+     "line": 11031
+    },
+    {
+     "name": "fxDenoiseCancelClicked",
+     "kind": "function",
+     "line": 11066
+    },
+    {
+     "name": "fxDemosaicSyncUI",
+     "kind": "function",
+     "line": 11077
+    },
+    {
+     "name": "fxDemosaicAlgoChanged",
+     "kind": "function",
+     "line": 11081
+    },
+    {
+     "name": "fxWork",
+     "kind": "let",
+     "line": 11095
+    },
+    {
+     "name": "fxCompareParams",
+     "kind": "function",
+     "line": 11097
+    },
+    {
+     "name": "fxCompare",
+     "kind": "let",
+     "line": 11098
+    },
+    {
+     "name": "fxComparePreviousSnapshot",
+     "kind": "let",
+     "line": 11099
+    },
+    {
+     "name": "fxSplit",
+     "kind": "let",
+     "line": 11100
+    },
+    {
+     "name": "fxPinned",
+     "kind": "let",
+     "line": 11103
+    },
+    {
+     "name": "fxHistOn",
+     "kind": "let",
+     "line": 11104
+    },
+    {
+     "name": "FX_FIT",
+     "kind": "const",
+     "line": 11105
+    },
+    {
+     "name": "fxZoom",
+     "kind": "let",
+     "line": 11106
+    },
+    {
+     "name": "fxLoupe",
+     "kind": "let",
+     "line": 11107
+    },
+    {
+     "name": "fxFullResPreview",
+     "kind": "let",
+     "line": 11115
+    },
+    {
+     "name": "_fxPreviewInteracting",
+     "kind": "let",
+     "line": 11116
+    },
+    {
+     "name": "fxFullResPreviewToggle",
+     "kind": "function",
+     "line": 11117
+    },
+    {
+     "name": "_fxZoomRenderTimer",
+     "kind": "let",
+     "line": 11127
+    },
+    {
+     "name": "_fxZoomRenderDebounced",
+     "kind": "function",
+     "line": 11128
+    },
+    {
+     "name": "fxExportCancel",
+     "kind": "let",
+     "line": 11136
+    },
+    {
+     "name": "fxHistory",
+     "kind": "let",
+     "line": 11137
+    },
+    {
+     "name": "_fxGeomBatchEpoch",
+     "kind": "let",
+     "line": 11138
+    },
+    {
+     "name": "_fxGeomBatchItemIds",
+     "kind": "const",
+     "line": 11139
+    },
+    {
+     "name": "_fxGeomBatchIdentity",
+     "kind": "function",
+     "line": 11140
+    },
+    {
+     "name": "_fxGeomBatchItemId",
+     "kind": "function",
+     "line": 11141
+    },
+    {
+     "name": "_fxGeomBatchSourceKey",
+     "kind": "function",
+     "line": 11142
+    },
+    {
+     "name": "cropMode",
+     "kind": "let",
+     "line": 11148
+    },
+    {
+     "name": "cropGrid",
+     "kind": "let",
+     "line": 11149
+    },
+    {
+     "name": "CROP_GRID_MODES",
+     "kind": "const",
+     "line": 11150
+    },
+    {
+     "name": "cropGridCycle",
+     "kind": "function",
+     "line": 11151
+    },
+    {
+     "name": "cropGridLinesHtml",
+     "kind": "function",
+     "line": 11152
+    },
+    {
+     "name": "cropGridShown",
+     "kind": "let",
+     "line": 11161
+    },
+    {
+     "name": "cropGridOverlaySync",
+     "kind": "function",
+     "line": 11162
+    },
+    {
+     "name": "cropSetGrid",
+     "kind": "function",
+     "line": 11172
+    },
+    {
+     "name": "exifRes",
+     "kind": "function",
+     "line": 11180
+    },
+    {
+     "name": "readDPI",
+     "kind": "function",
+     "line": 11195
+    },
+    {
+     "name": "jpegMetaSegs",
+     "kind": "function",
+     "line": 11227
+    },
+    {
+     "name": "neutralizeExifOrientation",
+     "kind": "function",
+     "line": 11243
+    },
+    {
+     "name": "injectMetadataJPEG",
+     "kind": "function",
+     "line": 11263
+    },
+    {
+     "name": "pngMetaChunks",
+     "kind": "function",
+     "line": 11283
+    },
+    {
+     "name": "injectMetadataPNG",
+     "kind": "function",
+     "line": 11295
+    },
+    {
+     "name": "injectMetadata",
+     "kind": "function",
+     "line": 11307
+    },
+    {
+     "name": "_crcTab",
+     "kind": "const",
+     "line": 11309
+    },
+    {
+     "name": "crc32",
+     "kind": "function",
+     "line": 11310
+    },
+    {
+     "name": "pngChunk",
+     "kind": "function",
+     "line": 11311
+    },
+    {
+     "name": "pngSpliceAfterIHDR",
+     "kind": "function",
+     "line": 11320
+    },
+    {
+     "name": "embedSRGBTag",
+     "kind": "function",
+     "line": 11335
+    },
+    {
+     "name": "injectDPI",
+     "kind": "function",
+     "line": 11340
+    },
+    {
+     "name": "_xmpEsc",
+     "kind": "function",
+     "line": 11365
+    },
+    {
+     "name": "buildRecipeXmp",
+     "kind": "function",
+     "line": 11366
+    },
+    {
+     "name": "_exportRecipeNames",
+     "kind": "function",
+     "line": 11382
+    },
+    {
+     "name": "mergeExportSidecarXmp",
+     "kind": "function",
+     "line": 11390
+    },
+    {
+     "name": "injectRecipeXmp",
+     "kind": "function",
+     "line": 11407
+    },
+    {
+     "name": "b64ToBytes",
+     "kind": "function",
+     "line": 11441
+    },
+    {
+     "name": "lutFromBytes",
+     "kind": "function",
+     "line": 11442
+    },
+    {
+     "name": "lutToBytes",
+     "kind": "function",
+     "line": 11447
+    },
+    {
+     "name": "CHART",
+     "kind": "const",
+     "line": 11459
+    },
+    {
+     "name": "chartSize",
+     "kind": "function",
+     "line": 11460
+    },
+    {
+     "name": "makeLutChart",
+     "kind": "function",
+     "line": 11461
+    },
+    {
+     "name": "downloadLutChart",
+     "kind": "function",
+     "line": 11476
+    },
+    {
+     "name": "isChartImage",
+     "kind": "function",
+     "line": 11483
+    },
+    {
+     "name": "chartToLUT",
+     "kind": "function",
+     "line": 11484
+    },
+    {
+     "name": "lutDB",
+     "kind": "function",
+     "line": 11507
+    },
+    {
+     "name": "lutTx",
+     "kind": "function",
+     "line": 11512
+    },
+    {
+     "name": "lutLibList",
+     "kind": "const",
+     "line": 11513
+    },
+    {
+     "name": "lutLibGet",
+     "kind": "const",
+     "line": 11514
+    },
+    {
+     "name": "lutLibPut",
+     "kind": "const",
+     "line": 11515
+    },
+    {
+     "name": "lutLibDel",
+     "kind": "const",
+     "line": 11516
+    },
+    {
+     "name": "csBackupUserAssets",
+     "kind": "function",
+     "line": 11518
+    },
+    {
+     "name": "LUT_BYTE_LEN",
+     "kind": "const",
+     "line": 11540
+    },
+    {
+     "name": "_lutBytesInflight",
+     "kind": "const",
+     "line": 11541
+    },
+    {
+     "name": "presetBytes",
+     "kind": "function",
+     "line": 11542
+    },
+    {
+     "name": "lutWarmCache",
+     "kind": "function",
+     "line": 11562
+    },
+    {
+     "name": "lastUploadedLUT",
+     "kind": "let",
+     "line": 11577
+    },
+    {
+     "name": "prettyLUT",
+     "kind": "function",
+     "line": 11579
+    },
+    {
+     "name": "LUT_CATEGORY_ORDER",
+     "kind": "const",
+     "line": 11582
+    },
+    {
+     "name": "groupedLutKeys",
+     "kind": "function",
+     "line": 11586
+    },
+    {
+     "name": "refreshLUTSelect",
+     "kind": "function",
+     "line": 11597
+    },
+    {
+     "name": "selectLUT",
+     "kind": "function",
+     "line": 11607
+    },
+    {
+     "name": "selectPrint",
+     "kind": "function",
+     "line": 11646
+    },
+    {
+     "name": "saveLUTToLibrary",
+     "kind": "function",
+     "line": 11655
+    },
+    {
+     "name": "deleteLUTFromLibrary",
+     "kind": "function",
+     "line": 11665
+    },
+    {
+     "name": "isTiffFile",
+     "kind": "function",
+     "line": 11673
+    },
+    {
+     "name": "iccProfileDescription",
+     "kind": "function",
+     "line": 11678
+    },
+    {
+     "name": "PROPHOTO_TO_XYZ_D50",
+     "kind": "const",
+     "line": 11719
+    },
+    {
+     "name": "XYZ_D50_TO_D65_BRADFORD",
+     "kind": "const",
+     "line": 11724
+    },
+    {
+     "name": "XYZ_D65_TO_SRGB_LINEAR",
+     "kind": "const",
+     "line": 11729
+    },
+    {
+     "name": "_mat3Mul",
+     "kind": "function",
+     "line": 11734
+    },
+    {
+     "name": "PROPHOTO_LINEAR_TO_SRGB_LINEAR",
+     "kind": "const",
+     "line": 11739
+    },
+    {
+     "name": "proPhotoDecodeTRC",
+     "kind": "function",
+     "line": 11741
+    },
+    {
+     "name": "srgbEncodeTRC",
+     "kind": "function",
+     "line": 11742
+    },
+    {
+     "name": "PROPHOTO_DECODE_LUT",
+     "kind": "const",
+     "line": 11743
+    },
+    {
+     "name": "convertProPhotoRGBAtoSRGB",
+     "kind": "function",
+     "line": 11755
+    },
+    {
+     "name": "_asciiOnly",
+     "kind": "function",
+     "line": 11780
+    },
+    {
+     "name": "safeTiffMetaFrom",
+     "kind": "function",
+     "line": 11781
+    },
+    {
+     "name": "loadTiff",
+     "kind": "function",
+     "line": 11795
+    },
+    {
+     "name": "FMT_RAW",
+     "kind": "const",
+     "line": 11833
+    },
+    {
+     "name": "FMT_STILL_NATIVE",
+     "kind": "const",
+     "line": 11839
+    },
+    {
+     "name": "FMT_STILL_TIFF",
+     "kind": "const",
+     "line": 11842
+    },
+    {
+     "name": "FMT_STILL_RUST",
+     "kind": "const",
+     "line": 11844
+    },
+    {
+     "name": "FMT_ALL",
+     "kind": "const",
+     "line": 11845
+    },
+    {
+     "name": "_fmtExtRe",
+     "kind": "function",
+     "line": 11846
+    },
+    {
+     "name": "FMT_RAW_WEB",
+     "kind": "const",
+     "line": 11859
+    },
+    {
+     "name": "RAW_FILE_EXT_RE",
+     "kind": "const",
+     "line": 11860
+    },
+    {
+     "name": "IMG_EXT_RE",
+     "kind": "const",
+     "line": 11861
+    },
+    {
+     "name": "RUST_ONLY_RE",
+     "kind": "const",
+     "line": 11865
+    },
+    {
+     "name": "isRw2File",
+     "kind": "function",
+     "line": 11866
+    },
+    {
+     "name": "sniffRealImageKind",
+     "kind": "function",
+     "line": 11874
+    },
+    {
+     "name": "errStr",
+     "kind": "function",
+     "line": 11881
+    },
+    {
+     "name": "_LibRaw",
+     "kind": "let",
+     "line": 11882
+    },
+    {
+     "name": "getLibRaw",
+     "kind": "function",
+     "line": 11883
+    },
+    {
+     "name": "withRawDecodeTimeout",
+     "kind": "function",
+     "line": 11886
+    },
+    {
+     "name": "_Mediabunny",
+     "kind": "let",
+     "line": 11899
+    },
+    {
+     "name": "getMediabunny",
+     "kind": "function",
+     "line": 11900
+    },
+    {
+     "name": "videoSupported",
+     "kind": "function",
+     "line": 11905
+    },
+    {
+     "name": "VID_EXT_RE",
+     "kind": "const",
+     "line": 11906
+    },
+    {
+     "name": "probeVfr",
+     "kind": "function",
+     "line": 11920
+    },
+    {
+     "name": "isHdrColorSpace",
+     "kind": "function",
+     "line": 11954
+    },
+    {
+     "name": "_fxAudioCtx",
+     "kind": "let",
+     "line": 11958
+    },
+    {
+     "name": "fxAudioCtx",
+     "kind": "function",
+     "line": 11959
+    },
+    {
+     "name": "_hdrProbeDone",
+     "kind": "let",
+     "line": 11979
+    },
+    {
+     "name": "fxHdrProbe",
+     "kind": "function",
+     "line": 11980
+    },
+    {
+     "name": "fxNeedsHlgTransform",
+     "kind": "function",
+     "line": 12087
+    },
+    {
+     "name": "loadFXVideoFile",
+     "kind": "function",
+     "line": 12097
+    },
+    {
+     "name": "_fxSeekGen",
+     "kind": "let",
+     "line": 12181
+    },
+    {
+     "name": "fxVideoSeekTo",
+     "kind": "function",
+     "line": 12182
+    },
+    {
+     "name": "fxHash01",
+     "kind": "function",
+     "line": 12199
+    },
+    {
+     "name": "fxClipSeed",
+     "kind": "function",
+     "line": 12202
+    },
+    {
+     "name": "fxVideoFrameSeed",
+     "kind": "function",
+     "line": 12212
+    },
+    {
+     "name": "fxVideoGrainMotionChanged",
+     "kind": "function",
+     "line": 12218
+    },
+    {
+     "name": "_fxPlayRAF",
+     "kind": "let",
+     "line": 12229
+    },
+    {
+     "name": "fxVideoLoopToggle",
+     "kind": "function",
+     "line": 12230
+    },
+    {
+     "name": "fxVideoMuted",
+     "kind": "let",
+     "line": 12241
+    },
+    {
+     "name": "_fxAudioStop",
+     "kind": "function",
+     "line": 12242
+    },
+    {
+     "name": "_fxAudioStart",
+     "kind": "function",
+     "line": 12246
+    },
+    {
+     "name": "fxVideoMuteToggle",
+     "kind": "function",
+     "line": 12258
+    },
+    {
+     "name": "fxVideoGuidesToggle",
+     "kind": "function",
+     "line": 12267
+    },
+    {
+     "name": "fxVideoPreviewQuality",
+     "kind": "let",
+     "line": 12275
+    },
+    {
+     "name": "fxVideoPreviewQualityChanged",
+     "kind": "function",
+     "line": 12276
+    },
+    {
+     "name": "fxVideoPlayToggle",
+     "kind": "function",
+     "line": 12277
+    },
+    {
+     "name": "fxVideoPause",
+     "kind": "function",
+     "line": 12287
+    },
+    {
+     "name": "fxVideoPlayTick",
+     "kind": "function",
+     "line": 12293
+    },
+    {
+     "name": "fxVideoTimeLabel",
+     "kind": "function",
+     "line": 12327
+    },
+    {
+     "name": "fxSyncTransportUI",
+     "kind": "function",
+     "line": 12336
+    },
+    {
+     "name": "fxVideoBuildThumbs",
+     "kind": "function",
+     "line": 12368
+    },
+    {
+     "name": "fxVideoScrubInput",
+     "kind": "function",
+     "line": 12394
+    },
+    {
+     "name": "fxVideoScrubCommit",
+     "kind": "function",
+     "line": 12398
+    },
+    {
+     "name": "fxVideoStep",
+     "kind": "function",
+     "line": 12400
+    },
+    {
+     "name": "fxVideoGoToTrim",
+     "kind": "function",
+     "line": 12410
+    },
+    {
+     "name": "fxVideoSetTrimAtPlayhead",
+     "kind": "function",
+     "line": 12419
+    },
+    {
+     "name": "fxVideoClearTrim",
+     "kind": "function",
+     "line": 12427
+    },
+    {
+     "name": "fxVideoTrimChanged",
+     "kind": "function",
+     "line": 12439
+    },
+    {
+     "name": "fxVideoCaptureFrame",
+     "kind": "function",
+     "line": 12462
+    },
+    {
+     "name": "DCP_PROFILES",
+     "kind": "const",
+     "line": 12498
+    },
+    {
+     "name": "CAMERA_DCP_PREFIXES",
+     "kind": "const",
+     "line": 12501
+    },
+    {
+     "name": "cameraDcpPrefix",
+     "kind": "function",
+     "line": 12505
+    },
+    {
+     "name": "resolveDcpSource",
+     "kind": "function",
+     "line": 12518
+    },
+    {
+     "name": "dcpFit",
+     "kind": "function",
+     "line": 12547
+    },
+    {
+     "name": "XYZ2PP",
+     "kind": "const",
+     "line": 12561
+    },
+    {
+     "name": "PP2SRGB",
+     "kind": "const",
+     "line": 12562
+    },
+    {
+     "name": "RAW_AS_SHOT",
+     "kind": "const",
+     "line": 12567
+    },
+    {
+     "name": "PHOTO_STYLE_DCP",
+     "kind": "const",
+     "line": 12570
+    },
+    {
+     "name": "rawProfileFor",
+     "kind": "function",
+     "line": 12571
+    },
+    {
+     "name": "rawProfile",
+     "kind": "function",
+     "line": 12577
+    },
+    {
+     "name": "setRawProfile",
+     "kind": "function",
+     "line": 12578
+    },
+    {
+     "name": "fxHdrPreviewSyncUI",
+     "kind": "function",
+     "line": 12580
+    },
+    {
+     "name": "fxHdrPreviewChanged",
+     "kind": "function",
+     "line": 12585
+    },
+    {
+     "name": "fxRawFullCleanupSyncUI",
+     "kind": "function",
+     "line": 12600
+    },
+    {
+     "name": "fxRawFullCleanupChanged",
+     "kind": "function",
+     "line": 12606
+    },
+    {
+     "name": "reloadRawProfileForCurrentPhoto",
+     "kind": "function",
+     "line": 12621
+    },
+    {
+     "name": "initDcpSelect",
+     "kind": "function",
+     "line": 12664
+    },
+    {
+     "name": "parseDCP",
+     "kind": "function",
+     "line": 12667
+    },
+    {
+     "name": "srgbG",
+     "kind": "function",
+     "line": 12717
+    },
+    {
+     "name": "_cpuWorker",
+     "kind": "let",
+     "line": 12739
+    },
+    {
+     "name": "_cpuJobs",
+     "kind": "const",
+     "line": 12740
+    },
+    {
+     "name": "_cpuFns",
+     "kind": "function",
+     "line": 12741
+    },
+    {
+     "name": "_cpuGetWorker",
+     "kind": "function",
+     "line": 12742
+    },
+    {
+     "name": "_cpuRun",
+     "kind": "function",
+     "line": 12775
+    },
+    {
+     "name": "bakeDcpLUT",
+     "kind": "function",
+     "line": 12795
+    },
+    {
+     "name": "_dcpCache",
+     "kind": "const",
+     "line": 12912
+    },
+    {
+     "name": "getDcpLUT",
+     "kind": "function",
+     "line": 12921
+    },
+    {
+     "name": "HR_MAX_STOPS",
+     "kind": "const",
+     "line": 12972
+    },
+    {
+     "name": "_srgbEncode",
+     "kind": "function",
+     "line": 12977
+    },
+    {
+     "name": "hrByteForHeadroom",
+     "kind": "function",
+     "line": 12978
+    },
+    {
+     "name": "applyDcpLUT",
+     "kind": "function",
+     "line": 12983
+    },
+    {
+     "name": "parseDngEmbeddedProfile",
+     "kind": "function",
+     "line": 13018
+    },
+    {
+     "name": "parseDngGainTableMap",
+     "kind": "function",
+     "line": 13089
+    },
+    {
+     "name": "dngGainInputMatrix",
+     "kind": "function",
+     "line": 13106
+    },
+    {
+     "name": "applyDngGainMap",
+     "kind": "function",
+     "line": 13114
+    },
+    {
+     "name": "rawSharedMemoryOk",
+     "kind": "function",
+     "line": 13137
+    },
+    {
+     "name": "loadRw2",
+     "kind": "function",
+     "line": 13142
+    },
+    {
+     "name": "installFXImages",
+     "kind": "function",
+     "line": 13387
+    },
+    {
+     "name": "fxDisplayTierCanvas",
+     "kind": "function",
+     "line": 13483
+    },
+    {
+     "name": "fxFileLoadKey",
+     "kind": "function",
+     "line": 13492
+    },
+    {
+     "name": "loadFXImages",
+     "kind": "function",
+     "line": 13493
+    },
+    {
+     "name": "autoDetectBW",
+     "kind": "function",
+     "line": 13639
+    },
+    {
+     "name": "toggleFX",
+     "kind": "function",
+     "line": 13654
+    },
+    {
+     "name": "_ffAutoEnable",
+     "kind": "function",
+     "line": 13665
+    },
+    {
+     "name": "fxUpdate",
+     "kind": "function",
+     "line": 13679
+    },
+    {
+     "name": "_fxRenderRAF",
+     "kind": "let",
+     "line": 13721
+    },
+    {
+     "name": "fxSharpMaskPreview",
+     "kind": "function",
+     "line": 13722
+    },
+    {
+     "name": "fxCancelScheduledRender",
+     "kind": "function",
+     "line": 13737
+    },
+    {
+     "name": "fxScheduleRender",
+     "kind": "function",
+     "line": 13741
+    },
+    {
+     "name": "ADJ_RESET_FIELDS",
+     "kind": "const",
+     "line": 13753
+    },
+    {
+     "name": "resetAdjust",
+     "kind": "function",
+     "line": 13754
+    },
+    {
+     "name": "syncAdjResetBtn",
+     "kind": "function",
+     "line": 13764
+    },
+    {
+     "name": "adjToggleScope",
+     "kind": "function",
+     "line": 13773
+    },
+    {
+     "name": "SEC_SCOPE_DOM",
+     "kind": "const",
+     "line": 13794
+    },
+    {
+     "name": "_SEC_ICON_ONE",
+     "kind": "const",
+     "line": 13796
+    },
+    {
+     "name": "_SEC_ICON_ALL",
+     "kind": "const",
+     "line": 13797
+    },
+    {
+     "name": "SEC_ALWAYS_ONE",
+     "kind": "const",
+     "line": 13798
+    },
+    {
+     "name": "_secSwap",
+     "kind": "let",
+     "line": 13800
+    },
+    {
+     "name": "_secInputs",
+     "kind": "function",
+     "line": 13801
+    },
+    {
+     "name": "secVals",
+     "kind": "function",
+     "line": 13802
+    },
+    {
+     "name": "secApply",
+     "kind": "function",
+     "line": 13803
+    },
+    {
+     "name": "_secScoped",
+     "kind": "function",
+     "line": 13805
+    },
+    {
+     "name": "secScopePersist",
+     "kind": "function",
+     "line": 13807
+    },
+    {
+     "name": "secScopeShowItem",
+     "kind": "function",
+     "line": 13809
+    },
+    {
+     "name": "secScopeSwapIn",
+     "kind": "function",
+     "line": 13811
+    },
+    {
+     "name": "secScopeToggle",
+     "kind": "function",
+     "line": 13814
+    },
+    {
+     "name": "secScopeSyncUI",
+     "kind": "function",
+     "line": 13825
+    },
+    {
+     "name": "verRender",
+     "kind": "function",
+     "line": 13845
+    },
+    {
+     "name": "verSaveNew",
+     "kind": "function",
+     "line": 13866
+    },
+    {
+     "name": "verMakeCurrent",
+     "kind": "function",
+     "line": 13869
+    },
+    {
+     "name": "verRename",
+     "kind": "function",
+     "line": 13871
+    },
+    {
+     "name": "verDelete",
+     "kind": "function",
+     "line": 13874
+    },
+    {
+     "name": "verCompare",
+     "kind": "function",
+     "line": 13878
+    },
+    {
+     "name": "adjSyncScopeUI",
+     "kind": "function",
+     "line": 13881
+    },
+    {
+     "name": "resetNR",
+     "kind": "function",
+     "line": 13891
+    },
+    {
+     "name": "resetDeconv",
+     "kind": "function",
+     "line": 13902
+    },
+    {
+     "name": "nrSyncGate",
+     "kind": "function",
+     "line": 13910
+    },
+    {
+     "name": "adjVal",
+     "kind": "function",
+     "line": 13918
+    },
+    {
+     "name": "applyRawDefaults",
+     "kind": "function",
+     "line": 13923
+    },
+    {
+     "name": "curveCh",
+     "kind": "let",
+     "line": 13937
+    },
+    {
+     "name": "_identityCurvePts",
+     "kind": "function",
+     "line": 13943
+    },
+    {
+     "name": "_curveDefault",
+     "kind": "function",
+     "line": 13944
+    },
+    {
+     "name": "curveEval",
+     "kind": "function",
+     "line": 13947
+    },
+    {
+     "name": "curvesIdentity",
+     "kind": "function",
+     "line": 13958
+    },
+    {
+     "name": "_paramMasterPts",
+     "kind": "function",
+     "line": 13979
+    },
+    {
+     "name": "paramCurveChanged",
+     "kind": "function",
+     "line": 13992
+    },
+    {
+     "name": "paramCurveResetAll",
+     "kind": "function",
+     "line": 13993
+    },
+    {
+     "name": "bakeCurves",
+     "kind": "function",
+     "line": 13999
+    },
+    {
+     "name": "curveSetCh",
+     "kind": "function",
+     "line": 14008
+    },
+    {
+     "name": "curveResetCh",
+     "kind": "function",
+     "line": 14009
+    },
+    {
+     "name": "curveResetAll",
+     "kind": "function",
+     "line": 14010
+    },
+    {
+     "name": "_crvEnsureOn",
+     "kind": "function",
+     "line": 14012
+    },
+    {
+     "name": "curveChanged",
+     "kind": "function",
+     "line": 14013
+    },
+    {
+     "name": "curveSetMode",
+     "kind": "function",
+     "line": 14022
+    },
+    {
+     "name": "fxResetCurvesAll",
+     "kind": "function",
+     "line": 14038
+    },
+    {
+     "name": "drawCurveEditor",
+     "kind": "function",
+     "line": 14039
+    },
+    {
+     "name": "_crvPos",
+     "kind": "function",
+     "line": 14054
+    },
+    {
+     "name": "_crvHit",
+     "kind": "function",
+     "line": 14056
+    },
+    {
+     "name": "_crvScroll",
+     "kind": "let",
+     "line": 14057
+    },
+    {
+     "name": "_crvInit",
+     "kind": "function",
+     "line": 14058
+    },
+    {
+     "name": "_wheelDefault",
+     "kind": "function",
+     "line": 14117
+    },
+    {
+     "name": "_wheelsDefault",
+     "kind": "function",
+     "line": 14118
+    },
+    {
+     "name": "cdlIdentity",
+     "kind": "function",
+     "line": 14119
+    },
+    {
+     "name": "_wheelRGB",
+     "kind": "function",
+     "line": 14126
+    },
+    {
+     "name": "cdlComputeSOP",
+     "kind": "function",
+     "line": 14132
+    },
+    {
+     "name": "wheelChanged",
+     "kind": "function",
+     "line": 14141
+    },
+    {
+     "name": "bakeNothingCdlIsUniformOnly",
+     "kind": "function",
+     "line": 14142
+    },
+    {
+     "name": "wheelReset",
+     "kind": "function",
+     "line": 14143
+    },
+    {
+     "name": "wheelResetAll",
+     "kind": "function",
+     "line": 14144
+    },
+    {
+     "name": "wheelLumChanged",
+     "kind": "function",
+     "line": 14145
+    },
+    {
+     "name": "wheelSyncUI",
+     "kind": "function",
+     "line": 14146
+    },
+    {
+     "name": "WHEEL_NAMES",
+     "kind": "const",
+     "line": 14151
+    },
+    {
+     "name": "drawWheel",
+     "kind": "function",
+     "line": 14152
+    },
+    {
+     "name": "_wheelPos",
+     "kind": "function",
+     "line": 14176
+    },
+    {
+     "name": "_wheelInit",
+     "kind": "function",
+     "line": 14181
+    },
+    {
+     "name": "wheelsInitAll",
+     "kind": "function",
+     "line": 14192
+    },
+    {
+     "name": "HSL_BANDS",
+     "kind": "const",
+     "line": 14195
+    },
+    {
+     "name": "HSL_COLS",
+     "kind": "const",
+     "line": 14196
+    },
+    {
+     "name": "HSL_HUE_DEG",
+     "kind": "const",
+     "line": 14199
+    },
+    {
+     "name": "HSL_HUE_RANGE",
+     "kind": "const",
+     "line": 14200
+    },
+    {
+     "name": "hslBand",
+     "kind": "let",
+     "line": 14201
+    },
+    {
+     "name": "_hslDefault",
+     "kind": "function",
+     "line": 14202
+    },
+    {
+     "name": "hslIdentity",
+     "kind": "function",
+     "line": 14203
+    },
+    {
+     "name": "pointColorsIdentity",
+     "kind": "function",
+     "line": 14204
+    },
+    {
+     "name": "bakeHsl",
+     "kind": "function",
+     "line": 14213
+    },
+    {
+     "name": "_hslColorAt",
+     "kind": "function",
+     "line": 14231
+    },
+    {
+     "name": "_hslAfterColor",
+     "kind": "function",
+     "line": 14237
+    },
+    {
+     "name": "hslBuildChips",
+     "kind": "function",
+     "line": 14241
+    },
+    {
+     "name": "HSL_HIST_BUCKETS",
+     "kind": "const",
+     "line": 14261
+    },
+    {
+     "name": "hslHistCompute",
+     "kind": "function",
+     "line": 14262
+    },
+    {
+     "name": "hslPreviewBand",
+     "kind": "let",
+     "line": 14281
+    },
+    {
+     "name": "_hslActiveBand",
+     "kind": "function",
+     "line": 14282
+    },
+    {
+     "name": "hslBuildHist",
+     "kind": "function",
+     "line": 14286
+    },
+    {
+     "name": "hslSetBand",
+     "kind": "function",
+     "line": 14306
+    },
+    {
+     "name": "hslPreviewSet",
+     "kind": "function",
+     "line": 14307
+    },
+    {
+     "name": "hslPreviewClear",
+     "kind": "function",
+     "line": 14308
+    },
+    {
+     "name": "hslSyncUI",
+     "kind": "function",
+     "line": 14333
+    },
+    {
+     "name": "hslKnob",
+     "kind": "function",
+     "line": 14360
+    },
+    {
+     "name": "hslSlider",
+     "kind": "function",
+     "line": 14361
+    },
+    {
+     "name": "hslResetBand",
+     "kind": "function",
+     "line": 14369
+    },
+    {
+     "name": "hslResetAll",
+     "kind": "function",
+     "line": 14370
+    },
+    {
+     "name": "pcSel",
+     "kind": "let",
+     "line": 14376
+    },
+    {
+     "name": "pcEyedropper",
+     "kind": "function",
+     "line": 14377
+    },
+    {
+     "name": "_fxEnsureNormalRender",
+     "kind": "function",
+     "line": 14392
+    },
+    {
+     "name": "_fxDisplayMap",
+     "kind": "let",
+     "line": 14409
+    },
+    {
+     "name": "_fxCvListeners",
+     "kind": "const",
+     "line": 14414
+    },
+    {
+     "name": "fxCanvasOn",
+     "kind": "function",
+     "line": 14415
+    },
+    {
+     "name": "fxVisibleCanvas",
+     "kind": "function",
+     "line": 14421
+    },
+    {
+     "name": "fxPointerToCanvasPx",
+     "kind": "function",
+     "line": 14425
+    },
+    {
+     "name": "_pickAvgRGB",
+     "kind": "function",
+     "line": 14441
+    },
+    {
+     "name": "pcEyedropperClick",
+     "kind": "function",
+     "line": 14458
+    },
+    {
+     "name": "pcRebuild",
+     "kind": "function",
+     "line": 14474
+    },
+    {
+     "name": "pcSyncUI",
+     "kind": "function",
+     "line": 14484
+    },
+    {
+     "name": "pcSlider",
+     "kind": "function",
+     "line": 14495
+    },
+    {
+     "name": "pcDelete",
+     "kind": "function",
+     "line": 14502
+    },
+    {
+     "name": "pcResetAll",
+     "kind": "function",
+     "line": 14508
+    },
+    {
+     "name": "artReshuffle",
+     "kind": "function",
+     "line": 14511
+    },
+    {
+     "name": "LS_EDITOR_BG",
+     "kind": "const",
+     "line": 14522
+    },
+    {
+     "name": "EDITOR_BG_DEFAULT",
+     "kind": "const",
+     "line": 14523
+    },
+    {
+     "name": "editorBgApply",
+     "kind": "function",
+     "line": 14524
+    },
+    {
+     "name": "editorBgInit",
+     "kind": "function",
+     "line": 14527
+    },
+    {
+     "name": "editorBgSet",
+     "kind": "function",
+     "line": 14534
+    },
+    {
+     "name": "editorBgReset",
+     "kind": "function",
+     "line": 14538
+    },
+    {
+     "name": "editorBgOpenMenu",
+     "kind": "function",
+     "line": 14542
+    },
+    {
+     "name": "_toastQ",
+     "kind": "const",
+     "line": 14581
+    },
+    {
+     "name": "_toastEl",
+     "kind": "function",
+     "line": 14582
+    },
+    {
+     "name": "toast",
+     "kind": "function",
+     "line": 14594
+    },
+    {
+     "name": "_expSessionNames",
+     "kind": "const",
+     "line": 14611
+    },
+    {
+     "name": "expCollidePolicy",
+     "kind": "function",
+     "line": 14612
+    },
+    {
+     "name": "expCollideSet",
+     "kind": "function",
+     "line": 14613
+    },
+    {
+     "name": "expDestLabel",
+     "kind": "function",
+     "line": 14614
+    },
+    {
+     "name": "expPolicyLabel",
+     "kind": "function",
+     "line": 14615
+    },
+    {
+     "name": "csExportResultKeep",
+     "kind": "function",
+     "line": 14616
+    },
+    {
+     "name": "expRetry",
+     "kind": "function",
+     "line": 14636
+    },
+    {
+     "name": "csExportDone",
+     "kind": "function",
+     "line": 14678
+    },
+    {
+     "name": "_toastPump",
+     "kind": "function",
+     "line": 14695
+    },
+    {
+     "name": "toastProgress",
+     "kind": "function",
+     "line": 14717
+    },
+    {
+     "name": "_csModal",
+     "kind": "function",
+     "line": 14745
+    },
+    {
+     "name": "_fxInfoTapInit",
+     "kind": "function",
+     "line": 14775
+    },
+    {
+     "name": "_kbdFix",
+     "kind": "function",
+     "line": 14812
+    },
+    {
+     "name": "_kbdSweep",
+     "kind": "function",
+     "line": 14817
+    },
+    {
+     "name": "CS_SHORTCUTS_KEY",
+     "kind": "const",
+     "line": 14831
+    },
+    {
+     "name": "csShortcutDefs",
+     "kind": "const",
+     "line": 14832
+    },
+    {
+     "name": "csShortcutHandlers",
+     "kind": "const",
+     "line": 14847
+    },
+    {
+     "name": "csShortcutBinding",
+     "kind": "function",
+     "line": 14848
+    },
+    {
+     "name": "csShortcutParse",
+     "kind": "function",
+     "line": 14849
+    },
+    {
+     "name": "csShortcutKeyId",
+     "kind": "function",
+     "line": 14850
+    },
+    {
+     "name": "csShortcutSameBinding",
+     "kind": "function",
+     "line": 14851
+    },
+    {
+     "name": "csShortcutMatch",
+     "kind": "function",
+     "line": 14852
+    },
+    {
+     "name": "csShortcutLabel",
+     "kind": "function",
+     "line": 14853
+    },
+    {
+     "name": "csShortcutContextsOverlap",
+     "kind": "function",
+     "line": 14854
+    },
+    {
+     "name": "csShortcutConflict",
+     "kind": "function",
+     "line": 14855
+    },
+    {
+     "name": "csShortcutUnassign",
+     "kind": "function",
+     "line": 14856
+    },
+    {
+     "name": "csShortcutSet",
+     "kind": "function",
+     "line": 14857
+    },
+    {
+     "name": "csShortcutRegister",
+     "kind": "function",
+     "line": 14859
+    },
+    {
+     "name": "csColorLabelsEnabled",
+     "kind": "function",
+     "line": 14860
+    },
+    {
+     "name": "csNativeActivationKey",
+     "kind": "function",
+     "line": 14861
+    },
+    {
+     "name": "csNativeActivationTarget",
+     "kind": "function",
+     "line": 14862
+    },
+    {
+     "name": "csShortcutCapture",
+     "kind": "function",
+     "line": 14863
+    },
+    {
+     "name": "csShortcutHeldActive",
+     "kind": "const",
+     "line": 14864
+    },
+    {
+     "name": "csShortcutHeldCapture",
+     "kind": "function",
+     "line": 14865
+    },
+    {
+     "name": "csShortcutCompareHeld",
+     "kind": "let",
+     "line": 14877
+    },
+    {
+     "name": "csShortcutReleaseCompare",
+     "kind": "function",
+     "line": 14878
+    },
+    {
+     "name": "shortcutsHtml",
+     "kind": "function",
+     "line": 14881
+    },
+    {
+     "name": "csShortcutShowConflict",
+     "kind": "function",
+     "line": 14885
+    },
+    {
+     "name": "_TOUR_KEY",
+     "kind": "const",
+     "line": 14903
+    },
+    {
+     "name": "_FIRST_EDIT_GUIDE_KEY",
+     "kind": "const",
+     "line": 14904
+    },
+    {
+     "name": "_FIRST_EDIT_STAGE_KEY",
+     "kind": "const",
+     "line": 14905
+    },
+    {
+     "name": "tourHtml",
+     "kind": "function",
+     "line": 14906
+    },
+    {
+     "name": "tourBind",
+     "kind": "function",
+     "line": 14923
+    },
+    {
+     "name": "csTourTrySample",
+     "kind": "function",
+     "line": 14937
+    },
+    {
+     "name": "csTourBrowseFolder",
+     "kind": "function",
+     "line": 14950
+    },
+    {
+     "name": "csFirstEditSkip",
+     "kind": "function",
+     "line": 14962
+    },
+    {
+     "name": "csFirstEditStage",
+     "kind": "function",
+     "line": 14963
+    },
+    {
+     "name": "csFirstEditSetStage",
+     "kind": "function",
+     "line": 14964
+    },
+    {
+     "name": "csFirstEditGuideEnabled",
+     "kind": "function",
+     "line": 14965
+    },
+    {
+     "name": "csFirstEditBegin",
+     "kind": "function",
+     "line": 14966
+    },
+    {
+     "name": "csFirstEditCoach",
+     "kind": "function",
+     "line": 14970
+    },
+    {
+     "name": "csFirstEditPhotoOpened",
+     "kind": "function",
+     "line": 14989
+    },
+    {
+     "name": "csFirstEditLookApplied",
+     "kind": "function",
+     "line": 14993
+    },
+    {
+     "name": "csFirstEditCompareShown",
+     "kind": "function",
+     "line": 14994
+    },
+    {
+     "name": "csFirstEditCompareDemo",
+     "kind": "function",
+     "line": 14998
+    },
+    {
+     "name": "csFirstEditFinish",
+     "kind": "function",
+     "line": 15002
+    },
+    {
+     "name": "tourMaybeShow",
+     "kind": "function",
+     "line": 15003
+    },
+    {
+     "name": "_ADV_KEY",
+     "kind": "const",
+     "line": 15020
+    },
+    {
+     "name": "csShowAdvancedTabs",
+     "kind": "function",
+     "line": 15021
+    },
+    {
+     "name": "_csAdvUnlocked",
+     "kind": "function",
+     "line": 15026
+    },
+    {
+     "name": "_cpCommands",
+     "kind": "function",
+     "line": 15076
+    },
+    {
+     "name": "_cpFilter",
+     "kind": "function",
+     "line": 15128
+    },
+    {
+     "name": "_cpIdx",
+     "kind": "let",
+     "line": 15146
+    },
+    {
+     "name": "cpOpen",
+     "kind": "function",
+     "line": 15147
+    },
+    {
+     "name": "fxPickPhotos",
+     "kind": "function",
+     "line": 15186
+    },
+    {
+     "name": "hapt",
+     "kind": "function",
+     "line": 15194
+    },
+    {
+     "name": "fxMoreMenu",
+     "kind": "function",
+     "line": 15199
+    },
+    {
+     "name": "fxMobileCaption",
+     "kind": "function",
+     "line": 15229
+    },
+    {
+     "name": "fxMobileExportSheet",
+     "kind": "function",
+     "line": 15240
+    },
+    {
+     "name": "_csInstallEvt",
+     "kind": "let",
+     "line": 15281
+    },
+    {
+     "name": "csInstallHint",
+     "kind": "function",
+     "line": 15283
+    },
+    {
+     "name": "appHSync",
+     "kind": "function",
+     "line": 15366
+    },
+    {
+     "name": "fxSyncDeskbarTitleOffset",
+     "kind": "function",
+     "line": 15432
+    },
+    {
+     "name": "_diagLast",
+     "kind": "let",
+     "line": 15484
+    },
+    {
+     "name": "diagLayout",
+     "kind": "function",
+     "line": 15485
+    },
+    {
+     "name": "_expOverlay",
+     "kind": "function",
+     "line": 15554
+    },
+    {
+     "name": "CV_ARS",
+     "kind": "const",
+     "line": 15563
+    },
+    {
+     "name": "_cvBgImg",
+     "kind": "let",
+     "line": 15564
+    },
+    {
+     "name": "cvSyncBgImg",
+     "kind": "function",
+     "line": 15565
+    },
+    {
+     "name": "cvPickBgPhoto",
+     "kind": "function",
+     "line": 15571
+    },
+    {
+     "name": "cvClearBgPhoto",
+     "kind": "function",
+     "line": 15579
+    },
+    {
+     "name": "CV_BGS",
+     "kind": "const",
+     "line": 15580
+    },
+    {
+     "name": "cvBuildChips",
+     "kind": "function",
+     "line": 15581
+    },
+    {
+     "name": "cvSetBg",
+     "kind": "function",
+     "line": 15623
+    },
+    {
+     "name": "mskSel",
+     "kind": "let",
+     "line": 15629
+    },
+    {
+     "name": "mskIsAI",
+     "kind": "function",
+     "line": 15637
+    },
+    {
+     "name": "MSK_SLIDER_LAYOUT_KEY",
+     "kind": "const",
+     "line": 15638
+    },
+    {
+     "name": "_mskCompactLayoutPref",
+     "kind": "let",
+     "line": 15639
+    },
+    {
+     "name": "mskCompactLayoutGet",
+     "kind": "function",
+     "line": 15640
+    },
+    {
+     "name": "mskCompactLayoutToggle",
+     "kind": "function",
+     "line": 15641
+    },
+    {
+     "name": "mskCaps",
+     "kind": "function",
+     "line": 15649
+    },
+    {
+     "name": "_okCbrt",
+     "kind": "function",
+     "line": 15678
+    },
+    {
+     "name": "rgb2oklab",
+     "kind": "function",
+     "line": 15679
+    },
+    {
+     "name": "rgb2oklch",
+     "kind": "function",
+     "line": 15690
+    },
+    {
+     "name": "oklch2rgb",
+     "kind": "function",
+     "line": 15696
+    },
+    {
+     "name": "MSK_MAX",
+     "kind": "const",
+     "line": 15706
+    },
+    {
+     "name": "CR_MAX_SAMPLES",
+     "kind": "const",
+     "line": 15707
+    },
+    {
+     "name": "_clone",
+     "kind": "const",
+     "line": 15728
+    },
+    {
+     "name": "_pxToB64",
+     "kind": "function",
+     "line": 15729
+    },
+    {
+     "name": "_pxFromB64",
+     "kind": "function",
+     "line": 15734
+    },
+    {
+     "name": "_mskToSnap",
+     "kind": "function",
+     "line": 15745
+    },
+    {
+     "name": "_mskFromSnap",
+     "kind": "function",
+     "line": 15755
+    },
+    {
+     "name": "_mskCloneLive",
+     "kind": "function",
+     "line": 15763
+    },
+    {
+     "name": "mskPxForWrite",
+     "kind": "function",
+     "line": 15772
+    },
+    {
+     "name": "_mskSkinDefaults",
+     "kind": "function",
+     "line": 15776
+    },
+    {
+     "name": "_mskMigrate",
+     "kind": "function",
+     "line": 15792
+    },
+    {
+     "name": "_MSK_AI_PROVENANCE_VERSION",
+     "kind": "const",
+     "line": 15836
+    },
+    {
+     "name": "_mskNormalizeAIProvenance",
+     "kind": "function",
+     "line": 15837
+    },
+    {
+     "name": "_mskRecordAIProvenance",
+     "kind": "function",
+     "line": 15847
+    },
+    {
+     "name": "_mskNewId",
+     "kind": "function",
+     "line": 15858
+    },
+    {
+     "name": "_mskEnsureIds",
+     "kind": "function",
+     "line": 15859
+    },
+    {
+     "name": "_mskCompositionPlan",
+     "kind": "function",
+     "line": 15890
+    },
+    {
+     "name": "_mskAdjustDefaults",
+     "kind": "function",
+     "line": 15915
+    },
+    {
+     "name": "mskAdd",
+     "kind": "function",
+     "line": 15917
+    },
+    {
+     "name": "mskAddBackground",
+     "kind": "function",
+     "line": 16031
+    },
+    {
+     "name": "mskAddTeethWhitening",
+     "kind": "function",
+     "line": 16041
+    },
+    {
+     "name": "mskAddEmbeddedPortraitMatte",
+     "kind": "function",
+     "line": 16065
+    },
+    {
+     "name": "mskAddEmbeddedTeethWhitening",
+     "kind": "function",
+     "line": 16132
+    },
+    {
+     "name": "mskAddEmbeddedHairMatte",
+     "kind": "function",
+     "line": 16133
+    },
+    {
+     "name": "mskEmbeddedMatteFallbackChoice",
+     "kind": "function",
+     "line": 16138
+    },
+    {
+     "name": "mskEmbeddedMatteManual",
+     "kind": "function",
+     "line": 16160
+    },
+    {
+     "name": "mskEmbeddedMatteFallback",
+     "kind": "function",
+     "line": 16169
+    },
+    {
+     "name": "_samToken",
+     "kind": "let",
+     "line": 16200
+    },
+    {
+     "name": "samInvalidate",
+     "kind": "function",
+     "line": 16208
+    },
+    {
+     "name": "_samFramedInvoke",
+     "kind": "function",
+     "line": 16209
+    },
+    {
+     "name": "mskAiTapToggle",
+     "kind": "function",
+     "line": 16216
+    },
+    {
+     "name": "mskAiBoxToggle",
+     "kind": "function",
+     "line": 16238
+    },
+    {
+     "name": "_sam2Token",
+     "kind": "let",
+     "line": 16250
+    },
+    {
+     "name": "samEnsureEncoded",
+     "kind": "function",
+     "line": 16251
+    },
+    {
+     "name": "samEnsureEncoded2",
+     "kind": "function",
+     "line": 16283
+    },
+    {
+     "name": "AI_MAX_POINTS_PER_POLARITY",
+     "kind": "const",
+     "line": 16322
+    },
+    {
+     "name": "samSubsamplePoints",
+     "kind": "function",
+     "line": 16323
+    },
+    {
+     "name": "_boxFilterMean",
+     "kind": "function",
+     "line": 16336
+    },
+    {
+     "name": "_guidedFilter",
+     "kind": "function",
+     "line": 16353
+    },
+    {
+     "name": "_samGuideGray",
+     "kind": "function",
+     "line": 16370
+    },
+    {
+     "name": "_samRefineMask",
+     "kind": "function",
+     "line": 16381
+    },
+    {
+     "name": "_samComplementSubjectMask",
+     "kind": "function",
+     "line": 16396
+    },
+    {
+     "name": "_samNormalizeBox",
+     "kind": "function",
+     "line": 16405
+    },
+    {
+     "name": "samRunPoints",
+     "kind": "function",
+     "line": 16411
+    },
+    {
+     "name": "_subjects",
+     "kind": "let",
+     "line": 16500
+    },
+    {
+     "name": "subjRefresh",
+     "kind": "function",
+     "line": 16501
+    },
+    {
+     "name": "subjExport",
+     "kind": "function",
+     "line": 16512
+    },
+    {
+     "name": "subjImportFile",
+     "kind": "function",
+     "line": 16516
+    },
+    {
+     "name": "subjToken",
+     "kind": "function",
+     "line": 16528
+    },
+    {
+     "name": "_subjCurEncoder",
+     "kind": "function",
+     "line": 16533
+    },
+    {
+     "name": "subjPanelHtml",
+     "kind": "function",
+     "line": 16534
+    },
+    {
+     "name": "_esc",
+     "kind": "function",
+     "line": 16594
+    },
+    {
+     "name": "_subjThumbKey",
+     "kind": "function",
+     "line": 16604
+    },
+    {
+     "name": "_subjThumbGet",
+     "kind": "function",
+     "line": 16605
+    },
+    {
+     "name": "_subjThumbRemove",
+     "kind": "function",
+     "line": 16606
+    },
+    {
+     "name": "_subjSelectionDensity",
+     "kind": "function",
+     "line": 16615
+    },
+    {
+     "name": "_subjSaveThumb",
+     "kind": "function",
+     "line": 16623
+    },
+    {
+     "name": "subjTeach",
+     "kind": "function",
+     "line": 16639
+    },
+    {
+     "name": "_subjMinScore",
+     "kind": "let",
+     "line": 16692
+    },
+    {
+     "name": "subjSetMinScore",
+     "kind": "function",
+     "line": 16694
+    },
+    {
+     "name": "_subjLowConfPending",
+     "kind": "let",
+     "line": 16695
+    },
+    {
+     "name": "_subjMaskBBox",
+     "kind": "function",
+     "line": 16703
+    },
+    {
+     "name": "_subjRecordSighting",
+     "kind": "function",
+     "line": 16714
+    },
+    {
+     "name": "_subjInstallFindResult",
+     "kind": "function",
+     "line": 16735
+    },
+    {
+     "name": "subjApplyLowConf",
+     "kind": "function",
+     "line": 16757
+    },
+    {
+     "name": "subjFind",
+     "kind": "function",
+     "line": 16765
+    },
+    {
+     "name": "_subjDot",
+     "kind": "function",
+     "line": 16804
+    },
+    {
+     "name": "_subjRefOutlierNotes",
+     "kind": "function",
+     "line": 16805
+    },
+    {
+     "name": "_subjScanBusy",
+     "kind": "let",
+     "line": 16828
+    },
+    {
+     "name": "_samInputDimsFor",
+     "kind": "function",
+     "line": 16829
+    },
+    {
+     "name": "subjFindAll",
+     "kind": "function",
+     "line": 16834
+    },
+    {
+     "name": "subjFindAllCancel",
+     "kind": "function",
+     "line": 16886
+    },
+    {
+     "name": "subjScanResultsHtml",
+     "kind": "function",
+     "line": 16887
+    },
+    {
+     "name": "_subjMultiResults",
+     "kind": "let",
+     "line": 16908
+    },
+    {
+     "name": "SUBJ_SEP_PRESETS",
+     "kind": "const",
+     "line": 16915
+    },
+    {
+     "name": "_subjSep",
+     "kind": "let",
+     "line": 16916
+    },
+    {
+     "name": "subjFindInstances",
+     "kind": "function",
+     "line": 16917
+    },
+    {
+     "name": "subjSetSep",
+     "kind": "function",
+     "line": 16933
+    },
+    {
+     "name": "subjSetMaxN",
+     "kind": "function",
+     "line": 16934
+    },
+    {
+     "name": "subjUseInstance",
+     "kind": "function",
+     "line": 16937
+    },
+    {
+     "name": "subjExcludeInstance",
+     "kind": "function",
+     "line": 16957
+    },
+    {
+     "name": "subjMultiResultsHtml",
+     "kind": "function",
+     "line": 16970
+    },
+    {
+     "name": "subjMenu",
+     "kind": "function",
+     "line": 16986
+    },
+    {
+     "name": "subjRefMenu",
+     "kind": "function",
+     "line": 17050
+    },
+    {
+     "name": "subjReplaceRef",
+     "kind": "function",
+     "line": 17067
+    },
+    {
+     "name": "subjRemoveRef",
+     "kind": "function",
+     "line": 17087
+    },
+    {
+     "name": "_subjPopup",
+     "kind": "function",
+     "line": 17095
+    },
+    {
+     "name": "_faceparseRunning",
+     "kind": "let",
+     "line": 17126
+    },
+    {
+     "name": "_mskSubjectBBox",
+     "kind": "function",
+     "line": 17127
+    },
+    {
+     "name": "_faceparseRunLayers",
+     "kind": "function",
+     "line": 17141
+    },
+    {
+     "name": "_depthRunning",
+     "kind": "let",
+     "line": 17185
+    },
+    {
+     "name": "fxHasDepthMap",
+     "kind": "function",
+     "line": 17186
+    },
+    {
+     "name": "fxDepthForGeom",
+     "kind": "function",
+     "line": 17190
+    },
+    {
+     "name": "fxSyncDepthTexture",
+     "kind": "function",
+     "line": 17207
+    },
+    {
+     "name": "mskDepthPreviewSource",
+     "kind": "function",
+     "line": 17218
+    },
+    {
+     "name": "mskDepthPreviewFinish",
+     "kind": "function",
+     "line": 17223
+    },
+    {
+     "name": "mskDepthPreviewClose",
+     "kind": "function",
+     "line": 17231
+    },
+    {
+     "name": "mskDepthPreviewOpen",
+     "kind": "function",
+     "line": 17237
+    },
+    {
+     "name": "mskDepthPreviewSync",
+     "kind": "function",
+     "line": 17269
+    },
+    {
+     "name": "mskDepthPreviewButton",
+     "kind": "function",
+     "line": 17274
+    },
+    {
+     "name": "fxEnsureDepthMap",
+     "kind": "function",
+     "line": 17280
+    },
+    {
+     "name": "_facePlace",
+     "kind": "function",
+     "line": 17330
+    },
+    {
+     "name": "_mskApplyFaceFallback",
+     "kind": "function",
+     "line": 17342
+    },
+    {
+     "name": "mskFaceAutoExclude",
+     "kind": "function",
+     "line": 17360
+    },
+    {
+     "name": "FACE_FEATURES",
+     "kind": "const",
+     "line": 17406
+    },
+    {
+     "name": "mskFaceSelectFeature",
+     "kind": "function",
+     "line": 17407
+    },
+    {
+     "name": "mskFaceSelectSkin",
+     "kind": "function",
+     "line": 17452
+    },
+    {
+     "name": "mskAiPointsClear",
+     "kind": "function",
+     "line": 17482
+    },
+    {
+     "name": "_subjFindStatsKey",
+     "kind": "function",
+     "line": 17495
+    },
+    {
+     "name": "_subjFindStatsGet",
+     "kind": "function",
+     "line": 17496
+    },
+    {
+     "name": "_subjFindStatsRecord",
+     "kind": "function",
+     "line": 17500
+    },
+    {
+     "name": "subjFindConfirm",
+     "kind": "function",
+     "line": 17507
+    },
+    {
+     "name": "_subjFindStatsHint",
+     "kind": "function",
+     "line": 17517
+    },
+    {
+     "name": "mskDelete",
+     "kind": "function",
+     "line": 17524
+    },
+    {
+     "name": "mskInvert",
+     "kind": "function",
+     "line": 17529
+    },
+    {
+     "name": "mskDuplicate",
+     "kind": "function",
+     "line": 17533
+    },
+    {
+     "name": "mskCopyToAll",
+     "kind": "function",
+     "line": 17548
+    },
+    {
+     "name": "_mskSemanticCopyJob",
+     "kind": "let",
+     "line": 17561
+    },
+    {
+     "name": "_mskPortableMaskSignature",
+     "kind": "function",
+     "line": 17562
+    },
+    {
+     "name": "_mskPortableCopyProcess",
+     "kind": "function",
+     "line": 17569
+    },
+    {
+     "name": "_mskPortableUndoProcess",
+     "kind": "function",
+     "line": 17613
+    },
+    {
+     "name": "_mskPortablePublish",
+     "kind": "function",
+     "line": 17636
+    },
+    {
+     "name": "_mskPersistPortableCurrent",
+     "kind": "function",
+     "line": 17646
+    },
+    {
+     "name": "_mskPortableIsUnsupported",
+     "kind": "function",
+     "line": 17650
+    },
+    {
+     "name": "_mskPortableNeedsReevaluation",
+     "kind": "function",
+     "line": 17654
+    },
+    {
+     "name": "_mskPortableReevaluate",
+     "kind": "function",
+     "line": 17655
+    },
+    {
+     "name": "mskCopyAndReevaluate",
+     "kind": "function",
+     "line": 17683
+    },
+    {
+     "name": "mskUndoPortableCopy",
+     "kind": "function",
+     "line": 17748
+    },
+    {
+     "name": "mskCancelPortableCopy",
+     "kind": "function",
+     "line": 17795
+    },
+    {
+     "name": "_mskTexDirty",
+     "kind": "let",
+     "line": 17806
+    },
+    {
+     "name": "mskSolo",
+     "kind": "let",
+     "line": 17812
+    },
+    {
+     "name": "mskToggleSolo",
+     "kind": "function",
+     "line": 17813
+    },
+    {
+     "name": "_mskThumb",
+     "kind": "function",
+     "line": 17822
+    },
+    {
+     "name": "_mskSrcCache",
+     "kind": "let",
+     "line": 17860
+    },
+    {
+     "name": "mskSourceData",
+     "kind": "function",
+     "line": 17861
+    },
+    {
+     "name": "fxInvalidateMaskSource",
+     "kind": "function",
+     "line": 17874
+    },
+    {
+     "name": "mskTexDims",
+     "kind": "function",
+     "line": 17875
+    },
+    {
+     "name": "samInputDims",
+     "kind": "function",
+     "line": 17883
+    },
+    {
+     "name": "mskEnsureDims",
+     "kind": "function",
+     "line": 17889
+    },
+    {
+     "name": "_mskDepthSmoothstep",
+     "kind": "function",
+     "line": 17897
+    },
+    {
+     "name": "_mskDepthCoverageData",
+     "kind": "function",
+     "line": 17900
+    },
+    {
+     "name": "mskDepthCoverageSource",
+     "kind": "function",
+     "line": 17915
+    },
+    {
+     "name": "_mskTexBufs",
+     "kind": "let",
+     "line": 17928
+    },
+    {
+     "name": "mskBuildTex",
+     "kind": "function",
+     "line": 17929
+    },
+    {
+     "name": "_mskBoxExtrema",
+     "kind": "function",
+     "line": 17955
+    },
+    {
+     "name": "_mskBlurCoverage",
+     "kind": "function",
+     "line": 17980
+    },
+    {
+     "name": "mskRefinedPixels",
+     "kind": "function",
+     "line": 17993
+    },
+    {
+     "name": "mskRefinementSupported",
+     "kind": "function",
+     "line": 18011
+    },
+    {
+     "name": "mskRefinementSourceReset",
+     "kind": "function",
+     "line": 18016
+    },
+    {
+     "name": "mskRefineControls",
+     "kind": "function",
+     "line": 18017
+    },
+    {
+     "name": "mskRefinementSet",
+     "kind": "function",
+     "line": 18026
+    },
+    {
+     "name": "mskRefinementReset",
+     "kind": "function",
+     "line": 18036
+    },
+    {
+     "name": "mskRefineEdges",
+     "kind": "function",
+     "line": 18041
+    },
+    {
+     "name": "_boxFilterJS",
+     "kind": "function",
+     "line": 18074
+    },
+    {
+     "name": "_smoothstepJS",
+     "kind": "function",
+     "line": 18108
+    },
+    {
+     "name": "mskGenerateSky",
+     "kind": "function",
+     "line": 18112
+    },
+    {
+     "name": "mskSkyRedetect",
+     "kind": "function",
+     "line": 18135
+    },
+    {
+     "name": "_skySeedPoints",
+     "kind": "function",
+     "line": 18141
+    },
+    {
+     "name": "mskPaintMode",
+     "kind": "let",
+     "line": 18161
+    },
+    {
+     "name": "_mskBrushTransientReset",
+     "kind": "let",
+     "line": 18162
+    },
+    {
+     "name": "mskPaintEndStroke",
+     "kind": "function",
+     "line": 18163
+    },
+    {
+     "name": "mskPaintTransientReset",
+     "kind": "function",
+     "line": 18164
+    },
+    {
+     "name": "mskPaintToggle",
+     "kind": "function",
+     "line": 18165
+    },
+    {
+     "name": "mskPaintStop",
+     "kind": "function",
+     "line": 18174
+    },
+    {
+     "name": "mskTeethGuideSync",
+     "kind": "function",
+     "line": 18176
+    },
+    {
+     "name": "mskPaintErase_sync",
+     "kind": "function",
+     "line": 18188
+    },
+    {
+     "name": "mskPaintErase_toggle",
+     "kind": "function",
+     "line": 18189
+    },
+    {
+     "name": "mskPaintClear",
+     "kind": "function",
+     "line": 18190
+    },
+    {
+     "name": "_mskPointToUV",
+     "kind": "function",
+     "line": 18191
+    },
+    {
+     "name": "mskPaintAt",
+     "kind": "function",
+     "line": 18198
+    },
+    {
+     "name": "_mskGroupOpen",
+     "kind": "let",
+     "line": 18401
+    },
+    {
+     "name": "mskGroupToggle",
+     "kind": "function",
+     "line": 18403
+    },
+    {
+     "name": "_mskGroup",
+     "kind": "function",
+     "line": 18410
+    },
+    {
+     "name": "mskAddMenu",
+     "kind": "function",
+     "line": 18424
+    },
+    {
+     "name": "_mskPlaceMenu",
+     "kind": "function",
+     "line": 18469
+    },
+    {
+     "name": "mskMoreMenu",
+     "kind": "function",
+     "line": 18481
+    },
+    {
+     "name": "_mskCompositionCandidateCheck",
+     "kind": "function",
+     "line": 18523
+    },
+    {
+     "name": "_mskCompositionMenuClose",
+     "kind": "let",
+     "line": 18547
+    },
+    {
+     "name": "mskCompositionMenu",
+     "kind": "function",
+     "line": 18548
+    },
+    {
+     "name": "MSK_TONE_BLEND_KEYS",
+     "kind": "const",
+     "line": 18607
+    },
+    {
+     "name": "mskCopyToneMenu",
+     "kind": "function",
+     "line": 18608
+    },
+    {
+     "name": "mskSkinStrength",
+     "kind": "function",
+     "line": 18626
+    },
+    {
+     "name": "mskCoatDepth",
+     "kind": "function",
+     "line": 18640
+    },
+    {
+     "name": "mskEyeBright",
+     "kind": "function",
+     "line": 18660
+    },
+    {
+     "name": "_mskDetectEyes",
+     "kind": "function",
+     "line": 18688
+    },
+    {
+     "name": "_mskAddCoatEyeMask",
+     "kind": "function",
+     "line": 18770
+    },
+    {
+     "name": "MSK_SKIN_PRESETS",
+     "kind": "const",
+     "line": 18799
+    },
+    {
+     "name": "MSK_COAT_PRESETS",
+     "kind": "const",
+     "line": 18808
+    },
+    {
+     "name": "_mskToneBlendDefaults",
+     "kind": "function",
+     "line": 18816
+    },
+    {
+     "name": "mskToneReset",
+     "kind": "function",
+     "line": 18825
+    },
+    {
+     "name": "mskSkinPreset",
+     "kind": "function",
+     "line": 18832
+    },
+    {
+     "name": "_mskPrevModeBeforePick",
+     "kind": "let",
+     "line": 18842
+    },
+    {
+     "name": "mskPickSkin",
+     "kind": "function",
+     "line": 18843
+    },
+    {
+     "name": "mskSkinCoverage",
+     "kind": "function",
+     "line": 18856
+    },
+    {
+     "name": "_mskRow",
+     "kind": "function",
+     "line": 18891
+    },
+    {
+     "name": "mskSlide",
+     "kind": "function",
+     "line": 18897
+    },
+    {
+     "name": "_hslToHex",
+     "kind": "function",
+     "line": 18909
+    },
+    {
+     "name": "_hexToHueSat",
+     "kind": "function",
+     "line": 18916
+    },
+    {
+     "name": "mskColSwatchSync",
+     "kind": "function",
+     "line": 18923
+    },
+    {
+     "name": "mskColPicked",
+     "kind": "function",
+     "line": 18927
+    },
+    {
+     "name": "MST_SWATCHES",
+     "kind": "const",
+     "line": 18940
+    },
+    {
+     "name": "_hexToRgb01",
+     "kind": "function",
+     "line": 18941
+    },
+    {
+     "name": "crSampleMean",
+     "kind": "function",
+     "line": 18949
+    },
+    {
+     "name": "mskSkinTarget",
+     "kind": "function",
+     "line": 18961
+    },
+    {
+     "name": "CR_CORE",
+     "kind": "const",
+     "line": 18985
+    },
+    {
+     "name": "_crAxisJS",
+     "kind": "function",
+     "line": 18986
+    },
+    {
+     "name": "crWeightJS",
+     "kind": "function",
+     "line": 18992
+    },
+    {
+     "name": "_srcVFrameCache",
+     "kind": "let",
+     "line": 19011
+    },
+    {
+     "name": "_srcVFrameData",
+     "kind": "function",
+     "line": 19012
+    },
+    {
+     "name": "mskMeasureSrcV",
+     "kind": "function",
+     "line": 19025
+    },
+    {
+     "name": "_mskSrcVT",
+     "kind": "let",
+     "line": 19051
+    },
+    {
+     "name": "mskSrcVDebounced",
+     "kind": "function",
+     "line": 19052
+    },
+    {
+     "name": "_mskCrEyeActive",
+     "kind": "let",
+     "line": 19056
+    },
+    {
+     "name": "_circMean",
+     "kind": "function",
+     "line": 19072
+    },
+    {
+     "name": "_circDist",
+     "kind": "function",
+     "line": 19078
+    },
+    {
+     "name": "_mskSkinPixels",
+     "kind": "function",
+     "line": 19082
+    },
+    {
+     "name": "mskAutoSamples",
+     "kind": "function",
+     "line": 19114
+    },
+    {
+     "name": "mskCrEyedropper",
+     "kind": "function",
+     "line": 19205
+    },
+    {
+     "name": "mskCrEyedropperClick",
+     "kind": "function",
+     "line": 19211
+    },
+    {
+     "name": "_mskCrLinkNote",
+     "kind": "function",
+     "line": 19251
+    },
+    {
+     "name": "mskCrRelink",
+     "kind": "function",
+     "line": 19255
+    },
+    {
+     "name": "mskCrToggle",
+     "kind": "function",
+     "line": 19256
+    },
+    {
+     "name": "mskDepToggle",
+     "kind": "function",
+     "line": 19261
+    },
+    {
+     "name": "mskCrDropSample",
+     "kind": "function",
+     "line": 19268
+    },
+    {
+     "name": "mskTgtMode",
+     "kind": "function",
+     "line": 19274
+    },
+    {
+     "name": "mskTgtSwatch",
+     "kind": "function",
+     "line": 19278
+    },
+    {
+     "name": "mskTgtPicked",
+     "kind": "function",
+     "line": 19282
+    },
+    {
+     "name": "SKIN_REF_KEY",
+     "kind": "const",
+     "line": 19295
+    },
+    {
+     "name": "_skinRefScopeKey",
+     "kind": "function",
+     "line": 19304
+    },
+    {
+     "name": "skinRefGet",
+     "kind": "function",
+     "line": 19312
+    },
+    {
+     "name": "mskSetSkinRef",
+     "kind": "function",
+     "line": 19313
+    },
+    {
+     "name": "mskUseSkinRef",
+     "kind": "function",
+     "line": 19325
+    },
+    {
+     "name": "fxSyncVideoUI",
+     "kind": "function",
+     "line": 19348
+    },
+    {
+     "name": "fxUpdateClipInfoUI",
+     "kind": "function",
+     "line": 19369
+    },
+    {
+     "name": "mskRebuild",
+     "kind": "function",
+     "line": 19386
+    },
+    {
+     "name": "mskClearComposition",
+     "kind": "function",
+     "line": 19799
+    },
+    {
+     "name": "mskSetComposition",
+     "kind": "function",
+     "line": 19804
+    },
+    {
+     "name": "mskToggleAdd",
+     "kind": "function",
+     "line": 19818
+    },
+    {
+     "name": "mskToggleSubtract",
+     "kind": "function",
+     "line": 19823
+    },
+    {
+     "name": "mskToggleIntersect",
+     "kind": "function",
+     "line": 19831
+    },
+    {
+     "name": "mskMove",
+     "kind": "function",
+     "line": 19839
+    },
+    {
+     "name": "mskReorder",
+     "kind": "function",
+     "line": 19851
+    },
+    {
+     "name": "mskRename",
+     "kind": "function",
+     "line": 19860
+    },
+    {
+     "name": "mskToggleMute",
+     "kind": "function",
+     "line": 19870
+    },
+    {
+     "name": "mskToggleExclude",
+     "kind": "function",
+     "line": 19879
+    },
+    {
+     "name": "mskAutoLabel",
+     "kind": "function",
+     "line": 19888
+    },
+    {
+     "name": "mskPreviewMode",
+     "kind": "let",
+     "line": 19905
+    },
+    {
+     "name": "mskSelViewOpacity",
+     "kind": "let",
+     "line": 19908
+    },
+    {
+     "name": "mskSelViewOutline",
+     "kind": "let",
+     "line": 19909
+    },
+    {
+     "name": "MSK_SELVIEW_PREF_KEY",
+     "kind": "const",
+     "line": 19910
+    },
+    {
+     "name": "MSK_SELVIEW_DEFAULT_COLOR",
+     "kind": "const",
+     "line": 19911
+    },
+    {
+     "name": "MSK_PREVIEW_RENDER_TOKEN",
+     "kind": "const",
+     "line": 19912
+    },
+    {
+     "name": "mskReadSelViewPrefs",
+     "kind": "function",
+     "line": 19913
+    },
+    {
+     "name": "_mskSelViewPrefs",
+     "kind": "const",
+     "line": 19919
+    },
+    {
+     "name": "mskSelViewStyle",
+     "kind": "let",
+     "line": 19920
+    },
+    {
+     "name": "mskSelViewColor",
+     "kind": "let",
+     "line": 19921
+    },
+    {
+     "name": "mskAlwaysShowSelection",
+     "kind": "let",
+     "line": 19922
+    },
+    {
+     "name": "mskSaveSelViewPrefs",
+     "kind": "function",
+     "line": 19923
+    },
+    {
+     "name": "mskSelViewRgb",
+     "kind": "function",
+     "line": 19924
+    },
+    {
+     "name": "mskUpdateSelViewControls",
+     "kind": "function",
+     "line": 19928
+    },
+    {
+     "name": "mskSelViewOpacityInput",
+     "kind": "function",
+     "line": 19943
+    },
+    {
+     "name": "mskSelViewOutlineToggle",
+     "kind": "function",
+     "line": 19948
+    },
+    {
+     "name": "mskSetSelViewStyle",
+     "kind": "function",
+     "line": 19949
+    },
+    {
+     "name": "mskSelViewColorInput",
+     "kind": "function",
+     "line": 19950
+    },
+    {
+     "name": "mskSelViewAlwaysInput",
+     "kind": "function",
+     "line": 19951
+    },
+    {
+     "name": "MSK_PREVMODE_HINT",
+     "kind": "const",
+     "line": 19952
+    },
+    {
+     "name": "mskSetPreviewMode",
+     "kind": "function",
+     "line": 19957
+    },
+    {
+     "name": "mskShowSelIdx",
+     "kind": "function",
+     "line": 19970
+    },
+    {
+     "name": "mskPreviewRenderOptions",
+     "kind": "function",
+     "line": 19976
+    },
+    {
+     "name": "mskOverlayBox",
+     "kind": "function",
+     "line": 19981
+    },
+    {
+     "name": "mskPaintOverlaySync",
+     "kind": "function",
+     "line": 20006
+    },
+    {
+     "name": "mskOverlaySync",
+     "kind": "function",
+     "line": 20033
+    },
+    {
+     "name": "_mskDrag",
+     "kind": "let",
+     "line": 20110
+    },
+    {
+     "name": "mskHandleDown",
+     "kind": "function",
+     "line": 20111
+    },
+    {
+     "name": "mskHandlePos",
+     "kind": "function",
+     "line": 20124
+    },
+    {
+     "name": "mskHandleMove",
+     "kind": "function",
+     "line": 20128
+    },
+    {
+     "name": "mskHandleUp",
+     "kind": "function",
+     "line": 20149
+    },
+    {
+     "name": "_FX_SNAP_SLIDERS",
+     "kind": "const",
+     "line": 20157
+    },
+    {
+     "name": "_FX_SNAP_TOGGLES",
+     "kind": "const",
+     "line": 20176
+    },
+    {
+     "name": "_FX_SNAP_SELECTS",
+     "kind": "const",
+     "line": 20177
+    },
+    {
+     "name": "_FX_SNAP_COLORS",
+     "kind": "const",
+     "line": 20178
+    },
+    {
+     "name": "getUISnapshot",
+     "kind": "function",
+     "line": 20179
+    },
+    {
+     "name": "PASTE_CATEGORIES",
+     "kind": "const",
+     "line": 20224
+    },
+    {
+     "name": "_PASTE_SELECTION_KEY",
+     "kind": "const",
+     "line": 20244
+    },
+    {
+     "name": "_pasteFieldEntries",
+     "kind": "function",
+     "line": 20245
+    },
+    {
+     "name": "_pasteAllFieldKeys",
+     "kind": "function",
+     "line": 20252
+    },
+    {
+     "name": "_pasteExpandKeys",
+     "kind": "function",
+     "line": 20253
+    },
+    {
+     "name": "_pasteSelectionGet",
+     "kind": "function",
+     "line": 20258
+    },
+    {
+     "name": "_pasteEscapeHtml",
+     "kind": "function",
+     "line": 20263
+    },
+    {
+     "name": "pasteEditSelectiveApply",
+     "kind": "function",
+     "line": 20264
+    },
+    {
+     "name": "_pasteChooseFields",
+     "kind": "function",
+     "line": 20278
+    },
+    {
+     "name": "applyUISnapshot",
+     "kind": "function",
+     "line": 20320
+    },
+    {
+     "name": "_fxFieldLabel",
+     "kind": "function",
+     "line": 20421
+    },
+    {
+     "name": "_FX_ID_WORDS",
+     "kind": "const",
+     "line": 20431
+    },
+    {
+     "name": "_fxPrettyId",
+     "kind": "function",
+     "line": 20435
+    },
+    {
+     "name": "snapDiffLabel",
+     "kind": "function",
+     "line": 20446
+    },
+    {
+     "name": "fxHistoryPush",
+     "kind": "function",
+     "line": 20486
+    },
+    {
+     "name": "_fxHistoryRestore",
+     "kind": "function",
+     "line": 20520
+    },
+    {
+     "name": "_fxApplyGeometryBatchEdge",
+     "kind": "function",
+     "line": 20540
+    },
+    {
+     "name": "_fxCaptureGeometryBatchTargets",
+     "kind": "function",
+     "line": 20552
+    },
+    {
+     "name": "_fxFinishGeometryBatchTargets",
+     "kind": "function",
+     "line": 20566
+    },
+    {
+     "name": "_fxHistoryTransition",
+     "kind": "function",
+     "line": 20576
+    },
+    {
+     "name": "_undoHoldTimer",
+     "kind": "let",
+     "line": 20597
+    },
+    {
+     "name": "fxUndoMousedown",
+     "kind": "function",
+     "line": 20598
+    },
+    {
+     "name": "fxUndoMouseup",
+     "kind": "function",
+     "line": 20607
+    },
+    {
+     "name": "fxUndoBtnClick",
+     "kind": "function",
+     "line": 20608
+    },
+    {
+     "name": "_fxHistFlashT",
+     "kind": "let",
+     "line": 20614
+    },
+    {
+     "name": "fxHistFlash",
+     "kind": "function",
+     "line": 20615
+    },
+    {
+     "name": "fxUndo",
+     "kind": "function",
+     "line": 20624
+    },
+    {
+     "name": "fxRedo",
+     "kind": "function",
+     "line": 20631
+    },
+    {
+     "name": "fxSyncTopbarDisabled",
+     "kind": "function",
+     "line": 20644
+    },
+    {
+     "name": "fxResetAll",
+     "kind": "function",
+     "line": 20653
+    },
+    {
+     "name": "toggleSplit",
+     "kind": "function",
+     "line": 20666
+    },
+    {
+     "name": "initSplitDrag",
+     "kind": "function",
+     "line": 20683
+    },
+    {
+     "name": "_fxSplitSrcLabel",
+     "kind": "function",
+     "line": 20698
+    },
+    {
+     "name": "_fxSplitRow",
+     "kind": "function",
+     "line": 20706
+    },
+    {
+     "name": "_fxSplitHead",
+     "kind": "function",
+     "line": 20715
+    },
+    {
+     "name": "fxSetSplitSrc",
+     "kind": "function",
+     "line": 20721
+    },
+    {
+     "name": "_fxSplitListInto",
+     "kind": "function",
+     "line": 20732
+    },
+    {
+     "name": "fxToggleSplitMenu",
+     "kind": "function",
+     "line": 20771
+    },
+    {
+     "name": "settingsSplitBuild",
+     "kind": "function",
+     "line": 20781
+    },
+    {
+     "name": "fxTimelineScrub",
+     "kind": "function",
+     "line": 20805
+    },
+    {
+     "name": "_fxTimelinePreviewBase",
+     "kind": "let",
+     "line": 20811
+    },
+    {
+     "name": "_fxTimelinePreview",
+     "kind": "function",
+     "line": 20812
+    },
+    {
+     "name": "_fxTimelinePreviewEnd",
+     "kind": "function",
+     "line": 20822
+    },
+    {
+     "name": "_fxTimelineListInto",
+     "kind": "function",
+     "line": 20842
+    },
+    {
+     "name": "fxAnchorPopover",
+     "kind": "function",
+     "line": 20903
+    },
+    {
+     "name": "fxToggleTimelinePopover",
+     "kind": "function",
+     "line": 20911
+    },
+    {
+     "name": "settingsHistoryBuild",
+     "kind": "function",
+     "line": 20921
+    },
+    {
+     "name": "_splitBox",
+     "kind": "function",
+     "line": 20937
+    },
+    {
+     "name": "_applySplitPos",
+     "kind": "function",
+     "line": 20946
+    },
+    {
+     "name": "fxScopeMode",
+     "kind": "let",
+     "line": 20962
+    },
+    {
+     "name": "toggleHist",
+     "kind": "function",
+     "line": 20963
+    },
+    {
+     "name": "fxScopeModeChanged",
+     "kind": "function",
+     "line": 20973
+    },
+    {
+     "name": "fxGamutWarn",
+     "kind": "let",
+     "line": 20978
+    },
+    {
+     "name": "fxClipLo",
+     "kind": "let",
+     "line": 20981
+    },
+    {
+     "name": "fxPeakOn",
+     "kind": "let",
+     "line": 20986
+    },
+    {
+     "name": "fxTogglePeak",
+     "kind": "function",
+     "line": 20987
+    },
+    {
+     "name": "fxPeakRender",
+     "kind": "function",
+     "line": 20991
+    },
+    {
+     "name": "fxPeakUpdate",
+     "kind": "function",
+     "line": 21008
+    },
+    {
+     "name": "fxClipCode",
+     "kind": "function",
+     "line": 21016
+    },
+    {
+     "name": "toggleGamutWarn",
+     "kind": "function",
+     "line": 21017
+    },
+    {
+     "name": "drawHistogram",
+     "kind": "function",
+     "line": 21028
+    },
+    {
+     "name": "drawScopeHistogram",
+     "kind": "function",
+     "line": 21047
+    },
+    {
+     "name": "_scopeWaveAccum",
+     "kind": "function",
+     "line": 21067
+    },
+    {
+     "name": "drawScopeWaveform",
+     "kind": "function",
+     "line": 21078
+    },
+    {
+     "name": "drawScopeParade",
+     "kind": "function",
+     "line": 21093
+    },
+    {
+     "name": "drawScopeVectorscope",
+     "kind": "function",
+     "line": 21115
+    },
+    {
+     "name": "_fxZoomFootprint",
+     "kind": "function",
+     "line": 21154
+    },
+    {
+     "name": "_applyZoom",
+     "kind": "function",
+     "line": 21159
+    },
+    {
+     "name": "_zoomRefit",
+     "kind": "function",
+     "line": 21185
+    },
+    {
+     "name": "_resetZoom",
+     "kind": "function",
+     "line": 21193
+    },
+    {
+     "name": "fxEnsureFullQuality",
+     "kind": "function",
+     "line": 21197
+    },
+    {
+     "name": "fxPromoteWebRaw",
+     "kind": "function",
+     "line": 21210
+    },
+    {
+     "name": "_updateZoomReadout",
+     "kind": "function",
+     "line": 21225
+    },
+    {
+     "name": "zoomSet",
+     "kind": "function",
+     "line": 21232
+    },
+    {
+     "name": "zoomBy",
+     "kind": "function",
+     "line": 21238
+    },
+    {
+     "name": "_zoomAt",
+     "kind": "function",
+     "line": 21246
+    },
+    {
+     "name": "zoomFit",
+     "kind": "function",
+     "line": 21258
+    },
+    {
+     "name": "toggleLoupe",
+     "kind": "function",
+     "line": 21266
+    },
+    {
+     "name": "initEditableVals",
+     "kind": "function",
+     "line": 21287
+    },
+    {
+     "name": "initZoomPan",
+     "kind": "function",
+     "line": 21311
+    },
+    {
+     "name": "fxCanvasClick",
+     "kind": "function",
+     "line": 21417
+    },
+    {
+     "name": "_fxEyeArmed",
+     "kind": "function",
+     "line": 21427
+    },
+    {
+     "name": "_FX_EYE_CURSOR",
+     "kind": "const",
+     "line": 21431
+    },
+    {
+     "name": "_fxEyeEl",
+     "kind": "let",
+     "line": 21432
+    },
+    {
+     "name": "_fxEyeTc",
+     "kind": "const",
+     "line": 21433
+    },
+    {
+     "name": "_fxEyeCtx",
+     "kind": "const",
+     "line": 21434
+    },
+    {
+     "name": "_fxEyeHide",
+     "kind": "function",
+     "line": 21435
+    },
+    {
+     "name": "_fxEyeMove",
+     "kind": "function",
+     "line": 21436
+    },
+    {
+     "name": "_fxEyeDraw",
+     "kind": "function",
+     "line": 21442
+    },
+    {
+     "name": "_fxEyeLeave",
+     "kind": "function",
+     "line": 21460
+    },
+    {
+     "name": "FN_OUT",
+     "kind": "const",
+     "line": 21475
+    },
+    {
+     "name": "fnNativeRecipe",
+     "kind": "function",
+     "line": 21478
+    },
+    {
+     "name": "fnNativeNeedsDevelop",
+     "kind": "function",
+     "line": 21490
+    },
+    {
+     "name": "fnNativeSource",
+     "kind": "function",
+     "line": 21496
+    },
+    {
+     "name": "fnEnsureNative",
+     "kind": "function",
+     "line": 21503
+    },
+    {
+     "name": "fnNativeExportItem",
+     "kind": "function",
+     "line": 21521
+    },
+    {
+     "name": "fnPickNativeBase",
+     "kind": "function",
+     "line": 21531
+    },
+    {
+     "name": "_fnPickActive",
+     "kind": "let",
+     "line": 21547
+    },
+    {
+     "name": "fnNum",
+     "kind": "function",
+     "line": 21548
+    },
+    {
+     "name": "fnBase",
+     "kind": "function",
+     "line": 21549
+    },
+    {
+     "name": "fnHasBase",
+     "kind": "function",
+     "line": 21550
+    },
+    {
+     "name": "fnIsBW",
+     "kind": "function",
+     "line": 21551
+    },
+    {
+     "name": "computeFilmNeg",
+     "kind": "function",
+     "line": 21552
+    },
+    {
+     "name": "fnSetStatus",
+     "kind": "function",
+     "line": 21563
+    },
+    {
+     "name": "fnSyncStatus",
+     "kind": "function",
+     "line": 21568
+    },
+    {
+     "name": "fnWorkToOrig",
+     "kind": "function",
+     "line": 21576
+    },
+    {
+     "name": "fnSampleBaseOrig",
+     "kind": "function",
+     "line": 21596
+    },
+    {
+     "name": "fnPickBaseAtOrig",
+     "kind": "function",
+     "line": 21614
+    },
+    {
+     "name": "fnPickBase",
+     "kind": "function",
+     "line": 21629
+    },
+    {
+     "name": "fnPickBaseClick",
+     "kind": "function",
+     "line": 21635
+    },
+    {
+     "name": "fnAutoBalance",
+     "kind": "function",
+     "line": 21650
+    },
+    {
+     "name": "fnApplyBaseToRoll",
+     "kind": "function",
+     "line": 21684
+    },
+    {
+     "name": "_wbEyedropperActive",
+     "kind": "let",
+     "line": 21706
+    },
+    {
+     "name": "wbEyedropper",
+     "kind": "function",
+     "line": 21707
+    },
+    {
+     "name": "wbEyedropperClick",
+     "kind": "function",
+     "line": 21714
+    },
+    {
+     "name": "_autoEnh",
+     "kind": "let",
+     "line": 21756
+    },
+    {
+     "name": "_AE_IDS",
+     "kind": "const",
+     "line": 21757
+    },
+    {
+     "name": "autoEnhance",
+     "kind": "function",
+     "line": 21758
+    },
+    {
+     "name": "_STYLES_KEY",
+     "kind": "const",
+     "line": 21798
+    },
+    {
+     "name": "stylesList",
+     "kind": "function",
+     "line": 21799
+    },
+    {
+     "name": "stylesSave",
+     "kind": "function",
+     "line": 21800
+    },
+    {
+     "name": "styleSaveCurrent",
+     "kind": "function",
+     "line": 21801
+    },
+    {
+     "name": "styleApply",
+     "kind": "function",
+     "line": 21819
+    },
+    {
+     "name": "_styleMaskApplyChoice",
+     "kind": "function",
+     "line": 21853
+    },
+    {
+     "name": "_stylePrepareMaskPreset",
+     "kind": "function",
+     "line": 21868
+    },
+    {
+     "name": "_styleRecipeKeys",
+     "kind": "function",
+     "line": 21909
+    },
+    {
+     "name": "_STYLE_RECENT_KEY",
+     "kind": "const",
+     "line": 21920
+    },
+    {
+     "name": "_styleRecent",
+     "kind": "function",
+     "line": 21921
+    },
+    {
+     "name": "styleToggleFavorite",
+     "kind": "function",
+     "line": 21922
+    },
+    {
+     "name": "_stylePreview",
+     "kind": "let",
+     "line": 21923
+    },
+    {
+     "name": "stylePreviewCancel",
+     "kind": "function",
+     "line": 21924
+    },
+    {
+     "name": "stylePreviewStart",
+     "kind": "function",
+     "line": 21930
+    },
+    {
+     "name": "styleDelete",
+     "kind": "function",
+     "line": 21941
+    },
+    {
+     "name": "styleExport",
+     "kind": "function",
+     "line": 21945
+    },
+    {
+     "name": "_styleBundleCreate",
+     "kind": "function",
+     "line": 21954
+    },
+    {
+     "name": "_styleBundleInspect",
+     "kind": "function",
+     "line": 21962
+    },
+    {
+     "name": "styleExportBundle",
+     "kind": "function",
+     "line": 21993
+    },
+    {
+     "name": "styleImportClick",
+     "kind": "function",
+     "line": 22000
+    },
+    {
+     "name": "styleImportFile",
+     "kind": "function",
+     "line": 22001
+    },
+    {
+     "name": "_styleSplit",
+     "kind": "function",
+     "line": 22055
+    },
+    {
+     "name": "styleRename",
+     "kind": "function",
+     "line": 22056
+    },
+    {
+     "name": "styleListRefresh",
+     "kind": "function",
+     "line": 22063
+    },
+    {
+     "name": "_EXPPRESET_KEY",
+     "kind": "const",
+     "line": 22099
+    },
+    {
+     "name": "exportPresetsList",
+     "kind": "function",
+     "line": 22100
+    },
+    {
+     "name": "exportPresetsSave",
+     "kind": "function",
+     "line": 22101
+    },
+    {
+     "name": "_exportPresetRead",
+     "kind": "function",
+     "line": 22102
+    },
+    {
+     "name": "exportPresetSaveCurrent",
+     "kind": "function",
+     "line": 22112
+    },
+    {
+     "name": "exportPresetApply",
+     "kind": "function",
+     "line": 22124
+    },
+    {
+     "name": "exportMultiPresetOpen",
+     "kind": "function",
+     "line": 22149
+    },
+    {
+     "name": "exportMultiPresetRun",
+     "kind": "function",
+     "line": 22163
+    },
+    {
+     "name": "_pmEsc",
+     "kind": "function",
+     "line": 22190
+    },
+    {
+     "name": "_pmStyleSummary",
+     "kind": "function",
+     "line": 22191
+    },
+    {
+     "name": "_pmExportSummary",
+     "kind": "function",
+     "line": 22196
+    },
+    {
+     "name": "_pmTab",
+     "kind": "let",
+     "line": 22198
+    },
+    {
+     "name": "presetsManagerOpen",
+     "kind": "function",
+     "line": 22200
+    },
+    {
+     "name": "_pmFolders",
+     "kind": "function",
+     "line": 22203
+    },
+    {
+     "name": "presetsManagerRender",
+     "kind": "function",
+     "line": 22210
+    },
+    {
+     "name": "exportPresetDeleteCurrent",
+     "kind": "function",
+     "line": 22238
+    },
+    {
+     "name": "exportPresetListRefresh",
+     "kind": "function",
+     "line": 22243
+    },
+    {
+     "name": "_SESS_KEY",
+     "kind": "const",
+     "line": 22254
+    },
+    {
+     "name": "_SESS_SLIDERS",
+     "kind": "const",
+     "line": 22255
+    },
+    {
+     "name": "_SESS_TOGGLES",
+     "kind": "const",
+     "line": 22260
+    },
+    {
+     "name": "_SESS_SELECTS",
+     "kind": "const",
+     "line": 22261
+    },
+    {
+     "name": "_SESS_COLORS",
+     "kind": "const",
+     "line": 22262
+    },
+    {
+     "name": "saveSession",
+     "kind": "function",
+     "line": 22263
+    },
+    {
+     "name": "_sessAutoT",
+     "kind": "let",
+     "line": 22316
+    },
+    {
+     "name": "sessionAutosave",
+     "kind": "function",
+     "line": 22317
+    },
+    {
+     "name": "loadSession",
+     "kind": "function",
+     "line": 22318
+    },
+    {
+     "name": "loadSessionGeomFor",
+     "kind": "function",
+     "line": 22357
+    },
+    {
+     "name": "_fmtShutter",
+     "kind": "function",
+     "line": 22377
+    },
+    {
+     "name": "readExifTags",
+     "kind": "function",
+     "line": 22378
+    },
+    {
+     "name": "_videoInfoRows",
+     "kind": "function",
+     "line": 22446
+    },
+    {
+     "name": "_fxPeoplePathToken",
+     "kind": "let",
+     "line": 22473
+    },
+    {
+     "name": "fxShowFaceBox",
+     "kind": "function",
+     "line": 22477
+    },
+    {
+     "name": "fxHideFaceBox",
+     "kind": "function",
+     "line": 22490
+    },
+    {
+     "name": "fxRenderPeoplePanel",
+     "kind": "function",
+     "line": 22494
+    },
+    {
+     "name": "_fxKeywordsPathToken",
+     "kind": "let",
+     "line": 22571
+    },
+    {
+     "name": "fxRenderKeywordsPanel",
+     "kind": "function",
+     "line": 22572
+    },
+    {
+     "name": "fxRenderAutoTags",
+     "kind": "function",
+     "line": 22618
+    },
+    {
+     "name": "fxFullDimsText",
+     "kind": "function",
+     "line": 22662
+    },
+    {
+     "name": "_csPhotoSourceMode",
+     "kind": "let",
+     "line": 22679
+    },
+    {
+     "name": "fxRefreshDims",
+     "kind": "function",
+     "line": 22696
+    },
+    {
+     "name": "showExif",
+     "kind": "function",
+     "line": 22703
+    },
+    {
+     "name": "_icoFrameRow",
+     "kind": "function",
+     "line": 22746
+    },
+    {
+     "name": "fxSetIcoFrame",
+     "kind": "function",
+     "line": 22756
+    },
+    {
+     "name": "MATCH_STAT_PX",
+     "kind": "const",
+     "line": 22783
+    },
+    {
+     "name": "_matchStats",
+     "kind": "function",
+     "line": 22787
+    },
+    {
+     "name": "_matchOffsets",
+     "kind": "function",
+     "line": 22815
+    },
+    {
+     "name": "_fxRefUrl",
+     "kind": "let",
+     "line": 22836
+    },
+    {
+     "name": "fxRefShow",
+     "kind": "function",
+     "line": 22837
+    },
+    {
+     "name": "fxRefClose",
+     "kind": "function",
+     "line": 22856
+    },
+    {
+     "name": "fxRefMatchCurrent",
+     "kind": "function",
+     "line": 22861
+    },
+    {
+     "name": "fxRefPickFile",
+     "kind": "function",
+     "line": 22878
+    },
+    {
+     "name": "fxRefSnapshot",
+     "kind": "function",
+     "line": 22880
+    },
+    {
+     "name": "fxRefMenu",
+     "kind": "function",
+     "line": 22886
+    },
+    {
+     "name": "matchSeriesToReference",
+     "kind": "function",
+     "line": 22894
+    },
+    {
+     "name": "matchSeriesClear",
+     "kind": "function",
+     "line": 22922
+    },
+    {
+     "name": "_adjSharpMaskPreview",
+     "kind": "let",
+     "line": 22928
+    },
+    {
+     "name": "_mskSharpMaskPreview",
+     "kind": "let",
+     "line": 22929
+    },
+    {
+     "name": "ADJ_FIELDS",
+     "kind": "const",
+     "line": 22930
+    },
+    {
+     "name": "domAdjustVals",
+     "kind": "function",
+     "line": 22931
+    },
+    {
+     "name": "applyAdjustVals",
+     "kind": "function",
+     "line": 22932
+    },
+    {
+     "name": "computeAdjustBlock",
+     "kind": "function",
+     "line": 22933
+    },
+    {
+     "name": "getFXParams",
+     "kind": "function",
+     "line": 22946
+    },
+    {
+     "name": "_borderLayerParams",
+     "kind": "function",
+     "line": 23060
+    },
+    {
+     "name": "renderLoupe",
+     "kind": "function",
+     "line": 23074
+    },
+    {
+     "name": "fxWrapInner",
+     "kind": "function",
+     "line": 23124
+    },
+    {
+     "name": "fxPreviewMaxH",
+     "kind": "function",
+     "line": 23129
+    },
+    {
+     "name": "_fxFullBase",
+     "kind": "let",
+     "line": 23161
+    },
+    {
+     "name": "fxInvalidateFullBase",
+     "kind": "function",
+     "line": 23162
+    },
+    {
+     "name": "_fxEnsureFullResBase",
+     "kind": "function",
+     "line": 23163
+    },
+    {
+     "name": "_fxShowFullBase",
+     "kind": "function",
+     "line": 23180
+    },
+    {
+     "name": "_fxHideFullBase",
+     "kind": "function",
+     "line": 23188
+    },
+    {
+     "name": "renderFullResCrop",
+     "kind": "function",
+     "line": 23189
+    },
+    {
+     "name": "FX_ORIG_PARAMS",
+     "kind": "const",
+     "line": 23239
+    },
+    {
+     "name": "renderSnapshotTo",
+     "kind": "function",
+     "line": 23241
+    },
+    {
+     "name": "resolveSplitSnapshot",
+     "kind": "function",
+     "line": 23269
+    },
+    {
+     "name": "fxComparePreviousBegin",
+     "kind": "function",
+     "line": 23294
+    },
+    {
+     "name": "fxComparePreviousEnd",
+     "kind": "function",
+     "line": 23303
+    },
+    {
+     "name": "renderPreview",
+     "kind": "function",
+     "line": 23312
+    },
+    {
+     "name": "_fxSliderOf",
+     "kind": "function",
+     "line": 23476
+    },
+    {
+     "name": "_fxFireInput",
+     "kind": "function",
+     "line": 23480
+    },
+    {
+     "name": "_fxSliderSet",
+     "kind": "function",
+     "line": 23484
+    },
+    {
+     "name": "_fxModTimer",
+     "kind": "let",
+     "line": 23494
+    },
+    {
+     "name": "fxMarkModifiedSliders",
+     "kind": "function",
+     "line": 23498
+    },
+    {
+     "name": "fxPaintSlider",
+     "kind": "function",
+     "line": 23541
+    },
+    {
+     "name": "fxPaintAllSliders",
+     "kind": "function",
+     "line": 23571
+    },
+    {
+     "name": "initSliderErgonomics",
+     "kind": "function",
+     "line": 23575
+    },
+    {
+     "name": "EXP_SHARP_AMT",
+     "kind": "const",
+     "line": 23707
+    },
+    {
+     "name": "exportResize",
+     "kind": "function",
+     "line": 23708
+    },
+    {
+     "name": "unsharpRGBA",
+     "kind": "function",
+     "line": 23737
+    },
+    {
+     "name": "exportSharpen",
+     "kind": "function",
+     "line": 23753
+    },
+    {
+     "name": "applyWatermark",
+     "kind": "function",
+     "line": 23780
+    },
+    {
+     "name": "exportResample",
+     "kind": "function",
+     "line": 23803
+    },
+    {
+     "name": "FILM_FRAMES",
+     "kind": "const",
+     "line": 23822
+    },
+    {
+     "name": "_framePlates",
+     "kind": "const",
+     "line": 23823
+    },
+    {
+     "name": "_framePlate",
+     "kind": "function",
+     "line": 23824
+    },
+    {
+     "name": "filmFrameOutSize",
+     "kind": "function",
+     "line": 23835
+    },
+    {
+     "name": "filmFrameCompose",
+     "kind": "function",
+     "line": 23839
+    },
+    {
+     "name": "canvasCompose",
+     "kind": "function",
+     "line": 23854
+    },
+    {
+     "name": "FILM_EDGE",
+     "kind": "const",
+     "line": 23889
+    },
+    {
+     "name": "filmEdgeManifest",
+     "kind": "function",
+     "line": 23890
+    },
+    {
+     "name": "FILM_EDGE_SCANS",
+     "kind": "const",
+     "line": 23899
+    },
+    {
+     "name": "_filmEdgeFillSources",
+     "kind": "function",
+     "line": 23900
+    },
+    {
+     "name": "_filmEdgeImg",
+     "kind": "function",
+     "line": 23906
+    },
+    {
+     "name": "_filmEdgePool",
+     "kind": "function",
+     "line": 23913
+    },
+    {
+     "name": "filmEdgeReady",
+     "kind": "function",
+     "line": 23920
+    },
+    {
+     "name": "_filmEdgeTinted",
+     "kind": "function",
+     "line": 23927
+    },
+    {
+     "name": "_filmRng",
+     "kind": "function",
+     "line": 23946
+    },
+    {
+     "name": "_filmEdgeSide",
+     "kind": "function",
+     "line": 23948
+    },
+    {
+     "name": "_filmRing",
+     "kind": "function",
+     "line": 23976
+    },
+    {
+     "name": "_layerGrain",
+     "kind": "function",
+     "line": 23994
+    },
+    {
+     "name": "_filmGlow",
+     "kind": "function",
+     "line": 24003
+    },
+    {
+     "name": "borderSeed",
+     "kind": "function",
+     "line": 24025
+    },
+    {
+     "name": "drawBorderLayers",
+     "kind": "function",
+     "line": 24031
+    },
+    {
+     "name": "borderLayerSizes",
+     "kind": "function",
+     "line": 24052
+    },
+    {
+     "name": "bordersAny",
+     "kind": "function",
+     "line": 24056
+    },
+    {
+     "name": "filmLayerSize",
+     "kind": "function",
+     "line": 24057
+    },
+    {
+     "name": "frameShuffle",
+     "kind": "function",
+     "line": 24058
+    },
+    {
+     "name": "_borderUISync",
+     "kind": "function",
+     "line": 24061
+    },
+    {
+     "name": "borderTypeChanged",
+     "kind": "function",
+     "line": 24066
+    },
+    {
+     "name": "applyPreviewBorders",
+     "kind": "function",
+     "line": 24075
+    },
+    {
+     "name": "defGeom",
+     "kind": "function",
+     "line": 24121
+    },
+    {
+     "name": "geomSyncResetVisibility",
+     "kind": "function",
+     "line": 24128
+    },
+    {
+     "name": "broadcastGeom",
+     "kind": "function",
+     "line": 24135
+    },
+    {
+     "name": "geomApplyToAll",
+     "kind": "function",
+     "line": 24136
+    },
+    {
+     "name": "resetGeomUI",
+     "kind": "function",
+     "line": 24168
+    },
+    {
+     "name": "curItem",
+     "kind": "function",
+     "line": 24174
+    },
+    {
+     "name": "buildFilmstrip",
+     "kind": "function",
+     "line": 24176
+    },
+    {
+     "name": "fxSelectImage",
+     "kind": "function",
+     "line": 24206
+    },
+    {
+     "name": "curGeom",
+     "kind": "function",
+     "line": 24269
+    },
+    {
+     "name": "inscribedSameAspect",
+     "kind": "function",
+     "line": 24271
+    },
+    {
+     "name": "straightenCanvas",
+     "kind": "function",
+     "line": 24276
+    },
+    {
+     "name": "applyGeomTo",
+     "kind": "function",
+     "line": 24287
+    },
+    {
+     "name": "healRingStats",
+     "kind": "function",
+     "line": 24328
+    },
+    {
+     "name": "healPatchStats",
+     "kind": "function",
+     "line": 24340
+    },
+    {
+     "name": "healAutoSource",
+     "kind": "function",
+     "line": 24358
+    },
+    {
+     "name": "healApply",
+     "kind": "function",
+     "line": 24383
+    },
+    {
+     "name": "healStrokeDabs",
+     "kind": "function",
+     "line": 24468
+    },
+    {
+     "name": "geomCanvas",
+     "kind": "function",
+     "line": 24482
+    },
+    {
+     "name": "updateWork",
+     "kind": "function",
+     "line": 24492
+    },
+    {
+     "name": "fxSyncDcpProfileUI",
+     "kind": "function",
+     "line": 24510
+    },
+    {
+     "name": "_cropRot90",
+     "kind": "function",
+     "line": 24531
+    },
+    {
+     "name": "_geomCropSync",
+     "kind": "function",
+     "line": 24535
+    },
+    {
+     "name": "geomRotate",
+     "kind": "function",
+     "line": 24536
+    },
+    {
+     "name": "geomFlip",
+     "kind": "function",
+     "line": 24539
+    },
+    {
+     "name": "AH_DOWNSCALE",
+     "kind": "const",
+     "line": 24554
+    },
+    {
+     "name": "AH_MAX_TILT",
+     "kind": "const",
+     "line": 24556
+    },
+    {
+     "name": "_ahEdges",
+     "kind": "function",
+     "line": 24562
+    },
+    {
+     "name": "_autoHorizonAngle",
+     "kind": "function",
+     "line": 24597
+    },
+    {
+     "name": "autoHorizon",
+     "kind": "function",
+     "line": 24712
+    },
+    {
+     "name": "_ahRoiArmed",
+     "kind": "let",
+     "line": 24730
+    },
+    {
+     "name": "ahRoiSyncUI",
+     "kind": "function",
+     "line": 24731
+    },
+    {
+     "name": "ahRoiArm",
+     "kind": "function",
+     "line": 24740
+    },
+    {
+     "name": "ahRoiClear",
+     "kind": "function",
+     "line": 24747
+    },
+    {
+     "name": "_ahRoiFrac",
+     "kind": "function",
+     "line": 24751
+    },
+    {
+     "name": "_stS2A",
+     "kind": "function",
+     "line": 24794
+    },
+    {
+     "name": "_stA2S",
+     "kind": "function",
+     "line": 24795
+    },
+    {
+     "name": "geomStraightenSlider",
+     "kind": "function",
+     "line": 24796
+    },
+    {
+     "name": "geomStraighten",
+     "kind": "function",
+     "line": 24797
+    },
+    {
+     "name": "geomResetRotate",
+     "kind": "function",
+     "line": 24798
+    },
+    {
+     "name": "geomReset",
+     "kind": "function",
+     "line": 24799
+    },
+    {
+     "name": "healMode",
+     "kind": "let",
+     "line": 24802
+    },
+    {
+     "name": "healEraseActive",
+     "kind": "function",
+     "line": 24803
+    },
+    {
+     "name": "healEraseSync",
+     "kind": "function",
+     "line": 24804
+    },
+    {
+     "name": "healEraseToggle",
+     "kind": "function",
+     "line": 24805
+    },
+    {
+     "name": "healEraseSetHeld",
+     "kind": "function",
+     "line": 24806
+    },
+    {
+     "name": "healSel",
+     "kind": "let",
+     "line": 24807
+    },
+    {
+     "name": "healOps",
+     "kind": "function",
+     "line": 24808
+    },
+    {
+     "name": "healNewId",
+     "kind": "function",
+     "line": 24809
+    },
+    {
+     "name": "healSelIdx",
+     "kind": "function",
+     "line": 24810
+    },
+    {
+     "name": "_healFwd",
+     "kind": "function",
+     "line": 24813
+    },
+    {
+     "name": "healSelect",
+     "kind": "function",
+     "line": 24831
+    },
+    {
+     "name": "healControlInput",
+     "kind": "function",
+     "line": 24843
+    },
+    {
+     "name": "healControlCommit",
+     "kind": "function",
+     "line": 24852
+    },
+    {
+     "name": "healDelete",
+     "kind": "function",
+     "line": 24853
+    },
+    {
+     "name": "healDeleteSel",
+     "kind": "function",
+     "line": 24858
+    },
+    {
+     "name": "healListRender",
+     "kind": "function",
+     "line": 24859
+    },
+    {
+     "name": "healSyncUI",
+     "kind": "function",
+     "line": 24875
+    },
+    {
+     "name": "healToggle",
+     "kind": "function",
+     "line": 24898
+    },
+    {
+     "name": "healEraseIntersected",
+     "kind": "function",
+     "line": 24912
+    },
+    {
+     "name": "healAdd",
+     "kind": "function",
+     "line": 24927
+    },
+    {
+     "name": "healUndoLast",
+     "kind": "function",
+     "line": 24944
+    },
+    {
+     "name": "healClear",
+     "kind": "function",
+     "line": 24948
+    },
+    {
+     "name": "redeyeMode",
+     "kind": "let",
+     "line": 24955
+    },
+    {
+     "name": "redeyeOps",
+     "kind": "function",
+     "line": 24956
+    },
+    {
+     "name": "redeyeSelectedOp",
+     "kind": "function",
+     "line": 24957
+    },
+    {
+     "name": "redeyeToggle",
+     "kind": "function",
+     "line": 24958
+    },
+    {
+     "name": "redeyeModeChanged",
+     "kind": "function",
+     "line": 24959
+    },
+    {
+     "name": "redeyeSyncUI",
+     "kind": "function",
+     "line": 24960
+    },
+    {
+     "name": "redeyeControlChanged",
+     "kind": "function",
+     "line": 24972
+    },
+    {
+     "name": "redeyeFixAll",
+     "kind": "function",
+     "line": 24973
+    },
+    {
+     "name": "redeyeOverlaySync",
+     "kind": "function",
+     "line": 24993
+    },
+    {
+     "name": "redeyeToggleOne",
+     "kind": "function",
+     "line": 25003
+    },
+    {
+     "name": "redeyeUndoLast",
+     "kind": "function",
+     "line": 25004
+    },
+    {
+     "name": "redeyeClear",
+     "kind": "function",
+     "line": 25005
+    },
+    {
+     "name": "_healPointToSource",
+     "kind": "function",
+     "line": 25024
+    },
+    {
+     "name": "healOverlaySync",
+     "kind": "function",
+     "line": 25051
+    },
+    {
+     "name": "_healDustKey",
+     "kind": "let",
+     "line": 25089
+    },
+    {
+     "name": "healDustToggle",
+     "kind": "function",
+     "line": 25090
+    },
+    {
+     "name": "healDustRender",
+     "kind": "function",
+     "line": 25096
+    },
+    {
+     "name": "healDustSync",
+     "kind": "function",
+     "line": 25097
+    },
+    {
+     "name": "_healDustSeq",
+     "kind": "let",
+     "line": 25120
+    },
+    {
+     "name": "cropToggle",
+     "kind": "function",
+     "line": 25210
+    },
+    {
+     "name": "cropDefaultForAR",
+     "kind": "function",
+     "line": 25211
+    },
+    {
+     "name": "cropEnter",
+     "kind": "function",
+     "line": 25218
+    },
+    {
+     "name": "cropImgBox",
+     "kind": "function",
+     "line": 25248
+    },
+    {
+     "name": "positionCropRect",
+     "kind": "function",
+     "line": 25253
+    },
+    {
+     "name": "cropDown",
+     "kind": "function",
+     "line": 25258
+    },
+    {
+     "name": "cropMove",
+     "kind": "function",
+     "line": 25266
+    },
+    {
+     "name": "cropUp",
+     "kind": "function",
+     "line": 25290
+    },
+    {
+     "name": "filmFrameChanged",
+     "kind": "function",
+     "line": 25294
+    },
+    {
+     "name": "cropOrientSync",
+     "kind": "function",
+     "line": 25314
+    },
+    {
+     "name": "cropSetOrientation",
+     "kind": "function",
+     "line": 25316
+    },
+    {
+     "name": "cropSwapOrientation",
+     "kind": "function",
+     "line": 25317
+    },
+    {
+     "name": "cropSetAspect",
+     "kind": "function",
+     "line": 25330
+    },
+    {
+     "name": "_cropCustomAR",
+     "kind": "function",
+     "line": 25345
+    },
+    {
+     "name": "cropCustomChanged",
+     "kind": "function",
+     "line": 25350
+    },
+    {
+     "name": "mskRemapForGeom",
+     "kind": "function",
+     "line": 25362
+    },
+    {
+     "name": "mskRemapForCrop",
+     "kind": "function",
+     "line": 25373
+    },
+    {
+     "name": "cropApply",
+     "kind": "function",
+     "line": 25385
+    },
+    {
+     "name": "cropCancel",
+     "kind": "function",
+     "line": 25394
+    },
+    {
+     "name": "cropExit",
+     "kind": "function",
+     "line": 25395
+    },
+    {
+     "name": "_presetLutCache",
+     "kind": "const",
+     "line": 25409
+    },
+    {
+     "name": "PRESET_LUT_CACHE_MAX",
+     "kind": "const",
+     "line": 25410
+    },
+    {
+     "name": "presetLut",
+     "kind": "function",
+     "line": 25411
+    },
+    {
+     "name": "fxLookCatFilter",
+     "kind": "let",
+     "line": 25422
+    },
+    {
+     "name": "fxLookSearchChanged",
+     "kind": "function",
+     "line": 25426
+    },
+    {
+     "name": "_lookMatches",
+     "kind": "function",
+     "line": 25430
+    },
+    {
+     "name": "buildLookCatChips",
+     "kind": "function",
+     "line": 25436
+    },
+    {
+     "name": "buildLookGallery",
+     "kind": "function",
+     "line": 25450
+    },
+    {
+     "name": "fxPickLookCell",
+     "kind": "function",
+     "line": 25580
+    },
+    {
+     "name": "initLookGalleryKeyNav",
+     "kind": "function",
+     "line": 25597
+    },
+    {
+     "name": "initCompareButton",
+     "kind": "function",
+     "line": 25629
+    },
+    {
+     "name": "isMemoryConstrained",
+     "kind": "function",
+     "line": 25642
+    },
+    {
+     "name": "fxGlowScale",
+     "kind": "function",
+     "line": 25648
+    },
+    {
+     "name": "fxPreviewGlowScale",
+     "kind": "function",
+     "line": 25653
+    },
+    {
+     "name": "shouldTile",
+     "kind": "function",
+     "line": 25656
+    },
+    {
+     "name": "fxSetCapturedExportDepth",
+     "kind": "function",
+     "line": 25658
+    },
+    {
+     "name": "processToCanvas",
+     "kind": "function",
+     "line": 25664
+    },
+    {
+     "name": "applyRedEyeCorrections",
+     "kind": "function",
+     "line": 25684
+    },
+    {
+     "name": "drawRedEyePreview",
+     "kind": "function",
+     "line": 25722
+    },
+    {
+     "name": "fxExportTileSize",
+     "kind": "function",
+     "line": 25740
+    },
+    {
+     "name": "fxCanReadExportTile",
+     "kind": "function",
+     "line": 25758
+    },
+    {
+     "name": "fxReadExportTile",
+     "kind": "function",
+     "line": 25761
+    },
+    {
+     "name": "renderTiled",
+     "kind": "function",
+     "line": 25770
+    },
+    {
+     "name": "setExportScope",
+     "kind": "function",
+     "line": 25828
+    },
+    {
+     "name": "syncBatchScopeStatus",
+     "kind": "function",
+     "line": 25829
+    },
+    {
+     "name": "syncExportScopeUI",
+     "kind": "function",
+     "line": 25848
+    },
+    {
+     "name": "chromasmithSaveToLightroom",
+     "kind": "function",
+     "line": 25870
+    },
+    {
+     "name": "_fxExportRuns",
+     "kind": "let",
+     "line": 25878
+    },
+    {
+     "name": "fxNotifyExportFinished",
+     "kind": "function",
+     "line": 25898
+    },
+    {
+     "name": "fxJpegSize",
+     "kind": "function",
+     "line": 25914
+    },
+    {
+     "name": "fxNeedsFullAndroidJpeg",
+     "kind": "function",
+     "line": 25928
+    },
+    {
+     "name": "fxProtectJpegDecodeLogs",
+     "kind": "function",
+     "line": 25933
+    },
+    {
+     "name": "fxFullJpegRows",
+     "kind": "function",
+     "line": 25942
+    },
+    {
+     "name": "fxDecodeFullAndroidJpeg",
+     "kind": "function",
+     "line": 25963
+    },
+    {
+     "name": "fxEncodeExportCanvas",
+     "kind": "function",
+     "line": 25993
+    },
+    {
+     "name": "exportFX",
+     "kind": "function",
+     "line": 26030
+    },
+    {
+     "name": "_exportFXRun",
+     "kind": "function",
+     "line": 26045
+    },
+    {
+     "name": "_videoComposeBorderMatte",
+     "kind": "function",
+     "line": 26523
+    },
+    {
+     "name": "fxVideoExportSmall",
+     "kind": "function",
+     "line": 26564
+    },
+    {
+     "name": "_ALLFX",
+     "kind": "const",
+     "line": 26804
+    },
+    {
+     "name": "_ALLFX_LS",
+     "kind": "const",
+     "line": 26808
+    },
+    {
+     "name": "_ALLFX_DEFAULT_KEYS",
+     "kind": "const",
+     "line": 26809
+    },
+    {
+     "name": "allFxCats",
+     "kind": "function",
+     "line": 26810
+    },
+    {
+     "name": "allFxRecipe",
+     "kind": "function",
+     "line": 26811
+    },
+    {
+     "name": "allFxOnToggles",
+     "kind": "function",
+     "line": 26812
+    },
+    {
+     "name": "allFxIsOn",
+     "kind": "function",
+     "line": 26815
+    },
+    {
+     "name": "enableAll",
+     "kind": "function",
+     "line": 26831
+    },
+    {
+     "name": "_PREVFX_LS",
+     "kind": "const",
+     "line": 26859
+    },
+    {
+     "name": "fxRememberPrevious",
+     "kind": "function",
+     "line": 26861
+    },
+    {
+     "name": "fxApplyPrevious",
+     "kind": "function",
+     "line": 26862
+    },
+    {
+     "name": "csActionPill",
+     "kind": "function",
+     "line": 26875
+    },
+    {
+     "name": "syncAllFxBtn",
+     "kind": "function",
+     "line": 26883
+    },
+    {
+     "name": "allFxSummary",
+     "kind": "function",
+     "line": 26887
+    },
+    {
+     "name": "allFxSettings",
+     "kind": "function",
+     "line": 26896
+    },
+    {
+     "name": "generateTestPhoto",
+     "kind": "function",
+     "line": 26927
+    },
+    {
+     "name": "loadTestPhoto",
+     "kind": "function",
+     "line": 27010
+    },
+    {
+     "name": "ImgSlider",
+     "kind": "class",
+     "line": 27035
+    },
+    {
+     "name": "ST",
+     "kind": "const",
+     "line": 27047
+    },
+    {
+     "name": "SL",
+     "kind": "const",
+     "line": 27048
+    },
+    {
+     "name": "getNextVer",
+     "kind": "function",
+     "line": 27049
+    },
+    {
+     "name": "getCurVer",
+     "kind": "function",
+     "line": 27050
+    },
+    {
+     "name": "startMatch",
+     "kind": "function",
+     "line": 27052
+    },
+    {
+     "name": "processRef",
+     "kind": "function",
+     "line": 27077
+    },
+    {
+     "name": "genStepPrev",
+     "kind": "function",
+     "line": 27100
+    },
+    {
+     "name": "renderHistory",
+     "kind": "function",
+     "line": 27111
+    },
+    {
+     "name": "mkStepCard",
+     "kind": "function",
+     "line": 27116
+    },
+    {
+     "name": "mkRefCard",
+     "kind": "function",
+     "line": 27132
+    },
+    {
+     "name": "useShareSheet",
+     "kind": "function",
+     "line": 27153
+    },
+    {
+     "name": "capNative",
+     "kind": "function",
+     "line": 27160
+    },
+    {
+     "name": "_u8b64",
+     "kind": "function",
+     "line": 27161
+    },
+    {
+     "name": "capShareFiles",
+     "kind": "function",
+     "line": 27162
+    },
+    {
+     "name": "_capAlbum",
+     "kind": "let",
+     "line": 27196
+    },
+    {
+     "name": "capAlbumId",
+     "kind": "function",
+     "line": 27197
+    },
+    {
+     "name": "capAndroid",
+     "kind": "function",
+     "line": 27207
+    },
+    {
+     "name": "capUpdateCheck",
+     "kind": "function",
+     "line": 27210
+    },
+    {
+     "name": "tauriNative",
+     "kind": "function",
+     "line": 27257
+    },
+    {
+     "name": "fxHdrHeadroom",
+     "kind": "let",
+     "line": 27262
+    },
+    {
+     "name": "fxSyncHdrOption",
+     "kind": "function",
+     "line": 27263
+    },
+    {
+     "name": "fxHdrExportEnabled",
+     "kind": "function",
+     "line": 27289
+    },
+    {
+     "name": "_hdrHeadroomPngFor",
+     "kind": "function",
+     "line": 27303
+    },
+    {
+     "name": "fxSaveGainMapHeic",
+     "kind": "function",
+     "line": 27325
+    },
+    {
+     "name": "fxExportDirLabel",
+     "kind": "function",
+     "line": 27382
+    },
+    {
+     "name": "fxExportDirUI",
+     "kind": "function",
+     "line": 27383
+    },
+    {
+     "name": "fxChooseExportDir",
+     "kind": "function",
+     "line": 27389
+    },
+    {
+     "name": "saveFilesNative",
+     "kind": "function",
+     "line": 27406
+    },
+    {
+     "name": "anchorDownload",
+     "kind": "function",
+     "line": 27435
+    },
+    {
+     "name": "saveFile",
+     "kind": "function",
+     "line": 27436
+    },
+    {
+     "name": "saveFiles",
+     "kind": "function",
+     "line": 27460
+    },
+    {
+     "name": "showSaveButton",
+     "kind": "function",
+     "line": 27500
+    },
+    {
+     "name": "dl",
+     "kind": "function",
+     "line": 27536
+    },
+    {
+     "name": "dlItem",
+     "kind": "function",
+     "line": 27537
+    },
+    {
+     "name": "GP_SCOPES",
+     "kind": "const",
+     "line": 27550
+    },
+    {
+     "name": "GP_DEFAULT_CLIENT_ID",
+     "kind": "const",
+     "line": 27556
+    },
+    {
+     "name": "gpClientId",
+     "kind": "function",
+     "line": 27557
+    },
+    {
+     "name": "askTextModal",
+     "kind": "function",
+     "line": 27568
+    },
+    {
+     "name": "confirmModal",
+     "kind": "function",
+     "line": 27613
+    },
+    {
+     "name": "gpAskClientId",
+     "kind": "function",
+     "line": 27635
+    },
+    {
+     "name": "gpTok",
+     "kind": "function",
+     "line": 27647
+    },
+    {
+     "name": "gpConnected",
+     "kind": "function",
+     "line": 27648
+    },
+    {
+     "name": "pkceVerifier",
+     "kind": "function",
+     "line": 27653
+    },
+    {
+     "name": "pkceChallenge",
+     "kind": "function",
+     "line": 27657
+    },
+    {
+     "name": "gpAuthNative",
+     "kind": "function",
+     "line": 27663
+    },
+    {
+     "name": "gpAuth",
+     "kind": "function",
+     "line": 27714
+    },
+    {
+     "name": "gpDisconnect",
+     "kind": "function",
+     "line": 27750
+    },
+    {
+     "name": "gpConnectToggle",
+     "kind": "function",
+     "line": 27756
+    },
+    {
+     "name": "gpFetch",
+     "kind": "function",
+     "line": 27761
+    },
+    {
+     "name": "_gpImportBusy",
+     "kind": "let",
+     "line": 27769
+    },
+    {
+     "name": "gpImportClick",
+     "kind": "function",
+     "line": 27770
+    },
+    {
+     "name": "gpTapOpen",
+     "kind": "function",
+     "line": 27782
+    },
+    {
+     "name": "gpTapClear",
+     "kind": "function",
+     "line": 27793
+    },
+    {
+     "name": "gpImportPhotos",
+     "kind": "function",
+     "line": 27794
+    },
+    {
+     "name": "gpSaveEnabled",
+     "kind": "function",
+     "line": 27975
+    },
+    {
+     "name": "gpToggleSave",
+     "kind": "function",
+     "line": 27976
+    },
+    {
+     "name": "gpAlbumId",
+     "kind": "function",
+     "line": 27981
+    },
+    {
+     "name": "gpUploadItems",
+     "kind": "function",
+     "line": 27988
+    },
+    {
+     "name": "gpUpdateUI",
+     "kind": "function",
+     "line": 28018
+    },
+    {
+     "name": "LR_IMS_AUTH",
+     "kind": "const",
+     "line": 28045
+    },
+    {
+     "name": "LR_IMS_TOKEN",
+     "kind": "const",
+     "line": 28046
+    },
+    {
+     "name": "LR_API",
+     "kind": "const",
+     "line": 28047
+    },
+    {
+     "name": "LR_SCOPES",
+     "kind": "const",
+     "line": 28048
+    },
+    {
+     "name": "LR_REDIRECT_URI",
+     "kind": "const",
+     "line": 28049
+    },
+    {
+     "name": "lrClientId",
+     "kind": "function",
+     "line": 28050
+    },
+    {
+     "name": "lrAskClientId",
+     "kind": "function",
+     "line": 28051
+    },
+    {
+     "name": "lrTok",
+     "kind": "function",
+     "line": 28060
+    },
+    {
+     "name": "lrConnected",
+     "kind": "function",
+     "line": 28061
+    },
+    {
+     "name": "lrAuthNative",
+     "kind": "function",
+     "line": 28068
+    },
+    {
+     "name": "lrAuth",
+     "kind": "function",
+     "line": 28119
+    },
+    {
+     "name": "lrApiGet",
+     "kind": "function",
+     "line": 28133
+    },
+    {
+     "name": "lrCatalogId",
+     "kind": "let",
+     "line": 28144
+    },
+    {
+     "name": "lrEnsureCatalog",
+     "kind": "function",
+     "line": 28146
+    },
+    {
+     "name": "lrConnectToggle",
+     "kind": "function",
+     "line": 28157
+    },
+    {
+     "name": "lrListAlbums",
+     "kind": "function",
+     "line": 28173
+    },
+    {
+     "name": "lrListAssets",
+     "kind": "function",
+     "line": 28178
+    },
+    {
+     "name": "lrAssetMeta",
+     "kind": "function",
+     "line": 28201
+    },
+    {
+     "name": "lrRenditionBlob",
+     "kind": "function",
+     "line": 28221
+    },
+    {
+     "name": "lrMasterBlob",
+     "kind": "function",
+     "line": 28231
+    },
+    {
+     "name": "lrRenditionUrl",
+     "kind": "function",
+     "line": 28238
+    },
+    {
+     "name": "lrGenerateRendition",
+     "kind": "function",
+     "line": 28248
+    },
+    {
+     "name": "lrMarkOrigin",
+     "kind": "function",
+     "line": 28261
+    },
+    {
+     "name": "lrImportAsset",
+     "kind": "function",
+     "line": 28270
+    },
+    {
+     "name": "lrSaveToDisk",
+     "kind": "function",
+     "line": 28313
+    },
+    {
+     "name": "lrUpgradeToFullsize",
+     "kind": "function",
+     "line": 28321
+    },
+    {
+     "name": "lrUpdateUI",
+     "kind": "function",
+     "line": 28352
+    },
+    {
+     "name": "dzo",
+     "kind": "function",
+     "line": 28369
+    },
+    {
+     "name": "dzd",
+     "kind": "function",
+     "line": 28370
+    },
+    {
+     "name": "fi",
+     "kind": "function",
+     "line": 28371
+    },
+    {
+     "name": "hf",
+     "kind": "function",
+     "line": 28372
+    },
+    {
+     "name": "chkStart",
+     "kind": "function",
+     "line": 28402
+    },
+    {
+     "name": "cpUpdateBatchTargets",
+     "kind": "function",
+     "line": 28403
+    },
+    {
+     "name": "chkCP",
+     "kind": "function",
+     "line": 28410
+    },
+    {
+     "name": "setDZ",
+     "kind": "function",
+     "line": 28419
+    },
+    {
+     "name": "yd",
+     "kind": "function",
+     "line": 28424
+    },
+    {
+     "name": "setP",
+     "kind": "function",
+     "line": 28425
+    },
+    {
+     "name": "showPB",
+     "kind": "function",
+     "line": 28426
+    },
+    {
+     "name": "hidePB",
+     "kind": "function",
+     "line": 28427
+    },
+    {
+     "name": "log",
+     "kind": "function",
+     "line": 28434
+    },
+    {
+     "name": "switchTab",
+     "kind": "function",
+     "line": 28446
+    },
+    {
+     "name": "toggleLog",
+     "kind": "function",
+     "line": 28460
+    },
+    {
+     "name": "ovfBuild",
+     "kind": "function",
+     "line": 28464
+    },
+    {
+     "name": "ovfClose",
+     "kind": "function",
+     "line": 28491
+    },
+    {
+     "name": "toolsBuild",
+     "kind": "function",
+     "line": 28498
+    },
+    {
+     "name": "toolsClose",
+     "kind": "function",
+     "line": 28513
+    },
+    {
+     "name": "viewMenuBuild",
+     "kind": "function",
+     "line": 28518
+    },
+    {
+     "name": "csLayoutMenuHtml",
+     "kind": "function",
+     "line": 28546
+    },
+    {
+     "name": "CS_WORKSPACE_LAYOUT_KEY",
+     "kind": "const",
+     "line": 28568
+    },
+    {
+     "name": "CS_LAYOUT_KEYS",
+     "kind": "const",
+     "line": 28569
+    },
+    {
+     "name": "_csLayoutKeys",
+     "kind": "function",
+     "line": 28570
+    },
+    {
+     "name": "csLayoutsList",
+     "kind": "function",
+     "line": 28571
+    },
+    {
+     "name": "CS_LAYOUT_FILE_FORMAT",
+     "kind": "const",
+     "line": 28572
+    },
+    {
+     "name": "csLayoutExportText",
+     "kind": "function",
+     "line": 28573
+    },
+    {
+     "name": "csLayoutExportFile",
+     "kind": "function",
+     "line": 28576
+    },
+    {
+     "name": "csLayoutImportText",
+     "kind": "function",
+     "line": 28580
+    },
+    {
+     "name": "csLayoutImportClick",
+     "kind": "function",
+     "line": 28601
+    },
+    {
+     "name": "csLayoutView",
+     "kind": "function",
+     "line": 28606
+    },
+    {
+     "name": "csLayoutSave",
+     "kind": "function",
+     "line": 28613
+    },
+    {
+     "name": "csLayoutApply",
+     "kind": "function",
+     "line": 28621
+    },
+    {
+     "name": "csLayoutDelete",
+     "kind": "function",
+     "line": 28627
+    },
+    {
+     "name": "csLayoutReset",
+     "kind": "function",
+     "line": 28634
+    },
+    {
+     "name": "_csWorkspaceDefaultSections",
+     "kind": "let",
+     "line": 28642
+    },
+    {
+     "name": "csWorkspaceLayoutGet",
+     "kind": "function",
+     "line": 28643
+    },
+    {
+     "name": "CS_WORKSPACE_PRESETS",
+     "kind": "const",
+     "line": 28648
+    },
+    {
+     "name": "csWorkspacePresetApply",
+     "kind": "function",
+     "line": 28653
+    },
+    {
+     "name": "_csWorkspaceOrder",
+     "kind": "function",
+     "line": 28663
+    },
+    {
+     "name": "_csWorkspaceRowId",
+     "kind": "function",
+     "line": 28664
+    },
+    {
+     "name": "_csWorkspaceRowLabel",
+     "kind": "function",
+     "line": 28665
+    },
+    {
+     "name": "_csWorkspaceRows",
+     "kind": "function",
+     "line": 28666
+    },
+    {
+     "name": "_csWorkspaceApply",
+     "kind": "function",
+     "line": 28667
+    },
+    {
+     "name": "_csWorkspaceSave",
+     "kind": "function",
+     "line": 28700
+    },
+    {
+     "name": "_csWorkspaceMove",
+     "kind": "function",
+     "line": 28701
+    },
+    {
+     "name": "csWorkspaceCustomizeOpen",
+     "kind": "function",
+     "line": 28702
+    },
+    {
+     "name": "csWorkspaceRevealSection",
+     "kind": "function",
+     "line": 28742
+    },
+    {
+     "name": "csWorkspaceRevealControl",
+     "kind": "function",
+     "line": 28743
+    },
+    {
+     "name": "appearanceBuild",
+     "kind": "function",
+     "line": 28749
+    },
+    {
+     "name": "UI_DENSITY_KEY",
+     "kind": "const",
+     "line": 28768
+    },
+    {
+     "name": "uiDensityGet",
+     "kind": "function",
+     "line": 28769
+    },
+    {
+     "name": "uiDensitySet",
+     "kind": "function",
+     "line": 28770
+    },
+    {
+     "name": "FX_ACCENT_DEF",
+     "kind": "const",
+     "line": 28779
+    },
+    {
+     "name": "fxAccentGet",
+     "kind": "function",
+     "line": 28780
+    },
+    {
+     "name": "fxAccentApply",
+     "kind": "function",
+     "line": 28781
+    },
+    {
+     "name": "fxAccentSet",
+     "kind": "function",
+     "line": 28783
+    },
+    {
+     "name": "fxAccentReset",
+     "kind": "function",
+     "line": 28784
+    },
+    {
+     "name": "photoTransitionsToggle",
+     "kind": "function",
+     "line": 28788
+    },
+    {
+     "name": "autoPreviewsToggle",
+     "kind": "function",
+     "line": 28796
+    },
+    {
+     "name": "viewMenuClose",
+     "kind": "function",
+     "line": 28802
+    },
+    {
+     "name": "gpuDiagnostics",
+     "kind": "function",
+     "line": 28803
+    },
+    {
+     "name": "performanceBuild",
+     "kind": "function",
+     "line": 28815
+    },
+    {
+     "name": "gpuPreferenceSet",
+     "kind": "function",
+     "line": 28830
+    },
+    {
+     "name": "SETTINGS_CATS",
+     "kind": "const",
+     "line": 28846
+    },
+    {
+     "name": "SETTINGS_PANE_ID",
+     "kind": "const",
+     "line": 28860
+    },
+    {
+     "name": "_settingsGallery",
+     "kind": "const",
+     "line": 28864
+    },
+    {
+     "name": "_settingsCatsNow",
+     "kind": "const",
+     "line": 28865
+    },
+    {
+     "name": "libSettingsAdopt",
+     "kind": "function",
+     "line": 28867
+    },
+    {
+     "name": "_settingsCat",
+     "kind": "let",
+     "line": 28873
+    },
+    {
+     "name": "settingsCatsBuild",
+     "kind": "function",
+     "line": 28874
+    },
+    {
+     "name": "settingsShowCat",
+     "kind": "function",
+     "line": 28888
+    },
+    {
+     "name": "settingsBuild",
+     "kind": "function",
+     "line": 28894
+    },
+    {
+     "name": "settingsClose",
+     "kind": "function",
+     "line": 28899
+    },
+    {
+     "name": "settingsToggle",
+     "kind": "function",
+     "line": 28900
+    },
+    {
+     "name": "_SVG",
+     "kind": "const",
+     "line": 28916
+    },
+    {
+     "name": "ICONS",
+     "kind": "const",
+     "line": 28917
+    },
+    {
+     "name": "icon",
+     "kind": "function",
+     "line": 29070
+    },
+    {
+     "name": "FX_SECTIONS",
+     "kind": "const",
+     "line": 29087
+    },
+    {
+     "name": "_fxSectionCards",
+     "kind": "let",
+     "line": 29100
+    },
+    {
+     "name": "_fxSectionCard",
+     "kind": "function",
+     "line": 29101
+    },
+    {
+     "name": "_eachSection",
+     "kind": "function",
+     "line": 29108
+    },
+    {
+     "name": "FX_GROUPS",
+     "kind": "const",
+     "line": 29133
+    },
+    {
+     "name": "FX_GROUP_OF",
+     "kind": "const",
+     "line": 29139
+    },
+    {
+     "name": "fxSplitLooksCard",
+     "kind": "function",
+     "line": 29144
+    },
+    {
+     "name": "RAIL_GROUP_BREAK",
+     "kind": "const",
+     "line": 29173
+    },
+    {
+     "name": "_activeSec",
+     "kind": "function",
+     "line": 29174
+    },
+    {
+     "name": "fxRailFlat",
+     "kind": "function",
+     "line": 29181
+    },
+    {
+     "name": "_fxGrouped",
+     "kind": "function",
+     "line": 29182
+    },
+    {
+     "name": "fxRailFlatToggle",
+     "kind": "function",
+     "line": 29183
+    },
+    {
+     "name": "FX_MOBILE_CATS",
+     "kind": "const",
+     "line": 29193
+    },
+    {
+     "name": "FX_MOBILE_HIDE",
+     "kind": "const",
+     "line": 29195
+    },
+    {
+     "name": "_fxMobileCat",
+     "kind": "let",
+     "line": 29196
+    },
+    {
+     "name": "FX_MOBILE_DESC",
+     "kind": "const",
+     "line": 29197
+    },
+    {
+     "name": "fxToolsOpen",
+     "kind": "function",
+     "line": 29199
+    },
+    {
+     "name": "fxToolsClose",
+     "kind": "function",
+     "line": 29212
+    },
+    {
+     "name": "ADJ_ICONS",
+     "kind": "const",
+     "line": 29219
+    },
+    {
+     "name": "fxAddAdjIcons",
+     "kind": "function",
+     "line": 29235
+    },
+    {
+     "name": "EXP_PLAIN",
+     "kind": "const",
+     "line": 29246
+    },
+    {
+     "name": "_expDims",
+     "kind": "function",
+     "line": 29247
+    },
+    {
+     "name": "_expBytes",
+     "kind": "function",
+     "line": 29250
+    },
+    {
+     "name": "_mb",
+     "kind": "const",
+     "line": 29253
+    },
+    {
+     "name": "expPlainRender",
+     "kind": "function",
+     "line": 29254
+    },
+    {
+     "name": "_expPreflight",
+     "kind": "function",
+     "line": 29274
+    },
+    {
+     "name": "fxShowHistoryList",
+     "kind": "function",
+     "line": 29357
+    },
+    {
+     "name": "_presetBlend",
+     "kind": "let",
+     "line": 29366
+    },
+    {
+     "name": "_styleBlendTree",
+     "kind": "function",
+     "line": 29367
+    },
+    {
+     "name": "_styleBlendSnapshot",
+     "kind": "function",
+     "line": 29376
+    },
+    {
+     "name": "presetStrength",
+     "kind": "function",
+     "line": 29391
+    },
+    {
+     "name": "_fxReKey",
+     "kind": "function",
+     "line": 29400
+    },
+    {
+     "name": "fxReorderable",
+     "kind": "function",
+     "line": 29401
+    },
+    {
+     "name": "fxMobileBack",
+     "kind": "function",
+     "line": 29432
+    },
+    {
+     "name": "fxMobileFilter",
+     "kind": "function",
+     "line": 29437
+    },
+    {
+     "name": "buildSecNav",
+     "kind": "function",
+     "line": 29444
+    },
+    {
+     "name": "RAIL_CODE",
+     "kind": "const",
+     "line": 29477
+    },
+    {
+     "name": "buildToolRail",
+     "kind": "function",
+     "line": 29478
+    },
+    {
+     "name": "RAIL_MODES",
+     "kind": "const",
+     "line": 29517
+    },
+    {
+     "name": "railSyncFoot",
+     "kind": "function",
+     "line": 29518
+    },
+    {
+     "name": "railMode",
+     "kind": "function",
+     "line": 29524
+    },
+    {
+     "name": "fxLayoutSettle",
+     "kind": "function",
+     "line": 29534
+    },
+    {
+     "name": "fxPanelWidth",
+     "kind": "function",
+     "line": 29539
+    },
+    {
+     "name": "fxEdgeDrag",
+     "kind": "function",
+     "line": 29556
+    },
+    {
+     "name": "fxInitEdges",
+     "kind": "function",
+     "line": 29579
+    },
+    {
+     "name": "fxSection",
+     "kind": "function",
+     "line": 29608
+    },
+    {
+     "name": "fxSheetClose",
+     "kind": "function",
+     "line": 29667
+    },
+    {
+     "name": "_lfRaf",
+     "kind": "let",
+     "line": 29680
+    },
+    {
+     "name": "fxLiveFitStop",
+     "kind": "function",
+     "line": 29681
+    },
+    {
+     "name": "fxLiveFit",
+     "kind": "function",
+     "line": 29682
+    },
+    {
+     "name": "_fxWinResizeT",
+     "kind": "let",
+     "line": 29740
+    },
+    {
+     "name": "_SEC_TOGGLE",
+     "kind": "const",
+     "line": 29895
+    },
+    {
+     "name": "_secInPrintSet",
+     "kind": "function",
+     "line": 29896
+    },
+    {
+     "name": "_secIsEnabled",
+     "kind": "function",
+     "line": 29897
+    },
+    {
+     "name": "_SEC_DEFAULT_ON",
+     "kind": "const",
+     "line": 29912
+    },
+    {
+     "name": "_secIsEdited",
+     "kind": "function",
+     "line": 29913
+    },
+    {
+     "name": "syncSectionEnabled",
+     "kind": "function",
+     "line": 29923
+    },
+    {
+     "name": "toggleTheme",
+     "kind": "function",
+     "line": 29934
+    },
+    {
+     "name": "syncThemeBtns",
+     "kind": "function",
+     "line": 29945
+    },
+    {
+     "name": "fxSetTheme",
+     "kind": "function",
+     "line": 29961
+    },
+    {
+     "name": "fxDesktopFoldImageIntoLooks",
+     "kind": "function",
+     "line": 29989
+    },
+    {
+     "name": "fxDesktopReorderLooksPanel",
+     "kind": "function",
+     "line": 30014
+    },
+    {
+     "name": "_mqMobile",
+     "kind": "let",
+     "line": 30065
+    },
+    {
+     "name": "applyFxLayout",
+     "kind": "function",
+     "line": 30066
+    },
+    {
+     "name": "relocatePreviewTools",
+     "kind": "function",
+     "line": 30087
+    },
+    {
+     "name": "applyMobileFx",
+     "kind": "const",
+     "line": 30111
+    },
+    {
+     "name": "selectToChips",
+     "kind": "function",
+     "line": 30258
+    },
+    {
+     "name": "selectToSeg",
+     "kind": "function",
+     "line": 30279
+    },
+    {
+     "name": "dustModeBuildChips",
+     "kind": "function",
+     "line": 30320
+    },
+    {
+     "name": "_fxRepaintCard",
+     "kind": "function",
+     "line": 30359
+    },
+    {
+     "name": "fxResetSection",
+     "kind": "function",
+     "line": 30365
+    },
+    {
+     "name": "_fxSectionResetOverride",
+     "kind": "const",
+     "line": 30410
+    },
+    {
+     "name": "_fxSectionScopedReset",
+     "kind": "const",
+     "line": 30416
+    },
+    {
+     "name": "_fxSecCollapsed",
+     "kind": "let",
+     "line": 30472
+    },
+    {
+     "name": "fxSecToggle",
+     "kind": "function",
+     "line": 30474
+    },
+    {
+     "name": "a11yEnhanceToggles",
+     "kind": "function",
+     "line": 30582
+    },
+    {
+     "name": "a11yLabelText",
+     "kind": "function",
+     "line": 30608
+    },
+    {
+     "name": "a11yEnhanceFormLabels",
+     "kind": "function",
+     "line": 30618
+    },
+    {
+     "name": "csFocusToggle",
+     "kind": "function",
+     "line": 30745
+    },
+    {
+     "name": "CS_CONTROL_UNIT_SPECS",
+     "kind": "const",
+     "line": 30770
+    },
+    {
+     "name": "csFormatControlUnit",
+     "kind": "function",
+     "line": 30792
+    },
+    {
+     "name": "csTypedToRaw",
+     "kind": "function",
+     "line": 30801
+    },
+    {
+     "name": "csSyncControlUnit",
+     "kind": "function",
+     "line": 30807
+    },
+    {
+     "name": "csSyncControlUnitTree",
+     "kind": "function",
+     "line": 30822
+    },
+    {
+     "name": "CL_ASPECTS",
+     "kind": "const",
+     "line": 30849
+    },
+    {
+     "name": "CL_SWATCHES",
+     "kind": "const",
+     "line": 30850
+    },
+    {
+     "name": "CL",
+     "kind": "const",
+     "line": 30851
+    },
+    {
+     "name": "_leaf",
+     "kind": "const",
+     "line": 30852
+    },
+    {
+     "name": "_row",
+     "kind": "function",
+     "line": 30853
+    },
+    {
+     "name": "_col",
+     "kind": "function",
+     "line": 30854
+    },
+    {
+     "name": "clLeafCount",
+     "kind": "function",
+     "line": 30855
+    },
+    {
+     "name": "clClone",
+     "kind": "function",
+     "line": 30856
+    },
+    {
+     "name": "clTemplates",
+     "kind": "function",
+     "line": 30857
+    },
+    {
+     "name": "_CL_SAVED_KEY",
+     "kind": "const",
+     "line": 30875
+    },
+    {
+     "name": "clSavedLayouts",
+     "kind": "function",
+     "line": 30876
+    },
+    {
+     "name": "clSaveLayout",
+     "kind": "function",
+     "line": 30877
+    },
+    {
+     "name": "clDeleteLayout",
+     "kind": "function",
+     "line": 30885
+    },
+    {
+     "name": "clApplySavedOpts",
+     "kind": "function",
+     "line": 30887
+    },
+    {
+     "name": "clLayoutRects",
+     "kind": "function",
+     "line": 30893
+    },
+    {
+     "name": "clInit",
+     "kind": "function",
+     "line": 30904
+    },
+    {
+     "name": "CL_SECTIONS",
+     "kind": "const",
+     "line": 30919
+    },
+    {
+     "name": "clBuildNav",
+     "kind": "function",
+     "line": 30920
+    },
+    {
+     "name": "clSection",
+     "kind": "function",
+     "line": 30931
+    },
+    {
+     "name": "_mqCl",
+     "kind": "let",
+     "line": 30938
+    },
+    {
+     "name": "applyClLayout",
+     "kind": "function",
+     "line": 30939
+    },
+    {
+     "name": "clAddFiles",
+     "kind": "function",
+     "line": 30946
+    },
+    {
+     "name": "clImgToUrl",
+     "kind": "function",
+     "line": 30961
+    },
+    {
+     "name": "clLoadImg",
+     "kind": "function",
+     "line": 30963
+    },
+    {
+     "name": "clRevokePhoto",
+     "kind": "function",
+     "line": 30964
+    },
+    {
+     "name": "clGradeOne",
+     "kind": "function",
+     "line": 30965
+    },
+    {
+     "name": "clEditSig",
+     "kind": "function",
+     "line": 30985
+    },
+    {
+     "name": "_clGradeTok",
+     "kind": "let",
+     "line": 30986
+    },
+    {
+     "name": "clRegrade",
+     "kind": "function",
+     "line": 30987
+    },
+    {
+     "name": "clAddFromEditor",
+     "kind": "function",
+     "line": 31000
+    },
+    {
+     "name": "clSetEdits",
+     "kind": "function",
+     "line": 31014
+    },
+    {
+     "name": "clSetOneLook",
+     "kind": "function",
+     "line": 31015
+    },
+    {
+     "name": "clLookName",
+     "kind": "function",
+     "line": 31016
+    },
+    {
+     "name": "clDropFiles",
+     "kind": "function",
+     "line": 31017
+    },
+    {
+     "name": "clPhotosChanged",
+     "kind": "function",
+     "line": 31018
+    },
+    {
+     "name": "clSetTemplate",
+     "kind": "function",
+     "line": 31029
+    },
+    {
+     "name": "clRebuildShapes",
+     "kind": "function",
+     "line": 31037
+    },
+    {
+     "name": "clMarkShapes",
+     "kind": "function",
+     "line": 31050
+    },
+    {
+     "name": "clRenderTray",
+     "kind": "function",
+     "line": 31051
+    },
+    {
+     "name": "clRemovePhoto",
+     "kind": "function",
+     "line": 31063
+    },
+    {
+     "name": "clTextGeom",
+     "kind": "function",
+     "line": 31073
+    },
+    {
+     "name": "clTextColor",
+     "kind": "function",
+     "line": 31080
+    },
+    {
+     "name": "clFrameInset",
+     "kind": "function",
+     "line": 31084
+    },
+    {
+     "name": "clDeckPts",
+     "kind": "function",
+     "line": 31095
+    },
+    {
+     "name": "clFontFam",
+     "kind": "function",
+     "line": 31105
+    },
+    {
+     "name": "clPhotoDate",
+     "kind": "function",
+     "line": 31108
+    },
+    {
+     "name": "clAutoCaption",
+     "kind": "function",
+     "line": 31110
+    },
+    {
+     "name": "clCaption",
+     "kind": "function",
+     "line": 31117
+    },
+    {
+     "name": "clSetCaption",
+     "kind": "function",
+     "line": 31118
+    },
+    {
+     "name": "clRenderFrame",
+     "kind": "function",
+     "line": 31119
+    },
+    {
+     "name": "clEnsureFreeItems",
+     "kind": "function",
+     "line": 31172
+    },
+    {
+     "name": "clSetMode",
+     "kind": "function",
+     "line": 31178
+    },
+    {
+     "name": "clRenderFreeform",
+     "kind": "function",
+     "line": 31189
+    },
+    {
+     "name": "clUpdateFreeSelection",
+     "kind": "function",
+     "line": 31203
+    },
+    {
+     "name": "clFreeSelect",
+     "kind": "function",
+     "line": 31213
+    },
+    {
+     "name": "clFreeRotate",
+     "kind": "function",
+     "line": 31214
+    },
+    {
+     "name": "clFreeLayer",
+     "kind": "function",
+     "line": 31215
+    },
+    {
+     "name": "clWireFreeItem",
+     "kind": "function",
+     "line": 31216
+    },
+    {
+     "name": "clFreeAddPhoto",
+     "kind": "function",
+     "line": 31229
+    },
+    {
+     "name": "clFreeDrop",
+     "kind": "function",
+     "line": 31236
+    },
+    {
+     "name": "clNat",
+     "kind": "function",
+     "line": 31238
+    },
+    {
+     "name": "clApplyTransform",
+     "kind": "function",
+     "line": 31242
+    },
+    {
+     "name": "clWireCell",
+     "kind": "function",
+     "line": 31252
+    },
+    {
+     "name": "clWireDivider",
+     "kind": "function",
+     "line": 31279
+    },
+    {
+     "name": "clSelectCell",
+     "kind": "function",
+     "line": 31288
+    },
+    {
+     "name": "clHideCellPanel",
+     "kind": "function",
+     "line": 31294
+    },
+    {
+     "name": "clSyncZoom",
+     "kind": "function",
+     "line": 31295
+    },
+    {
+     "name": "clCellZoom",
+     "kind": "function",
+     "line": 31296
+    },
+    {
+     "name": "clCellReset",
+     "kind": "function",
+     "line": 31297
+    },
+    {
+     "name": "clCellClear",
+     "kind": "function",
+     "line": 31298
+    },
+    {
+     "name": "clReplaceSelected",
+     "kind": "function",
+     "line": 31299
+    },
+    {
+     "name": "clSet",
+     "kind": "function",
+     "line": 31306
+    },
+    {
+     "name": "clSetAspect",
+     "kind": "function",
+     "line": 31307
+    },
+    {
+     "name": "CL_MAX_PX",
+     "kind": "const",
+     "line": 31311
+    },
+    {
+     "name": "clPresetDims",
+     "kind": "function",
+     "line": 31312
+    },
+    {
+     "name": "clTargetSize",
+     "kind": "function",
+     "line": 31316
+    },
+    {
+     "name": "clSyncPresetNote",
+     "kind": "function",
+     "line": 31321
+    },
+    {
+     "name": "clSetPreset",
+     "kind": "function",
+     "line": 31328
+    },
+    {
+     "name": "clShuffle",
+     "kind": "function",
+     "line": 31335
+    },
+    {
+     "name": "clReset",
+     "kind": "function",
+     "line": 31341
+    },
+    {
+     "name": "clRoundRect",
+     "kind": "function",
+     "line": 31342
+    },
+    {
+     "name": "clDrawFreeform",
+     "kind": "function",
+     "line": 31343
+    },
+    {
+     "name": "clDrawCell",
+     "kind": "function",
+     "line": 31349
+    },
+    {
+     "name": "clExport",
+     "kind": "function",
+     "line": 31376
+    },
+    {
+     "name": "CL_BOOK",
+     "kind": "let",
+     "line": 31413
+    },
+    {
+     "name": "clBookPaginate",
+     "kind": "function",
+     "line": 31414
+    },
+    {
+     "name": "clBookTree",
+     "kind": "function",
+     "line": 31420
+    },
+    {
+     "name": "clBookReleasePreviews",
+     "kind": "function",
+     "line": 31425
+    },
+    {
+     "name": "clBookCapture",
+     "kind": "function",
+     "line": 31428
+    },
+    {
+     "name": "clBookCanvas",
+     "kind": "function",
+     "line": 31435
+    },
+    {
+     "name": "clBookPaginateHtmlEscape",
+     "kind": "function",
+     "line": 31457
+    },
+    {
+     "name": "clBookCanvasBlob",
+     "kind": "function",
+     "line": 31458
+    },
+    {
+     "name": "clBookPaperSettings",
+     "kind": "function",
+     "line": 31459
+    },
+    {
+     "name": "clBookApplyPageSetup",
+     "kind": "function",
+     "line": 31469
+    },
+    {
+     "name": "clBookBuild",
+     "kind": "function",
+     "line": 31480
+    },
+    {
+     "name": "clBookMove",
+     "kind": "function",
+     "line": 31508
+    },
+    {
+     "name": "clBookBuildFromState",
+     "kind": "function",
+     "line": 31514
+    },
+    {
+     "name": "clBookClose",
+     "kind": "function",
+     "line": 31530
+    },
+    {
+     "name": "clBookPrint",
+     "kind": "function",
+     "line": 31531
+    },
+    {
+     "name": "_catStub",
+     "kind": "function",
+     "line": 31558
+    },
+    {
+     "name": "_catLongText",
+     "kind": "function",
+     "line": 31564
+    },
+    {
+     "name": "_catHoverSheet",
+     "kind": "let",
+     "line": 31575
+    },
+    {
+     "name": "_catEnsureHoverSheet",
+     "kind": "function",
+     "line": 31576
+    },
+    {
+     "name": "_catState",
+     "kind": "function",
+     "line": 31595
+    },
+    {
+     "name": "_catItem",
+     "kind": "function",
+     "line": 31629
+    },
+    {
+     "name": "buildCatalogPage",
+     "kind": "function",
+     "line": 31643
+    }
+   ]
+  },
+  {
+   "index": 14,
+   "start": 31809,
+   "end": 31953,
+   "lines": 145,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 15,
+   "start": 31955,
+   "end": 31979,
+   "lines": 25,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 16,
+   "start": 31980,
+   "end": 32008,
+   "lines": 29,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 17,
+   "start": 32009,
+   "end": 32153,
+   "lines": 145,
+   "external": false,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 18,
+   "start": 32154,
+   "end": 32154,
+   "lines": 1,
+   "external": true,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 19,
+   "start": 32155,
+   "end": 32155,
+   "lines": 1,
+   "external": true,
+   "declCount": 0,
+   "decls": []
+  },
+  {
+   "index": 20,
+   "start": 32156,
+   "end": 32156,
+   "lines": 1,
+   "external": true,
+   "declCount": 0,
+   "decls": []
+  }
+ ],
+ "crossBlockReferences": [
+  {
+   "from": 13,
+   "to": 2,
+   "count": 120
+  },
+  {
+   "from": 13,
+   "to": 3,
+   "count": 75
+  },
+  {
+   "from": 13,
+   "to": 6,
+   "count": 37
+  },
+  {
+   "from": 13,
+   "to": 4,
+   "count": 24
+  },
+  {
+   "from": 17,
+   "to": 13,
+   "count": 24
+  },
+  {
+   "from": 5,
+   "to": 13,
+   "count": 23
+  },
+  {
+   "from": 13,
+   "to": 12,
+   "count": 22
+  },
+  {
+   "from": 11,
+   "to": 13,
+   "count": 18
+  },
+  {
+   "from": 7,
+   "to": 13,
+   "count": 14
+  },
+  {
+   "from": 16,
+   "to": 13,
+   "count": 10
+  },
+  {
+   "from": 4,
+   "to": 13,
+   "count": 9
+  },
+  {
+   "from": 6,
+   "to": 13,
+   "count": 9
+  },
+  {
+   "from": 15,
+   "to": 13,
+   "count": 7
+  },
+  {
+   "from": 13,
+   "to": 5,
+   "count": 5
+  },
+  {
+   "from": 7,
+   "to": 2,
+   "count": 4
+  },
+  {
+   "from": 14,
+   "to": 2,
+   "count": 4
+  },
+  {
+   "from": 3,
+   "to": 13,
+   "count": 3
+  },
+  {
+   "from": 12,
+   "to": 13,
+   "count": 3
+  },
+  {
+   "from": 2,
+   "to": 13,
+   "count": 2
+  },
+  {
+   "from": 7,
+   "to": 6,
+   "count": 2
+  },
+  {
+   "from": 0,
+   "to": 13,
+   "count": 1
+  },
+  {
+   "from": 6,
+   "to": 3,
+   "count": 1
+  },
+  {
+   "from": 9,
+   "to": 6,
+   "count": 1
+  }
+ ],
+ "totals": {
+  "blocks": 21,
+  "functions": 1293,
+  "declarations": 1622
+ }
+}
