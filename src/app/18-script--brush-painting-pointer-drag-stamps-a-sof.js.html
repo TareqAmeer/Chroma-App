@@ -1,0 +1,460 @@
+// ── Brush painting: pointer-drag stamps a soft circular falloff into the selected brush
+// mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
+// way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
+let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=25,mskBrushFlow=60,mskBrushFeather=100,mskBrushDensity=100,_mskStroke=null;
+let _mskBrushTransientReset=()=>{};
+function mskPaintEndStroke(){if(!_mskStroke)return;_mskStroke=null;renderPreview();fxHistoryPush();}
+function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
+function mskPaintToggle(){
+  mskPaintMode=!mskPaintMode;
+  if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
+  else mskPaintTransientReset();
+  const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
+  if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
+  if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
+  mskTeethGuideSync();
+}
+function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskTeethGuideSync();}
+function mskTeethGuideSync(){
+  const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
+  let guide=document.getElementById('msk-teeth-guide');
+  if(!m||m.origin!=='manual-teeth'||!mskPaintMode||!wrap){if(guide)guide.remove();return;}
+  if(!guide){
+    guide=document.createElement('div');guide.id='msk-teeth-guide';
+    guide.setAttribute('role','status');guide.setAttribute('aria-live','polite');
+    guide.style.cssText='position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:8;max-width:calc(100% - 20px);padding:7px 11px;border:1px solid var(--bdr-pill);border-radius:var(--r-pill);background:var(--scrim-b3);color:var(--txt);font-family:var(--sans);font-size:var(--fs-2);line-height:1.35;text-align:center;pointer-events:none;';
+    wrap.appendChild(guide);
+  }
+  guide.textContent='Paint enamel only · use Erase around lips and gums';
+}
+function mskPaintErase_sync(){const b=document.getElementById('btn-msk-erase');if(b){b.classList.toggle('on',mskPaintErase);b.setAttribute('aria-pressed',String(mskPaintErase));}const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));}
+function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;mskPaintErase_sync();}
+function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
+function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
+  const src=fxWork||fxImg;if(!src||!FX.cv)return null;
+  const pt=fxPointerToCanvasPx(e);if(!pt)return null;
+  const cx=pt.x,cy=pt.y;
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  return{nx:Math.min(1,Math.max(0,cx*sw/FX.cv.width/sw)),ny:Math.min(1,Math.max(0,cy*sh/FX.cv.height/sh))};
+}
+function mskPaintAt(m,nx,ny,erase=mskPaintErase){
+  // The ONE in-place raster mutation in the app, so the ONE place copy-on-write has to fire.
+  // Undo history holds this array by reference (see fxHistoryPush); mskPxForWrite hands back a
+  // private copy the first time we write after a push, and the same array on every subsequent
+  // stroke sample until the next push. Painting therefore costs one clone per undo step, not
+  // one per pointermove.
+  const px=mskPxForWrite(m);
+  const w=m.mtW,h=m.mtH,cx=nx*w,cy=ny*h;
+  const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(w,h));
+  const flow=Math.max(0,Math.min(1,mskBrushFlow/100));
+  const feather=Math.max(0,Math.min(1,mskBrushFeather/100)),density=Math.max(0,Math.min(1,mskBrushDensity/100));
+  const x0=Math.max(0,Math.floor(cx-rad)),x1=Math.min(w-1,Math.ceil(cx+rad));
+  const y0=Math.max(0,Math.floor(cy-rad)),y1=Math.min(h-1,Math.ceil(cy+rad));
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+    const dd=Math.hypot(x-cx,y-cy)/rad;if(dd>1)continue;
+    const edge=feather===0?0:Math.max(0,(dd-(1-feather))/feather);
+    const soft=1-edge*edge*(3-2*edge),add=flow*soft*255,idx=y*w+x,cur=px[idx];
+    // Density bounds the paint/erase coverage. Never weaken existing stronger coverage
+    // simply because the newly selected density is lower. Defaults preserve prior pixels.
+    px[idx]=erase?Math.min(cur,Math.max(255*(1-density),cur-add)):Math.max(cur,Math.min(255*density,cur+add));
+  }
+  _mskTexDirty=true;
+}
+(function initMaskPaint(){
+  const cv=document.getElementById('fx-canvas');if(!cv)return;
+  let renderQueued=false;
+  const queueRender=()=>{if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderPreview();if(typeof mskOverlaySync==='function')mskOverlaySync();});};
+  // Live brush cursor: a ring at the photo's actual painted radius, following the pointer
+  // whenever Paint is armed — independent of whether a stroke is currently down, so you can see
+  // the brush size BEFORE clicking, not just while dragging. Diameter mirrors mskPaintAt's own
+  // radius formula ((size/100)*0.25*max(bufferW,bufferH)) as a fraction of the photo's rendered
+  // box, so it tracks size/zoom without needing exact 1:1 buffer-to-screen pixel mapping.
+  const cursorEl=document.getElementById('msk-brush-cursor');
+  let lastBrushPointer=null;
+  const clearTransientErase=()=>{lastBrushPointer=null;mskBrushEraseHeld=false;if(cursorEl)cursorEl.classList.remove('erase');};
+  window.chromasmithBrushEraseHeld=on=>{mskBrushEraseHeld=!!on;if(lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:mskBrushEraseHeld});};
+  _mskBrushTransientReset=clearTransientErase;
+  window.addEventListener('blur',mskPaintTransientReset);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')mskPaintTransientReset();});
+  function updateBrushCursor(e){
+    if(!cursorEl)return;
+    const m=fxState.masks[mskSel];
+    if(!mskPaintMode||!m||m.type!=='brush'){cursorEl.classList.remove('on');return;}
+    // #msk-brush-cursor is a sibling of #fx-zoom-wrap, both children of #fx-wrap (see
+    // mskOverlayBox's identical convention for #fx-mask-overlay) — it's #fx-wrap that's the
+    // positioned ancestor, NOT #fx-zoom-wrap. #fx-wrap centers the zoom-wrap via flexbox, so
+    // using the wrong container here would offset the ring by that centering gap whenever the
+    // photo's aspect ratio doesn't exactly fill fx-wrap.
+    const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+    const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect(),vr=fxVisibleCanvas().getBoundingClientRect();
+    // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
+    const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
+    const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
+    cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
+    cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
+    cursorEl.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));
+    cursorEl.classList.add('on');
+  }
+  fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
+  // The shared held-modifier registry updates erase state and the stationary cursor, including
+  // rebound modifiers. AI scribbles and color sampling retain their separate Alt meanings.
+  fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
+  fxCanvasOn('pointerdown',e=>{
+    if(!mskPaintMode)return;
+    const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
+    // Touch and pen can go directly from pointerenter to pointerdown without a prior
+    // pointermove. Paint the brush-size/erase ring on contact so their first stroke has
+    // the same visible feedback as a mouse already hovering over the canvas.
+    lastBrushPointer=e;updateBrushCursor(e);
+    e.preventDefault();e.stopPropagation();
+    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
+    _mskStroke=m;
+    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
+    queueRender();
+  });
+  fxCanvasOn('pointermove',e=>{
+    if(!mskPaintMode||!_mskStroke)return;
+    e.preventDefault();e.stopPropagation();
+    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
+    queueRender();
+  });
+  const end=e=>{if(!_mskStroke)return;if(e.type==='pointercancel')clearTransientErase();mskPaintEndStroke();};
+  fxCanvasOn('pointerup',end);fxCanvasOn('pointercancel',end);
+  // AI brush-select (desktop only — see main.rs's sam_encode/sam_points, backed by EdgeSAM).
+  // Lightroom-style: drag a rough scribble over the object; points are sampled along the stroke
+  // path (min spacing so a slow drag doesn't spam thousands of near-duplicate points) and
+  // appended to m.aiPoints, which PERSISTS across strokes so repeated scribbles refine the same
+  // selection. SAM only runs once, on stroke release (not per pointermove) — dragging stays
+  // smooth even though each query is a real native round-trip.
+  const AI_MIN_SPACING=0.012; // normalized-image-fraction min distance between sampled points
+  let _aiStroke=null,_aiStrokeLast=null,_aiStrokeAdded=false,_aiStrokeStartLen=0,_aiBoxDrag=null;
+  // Live scribble feedback: the actual mask (m.px) only updates after a real async SAM round
+  // trip on stroke release, so without this the user drags blind and sees nothing until it
+  // resolves. This draws the raw traced points immediately into #fx-mask-overlay (same
+  // normalized 0..1 SVG used for radial/linear handles — viewBox="0 0 1 1", no pixel math
+  // needed) as small dots — cleared automatically once mskRebuild()/mskOverlaySync() runs
+  // after samRunPoints replaces m.px with the real mask.
+  function _aiRenderLiveStroke(m){
+    const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+    const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
+    svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+    svg.classList.add('on');
+    const pts=m.aiPoints||[];
+    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
+  }
+  function _aiRenderLiveBox(a,b){
+    const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+    const box=mskOverlayBox();if(!box)return;
+    svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';svg.classList.add('on');
+    const x=Math.min(a.nx,b.nx),y=Math.min(a.ny,b.ny),w=Math.abs(a.nx-b.nx),h=Math.abs(a.ny-b.ny);
+    svg.innerHTML=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(255,90,60,.12)" stroke="#ff5a3c" stroke-width="0.0025" vector-effect="non-scaling-stroke"/>`;
+  }
+  fxCanvasOn('pointerdown',e=>{
+    if(mskAiPromptMode!=='box'||!mskAiTapMode)return;
+    const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+    e.preventDefault();e.stopPropagation();try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
+    const p=_mskPointToUV(e);if(p)_aiBoxDrag={mask:m,item:curItem(),start:p,end:p,previous:m.aiBox?Object.assign({},m.aiBox):null};
+    if(_aiBoxDrag)_aiRenderLiveBox(_aiBoxDrag.start,_aiBoxDrag.end);
+  });
+  fxCanvasOn('pointermove',e=>{if(!_aiBoxDrag)return;e.preventDefault();e.stopPropagation();const p=_mskPointToUV(e);if(p){_aiBoxDrag.end=p;_aiRenderLiveBox(_aiBoxDrag.start,p);}});
+  const aiBoxEnd=e=>{
+    if(!_aiBoxDrag)return;const d=_aiBoxDrag;_aiBoxDrag=null;
+    if(e.type==='pointercancel'||curItem()!==d.item||fxState.masks[mskSel]!==d.mask){d.mask.aiBox=d.previous;mskOverlaySync();return;}
+    const box=_samNormalizeBox({x0:d.start.nx,y0:d.start.ny,x1:d.end.nx,y1:d.end.ny});
+    if(!box){if(typeof toast==='function')toast('Drag a larger rectangle around the object');mskOverlaySync();return;}
+    d.mask.aiBox=box;d.mask.aiPoints=[];samRunPoints(d.mask,{expectedItem:d.item});
+  };
+  fxCanvasOn('pointerup',aiBoxEnd);fxCanvasOn('pointercancel',aiBoxEnd);fxCanvasOn('lostpointercapture',aiBoxEnd);
+  fxCanvasOn('pointerdown',e=>{
+    if(!mskAiTapMode||mskAiPromptMode!=='scribble')return;
+    const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+    e.preventDefault();e.stopPropagation();
+    try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
+    _aiStroke=m;_aiStrokeLast=null;_aiStrokeAdded=false;_aiStrokeStartLen=(m.aiPoints||[]).length;
+    const p=_mskPointToUV(e);
+    if(p){
+      if(!m.aiPoints)m.aiPoints=[];
+      m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
+      _aiStrokeLast=p;_aiStrokeAdded=true;
+      _aiRenderLiveStroke(m);
+    }
+  });
+  fxCanvasOn('pointermove',e=>{
+    if(!mskAiTapMode||mskAiPromptMode!=='scribble'||!_aiStroke)return;
+    const m=_aiStroke;
+    e.preventDefault();e.stopPropagation();
+    const p=_mskPointToUV(e);if(!p)return;
+    if(_aiStrokeLast&&Math.hypot(p.nx-_aiStrokeLast.nx,p.ny-_aiStrokeLast.ny)<AI_MIN_SPACING)return;
+    if(!m.aiPoints)m.aiPoints=[];
+    m.aiPoints.push({nx:p.nx,ny:p.ny,positive:!e.altKey});
+    _aiStrokeLast=p;_aiStrokeAdded=true;
+    _aiRenderLiveStroke(m);
+  });
+  const aiEnd=e=>{
+    if(!_aiStroke)return;
+    const m=_aiStroke;_aiStroke=null;
+    if(_aiStrokeAdded)samRunPoints(m);
+    _aiStrokeLast=null;_aiStrokeAdded=false;
+  };
+  fxCanvasOn('pointerup',aiEnd);fxCanvasOn('pointercancel',aiEnd);
+  // lostpointercapture matters: if capture is lost mid-drag (pointer leaves the window, another
+  // element grabs it) neither pointerup nor pointercancel necessarily fires on this element, and
+  // _aiStroke would stay set so every subsequent move kept appending points to the mask.
+  fxCanvasOn('lostpointercapture',aiEnd);
+  // Called from the pinch-zoom touchmove handler (initZoomPan) the moment a second finger
+  // lands: a touch pinch's FIRST finger fires pointerdown before the second finger arrives, so
+  // it briefly starts a paint/scribble stroke — this discards whatever that partial stroke
+  // added (no samRunPoints call, no history push) instead of segmenting/painting a pinch as a
+  // gesture on the mask.
+  window.chromasmithAbortMaskStroke=function(){
+    if(_mskStroke){_mskStroke=null;}
+    if(_aiStroke){
+      const m=_aiStroke;
+      if(m.aiPoints)m.aiPoints.length=_aiStrokeStartLen;
+      _aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;
+      if(typeof mskOverlaySync==='function')mskOverlaySync(); // clear the live-stroke dots drawn so far
+    }
+    if(_aiBoxDrag){_aiBoxDrag.mask.aiBox=_aiBoxDrag.previous;_aiBoxDrag=null;if(typeof mskOverlaySync==='function')mskOverlaySync();}
+  };
+})();
+// ══ MASK PANEL STRUCTURE ═════════════════════════════════════════════════════════════════════
+// The panel used to render 35 control rows in one flat column for EVERY mask, in this order:
+// shape · Up/Down/Name/Mute/Solo/Eraser · Amount · the whole Skin Tone block · 14 adjustment
+// sliders · Invert/Delete. Two things were badly wrong with that:
+//
+//   1. Skin Tone rendered on every mask type — Radial, Linear, even Luminance Range, where it is
+//      meaningless — and it sat BETWEEN Amount and the adjustments, pushing Exposure roughly a
+//      thousand pixels down the panel.
+//   2. Six rarely-used management buttons occupied three rows of the most valuable space in the
+//      panel, above the controls you actually reach for.
+//
+// Now three collapsible groups — SELECTION (which pixels) · ADJUST (what to do to them) ·
+// SKIN TONE (skin masks only) — with management moved into a "..." menu on the mask row.
+//
+// ⚠️ The colour-range gate is a SELECTION tool and lives in Selection for ordinary masks. On a
+// Skin mask it is step 1 of the guided flow instead, so it appears exactly once either way.
+// coattone is DELIBERATELY separate from skin (not shared state) and defaults CLOSED — see the
+// panel-simplification note where it's used: a Coat mask showing both the new one-slider "Red
+// depth" AND the full old guided tone-matching flow open at once (steps, presets, a coverage
+// readout) read as two competing tools fighting for attention, not a single simple one. Red
+// depth/Eye brightness stay the obvious, open-by-default thing; the older flow is still there,
+// one click under Advanced, for anyone who wants the Capture One-style convergence tool instead.
+// Skin masks are UNCHANGED — that flow is still the primary, open-by-default tool there.
+let _mskGroupOpen={selection:true,adjust:true,skin:true,coattone:false};
+try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
+function mskGroupToggle(k){
+  _mskGroupOpen[k]=!_mskGroupOpen[k];
+  try{localStorage.setItem('chromasmith_msk_groups',JSON.stringify(_mskGroupOpen));}catch(e){}
+  mskRebuild();
+}
+// Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
+// Selection collapsed wants it collapsed for the next mask too.
+function _mskGroup(key,label,body,note){
+  const open=_mskGroupOpen[key]!==false;
+  return '<div class="msk-group'+(open?' open':'')+'">'
+    +'<button class="msk-group-hd" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'">'
+    +'<span class="msk-group-chev">'+icon('chevron',14)+'</span><span>'+label+'</span>'
+    +(note?'<span class="msk-group-note">'+note+'</span>':'')+'</button>'
+    +(open?'<div class="msk-group-bd">'+body+'</div>':'')+'</div>';
+}
+// Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
+// they are not what you touch while grading, so they no longer cost three rows of panel height.
+// "+ Mask" — replaces a row of up to 8 peer buttons (CLAUDE.md called this out by name: "Nine
+// `+`-prefixed buttons in a single mask row"). Same popover component as mskMoreMenu below
+// (.msk-more-menu/.msk-more-it), grouped into the 4 kinds a mask actually is: a SHAPE, something
+// you PAINT, an AI-segmented one (desktop only), or a shapeless RANGE gate.
+function mskAddMenu(ev){
+  ev.stopPropagation();
+  document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
+  const item=(label,ic,type,action)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
+    +icon(ic,15)+'<span>'+label+'</span></button>';
+  const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
+  // ⚠️ Was gated on `body.deskx` — a LAYOUT class toggled purely by window WIDTH (a media query,
+  // see the listener a few hundred lines up), unrelated to whether the on-device SAM/faceparse
+  // models this section actually needs are even available. The desktop app just gained window-
+  // state persistence (it can now launch at whatever size the user last left it), so a Tauri
+  // window narrower than the deskx breakpoint made Skin/Coat/AI Select silently disappear from
+  // + Mask entirely — reported as "no Coat/dog button under masks" even though the feature was
+  // wired correctly. Every OTHER AI-mask entry point (subjPanelHtml, mskFaceAutoExclude, etc.)
+  // already gates on window.__TAURI__ — the actual "can this run" check — so this now matches.
+  const desktop=!!window.__TAURI__;
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+  const html='<div class="msk-more-hd">'+fxState.masks.length+' / '+MSK_MAX+' masks</div>'
+    +hd('Shape')
+    +item('Radial','local','radial')+item('Linear','linearGrad','linear')
+    +'<div class="msk-more-sep"></div>'+hd('Paint')
+    +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Teeth Matte','brush','', 'mskAddEmbeddedTeethWhitening()'):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Hair Matte','brush','', 'mskAddEmbeddedHairMatte()'):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Skin Matte','brush','', "mskAddEmbeddedPortraitMatte('skin')"):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Glasses Matte','brush','', "mskAddEmbeddedPortraitMatte('glasses')"):'')
+    +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Sky Matte','brush','', "mskAddEmbeddedPortraitMatte('sky')"):'')
+    +item('Brush','brush','brush')+item('Sky','sky','sky')
+    +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
+      +item('Skin','wand','skin')+item('Coat','wand','coat')
+      +item('Select Subject','wand','ai')
+      +item('Select Background','wand','', 'mskAddBackground()'):'')
+    +'<div class="msk-more-sep"></div>'+hd('Range')
+    +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum')
+    // Depth Range needs a real per-photo depth map (vendor/depth's ONNX model, main.rs's
+    // depth_run) — desktop-only, same gate as Skin/Coat/AI Select above, not a layout check.
+    +(desktop?item('Depth Range','focus','depth'):'');
+  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+  document.body.appendChild(d);
+  const r=ev.currentTarget.getBoundingClientRect();
+  _mskPlaceMenu(d,r);
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
+// Places a mask dropdown beside its trigger and keeps it on screen: it opens below the trigger when
+// that fits, otherwise on whichever side has more room, and gets its own scroll (max-height) when even
+// that side is too short — so a long menu like the mask settings one can always be scrolled.
+function _mskPlaceMenu(d,r){
+  const pad=8,gap=4;
+  const below=innerHeight-r.bottom-gap-pad,above=r.top-gap-pad;
+  const fitsBelow=d.offsetHeight<=below;
+  const room=Math.max(120,fitsBelow?below:Math.max(above,below));
+  d.style.maxHeight=room+'px';d.style.overflowY='auto';
+  const h=Math.min(d.offsetHeight,room);
+  let top=fitsBelow||below>=above?r.bottom+gap:r.top-gap-h;
+  top=Math.max(pad,Math.min(top,innerHeight-h-pad));
+  d.style.top=top+'px';
+  d.style.left=Math.max(8,Math.min(r.left,innerWidth-d.offsetWidth-8))+'px';
+}
+function mskMoreMenu(ev){
+  ev.stopPropagation();
+  const m=fxState.masks[mskSel];if(!m)return;
+  document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
+  const item=(label,ic,fn,on,dis,danger)=>'<button class="msk-more-it'+(on?' on':'')+(danger?' danger':'')+'"'
+    +(dis?' disabled':'')+' onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+fn+'">'
+    +icon(ic,15)+'<span>'+label+'</span></button>';
+  const otherToneMasks=mskCaps(m).toneTool?fxState.masks.filter((o,i)=>i!==mskSel&&mskCaps(o).toneTool):[];
+  const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
+    +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
+    +item('Rename…','rename','mskRename()')
+    +item('Duplicate','copy','mskDuplicate(false)')
+    +item('Duplicate inverted','compare','mskDuplicate(true)')
+    // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another
+    // Skin or Coat mask on this SAME photo — e.g. a group shot with one Skin mask per person,
+    // where person B's mask should start from person A's already-dialed-in look. Deliberately
+    // does NOT copy the selection (crSamples/crOn) — each person's own picks/segmentation stays
+    // theirs; only the "where it should end up and how hard" settings transfer.
+    +(otherToneMasks.length?item('Copy tone settings from…','copy','mskCopyToneMenu(event)'):'')
+    +item(m.muted?'Unmute':'Mute','eyeOff','mskToggleMute()',m.muted)
+    +item(mskSolo===mskSel?'Stop soloing':'Solo','star','mskToggleSolo()',mskSolo===mskSel)
+    +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
+    +(m.composeOp?item('Stop '+m.composeOp+' composition','scissors','mskClearComposition()'): '')
+    +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]
+      ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('warn',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
+    +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('layers',15)+'<span>Compose with…</span></button>':'')
+    +item('Save as Mask Preset…','star','styleSaveCurrent(true)')
+    +(mskSel>0&&m.composeOp!=='add'?item('Add previous mask','local','mskToggleAdd()'):'')
+    +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')
+    +(mskSel>0&&m.composeOp!=='intersect'?item('Intersect with previous mask','eyedropper','mskSetComposition(\'intersect\')'):'')
+    +item(m.invert?'Un-invert':'Invert','compare','mskInvert()',m.invert)
+    +'<div class="msk-more-sep"></div>'
+    +item('Delete mask','trash','mskDelete()',false,false,true);
+  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+  document.body.appendChild(d);
+  const r=ev.currentTarget.getBoundingClientRect();
+  _mskPlaceMenu(d,r);
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+}
+// Validate a proposed operand against a private copy so an invalid or cyclic choice never
+// changes the live selection. The planner also rejects targets whose own dependency chain is
+// missing/cyclic, which keeps a repaired mask from inheriting another disabled selection.
+function _mskCompositionCandidateCheck(masks,activeId,op,operandId){
+  if(!Array.isArray(masks)||!['add','subtract','intersect'].includes(op))return{valid:false,reason:'operation'};
+  const activeIndex=masks.findIndex(m=>m.id===activeId),operandIndex=masks.findIndex(m=>m.id===operandId);
+  if(activeIndex<0||operandIndex<0)return{valid:false,reason:'missing'};
+  if(activeIndex===operandIndex)return{valid:false,reason:'self'};
+  const candidate=masks.map(m=>({...m})),active=candidate[activeIndex];
+  active.composeOp=op;active.operandId=operandId;active.compositionMigrated=true;
+  active.subtract=op==='subtract';active.intersect=op==='intersect';
+  const plan=_mskCompositionPlan(candidate);
+  if(plan.valid[activeIndex])return{valid:true,reason:''};
+  const byId=new Map(candidate.map((m,i)=>[m.id,i]));
+  function reachesActive(i,seen){
+    if(i===activeIndex)return true;
+    if(seen.has(i))return false;
+    seen.add(i);
+    const m=candidate[i],edge=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+    if(!edge)return false;
+    const next=byId.get(m.operandId);
+    return Number.isInteger(next)&&reachesActive(next,seen);
+  }
+  return{valid:false,reason:reachesActive(operandIndex,new Set())?'cycle':'dependency'};
+}
+// Accessible operation + stable-ID operand picker. Native select controls provide keyboard
+// navigation; option labels are assigned as text, so user mask names never enter HTML markup.
+let _mskCompositionMenuClose=null;
+function mskCompositionMenu(ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const anchor=ev&&ev.currentTarget&&ev.currentTarget.getBoundingClientRect?ev.currentTarget.getBoundingClientRect():{left:100,bottom:100};
+  if(_mskCompositionMenuClose)_mskCompositionMenuClose(false);
+  document.querySelectorAll('.msk-more-menu').forEach(n=>n.remove());
+  const masks=_mskEnsureIds(fxState.masks),active=masks[mskSel];if(!active)return;
+  const sourceMasks=fxState.masks;
+  const currentPlan=_mskCompositionPlan(masks);
+  const menu=document.createElement('div');menu.className='msk-more-menu msk-compose-menu';
+  menu.setAttribute('role','dialog');menu.setAttribute('aria-modal','false');menu.setAttribute('aria-label','Compose mask selection');
+  const heading=document.createElement('div');heading.className='msk-more-hd';heading.textContent='Compose selected mask with';menu.appendChild(heading);
+  if(active.composeOp&&!currentPlan.valid[mskSel]){
+    const repair=document.createElement('div');repair.className='msk-compose-status';repair.setAttribute('role','alert');
+    repair.textContent='This selection is disabled. Choose a valid operation and another mask to replace its broken operand.';menu.appendChild(repair);
+  }
+  const field=(id,labelText)=>{const wrap=document.createElement('div');wrap.className='msk-compose-field';const label=document.createElement('label');label.htmlFor=id;label.textContent=labelText;wrap.appendChild(label);return wrap;};
+  const op=document.createElement('select');op.id='msk-compose-operation';op.setAttribute('aria-label','Composition operation');
+  [['add','Add'],['subtract','Subtract'],['intersect','Intersect']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;op.appendChild(o);});
+  op.value=['add','subtract','intersect'].includes(active.composeOp)?active.composeOp:'add';
+  const opField=field(op.id,'Operation');opField.appendChild(op);menu.appendChild(opField);
+  const operand=document.createElement('select');operand.id='msk-compose-operand';operand.setAttribute('aria-label','Other mask');
+  const others=masks.map((m,i)=>({m,i})).filter(x=>x.i!==mskSel);
+  others.forEach(({m,i})=>{const o=document.createElement('option');o.value=m.id;
+    o.textContent=(m.name||mskAutoLabel(m,i))+' · '+(m.origin||m.type||'mask')+' · '+(i+1);operand.appendChild(o);});
+  if(others.some(x=>x.m.id===active.operandId))operand.value=active.operandId;
+  const operandField=field(operand.id,'Other mask');operandField.appendChild(operand);menu.appendChild(operandField);
+  const status=document.createElement('div');status.className='msk-compose-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');menu.appendChild(status);
+  const apply=document.createElement('button');apply.type='button';apply.className='msk-compose-apply';apply.textContent='Apply composition';menu.appendChild(apply);
+  const check=()=>{
+    const live=fxState.masks;
+    if(live!==sourceMasks||live[mskSel]!==active)return{valid:false,reason:'stale'};
+    return _mskCompositionCandidateCheck(_mskEnsureIds(live),active.id,op.value,operand.value);
+  };
+  const update=()=>{const result=check();apply.disabled=!result.valid;
+    status.textContent=result.valid?'The other mask stays attached by ID when masks are reordered.':
+      result.reason==='cycle'?'This would create a composition cycle. Choose a different mask.':
+      result.reason==='dependency'?'That mask depends on an invalid or cyclic selection. Repair it first.':
+      result.reason==='stale'?'The photo or selected mask changed. Close this chooser and reopen it.':
+      result.reason==='self'?'Choose another mask.':'A valid other mask is required.';
+  };
+  op.addEventListener('change',update);operand.addEventListener('change',update);
+  const close=(restoreFocus=false)=>{menu.remove();document.removeEventListener('mousedown',outside,true);document.removeEventListener('keydown',escape,true);
+    if(_mskCompositionMenuClose===close)_mskCompositionMenuClose=null;
+    if(restoreFocus){const trigger=document.querySelector('#local-ctl .msk-more');if(trigger)trigger.focus();}
+  };
+  _mskCompositionMenuClose=close;
+  const outside=e=>{if(!menu.contains(e.target)){close();}};
+  const escape=e=>{if(e.key==='Escape')close(true);};
+  apply.addEventListener('click',()=>{const result=check();if(!result.valid){update();return;}
+    if(mskSetComposition(op.value,operand.value))close(true);
+  });
+  document.body.appendChild(menu);
+  const left=Math.max(8,Math.min(anchor.left,innerWidth-menu.offsetWidth-8));
+  const top=Math.max(8,Math.min(anchor.bottom+4,innerHeight-menu.offsetHeight-8));
+  menu.style.left=left+'px';menu.style.top=top+'px';
+  update();op.focus({preventScroll:true});menu.scrollTop=0;
+  setTimeout(()=>{if(!menu.isConnected||_mskCompositionMenuClose!==close)return;
+    document.addEventListener('mousedown',outside,true);document.addEventListener('keydown',escape,true);},0);
+}
+const MSK_TONE_BLEND_KEYS=['crRange','crRangeC','uH','uS','uL','preserve','tgtMode','tgtHex','tanDepth','tanWarm','tanOneWay','tanOneWayAmt'];
+function mskCopyToneMenu(ev){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const others=fxState.masks.map((o,i)=>({o,i})).filter(({o,i})=>i!==mskSel&&mskCaps(o).toneTool)
+    .map(({o,i})=>({label:o.name||('Mask '+(i+1))+' ('+(o.origin==='coat'?'Coat':'Skin')+')',fn:()=>{
+      MSK_TONE_BLEND_KEYS.forEach(k=>{m[k]=o[k]});
+      mskSrcVDebounced();mskRebuild();fxUpdate();
+      toast('Tone settings copied',true);
+    }}));
+  _subjPopup(others,ev);
+}

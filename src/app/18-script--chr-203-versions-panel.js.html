@@ -1,0 +1,415 @@
+// ── CHR-203: Versions panel ───────────────────────────────────────────────────────────────
+// Talks to the desktop Library through window.chromasmithVersions (library-ui.js), which wraps
+// the existing sidecar_*_version commands. In the browser there's no sidecar, so the list says so.
+async function verRender(){
+  const host=document.getElementById('ver-list');if(!host)return;
+  const api=window.chromasmithVersions,b=document.getElementById('btn-ver-new');
+  if(!api||!api.available()){host.innerHTML='<div class="fx-hint">Versions are saved with photos opened from the gallery in the desktop app.</div>';if(b)b.disabled=true;return;}
+  if(b)b.disabled=false;
+  let d;try{d=await api.get();}catch(e){d=null;}
+  const vers=(d&&d.versions&&d.versions.length)?d.versions:[{name:'Current edit',recipe:null}],act=d&&d.versions&&d.versions.length?d.active:0;
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let thumb='';try{const c=document.createElement('canvas'),cv=FX.cv,k=72/Math.max(cv.width,1);c.width=72;c.height=Math.max(1,Math.round(cv.height*k));c.getContext('2d').drawImage(cv,0,0,c.width,c.height);thumb=c.toDataURL('image/jpeg',.8);}catch(e){}
+  const hasV=!!(d&&d.versions&&d.versions.length),sb='font-size:11px;padding:3px 8px';
+  host.innerHTML=vers.map((v,i)=>{const cur=i===act;
+    const acts=(cur?'':`<button class="btn bgh" style="${sb}" onclick="verCompare(${i})">Compare</button><button class="btn bgh" style="${sb}" onclick="verMakeCurrent(${i})">Make current</button>`)
+      +(hasV?`<button class="btn bgh" style="${sb}" onclick="verRename(${i})">Rename</button>`:'')+(hasV&&!cur?`<button class="btn bgh" style="${sb}" onclick="verDelete(${i})">Delete</button>`:'');
+    return `<div class="ver-row" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)">
+      ${cur&&thumb?`<img src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`:'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
+        <div class="fx-hint" style="margin:0">${cur?'Current':'Saved version'}</div>
+        ${acts?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${acts}</div>`:''}
+      </div></div>`;}).join('');
+}
+async function verSaveNew(){const api=window.chromasmithVersions;if(!api)return;
+  const name=(await askTextModal('Save as new version','The current edit stays as it is; the new version starts as a copy of it.')||'').trim();if(!name)return;
+  try{await api.add(name);toast(`Saved version "${name}"`,true);}catch(e){toast('Could not save the version — '+(e.message||e),false);}verRender();}
+async function verMakeCurrent(i){try{await window.chromasmithVersions.setActive(i);}catch(e){toast('Could not switch version — '+(e.message||e),false);}
+  setTimeout(()=>{if(typeof fxSection==='function')fxSection('info');verRender();},800);} // reopening the photo closes the panel — bring Versions back
+async function verRename(i){const d=await window.chromasmithVersions.get();const v=d.versions[i];if(!v)return;
+  const name=(await askTextModal('Rename version','',v.name)||'').trim();if(!name||name===v.name)return;
+  try{await window.chromasmithVersions.rename(i,name);}catch(e){toast('Could not rename — '+(e.message||e),false);}verRender();}
+async function verDelete(i){const d=await window.chromasmithVersions.get();const v=d.versions[i];if(!v)return;
+  if(!await confirmModal(`Delete version "${v.name}"? This cannot be undone.`,'Delete'))return;
+  try{await window.chromasmithVersions.del(i);}catch(e){toast('Could not delete — '+(e.message||e),false);}verRender();}
+// Compare: the split view's "Pinned" side shows that version's edit against the current one.
+async function verCompare(i){const d=await window.chromasmithVersions.get();const v=d&&d.versions[i];if(!v||!v.recipe)return;
+  try{fxPinned=JSON.parse(decodeURIComponent(escape(atob(v.recipe))));}catch(e){toast('Could not read that version',false);return;}
+  fxSetSplitSrc('pin');toast(`Comparing with "${v.name}" — drag the split line`);}
+function adjSyncScopeUI(){
+  if(typeof secScopeSyncUI==='function')secScopeSyncUI();
+  const row=document.getElementById('adj-scope-row');if(!row){syncBatchScopeStatus();return;}
+  row.style.display=fxImages.length>1?'flex':'none';
+  const btn=document.getElementById('btn-adj-scope');if(!btn)return;
+  const it=curItem();const on=!!(it&&it.adjustOverride);
+  btn.classList.toggle('bpri',on);btn.classList.toggle('bgh',!on);
+  btn.innerHTML=''+(on?'Independent — click to sync to shared':'This photo only');
+  syncBatchScopeStatus();
+}
+function resetNR(){
+  ['nr-lum','nr-col','nr-hldesat','nr-con'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  {const d=document.getElementById('sl-nr-det');if(d)d.value=50;} // Detail default 50, not 0
+  ['nr-color-detail','nr-smooth'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=50;});
+  // Sharpen lives in this panel now; RAW photos default to 40 (matches applyRawDefaults), others to 0.
+  {const s=document.getElementById('sl-adj-sharp'),vs=document.getElementById('vl-adj-sharp');
+   if(s){const it=curItem();const isRaw=it&&RAW_FILE_EXT_RE.test('.'+(it.ext||''));s.value=isRaw?40:0;if(vs)vs.textContent=s.value;}}
+  {const sd=document.getElementById('sl-adj-sharp-detail'),vd=document.getElementById('vl-adj-sharp-detail');if(sd){sd.value=50;if(vd)vd.textContent='50';}}
+  fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="nr"]'));
+  fxUpdate();nrSyncGate();log('Noise reduction reset','info');
+}
+function resetDeconv(){
+  ['deconv-amt'].forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=0;});
+  {const r=document.getElementById('sl-deconv-rad');if(r)r.value=20;}
+  fxUpdate();log('Deconvolution reset','info');
+}
+// Detail, Contrast, Color Detail, Smoothness and Highlight-Desat only have an effect while
+// Luminance or Color is >0 (the shader NR pass is skipped entirely otherwise — see the comment
+// above the NR shader). Dim them + show a hint when both gate sliders are 0.
+function nrSyncGate(){
+  const on=adjVal('sl-nr-lum')>0||adjVal('sl-nr-col')>0;
+  ['row-nr-det','row-nr-con','row-nr-color-detail','row-nr-smooth','row-nr-hldesat','hint-nr-hldesat'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('gate-off',!on);});
+  const hint=document.getElementById('nr-gate-hint');
+  if(hint)hint.textContent=on?'Tames RAW sensor noise (esp. high ISO) before the film look.':
+    'Detail, Contrast, Color Detail, Smoothness and Highlight Desaturation are inactive — raise Luminance or Color to enable noise reduction.';
+  if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI(); // same refresh points cover the RAW-NR tier select/Denoise-now button too
+}
+function adjVal(id){return parseFloat((document.getElementById(id)||{value:0}).value)||0;}
+// RAW-only baseline (Lightroom applies Color NR 25 + capture sharpening by default on import;
+// this app previously opened every RAW at zero corrective defaults). Only touches sliders
+// still sitting at their own defaults, so it never clobbers a value the user (or a restored
+// XMP recipe, applied right after loadFXImages returns) has already set.
+function applyRawDefaults(){
+  const col=document.getElementById('sl-nr-col'),sharp=document.getElementById('sl-adj-sharp');
+  const vCol=document.getElementById('vl-nr-col'),vSharp=document.getElementById('vl-adj-sharp');
+  let applied=false;
+  // .defaultValue (not just .value) is set too — fxPaintSlider anchors the "flat, unrotated"
+  // thumb position and the fill-from-default marker on .defaultValue, and this new resting
+  // point IS the default for a RAW photo, not the 0 the static markup ships for every other kind.
+  if(col&&adjVal('sl-nr-col')===0){col.value=25;col.defaultValue=25;if(vCol)vCol.textContent='25';applied=true;}
+  if(sharp&&adjVal('sl-adj-sharp')===0){sharp.value=40;sharp.defaultValue=40;if(vSharp)vSharp.textContent='40';applied=true;}
+  if(applied)log('RAW defaults applied (Color NR 25, Sharpen 40)','info');
+  if(applied&&typeof fxPaintAllSliders==='function')fxPaintAllSliders();
+}
+
+// ══ TONE CURVES — master + R/G/B point curves, monotone cubic, baked to a 256×1 LUT ══
+let curveCh='m',_crvDrag=-1,_crvTouchDeleteTimer=0;
+// 5 pre-seeded points at 0/25/50/75/100% (Blacks/Shadows/Midtones/Highlights/Whites), all on
+// the identity diagonal — Fritsch-Carlson through evenly-spaced collinear points reproduces
+// y=x exactly (matching slopes of 1 throughout), so this bakes byte-identical to the old
+// 2-point [[0,0],[1,1]] default; curvesIdentity() below is updated to match (checks every
+// point, not just a length of 2). Clicking between points still adds more, same as before.
+function _identityCurvePts(){return[[0,0],[0.25,0.25],[0.5,0.5],[0.75,0.75],[1,1]];}
+function _curveDefault(){const p=_identityCurvePts();return{m:p.map(v=>v.slice()),r:p.map(v=>v.slice()),g:p.map(v=>v.slice()),b:p.map(v=>v.slice())};}
+// Monotone cubic (Fritsch–Carlson) through sorted control points — no overshoot/ringing,
+// so a gentle S-curve stays monotone (a Catmull-Rom would overshoot past 0/1 at the toes).
+function curveEval(pts){
+  const n=pts.length;if(n<2){const y=n?pts[0][1]:0;return _=>y;}
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),d=[],m=[];
+  for(let i=0;i<n-1;i++)d.push((ys[i+1]-ys[i])/Math.max(xs[i+1]-xs[i],1e-6));
+  m.push(d[0]);for(let i=1;i<n-1;i++)m.push(d[i-1]*d[i]<=0?0:(d[i-1]+d[i])/2);m.push(d[n-2]);
+  for(let i=0;i<n-1;i++){if(!d[i]){m[i]=0;m[i+1]=0;continue;}const a=m[i]/d[i],b=m[i+1]/d[i],s=a*a+b*b;
+    if(s>9){const t=3/Math.sqrt(s);m[i]=t*a*d[i];m[i+1]=t*b*d[i];}}
+  return x=>{if(x<=xs[0])return ys[0];if(x>=xs[n-1])return ys[n-1];
+    let i=0;while(x>xs[i+1])i++;const h=xs[i+1]-xs[i],t=(x-xs[i])/h,t2=t*t,t3=t2*t;
+    return ys[i]*(2*t3-3*t2+1)+m[i]*h*(t3-2*t2+t)+ys[i+1]*(3*t2-2*t3)+m[i+1]*h*(t3-t2);};
+}
+function curvesIdentity(){const C=fxState.curves;
+  const chIdentity=['r','g','b'].every(k=>C[k].every(p=>p[0]===p[1]));
+  if(fxState.curveMode==='param'){const P=fxState.curveParam;return chIdentity&&!P.s&&!P.d&&!P.l&&!P.h;}
+  return chIdentity&&C.m.every(p=>p[0]===p[1]);
+}
+// ══ PARAMETRIC CURVE MODE (ROADMAP R11) ══
+// 4 region sliders (Shadows/Darks/Lights/Highlights) — the standard Lightroom/ACR "Parametric"
+// convention: instead of dragging raw control-point handles, the user nudges a named tonal
+// region up/down and a curve is derived underneath. This is a pure JS layer that computes
+// control points and feeds them into the EXISTING curveEval/bakeCurves machinery — no second
+// curve-baking implementation.
+//
+// Split-point choice: LR/ACR's real defaults split the 0-100% tone range into quarters at
+// 25/50/75 for its 3 draggable region-boundary sliders, with Shadows/Highlights extending past
+// the outer boundaries and Darks/Lights sitting either side of the midpoint. Rather than also
+// exposing 3 more region-boundary sliders (a second control this app doesn't have elsewhere),
+// this picks 4 FIXED interior anchor x-positions at even 0.2 spacing — 0.2/0.4/0.6/0.8 — so
+// Shadows/Darks/Lights/Highlights each get one clearly-separated anchor between the (untouched)
+// black/white endpoints at x=0/1. This deliberately does NOT reuse the point-curve's own
+// 0/.25/.5/.75/1 default positions: those are shared with per-channel R/G/B point edits, and a
+// shared x would make a parametric offset and a point-curve edit at the same x fight silently.
+function _paramMasterPts(){
+  const P=fxState.curveParam,mx=0.16; // ±100 slider -> ±0.16 y-offset at that anchor
+  const pts=[[0,0],[0.2,0.2+P.s/100*mx],[0.4,0.4+P.d/100*mx],[0.6,0.6+P.l/100*mx],[0.8,0.8+P.h/100*mx],[1,1]];
+  // Force the y-sequence non-decreasing (a forward running-max pass): Fritsch-Carlson only
+  // GUARANTEES a monotone spline when the input data is itself monotone, and two adjacent
+  // sliders pushed opposite ways (e.g. Shadows +100, Darks -100) would otherwise hand it a
+  // locally-decreasing sequence -> a non-monotonic, visually-broken tone curve. This clamp
+  // means an extreme opposing pair partially "loses" to its neighbour rather than ever
+  // inverting the curve — verified in tools/calib/verify_param_curve.mjs across the full ±100 grid.
+  for(let i=1;i<pts.length;i++)pts[i][1]=Math.max(pts[i][1],pts[i-1][1]);
+  pts.forEach(p=>{p[1]=Math.min(1,Math.max(0,p[1]));});
+  return pts;
+}
+function paramCurveChanged(k,v){fxState.curveParam[k]=parseFloat(v)||0;curveChanged();}
+function paramCurveResetAll(){fxState.curveParam={s:0,d:0,l:0,h:0};
+  ['s','d','l','h'].forEach(k=>{const s=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k);if(s)s.value=0;if(vv)vv.textContent='0';});
+  curveChanged();
+}
+// Bake: out_c = master(channel_c(v)) per 8-bit level. Identity bakes to i/255 exactly, and the
+// shader samples texel CENTERS, so identity+useCurve is byte-identical to useCurve off.
+function bakeCurves(){
+  const C=fxState.curves,cl=v=>Math.min(1,Math.max(0,v));
+  const fM=fxState.curveMode==='param'?curveEval(_paramMasterPts()):curveEval(C.m);
+  const fR=curveEval(C.r),fG=curveEval(C.g),fB=curveEval(C.b);
+  const d=new Uint8Array(256*4);
+  for(let i=0;i<256;i++){const v=i/255;
+    d[i*4]=cl(fM(cl(fR(v))))*255+.5|0;d[i*4+1]=cl(fM(cl(fG(v))))*255+.5|0;d[i*4+2]=cl(fM(cl(fB(v))))*255+.5|0;d[i*4+3]=255;}
+  if(FX.ok)FX.setCurveTex(d);
+}
+function curveSetCh(ch){curveCh=ch;document.querySelectorAll('.crv-chip').forEach(b=>b.classList.toggle('on',b.dataset.ch===ch));drawCurveEditor();}
+function curveResetCh(){fxState.curves[curveCh]=_identityCurvePts();curveChanged();}
+function curveResetAll(){fxState.curves=_curveDefault();curveChanged();}
+// Editing the curve switches Tone Curves on, like touching any other tool would.
+function _crvEnsureOn(){const tg=document.getElementById('tg-curves');if(tg&&!tg.classList.contains('on')&&!curvesIdentity())toggleFX('curves');}
+function curveChanged(){
+  _crvEnsureOn();bakeCurves();drawCurveEditor();fxUpdate();
+  // Curve edits (point-mode canvas drags, parametric sliders) aren't tracked by the generic
+  // fxMarkModifiedSliders()/.fx-mod snapshot — same reason Curves always had its own bespoke
+  // reset. This is what actually drives the header's "Reset | All" visibility for this section.
+  document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-has-curveedit',!curvesIdentity());
+}
+// Toggle between the raw point-curve editor and the 4-slider parametric mode — same segmented-
+// button pattern as the RGB/R/G/B channel chips above, mirrored for the mode switch itself.
+function curveSetMode(mode){
+  fxState.curveMode=mode;
+  document.querySelectorAll('.crv-mode-chip').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+  const pt=document.getElementById('curve-point-block'),pm=document.getElementById('curve-param-block');
+  if(pt)pt.style.display=mode==='point'?'':'none';
+  if(pm)pm.style.display=mode==='param'?'':'none';
+  // Param mode has no per-channel concept, so the header's scoped "Reset | All" collapses to a
+  // single "Reset" there (see .fx-curve-param-mode in the CSS) — same class also drives the
+  // generic reset button's own label back and forth.
+  document.querySelector('.fx-ctrl[data-fxsec="curves"]')?.classList.toggle('fx-curve-param-mode',mode==='param');
+  const genericLb=document.querySelector('.fx-ctrl[data-fxsec="curves"] > .fx-ctrl-title .fx-ctrl-title-reset-lb');
+  if(genericLb)genericLb.textContent=mode==='param'?'Reset':'All';
+  curveChanged();
+}
+// Header "All" reset for Curves covers both editing modes at once, so switching modes never
+// leaves stale state in the one not currently shown.
+function fxResetCurvesAll(){curveResetAll();paramCurveResetAll();}
+function drawCurveEditor(){
+  const cv=document.getElementById('cv-curve');if(!cv||!cv.clientWidth)return;
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
+  cv.width=w*dpr;cv.height=w*dpr;
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,w);
+  x.strokeStyle='rgba(255,255,255,.08)';x.lineWidth=1;
+  for(let i=1;i<4;i++){x.beginPath();x.moveTo(w*i/4,0);x.lineTo(w*i/4,w);x.moveTo(0,w*i/4);x.lineTo(w,w*i/4);x.stroke();}
+  x.strokeStyle='rgba(255,255,255,.15)';x.beginPath();x.moveTo(0,w);x.lineTo(w,0);x.stroke();
+  const col={m:'#e8e8e8',r:'#ff6b6b',g:'#69db7c',b:'#74a9ff'}[curveCh];
+  const f=curveEval(fxState.curves[curveCh]);
+  x.strokeStyle=col;x.lineWidth=1.5;x.beginPath();
+  for(let i=0;i<=w;i++){const y=Math.min(1,Math.max(0,f(i/w)));(i?x.lineTo:x.moveTo).call(x,i,w-y*w);}
+  x.stroke();
+  x.fillStyle=col;fxState.curves[curveCh].forEach(p=>{x.fillRect(Math.round(p[0]*w)-4,Math.round(w-p[1]*w)-4,8,8);}); // square points (app's square control language)
+}
+function _crvPos(e){const cv=document.getElementById('cv-curve'),r=cv.getBoundingClientRect();
+  return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];}
+function _crvHit(px,py){let hit=-1;fxState.curves[curveCh].forEach((p,i)=>{if(Math.hypot(p[0]-px,p[1]-py)<0.06)hit=i;});return hit;}
+let _crvScroll=null,_crvTouchStart=null;
+function _crvInit(){
+  const cv=document.getElementById('cv-curve');if(!cv)return;
+  cv.addEventListener('pointerdown',e=>{
+    const[px,py]=_crvPos(e),pts=fxState.curves[curveCh];
+    let hit=_crvHit(px,py);
+    // Only a touch ON the curve (or a point) edits it. Anywhere else, a finger drag scrolls the
+    // tool sheet instead — so scrolling past the curve never bends it by accident.
+    const r=cv.getBoundingClientRect(),tol=(e.pointerType==='mouse'?8:20)/r.height;
+    if(hit<0&&Math.abs(Math.min(1,Math.max(0,curveEval(pts)(px)))-py)>tol){
+      if(e.pointerType!=='mouse'){const sc=cv.closest('.fx-panel');if(sc)_crvScroll={y:e.clientY,top:sc.scrollTop,el:sc};}
+      return;
+    }
+    if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
+    _crvDrag=hit;cv.setPointerCapture(e.pointerId);_crvEnsureOn();
+    // Touch users cannot double-click a canvas point. A short hold removes only interior
+    // points; any movement turns the same pointer into the existing drag gesture instead.
+    if(e.pointerType==='touch'&&hit>0&&hit<pts.length-1){
+      clearTimeout(_crvTouchDeleteTimer);_crvTouchStart={x:e.clientX,y:e.clientY};
+      _crvTouchDeleteTimer=setTimeout(()=>{
+        if(_crvDrag!==hit)return;
+        pts.splice(hit,1);_crvDrag=-1;_crvTouchDeleteTimer=0;curveChanged();
+      },550);
+    }
+    bakeCurves();drawCurveEditor();
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(_crvScroll){_crvScroll.el.scrollTop=_crvScroll.top-(e.clientY-_crvScroll.y);return;}
+    if(_crvDrag<0)return;
+    if(_crvTouchDeleteTimer){
+      // A resting fingertip jitters a pixel or two; only real movement cancels the hold-to-delete.
+      if(_crvTouchStart&&Math.hypot(e.clientX-_crvTouchStart.x,e.clientY-_crvTouchStart.y)<6)return;
+      clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;
+    }
+    const pts=fxState.curves[curveCh];let[px,py]=_crvPos(e);
+    if(_crvDrag===0)px=0;else if(_crvDrag===pts.length-1)px=1;              // endpoints: x pinned, y free
+    else px=Math.min(pts[_crvDrag+1][0]-0.01,Math.max(pts[_crvDrag-1][0]+0.01,px));
+    pts[_crvDrag]=[px,py];_crvEnsureOn();bakeCurves();drawCurveEditor();
+    clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);           // live drag preview; history on release
+  });
+  const up=()=>{_crvScroll=null;if(_crvTouchDeleteTimer){clearTimeout(_crvTouchDeleteTimer);_crvTouchDeleteTimer=0;}if(_crvDrag<0)return;_crvDrag=-1;curveChanged();};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('dblclick',e=>{
+    const[px,py]=_crvPos(e),pts=fxState.curves[curveCh],hit=_crvHit(px,py);
+    if(hit>0&&hit<pts.length-1){pts.splice(hit,1);curveChanged();}
+  });
+  bakeCurves();drawCurveEditor();
+}
+
+// ══ LIFT / GAMMA / GAIN COLOUR WHEELS (ROADMAP R11) — ASC-CDL Slope/Offset/Power ══
+// Real, published, industry-standard transform (American Society of Cinematographers Color
+// Decision List — ASC-CDL, the same math behind DaVinci Resolve's primary wheels and
+// OpenColorIO's CDLTransform): for each channel,
+//     out = clamp( (in * slope + offset) ^ power , 0, 1 )
+// "Slope" is driven by the Gain wheel (multiplicative — dominates highlights, since a
+// multiplicative term moves a bright pixel further than a dark one), "Offset" by the Lift wheel
+// (additive — dominates shadows, since an additive term is a LARGER fraction of a dark value),
+// and "Power" by the Gamma wheel (an exponent — bends the midtones, leaving 0 and 1 fixed).
+// This is deliberately NOT three independent hand-rolled dials; it's the one published formula,
+// ported directly (see tools/calib/verify_cdl.mjs for the Node-side validation against hand points).
+function _wheelDefault(){return{h:0,s:0,l:0};}
+function _wheelsDefault(){return{lift:_wheelDefault(),gamma:_wheelDefault(),gain:_wheelDefault()};}
+function cdlIdentity(){const W=fxState.wheels;
+  return['lift','gamma','gain'].every(k=>W[k].s===0&&W[k].l===0);}
+// Wheel (angle,radius) -> a per-channel RGB offset. Standard 3-wheel colour-balance convention:
+// project the wheel's (x,y) position onto three unit vectors 120° apart, one per primary — same
+// "additive intensity on a hue wheel" idea this app already uses for the video vectorscope
+// (CLAUDE.md §12, drawScopeVectorscope's Rec.709 Cb/Cr wheel + 123° skin-tone line), just with
+// R/G/B primaries in place of Cb/Cr. k=0.4 keeps a full-radius drag from blowing out a channel.
+function _wheelRGB(h,s){
+  const rad=h*Math.PI/180,x=s*Math.cos(rad),y=s*Math.sin(rad),k=0.4;
+  return[0,120,240].map(deg=>{const a=deg*Math.PI/180;return k*(x*Math.cos(a)+y*Math.sin(a));});
+}
+// Computes the SOP (Slope/Offset/Power) triple from the 3 wheels' current state. Pure JS,
+// validated in tools/calib/verify_cdl.mjs BEFORE any GLSL was written (see that script's header).
+function cdlComputeSOP(){
+  const W=fxState.wheels;
+  const liftRGB=_wheelRGB(W.lift.h,W.lift.s), gainRGB=_wheelRGB(W.gain.h,W.gain.s), gammaRGB=_wheelRGB(W.gamma.h,W.gamma.s);
+  const offset=[0,1,2].map(i=>liftRGB[i]+(W.lift.l/100)*0.25);        // lift lum: ±100 -> ±0.25 additive
+  const slope=[0,1,2].map(i=>1+gainRGB[i]+(W.gain.l/100)*1.0);        // gain lum: ±100 -> slope in [0,2]
+  const gammaVal=[0,1,2].map(i=>Math.max(0.05,1+gammaRGB[i]+(W.gamma.l/100)*1.0)); // gamma lum: ±100 -> gamma in [0.05,2]
+  const power=gammaVal.map(g=>1/g);                                   // ASC "Power" = 1/gamma (UI convention: + brightens midtones)
+  return{slope,offset,power};
+}
+function wheelChanged(){bakeNothingCdlIsUniformOnly();fxUpdate();}
+function bakeNothingCdlIsUniformOnly(){/* SOP is recomputed live in getFXParams from fxState.wheels — nothing to bake/cache */}
+function wheelReset(name){fxState.wheels[name]=_wheelDefault();wheelSyncUI(name);wheelChanged();}
+function wheelResetAll(){fxState.wheels=_wheelsDefault();['lift','gamma','gain'].forEach(wheelSyncUI);wheelChanged();}
+function wheelLumChanged(name,v){fxState.wheels[name].l=parseFloat(v)||0;wheelChanged();}
+function wheelSyncUI(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(cv)drawWheel(name);
+  const sl=document.getElementById('sl-wheel-'+name+'-l'),vv=document.getElementById('vl-wheel-'+name+'-l');
+  if(sl)sl.value=fxState.wheels[name].l;if(vv)vv.textContent=fxState.wheels[name].l;
+}
+const WHEEL_NAMES=['lift','gamma','gain'];
+function drawWheel(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(!cv||!cv.clientWidth)return;
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth;
+  cv.width=w*dpr;cv.height=w*dpr;
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,w);
+  const cx=w/2,cy=w/2,R=w/2-6;
+  // Hue-wheel background (same radial-hue convention as drawScopeVectorscope's Cb/Cr wheel):
+  // conic-style approximation via many thin radial strokes (canvas2D has no conic gradient
+  // fallback needed here — createConicGradient is used where available for a clean sweep).
+  if(x.createConicGradient){
+    const g=x.createConicGradient(0,cx,cy);
+    for(let i=0;i<=12;i++){const deg=i/12*360;g.addColorStop(i/12,`hsl(${deg},85%,55%)`);}
+    x.save();x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.clip();x.fillStyle=g;x.fillRect(0,0,w,w);x.restore();
+  }else{
+    for(let deg=0;deg<360;deg+=2){const a0=deg*Math.PI/180,a1=(deg+2.5)*Math.PI/180;
+      x.beginPath();x.moveTo(cx,cy);x.arc(cx,cy,R,a0,a1);x.closePath();x.fillStyle=`hsl(${deg},85%,55%)`;x.fill();}
+  }
+  x.globalAlpha=0.35;x.fillStyle='#000';x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.fill();x.globalAlpha=1;
+  x.strokeStyle='rgba(255,255,255,.35)';x.lineWidth=1;x.beginPath();x.arc(cx,cy,R,0,Math.PI*2);x.stroke();
+  x.beginPath();x.arc(cx,cy,2,0,Math.PI*2);x.fillStyle='rgba(255,255,255,.5)';x.fill(); // centre dot = neutral
+  const W=fxState.wheels[name],rad=W.h*Math.PI/180;
+  const px=cx+W.s*R*Math.cos(rad),py=cy-W.s*R*Math.sin(rad);
+  x.beginPath();x.arc(px,py,7,0,Math.PI*2);x.fillStyle='#fff';x.fill();x.strokeStyle='#000';x.lineWidth=1.5;x.stroke();
+}
+function _wheelPos(cv,e){const r=cv.getBoundingClientRect(),cx=r.width/2,cy=r.height/2,R=r.width/2-6;
+  let x=(e.clientX-r.left-cx)/R,y=-(e.clientY-r.top-cy)/R;
+  const s=Math.min(1,Math.hypot(x,y));if(s>0){const sc=s/Math.hypot(x,y);x*=sc;y*=sc;}
+  return{h:Math.atan2(y,x)*180/Math.PI,s};
+}
+function _wheelInit(name){
+  const cv=document.getElementById('cv-wheel-'+name);if(!cv||cv._wheelInit)return;cv._wheelInit=true;
+  let dragging=false;
+  const move=e=>{const p=_wheelPos(cv,e);fxState.wheels[name].h=p.h;fxState.wheels[name].s=p.s;drawWheel(name);};
+  cv.addEventListener('pointerdown',e=>{dragging=true;cv.setPointerCapture(e.pointerId);move(e);clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);});
+  cv.addEventListener('pointermove',e=>{if(!dragging)return;move(e);clearTimeout(fxTimer);fxTimer=setTimeout(renderPreview,120);});
+  const up=()=>{if(!dragging)return;dragging=false;wheelChanged();};
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('dblclick',()=>{wheelReset(name);});
+  drawWheel(name);
+}
+function wheelsInitAll(){WHEEL_NAMES.forEach(_wheelInit);}
+
+// ══ HSL COLOR MIXER — 8 bands × hue/sat/lum, baked to a 33³ LUT via applyHSL ═══
+const HSL_BANDS=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'];
+const HSL_COLS={Red:'#ff5b5b',Orange:'#ff9f43',Yellow:'#ffd43b',Green:'#51cf66',Aqua:'#3bc9db',Blue:'#4d8bff',Purple:'#9775fa',Magenta:'#f06595'};
+// Center hue (degrees, 0-360) + hue RANGE each band covers — for the population histogram
+// (bucketing image pixels by hue) and the chip's before/after split swatch.
+const HSL_HUE_DEG={Red:0,Orange:30,Yellow:60,Green:120,Aqua:190,Blue:230,Purple:275,Magenta:320};
+const HSL_HUE_RANGE=[[345,15],[15,45],[45,75],[75,165],[165,210],[210,255],[255,290],[290,345]]; // parallel to HSL_BANDS
+let hslBand='Red',_hslBakeT=null;
+function _hslDefault(){return{hue:{},sat:{},lum:{}};}
+function hslIdentity(){const H=fxState.hsl;return['hue','sat','lum'].every(k=>HSL_BANDS.every(b=>!(H[k]&&H[k][b])));}
+function pointColorsIdentity(){return!(fxState.pointColors&&fxState.pointColors.length);}
+// Bake fxState.hsl AND fxState.pointColors together through applyHSL/applyPointColors (the
+// Match & Refine band-kernel implementation) into ONE packed 33³ RGB byte cube (x=r fastest —
+// the exact layout setLUT/setHslLUT expect), shared by the Color Mixer and Point Color panels
+// so no second shader stage/texture is needed. Each panel's OWN toggle gates whether its inputs
+// are actually baked in (not just whether the shared LUT is applied) — otherwise, with two
+// independent toggles sharing one texture, turning Color Mixer off while Point Color stays on
+// would still silently re-apply whatever Color Mixer band values happened to be sitting in
+// fxState.hsl. ~36k evals ≈ a few ms; debounced during slider drags. Hue slider ±100 → ±45°.
+function bakeHsl(){
+  const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
+  const pcOn=!!(document.getElementById('tg-pointcolor')||{}).classList?.contains('on');
+  const H=fxState.hsl,S=33,S2=S*S,d=new Uint8Array(S*S*S*3),hA={},sA={},lA={};
+  if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
+  const pts=(pcOn&&fxState.pointColors)?fxState.pointColors:null;
+  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+    let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+    if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
+    const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
+  if(FX.ok)FX.setHslLUT(d);
+}
+// DRK-style before/after split swatch: left half is the band's canonical hue, right half
+// is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews
+// the edit instead of staying a flat reference color forever. Both halves are the SAME formula
+// (only the deltas differ) so at hue=sat=lum=0 they resolve to one flat color, not a two-tone
+// split — the old left half came from an unrelated hardcoded HSL_COLS hex that never agreed
+// with the hsl()-computed right half even with zero edits.
+function _hslColorAt(b,hue,sat,lum){
+  const hDeg=(HSL_HUE_DEG[b]+(hue||0)*0.45+360)%360;
+  const sPct=Math.max(0,Math.min(100,65+(sat||0)*0.35));
+  const lPct=Math.max(0,Math.min(100,55+(lum||0)*0.35));
+  return `hsl(${hDeg.toFixed(0)},${sPct.toFixed(0)}%,${lPct.toFixed(0)}%)`;
+}
+function _hslAfterColor(b){
+  const H=fxState.hsl;
+  return _hslColorAt(b,(H.hue&&H.hue[b])||0,(H.sat&&H.sat[b])||0,(H.lum&&H.lum[b])||0);
+}
+function hslBuildChips(){
+  const row=document.getElementById('hsl-chips');if(!row)return;row.innerHTML='';
+  const preview=_hslActiveBand();
+  HSL_BANDS.forEach(b=>{
+    const edited=['hue','sat','lum'].some(k=>fxState.hsl[k]&&fxState.hsl[k][b]);
+    const bt=document.createElement('button');bt.type='button';
+    bt.className='hsl-chip'+(edited?' edited':'')+(b===preview?' on':'');
+    bt.dataset.band=b;bt.title=b;bt.setAttribute('aria-label',b+(edited?', edited':''));
+    bt.setAttribute('aria-pressed',String(b===preview));
+    bt.style.setProperty('--band-col',HSL_COLS[b]);
+    bt.style.setProperty('--band-before',_hslColorAt(b,0,0,0));
+    bt.style.setProperty('--band-after',_hslAfterColor(b));
+    bt.onclick=()=>hslSetBand(b);
+    row.appendChild(bt);
+  });
+}

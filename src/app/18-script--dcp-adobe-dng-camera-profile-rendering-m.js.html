@@ -1,0 +1,1220 @@
+// ── DCP (Adobe DNG Camera Profile) rendering — match Lightroom's RAW color ──
+// Pipeline (validated numerically vs an LR reference TIFF in tools/calib/dcp_pipeline.py):
+// linear WB'd camera RGB → [gains] → ForwardMatrix → XYZ(D50) → linear ProPhoto →
+// exposure → ProfileLookTable (HSV deltas, layout [val][hue][sat]) → black subtract →
+// per-channel ProfileToneCurve → ProPhoto→sRGB → gamma. The whole transform is baked
+// into a 65^3 LUT once per profile, then applied per pixel with trilinear interp.
+// Union of every camera's style names — not every name resolves for every camera (Sony has no
+// "Cinelike D2", Panasonic has no "Neutral"/"Clear"/"Deep"/"Light"); getDcpLUT falls back to
+// that camera's Standard profile when the specific file doesn't exist.
+const DCP_PROFILES=['Standard','Natural','Vivid','Flat','Portrait','Landscape','Cinelike D2','Cinelike V2','L Classic Neo','Monochrome','L Monochrome','L Monochrome D','L Monochrome S','Leica Monochrome','Neutral','Clear','Deep','Light'];
+// Detected EXIF make/model -> vendor/dcp/ filename prefix. Add an entry here whenever a new
+// camera's .dcp set is dropped into vendor/dcp/ (see CLAUDE.md §7 for where they come from).
+const CAMERA_DCP_PREFIXES=[
+  {test:/panasonic/i,model:/dc-s9/i,prefix:'Panasonic DC-S9'},
+  {test:/sony/i,model:/dsc-rx100m5/i,prefix:'Sony DSC-RX100M5'},
+];
+function cameraDcpPrefix(make,model){
+  const m=(make||'').trim(),mo=(model||'').trim();
+  for(const c of CAMERA_DCP_PREFIXES)if(c.test.test(m)&&c.model.test(mo))return c.prefix;
+  return null; // no bundled profile for this camera — caller should skip DCP entirely
+}
+// ROADMAP.md's F1 — desktop-only: when the bundled 2-camera table above doesn't match, ask Rust's
+// dcp_store.rs to look for a real Adobe Camera Raw / DNG Converter profile already installed on
+// this machine (resolution order there: user-installed -> system -> the generic "Adobe Standard"
+// singleton). Bundled ALWAYS wins when it matches — this is deliberately a fallback, never a
+// replacement, so DC-S9/RX100M5 rendering (calibrated with a fitted residual on top) is untouched.
+// Returns null on web/iOS (no filesystem access, and no point asking) and whenever nothing is
+// installed for this camera. `source` is threaded through to getDcpLUT so it knows whether to
+// fetch() the bundled file or invoke() the disk one.
+async function resolveDcpSource(make,model){
+  const bundled=cameraDcpPrefix(make,model);
+  if(bundled)return{prefix:bundled,source:'bundled'};
+  if(!window.__TAURI__||!make||!model)return null;
+  // Cached per session: the on-disk Adobe profile set for a camera doesn't change mid-session,
+  // and this ran an IPC round trip on every RAW open of a non-bundled camera.
+  const ck=make+'\u0000'+model;
+  if(resolveDcpSource._c&&resolveDcpSource._c.has(ck))return resolveDcpSource._c.get(ck);
+  try{
+    const set=await window.__TAURI__.core.invoke('list_dcp_profiles',{make,model});
+    const out=set?{prefix:set.prefix,source:set.source,styles:set.styles}:null;
+    (resolveDcpSource._c||(resolveDcpSource._c=new Map())).set(ck,out);
+    return out;
+  }catch(e){
+    console.error('list_dcp_profiles',e);
+    return null;
+  }
+}
+// Residual correction constants, refitted against FIVE Lightroom reference TIFFs (ISO
+// 200-5000) on the NATIVE rawler decode + the DNG-SDK-correct pipeline below
+// (tools/calib/dcp_native_fit.py -> dcp_native_fit.json). With the decode truly linear and the
+// pipeline structurally right, everything collapsed to near-identity: ev 0.000 with NO ISO
+// dependence (the old ev=-0.819-0.1732x and black=0.04 were compensating a mis-linearized
+// libraw-wasm decode — wasm ~= 1.22*native^0.634, measured per-pixel), and gr/gb are a ~2%
+// WB-interpretation trim. Shadow-skin patches now match LR within 5/255 (previously crushed).
+// Fitted ONLY against the Panasonic DC-S9 (tools/calib/dcp_native_fit.py, against real Lightroom
+// TIFFs) — a small residual exposure/WB correction layered on top of the DCP's own matrices.
+// Applying it to a different sensor's data would be a wrong-but-plausible-looking tweak, not
+// a calibrated one, so any other camera gets identity until it has its own fitted constants.
+function dcpFit(iso,cameraPrefix){
+  // sky: gates bakeDcpLUT's residual cool-highlight lift below — fitted ONLY against the
+  // DC-S9 (tools/calib/dcp_residual_tone.py), so it must ride the SAME camera check as ev/gr/gb
+  // rather than applying unconditionally. Before this, every non-S9 camera (e.g. the bundled
+  // Sony DSC-RX100M5 profile) silently got an S9-specific blue-sky correction baked in.
+  // ⚠️ Guard on `!==` alone, NOT `cameraPrefix&&cameraPrefix!==...` — the old `&&` form treated
+  // a falsy cameraPrefix (null/undefined, "no bundled profile for this camera") as "fall through
+  // to the S9 branch", the opposite of correct. Unreachable today (the one caller throws before
+  // getDcpLUT/dcpFit when cameraDcpPrefix() returns null — chromasmith-22.html's
+  // `if(!camPrefix)throw new Error(...)`), but ROADMAP.md's R8 exists specifically to replace
+  // that throw with a fallback path, which would call dcpFit(iso,null) for real.
+  if(cameraPrefix!=='Panasonic DC-S9')return{ev:0.0,gb:1.0,gr:1.0,sky:false};
+  return{ev:0.0,gb:0.9783,gr:0.9860,sky:true};
+}
+const XYZ2PP=[1.3459433,-0.2556075,-0.0511118,-0.5445989,1.5081673,0.0205351,0,0,1.2118128];
+const PP2SRGB=[2.0340758,-0.7273341,-0.3067418,-0.2288131,1.2317301,-0.0029168,-0.0085698,-0.1532866,1.1618564];
+// "As Shot" (default): each RAW opens on the profile the camera itself recorded (Panasonic
+// PhotoStyle makernote, read natively by panasonic_photo_style). Codes per ExifTool; 22 =
+// Leica Monochrome verified in lens_correct.rs's photo_style_reads_real_files. Unknown, V-Log
+// (17 — handled by the V-Log input transform instead) or non-Panasonic falls back to Standard.
+const RAW_AS_SHOT='__asshot';
+// One-time move to As Shot: the old default was a fixed 'Standard' for every photo.
+try{if(!localStorage.getItem('rawProfileAsShotMigrated')){if(localStorage.getItem('rawProfile')==='Standard')localStorage.removeItem('rawProfile');localStorage.setItem('rawProfileAsShotMigrated','1');}}catch(e){}
+const PHOTO_STYLE_DCP={1:'Standard',2:'Vivid',3:'Natural',4:'Monochrome',5:'Landscape',6:'Portrait',8:'Cinelike D2',9:'Cinelike V2',11:'L Monochrome',15:'L Monochrome D',18:'Cinelike D2',22:'Leica Monochrome'};
+function rawProfileFor(ident,profile){
+  if(profile===undefined)profile=rawProfile();
+  if(profile!==RAW_AS_SHOT)return profile;
+  const ps=ident&&ident.photoStyle;
+  return (ps!=null&&PHOTO_STYLE_DCP[ps])||'Standard';
+}
+function rawProfile(){const v=localStorage.getItem('rawProfile');return v===null?RAW_AS_SHOT:v}
+function setRawProfile(v){localStorage.setItem('rawProfile',v);reloadRawProfileForCurrentPhoto(v)}
+try{window.chromasmithHdrPreview=localStorage.getItem('chromasmithHdrPreview')==='1';}catch(e){window.chromasmithHdrPreview=false;}
+function fxHdrPreviewSyncUI(){
+  const row=document.getElementById('fx-hdr-preview-row'),tg=document.getElementById('tg-hdr-preview');
+  if(row)row.style.display=window.__TAURI__?'':'none';
+  if(tg)tg.classList.toggle('on',!!window.chromasmithHdrPreview);
+}
+async function fxHdrPreviewChanged(){
+  window.chromasmithHdrPreview=!window.chromasmithHdrPreview;
+  try{localStorage.setItem('chromasmithHdrPreview',window.chromasmithHdrPreview?'1':'0');}catch(e){}
+  fxHdrPreviewSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  const reloaded=typeof window.chromasmithReloadCurrentPhoto==='function'&&window.chromasmithReloadCurrentPhoto();
+  if(reloaded)toast('HDR preview: '+(window.chromasmithHdrPreview?'on':'off')+' — reloading this photo…',true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxHdrPreviewSyncUI);
+// "Full cleanup while editing": RAW opens run only the chroma-wavelet noise reduction (fast); the
+// shadow NR + false-colour suppression + hue defringe are applied at export automatically
+// (exportFX -> chromasmithApplyFullCleanup) or here on demand. A global preference like HDR
+// preview above (localStorage), not per-photo recipe state — it only decides which decode tier
+// the editor shows, and export always completes the full pass.
+try{window.chromasmithRawFullCleanup=localStorage.getItem('chromasmithRawFullCleanup')==='1';}catch(e){window.chromasmithRawFullCleanup=false;}
+function fxRawFullCleanupSyncUI(){
+  const row=document.getElementById('fx-raw-cleanup-row'),tg=document.getElementById('tg-raw-full-cleanup');
+  const it=(typeof curItem==='function')?curItem():null;
+  if(row)row.style.display=(window.__TAURI__&&!!(it&&it.rawFile))?'':'none';
+  if(tg)tg.classList.toggle('on',!!window.chromasmithRawFullCleanup);
+}
+function fxRawFullCleanupChanged(){
+  window.chromasmithRawFullCleanup=!window.chromasmithRawFullCleanup;
+  try{localStorage.setItem('chromasmithRawFullCleanup',window.chromasmithRawFullCleanup?'1':'0');}catch(e){}
+  fxRawFullCleanupSyncUI();
+  const reloaded=typeof window.chromasmithReloadCurrentPhoto==='function'&&window.chromasmithReloadCurrentPhoto();
+  if(reloaded)toast('Full cleanup while editing: '+(window.chromasmithRawFullCleanup?'on':'off')+' — reloading this photo…',true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawFullCleanupSyncUI);
+// Re-decodes the CURRENT photo under the newly-picked DCP profile instead of only remembering
+// the choice for the next RW2 load (the original behaviour — see the log string it used to emit).
+// Native shell: full path-based reopen (chromasmithReloadCurrentPhoto), same mechanism the
+// lens/NR toggles already use. Browser/wasm: rawFile (kept on the fxImages entry specifically
+// "for the Diagnostics DCP-option re-decode") lets loadRw2 re-run without a re-pick; its
+// returned canvas replaces it.img in place so undo history / masks / geometry on the item
+// survive untouched — only the pixels change.
+async function reloadRawProfileForCurrentPhoto(v){
+  const label=v===RAW_AS_SHOT?'As Shot':(v||'None (LibRaw sRGB)');
+  const it=typeof curItem==='function'?curItem():null;
+  if(!it){log('RAW profile: '+label,'info');return}
+  // Visible "this is happening" signal: reuse the SAME deskbar spinner the initial RAW decode
+  // shows (fxDeskbarTitle), rather than inventing a second indicator — plus dim the dropdown
+  // itself so a second change can't race the first while a decode is in flight.
+  const sel=document.getElementById('sel-dcp');
+  if(sel)sel.disabled=true;
+  fxPhotoActivityInvalidate();
+  fxDeskbarTitle(it.name,'Reprocessing RAW…',true);
+  // Re-reads curItem() fresh rather than closing over `it` — the native path (chromasmithReloadCurrentPhoto)
+  // replaces fxImages wholesale, so restoring from the pre-reload `it` could paint a stale object.
+  const restoreTitle=()=>{
+    const cur=typeof curItem==='function'?curItem():null;
+    if(!cur)return;
+    fxDeskbarTitle(cur.name,typeof fxDimsFmt==='function'?fxDimsFmt(cur.name,cur.img,cur.ext):'',false);
+  };
+  try{
+    if(window.__TAURI__&&typeof window.chromasmithReloadCurrentPhoto==='function'){
+      log('RAW profile: '+label+' — reloading…','info');
+      await window.chromasmithReloadCurrentPhoto();
+      log('RAW profile applied: '+label,'ok');
+      return;
+    }
+    if(!it.rawFile){log('RAW profile: '+label+' — applies to the next RAW load','info');return}
+    log('RAW profile: '+label+' — reloading…','info');
+    const half=!!it._rawHalf; // keep a proxy a proxy; supersede any in-flight promotion
+    if(half){it._rawGen=(it._rawGen||0)+1;delete it._rawFullP;}
+    const r=await loadRw2(it.rawFile,{half});
+    it.img=half?(fxDisplayTierCanvas(r.canvas)||r.canvas):r.canvas;
+    if(it===curItem())fxImg=it.img;
+    if(typeof updateWork==='function')updateWork();
+    if(typeof renderPreview==='function')renderPreview();
+    log('RAW profile applied: '+label,'ok');
+  }catch(e){
+    log('RAW profile reload failed: '+errStr(e),'warn');
+    if(typeof toast==='function')toast('RAW profile reload failed: '+errStr(e),false);
+  }finally{
+    if(sel)sel.disabled=false;
+    restoreTitle();
+  }
+}
+function initDcpSelect(){const s=document.getElementById('sel-dcp');if(!s)return;
+  s.innerHTML='<option value="'+RAW_AS_SHOT+'">As Shot (camera Photo Style)</option><option value="">None (LibRaw sRGB)</option>'+DCP_PROFILES.map(n=>'<option value="'+n+'">'+n+'</option>').join('');
+  s.value=rawProfile();}
+function parseDCP(buf,fname){
+  fname=fname||'DCP profile';
+  const d=new DataView(buf);
+  // Every offset below is read from the FILE ITSELF (untrusted) — a truncated/corrupt .dcp
+  // must throw a clear named error instead of a raw uncaught RangeError from the DataView.
+  function need(offset,len){
+    if(offset<0||len<0||offset+len>d.byteLength)throw new Error(`Corrupt DCP profile (offset out of range): ${fname}`);
+  }
+  need(0,4);
+  if(d.getUint16(0,true)!==0x4949||d.getUint16(2,true)!==0x4352)throw new Error('not a little-endian DCP');
+  need(4,4);
+  const off=d.getUint32(4,true);
+  need(off,2);
+  const n=d.getUint16(off,true);
+  const TYPSZ={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8};
+  const tags={};
+  for(let i=0;i<n;i++){
+    const e=off+2+i*12;
+    need(e,12);
+    const tag=d.getUint16(e,true),typ=d.getUint16(e+2,true),cnt=d.getUint32(e+4,true);
+    const sz=(TYPSZ[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,true):e+8;
+    need(ptr,sz);
+    let val;
+    if(typ===10){val=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,true),b=d.getInt32(ptr+8*j+4,true);val[j]=b?a/b:a;}}
+    else if(typ===11){val=new Float32Array(cnt);for(let j=0;j<cnt;j++)val[j]=d.getFloat32(ptr+4*j,true);}
+    else if(typ===4){val=new Uint32Array(cnt);for(let j=0;j<cnt;j++)val[j]=d.getUint32(ptr+4*j,true);}
+    else continue; // only numeric tags are needed
+    tags[tag]=val;
+  }
+  // ROADMAP.md's F1b: ProfileToneCurve (50940) is missing from 201 of 210 real Adobe Standard/
+  // profiles sampled (confirmed against the actual files, not assumed) — `Camera/*` profiles are
+  // 412/412 fine, so this only bites the F1 on-disk-resolver's flat-tree fallback path. DNG's own
+  // spec treats an absent ProfileToneCurve as "apply none" — an identity curve (two points,
+  // (0,0)->(1,1)) reproduces exactly that: bakeDcpLUT's `tone=v=>toneL[...]` interpolation over
+  // these two points is the straight line y=x, a true no-op through that stage.
+  const IDENTITY_TONE_CURVE=new Float64Array([0,0,1,1]);
+  if(!tags[50964]||!tags[50981]||!tags[50982])throw new Error('DCP missing ForwardMatrix/LookTable');
+  // Reject tags with the right IDs but wrong element counts — a malformed/truncated table here
+  // would otherwise silently produce NaN matrices deep in bakeDcpLUT instead of failing loudly.
+  if(tags[50964].length<9)throw new Error(`Corrupt DCP profile (ForwardMatrix has wrong element count): ${fname}`);
+  if(tags[50940]&&(tags[50940].length<4||tags[50940].length%2!==0))throw new Error(`Corrupt DCP profile (ToneCurve has wrong element count): ${fname}`);
+  if(tags[50981].length<3)throw new Error(`Corrupt DCP profile (LookTable dims has wrong element count): ${fname}`);
+  {
+    const[nh,ns,nv]=tags[50981];
+    const expectedLook=nh*ns*nv*3;
+    if(!(nh>0&&ns>0&&nv>0)||tags[50982].length<expectedLook)throw new Error(`Corrupt DCP profile (LookTable has wrong element count): ${fname}`);
+  }
+  return{fm:tags[50964],tone:tags[50940]||IDENTITY_TONE_CURVE,dims:tags[50981],look:tags[50982],
+         enc:tags[51108]?tags[51108][0]:0,baseOff:tags[51109]?tags[51109][0]:0};
+}
+function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4)-0.055}
+// ══ OFF-MAIN-THREAD PIXEL WORK ═══════════════════════════════════════════════════════════════
+// Two loops in this file are big enough to freeze the UI outright, and neither has any reason to
+// run on the main thread:
+//   • bakeDcpLUT — 65³ = 274,625 iterations of matrix + HSV + LookTable trilinear + tone curve,
+//     on every RAW load and every RAW-profile change.
+//   • exportSharpen — a 4-tap cross high-pass over the WHOLE export canvas (a 24MP export is
+//     ~72M channel operations) after a full getImageData readback.
+//
+// ⚠️ The worker source is BUILT FROM THE REAL FUNCTIONS via Function.prototype.toString rather
+// than being a hand-copied second implementation. bakeDcpLUT is a precise transcription of the
+// Adobe DNG SDK pipeline (see its comment above, and CLAUDE.md §7) that took real work to get
+// right; a copy of it inside a worker string would be a second thing to keep in sync, and the
+// failure mode of it drifting is "RAW colour is subtly wrong", which nobody would trace back
+// here. One definition, stringified.
+//
+// If Worker or Blob URLs are unavailable, or construction throws (some embedded WebViews),
+// _cpuRun calls the exact same function inline instead — identical output, only the blocking
+// differs. ⚠️ That fallback happens BEFORE anything is transferred, and deliberately never
+// after: a transferred ArrayBuffer is detached in this thread, so a "retry on the main thread"
+// once a job is already in flight would be operating on a detached buffer. A job that fails
+// after dispatch rejects, and its caller decides.
+let _cpuWorker,_cpuJobSeq=0;
+const _cpuJobs=new Map();
+function _cpuFns(){return{bakeDcpLUT,unsharpRGBA};} // the only functions the worker exposes
+function _cpuGetWorker(){
+  if(_cpuWorker!==undefined)return _cpuWorker;      // null = permanently unavailable
+  _cpuWorker=null;
+  try{
+    const fns=_cpuFns(),names=Object.keys(fns);
+    const src=[
+      'const XYZ2PP='+JSON.stringify(XYZ2PP)+';',
+      'const PP2SRGB='+JSON.stringify(PP2SRGB)+';',
+      srgbG.toString(),
+      ...names.map(n=>fns[n].toString()),
+      'const FNS={'+names.join(',')+'};',
+      // Transfer the result back rather than structured-cloning it: a 65³ LUT is 3.3MB and a
+      // 24MP sharpen result is ~96MB, and copying those twice would give back much of what
+      // moving the work off-thread just bought.
+      'const bufOf=r=>r&&r.buffer?[r.buffer]:(r&&r.data&&r.data.buffer?[r.data.buffer]:[]);',
+      'onmessage=e=>{const{id,fn,args}=e.data;'
+        +'try{const r=FNS[fn](...args);postMessage({id,ok:true,r},bufOf(r));}'
+        +'catch(err){postMessage({id,ok:false,e:String(err&&err.message||err)});}};'
+    ].join('\n');
+    const w=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+    w.onmessage=e=>{
+      const job=_cpuJobs.get(e.data.id);if(!job)return;
+      _cpuJobs.delete(e.data.id);
+      e.data.ok?job.res(e.data.r):job.rej(new Error(e.data.e));
+    };
+    // A worker that dies mid-job must not leave every caller awaiting forever.
+    w.onerror=()=>{_cpuJobs.forEach(j=>j.rej(new Error('pixel worker failed')));_cpuJobs.clear();_cpuWorker=null;};
+    _cpuWorker=w;
+  }catch(e){_cpuWorker=null;}
+  return _cpuWorker;
+}
+// `transfer` lists ArrayBuffers to hand over zero-copy. Anything transferred is DETACHED here
+// afterwards, so never pass a buffer this thread still needs to read.
+function _cpuRun(fnName,args,transfer){
+  const w=_cpuGetWorker();
+  if(!w)return Promise.resolve().then(()=>_cpuFns()[fnName](...args)); // same code, main thread
+  return new Promise((res,rej)=>{
+    const id=++_cpuJobSeq;
+    _cpuJobs.set(id,{res,rej});
+    try{w.postMessage({id,fn:fnName,args},transfer||[]);}
+    catch(e){_cpuJobs.delete(id);rej(e);}
+  });
+}
+// Bake the DCP transform into a 65^3 LUT. Pipeline order and clamping semantics mirror the
+// Adobe DNG SDK as implemented by RawTherapee's rtengine/dcp.cc (verified against its source):
+// camera RGB → ForwardMatrix → XYZ(D50) → linear ProPhoto → exposure (2^(ev+BaselineExposure
+// Offset)) → LookTable (HSV deltas; TABLE-INDEX clamps only, values stay extended-range) →
+// hue-preserving Adobe RGBTone tone curve (curve on max & min channel, median interpolated —
+// NOT per-channel; per-channel application over-darkens/over-saturates mixed colors, worst in
+// shadows) → ProPhoto→sRGB → gamma. NO black subtraction anywhere: the DCPs carry
+// DefaultBlackRender=None (the profile forbids it; the ToneCurve has its own shadow toe), and
+// black levels are fully handled at raw decode. Values are floored at 0 but NOT ceiled at 1
+// until the final output stage, so bright saturated colors keep their hue through the curve.
+function bakeDcpLUT(dcp,fit,N){
+  N=N||65;
+  const nh=dcp.dims[0],ns=dcp.dims[1],nv=dcp.dims[2],tbl=dcp.look;
+  const expo=Math.pow(2,fit.ev+dcp.baseOff);
+  const TN=4096,toneL=new Float32Array(TN); // dense tone curve (sampled via RGBTone below)
+  {const p=dcp.tone,np2=p.length/2;
+   for(let i=0;i<TN;i++){const x=i/(TN-1);let j=1;while(j<np2-1&&p[2*j]<x)j++;
+     const x0=p[2*(j-1)],y0=p[2*(j-1)+1],x1=p[2*j],y1=p[2*j+1];
+     toneL[i]=x1>x0?y0+(y1-y0)*(x-x0)/(x1-x0):y0;}}
+  const tone=v=>toneL[Math.round(Math.min(Math.max(v,0),1)*(TN-1))];
+  const out=new Float32Array(N*N*N*3);
+  let o=0;
+  for(let bi=0;bi<N;bi++)for(let gi=0;gi<N;gi++)for(let ri=0;ri<N;ri++){
+    const cr=ri/(N-1)*fit.gr,cg=gi/(N-1),cb=bi/(N-1)*fit.gb;
+    // ForwardMatrix → XYZ(D50) → ProPhoto, then exposure (floor 0, no ceiling)
+    const X=dcp.fm[0]*cr+dcp.fm[1]*cg+dcp.fm[2]*cb,
+          Y=dcp.fm[3]*cr+dcp.fm[4]*cg+dcp.fm[5]*cb,
+          Z=dcp.fm[6]*cr+dcp.fm[7]*cg+dcp.fm[8]*cb;
+    let r=Math.max((XYZ2PP[0]*X+XYZ2PP[1]*Y+XYZ2PP[2]*Z)*expo,0),
+        g=Math.max((XYZ2PP[3]*X+XYZ2PP[4]*Y+XYZ2PP[5]*Z)*expo,0),
+        b=Math.max((XYZ2PP[6]*X+XYZ2PP[7]*Y+XYZ2PP[8]*Z)*expo,0);
+    // RGB→HSV
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),c=mx-mn;
+    let h=0;if(c>1e-12){if(mx===r)h=((g-b)/c%6+6)%6;else if(mx===g)h=(b-r)/c+2;else h=(r-g)/c+4;h*=60;}
+    let s=mx>1e-12?c/mx:0,v=mx;
+    // LookTable trilinear (hue wraps; V axis sRGB-encoded when enc===1). venc/vi clamps are
+    // TABLE-INDEX bounds only — v itself stays extended-range for the v*dv product below.
+    const venc=Math.min(dcp.enc===1?srgbG(v):v,1);
+    const hi=h/360*nh,si=s*(ns-1),vi=venc*(nv-1);
+    const h0=Math.floor(hi)%nh,h1=(h0+1)%nh,hf=hi-Math.floor(hi);
+    const s0=Math.min(Math.floor(si),ns-2),sf=si-s0,s1=s0+1;
+    const v0=Math.min(Math.floor(vi),nv-2),vf=vi-v0,v1=v0+1;
+    const idx=(vv,hh,ss)=>3*((vv*nh+hh)*ns+ss); // data layout: [val][hue][sat]
+    let dh=0,ds=1,dv=1;
+    for(let k=0;k<3;k++){
+      const c00=tbl[idx(v0,h0,s0)+k]*(1-hf)+tbl[idx(v0,h1,s0)+k]*hf,
+            c01=tbl[idx(v0,h0,s1)+k]*(1-hf)+tbl[idx(v0,h1,s1)+k]*hf,
+            c10=tbl[idx(v1,h0,s0)+k]*(1-hf)+tbl[idx(v1,h1,s0)+k]*hf,
+            c11=tbl[idx(v1,h0,s1)+k]*(1-hf)+tbl[idx(v1,h1,s1)+k]*hf,
+            cc=(c00*(1-sf)+c01*sf)*(1-vf)+(c10*(1-sf)+c11*sf)*vf;
+      if(k===0)dh=cc;else if(k===1)ds=cc;else dv=cc;
+    }
+    h=(h+dh%360+360)%360;s=Math.min(Math.max(s*ds,0),1);v=Math.max(v*dv,0); // s is a ratio (≤1 by definition); v stays extended
+    // HSV→RGB
+    const hh=h/60,i6=Math.floor(hh)%6,f=hh-Math.floor(hh),
+          p2=v*(1-s),q=v*(1-s*f),t=v*(1-s*(1-f));
+    if(i6===0){r=v;g=t;b=p2}else if(i6===1){r=q;g=v;b=p2}else if(i6===2){r=p2;g=v;b=t}
+    else if(i6===3){r=p2;g=q;b=v}else if(i6===4){r=t;g=p2;b=v}else{r=v;g=p2;b=q}
+    // Hue-preserving Adobe RGBTone (DNG SDK / RawTherapee AdobeToneCurve): apply the curve to
+    // the max and min channels, interpolate the median between them at its original ratio.
+    {
+      let tr,tg,tb;
+      if(r>=g){
+        if(g>b){ // r >= g > b
+          tr=tone(r);tb=tone(b);tg=r>b?tb+(tr-tb)*(g-b)/(r-b):tr;
+        }else if(b>r){ // b > r >= g
+          tb=tone(b);tg=tone(g);tr=b>g?tg+(tb-tg)*(r-g)/(b-g):tb;
+        }else{ // r >= b >= g
+          tr=tone(r);tg=tone(g);tb=r>g?tg+(tr-tg)*(b-g)/(r-g):tr;
+        }
+      }else{
+        if(r>b){ // g > r > b
+          tg=tone(g);tb=tone(b);tr=g>b?tb+(tg-tb)*(r-b)/(g-b):tg;
+        }else if(b>g){ // b > g > r
+          tb=tone(b);tr=tone(r);tg=b>r?tr+(tb-tr)*(g-r)/(b-r):tb;
+        }else{ // g >= b >= r
+          tg=tone(g);tr=tone(r);tb=g>r?tr+(tg-tr)*(b-r)/(g-r):tg;
+        }
+      }
+      r=tr;g=tg;b=tb;
+    }
+    // ProPhoto → sRGB + gamma. ⚠️ ROADMAP.md's R1 (scene-referred): the upper clamp here USED
+    // TO throw away exactly the highlight headroom that made this whole feature a no-op for RAW
+    // files — a real window/sky in a RAW file can genuinely bake to sr/sg/sb well above 1.0
+    // (extended-range ProPhoto values), and this was the exact point that discarded it before
+    // applyDcpLUT or the GPU ever got a chance to see it. Floor only (0), no ceiling — srgbG
+    // already extrapolates its own gamma curve correctly for x>1 (`Math.max(x,0)` inside it,
+    // no upper bound), so gr2/gg2/gb2 below can now genuinely exceed 1.0. The sky-gate residual
+    // right after this is unaffected: it self-gates to ~0 for any value already this bright
+    // (`1-ss(0.90,0.985,v2)`→0 as v2→1), verified by inspection, not just assumed — see its own
+    // comment.
+    const sr=Math.max(PP2SRGB[0]*r+PP2SRGB[1]*g+PP2SRGB[2]*b,0),
+          sg=Math.max(PP2SRGB[3]*r+PP2SRGB[4]*g+PP2SRGB[5]*b,0),
+          sb=Math.max(PP2SRGB[6]*r+PP2SRGB[7]*g+PP2SRGB[8]*b,0);
+    let gr2=srgbG(sr),gg2=srgbG(sg),gb2=srgbG(sb);
+    // Residual cool-highlight lift (fitted vs Lightroom, tools/calib/dcp_residual_tone.py +
+    // dcp_sky_gate.json): after everything above, LR still renders bright SATURATED COOL
+    // regions (blue sky most visibly) ~6-8/255 brighter and slightly less saturated. The
+    // residual is hue/sat/value-gated, NOT a global tone shift — skin (warm hue), water
+    // (same hue as sky but low sat) and shadows (low v) all sit outside the gates and are
+    // untouched (verified: gate patches byte-identical, sky diff +7.4 → +0.7). Applied in
+    // final sRGB-gamma space (the space the residual was measured in).
+    {
+      const mx2=Math.max(gr2,gg2,gb2),mn2=Math.min(gr2,gg2,gb2),c2=mx2-mn2;
+      let h2=0;if(c2>1e-12){if(mx2===gr2)h2=((gg2-gb2)/c2%6+6)%6;else if(mx2===gg2)h2=(gb2-gr2)/c2+2;else h2=(gr2-gg2)/c2+4;h2*=60;}
+      let s2=mx2>1e-12?c2/mx2:0,v2=mx2;
+      const ss=(a,b2,x)=>{const t=Math.min(Math.max((x-a)/Math.max(b2-a,1e-9),0),1);return t*t*(3-2*t)};
+      const dhh=Math.abs(((h2-215)+180)%360-180);
+      const ghRaw=Math.min(Math.max(1-dhh/161.39,0),1), gh=ghRaw*ghRaw*(3-2*ghRaw);
+      // fit.sky: this residual is fitted ONLY against the DC-S9 (see dcpFit above) — folded
+      // into the gate itself (rather than an `if(fit.sky)` wrapper around the whole block) so
+      // the block's own math is untouched and a disabled camera takes the identical `gate<=0`
+      // no-op path every other hue/sat/value combination already takes.
+      const gate=fit.sky?gh*ss(0.10,0.4986,s2)*(ss(0.45,0.62,v2)*(1-ss(0.90,0.985,v2))):0;
+      if(gate>0){
+        v2=Math.min(Math.max(v2+0.05322*gate,0),1);
+        s2=Math.min(Math.max(s2-0.02173*gate,0),1);
+        const hh2=h2/60,i7=Math.floor(hh2)%6,f2=hh2-Math.floor(hh2),
+              pp=v2*(1-s2),qq=v2*(1-s2*f2),tt=v2*(1-s2*(1-f2));
+        if(i7===0){gr2=v2;gg2=tt;gb2=pp}else if(i7===1){gr2=qq;gg2=v2;gb2=pp}else if(i7===2){gr2=pp;gg2=v2;gb2=tt}
+        else if(i7===3){gr2=pp;gg2=qq;gb2=v2}else if(i7===4){gr2=tt;gg2=pp;gb2=v2}else{gr2=v2;gg2=pp;gb2=qq}
+      }
+    }
+    out[o++]=gr2;out[o++]=gg2;out[o++]=gb2;
+  }
+  return{n:N,data:out};
+}
+const _dcpCache={},_dcpLutCache={};
+// cameraPrefix: the vendor/dcp/ filename prefix (see cameraDcpPrefix), REQUIRED now — a photo
+// with no matching bundled camera profile must never silently fall back to the Panasonic
+// files (that was the original bug: every camera got the DC-S9 profile applied to it).
+// source: 'bundled' (default, fetch() from vendor/dcp/ — unchanged) or one of dcp_store.rs's own
+// source strings ('user-camera'/'system-camera'/'adobe-standard', ROADMAP.md's F1) — a real
+// Adobe Camera Raw / DNG Converter profile already installed on this machine, read in place via
+// Tauri IPC instead of fetch(). Bundled always wins when it matches (resolveDcpSource never
+// returns a disk source unless the bundled 2-camera table already missed), so this is additive.
+async function getDcpLUT(cameraPrefix,name,iso,source){
+  if(!cameraPrefix)throw new Error('no bundled DCP profile for this camera');
+  source=source||'bundled';
+  const cacheKey=source+':'+cameraPrefix+'|'+name;
+  const key=cacheKey+'@'+(iso||200);
+  if(_dcpLutCache[key])return _dcpLutCache[key];
+  if(!_dcpCache[cacheKey]){
+    let buf;
+    if(source==='bundled'){
+      let r;
+      try{
+        r=await fetch('vendor/dcp/'+cameraPrefix+' Camera '+name+'.dcp');
+        if(!r.ok&&name!=='Standard'){ // this camera doesn't have that specific style — fall back to its Standard
+          r=await fetch('vendor/dcp/'+cameraPrefix+' Camera Standard.dcp');
+        }
+      }catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+      if(!r.ok)throw new Error('DCP profile fetch failed: '+cameraPrefix+' '+name+' ('+r.status+')');
+      try{buf=await r.arrayBuffer();}catch(e){throw new Error('Failed to load camera profile: '+errStr(e))}
+    }else{
+      // Same "this camera doesn't have that specific style — fall back to Standard" retry the
+      // bundled fetch() path above does, for parity on the Camera/ tree (multiple real styles
+      // per camera, same as vendor/dcp/). Adobe Standard's flat tree only ever has 'Standard'
+      // (see resolveDcpSource/dcp_store.rs's DcpProfileSet.styles), so the retry there is a
+      // guaranteed no-op — harmless, not worth special-casing out.
+      try{
+        const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:name});
+        buf=new Uint8Array(bytes).buffer;
+      }catch(e){
+        if(name==='Standard')throw new Error('Failed to load installed camera profile: '+errStr(e));
+        try{
+          const bytes=await window.__TAURI__.core.invoke('read_dcp_file',{source,prefix:cameraPrefix,style:'Standard'});
+          buf=new Uint8Array(bytes).buffer;
+        }catch(e2){throw new Error('Failed to load installed camera profile: '+errStr(e2))}
+      }
+    }
+    _dcpCache[cacheKey]=parseDCP(buf,cameraPrefix+' Camera '+name+'.dcp');
+  }
+  // Off the main thread (see _cpuRun): 274,625 iterations of the DNG pipeline froze the UI for
+  // the whole bake on every RAW load / profile change. parseDCP's output is plain arrays and
+  // numbers, so it structured-clones into the worker as-is; nothing is transferred, because
+  // _dcpCache keeps the parsed profile for the next profile switch.
+  const lut=await _cpuRun('bakeDcpLUT',[_dcpCache[cacheKey],dcpFit(iso,cameraPrefix)]);
+  _dcpLutCache[key]=lut;return lut;
+}
+// HDR from RAW (ROADMAP 13/14's replacement — see gainmap.rs's own header): CIRAWFilter was
+// measured directly against a real RW2 and does nothing for this camera's files (its own
+// extendedDynamicRangeAmount reads back identical at 0 and 1), so the source of a RAW's HDR
+// headroom has to be OUR decode, not Core Image's RAW pipeline. It's already computed here and
+// already thrown away: CLAUDE.md §7 records the DCP LookTable as "TABLE-INDEX clamps only, values
+// extended-range" — the trilinear-sampled c00..c11 below can genuinely exceed 1.0 before the
+// `+0.5` write clamps it to 255. HR_MAX_STOPS caps how much of that gets carried into the export.
+const HR_MAX_STOPS=2; // 4x — beyond this a photo's own highlights are noise, not real detail
+// sRGB OETF (gamma ENCODE). Needed because Core Image gamma-DECODES an untagged 8-bit PNG on
+// load before any filter sees it — measured directly (desktop's gainmap_from_map_probe.rs): a
+// raw linear byte of 128/255 (intended 2.506x at 2 stops) wrote back reading only 1.647x, which
+// matches the sRGB EOTF almost exactly. Encoding here cancels that decode out on the Rust side.
+function _srgbEncode(v){return v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;}
+function hrByteForHeadroom(maxV){
+  if(maxV<=1)return 0;
+  const norm=Math.min(1,Math.log2(maxV)/HR_MAX_STOPS);
+  return Math.round(255*_srgbEncode(norm));
+}
+function applyDcpLUT(u16,w,h,lut,hrOut,extOut){ // u16: interleaved RGB Uint16, linear camera space
+  // extOut (ROADMAP.md R1, optional Float32Array(w*h*3)): the SAME per-pixel `v` this loop
+  // already computes, before `rgba`'s *255+quantize-and-clamp throws away anything above 1.0.
+  // This is the actual fix for "scene-referred only pays when the source has headroom" — RAW
+  // yes, an 8-bit JPEG mostly not: `v` genuinely exceeds 1.0 for a real blown sky/window once
+  // bakeDcpLUT's own upper clamp was removed (see that function's comment), and until this
+  // point in the pipeline that headroom was being computed and then unconditionally discarded.
+  const N=lut.n,L=lut.data,NM=N-1,rgba=new Uint8ClampedArray(w*h*4);
+  const sc=NM/65535;
+  for(let i=0,j=0;i<w*h;i++){
+    const fr=u16[3*i]*sc,fg=u16[3*i+1]*sc,fb=u16[3*i+2]*sc;
+    const r0=Math.min(fr|0,NM-1),g0=Math.min(fg|0,NM-1),b0=Math.min(fb|0,NM-1);
+    const rf=fr-r0,gf=fg-g0,bf=fb-b0;
+    let maxV=0;
+    for(let k=0;k<3;k++){
+      const q=(rr,gg,bb)=>L[3*((bb*N+gg)*N+rr)+k]; // baked order: b outer, g, r inner
+      const c00=q(r0,g0,b0)*(1-rf)+q(r0+1,g0,b0)*rf, c10=q(r0,g0+1,b0)*(1-rf)+q(r0+1,g0+1,b0)*rf,
+            c01=q(r0,g0,b0+1)*(1-rf)+q(r0+1,g0,b0+1)*rf, c11=q(r0,g0+1,b0+1)*(1-rf)+q(r0+1,g0+1,b0+1)*rf;
+      const v=(c00*(1-gf)+c10*gf)*(1-bf)+(c01*(1-gf)+c11*gf)*bf;
+      if(hrOut&&v>maxV)maxV=v;
+      if(extOut)extOut[3*i+k]=v;
+      rgba[j+k]=255*v+0.5;
+    }
+    // ⚠️ Computed for free in the SAME loop that already runs for every RAW load, never a
+    // second pass — the headroom map costs nothing extra unless hrOut is actually supplied.
+    if(hrOut)hrOut[i]=hrByteForHeadroom(maxV);
+    rgba[j+3]=255;j+=4;
+  }
+  return rgba;
+}
+
+// Camera profile carried INSIDE a DNG (iPhone/Pixel/Samsung/converted files): a DCP-shaped object
+// for bakeDcpLUT built from the file's own tags — ForwardMatrix, else ColorMatrix inverted and
+// adapted D65→D50 — plus its ProfileToneCurve and Look/HueSatMap table when present. Returns null
+// for anything that isn't a DNG carrying a usable matrix (caller falls back to LibRaw sRGB).
+function parseDngEmbeddedProfile(bytes){
+  try{
+    const d=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    const le=d.getUint16(0,false)===0x4949;
+    if(!le&&d.getUint16(0,false)!==0x4D4D)return null;
+    if(d.getUint16(2,le)!==42)return null;
+    const TS={1:1,2:1,3:2,4:4,5:8,6:1,7:1,8:2,9:4,10:8,11:4,12:8,13:4,16:8};
+    const tags={},seen=new Set();let orient=null,gainBytes=null,truncated=false;
+    const walk=off=>{
+      if(!off||seen.has(off)||off+2>d.byteLength)return;
+      seen.add(off);
+      const n=d.getUint16(off,le);
+      for(let i=0;i<n;i++){
+        const e=off+2+i*12;if(e+12>d.byteLength)return;
+        const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),cnt=d.getUint32(e+4,le);
+        const sz=(TS[typ]||1)*cnt,ptr=sz>4?d.getUint32(e+8,le):e+8;
+        if(tag===330){for(let k=0;k<cnt&&k<8;k++)walk(d.getUint32((cnt>1?ptr:e+8)+4*k,le));continue;}
+        if(tag===274&&orient==null){orient=d.getUint16(e+8,le);continue;} // IFD0 Orientation (the decoders rotate by it; the gain map is in unrotated coords)
+        if(tag===52525&&typ===7&&!gainBytes){if(ptr+sz<=d.byteLength)gainBytes=new Uint8Array(bytes.buffer,bytes.byteOffset+ptr,cnt);else truncated=true;continue;} // ProfileGainTableMap (DNG 1.6)
+        if(!(tag>=50721&&tag<=51109)||cnt>2000000)continue;
+        if(ptr+sz>d.byteLength){truncated=true;continue;} // caller passed only the file's head — see desktop-native.js's chromasmithResolveRawLut
+        let v;
+        if(typ===10){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getInt32(ptr+8*j,le),b=d.getInt32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===5){v=new Float64Array(cnt);for(let j=0;j<cnt;j++){const a=d.getUint32(ptr+8*j,le),b=d.getUint32(ptr+8*j+4,le);v[j]=b?a/b:0;}}
+        else if(typ===11){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat32(ptr+4*j,le);}
+        else if(typ===12){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getFloat64(ptr+8*j,le);}
+        else if(typ===3){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint16(ptr+2*j,le);}
+        else if(typ===4){v=new Float64Array(cnt);for(let j=0;j<cnt;j++)v[j]=d.getUint32(ptr+4*j,le);}
+        else continue;
+        if(!tags[tag])tags[tag]=v;
+      }
+      if(off+2+n*12+4<=d.byteLength)walk(d.getUint32(off+2+n*12,le));
+    };
+    walk(d.getUint32(4,le));
+    const inv3=m=>{const[a,b,c,dd,e,f,g,h,i]=m,A=e*i-f*h,B=f*g-dd*i,C=dd*h-e*g,det=a*A+b*B+c*C;
+      if(!isFinite(det)||Math.abs(det)<1e-9)return null;
+      return[A/det,(c*h-b*i)/det,(b*f-c*e)/det,B/det,(a*i-c*g)/det,(c*dd-a*f)/det,C/det,(b*g-a*h)/det,(a*e-b*dd)/det];};
+    const mul3=(x,y)=>{const r=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++)r[3*i+j]=x[3*i]*y[j]+x[3*i+1]*y[3+j]+x[3*i+2]*y[6+j];return r;};
+    let fm=null;
+    const F=tags[50965]||tags[50964],C=tags[50722]||tags[50721];
+    if(F&&F.length>=9&&F.slice(0,9).every(isFinite))fm=Array.from(F.slice(0,9));
+    else if(C&&C.length>=9&&C.slice(0,9).every(isFinite)){
+      const A=inv3(Array.from(C.slice(0,9)));if(!A)return null;
+      const BR=[1.0478112,0.0228866,-0.0501270,0.0295424,0.9904844,-0.0170491,-0.0092345,0.0150436,0.7521316];
+      const M=mul3(BR,A),Mi=inv3(M);if(!Mi)return null;
+      const W=[0.9642,1,0.8249],sc=[0,1,2].map(i=>Mi[3*i]*W[0]+Mi[3*i+1]*W[1]+Mi[3*i+2]*W[2]);
+      fm=[0,1,2].flatMap(i=>[M[3*i]*sc[0],M[3*i+1]*sc[1],M[3*i+2]*sc[2]]);
+    }
+    if(!fm||!fm.every(isFinite))return null;
+    let dims,look,enc=0;
+    if(tags[50981]&&tags[50982]&&tags[50981].length>=3&&tags[50982].length>=tags[50981][0]*tags[50981][1]*tags[50981][2]*3){
+      dims=tags[50981];look=tags[50982];enc=tags[51108]?tags[51108][0]:0;
+    }else if(tags[50937]&&(tags[50939]||tags[50938])&&tags[50937].length>=3&&(tags[50939]||tags[50938]).length>=Math.max(1,tags[50937][2])*tags[50937][0]*tags[50937][1]*3){
+      dims=[tags[50937][0],tags[50937][1],Math.max(1,tags[50937][2])];look=tags[50939]||tags[50938];enc=tags[51107]?tags[51107][0]:0;
+    }else{dims=[1,2,2];look=new Float64Array([0,1,1,0,1,1,0,1,1,0,1,1]);} // identity: 0° hue, ×1 sat, ×1 val
+    const tone=tags[50940]&&tags[50940].length>=4&&tags[50940].length%2===0?tags[50940]:new Float64Array([0,0,1,1]);
+    const out={fm,tone,dims,look,enc,baseOff:(tags[50730]?tags[50730][0]:0)+(tags[51109]?tags[51109][0]:0)}; // DNG BaselineExposure (+ profile offset)
+    // CHR-162: iPhone ProRAW (and other DNG 1.6+ writers) store scene-linear data several stops
+    // under the intended render and carry a ProfileGainTableMap — a spatially varying local
+    // tone map (gains up to ~10x in shadows on a real iPhone 14 Pro file). Ignoring it rendered
+    // those files ~40 L* too dark and muddy. It's per-pixel/spatial so it can't live in the 3D
+    // LUT; applyDngGainMap applies it to the linear camera RGB before the LUT.
+    const gm=gainBytes&&parseDngGainTableMap(gainBytes);
+    if(gm){gm.orient=orient||1;out.gainMap=gm;}
+    if(truncated)out.truncated=true;
+    return out;
+  }catch(e){return null;}
+}
+// DNG 1.6 ProfileGainTableMap, always big-endian: MapPointsV/H (u32), MapSpacingV/H,
+// MapOriginV/H (f64, in 0..1 image-relative units), MapPointsN (u32), MapInputWeights[5] (f32:
+// R,G,B,min,max), optional Gamma (f32, DNG 1.7 version 2), then f32 gains [V][H][N].
+function parseDngGainTableMap(b){
+  if(!b||b.length<60)return null;
+  const d=new DataView(b.buffer,b.byteOffset,b.byteLength);
+  const pv=d.getUint32(0,false),ph=d.getUint32(4,false),sv=d.getFloat64(8,false),sh=d.getFloat64(16,false),
+        ov=d.getFloat64(24,false),oh=d.getFloat64(32,false),n=d.getUint32(40,false);
+  const wt=[0,1,2,3,4].map(i=>d.getFloat32(44+4*i,false));
+  const cells=pv*ph*n;if(!pv||!ph||!n||cells>8e6)return null;
+  let off=64,gamma=1;
+  if(b.length===68+4*cells){gamma=d.getFloat32(64,false);off=68;}
+  else if(b.length!==64+4*cells)return null;
+  if(!(gamma>0)||![sv,sh,ov,oh].every(isFinite))gamma=1;
+  const table=new Float32Array(cells);
+  for(let i=0;i<cells;i++)table[i]=d.getFloat32(off+4*i,false);
+  return{pv,ph,sv,sh,ov,oh,n,wt,gamma,table};
+}
+// Camera RGB (white-balanced, 0..1) -> linear ProPhoto at the profile's exposure: the space the
+// gain map's input weights are defined in (same fm/XYZ2PP/exposure bakeDcpLUT uses).
+function dngGainInputMatrix(dcp,fit){
+  const e=Math.pow(2,(fit?fit.ev:0)+dcp.baseOff),f=dcp.fm,sc=[fit?fit.gr:1,1,fit?fit.gb:1],M=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)M[3*i+j]=e*sc[j]*(XYZ2PP[3*i]*f[j]+XYZ2PP[3*i+1]*f[3+j]+XYZ2PP[3*i+2]*f[6+j]);
+  return M;
+}
+// In place: multiply each pixel of an ORIENTED interleaved linear u16 RGB buffer by the gain
+// map's gain for its (unrotated) position and weighted input level. Mirrored in Rust by
+// raw_decode.rs's apply_dng_gain_map — keep the two identical.
+function applyDngGainMap(u16,w,h,gm,M){
+  const{pv,ph,sv,sh,ov,oh,n,wt,gamma,table,orient}=gm,NM=n-1,k=1/65535;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const X=(x+0.5)/w,Y=(y+0.5)/h;let u,v; // u: horizontal, v: vertical, in the stored (unrotated) image
+    if(orient===3){u=1-X;v=1-Y;}else if(orient===6){u=Y;v=1-X;}else if(orient===8){u=1-Y;v=X;}else{u=X;v=Y;}
+    const i=3*(y*w+x),r=u16[i]*k,g=u16[i+1]*k,b=u16[i+2]*k;
+    const R=M[0]*r+M[1]*g+M[2]*b,G=M[3]*r+M[4]*g+M[5]*b,B=M[6]*r+M[7]*g+M[8]*b;
+    let t=wt[0]*R+wt[1]*G+wt[2]*B+wt[3]*Math.min(R,G,B)+wt[4]*Math.max(R,G,B);
+    t=Math.min(Math.max(t,0),1);if(gamma!==1)t=Math.pow(t,gamma);
+    const fv=Math.min(Math.max((v-ov)/sv,0),pv-1),fh=Math.min(Math.max((u-oh)/sh,0),ph-1),fn=t*NM;
+    const v0=Math.min(fv|0,Math.max(pv-2,0)),h0=Math.min(fh|0,Math.max(ph-2,0)),n0=Math.min(fn|0,Math.max(NM-1,0));
+    const v1=Math.min(v0+1,pv-1),h1=Math.min(h0+1,ph-1),n1=Math.min(n0+1,NM);
+    const av=fv-v0,ah=fh-h0,an=fn-n0;
+    const q=(vv,hh)=>{const o=(vv*ph+hh)*n;return table[o+n0]*(1-an)+table[o+n1]*an;};
+    const gain=(q(v0,h0)*(1-ah)+q(v0,h1)*ah)*(1-av)+(q(v1,h0)*(1-ah)+q(v1,h1)*ah)*av;
+    for(let c=0;c<3;c++){const o=u16[i+c]*gain;u16[i+c]=o>65535?65535:o+0.5;}
+  }
+  return u16;
+}
+// libraw's wasm imports a SHARED WebAssembly.Memory, so it needs shared memory — not cross-origin isolation as such.
+// Browsers only offer that via crossOriginIsolated, but the Android WebView never reports isolated (it ignores the
+// COOP/COEP the shell sends) while still creating shared wasm memory fine, so the isolation check blocked every RAW
+// there. On Android only (iOS is left as it was), feature-detect the thing the decoder actually uses.
+function rawSharedMemoryOk(){
+  if(self.crossOriginIsolated)return true;
+  if(!capAndroid())return false;
+  try{new WebAssembly.Memory({initial:1,maximum:1,shared:true});return true;}catch(e){return false;}
+}
+async function loadRw2(file,opts){
+  // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
+  // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
+  // proxy; fxPromoteWebRaw decodes the full frame when zoom/loupe/export actually need it.
+  const half=!!(opts&&opts.half)&&!window.__TAURI__;
+  const filmSource=!!(opts&&opts.filmSource);
+  const privateEntry=!!(opts&&opts.privateEntry);
+  const rawDecodeSettings=file&&file.__csRawDecodeSettings||null;
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-enter');
+  if(!rawSharedMemoryOk())throw new Error('RW2 needs SharedArrayBuffer — reload the page once so the service worker can enable it');
+  let profile=rawDecodeSettings&&Object.prototype.hasOwnProperty.call(rawDecodeSettings,'profile')?rawDecodeSettings.profile:rawProfile();
+  const LibRaw=await getLibRaw();
+  // By-path RAW (desktop Library open, see library-ui's makePathRawFile): the native shim reads
+  // the file itself, so no bytes are loaded here; the rare paths below that need them (embedded
+  // DNG profile, sRGB fallback) fetch them on demand.
+  const srcPath=(window.__TAURI__&&file.__csSourcePath)||null;
+  const bytes=srcPath?new Uint8Array(0):new Uint8Array(await file.arrayBuffer());
+  let bytesCopy=srcPath?null:bytes.slice(); // raw.open() transfers (detaches) `bytes`; kept for the embedded-profile parse / sRGB fallback re-decode
+  const fullBytes=async()=>bytesCopy||(bytesCopy=new Uint8Array(await file.arrayBuffer()));
+  const t0=performance.now();
+  const raw=new LibRaw();
+  let m,img;
+  const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1,filmSource}; // linear 16-bit camera RGB (DCP input space)
+  const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
+  try{
+    await withRawDecodeTimeout(raw,async()=>{
+      const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
+      if(srcPath)openSettings.sourcePath=srcPath;
+      if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      if(privateEntry)openSettings.privateEntry=true;
+      await raw.open(bytes,openSettings);
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
+      m=await raw.metadata();
+      // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
+      if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
+      if(profile)profile=rawProfileFor(m,profile);
+      img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
+    });
+  }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+  finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
+  // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
+  // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+  // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
+  // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
+  // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
+  // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
+  // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
+  let embDcp=null;
+  // CHR-162: skipped when the native shell already developed the pixels (img.rgba — a bundled,
+  // Adobe-on-disk or embedded-DNG profile LUT applied in Rust): parsing needs the whole file
+  // (75MB for an iPhone ProRAW, over IPC), and the sRGB fallback below would then throw that
+  // develop away and decode the RAW a second time.
+  if(profile&&!img.rgba&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
+  if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+    profile=null;
+    const raw2=new LibRaw();
+    try{
+      await withRawDecodeTimeout(raw2,async()=>{
+        const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
+        if(srcPath)fallbackSettings.sourcePath=srcPath;
+        if(privateEntry)fallbackSettings.privateEntry=true;
+        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
+        img=await raw2.imageData();
+      });
+    }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
+    finally{try{raw2.worker.terminate()}catch(_){}}
+    if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+  }
+  // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
+  // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
+  // green) until the user notices and finds the toggle themselves. Desktop-only for now
+  // (m.photoStyle comes from NativeLibRawShim.metadata(); the browser/wasm libraw path never
+  // sets it — no makernote parsing there, and per CLAUDE.md desktop is the maintained RAW
+  // target). Only touches the select's DOM value; no explicit re-render needed here — every
+  // render call reads `sel-input`'s live value via getFXParams() (`input:(document.getElementById
+  // ('sel-input')||{}).value`), so the FIRST render of this photo picks it up like any other
+  // control the user had already set before opening the file.
+  // ⚠️ Known limitation, not fixed here: `sel-input` is ONE global control shared across a
+  // whole batch (CLAUDE.md — Effects/adjustments apply to every loaded photo identically). In a
+  // mixed V-Log/Standard batch, whichever V-Log file loads LAST wins for every photo — this only
+  // ever sets 'vlog', never back — since a real fix needs the same per-photo `adjustOverride`
+  // machinery `matchSeriesToReference` already uses, which is out of scope for this first pass.
+  if(!privateEntry&&m&&m.photoStyle===17){
+    const selInput=document.getElementById('sel-input');
+    if(selInput&&selInput.value!=='vlog'){
+      selInput.value='vlog';
+      if(typeof log==='function')log('V-Log source detected (Panasonic PhotoStyle) — Input profile set to V-Log (Lumix)','info');
+    }
+  }
+  const w=img.width,h=img.height,ch=img.colors||3;let rgb=img.data;
+  if(!w||!h||!rgb||rgb.length<w*h*ch)throw new Error(`RW2 decode produced no image (got ${rgb&&rgb.length} samples for ${w}×${h}×${ch})`);
+  let rgba,c,dt,hrOut,sceneLinear;
+  // ⚠️ hrOut/sceneLinear are declared HERE, not with `const` inside the branches below, and
+  // this is load-bearing, not stylistic: the `if(typeof hrOut!=='undefined')` stash check
+  // further down used to sit OUTSIDE the `else if(profile){}` block that declared `hrOut` with
+  // `const` — block-scoped consts stop existing entirely once their `{}` closes, so `typeof
+  // hrOut` there was *always* "undefined" regardless of whether the branch ran (verified with a
+  // standalone Node repro of the exact same shape before touching this file). The browser/wasm
+  // DCP path's `_hdrHeadroom` stash has therefore never actually fired. Declaring both here and
+  // assigning (not declaring) them in each branch fixes that for real, and is what let this
+  // session's new `sceneLinear` stash (ROADMAP.md R1) actually reach the code that reads it.
+  // Covers the linearization loop, DCP LUT fetch/bake/apply and the canvas writes — the RW2
+  // bytes are already decoded at this point (the worker is already freed in the finally above),
+  // but a bad/missing DCP profile, a corrupt profile file, or a canvas failure here previously
+  // threw an unwrapped error straight out of loadRw2 with no context. Wrapping it lets the
+  // per-file catch in loadFXImages (and its batch-summary toast) report something legible.
+  try{
+    if(img.rgba){
+      rgba=img.data; // native shell: decode + DCP develop already done in Rust, pixels are final RGBA8
+      // ROADMAP.md R1: desktop's own extended-range companion, threaded all the way from
+      // main.rs's decode_raw_v2/denoise_raw_high through NativeLibRawShim.imageData()/refine().
+      // undefined when Rust didn't send one (no DCP applied, or no measured headroom) — same
+      // "absent means nothing to preserve" convention the browser path below already uses.
+      sceneLinear=img.sceneLinear;
+    }else if(profile){
+      if(ch!==3)throw new Error('DCP path expects 3-channel RAW output, got '+ch);
+      // libraw-wasm's "linear" output is measurably non-linear vs true (ADC-count) linearity:
+      // wasm ≈ 1.22·native^0.634 per channel (fitted on identical frames vs the desktop shell's
+      // rawler decode, 3% residual). The DCP constants are calibrated on TRUE linear data, so
+      // in the browser (no native shell) linearize first: v' = (v/gain)^(1/0.634). The desktop
+      // shell's NativeLibRawShim already returns true-linear data — skip there.
+      if(!window.__TAURI__){
+        const GAIN=[1.219,1.215,1.193],PW=1/0.634;
+        // Per-channel 65536-entry tables: identical output to the per-sample Math.pow (Uint16Array
+        // store truncates the same value), but ~72M pow calls on a 24MP frame become 196K.
+        const T=GAIN.map(g=>{const t=new Uint16Array(65536);for(let v=0;v<65536;v++)t[v]=Math.min(Math.pow((v/65535)/g,PW)*65535,65535);return t;});
+        const lin=new Uint16Array(rgb.length),T0=T[0],T1=T[1],T2=T[2];
+        for(let i=0;i<rgb.length;i+=3){lin[i]=T0[rgb[i]];lin[i+1]=T1[rgb[i+1]];lin[i+2]=T2[rgb[i+2]];}
+        rgb=lin;
+      }
+      const camPrefix=cameraDcpPrefix(m.make,m.model);
+      // Widening RAW_FILE_EXT_RE made this the COMMON case for any camera outside the 2 bundled
+      // here (Panasonic DC-S9, Sony DSC-RX100M5) — the web build only ever ships those two DCP
+      // sets. The desktop app additionally reads locally-installed Adobe camera profiles.
+      let lut;
+      if(!camPrefix&&embDcp){
+        if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the profile embedded in the DNG`,'info');
+        const fit=dcpFit(m.iso_speed,null);
+        lut=await _cpuRun('bakeDcpLUT',[{...embDcp,gainMap:undefined},fit]);
+        // CHR-162: the file's own local tone map (iPhone ProRAW) — spatial, so applied to the
+        // linear pixels (in place — this decode's own buffer) before the LUT rather than baked into it.
+        if(embDcp.gainMap)applyDngGainMap(rgb,w,h,embDcp.gainMap,dngGainInputMatrix(embDcp,fit));
+      }else
+      if(!camPrefix)throw new Error(`No bundled colour profile for ${m.make||'this camera'} ${m.model||''} — try "None (LibRaw sRGB)" in RAW profile, or open this photo in the CHRO-MA-SMITH desktop app, which can also use camera profiles you've installed with Adobe Camera Raw.`);
+      if(!lut)lut=await getDcpLUT(camPrefix,profile,m.iso_speed);
+      hrOut=new Uint8ClampedArray(w*h);
+      // ROADMAP.md R1: the real scene-linear buffer — see applyDcpLUT's own comment. Always
+      // computed (the loop already runs regardless; this is one more write per channel, not a
+      // second pass) and stashed below exactly like hrOut already is, so setImage can upload it
+      // as a float texture when real headroom is present instead of the always-8-bit canvas.
+      sceneLinear=new Float32Array(w*h*3);
+      rgba=applyDcpLUT(rgb,w,h,lut,hrOut,sceneLinear);
+    }else{
+      // interleaved channels → RGBA (ch is 3 for RGB; guard for 1=grey/4=RGBA)
+      rgba=new Uint8ClampedArray(w*h*4);
+      for(let i=0,j=0;i<w*h;i++){const s=i*ch;rgba[j++]=rgb[s];rgba[j++]=ch>1?rgb[s+1]:rgb[s];rgba[j++]=ch>2?rgb[s+2]:rgb[s];rgba[j++]=255;}
+    }
+    dt=Math.round(performance.now()-t0);
+    c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+    if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
+    // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
+    // `img:c`, and this way the headroom data survives that indirection with zero extra
+    // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`
+    // for the same reason). A cheap presence flag avoids scanning w*h bytes just to decide
+    // whether to show the HDR toggle.
+    if(!privateEntry&&typeof hrOut!=='undefined'){
+      // Full scan, not sparse sampling — a bright sky strip is a small fraction of the frame and
+      // a stride could miss it entirely, which would hide the HDR toggle on a photo that
+      // genuinely has headroom. A single pass over a Uint8ClampedArray is cheap regardless.
+      let any=false;for(let i=0;i<hrOut.length;i++){if(hrOut[i]>12){any=true;break;}}
+      c._hdrHeadroom={data:hrOut,w,h};
+      c._hdrHeadroomPresent=any;
+    }
+    // ROADMAP.md R1: an INDEPENDENT check, not nested inside hrOut's — the desktop `img.rgba`
+    // path (Rust) can carry `sceneLinear` without this function ever computing `hrOut` at all
+    // (that's a browser/applyDcpLUT-only byte-headroom encoding used solely for gain-map HEIC
+    // export), so nesting this inside `hrOut`'s presence would silently never fire on desktop.
+    if(!privateEntry&&typeof sceneLinear!=='undefined'){
+      // A f32 scan, not the hrOut byte-threshold trick above — real values in this buffer ARE
+      // the linear-ish sRGB-encoded quantity itself, so "any pixel measurably above white"
+      // is a direct, honest presence test rather than a re-derived proxy.
+      let any=false;for(let i=0;i<sceneLinear.length;i++){if(sceneLinear[i]>1.05){any=true;break;}}
+      c._sceneLinear={data:sceneLinear,w,h};
+      c._sceneLinearPresent=any;
+    }
+  }catch(e){throw new Error('RW2 color processing failed: '+errStr(e))}
+  if(!privateEntry)log(`RW2 decoded ${w}×${h} in ${dt} ms (${m.make||''} ${m.model||''}) — ${profile?'DCP profile: '+profile+' (Lightroom-matched color)':'LibRaw render, not Lightroom-matched'}`,'ok');
+  // Two-phase decode, phase 2: the decode above intentionally skipped false-color-suppression/
+  // hue-defringe/native-NR to get a photo on screen fast (see desktop-native.js's
+  // NativeLibRawShim.open()). If that quality gap actually matters here (native NR is on),
+  // silently re-decode the SAME bytes at full quality in the background and swap the pixels
+  // into THIS canvas once it lands — fire-and-forget, matched back by object identity (`c`) so
+  // a since-closed/replaced photo is a safe no-op instead of corrupting the wrong image.
+  if(window.__TAURI__&&typeof raw.refine==='function'){
+    const applyRefinement=(refined)=>{
+      if(!refined)return; // this decode didn't need refining (NR was off)
+      const owner=privateEntry?null:fxImages.find(it=>it.img===c||it.fullImg===c);
+      if(!privateEntry&&!owner)return; // user switched photos while refine was running
+      let rgba2;
+      if(refined.rgba){rgba2=refined.data;}
+      else{const rgb2=refined.data,ch2=refined.colors||3;rgba2=new Uint8ClampedArray(refined.width*refined.height*4);
+        for(let i=0,j=0;i<refined.width*refined.height;i++){const s=i*ch2;rgba2[j++]=rgb2[s]>>8;rgba2[j++]=ch2>1?rgb2[s+1]>>8:rgb2[s]>>8;rgba2[j++]=ch2>2?rgb2[s+2]>>8:rgb2[s]>>8;rgba2[j++]=255;}}
+      // Defensive resize (fast and refined decodes are the same resolution today — see
+      // raw_decode.rs's decode_rw2_bytes — but putImageData does NOT resize its target canvas,
+      // so if that ever changes again this stays correct instead of silently clipping).
+      if(c.width!==refined.width||c.height!==refined.height){c.width=refined.width;c.height=refined.height;}
+      c.getContext('2d').putImageData(new ImageData(rgba2,refined.width,refined.height),0,0);
+      // ROADMAP.md R1: keep _sceneLinear in sync with whichever pixels are actually on the
+      // canvas now — same "absent means delete the stale one" rule as chromasmithDenoiseHigh's
+      // own refresh, so a refine that DIDN'T carry extended data (e.g. NR ran but the fast pass
+      // is being effectively kept) can't leave a mismatched stash from the earlier fast decode.
+      if(!privateEntry&&refined.sceneLinear){
+        let any=false;for(let i=0;i<refined.sceneLinear.length;i++){if(refined.sceneLinear[i]>1.05){any=true;break;}}
+        c._sceneLinear={data:refined.sceneLinear,w:refined.width,h:refined.height};
+        c._sceneLinearPresent=any;
+      }else{
+        delete c._sceneLinear;delete c._sceneLinearPresent;
+      }
+      if(!privateEntry&&owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
+      if(!privateEntry&&typeof updateWork==='function')updateWork();
+      if(!privateEntry&&typeof renderPreview==='function')renderPreview();
+      // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).
+      if(!privateEntry){window.__pm&&window.__pm('refine-applied');log('RAW refined (noise reduction applied)','info');}
+    };
+    const refinement=raw.refine().then(applyRefinement).catch(e=>{
+      if(privateEntry)throw e;
+      console.error('RAW background refine failed',e);
+      log(`RAW background refine failed for ${file.name}: ${errStr(e)}`,'warn');
+      if(typeof toast==='function')toast(`Noise reduction refine failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
+    });
+    if(privateEntry)await refinement;
+  }
+  if(privateEntry&&typeof raw.releaseDecodeBuffers==='function')raw.releaseDecodeBuffers();
+  if(!privateEntry)window.__pm&&window.__pm('loadRw2-return');
+  return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
+}
+// Installs already-decoded entries as the active fxImages and renders — the second half of
+// loadFXImages, split out so a caller with an ALREADY-DECODED entry (the desktop Library's
+// image cache — see chromasmithInstallCachedImage in library-ui.js) can skip the expensive
+// decode (RW2: PPG demosaic + DCP LUT bake, several seconds) entirely on a cache hit, instead
+// of re-running the whole file→canvas pipeline just to redisplay the same photo.
+// entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
+// genuinely different photo" string loadFXImages computes from file name+size+lastModified.
+function installFXImages(entries,loadKey,opts){
+  opts=opts||{};
+  if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
+
+  if(typeof fxInvalidateMaskSource==='function')fxInvalidateMaskSource(); // A15: the cached photo-at-mask-resolution decode belongs to the OUTGOING photo
+
+  if(!entries.length)return;
+  // A new photo invalidates any cached AI-select embedding (it belongs to the OUTGOING image) —
+  // the next tap/AI-mask-add re-encodes lazily rather than eagerly here, so opening a photo you
+  // never use AI Select on never pays the encode cost.
+  samInvalidate();mskAiTapMode=false;
+  _fxGeomBatchEpoch++;
+  fxImages=entries;
+  setTimeout(()=>{if(typeof csInstallHint==='function')csInstallHint();},4000);
+  // Phones open on the looks: Chromasmith is a film-look app first, tools second.
+  setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();if(document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('sheet-open')&&!document.body.classList.contains('tools-open'))fxSection('looks');},300);
+  if(cropMode)cropExit();
+  fxImages.forEach(it=>{it.geom=defGeom();if(it.adjustOverride===undefined)it.adjustOverride=null;});
+  fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
+  fxCurIdx=0;fxExportScope='all';
+  fxImg=fxImages[0].img;updateWork();
+  resetGeomUI();
+  const n=fxImages.length;
+  setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
+  document.getElementById('fx-fname').value=fxImages[0].name;
+  fxDeskbarTitle(fxImages[0].name,fxDimsFmt(fxImages[0].name,fxImages[0].img,fxImages[0].ext));
+  // Version restarts only for a GENUINELY new photo/batch — not on every reopen. The docked
+  // Library panel (unlike the old full-page overlay) stays visible next to the editor, so
+  // clicking the same photo again (to compare after an export, or just re-selecting it) is now
+  // common; resetting to v1.0 every time made every export reuse the same "_v1.0" filename, so
+  // the OS/browser's own duplicate-download naming ("(1)", "(2)"...) silently replaced the
+  // intended "_v1.1"/"_v1.2" scheme. Key on name+size+lastModified so a real edit-then-reload
+  // of the same file (same bytes) still counts as "the same photo".
+  const isNewPhoto=loadKey!==_fxLoadKey;
+  if(isNewPhoto){fxVersion=1.0;_fxLoadKey=loadKey;}
+  document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+  // "All FX" (grain/halation/bloom/borders) is shared/global UI state ON PURPOSE while
+  // switching between photos WITHIN one already-loaded batch (fxSelectImage) — that's what
+  // lets one Adjust/Grain/etc. edit apply to every photo in a batch identically. But loading a
+  // genuinely different photo (a fresh loadFXImages call — reported as "All FX stays stuck on
+  // the new image") should start clean, same as geometry/zoom/history above: turning on All FX
+  // for one photo shouldn't silently paint every future unrelated photo you open. A caller that
+  // then restores a saved per-photo recipe (openInEditor's applyUISnapshot) runs AFTER this and
+  // correctly reapplies that specific photo's own toggle state, recipe or not.
+  if(isNewPhoto){
+    _ALLFX.forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);if(tg)tg.classList.remove('on');
+      const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.add('ff-off');} // off = shown dimmed, never hidden
+    });
+    if(typeof syncAllFxBtn==='function')syncAllFxBtn();
+  }
+  const btn=document.getElementById('btn-fx-export');btn.disabled=false;
+  document.getElementById('fx-preview-tools').style.display='flex';
+  document.getElementById('fx-zoom-ctrl').style.display='flex';
+  fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');
+  // Seed history with a BASELINE snapshot of the just-loaded (RAW-defaults-applied, no user
+  // edits yet) state immediately — previously fxHistory started empty and only got its first
+  // entry on the user's FIRST edit (fxUpdate->fxHistoryPush), so fxHistory[0] was "state right
+  // after edit #1", not the pristine default. fxResetAll() applied fxHistory[0] believing it
+  // was the baseline, so a single edit followed by Reset was a silent no-op (that field's own
+  // value was already baked into "history[0]"), and fxResetAll() also early-returned entirely
+  // when fxHistory was still empty (the exact single-edit-then-reset case). Recipe restoration
+  // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
+  // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
+  // not back to whatever was last saved.
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
+  if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
+  // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
+  // see fxSelectImage's own comment on broadcastGeom): fxState.masks now always points at the
+  // CURRENTLY SELECTED photo's own masks array, swapped by fxSelectImage on every filmstrip
+  // click. fxImages[0] gets the array the baseline snapshot/recipe-restore below already
+  // produced (so a saved single-photo recipe's masks land correctly); every OTHER photo in a
+  // freshly loaded batch starts with its own independent empty array — previously ALL photos
+  // in a batch shared the exact same fxState.masks array by reference, so painting/adjusting a
+  // mask on photo 1 silently appeared on every other photo too ("masks transfer from one image
+  // to the next"). mskCopyToAll() is the explicit, opt-in way to actually share a mask set
+  // across a batch now.
+  fxImages[0].masks=fxState.masks;
+  for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
+  if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
+  if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
+  if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
+  if(!opts.deferRender){renderPreview();buildLookGallery();buildFilmstrip();}
+  else {
+    const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,500));
+    idle(()=>{buildLookGallery();buildFilmstrip();},{timeout:1000});
+  }
+  syncExportScopeUI();
+  if(typeof nrSyncGate==='function')nrSyncGate(); // this photo's own NR sliders just landed in the DOM — refresh the Detail/HL-Desat dim state for them
+  if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
+  showExif(fxImages[0].exif||{});
+  log(`Loaded ${n} image(s) — ${fxImages[0].dpi} DPI, .${fxImages[0].ext}`,'ok');
+}
+// A ~2560px long-edge copy of a full-resolution canvas for fit-view editing; null if the source is
+// already about that size. naturalWidth/Height are defined so size checks treat it like an image.
+function fxDisplayTierCanvas(full){
+  const fw=full.naturalWidth||full.width,fh=full.naturalHeight||full.height;
+  if(!fw||!fh||Math.max(fw,fh)<=3000)return null;
+  const k=2560/Math.max(fw,fh),c=document.createElement('canvas');
+  c.width=Math.round(fw*k);c.height=Math.round(fh*k);
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(full,0,0,c.width,c.height);
+  Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  return c;
+}
+function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
+async function loadFXImages(fileList,opts){
+  opts=opts||{};
+  const privateEntries=!!opts.privateEntries;
+  if(!privateEntries){
+    if(!window.__csLibOpen&&typeof window.chromasmithForgetOpened==='function')window.chromasmithForgetOpened();
+    fxRememberPrevious();
+  }
+  if(!privateEntries)window.__pm&&window.__pm('lfx-start');
+  if(!privateEntries)fxPhotoActivityInvalidate();
+  // MIME is often EMPTY, not just for TIFF/RW2: the desktop library opens files via
+  // read_file_bytes and builds File objects with type:'' — a plain MIME check silently
+  // dropped every PNG/JPEG opened from the library ("No images loaded"). Fall back to the
+  // filename extension whenever the MIME is missing/unhelpful.
+  // IMG_EXT_RE/RUST_ONLY_RE come from the FORMAT REGISTRY near loadTiff — see that comment.
+  // Video files are routed to their own decode path (loadFXVideoFile) below, alongside the
+  // per-file try/catch loop images already use — a video mixed into `files` would hit loadImg()
+  // and fail as "not a valid image". Gated on videoSupported() so a browser without WebCodecs
+  // (or Capacitor/iOS) gets a clear per-file error instead of a silent no-op.
+  const videoFiles=videoSupported()?[...fileList].filter(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name)):[];
+  // RUST_ONLY_RE files (EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL) are ACCEPTED here on every platform —
+  // desktop decodes them via decode_image_v1; web/iOS instead throws unsupportedFormatMessage()
+  // from inside the decode loop below, which flows through the same per-file catch/_loadFailCount
+  // as every other decode failure, rather than being filtered out here and silently dropped.
+  const openable=f=>f.type.startsWith('image/')||IMG_EXT_RE.test(f.name)||isTiffFile(f)||isRw2File(f)||RUST_ONLY_RE.test(f.name);
+  const files=[...fileList].filter(openable);
+  const nonImageNonVideo=[...fileList].filter(f=>!openable(f)&&!videoFiles.includes(f)&&!(f.type.startsWith('video/')||VID_EXT_RE.test(f.name)));
+  if(privateEntries&&(videoFiles.length||nonImageNonVideo.length))throw new Error('Compare supports still photos only.');
+  // Declared here (not down by the decode loop, where it used to live) so the partition above
+  // can add to the same count — one "N file(s) failed" toast covers both unsupported-format
+  // rejections and genuine decode failures, instead of two separate toasts firing.
+  let _loadFailCount=0;
+  if(!privateEntries)for(const f of nonImageNonVideo){log(unsupportedFormatMessage(f.name),'err');_loadFailCount++}
+  if(!files.length&&!videoFiles.length){
+    if(nonImageNonVideo.length&&typeof toast==='function')toast(`${nonImageNonVideo.length} file(s) couldn't be opened — see log`,false);
+    return;
+  }
+  if(!videoSupported()&&[...fileList].some(f=>f.type.startsWith('video/')||VID_EXT_RE.test(f.name))){
+    log('Video grading needs a browser with WebCodecs support (desktop Chrome, or the desktop app) — not available here.','err');
+  }
+  // Hoisted above the decode loop (only depends on `files`, not `entries`) so a genuinely NEW
+  // photo can be detected BEFORE applyRawDefaults() runs below. Previously that detection only
+  // happened afterward, inside installFXImages — so applyRawDefaults()'s "only fill a slider
+  // still at 0" check saw whatever the PREVIOUS photo had left every slider/toggle at, not this
+  // photo's true defaults (e.g. Color NR silently inheriting the last photo's value instead of
+  // its own 25 default), and rail icons (tg-adjust/tg-curves/tg-hsl/tg-local/tg-art/tg-vig/
+  // tg-canvas — everything outside the small _ALLFX set) kept showing "enabled" (orange) on a
+  // never-touched photo simply because the LAST photo had left that toggle's DOM class on.
+  const loadKey=[...files,...videoFiles].map(fxFileLoadKey).sort().join('|');
+  if(!privateEntries&&loadKey!==_fxLoadKey&&_fxPristineDefault)applyUISnapshot(_fxPristineDefault,{skipRender:true});
+  if(!privateEntries)window.__pm&&window.__pm('lfx-snapshot-done');
+  const entries=[];
+  for(const file of videoFiles){
+    fxDeskbarTitle(file.name,'Opening video…',true);
+    try{
+      entries.push(await loadFXVideoFile(file));
+    }catch(e){log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)}
+  }
+  for(const file of files){
+    if(!privateEntries)fxDeskbarTitle(file.name,'Opening photo…',true);
+    try{
+      // A by-path RAW (desktop Library open) carries only its header: that's all the sniff needs,
+      // and the native decode reads the file itself. Anything else reads the whole file as before.
+      let bytes=file.__csHead?file.__csHead:new Uint8Array(await file.arrayBuffer());
+      if(!privateEntries)window.__pm&&window.__pm('lfx-arraybuffer');
+      let ext=(file.name.split('.').pop()||'png').toLowerCase();if(ext==='jpeg')ext='jpg';if(ext==='tiff')ext='tif';
+      // A RAW-extension file whose bytes are actually a JPEG/PNG (see sniffRealImageKind) —
+      // route it through the normal image path instead of the RAW decoder, which would
+      // correctly-but-uselessly reject it as "no decoder". Most commonly a Google Photos
+      // Picker import handing back the JPEG twin of an iPhone ProRAW/RAW+JPEG pair.
+      const sniffedKind=isRw2File(file)?sniffRealImageKind(bytes):null;
+      if(sniffedKind&&file.__csHead)bytes=new Uint8Array(await file.arrayBuffer()); // not really RAW: the image path needs every byte
+      if(sniffedKind){
+        ext=sniffedKind;
+        if(!privateEntries)log(`${file.name}: this isn't actually RAW data — the source (likely Google Photos) only had a ${sniffedKind.toUpperCase()} copy. Imported as ${sniffedKind.toUpperCase()}; RAW-only adjustments (Color NR, RAW profile) won't apply.`,'warn');
+      }
+      if(isTiffFile(file)){
+        const{canvas,dpi,icc,tiffMeta}=await loadTiff(file);
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext:'tif',dpi,bytes:null,icc,tiffMeta}); // bytes:null → no PNG/JPEG meta splice; icc re-embedded separately; tiffMeta → Save to Lightroom's real-TIFF re-encode
+        continue;
+      }
+      if(isRw2File(file)&&!sniffedKind){
+        // Not DNG: ProRAW/linear DNGs are already demosaiced, so halfSize saves nothing — measured slower
+        // on a 48MP iPhone DNG, and it came back at a wrong 1920px size.
+        const webHalf=!privateEntries&&!window.__TAURI__&&!file.__csSourcePath&&!/\.dng$/i.test(file.name);
+        const{canvas,dpi,meta}=await loadRw2(file,{half:webHalf,privateEntry:privateEntries});
+        // Attach lens/camera/iso at decode time (native shell) so the metadata panel shows them
+        // on EVERY open path — library-ui's get_meta refines this later on library opens.
+        const exif=meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',photoStyle:meta.photoStyle,lensStatusUnknown:!!meta.lensStatusUnknown}:undefined;
+        // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
+        // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
+        // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
+        const work=!privateEntries&&file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
+        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
+        entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
+        continue;
+      }
+      // EXR/HDR/TGA/DDS/QOI/FF/PNM*/JXL — desktop-only (still_decode.rs). RUST_ONLY_RE files are
+      // included in `files` on every platform (see the FORMAT REGISTRY / openable() above), so
+      // web/iOS reaches this branch too: without window.chromasmithDecodeStill it throws the same
+      // named message loadFXImages already shows for a format no surface can open at all, instead
+      // of a bare "could not be decoded".
+      if(RUST_ONLY_RE.test(file.name)){
+        if(typeof window.chromasmithDecodeStill!=='function')throw new Error(unsupportedFormatMessage(file.name));
+        const{canvas,dpi,note}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength}); // bytes:null → no PNG/JPEG meta splice on export
+        continue;
+      }
+      // ROADMAP.md F6: .ico is otherwise browser-native (FMT_STILL_NATIVE/IMG_EXT_RE, plain
+      // <img>), which only ever shows the ONE frame the browser's own ICO decoder picks. Desktop
+      // routes it through the same Rust decode as RUST_ONLY_RE instead, purely so a multi-frame
+      // icon can offer a frame picker (see fxIcoFramePicker below) — this is additive: an ICO
+      // that only has one frame renders identically either way, and web/iOS (no
+      // chromasmithDecodeStill) falls straight through to the existing <img> path below.
+      if(ext==='ico'&&typeof window.chromasmithDecodeStill==='function'){
+        const{canvas,dpi,note,frameCount}=await window.chromasmithDecodeStill(bytes,ext);
+        if(note)log(`${file.name}: ${note}`,'warn');
+        entries.push({img:canvas,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,fileSize:bytes.byteLength,icoFrameCount:frameCount,icoFrame:0,_icoBytes:bytes});
+        continue;
+      }
+      const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
+      const exif=['jpg','jpeg','heic','heif','png','webp','tif','tiff'].includes(ext)?readExifTags(bytes):{};
+      const img=await loadImg(file);
+      // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
+      // row in the metadata panel at all — only photos opened via the desktop Library set it.
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
+    }catch(e){if(privateEntries)throw e;log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
+  }
+  if(privateEntries)return entries;
+  if(_loadFailCount>0&&typeof toast==='function')toast(`${_loadFailCount} of ${files.length+videoFiles.length+nonImageNonVideo.length} file(s) failed to load — see log`,false);
+  if(!entries.length){const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false);else fxDeskbarTitle('', '', false);log('No images loaded','err');return}
+  // Must run BEFORE installFXImages (its render reflects whatever's in the slider DOM right
+  // now) — was previously inline per-RW2-entry, before any render had happened; moving it
+  // after the render here would apply the defaults a frame too late, requiring a manual
+  // slider nudge before they'd visibly take effect.
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-defaults');
+  if(entries.some(it=>RAW_FILE_EXT_RE.test('.'+it.ext)))applyRawDefaults();
+  if(!privateEntries)window.__pm&&window.__pm('lfx-pre-install');
+  installFXImages(entries,loadKey);
+  if(typeof csFirstEditPhotoOpened==='function')csFirstEditPhotoOpened();
+  if(!privateEntries)window.__pm&&window.__pm('lfx-installed');
+  return entries[0]; // callers that must know THEIR photo (not a stale/other one) is what's installed compare against fxImages[0]
+}
+// Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
+// "White glow" halation switch accordingly. The user can still toggle it afterward.
+function autoDetectBW(img){
+  const tg=document.getElementById('tg-hal-white');if(!tg||!img)return;
+  let bw=false;
+  try{
+    const{px}=getPx(img,256);                       // small downscaled sample
+    let s=0,nseen=0;
+    for(let i=0;i<px.length;i+=4){
+      const r=px[i],g=px[i+1],b=px[i+2];
+      s+=(Math.max(r,g,b)-Math.min(r,g,b))/255; nseen++;
+    }
+    bw = nseen>0 && (s/nseen)<0.05;                  // mean saturation < 5% → monochrome
+  }catch(e){}
+  tg.classList.toggle('on',bw);
+  if(bw)log('Black-and-white photo detected — halation set to white (toggle in Halation)','info');
+}
+function toggleFX(name){const tg=document.getElementById(`tg-${name}`);const on=!tg.classList.contains('on');tg.classList.toggle('on',on);const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
+  // Turning a section ON is an explicit "I want this" — leaving its card collapsed (a title bar
+  // with no visible body, per .fx-sec-collapsed>:not(.fx-ctrl-title){display:none}) means the
+  // sliders you just enabled are still invisible, reading as "the toggle doesn't do anything."
+  // The card can end up collapsed from an earlier session (fxSecToggle persists it in
+  // localStorage) with no relation to which effects are on/off, so this reconciles the two.
+  if(on){const card=ff&&ff.closest('.fx-ctrl');if(card&&card.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(card);}if(name==='curves'&&on)setTimeout(drawCurveEditor,0);if(name==='hsl'&&on)setTimeout(hslBuildHist,60);if(name==='wheels'&&on)setTimeout(wheelsInitAll,0);if(name==='local'&&typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);if((name==='hsl'||name==='pointcolor')&&typeof bakeHsl==='function')bakeHsl();if(typeof hapt==='function')hapt();fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();}
+// Touching a control in a dimmed (off) section turns that section on, rather than the control
+// silently doing nothing. This is the other half of showing off-sections instead of hiding them:
+// the controls are visible, so they have to be live. Registered once, delegated, capture-phase so
+// it runs before the control's own oninput reads state.
+function _ffAutoEnable(e){
+  const ff=e.target&&e.target.closest&&e.target.closest('.fx-fields.ff-off');
+  if(!ff)return;
+  // Picking a band/zone only changes which one you're looking at — not an edit, so it must not switch the section on.
+  if(e.target.closest('.hsl-hist-zone,.hsl-chip'))return;
+  const name=ff.id.replace(/^ff-/,'');
+  const tg=document.getElementById('tg-'+name);
+  if(!tg||tg.classList.contains('on'))return;
+  toggleFX(name);
+  if(typeof toast==='function'){const lb=(FX_SECTIONS.find(x=>x[0]===name)||[])[1]||(name.charAt(0).toUpperCase()+name.slice(1));toast(lb+' turned on');}
+}
+document.addEventListener('input',_ffAutoEnable,true);
+document.addEventListener('change',_ffAutoEnable,true);
+document.addEventListener('pointerdown',(e)=>{if(e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle'))_ffAutoEnable(e);},true);
+function fxUpdate(){
+  ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
+    if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
+  });
+  {const slLM=document.getElementById('sl-lut-mix');if(slLM)fxState.lutMix=parseFloat(slLM.value)/100;}
+  if(typeof nrSyncGate==='function')nrSyncGate();
+  if(typeof fnSyncStatus==='function')fnSyncStatus();
+  // Persist the live Adjust sliders into whichever store the CURRENT photo actually reads at
+  // render/export time: its own it.adjustOverride if it's been made independent (adjToggleScope),
+  // else the shared batch-wide baseline — otherwise switching photos would lose whatever was
+  // just typed the moment fxSelectImage overwrites these same DOM elements for the next photo.
+  {const it=typeof curItem==='function'?curItem():null;
+   if(it&&it.adjustOverride)it.adjustOverride=domAdjustVals();
+   else fxState.sharedAdjust=domAdjustVals();}
+  if(typeof secScopePersist==='function')secScopePersist();
+  if(window.__TAURI__&&typeof fnEnsureNative==='function')fnEnsureNative(curItem()).catch(e=>fnSetStatus(errStr(e),true));
+  // History push is debounced here (unlike the curve editor/brush, which push explicitly on
+  // pointerup) because every one of the ~35 sliders above calls fxUpdate() on `oninput` —
+  // dozens of times per second while dragging. fxHistoryPush() stringifies the whole UI
+  // snapshot, including any brush mask's full mtW*mtH pixel array, so doing that per-tick
+  // was the single biggest cause of slider lag on photos with a brush mask. Same 400ms
+  // cadence as the render debounce below — fires once, ~400ms after the user stops moving
+  // the slider, not on every tick.
+  clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
+  if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
+  fxScheduleRender();
+  if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
+}

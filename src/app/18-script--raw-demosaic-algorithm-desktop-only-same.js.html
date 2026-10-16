@@ -1,0 +1,104 @@
+// ── RAW demosaic algorithm — desktop only, same
+// decode-time-only constraint as native NR above (raw_decode.rs's demosaic step runs before
+// anything else, so this can't take effect live either). Defaults OFF (unchanged behavior);
+// deliberately per-photo only. The backend validates CFA compatibility for each non-default
+// choice; X-Trans Markesteijn is not a Bayer algorithm and AHD is not offered as X-Trans.
+try{window.chromasmithDemosaicAlgo=localStorage.getItem('chromasmithDemosaicAlgo')||'';}catch(e){window.chromasmithDemosaicAlgo='';}
+function fxDemosaicSyncUI(){
+  const sel=document.getElementById('sel-demosaic-algo');
+  if(sel){sel.value=window.chromasmithDemosaicAlgo||'';if(sel.value!==(window.chromasmithDemosaicAlgo||'')){window.chromasmithDemosaicAlgo='';sel.value='';}}
+}
+function fxDemosaicAlgoChanged(value){
+  window.chromasmithDemosaicAlgo=['ahd','vng','mhc','markesteijn1','markesteijn3'].includes(value)?value:'';
+  // Per-photo via the recipe (getUISnapshot's demosaicAlgo field), same auto-persist path as
+  // native NR; localStorage is only the starting default for a photo with no saved recipe yet.
+  try{localStorage.setItem('chromasmithDemosaicAlgo',window.chromasmithDemosaicAlgo);}catch(e){}
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+  const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
+  const labels={ '':'Standard RAW processing',ahd:'AHD RAW processing',vng:'VNG RAW processing',mhc:'MHC RAW processing',markesteijn1:'X-Trans Markesteijn 1-pass',markesteijn3:'X-Trans Markesteijn 3-pass' };
+  if(window.__TAURI__)toast((labels[window.chromasmithDemosaicAlgo]||labels[''])+suffix,true);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  fxDemosaicSyncUI();
+});
+let fxWork=null;        // geometry-applied (rotate/flip/straighten/crop) source for preview/export
+// Compare (show original) strips only the LOOK; borders/canvas matte/film frame stay so the photo's size and position never move.
+function fxCompareParams(){return{...getFXParams(),lut:null,adjust:{enabled:false},grain:{enabled:false},halation:{enabled:false},bloom:{enabled:false},masks:[],debug:0};}
+let fxCompare=false;    // true while "hold to compare" shows the untouched original
+let fxComparePreviousSnapshot=null,fxComparePreviousCode=''; // transient CHR-270 history hold; never serialized
+let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after view
+// B3: what the split's "before" side renders. 'orig'|'pin'|{hist:N}|{style:name}|{export:v,recipe}
+// — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
+let fxPinned=null, fxSplitSrc='orig';
+let fxHistOn=false;                        // live histogram toggle
+const FX_FIT=0.9; // displayed 100% = whole photo fits the canvas with a margin (room for a border)
+let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
+let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
+// Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps
+// the MAIN preview's backing store to the full source resolution so the whole composed image
+// can actually be seen/judged at full detail, not just a ~1800px-capped downsample. Costly per
+// frame (scales ~dpr²), so it's opt-in and drops back to the normal capped preview while a
+// slider/pan/zoom drag is actively in progress (see _fxPreviewInteracting below), snapping back
+// to full res once the interaction ends — same idiom Lightroom/Capture One use for their
+// full-quality preview toggle.
+let fxFullResPreview=false; try{fxFullResPreview=localStorage.getItem('chromasmith_fullres_preview')==='1';}catch(e){}
+let _fxPreviewInteracting=false;
+function fxFullResPreviewToggle(){
+  fxFullResPreview=!fxFullResPreview;
+  try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
+  const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
+  if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
+  renderPreview();
+}
+// Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
+// backing-store change), so crossing the fxZoom>1 threshold needs an explicit re-render to
+// actually swap backing-store resolution — but not on every wheel/pinch tick (60+/s mid-gesture).
+let _fxZoomRenderTimer=null, _fxZoomInteractTimer=null;
+function _fxZoomRenderDebounced(){
+  if(!fxFullResPreview)return;
+  clearTimeout(_fxZoomRenderTimer);
+  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)renderPreview();},90);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
+});
+let fxExportCancel=false;                // set by the Cancel button to abort a batch export
+let fxHistory=[], fxHistIdx=-1, _fxHistLocked=false; // undo/redo
+let _fxGeomBatchEpoch=0,_fxGeomBatchNextId=1,_fxGeomBatchPending=false;
+const _fxGeomBatchItemIds=new WeakMap(),_fxGeomBatchFileIds=new WeakMap();
+function _fxGeomBatchIdentity(map,obj){if(!obj||typeof obj!=='object')return 0;let id=map.get(obj);if(!id){id=_fxGeomBatchNextId++;map.set(obj,id);}return id;}
+function _fxGeomBatchItemId(item){return _fxGeomBatchIdentity(_fxGeomBatchItemIds,item);}
+function _fxGeomBatchSourceKey(item){
+  if(!item)return'';
+  const file=item.rawFile;
+  return JSON.stringify([item.path||'',item.name||'',item.ext||'',item.fileSize??'',
+    file?_fxGeomBatchIdentity(_fxGeomBatchFileIds,file):0,file?.name||'',file?.size??'',file?.lastModified??'']);
+}
+let cropMode=false,cropN=null,cropAR=0,cropBase=null,_cropDrag=null; // interactive crop state
+let cropGrid='3x3'; try{cropGrid=localStorage.getItem('chromasmith_crop_grid')||'3x3';}catch(e){}
+const CROP_GRID_MODES=['3x3','4x4','9x9','golden','off'];
+function cropGridCycle(){const i=CROP_GRID_MODES.indexOf(cropGrid);cropSetGrid(CROP_GRID_MODES[(i+1+CROP_GRID_MODES.length)%CROP_GRID_MODES.length]);}
+function cropGridLinesHtml(){
+  if(cropGrid==='off')return'';
+  const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667]; // default 3x3 (rule of thirds)
+  return stops.map(p=>`<div class="crop-grid-v" style="left:${p}%"></div>`).join('')+
+         stops.map(p=>`<div class="crop-grid-h" style="top:${p}%"></div>`).join('');
+}
+// Picking a grid shows it over the photo WITHOUT entering crop mode: crop mode freezes the preview
+// (straighten and zoom did nothing while a grid was on), and levelling a horizon against a grid is
+// the whole point of showing one. Crop mode draws its own grid inside the crop rectangle.
+let cropGridShown=false;
+function cropGridOverlaySync(){
+  const ov=document.getElementById('fx-grid-overlay');if(!ov)return;
+  const it=typeof curItem==='function'?curItem():null;
+  const on=cropGridShown&&cropGrid!=='off'&&!cropMode&&!!(it&&it.img);
+  ov.style.display=on?'block':'none';if(!on){ov.innerHTML='';return;}
+  const stops=cropGrid==='9x9'?[1,2,3,4,5,6,7,8].map(i=>i*100/9):cropGrid==='4x4'?[25,50,75]:cropGrid==='golden'?[38.2,61.8]:[33.333,66.667];
+  const ls=stops.map(p=>`<line x1="${p}" y1="0" x2="${p}" y2="100"/><line x1="0" y1="${p}" x2="100" y2="${p}"/>`).join('');
+  ov.innerHTML=`<g fill="none" vector-effect="non-scaling-stroke"><g stroke="rgba(0,0,0,.4)" stroke-width="3">${ls}</g><g stroke="rgba(255,255,255,.85)" stroke-width="1">${ls}</g></g>`;
+  ov.querySelectorAll('line').forEach(l=>l.setAttribute('vector-effect','non-scaling-stroke'));
+}
+function cropSetGrid(v){cropGrid=v;const sel=document.getElementById('sel-crop-grid');if(sel)sel.value=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
+  cropGridShown=v!=='off';cropGridOverlaySync();
+  const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}

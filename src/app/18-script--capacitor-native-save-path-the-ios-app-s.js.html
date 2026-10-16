@@ -1,0 +1,95 @@
+// ── Capacitor-native save path (the iOS app shell) ────────────────────────────
+// Inside the WKWebView shell navigator.share({files}) is unreliable across iOS versions, so
+// when running natively write the blobs to the app cache (Filesystem plugin) and present the
+// NATIVE share sheet (Share plugin) — which also needs no live user-activation, so the
+// multi-photo "activation expired" fallback never triggers. Gated on window.Capacitor:
+// completely inert in every browser (GitHub Pages behavior unchanged).
+function capNative(){return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}
+function _u8b64(u8){let s='';const CH=32768;for(let i=0;i<u8.length;i+=CH)s+=String.fromCharCode.apply(null,u8.subarray(i,i+CH));return btoa(s);}
+async function capShareFiles(items){ // [{content:Uint8Array|string,fname,mime}] → "Chromasmith" photo album, else share sheet
+  const{Filesystem,Share}=window.Capacitor.Plugins;
+  const uris=[];let nAlbum=0,nDocs=0;
+  for(const it of items){
+    const data=typeof it.content==='string'
+      ?btoa(unescape(encodeURIComponent(it.content)))
+      :_u8b64(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
+    const r=await Filesystem.writeFile({path:'export/'+it.fname,data,directory:'CACHE',recursive:true});
+    // Images go straight into a "Chromasmith" album in the phone's photo library (Media plugin);
+    // LUTs/JSON and any album failure fall through to the share sheet / Documents below.
+    if(/^image\//.test(it.mime||'')||/\.(jpe?g|png|webp|avif|tiff?|heic)$/i.test(it.fname)){
+      try{if(capAndroid()){
+          const plugin=window.Capacitor.Plugins.PhotoExport;const ready=await plugin.prepare();
+          if(!ready.persistent||ready.failed>0)throw new Error('Permanent Photos storage is unavailable or earlier exports need attention.');
+          const saved=await plugin.savePhoto({path:r.uri,name:it.fname});
+          if(!saved.persistent)throw new Error('Permanent Photos storage was not confirmed');
+          nAlbum++;try{await Filesystem.deleteFile({path:'export/'+it.fname,directory:'CACHE'});}catch(_){}continue;
+        }
+        const album=await capAlbumId();
+        await window.Capacitor.Plugins.Media.savePhoto({path:r.uri,albumIdentifier:album,fileName:it.fname.replace(/\.[^.]+$/,'')});
+        nAlbum++;continue;}
+      catch(e){log('Save to Photos album failed ('+(e&&e.message||e)+')','warn');}
+    }
+    // Android: the share sheet has no "save to gallery" target, so fall back to the public
+    // Documents/Chromasmith folder (no permission needed on Android 11+).
+    if(capAndroid()){
+      try{await Filesystem.writeFile({path:'Chromasmith/'+it.fname,data,directory:'DOCUMENTS',recursive:true});nDocs++;continue}
+      catch(e){log('Android save to Documents failed ('+(e&&e.message||e)+') — using share sheet','warn');}
+    }
+    uris.push(r.uri);
+  }
+  if(uris.length)await Share.share({files:uris});
+  if(nAlbum||nDocs)toast(nAlbum?'Saved to Photos › Chromasmith ✓':'Saved to Documents/Chromasmith ✓',true);
+}
+let _capAlbum=null;
+async function capAlbumId(){ // find-or-create the "Chromasmith" album; identifier is required on Android
+  if(capAndroid())throw new Error('Android Photos must use permanent shared storage.');
+  if(_capAlbum)return _capAlbum;
+  const M=window.Capacitor.Plugins.Media;if(!M)throw new Error('Media plugin missing');
+  const find=async()=>{const r=await M.getAlbums();const a=(r.albums||[]).find(x=>x.name==='Chromasmith');return a&&a.identifier;};
+  let id=await find();
+  if(!id){await M.createAlbum({name:'Chromasmith'});id=await find();}
+  if(!id)throw new Error('could not create album');
+  return(_capAlbum=id);
+}
+function capAndroid(){return capNative()&&window.Capacitor.getPlatform&&window.Capacitor.getPlatform()==='android';}
+// Sideloaded Android builds don't auto-update: the release CI attaches an empty "build-<BUILD>.txt"
+// asset, so a differing name on the latest GitHub release means a newer APK exists.
+async function capUpdateCheck(){
+  if(!capAndroid())return;
+  try{
+    const r=await fetch('https://api.github.com/repos/TareqAmeer/Chroma-App/releases/latest',{mode:'cors'});
+    if(!r.ok)return;
+    const j=await r.json(),a=(j.assets||[]).find(x=>/^build-.+\.txt$/.test(x.name));
+    if(!a||a.name==='build-'+BUILD+'.txt')return;
+    const apk=(j.assets||[]).find(x=>/\.apk$/.test(x.name));
+    const b=document.createElement('div');
+    b.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:9999;background:var(--sur);color:var(--tx,#eee);border-radius:12px;padding:12px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:14px';
+    b.innerHTML='<span style="flex:1">New version '+(j.tag_name||'')+' available</span><a style="color:inherit;font-weight:600" target="_blank" rel="noopener">Download</a><button style="background:none;border:0;color:inherit;font-size:18px" aria-label="Dismiss">×</button>';
+    b.querySelector('a').href=apk?apk.browser_download_url:j.html_url;
+    b.querySelector('button').onclick=()=>{clearInterval(lift);b.remove();};
+    document.body.appendChild(b);
+    // Sit above the Studio bottom nav (Looks/Tools/Crop/Export) instead of covering it: a fixed bottom banner
+    // swallowed taps on Export and its Download link opened the browser. The nav comes and goes with the view.
+    const place=()=>{const n=document.getElementById('fx-mobile-nav'),r=n&&n.getBoundingClientRect();
+      const h=r&&r.height>0&&getComputedStyle(n).display!=='none'?Math.max(0,innerHeight-r.top):0;
+      b.style.bottom=h?(h+12)+'px':'calc(12px + env(safe-area-inset-bottom))';};
+    const lift=setInterval(place,500);place();
+  }catch(e){}
+}
+// Android only: keep the system-bar strips the same colour as the page under them. mobile-editor.js picks light/dark bar
+// glyphs from the page background (right for iOS, where the bar is transparent over the page); on Android the strip is the
+// window background, so it must follow the same colour or the glyphs end up on a clashing strip.
+if(capAndroid()){
+  // Debounced LONGER than mobile-editor.js's own sync (80ms) and applied on every settle, not just on change: Capacitor's
+  // SystemBars.setStyle (which that sync calls on each theme change) resets the bar colours, so this has to land after it.
+  const sync=()=>{try{
+    const bp=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.BarBackground;if(!bp)return;
+    const lib=document.getElementById('mlib'),open=lib&&getComputedStyle(lib).display!=='none';
+    const m=getComputedStyle(open?lib:document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+    if(!m||m.length<3||(m[3]!==undefined&&+m[3]===0))return;
+    bp.setColor({color:'#'+m.slice(0,3).map(v=>('0'+Math.round(+v).toString(16)).slice(-2)).join('')});}catch(e){}};
+  let t=0;new MutationObserver(()=>{clearTimeout(t);t=setTimeout(sync,300);}).observe(document.documentElement,{attributes:true,subtree:true,attributeFilter:['class','style']});
+  setTimeout(sync,500);setTimeout(sync,2500);}
+setTimeout(capUpdateCheck,4000);
+// Phone gallery (mobile/mobile-library.js): native shells only, or ?mlib=1 to try it in a browser.
+if(capNative()||/[?&]mlib=1/.test(location.search)){const sc=document.createElement('script');sc.src='mobile/mobile-library.js';document.head.appendChild(sc);}

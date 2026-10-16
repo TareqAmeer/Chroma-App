@@ -1,0 +1,286 @@
+// ── Command palette (⌘K) — a fuzzy list over tabs/sections/looks/actions, built FRESH every
+// open (not cached at load) so it always reflects the live DOM: which LUT/print options exist,
+// which tab is current, etc. Deliberately its own tiny overlay rather than reusing _csModal —
+// it needs a live-filtered list with arrow-key navigation, which the generic modal doesn't do.
+function _cpCommands(){
+  const cmds=[];
+  const add=(group,label,run)=>cmds.push({group,label,run});
+  const TABS={fx:'Effects & Export',match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'};
+  Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
+  // CHR-196: every tool card, named as it is everywhere else, with its aliases searchable.
+  const SECTIONS={};document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>{const k=c.dataset.fxsec;if(CS_NAMES[k]&&!SECTIONS[k])SECTIONS[k]=(['export','wm','exppreset','share'].includes(k)?'Export: ':'')+CS_NAMES[k];});
+  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
+  // Hidden workspace rows remain discoverable by their normal control label. Running the result
+  // unhides the original row and opens its existing section; no shadow control is created.
+  const workspace=csWorkspaceLayoutGet(),hiddenRows=new Set(workspace.hiddenControls),hiddenSections=new Set(workspace.hiddenSections);
+  document.querySelectorAll('.fx-ctrl[data-fxsec] .fx-row').forEach(row=>{
+    const control=row.querySelector('input[id],select[id],textarea[id],button[id]'),card=row.closest('.fx-ctrl[data-fxsec]');if(!control||!card)return;
+    const id=control.id,key=card.dataset.fxsec;if(!hiddenRows.has(id)&&!hiddenSections.has(key))return;
+    const label=(row.querySelector('.fx-label')?.textContent||control.getAttribute('aria-label')||control.title||id).trim().replace(/\s+/g,' ');
+    add('Control','Show control: '+label,()=>csWorkspaceRevealControl(id));
+  });
+  // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
+  // point at a preset that doesn't actually exist in this build.
+  const lutSel=document.getElementById('sel-lut');
+  if(lutSel)Array.from(lutSel.options).forEach(o=>{if(o.value)add('Look','Apply look: '+o.textContent,()=>{lutSel.value=o.value;selectLUT(o.value);});});
+  const printSel=document.getElementById('sel-print');
+  if(printSel)Array.from(printSel.options).forEach(o=>{if(o.value)add('Print profile','Apply print: '+o.textContent,()=>{printSel.value=o.value;selectPrint(o.value);});});
+  if(typeof mskAdd==='function'){
+    const MASKS={radial:'Radial',linear:'Linear',color:'Color Range',lum:'Luminance Range',depth:'Depth Range',brush:'Brush',sky:'Sky',ai:'AI Select',skin:'Skin',coat:'Coat'};
+    Object.entries(MASKS).forEach(([k,label])=>add('Mask','Add mask: '+label,()=>{switchTab('fx');fxSection('local');mskAdd(k);}));
+  }
+  // CHR-196/266: actions that have a registry entry take their visible name from it (one name
+  // everywhere, the old wording stays searchable) and show their live binding beside the result.
+  const sc=id=>{const c=cmds[cmds.length-1],d=csShortcutDefs.find(x=>x.id===id);c.sc=id;if(d&&c.label!==d.label){c.aliases=((c.aliases||'')+' '+c.label).toLowerCase();c.label=d.label;}};
+  add('Action','Export',()=>{if(typeof exportFX==='function')exportFX();});sc('editor.export');
+  add('Action','Undo',()=>{if(typeof fxUndo==='function')fxUndo();});sc('editor.undo');
+  add('Action','Redo',()=>{if(typeof fxRedo==='function')fxRedo();});sc('editor.redo');
+  add('Action','Save session',()=>{if(typeof saveSession==='function')saveSession();});sc('editor.save-session');
+  add('Action','Load session',()=>{if(typeof loadSession==='function')loadSession(true);});sc('editor.load-session');
+  add('Action','Save as Style…',()=>{if(typeof styleSaveCurrent==='function')styleSaveCurrent();});
+  add('Action','Toggle theme',()=>{if(typeof toggleTheme==='function')toggleTheme();});
+  add('Action','Keyboard shortcuts',()=>window.chromasmithShowShortcuts());sc('editor.shortcuts');
+  add('Action','Manage presets',()=>presetsManagerOpen());cmds[cmds.length-1].aliases='looks styles export recipes presets favourites';
+  add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
+  add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';sc('editor.split');
+  add('Action','Show welcome tour',()=>window.chromasmithShowTour());
+  add('Action','Show advanced tools',()=>csShowAdvancedTabs(true));
+  // Every other bindable editor action appears here too, under its registry name, so the palette,
+  // the shortcut guide and the key bindings can never drift apart.
+  const linked=new Set(cmds.map(c=>c.sc).filter(Boolean));
+  csShortcutDefs.forEach(a=>{
+    if(linked.has(a.id)||!csShortcutHandlers[a.id]||!a.contexts.includes('editor')||['editor.compare','editor.search'].includes(a.id))return;
+    add('Action',a.label,()=>{if(csShortcutHandlers[a.id]({})===false&&typeof toast==='function')toast('Not available right now: '+a.label+' needs an open photo or a different view');});sc(a.id);
+  });
+  return cmds;
+}
+function _cpFilter(cmds,q){
+  q=q.trim().toLowerCase();if(!q){const rk=c=>c.group==='Action'?0:c.group==='Section'?1:c.group==='Tab'?2:3;return cmds.map((c,i)=>[rk(c),i,c]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(x=>x[2]);}
+  // Simple subsequence fuzzy match (like most command palettes): every char of q must appear
+  // in order somewhere in the label, not necessarily contiguous. Ranks exact substring first.
+  const scored=[];
+  for(const c of cmds){
+    const hay=(c.group+' '+c.label+(c.sc&&csShortcutBinding(c.sc)?' '+csShortcutLabel(csShortcutBinding(c.sc)):'')).toLowerCase();
+    const sub=hay.indexOf(q);
+    // CHR-196: tools and actions outrank the 113 look names; an alias hit counts as a match.
+    const pri=(c.group==='Section'||c.group==='Action')?0:500;
+    if(sub>=0){scored.push([sub+pri,c]);continue;}
+    if(c.aliases&&c.aliases.includes(q)){scored.push([200+pri,c]);continue;}
+    let qi=0;for(let i=0;i<hay.length&&qi<q.length;i++)if(hay[i]===q[qi])qi++;
+    if(qi===q.length)scored.push([1000+pri+hay.length,c]);
+  }
+  scored.sort((a,b)=>a[0]-b[0]);
+  return scored.slice(0,60).map(s=>s[1]);
+}
+let _cpIdx=0;
+function cpOpen(){
+  const prev=document.getElementById('cp-ov');if(prev){prev.remove();return;}
+  const cmds=_cpCommands();
+  const ov=document.createElement('div');ov.id='cp-ov';
+  ov.style.cssText='position:fixed;inset:0;z-index:var(--z-modal);background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh';
+  ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  const panel=document.createElement('div');
+  panel.style.cssText='width:min(560px,92vw);max-height:60vh;display:flex;flex-direction:column;background:var(--glass-bg);-webkit-backdrop-filter:blur(24px) saturate(1.4);backdrop-filter:blur(24px) saturate(1.4);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2);overflow:hidden';
+  panel.innerHTML='<input id="cp-input" placeholder="Type a command… (tabs, sections, looks, masks, actions)" style="border:none;outline:none;background:transparent;color:var(--txt);font:15px -apple-system,sans-serif;padding:14px 16px;border-bottom:1px solid var(--bdr)">'
+    +'<div id="cp-list" style="overflow-y:auto;padding:6px"></div>';
+  ov.appendChild(panel);document.body.appendChild(ov);
+  const input=panel.querySelector('#cp-input'),list=panel.querySelector('#cp-list');
+  _cpIdx=0;
+  function render(){
+    const filtered=_cpFilter(cmds,input.value);
+    if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
+    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
+      +`<span>${c.label}</span><span style="display:flex;align-items:center;gap:8px"><kbd class="cp-kbd" style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.sc&&csShortcutBinding(c.sc)?csShortcutLabel(csShortcutBinding(c.sc)):''}</kbd><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></span></div>`).join('')
+      ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
+    list.querySelectorAll('.cp-row').forEach(row=>{
+      row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};
+      row.onclick=()=>{const c=filtered[parseInt(row.dataset.i,10)];if(c){ov.remove();c.run();}};
+    });
+  }
+  input.oninput=render;
+  input.onkeydown=e=>{
+    const filtered=_cpFilter(cmds,input.value);
+    if(e.key==='ArrowDown'){e.preventDefault();_cpIdx=Math.min(filtered.length-1,_cpIdx+1);render();}
+    else if(e.key==='ArrowUp'){e.preventDefault();_cpIdx=Math.max(0,_cpIdx-1);render();}
+    else if(e.key==='Enter'){e.preventDefault();const c=filtered[_cpIdx];if(c){ov.remove();c.run();}}
+    else if(e.key==='Escape'){e.preventDefault();ov.remove();}
+  };
+  render();
+  setTimeout(()=>input.focus(),0);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key.toLowerCase()!=='k'||!(e.metaKey||e.ctrlKey))return;
+  e.preventDefault();cpOpen();
+});
+function fxPickPhotos(){const inp=document.querySelector('#dz-fx-img input[type=file]');if(inp)inp.click();}
+// Haptic tap: iOS shell (Capacitor Haptics plugin) OR the Tauri desktop shell (native macOS
+// trackpad haptic via Rust's haptic_feedback() — see desktop/src-tauri/src/main.rs). Previously
+// this only ever checked capNative()/window.Capacitor, so the desktop build had literally no
+// haptic path at all despite Force Touch trackpads supporting exactly this. Silently inert on
+// any other platform (browser/Pages build, or a non-Force-Touch trackpad/mouse under Tauri —
+// NSHapticFeedbackManager itself handles that no-op, nothing to detect on the JS side). Fire-
+// and-forget: a haptic tap is decorative feedback, never worth awaiting or logging a failure for.
+function hapt(s){
+  try{if(capNative()&&window.Capacitor.Plugins.Haptics)window.Capacitor.Plugins.Haptics.impact({style:s||'LIGHT'});}catch(e){}
+  try{if(window.__TAURI__)window.__TAURI__.core.invoke('haptic_feedback').catch(()=>{});}catch(e){}
+}
+// Mobile "⋯" sheet: the editor is the whole app on the phone; the other tabs live here.
+function fxMoreMenu(){
+  const old=document.getElementById('fx-more-menu');if(old){old.remove();return;}
+  const m=document.createElement('div');m.id='fx-more-menu';
+  const sh=document.createElement('div');sh.className='mm-sheet';
+  // Phone menu keeps only what is useful on the go: Match & Refine, Collage and the Log are
+  // desk tools, and the Guide is linked from the empty state instead.
+  const project=document.createElement('button');project.className='btn bgh';project.textContent='Open mobile project…';project.onclick=()=>{m.remove();MobileProject.openDesktop();};sh.appendChild(project);
+  [['Color Copy','copy']].forEach(([lb,tab])=>{
+    const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;
+    b.onclick=()=>{m.remove();switchTab(tab);};sh.appendChild(b);
+  });
+  [['History',()=>fxShowHistoryList()],['Compare (split view)',()=>toggleSplit()],['Metadata',()=>fxSection('info')],['Histogram',()=>csToggleHist()]].forEach(([lb,fn])=>{
+    const b=document.createElement('button');b.className='btn bgh';b.textContent=lb;b.onclick=()=>{m.remove();fn();};sh.appendChild(b);
+  });
+  const pv=document.createElement('button');pv.className='btn bgh';pv.textContent='Apply previous settings';
+  pv.onclick=()=>{m.remove();fxApplyPrevious();};sh.appendChild(pv);
+  // Reset photo: back to this photo's untouched defaults (one undo step; geometry too).
+  const rp=document.createElement('button');rp.className='btn bgh';rp.textContent='Reset photo';
+  rp.onclick=()=>{m.remove();if(!fxImages.length)return;if(!confirm('Reset all edits on this photo? You can undo this.'))return;
+    if(typeof window.chromasmithApplyPristineDefault==='function')window.chromasmithApplyPristineDefault();
+    const it=curItem();if(it){it.geom=defGeom();if(typeof broadcastGeom==='function')broadcastGeom();}
+    if(typeof updateWork==='function')updateWork();fxUpdate();fxHistoryPush();if(typeof toast==='function')toast('Photo reset');};
+  sh.appendChild(rp);
+  const fx=document.createElement('button');fx.className='btn bgh';fx.textContent='All FX settings…';
+  fx.onclick=()=>{m.remove();allFxSettings();};sh.appendChild(fx);
+  const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
+  m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+// Phone caption under the photo, gallery-label style: name · look · size.
+function fxMobileCaption(){
+  const el=document.getElementById('fx-mcap');if(!el)return;
+  const it=fxImages[fxCurIdx];if(!it){el.textContent='';return;}
+  const v=(document.getElementById('sel-lut')||{}).value||'';
+  const look=v?(v.startsWith('p:')&&typeof prettyLUT==='function'?prettyLUT(v.slice(2)):v.replace(/^[a-z]:/,'')):'No look';
+  const im=it.img||{};const wh=im.naturalWidth||im.width?((im.naturalWidth||im.width)+' × '+(im.naturalHeight||im.height)):'';
+  el.innerHTML='<b></b><span></span><span></span>';
+  el.children[0].textContent=(it.name||'Photo').replace(/\.[^.]+$/,'');el.children[1].textContent=look;el.children[2].textContent=wh;
+}
+// Phone export sheet: size, format and quality before saving, instead of exporting on one tap.
+// It edits the real Output controls, so desktop and phone share one set of export settings.
+function fxMobileExportSheet(){
+  if(!fxImages.length){toast('Open a photo first');return;}
+  const old=document.getElementById('fx-more-menu');if(old)old.remove();
+  const m=document.createElement('div');m.id='fx-more-menu';
+  const sh=document.createElement('div');sh.className='mm-sheet mm-export';
+  const h=document.createElement('div');h.className='mm-title';h.textContent='Export';sh.appendChild(h);
+  const mirror=(label,id)=>{
+    const src=document.getElementById(id);if(!src)return;
+    const row=document.createElement('label');row.className='mm-row';
+    const t=document.createElement('span');t.textContent=label;
+    const sel=document.createElement('select');sel.className='fx-select';sel.innerHTML=src.innerHTML;sel.value=src.value;
+    sel.onchange=()=>{src.value=sel.value;src.dispatchEvent(new Event('change',{bubbles:true}));};
+    row.append(t,sel);sh.appendChild(row);
+  };
+  if(fxImages.length>1){ // batch: say plainly whether this exports one photo or all of them
+    const row=document.createElement('div');row.className='mm-row mm-scope';
+    [['current','This photo'],['all','All '+fxImages.length]].forEach(([k,lb])=>{
+      const b=document.createElement('button');b.type='button';b.className='btn '+(fxExportScope===k?'bsec':'bgh');b.textContent=lb;
+      b.onclick=()=>{setExportScope(k);row.querySelectorAll('button').forEach(x=>x.className='btn bgh');b.className='btn bsec';syncGo();};
+      row.appendChild(b);});
+    sh.appendChild(row);
+  }
+  csExportPresets(sh);
+  mirror('Size','sel-exp-size');mirror('Format','sel-exp-fmt');
+  const q=document.getElementById('sl-exp-q');
+  if(q){const row=document.createElement('label');row.className='mm-row';
+    const t=document.createElement('span');const r=document.createElement('input');
+    r.type='range';r.className='fx-slider';r.min=q.min;r.max=q.max;r.value=q.value;
+    const lab=()=>t.textContent='Quality '+r.value;lab();
+    r.oninput=()=>{q.value=r.value;q.dispatchEvent(new Event('input',{bubbles:true}));lab();};
+    row.append(t,r);sh.appendChild(row);}
+  csExportEstimate(sh);
+  const go=document.createElement('button');go.className='btn bpri';
+  const syncGo=()=>go.textContent=fxImages.length>1&&fxExportScope!=='current'?'Export '+fxImages.length+' photos':'Export photo';
+  syncGo();go.onclick=()=>{m.remove();exportFX();};sh.appendChild(go);
+  const c=document.createElement('button');c.className='btn bsec';c.textContent='Cancel';c.onclick=()=>m.remove();sh.appendChild(c);
+  m.appendChild(sh);m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+// Add-to-Home-Screen hint: once, on a phone browser tab (not the installed app / iOS shell),
+// after the first photo opens. Android gives a real install prompt; iOS needs Share → Add.
+let _csInstallEvt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_csInstallEvt=e;});
+function csInstallHint(){
+  try{if(localStorage.getItem('cs_install_seen'))return;}catch(e){return;}
+  if(!document.body.classList.contains('mobile-fx')||window.__TAURI__||(typeof capNative==='function'&&capNative()))return;
+  if(matchMedia('(display-mode: standalone)').matches||navigator.standalone)return;
+  const iOS=/iP(hone|ad|od)/.test(navigator.userAgent);
+  if(!_csInstallEvt&&!iOS)return;
+  try{localStorage.setItem('cs_install_seen','1');}catch(e){}
+  const d=document.createElement('div');d.id='cs-install';
+  d.innerHTML='<span></span><button class="btn bsec" type="button"></button><button class="btn bgh" type="button" aria-label="Dismiss">×</button>';
+  d.firstChild.textContent=_csInstallEvt?'Install Chromasmith — opens full screen and works offline.':'Add to Home Screen: tap Share, then “Add to Home Screen” — opens full screen and works offline.';
+  const [go,x]=d.querySelectorAll('button');
+  go.textContent=_csInstallEvt?'Install':'OK';
+  go.onclick=()=>{d.remove();if(_csInstallEvt){_csInstallEvt.prompt();_csInstallEvt=null;}};
+  x.onclick=()=>d.remove();
+  document.body.appendChild(d);setTimeout(()=>d.remove(),15000);
+}
+// Phone: press and hold the photo to see the original (replaces the tiny overlay button).
+(function(){
+  const w=document.getElementById('fx-wrap');if(!w)return;
+  let t=null,x=0,y=0,on=false;
+  const stop=()=>{clearTimeout(t);t=null;if(on){on=false;fxCompare=false;renderPreview();}};
+  w.addEventListener('pointerdown',e=>{
+    if(!document.body.classList.contains('mobile-fx')||cropMode||mskPaintMode||window.csSwipeAdjust||!e.isPrimary)return;
+    x=e.clientX;y=e.clientY;clearTimeout(t);
+    t=setTimeout(()=>{t=null;on=true;fxCompare=true;renderPreview();hapt();},300); // short hold: 300ms — still longer than a tap, and moving >14px (a pan) cancels it
+  });
+  w.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>14){clearTimeout(t);t=null;}});
+  ['pointerup','pointercancel','pointerleave'].forEach(n=>w.addEventListener(n,stop));
+  w.addEventListener('touchstart',e=>{if(e.touches.length>1)stop();},{passive:true});
+  w.addEventListener('contextmenu',e=>{if(document.body.classList.contains('mobile-fx'))e.preventDefault();});
+})();
+// Slider polish: value bubble above the thumb while dragging (mobile), and DOUBLE-TAP a
+// slider to reset it to its authored default.
+document.addEventListener('input',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  if(!document.body.classList.contains('mobile-fx'))return;
+  let b=document.getElementById('fx-sl-bubble');
+  if(!b){b=document.createElement('div');b.id='fx-sl-bubble';document.body.appendChild(b);}
+  const r=s.getBoundingClientRect(),min=+s.min||0,max=+s.max||100,f=(s.value-min)/((max-min)||1);
+  b.textContent=s.value;b.style.left=(r.left+f*r.width)+'px';b.style.top=(r.top-32)+'px';b.style.opacity='1';
+  clearTimeout(b._h);b._h=setTimeout(()=>b.style.opacity='0',700);
+});
+document.addEventListener('dblclick',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  s.value=s.defaultValue;s.dispatchEvent(new Event('input',{bubbles:true}));hapt();toast('Reset');
+});
+// Tracks "a slider is actively being dragged" so the full-res preview toggle can temporarily
+// fall back to the cheap capped backing store during the drag (see fxFullResPreview/renderPreview).
+document.addEventListener('pointerdown',e=>{
+  const s=e.target;if(!s.classList||!s.classList.contains('fx-slider'))return;
+  _fxPreviewInteracting=true;
+});
+document.addEventListener('pointerup',e=>{
+  if(!_fxPreviewInteracting)return;
+  _fxPreviewInteracting=false;
+  if(fxFullResPreview)renderPreview();
+});
+// pointerup doesn't fire if the gesture is interrupted (e.g. dragged off-window, browser takes
+// over for a system gesture) — without this, _fxPreviewInteracting can stick `true` forever and
+// silently pin the preview to the cheap capped backing store even with Full res toggled on.
+document.addEventListener('pointercancel',e=>{
+  if(!_fxPreviewInteracting)return;
+  _fxPreviewInteracting=false;
+  if(fxFullResPreview)renderPreview();
+});
+// De-webification bits that need JS: lock page zoom on touch/native (the app pinch-zooms the
+// PHOTO, the page itself must not zoom), and kill the long-press context menu on the preview.
+(function(){
+  if((window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)||capNative()){
+    const m=document.querySelector('meta[name=viewport]');
+    if(m)m.setAttribute('content','width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no');
+  }
+  const wrap=document.getElementById('fx-wrap');
+  if(wrap)wrap.addEventListener('contextmenu',e=>e.preventDefault());
+})();

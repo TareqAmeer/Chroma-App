@@ -1,0 +1,122 @@
+// ── Session save / restore ──────────────────────────────────────────────────────
+const _SESS_KEY='chromasmith-session-v1';
+const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
+  'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
+  'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
+const _SESS_TOGGLES=['tg-filmneg','tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
+const _SESS_SELECTS=['sel-fneg-mode','sel-input','sel-tonemap','sel-grain-fmt','sel-lut','sel-print','sel-exp-fmt','sel-exp-size','sel-exp-sharp','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src'];
+const _SESS_COLORS=['cl-b1','cl-b2'];
+function saveSession(quiet){
+  const s={};
+  _SESS_SLIDERS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
+  _SESS_TOGGLES.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.classList.contains('on');});
+  _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
+  _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s[id]=el.value;});
+  s._curves=fxState.curves;   // tone-curve control points
+  s._curveMode=fxState.curveMode;   // 'point' or 'param' — ROADMAP R11
+  s._curveParam=fxState.curveParam; // parametric Shadows/Darks/Lights/Highlights
+  s._wheels=fxState.wheels;   // lift/gamma/gain colour wheels — ROADMAP R11
+  s._hsl=fxState.hsl;         // HSL mixer band settings
+  s._pointColors=fxState.pointColors; // point color picks
+  s._artSeed=fxState.artSeed; // artifact placement seed
+  s._frameShuffle=fxState.frameShuffle||0;
+  s._dustMode=fxState.dustMode; // dust speck colour mode (0 both,1 black,2 white)
+  s._masks=fxState.masks.map(m=>_mskToSnap(m));  // local-adjustment masks (raster -> base64; a live typed array does not survive JSON)
+  s._canvas=fxState.canvas;   // canvas matte (ar/bg/blur)
+  // Geometry (crop/rotate/flip/straighten) was the one edit surface sessions LOST on reload.
+  // It can't be restored blindly at boot (no photo is loaded yet, and a later-loaded different
+  // photo must not inherit a stale crop) — so it's saved keyed to the photo's name and applied
+  // by loadSessionGeomFor() only when a matching photo is actually (re)loaded.
+  const git=fxImages[0];
+  s._geom=(git&&git.geom)?git.geom:null;
+  s._geomFor=git?git.name:null;
+  // Retouch ops ride with geometry: same "only restore onto the matching photo" rule, for the
+  // same reason — a spot list is meaningless on a different picture, and applying it blindly
+  // would smear patches over whatever happened to load next. Plain numbers, so unlike mask
+  // rasters this cannot blow the localStorage quota.
+  s._heal=(git&&git.heal&&git.heal.length)?git.heal:null;
+  s._inpaint=(git&&git.inpaint&&git.inpaint.length)?_clone(git.inpaint):null;
+  s._redeyeFor=git?git.name:null;
+  s._redeye=(git&&git.redeye&&git.redeye.length)?git.redeye:null;
+  s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
+  // ⚠️ localStorage is a ~5MB quota. A photo carrying brush/AI masks can exceed it on its own
+  // (each raster is base64'd), and the throw is a QuotaExceededError that used to be swallowed
+  // into a quiet log line during an autosave — so the user believed their session was saved when
+  // nothing had been written since the mask was painted. Retry once WITHOUT the rasters: the
+  // sliders, curves, LUT and mask geometry all still come back, and the user is told plainly
+  // which part could not be kept.
+  try{localStorage.setItem(_SESS_KEY,JSON.stringify(s));if(!quiet)log('Session saved','ok');}
+  catch(e){
+    try{
+      const lean=Object.assign({},s,{_masks:fxState.masks.map(m=>_mskToSnap(m,true))});
+      localStorage.setItem(_SESS_KEY,JSON.stringify(lean));
+      const n=fxState.masks.filter(m=>m.px&&m.px.length).length;
+      log(`Session saved without ${n} painted mask${n===1?'':'s'} — too large for browser storage`,'warn');
+      if(!quiet&&typeof toast==='function')toast('Session saved, but painted masks were too large to keep');
+    }catch(e2){if(!quiet)log('Session save failed: '+e.message,'warn');}
+  }
+}
+// Browser autosave: a reload mid-edit used to lose everything (saveSession was button-only; the
+// chromasmithOnEdit auto-save hook only exists in the native shell). Debounced off every history
+// push so at most one localStorage write ~2s after the last edit.
+let _sessAutoT=null;
+function sessionAutosave(){clearTimeout(_sessAutoT);_sessAutoT=setTimeout(()=>saveSession(true),2000);}
+function loadSession(userTriggered){
+  try{
+    const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
+    const s=JSON.parse(raw);
+    if(s['sl-adj-exp']!=null&&s._ver!==2)s['sl-adj-exp']=Math.max(-100,Math.min(100,parseFloat(s['sl-adj-exp'])*(20/50)));
+    _SESS_SLIDERS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
+    _SESS_TOGGLES.forEach(id=>{
+      const el=document.getElementById(id);if(!el||s[id]==null)return;
+      el.classList.toggle('on',!!s[id]);
+      const ff=document.getElementById('ff-'+id.slice(3));if(ff){ff.style.display='';ff.classList.toggle('ff-off',!s[id]);}
+    });
+    _SESS_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null){el.value=s[id];el._chipsRender&&el._chipsRender();}});
+    _SESS_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
+    if(s._curves){fxState.curves=s._curves;bakeCurves();drawCurveEditor();}
+    if(s._curveParam)fxState.curveParam=s._curveParam;
+    if(s._curveMode!==undefined){
+      fxState.curveMode=s._curveMode;
+      ['s','d','l','h'].forEach(k=>{const sl=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k),val=(fxState.curveParam&&fxState.curveParam[k])||0;if(sl)sl.value=val;if(vv)vv.textContent=val;});
+      if(typeof curveSetMode==='function')curveSetMode(s._curveMode);
+    }
+    if(s._wheels){fxState.wheels=s._wheels;if(typeof WHEEL_NAMES!=='undefined')WHEEL_NAMES.forEach(wheelSyncUI);}
+    if(s._hsl){fxState.hsl=s._hsl;bakeHsl();hslSyncUI();}
+    if(s._pointColors){fxState.pointColors=s._pointColors;pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
+    if(s._artSeed!=null)fxState.artSeed=s._artSeed;
+    if(s._frameShuffle!=null)fxState.frameShuffle=s._frameShuffle;
+    _borderUISync();
+    if(s._dustMode!=null){fxState.dustMode=s._dustMode;dustModeBuildChips();}
+    if(s._masks){fxState.masks=s._masks.map(_mskFromSnap);mskSel=fxState.masks.length-1;mskRebuild();}
+    if(s._canvas){fxState.canvas=s._canvas;cvBuildChips();}
+    fxUpdate();
+    // restore LUT preset selection if stored
+    if(s['sel-lut'])selectLUT(s['sel-lut'],true).catch(()=>{});
+    if(s['sel-print'])selectPrint(s['sel-print']);
+    if(userTriggered)log('Session restored','ok');
+  }catch(e){if(userTriggered)log('No saved session found','info');}
+}
+// Apply the session's saved geometry to a just-loaded photo IF it's the same photo the session
+// was saved from (matched by name) — called from installFXImages. See saveSession's note on why
+// geometry can't restore at boot like the other session state.
+function loadSessionGeomFor(){
+  try{
+    const raw=localStorage.getItem(_SESS_KEY);if(!raw)return;
+    const s=JSON.parse(raw);
+    if(!s._geomFor||!fxImages.length)return;
+    if(fxImages[0].name!==s._geomFor)return;
+    // Retouch is PER-PHOTO — a blemish belongs to one frame — so unlike geometry it is restored
+    // only onto the photo it was recorded for, never broadcast across the batch.
+    if(s._heal&&fxImages[0])fxImages[0].heal=JSON.parse(JSON.stringify(s._heal));
+    if(s._inpaint&&fxImages[0]){fxImages[0].inpaint=_clone(s._inpaint);if(window.chromasmithInpaintRestore)window.chromasmithInpaintRestore(fxImages[0]).catch(()=>{});else fxImages[0]._inpaintError='Accepted erase repair assets require the desktop app';}
+    if(s._redeye&&fxImages[0])fxImages[0].redeye=JSON.parse(JSON.stringify(s._redeye));
+    if(!s._geom)return;
+    fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
+    const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
+    const ang=s._geom.angle||0;if(ss){ss.value=_stA2S(ang);fxPaintSlider(ss);}if(sv)sv.textContent=ang.toFixed(2)+'°';
+    updateWork();
+  }catch(e){/* geometry restore is best-effort */}
+}

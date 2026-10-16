@@ -1,0 +1,349 @@
+// ── All FX recipe: the user chooses WHICH parts All FX applies (grain, halation, look, …) and
+// at what settings. Stored per machine as {keys:[PASTE_CATEGORIES key], snap:partial snapshot}.
+// No saved recipe = the original behaviour (flip grain/halation/bloom/borders at current values).
+const _ALLFX_LS='chromasmith.allfx.v1';
+const _ALLFX_DEFAULT_KEYS=['grain','halation','bloom','canvas'];
+function allFxCats(){return PASTE_CATEGORIES.filter(c=>c.key!=='masks');}
+function allFxRecipe(){try{const r=JSON.parse(localStorage.getItem(_ALLFX_LS)||'null');return r&&Array.isArray(r.keys)&&r.snap?r:null;}catch(e){return null;}}
+function allFxOnToggles(r){ // the toggle ids a recipe switches ON — what "All FX is active" means
+  const out=[];allFxCats().filter(c=>r.keys.includes(c.key)).forEach(c=>c.toggles.forEach(id=>{const k=id.slice(3);if(r.snap.toggles&&r.snap.toggles[k])out.push(k);}));return out;
+}
+function allFxIsOn(){
+  const r=allFxRecipe(),tgOn=n=>{const t=document.getElementById(`tg-${n}`);return !!(t&&t.classList.contains('on'));};
+  if(!r)return _ALLFX.every(tgOn);
+  const tg=allFxOnToggles(r);
+  const lutOk=!r.keys.includes('lut')||((document.getElementById('sel-lut')||{}).value||'')===((r.snap.selects||{})['sel-lut']||'');
+  return lutOk&&(tg.length?tg.every(tgOn):r.keys.includes('lut'));
+}
+// Merged snapshot = base (a photo's own recipe, or factory defaults) + only the recipe's categories.
+window.chromasmithAllFxApplyTo=function(baseSnap){
+  const r=allFxRecipe();
+  let base=baseSnap?JSON.parse(JSON.stringify(baseSnap)):JSON.parse(JSON.stringify(_fxPristineDefault||getUISnapshot()));
+  if(!baseSnap){['geom','heal','adjustIndependent','rawNr','rawNrHighStrength','nativeNr','demosaicAlgo'].forEach(k=>delete base[k]);base.masks=[];}
+  base.sliders=base.sliders||{};base.toggles=base.toggles||{};base.selects=base.selects||{};
+  if(r)return pasteEditSelectiveApply(base,r.snap,r.keys);
+  _ALLFX.forEach(n=>{base.toggles[n]=true;});return base;
+};
+function enableAll(){          // toggle: apply the All FX recipe if it isn't fully on, otherwise turn it off
+  const r=allFxRecipe(),target=!allFxIsOn();
+  if(typeof hapt==='function')hapt();
+  if(!r){
+    _ALLFX.forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);
+      tg.classList.toggle('on',target);
+      const ff=document.getElementById(`ff-${name}`);
+      if(ff){ff.style.display='';ff.classList.toggle('ff-off',!target);}
+    });
+  }else if(target){
+    applyUISnapshot(pasteEditSelectiveApply(getUISnapshot(),r.snap,r.keys));
+  }else{
+    allFxOnToggles(r).forEach(name=>{
+      const tg=document.getElementById(`tg-${name}`);if(!tg)return;tg.classList.remove('on');
+      const ff=document.getElementById(`ff-${name}`);if(ff){ff.style.display='';ff.classList.add('ff-off');}
+    });
+    if(r.keys.includes('lut')){const sl=document.getElementById('sel-lut');if(sl&&sl.value){sl.value='';sl._chipsRender&&sl._chipsRender();selectLUT('',true);}}
+  }
+  fxUpdate();
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+  syncAllFxBtn();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  log(target?(r?'All FX applied':'Grain, Halation, Bloom and Borders enabled'):'All FX turned off',target?'ok':'info');
+  csActionPill(target?(r?'All FX applied — '+allFxSummary(r):'All FX: grain, halation, bloom and borders on'):'All FX turned off','Undo',()=>fxUndo());
+}
+// Apply the previous photo's settings — same category-safe path All FX uses (masks never carry over,
+// they belong to the other photo's content).
+const _PREVFX_LS='chromasmith.prevfx.v1';
+// Called before any new photo replaces the current one (sliders still hold the outgoing edit).
+function fxRememberPrevious(){if(fxImages.length&&typeof getUISnapshot==='function'){try{localStorage.setItem(_PREVFX_LS,JSON.stringify(getUISnapshot({skipRaster:true})));}catch(e){}}}
+function fxApplyPrevious(){
+  if(!fxImages.length){toast('Open a photo first');return;}
+  let snap=null;try{snap=JSON.parse(localStorage.getItem(_PREVFX_LS)||'null');}catch(e){}
+  if(!snap){toast('No previous photo yet — edit one, then open the next');return;}
+  if(typeof hapt==='function')hapt();
+  applyUISnapshot(pasteEditSelectiveApply(getUISnapshot(),snap,allFxCats().map(c=>c.key)));
+  fxUpdate();
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+  syncAllFxBtn();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  csActionPill('Previous settings applied','Undo',()=>fxUndo());
+}
+// Short status pill with one action (Undo). Reuses the export-done pill's look and slot.
+function csActionPill(text,label,fn){
+  const old=document.getElementById('cs-export-done');if(old)old.remove();
+  const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
+  d.innerHTML='<span></span><button type="button"></button><button type="button" aria-label="Dismiss" class="cs-x">×</button>';
+  d.firstChild.textContent=text;d.children[1].textContent=label;
+  d.children[1].onclick=()=>{d.remove();fn();};d.children[2].onclick=()=>d.remove();
+  document.body.appendChild(d);setTimeout(()=>d.remove(),6000);
+}
+function syncAllFxBtn(){       // highlight the All-FX buttons when every effect is on
+  const allOn=allFxIsOn();
+  document.querySelectorAll('.js-allfx').forEach(b=>b.classList.toggle('allon',allOn));
+}
+function allFxSummary(r){      // one readable line of what a saved recipe does
+  if(!r)return 'Default: turns on Grain, Halation, Bloom and Borders at whatever their sliders are set to.';
+  const s=r.snap,sl=s.sliders||{},parts=[];
+  if(r.keys.includes('lut')){const v=(s.selects||{})['sel-lut']||'';parts.push('Look: '+(v?v.slice(2):'none')+(sl['lut-mix']!==undefined&&v?` (${sl['lut-mix']}%)`:''));}
+  const amt=(key,label,id,tg)=>{if(r.keys.includes(key))parts.push(label+' '+((s.toggles||{})[tg]?(sl[id]!==undefined?sl[id]:'on'):'off'));};
+  amt('grain','Grain','grain-a','grain');amt('halation','Halation','hal-a','hal');amt('bloom','Bloom','bloom-a','bloom');
+  allFxCats().filter(c=>r.keys.includes(c.key)&&!['lut','grain','halation','bloom'].includes(c.key)).forEach(c=>parts.push(c.label));
+  return parts.join(' · ')||'Nothing selected';
+}
+function allFxSettings(){
+  const r=allFxRecipe(),keys=r?r.keys:_ALLFX_DEFAULT_KEYS;
+  const rows=allFxCats().map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" class="allfx-cat-cb" value="${c.key}"${keys.includes(c.key)?' checked':''}>${c.label}</label>`).join('');
+  _csModal('All FX — what it applies',
+    `<p style="margin:0 0 10px;font-size:12px;opacity:.75">Tick what All FX should apply, set those panels (strengths, look, borders…) the way you want in the studio, then save. All FX in the Studio and the Gallery will use exactly these settings.</p>`
+    +`<div style="font-size:12px;margin-bottom:10px"><b>Now:</b> <span id="allfx-sum">${allFxSummary(r)}</span></div>`
+    +`<div>${rows}</div>`
+    +`<label style="display:flex;align-items:center;gap:8px;padding:8px 0 0;font-size:12px;cursor:pointer"><input type="checkbox" id="allfx-cur" checked>Take strengths &amp; look from the editor's current settings${r?' (untick to keep the saved ones)':''}</label>`
+    +`<div class="btn-row" style="margin-top:14px;justify-content:flex-end;gap:8px">`
+    +`<button class="btn bgh" id="allfx-reset"${r?'':' disabled'}>Back to default</button>`
+    +`<button class="btn bgh" id="allfx-cancel">Cancel</button>`
+    +`<button class="btn bpri" id="allfx-save">Save</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  ov.querySelector('#allfx-cancel').onclick=()=>ov.remove();
+  ov.querySelector('#allfx-reset').onclick=()=>{try{localStorage.removeItem(_ALLFX_LS);}catch(e){}ov.remove();syncAllFxBtn();log('All FX back to default','info');};
+  ov.querySelector('#allfx-save').onclick=()=>{
+    const checked=[...ov.querySelectorAll('.allfx-cat-cb:checked')].map(cb=>cb.value);
+    if(!checked.length){log('Tick at least one thing for All FX to apply','err');return;}
+    const useCur=ov.querySelector('#allfx-cur').checked,cur=getUISnapshot({skipRaster:true});
+    const snap={sliders:{},toggles:{},selects:{},colors:{}};
+    // Categories newly ticked always come from the editor; previously-saved ones keep their saved
+    // values unless "take from current" is ticked.
+    checked.forEach(k=>pasteEditSelectiveApply(snap,(!useCur&&r&&r.keys.includes(k))?r.snap:cur,[k]));
+    try{localStorage.setItem(_ALLFX_LS,JSON.stringify({keys:checked,snap}));}catch(e){log('Could not save All FX settings','err');return;}
+    ov.remove();syncAllFxBtn();log('All FX saved — '+allFxSummary({keys:checked,snap}),'ok');
+  };
+}
+window.chromasmithAllFxSettings=allFxSettings;
+window.chromasmithAllFxSummary=()=>allFxSummary(allFxRecipe());
+document.addEventListener('contextmenu',e=>{const b=e.target.closest&&e.target.closest('.js-allfx,#lib-allfx-btn');if(!b)return;e.preventDefault();allFxSettings();});
+
+function generateTestPhoto(){
+  const W=1400,H=1050;
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#050508';ctx.fillRect(0,0,W,H);
+
+  // — Zone 1: white point sources on black (halation/bloom test) —
+  const pts=[
+    {x:.08,y:.10,r:2,b:1.0},{x:.20,y:.10,r:3,b:1.0},{x:.33,y:.10,r:1.5,b:.85},
+    {x:.46,y:.10,r:4,b:1.0},{x:.59,y:.10,r:2,b:.75},{x:.72,y:.10,r:3,b:.95},{x:.86,y:.10,r:2,b:1.0}
+  ];
+  pts.forEach(({x,y,r,b})=>{
+    const bv=Math.round(b*255),cx=x*W,cy=y*H;
+    const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,r*12);
+    grd.addColorStop(0,`rgb(${bv},${bv},${bv})`);
+    grd.addColorStop(.25,`rgba(${bv},${bv},${bv},.6)`);
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(cx,cy,r*12,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=`rgb(${bv},${bv},${bv})`;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+  });
+
+  // — Zone 2: coloured bright point sources —
+  const cpts=[
+    {x:.08,y:.24,col:'#ff1500'},{x:.22,y:.24,col:'#ff7700'},{x:.36,y:.24,col:'#f5e800'},
+    {x:.50,y:.24,col:'#00d435'},{x:.64,y:.24,col:'#0077ff'},{x:.78,y:.24,col:'#cc00ee'}
+  ];
+  cpts.forEach(({x,y,col})=>{
+    const cx=x*W,cy=y*H;
+    const grd=ctx.createRadialGradient(cx,cy,0,cx,cy,22);
+    grd.addColorStop(0,col);grd.addColorStop(.5,col+'88');grd.addColorStop(1,col+'00');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(cx,cy,22,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(cx,cy,2.5,0,Math.PI*2);ctx.fill();
+  });
+
+  // — Zone 3: grey ramp (grain test) —
+  const ry=H*.36,rh=H*.13;
+  for(let i=0;i<16;i++){
+    const v=Math.round(Math.pow(i/15,2.2)*255);
+    ctx.fillStyle=`rgb(${v},${v},${v})`;
+    ctx.fillRect(i*W/16,ry,W/16+1,rh);
+  }
+  // Labels
+  ctx.fillStyle='rgba(255,255,255,.35)';ctx.font='bold 11px monospace';
+  for(let i=0;i<16;i+=3){
+    const v=Math.round(Math.pow(i/15,2.2)*255);
+    ctx.fillText(v,i*W/16+3,ry+rh-4);
+  }
+
+  // — Zone 4: saturated colour patches —
+  const py=H*.52,ph=H*.12;
+  ['#bb0000','#dd4400','#999900','#006622','#003d99','#440099','#880044','#777777'].forEach((col,i)=>{
+    ctx.fillStyle=col;ctx.fillRect(i*W/8,py,W/8+1,ph);
+  });
+
+  // — Zone 5: bright rectangle / window test (bloom + halation boundary) —
+  const wy=H*.68;
+  ctx.fillStyle='#111114';ctx.fillRect(0,wy,W,H*.18);
+  // Bright white panel
+  ctx.fillStyle='#ffffff';ctx.fillRect(W*.04,wy+H*.02,W*.10,H*.13);
+  // Near-white
+  ctx.fillStyle='#e0e0e0';ctx.fillRect(W*.18,wy+H*.02,W*.10,H*.13);
+  // 80% grey
+  ctx.fillStyle='#cccccc';ctx.fillRect(W*.32,wy+H*.02,W*.10,H*.13);
+  // Window-like: bright interior
+  ctx.fillStyle='#f8f8ee';ctx.fillRect(W*.55,wy+H*.01,W*.14,H*.15);
+  ctx.fillStyle='#222226';
+  ctx.fillRect(W*.557,wy+H*.015,W*.025,H*.14);
+  ctx.fillRect(W*.59,wy+H*.015,W*.025,H*.14);
+  ctx.fillRect(W*.555,wy+H*.08,W*.145,H*.008);
+
+  // — Zone 6: single-pixel lines (sharpness/grain interaction) —
+  const ly=H*.88;
+  ctx.fillStyle='#111114';ctx.fillRect(0,ly,W,H*.10);
+  [1,2,4,8,16].forEach((gap,i)=>{
+    const sx=W*.04+i*(W*.17);
+    for(let x=sx;x<sx+W*.14;x+=gap*2){
+      ctx.fillStyle='#ffffff';ctx.fillRect(x,ly+H*.01,gap,H*.075);
+    }
+  });
+
+  return c;
+}
+
+async function loadTestPhoto(){
+  const tc=generateTestPhoto();
+  const img=new Image();
+  img.onload=()=>{
+    if(cropMode)cropExit();
+    fxImages=[{img,name:'test-photo',ext:'png',dpi:72,geom:defGeom()}];
+    fxCurIdx=0;fxExportScope='all';
+    fxImg=img;updateWork();resetGeomUI();
+    const dz=document.getElementById('dz-fx-img');if(dz)dz.classList.add('loaded');
+    const fn=document.getElementById('fn-fx-img');if(fn)fn.textContent='test-photo.png';
+    document.getElementById('fx-fname').value='test-photo';
+    const eb=document.getElementById('btn-fx-export');eb.disabled=false;eb.innerHTML='Export';
+    document.getElementById('fx-preview-tools').style.display='flex';
+    document.getElementById('fx-zoom-ctrl').style.display='flex';
+    fxLoupe=false;document.getElementById('btn-loupe').classList.remove('on');_resetZoom();
+    renderPreview();buildLookGallery();buildFilmstrip();syncExportScopeUI();
+    if(typeof nrSyncGate==='function')nrSyncGate();
+    log('Test photo loaded — grain/halation/bloom test chart','ok');
+  };
+  img.src=tc.toDataURL('image/png');
+}
+
+// ═══════════════════════════
+// SLIDER COMPONENT
+// ═══════════════════════════
+class ImgSlider{
+  constructor(wrap,la,lb){this.wrap=wrap;this.pct=50;this._id=Math.random().toString(36).slice(2);this._init(la,lb)}
+  _init(la,lb){this.wrap.innerHTML=`<div class="sl-outer" id="so${this._id}"><canvas class="sl-ca" id="ca${this._id}"></canvas><canvas class="sl-cb" id="cb${this._id}"></canvas><div class="sl-line" id="sl${this._id}"></div><div class="sl-knob" id="sk${this._id}">⇔</div><span class="sl-lbl sl-ll">${la}</span><span class="sl-lbl sl-lr">${lb}</span></div><div class="sl-cap">${la} ↔ ${lb}</div>`;
+  this.outer=document.getElementById('so'+this._id);this.ca=document.getElementById('ca'+this._id);this.cb=document.getElementById('cb'+this._id);this.line=document.getElementById('sl'+this._id);this.knob=document.getElementById('sk'+this._id);this._bind()}
+  setImages(pxA,pxB,w,h){this.ca.width=w;this.ca.height=h;this.ca.style.width='100%';this.ca.style.height='auto';this.cb.width=w;this.cb.height=h;this.cb.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%';this.ca.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pxA),w,h),0,0);this.cb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pxB),w,h),0,0);this._upd(50)}
+  _upd(p){this.pct=p;this.cb.style.clipPath=`inset(0 0 0 ${p}%)`;this.line.style.left=p+'%';this.knob.style.left=p+'%'}
+  _bind(){const mv=e=>{if(!this.drag)return;const r=this.outer.getBoundingClientRect(),cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;this._upd(Math.max(0,Math.min(100,cx/r.width*100)))};this.outer.addEventListener('mousedown',()=>this.drag=true);this.outer.addEventListener('touchstart',()=>this.drag=true,{passive:true});window.addEventListener('mousemove',mv);window.addEventListener('touchmove',mv,{passive:true});window.addEventListener('mouseup',()=>this.drag=false);window.addEventListener('touchend',()=>this.drag=false)}
+}
+
+// ═══════════════════════════
+// WORKFLOW STATE
+// ═══════════════════════════
+const ST={beforeFile:null,targetFile:null,startFile:null,startType:null,baseName:'my_look',beforeImg:null,targetImg:null,history:[],cpSrcFile:null,cpRefFile:null,cpRefExtra:[],cpTargetPaths:[],cpVer:1.0};
+const SL={};
+function getNextVer(){return`v1.${ST.history.length}`}
+function getCurVer(){return ST.history.length>0?`v1.${ST.history.length-1}`:'—'}
+
+async function startMatch(){
+  if(!ST.beforeFile||!ST.targetFile)return;
+  const btn=document.getElementById('btn-start');btn.disabled=true;
+  ST.baseName=document.getElementById('match-name').value||'my_look';
+  showPB('pb-s');log('Starting initial match…','info');
+  try{
+    ST.beforeImg=await loadImg(ST.beforeFile);ST.targetImg=await loadImg(ST.targetFile);
+    const{px:bPx,w,h}=getPx(ST.beforeImg);const tPx=resizePx(ST.targetImg,w,h);
+    let base=identLUT();
+    if(ST.startFile){if(ST.startType==='lut'){base=parseCube(ST.startFile);log('Starting LUT applied')}else{base=await genBlindLUT(parseXMP(ST.startFile),'pf-s');log('Starting XMP converted')}}
+    const minePx=applyLUTtoPx(bPx,base);
+    const corr=await buildCorrLUT(minePx,tPx,w,h,'pf-s',20,75);
+    const finalLUT=await composeLUTs(corr,base,'pf-s',75,88);
+    setP('pf-s',88);
+    // XMP must mirror THIS version's LUT (so it changes every iteration).
+    // Derive it from before -> (before through the final LUT), not before->target.
+    const achievedPx=applyLUTtoPx(bPx,finalLUT);
+    const finalXMP=await deriveXMP(bPx,achievedPx,w,h,`${ST.baseName} ${getNextVer()}`,'pf-s');
+    const summary=analyzeChanges(identLUT(),finalLUT);
+    ST.history.push({ver:getNextVer(),lut:finalLUT,xmp:finalXMP,summary,deviceFile:null});
+    setP('pf-s',100);log(`${getNextVer()} ready`,'ok');
+    renderHistory();await genStepPrev(ST.history.length-1);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  btn.disabled=false;setTimeout(()=>hidePB('pb-s'),800);
+}
+async function processRef(idx){
+  const item=ST.history[idx];if(!item?.deviceFile)return;
+  const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=true;
+  const pfId=`pf-ref-${idx}`;showPB(`pb-ref-${idx}`);
+  log(`Refining ${item.ver} → ${getNextVer()}…`,'info');
+  try{
+    const devImg=await loadImg(item.deviceFile);
+    const{px:dPx,w,h}=getPx(devImg);const tPx=resizePx(ST.targetImg,w,h);
+    const corr=await buildCorrLUT(dPx,tPx,w,h,pfId,10,75);
+    const refined=await composeLUTs(corr,item.lut,pfId,75,88);
+    setP(pfId,88);
+    // XMP mirrors the REFINED LUT (changes each refinement), derived from
+    // before -> (before through the refined LUT).
+    const{px:bPx,w:bw,h:bh}=getPx(ST.beforeImg);
+    const achievedPx=applyLUTtoPx(bPx,refined);
+    const xmp=await deriveXMP(bPx,achievedPx,bw,bh,`${ST.baseName} ${getNextVer()}`,pfId);
+    const summary=analyzeChanges(item.lut,refined);
+    ST.history.push({ver:getNextVer(),lut:refined,xmp,summary,deviceFile:null,prevVer:item.ver});
+    setP(pfId,100);log(`${getNextVer()} ready`,'ok');
+    renderHistory();await genStepPrev(ST.history.length-1);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  setTimeout(()=>hidePB(`pb-ref-${idx}`),800);
+}
+async function genStepPrev(idx){
+  const item=ST.history[idx];if(!item)return;
+  log(`Generating preview for ${item.ver}…`);
+  const{px:bPx,w,h}=getPx(ST.beforeImg,900);
+  const tPx=resizePx(ST.targetImg,w,h);
+  const oPx=applyLUTtoPx(bPx,item.lut);
+  item.bPx=bPx;item.tPx=tPx;item.oPx=oPx;item.pw=w;item.ph=h;
+  const sbf=SL[`${idx}-bf`],stf=SL[`${idx}-tf`];
+  if(sbf)sbf.setImages(bPx,oPx,w,h);if(stf)stf.setImages(tPx,oPx,w,h);
+  log(`Preview ready for ${item.ver}`,'ok');
+}
+function renderHistory(){
+  const hist=document.getElementById('step-history');hist.innerHTML='';
+  ST.history.forEach((item,idx)=>hist.appendChild(mkStepCard(item,idx)));
+  hist.appendChild(mkRefCard(ST.history.length-1));
+}
+function mkStepCard(item,idx){
+  const card=document.createElement('div');card.className='step-card';
+  card.innerHTML=`<div class="step-hdr"><span class="step-badge">${item.ver}</span><span style="color:var(--mut);font-size:10px">${item.prevVer?`Refinement ${item.prevVer} → ${item.ver}`:'Initial Match'} — ${ST.baseName}</span></div>`;
+  const body=document.createElement('div');body.className='step-body';
+  body.innerHTML=`<div class="sliders-row"><div id="sbf-${idx}"></div><div id="stf-${idx}"></div></div>`;
+  const sumHTML=item.summary.map(s=>`<li>${s}</li>`).join('');
+  body.innerHTML+=`<div class="sum-box"><div class="sum-title">${item.prevVer?`Changes ${item.prevVer} → ${item.ver}`:'What this version does'}</div><ul class="sum-list">${sumHTML}</ul></div>`;
+  body.innerHTML+=`<div class="btn-row" style="margin-top:12px"><button class="btn bpri" onclick="dlItem(${idx},'lut')">Download .cube ${item.ver}</button><button class="btn bsec" onclick="dlItem(${idx},'xmp')">Download .xmp ${item.ver}</button></div>`;
+  card.appendChild(body);
+  setTimeout(()=>{
+    const wbf=document.getElementById(`sbf-${idx}`),wtf=document.getElementById(`stf-${idx}`);
+    if(wbf){SL[`${idx}-bf`]=new ImgSlider(wbf,'Before','Final');if(item.bPx)SL[`${idx}-bf`].setImages(item.bPx,item.oPx,item.pw,item.ph);else wbf.innerHTML=`<div class="sl-ph">Generating preview…</div>`}
+    if(wtf){SL[`${idx}-tf`]=new ImgSlider(wtf,'Target','Final');if(item.tPx)SL[`${idx}-tf`].setImages(item.tPx,item.oPx,item.pw,item.ph);else wtf.innerHTML=`<div class="sl-ph">Generating preview…</div>`}
+  },60);
+  return card;
+}
+function mkRefCard(prevIdx){
+  const card=document.createElement('div');card.className='card';
+  const nv=getNextVer();
+  card.innerHTML=`<div class="ctitle">Refinement ${getCurVer()} → ${nv}<div class="cver">${nv}</div></div>
+  <div class="dz" id="dz-dev-${prevIdx}" ondragover="dzo(event,this)" ondragleave="dzl(this)" ondrop="dzd(event,'dev-${prevIdx}')">
+    <input type="file" accept="image/*" onchange="fi(event,'dev-${prevIdx}')">
+    <div class="dz-ic">${icon('image',16)}</div><div class="dz-lb">Rendered output for ${getCurVer()}</div>
+    <div class="dz-sb">Lumix Lab (.cube) or Lightroom (.xmp) export with ${getCurVer()} applied</div><div class="dz-fn" id="fn-dev-${prevIdx}"></div>
+  </div>
+  <div class="btn-row"><button class="btn bpri" id="btn-ref-${prevIdx}" disabled onclick="processRef(${prevIdx})">Process → ${nv}</button></div>
+  <div class="pb" id="pb-ref-${prevIdx}"><div class="pf" id="pf-ref-${prevIdx}"></div></div>`;
+  return card;
+}
+
+// ═══════════════════════════
+// DOWNLOAD
+// ═══════════════════════════
+// Share-first save: ONLY on touch/iOS devices (where <a download> just reloads) use the
+// share sheet → "Save Image" to Photos. Desktop ALWAYS plain-downloads — navigator.canShare
+// is true on desktop Chrome/Safari too, so gating on canShare alone hijacked desktop exports
+// into the share path (and its "Tap to save" fallback button). Gate on the device instead.
+function useShareSheet(){return isMemoryConstrained()} // same touch/iOS predicate

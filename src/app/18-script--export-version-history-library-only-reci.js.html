@@ -1,0 +1,35 @@
+// ── Export/version history (Library-only, recipe-based — see library.rs's
+// get_export_history/append_export_history). Separate from the in-session fxHistory undo
+// stack: this only grows on a successful EXPORT and survives across relaunches, so you can
+// come back later and reload the recipe that produced a specific past export. Restoring a
+// version loads the recipe into the live editor only — it does NOT re-export automatically.
+function fxUpdateHistoryBtn(){
+  const b=document.getElementById('btn-export-history');
+  if(!b)return;
+  b.style.display=(typeof window.chromasmithGetExportHistory==='function')?'':'none';
+}
+// Shared viewport clamp for the toolbar popovers below (history/split/timeline) — each is
+// anchored via a fixed CSS corner (left:0 or right:0) sized to its OWN button, not to where that
+// button actually sits in the window. That's fine when the trigger is reliably near the edge the
+// popover extends AWAY from (per #lib-filters-pop's own comment in library-ui.js), but these
+// three don't have that guarantee at every window width/dock state — reported live for the
+// Library's activity pill (library-ui.js's .lib-act-pop, fixed separately) and the same fixed-
+// corner-CSS pattern applies here too. Called AFTER the popover's content is populated, since its
+// width/height depend on that content.
+function fxClampPopoverToViewport(pop){
+  if(!pop||pop.style.display==='none')return;
+  const margin=8;
+  const r=pop.getBoundingClientRect();
+  let dx=0,dy=0;
+  if(r.left<margin)dx=margin-r.left;
+  else if(r.right>window.innerWidth-margin)dx=(window.innerWidth-margin)-r.right;
+  if(r.top<margin)dy=margin-r.top;
+  else if(r.bottom>window.innerHeight-margin)dy=(window.innerHeight-margin)-r.bottom;
+  if(dx||dy){
+    // Read any pre-existing transform-based offset (none of these three set one) rather than
+    // clobbering it, so this stays additive if a future popover ever combines the two.
+    pop.style.transform=(pop.style.transform||'').replace(/translate\([^)]*\)/,'')+` translate(${dx}px,${dy}px)`;
+  }
+}
+// fxToggleHistoryPopover() retired 2026-09-09 (3.1.3/3.1.4) — #btn-export-history now opens the
+// same combined popover fxToggleTimelinePopover() builds; see that function's own comment.

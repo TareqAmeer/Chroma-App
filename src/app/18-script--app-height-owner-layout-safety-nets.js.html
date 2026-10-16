@@ -1,0 +1,285 @@
+// ── App-height owner + layout safety nets ──────────────────────────────────────
+// --app-h is THE height the mobile layout is sized to (body.mobile-fx / body.mobile-cl use
+// var(--app-h,100svh)). It comes from visualViewport.height — the only measurement that is
+// always the true visible height across Safari, Home-Screen standalone and the Capacitor
+// shell; every CSS viewport unit (vh/dvh/svh) mis-reports in at least one of those modes.
+// Also: snap any stray page scroll back to (0,0) — with overflow:hidden at a fixed height a
+// residual scroll offset from iOS chrome transitions shows the MIDDLE of the layout (top bar
+// pushed down, bottom nav clipped).
+function appHSync(){
+  const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||0;
+  if(h)document.documentElement.style.setProperty('--app-h',Math.round(h)+'px');
+  if(document.body.classList.contains('mobile-fx')&&(window.scrollX||window.scrollY))window.scrollTo(0,0);
+  if(typeof diagLayout==='function')diagLayout();
+}
+// #fx-toolrail's sticky offset (body.fx-deskb #fx-toolrail{top:...}) has to clear #fx-deskbar,
+// which is ALSO sticky and sits on top of it (z-index 20 vs the rail's auto). A hardcoded px
+// guess drifts stale the moment the deskbar wraps to two rows (narrow window) or its content
+// grows, and when it's short by even a few px the deskbar paints over the rail's top button —
+// exactly the "Looks button hidden under Export" symptom. Measure the real height instead.
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  if(!bar)return;
+  const sync=()=>{if(bar.offsetHeight)document.documentElement.style.setProperty('--deskbar-h',bar.offsetHeight+'px');};
+  new ResizeObserver(sync).observe(bar);
+  window.addEventListener('resize',sync);
+  sync();
+})();
+// Responsive fold for the always-visible bar (2026-09-09) — see the .fx-deskbar-tight1/2 CSS
+// comment above #fx-settings. Reads the bar's own rendered width (not window.innerWidth) since
+// the tool-rail/panel split eats into it independently of the window; same ResizeObserver idiom
+// as --deskbar-h above, just watching width instead of height.
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  if(!bar)return;
+  // Fold by real fit, not a fixed width: keep the photo identity readable while the zoom controls
+  // remain in the right tools cluster; fold optional controls one step at a time until they fit.
+  const L=['fx-deskbar-fold1','fx-deskbar-tight1','fx-deskbar-tight2','fx-deskbar-fold5','fx-deskbar-fold3','fx-deskbar-fold4','fx-deskbar-fold2'];
+  const fits=()=>{const l=document.getElementById('fx-deskbar-left'),t=document.getElementById('fx-deskbar-title'),r=document.getElementById('fx-deskbar-right');
+    if(!l||!t||!r||!t.getClientRects().length)return true;const a=l.getBoundingClientRect(),b=t.getBoundingClientRect(),c=r.getBoundingClientRect();
+    // the title's children can spill past its own box (nowrap flex), so measure their real extent too
+    let lo=b.left,hi=b.right;for(const k of t.children){const q=k.getBoundingClientRect();if(q.width>0){lo=Math.min(lo,q.left);hi=Math.max(hi,q.right);}}
+    b.left=lo;b.right=hi;
+    const name=t.querySelector('#db-title-name'),availability=t.querySelector('#cs-source-render-state');
+    const needed=Math.max(name&&!name.hidden?Math.min(200,name.scrollWidth):0,availability&&!availability.hidden?Math.min(160,availability.scrollWidth):0);
+    const ts=getComputedStyle(t),innerWidth=t.clientWidth-(parseFloat(ts.paddingLeft)||0)-(parseFloat(ts.paddingRight)||0);
+    const readable=!needed||innerWidth>=needed;
+    return readable&&a.right+12<=lo&&hi+12<=c.left&&c.right<=bar.getBoundingClientRect().right+1;};
+  let busy=false;
+  const sync=()=>{
+    if(busy)return;const w=bar.offsetWidth;if(!w)return;busy=true;
+    const cl=document.body.classList;L.forEach(k=>cl.remove(k));
+    for(const k of L){if(fits())break;cl.add(k);}
+    busy=false;
+  };
+  new ResizeObserver(sync).observe(bar);
+  // Panel/rail/dock changes move the bar's clusters without resizing the bar itself, so a width-only
+  // observer left a stale fold (overlaps after dragging a resizer). Re-fold on any non-fold body
+  // class change and on the layout's inline size variables.
+  const sig=()=>[...document.body.classList].filter(c=>!c.startsWith('fx-deskbar-')).join(' ');let lastSig=sig();
+  new MutationObserver(()=>{const n=sig();if(n!==lastSig){lastSig=n;requestAnimationFrame(sync);}}).observe(document.body,{attributes:true,attributeFilter:['class']});
+  const lay=document.querySelector('.fx-layout');if(lay)new MutationObserver(()=>requestAnimationFrame(sync)).observe(lay,{attributes:true,attributeFilter:['style']});
+  // any text change in the bar (file name, status, dimensions) changes what has to fit
+  new MutationObserver(()=>requestAnimationFrame(sync)).observe(bar,{childList:true,characterData:true,subtree:true});
+  window.addEventListener('resize',sync);
+  sync();
+})();
+// 2026-09-11 (topbar parity pass, item 4): recenters #fx-deskbar-title on the actual image
+// viewport (#fx-zoom-wrap) instead of the bar's own geometric middle — see the CSS comment on
+// body.deskx #fx-deskbar-title (--db-title-off) for why this is measured live rather than
+// computed from --dock-w/--panel-w/--rail-w in a plain calc(): a formula blind to how much room
+// #fx-deskbar-left/-right actually need shifted the title straight into the zoom slider at
+// ordinary widths (caught by editor:responsive). This measures the real rendered edges of the
+// left/right button groups and the real image wrapper, then clamps the shift so the title can
+// never be pushed into either group — it recenters as far as genuine slack allows and no further.
+function fxSyncDeskbarTitleOffset(){
+  document.documentElement.style.setProperty('--db-title-off','0px');return; // CHR-127: title stays on the bar's own centre, never tracks the image/panels
+  const bar=document.getElementById('fx-deskbar');
+  const title=document.getElementById('fx-deskbar-title');
+  const left=document.getElementById('fx-deskbar-left');
+  const right=document.getElementById('fx-deskbar-right');
+  const img=document.getElementById('fx-zoom-wrap');
+  if(!bar||!title||!left||!right||!img)return;
+  if(!document.body.classList.contains('deskx'))return;
+  const barR=bar.getBoundingClientRect();if(!barR.width)return;
+  const imgR=img.getBoundingClientRect();if(!imgR.width)return;
+  // Read the title's CURRENT on-screen center, then back out any existing transform so this is
+  // always computed against the untransformed (grid-centered) position — otherwise each call
+  // would compound onto the previous frame's shift instead of recomputing it from scratch.
+  const titleR=title.getBoundingClientRect();
+  const cs=getComputedStyle(title);
+  const m=new DOMMatrixReadOnly(cs.transform==='none'?undefined:cs.transform);
+  const curOffset=m.m41||0;
+  const naturalCenter=(titleR.left+titleR.width/2)-curOffset;
+  const desiredCenter=imgR.left+imgR.width/2;
+  let offset=desiredCenter-naturalCenter;
+  // Clamp so the shifted title box can never overlap the left/right button clusters — 12px
+  // breathing room on each side, same as the bar's own gap tokens.
+  const leftR=left.getBoundingClientRect(),rightR=right.getBoundingClientRect();
+  const halfTitle=titleR.width/2;
+  const gap=parseFloat(getComputedStyle(bar).getPropertyValue('--deskbar-control-gap'))||12;
+  const minCenter=leftR.right+gap+halfTitle;
+  const maxCenter=rightR.left-gap-halfTitle;
+  let clampedCenter=desiredCenter;
+  if(maxCenter>=minCenter)clampedCenter=Math.min(Math.max(desiredCenter,minCenter),maxCenter);
+  else clampedCenter=naturalCenter; // no slack at all — stay at the grid's own center
+  offset=clampedCenter-naturalCenter;
+  document.documentElement.style.setProperty('--db-title-off',offset+'px');
+}
+(function(){
+  const bar=document.getElementById('fx-deskbar');
+  const img=document.getElementById('fx-zoom-wrap');
+  if(!bar)return;
+  const sync=()=>requestAnimationFrame(fxSyncDeskbarTitleOffset);
+  new ResizeObserver(sync).observe(bar);
+  // #fx-zoom-wrap is the flexible column in .fx-layout's grid (chromasmith-22.html's
+  // body.deskx .fx-layout rule) — its width changes whenever the tool panel/rail/library dock
+  // toggles (panel-closed, rail-icons, rail-hidden, lib-docked), none of which change #fx-deskbar's
+  // OWN width, so a ResizeObserver on the bar alone would miss exactly the events this exists to
+  // react to. .fx-layout's grid-template-columns transition (.2s) fires several resize entries
+  // as it animates; rAF-batching in sync() keeps that cheap.
+  if(img)new ResizeObserver(sync).observe(img);
+  window.addEventListener('resize',sync);
+  sync();
+})();
+// Log one measurement line (visible in More→Log) so on-device layout bugs are diagnosed from
+// data instead of screenshots: every number that decides whether the layout fits, + verdict.
+let _diagLast='';
+function diagLayout(){
+  try{
+    if(!document.body.classList.contains('mobile-fx'))return;
+    const vv=window.visualViewport?Math.round(window.visualViewport.height):0,ih=window.innerHeight;
+    const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||0;
+    const cs=getComputedStyle(document.body);
+    const sat=Math.round(parseFloat(cs.paddingTop))||0; // resolved max(10px,var(--sat))
+    const sn=document.getElementById('fx-secnav');
+    const snB=sn?Math.round(sn.getBoundingClientRect().bottom):0;
+    const sh=document.documentElement.scrollHeight;
+    const vis=appH||vv||ih;
+    const over=Math.max(sh-vis,snB-vis);
+    const msg=`Layout ${BUILD}: vv=${vv} inner=${ih} app-h=${appH} padTop=${sat} scrollH=${sh} navBottom=${snB} → ${over>2?('OVERFLOW '+over+'px'):'FITS'}`;
+    // quiet: an overflowing layout is a signal for whoever is debugging the shell, not something
+    // the person editing a photo can act on — and it re-fires on every resize.
+    if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info',true);}
+  }catch(e){}
+}
+(function(){
+  window.addEventListener('load',appHSync);
+  window.addEventListener('resize',appHSync);
+  window.addEventListener('pageshow',appHSync);
+  window.addEventListener('focus',appHSync);
+  document.addEventListener('visibilitychange',appHSync);
+  window.addEventListener('orientationchange',()=>setTimeout(appHSync,50));
+  if(window.visualViewport)window.visualViewport.addEventListener('resize',appHSync);
+  // Watchdog: events are the fast path but none of them is guaranteed on every engine/mode
+  // (verified: a CDP viewport change can resize the window without dispatching resize).
+  // A 1s drift check is imperceptible in cost and makes a stale --app-h self-healing.
+  setInterval(()=>{
+    const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||0;
+    const cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||0;
+    if(h&&Math.abs(h-cur)>1)appHSync();
+  },1000);
+  appHSync();
+})();
+// Swipe left/right on the (unzoomed) preview to switch photos in a multi-photo batch.
+(function(){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let sx=0,sy=0,st=0,valid=false;
+  wrap.addEventListener('touchstart',e=>{valid=e.touches.length===1;if(valid){sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();}},{passive:true});
+  wrap.addEventListener('touchend',e=>{
+    if(!valid||fxZoom>1||cropMode||fxLoupe||fxImages.length<2||document.body.classList.contains('sheet-open'))return;
+    const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(Math.abs(dx)>60&&Math.abs(dy)<45&&Date.now()-st<600){fxSelectImage(fxCurIdx+(dx<0?1:-1));hapt();}
+  },{passive:true});
+})();
+// Long-press with ONE finger = hold-to-compare (the chip button stays for discoverability).
+// A 2nd finger landing means this is a pinch-zoom gesture instead, so it cancels/blocks compare
+// — each touch point fires its own pointerdown (Pointer Events spec), so counting active
+// pointerIds on this element is enough to tell a hold from a pinch without touching the
+// separate touchstart/touchmove pinch-zoom handler below.
+(function(){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let t=null,sx=0,sy=0,engaged=false;
+  const active=new Set();
+  const cancelCompare=()=>{clearTimeout(t);t=null;if(engaged){engaged=false;fxCompare=false;renderPreview();}};
+  wrap.addEventListener('pointerdown',e=>{
+    if(!fxWork||cropMode||e.button)return;
+    active.add(e.pointerId);
+    if(active.size>1){cancelCompare();return;}
+    sx=e.clientX;sy=e.clientY;engaged=false;
+    t=setTimeout(()=>{engaged=true;fxCompare=true;renderPreview();hapt();},300);
+  });
+  wrap.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-sx,e.clientY-sy)>14){clearTimeout(t);t=null;}});
+  const end=e=>{active.delete(e.pointerId);cancelCompare();};
+  wrap.addEventListener('pointerup',end);wrap.addEventListener('pointercancel',end);wrap.addEventListener('pointerleave',end);
+})();
+// Mobile export overlay: dimmed screen + big progress + cancel (the panel sheet may be closed).
+function _expOverlay(show){
+  let o=document.getElementById('fx-exp-ov');
+  if(!show){if(o)o.remove();return;}
+  if(!o){o=document.createElement('div');o.id='fx-exp-ov';
+    o.innerHTML='<div class="eo-box"><div class="eo-txt" id="eo-txt">Exporting…</div><div class="eo-bar"><div id="eo-fill"></div></div><button class="btn bgh" onclick="fxExportCancel=true">Cancel</button></div>';
+    document.body.appendChild(o);}
+}
+
+// ══ CANVAS — aspect-ratio matte around image+borders (see canvasCompose) ═══════
+const CV_ARS=[['Fit',0],['1:1',1,'Post'],['4:5',0.8,'Portrait'],['9:16',9/16,'Story'],['16:9',16/9,'Wide'],['3:2',1.5],['2:3',2/3],['4:3',4/3],['3:4',0.75]];
+let _cvBgImg=null; // decoded background photo; the saved copy is fxState.canvas.bgSrc (a small JPEG data URL), so it travels with the photo's edits
+function cvSyncBgImg(){
+  const src=fxState.canvas.bgSrc||null;
+  if(!src){_cvBgImg=null;return;}
+  if(_cvBgImg&&_cvBgImg._src===src)return;
+  const im=new Image();im._src=src;im.onload=()=>{_cvBgImg=im;if(typeof fxUpdate==='function')fxUpdate();};im.src=src;
+}
+function cvPickBgPhoto(){const i=document.createElement('input');i.type='file';i.accept='image/*';
+  i.onchange=()=>{const f=i.files[0];if(!f)return;const im=new Image();
+    im.onload=()=>{ // a background is blurred anyway — 1200px is plenty and keeps the saved edit small
+      const k=Math.min(1,1200/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement('canvas');
+      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+      fxState.canvas.bgSrc=c.toDataURL('image/jpeg',0.82);fxState.canvas.blur=true;URL.revokeObjectURL(im.src);
+      cvBuildChips();fxUpdate();fxHistoryPush();};
+    im.src=URL.createObjectURL(f);};i.click();}
+function cvClearBgPhoto(){fxState.canvas.bgSrc=null;_cvBgImg=null;cvBuildChips();fxUpdate();fxHistoryPush();}
+const CV_BGS=['#000000','#ffffff','#141414','#f5f0e8','#d4903a','#4a5d73','#7a3b3b','blur'];
+function cvBuildChips(){
+  const row=document.getElementById('cv-ar-chips');
+  if(row){row.innerHTML='';
+    // Shape tiles: each tile IS its ratio (Swiss: flat, square corners, ink when picked).
+    CV_ARS.forEach(([lb,ar,use])=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='cv-tile'+(fxState.canvas.ar===ar?' on':'');
+      const r=ar||1,H=64,W=Math.round(Math.min(104,Math.max(42,H*r)));
+      b.style.width=W+'px';b.style.height=Math.round(ar?Math.min(H,W/r):H)+'px';
+      b.innerHTML=(use?'<span class="cv-use">'+use+'</span>':'')+'<span class="cv-ar">'+lb+'</span>';
+      b.setAttribute('aria-pressed',String(fxState.canvas.ar===ar));
+      b.onclick=()=>{fxState.canvas.ar=ar;cvBuildChips();fxUpdate();};
+      row.appendChild(b);
+    });}
+  const sw=document.getElementById('cv-bg-swatches');
+  if(sw){sw.innerHTML='';
+    CV_BGS.forEach(c=>{
+      const b=document.createElement('button');
+      const isBlur=c==='blur';
+      const sel=isBlur?fxState.canvas.blur:(!fxState.canvas.blur&&fxState.canvas.bg===c);
+      // 28px to clear the pointer-target floor (was 24). The blurred-background option used to be
+      // labelled with the text "BLR" set at 8px inside a 24px circle — unreadable, and it was
+      // invisible to the UI audit until off-sections started rendering dimmed instead of hidden.
+      // It is an icon now, like every other affordance in the app.
+      b.className='pc-chip';
+      b.style.cssText='width:28px;height:28px;border-radius:0;border:var(--bw-2) solid '+(sel?'var(--acc)':'var(--bdr)')+';cursor:pointer;padding:0;flex-shrink:0;'
+        +'display:inline-flex;align-items:center;justify-content:center;'
+        +(isBlur?'background:linear-gradient(135deg,#8a8a8a,#333);color:#fff':'background:'+c);
+      if(isBlur){b.innerHTML=icon('nr',14);b.title='Blurred photo as the background';}
+      else{const nm={'#000000':'Black','#ffffff':'White','#141414':'Charcoal','#f5f0e8':'Paper','#d4903a':'Amber','#4a5d73':'Slate blue','#7a3b3b':'Oxblood'}[String(c).toLowerCase()]||c;b.title=nm+' background';}
+      b.setAttribute('aria-label',b.title);b.setAttribute('aria-pressed',String(!!sel));
+      b.onclick=()=>{if(isBlur){fxState.canvas.blur=!fxState.canvas.blur;}else{fxState.canvas.bg=c;fxState.canvas.blur=false;}cvBuildChips();fxUpdate();};
+      sw.appendChild(b);
+    });}
+  // background photo + blur amount (only meaningful with the photo background on)
+  cvSyncBgImg();
+  const bl=document.getElementById('cv-blur-row'),sl=document.getElementById('sl-canvas-blur'),pb=document.getElementById('cv-bgphoto-lb');
+  if(bl)bl.style.display=fxState.canvas.blur?'':'none';
+  if(sl){sl.value=fxState.canvas.blurAmt==null?60:fxState.canvas.blurAmt;const v=document.getElementById('vl-canvas-blur');if(v)v.textContent=sl.value;}
+  if(pb)pb.textContent=_cvBgImg?'Other photo ✓':'This photo';
+  const cb=document.getElementById('cv-bgphoto-clear');if(cb)cb.style.display=_cvBgImg?'':'none';
+}
+function cvSetBg(c){fxState.canvas.bg=c;fxState.canvas.blur=false;cvBuildChips();fxUpdate();}
+
+// ══ LOCAL ADJUSTMENTS — up to 4 analytic radial/linear masks (see lut-pass shader) ═
+// Masks store SHADER-ready values (uv coords with y=0 at the image BOTTOM — the FLIP_Y
+// texture convention; exposure in stops; etc.). The sliders convert: Y sliders are
+// top-based (0 = top of the photo) and flip on write via data-fl.
+let mskSel=-1;
+// True when a mask is driven by the on-device segmentation (EdgeSAM/SAM2 — see
+// desktop/src-tauri/src/sam.rs). Checked instead of `origin==='ai'` because the Skin mask is now
+// segmentation-first too: SEGMENT the subject, then refine by colour inside it. That ordering is
+// the right way round. Colour alone cannot separate a subject from a background that shares its
+// colours — chasing it here produced a straight oscillation, where tightening the gate enough to
+// reject sunlit limestone (bright, near-neutral) also rejected chest hair and beard (dark,
+// near-neutral), because saturation cannot tell those apart. Geometry can.
+function mskIsAI(m){return !!(m&&(m.origin==='ai'||m.ai));}
+const MSK_SLIDER_LAYOUT_KEY='cs.maskSliderLayout';
+let _mskCompactLayoutPref=(()=>{try{return localStorage.getItem(MSK_SLIDER_LAYOUT_KEY)==='compact';}catch(_){return false;}})();
+function mskCompactLayoutGet(){return _mskCompactLayoutPref;}
+function mskCompactLayoutToggle(){const next=!_mskCompactLayoutPref;_mskCompactLayoutPref=next;try{localStorage.setItem(MSK_SLIDER_LAYOUT_KEY,next?'compact':'standard');}catch(_){}
+  mskRebuild();}

@@ -1,0 +1,283 @@
+// ── Calibrated halation/bloom constants (measured from Dehancer halation-70 /
+//    bloom-40 targets; sigma in px at a 2400px reference width; gains given at
+//    the default Amount sliders). See tools/calib/ for the derivation harness. ──
+// Halation v22: rule-based emission model (replaces the v5/v21 red-surplus model,
+//   which never halated green/cyan/purple/yellow/red and pink-flooded gray bars).
+//   Fitted by a dense pixel-loss optimizer (tools/calib/optimize_hal.py, Nelder-Mead)
+//   directly against `dehancer halation x2.png` — final loss 0.0239 (vs v5's 0.0287),
+//   and visually confirmed against the Phase-A "glance match" checklist (gray bars
+//   stay neutral, red/green/cyan/purple/orange/yellow all halate, warm≫cool, halo is
+//   soft red-orange not hard red, thin warm inner rim present). See tools/calib/best_params.json
+//   and tools/calib/cmp_rule_*.png for the fit + visual proof. (sigmas below are at 1x ref,
+//   i.e. best_params.json's 2x-image values ÷ 2; gains/emission params are scale-free.)
+//   powL,kW,kC,aG,bluesupp(=bB),bP: the rule-based emission constants — see GLSL src shader.
+//   v22.1b adds bP=2.10 (magenta/purple driver, +bP*min(R,B) in the warmth term):
+//   this chart's purple swatch is (200,0,200) — R==B exactly — so bB (an R/B-EXCESS
+//   suppressor) has zero effect on it; purple still under-halated (0.187 vs Dehancer's
+//   0.325) even after the asymmetric-bB fix made it present at all. min(R,B) is a
+//   "magenta-ness" detector, PROVABLY zero whenever either channel is zero (red/
+//   orange/yellow/green have B=0; cyan/blue have R=0) — validated to move ONLY the
+//   purple gap (0.187→0.327, matching 0.325) with every other color's gap-R and
+//   interior-flood value bit-identical (tools/calib/scorecard.py: 1 FAIL→0 FAIL).
+// MP4 display-matrix rotation -> the 2x2 matrix srcXf expects (packed row-major a,b,c,d).
+// WebCodecs/VideoDecoder does not apply this for you — mediabunny's track.getRotation() reads
+// it, and the shader applies it at the one place the raw video pixel enters the pipeline
+// (vidUV in progs.lut). Cached as Float32Array so _pass's uniform4fv path picks it up (a plain
+// length-4 JS array falls through _pass's array-length switch and silently sets nothing).
+FXR._rotXfCache={};
+FXR.rotXf=function(deg){
+  const k=((deg%360)+360)%360;
+  if(!FXR._rotXfCache[k]){
+    const m=k===90?[0,1,-1,0]:k===180?[-1,0,0,-1]:k===270?[0,-1,1,0]:[1,0,0,1];
+    FXR._rotXfCache[k]=new Float32Array(m);
+  }
+  return FXR._rotXfCache[k];
+};
+FXR.CAL={
+  refWidth:2400,
+  // Skin-tone frequency separation: blur sigma as a fraction of the reference width, so the
+  // low-frequency lightness estimate is the same physical scale at every render size. 2% ~= 48px
+  // at the 2400px reference, ~80px on a 4000px file — broad enough to be "the tan gradient"
+  // rather than "the shading", which is the whole point of the separation.
+  skinBlurFrac:0.02,
+  // channel-split halation (σ_R=7.52 ≫ σ_G=3.76 ≫ σ_B=1.13 px at 1x ref)
+  //   → red spreads widest, green narrower, blue essentially local → warm backing
+  //   colour AND the thin amber-to-red inner-rim cue both emerge from physics.
+  // bloom unchanged from v21: source-coloured, σ=12.42px, gain=0.111 (still PASSes).
+  // TWO-CHANNEL emission (tools/calib/optimize_hal2.py): .r = warm "backing dye" (all bright sources),
+  // .g = HUE-GATED yellow driver. The green is gated by `gate=smoothstep(gA,gB, G-R)` (linear) so
+  // it fires only for G≥R sources (white/grey/yellow/green/cyan) and NOT red/orange/purple — those
+  // keep a pure-red halo (matches Dehancer's per-colour halo G/R: red 0.0, white 0.6, etc.). The
+  // yellow→orange→red edge gradient now appears in BOTH standard and no-remjet (σ_R≫σ_G: near the
+  // edge R+G=yellow, deeper R-only=red). Standard red params (gainR,sigmaR + emitR's kW/kC/aG/bP/
+  // bluesupp/powL) are UNCHANGED, so every red-based scorecard requirement is byte-identical; only
+  // the green channel (gainG,sigmaG,powLg,gA,gB) is new. Green sigmaG fit to the std white edge.
+  halation:{thr:0.10,knee:0.141,power:1.0,bluesupp:0.9691,
+            powL:3.9247,kW:1.0028,kC:0.8860,aG:0.1972,bP:2.10,
+            powLg:3.9247,gA:-1.0,gB:0.15,             // green channel: steep lum curve + G≥R hue gate
+            sigmaR:7.5233,sigmaG:2.9672,sigmaB:1.1285,
+            // gainG kept LOW so the green peak never exceeds red on COMPACT sources (dots): a
+            // narrow-σ green over-concentrates in 2D, so a too-high gainG turns white dots green
+            // instead of yellow. Dot-safe = gainG ≲ gainR·(σ_G/σ_R)². Fit to the white-dot radial.
+            gainR:1.2380,gainG:0.0764,gainB:0.0,defAmount:70,
+            // "No remjet" film (no anti-halation backing): stronger, wider, with the SAME yellow
+            // edge, PLUS (1) a flatter luminance curve (powL/powLg≈1.6) so dim greys/cool also
+            // halate, and (2) a low high-pass (hp=0.55) so the wide blur floods interiors smoothly
+            // (no carved dark ring / colour step). Per-channel gains absolute @amount=70; σ scales
+            // relative to the base σ_R/σ_G. extremeScale: the "Extreme" toggle multiplies ≈×5–6.
+            noRemjet:{gainR:1.80,gainG:0.34,gainB:0.0,sigmaScaleR:1.40,sigmaScaleG:1.75,
+                      thr:0.05,hp:0.55,powL:1.628,powLg:1.628},
+            extremeScale:3.0},
+  bloom:{thr:0.10,knee:0.15,power:1.0,sigma:12.42,gain:0.111,defAmount:40},
+  // FILM GRAIN — value-noise, per-channel signal-dependent σ, calibrated to Dehancer's grain
+  // module measured from grain-test-2x.png rendered at each film format (tools/calib/measure_grain*,
+  // grain refs dehancer-{8,16,35,65}mm-{60,100}.png). Model (display space, before print):
+  //   σ_c = grA · k_c · v_c^powG · (1−smoothstep(hiLo,hiHi,v_c))         per channel
+  //   noise_c = (wi·indep_c + ws·shared) · σ_c    (wi²+ws²=1 → unit variance, corr=ws²≈0.40)
+  //   grA = (amount/100·amountSpan)^powA · format.scale                  (value-noise unit std baked into k)
+  // R is ~1.2× G≈B; σ rises to a peak near v≈0.7 then rolls off (highlight gate). Format sets the
+  // clump CELL size (px at refW=4800) + a strength scale (65mm finest/weakest, 35mm strongest).
+  grain:{kR:0.75,kG:0.63,kB:0.63,powG:0.69,powA:0.59,hiLo:0.72,hiHi:0.95,
+         wi:0.7746,ws:0.6325,amountSpan:1.5,refW:4800,
+         formats:{ '8mm':{cellPx:5.0,scale:0.83}, '16mm':{cellPx:4.0,scale:1.00},
+                   '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
+};
+const FX=new FXR();
+// Video still renders through FX itself, so it retains the narrow texture-update queue needed
+// to keep an in-flight video grade coherent. Still exports never enter this lock: they render on
+// FXExport and leave the preview fully interactive.
+['setLUT','setPrintLUT','setHslLUT','setCurveTex','setStockShoulderTex','setDepthTex'].forEach(m=>{
+  const apply=FX[m].bind(FX);
+  FX[m]=(...args)=>{
+    if(window.__csVideoExporting){
+      const copy=args.map(a=>ArrayBuffer.isView(a)?new a.constructor(a):a);
+      (window.__csVideoTextureChanges||(window.__csVideoTextureChanges=[])).push([m,copy]);return;
+    }
+    return apply(...args);
+  };
+});
+// Still exports use a second WebGL context so live edits can keep updating the preview while
+// their immutable texture snapshot renders. Video stays on FX: its encoder owns a separate
+// streaming contract and never enters processToCanvas/renderTiled.
+let FXExport=null;
+function fxPrepareExportRenderer(){
+  if(!FXExport){FXExport=new FXR(document.createElement('canvas'));if(!FXExport.ok)throw new Error('Could not create the export WebGL renderer');}
+  FXExport.resetTextureSnapshotFrom(FX);
+  return FXExport;
+}
+// CHR-181: a third, private renderer feeds the read-only second-display window. It owns an
+// independent WebGL context so refreshing the display never mutates live preview or export.
+let FXDisplay=null,_fxDisplayWindow=null,_fxDisplayTimer=0,_fxDisplayRevision=0,_fxDisplayReadyUnlisten=null,_fxDisplayModeUnlisten=null,_fxDisplayReady=false,_fxDisplayMode='photo';
+function fxSecondDisplayOpen(){
+  if(!window.__TAURI__||!fxWork||curItem()?.kind==='video'){toast('Open a still photo to use the second display');return;}
+  const api=window.__TAURI__.webviewWindow,winApi=window.__TAURI__.window;
+  if(!api?.WebviewWindow){toast('Second display is not available in this desktop build');return;}
+  if(_fxDisplayWindow){_fxDisplayWindow.setFocus?.();return;}
+  (async()=>{
+    _fxDisplayReady=false;
+    _fxDisplayReadyUnlisten=await window.__TAURI__.event.listen('chromasmith-second-display-ready',()=>{_fxDisplayReady=true;fxSecondDisplayUpdate();});
+    _fxDisplayModeUnlisten=await window.__TAURI__.event.listen('chromasmith-second-display-mode',event=>{_fxDisplayMode=event?.payload?.mode==='grid'?'grid':'photo';fxSecondDisplayUpdate();});
+    const monitors=await winApi.availableMonitors(),current=await winApi.getCurrentWindow().currentMonitor();
+    const other=monitors.find(m=>current&&(m.name!==current.name||m.position.x!==current.position.x||m.position.y!==current.position.y));
+    const scale=other?.scaleFactor||1,pos=other?.position;
+    const opts={url:'second-display.html',title:'Chromasmith — Second display',width:other?Math.round(other.size.width/scale):1280,height:other?Math.round(other.size.height/scale):800,center:!other};
+    if(pos){opts.x=Math.round(pos.x/scale);opts.y=Math.round(pos.y/scale);}
+    const w=new api.WebviewWindow('second-display',opts);_fxDisplayWindow=w;
+    w.once('tauri://destroyed',()=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;_fxDisplayRevision++;clearTimeout(_fxDisplayTimer);if(FXDisplay){try{FXDisplay.gl.getExtension('WEBGL_lose_context')?.loseContext();}catch(_){}FXDisplay=null;}});
+    w.once('tauri://error',e=>{_fxDisplayWindow=null;_fxDisplayReady=false;_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;toast('Could not open second display: '+String(e?.payload||e));});
+  })().catch(e=>{_fxDisplayReadyUnlisten?.();_fxDisplayReadyUnlisten=null;_fxDisplayModeUnlisten?.();_fxDisplayModeUnlisten=null;toast('Could not open second display: '+String(e?.message||e));});
+}
+window.fxSecondDisplayOpen=fxSecondDisplayOpen;
+function fxSecondDisplayUpdate(){
+  if(!_fxDisplayWindow||!_fxDisplayReady)return;
+  const revision=++_fxDisplayRevision;clearTimeout(_fxDisplayTimer);
+  _fxDisplayTimer=setTimeout(()=>{
+    try{
+      if(!fxWork||curItem()?.kind==='video'){
+        const frame=_fxDisplayMode==='grid'?{mode:'grid',tiles:[],total:0}:{mode:'empty',message:'Open a still photo to display it here.'};
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',frame);
+        return;
+      }
+      if(!FXDisplay){FXDisplay=new FXR(document.createElement('canvas'));if(!FXDisplay.ok)throw new Error('Could not create second-display renderer');}
+      const renderTile=(src,maxPixels)=>{
+        const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
+        const k=Math.min(1,1800/w,1800/h,Math.sqrt(maxPixels/(w*h))),rw=Math.max(1,Math.round(w*k)),rh=Math.max(1,Math.round(h*k));
+        FXDisplay.resetTextureSnapshotFrom(FX);FXDisplay.setImage(src);FXDisplay.render(getFXParams(),rw,rh,{...mskPreviewRenderOptions({glowScale:fxPreviewGlowScale(),scOverride:w/FXR.CAL.refWidth}),showSel:-1});
+        return{dataUrl:FXDisplay.cv.toDataURL('image/jpeg',0.88),width:w,height:h};
+      };
+      if(_fxDisplayMode==='grid'){
+        // A loaded Editor batch is the current multi-photo selection. Cap the grid at 16 entries
+        // and at 1MP per tile: the aggregate display raster can never exceed 16MP.
+        const items=fxImages.filter(it=>it?.img).slice(0,16),tiles=items.map((it,i)=>{
+          const image=renderTile(it.img,1000000),id=String(it.path||it.id||`${it.name||'photo'}:${i}`);
+          return{id,name:String(it.name||`Photo ${i+1}`),dataUrl:image.dataUrl};
+        });
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',{mode:'grid',tiles,total:fxImages.length});
+      }else{
+        const src=fxWork,w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,image=renderTile(src,16000000);
+        if(revision===_fxDisplayRevision&&_fxDisplayWindow)window.__TAURI__.event.emitTo('second-display','chromasmith-second-display-frame',{mode:'photo',dataUrl:image.dataUrl,name:curItem()?.name||'',width:w,height:h});
+      }
+    }catch(e){log('Second display render failed: '+String(e?.message||e),'err');}
+  },160);
+}
+
+// ═══════════════════════════
+// FX UI
+// ═══════════════════════════
+const fxState={canvas:{ar:0,bg:'#000000',blur:false},curves:_curveDefault(),curveMode:'point',curveParam:{s:0,d:0,l:0,h:0},
+  // ROADMAP R11 — 3-way lift/gamma/gain colour wheels (ASC-CDL, see cdlComputeSOP). h=hue
+  // angle in degrees (wheel position), s=radial magnitude 0..1 (0=centre/neutral), l=an
+  // independent luminance slider -100..100. All-neutral (s=0,l=0 on all three) is a no-op.
+  wheels:{lift:{h:0,s:0,l:0},gamma:{h:0,s:0,l:0},gain:{h:0,s:0,l:0}},
+  hsl:{hue:{},sat:{},lum:{}},pointColors:[],artSeed:7.7,dustMode:0,masks:[],grain:{enabled:false,amount:30,size:3,format:'65mm'},halation:{enabled:false,amount:70,radius:20,color:'#cc4400'},bloom:{enabled:false,amount:40,threshold:70,radius:25,color:'#fffef0'},b1:{thickness:1,color:'#000000'},b2:{thickness:2,color:'#ffffff'},lut:null,lutMix:1,print:null,sharedAdjust:null};
+let fxImg=null,fxTimer=null,_fxHistPushTimer=null,fxVersion=1.0,fxImages=[],fxCurIdx=0,fxExportScope='all',_fxLoadKey='';
+let _fxAmtTouched=false; // true once the user manually moves grain/halation/bloom Amount after a look pick
+let _fxPristineDefault=null; // captured once at boot, before loadSession() — see loadFXImages
+// Deskbar center title (deskx desktop shell): filename + status suffix. status is either the
+// image dimensions ("6000 × 4000") or, while a decode is in flight, an animated spinner
+// (spinning=true, statusText ignored). Also exposed on window for library-ui.js.
+// File-extension → short format label for the deskbar status (e.g. "RW2", "HEIC", "JPG").
+function fxFormatLabel(name){const m=/\.([a-z0-9]+)$/i.exec(name||'');return m?m[1].toUpperCase():''}
+function fxDimsFmt(name,img,ext){
+  // While the full-resolution photo is still loading, the preview tier's size (e.g. 2560 × 1707)
+  // isn't the photo's real size — show only the format until the real one lands.
+  const promoting=document.getElementById('fx-zoom-wrap')?.classList.contains('lib-full-loading');
+  const dims=img&&!promoting?`${img.width} × ${img.height}`:'';
+  // `name` has its extension stripped by the time entries are built (installFXImages/
+  // fxSelectImage), so deriving the format from it here always came back empty — the
+  // format only ever appeared during the pre-load spinner title (which shows the raw
+  // filename). Prefer the item's own `ext` field, falling back to name-sniffing for any
+  // caller that doesn't have one.
+  const fmt=ext?ext.toUpperCase():fxFormatLabel(name);
+  return dims&&fmt?`${dims} · ${fmt}`:(dims||fmt);
+}
+function fxDeskbarTitle(name,statusText,spinning){
+  const n=document.getElementById('db-title-name'),s=document.getElementById('db-title-status');
+  if(!n||!s)return;
+  if(name!==undefined&&name!==null)n.textContent=name;
+  s.classList.toggle('spin',!!spinning);
+  s.textContent=statusText||'';
+  const title=document.getElementById('fx-deskbar-title');
+  const titleVisible=!!(title&&title.getClientRects().length);
+  let local=document.getElementById('fx-photo-work-status');
+  if(spinning&&statusText&&!titleVisible){
+    const wrap=document.getElementById('fx-wrap');
+    if(wrap){
+      if(!local){local=document.createElement('div');local.id='fx-photo-work-status';local.setAttribute('role','status');local.setAttribute('aria-live','polite');local.setAttribute('aria-atomic','true');wrap.appendChild(local)}
+      local.textContent=(name?name+' · ':'')+statusText;local.hidden=false;
+    }
+  }else if(local){local.hidden=true;local.textContent=''}
+  fxUpdateFlagBtns();
+  fxUpdateHistoryBtn();
+}
+window.fxDeskbarTitle=fxDeskbarTitle;
+// Photo-scoped loading indicator shared by decode and on-demand analysis. Completion (including
+// failure) restores this photo's dimensions; a late result from a photo the user has switched
+// away from must never overwrite the newly selected photo's status.
+let _fxPhotoActivitySeq=0;
+function fxPhotoActivityInvalidate(){_fxPhotoActivitySeq++;}
+function fxPhotoActivity(item,label){
+  const current=()=>typeof curItem==='function'?curItem():null;
+  const belongs=()=>item&&current()===item;
+  if(!belongs())return()=>{};
+  const seq=++_fxPhotoActivitySeq;
+  fxDeskbarTitle(item.name,label,true);
+  let settled=false;
+  return()=>{
+    if(settled)return;
+    settled=true;
+    if(seq!==_fxPhotoActivitySeq||!belongs())return;
+    const it=current();
+    fxDeskbarTitle(it.name,fxDimsFmt(it.name,it.img,it.ext),false);
+  };
+}
+// Library red/green flag toggle for the currently-open photo — Tauri/Library-only (no-op,
+// buttons hidden, in the browser build where window.chromasmithToggleFlag is never defined).
+async function fxToggleFlag(label){
+  if(typeof window.chromasmithToggleFlag!=='function')return;
+  if(typeof hapt==='function')hapt();
+  await window.chromasmithToggleFlag(label);
+  fxUpdateFlagBtns();
+}
+function fxUpdateFlagBtns(){
+  // Only for a photo opened FROM the Gallery: a dropped/Open-File photo has no catalog entry, so
+  // the buttons used to show and silently do nothing (found by test/control_sweep.mjs).
+  const fromLib=typeof window.chromasmithHasOpenedPhoto!=='function'||window.chromasmithHasOpenedPhoto();
+  const has=fromLib&&typeof window.chromasmithOpenedFlag==='function';
+  const r=document.getElementById('btn-flag-red'),g=document.getElementById('btn-flag-green'),f=document.getElementById('btn-favorite');
+  if(r&&g){
+    r.style.display=g.style.display=has?'':'none';
+    if(has){
+      const label=window.chromasmithOpenedFlag();
+      r.classList.toggle('on',label==='Red');
+      g.classList.toggle('on',label==='Green');
+    }
+  }
+  if(f){
+    const hasFav=fromLib&&typeof window.chromasmithOpenedFavorite==='function';
+    f.style.display=hasFav?'':'none';
+    if(hasFav)f.classList.toggle('on',window.chromasmithOpenedFavorite());
+  }
+  fxUpdateColorLabelControl();
+}
+function fxSetColorLabel(colorLabel){
+  if(typeof window.chromasmithSetColorLabel!=='function')return;
+  window.chromasmithSetColorLabel(colorLabel).then(()=>fxUpdateColorLabelControl());
+}
+function fxUpdateColorLabelControl(){
+  const el=document.getElementById('btn-color-label');if(!el)return;
+  const enabled=typeof window.chromasmithColorLabelsEnabled==='function'
+    ?window.chromasmithColorLabelsEnabled():localStorage.getItem('chromasmith_color_labels_enabled')!=='0';
+  const fromLib=typeof window.chromasmithHasOpenedPhoto!=='function'||window.chromasmithHasOpenedPhoto();
+  const visible=enabled&&fromLib&&typeof window.chromasmithOpenedColorLabel==='function';
+  el.style.display=visible?'':'none';
+  if(visible)el.value=window.chromasmithOpenedColorLabel()||'';
+}
+// Library favorite (heart) toggle for the currently-open photo — same Tauri/Library-only
+// gating as fxToggleFlag above.
+async function fxToggleFavorite(){
+  if(typeof window.chromasmithToggleFavorite!=='function')return;
+  if(typeof hapt==='function')hapt();
+  await window.chromasmithToggleFavorite();
+  fxUpdateFlagBtns();
+}

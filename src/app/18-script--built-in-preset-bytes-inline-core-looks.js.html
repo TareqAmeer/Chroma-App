@@ -1,0 +1,173 @@
+// ── Built-in preset bytes: inline (core looks) → IndexedDB → vendor/luts/<key>.bin ──────────
+// Only the User Looks category still ships as base64 inside this file; the other ~102 presets
+// are raw 33³ RGB bytes in vendor/luts/, fetched once and cached. That took 16.3 MB out of the
+// HTML (17.7 MB → ~1.4 MB), which every surface pays on cold start — the web build over the
+// network, the iOS shell and the desktop shell as parse time. See tools/calib/split_lut_presets.py.
+// ⚠️ Keep the inline copies: a bare chromasmith-22.html opened over file:// can't fetch(), and
+// the core looks are the ones that have to survive that.
+const LUT_BYTE_LEN=SZ*SZ*SZ*3;                 // 107811 — one 33³ LUT, 3 bytes/entry
+const _lutBytesInflight=Object.create(null);   // key -> Promise, so N gallery cells share one fetch
+async function presetBytes(key){
+  const inline=LUT_PRESETS[key];
+  if(inline)return b64ToBytes(inline);
+  if(_lutBytesInflight[key])return _lutBytesInflight[key];
+  return _lutBytesInflight[key]=(async()=>{
+    try{const rec=await lutTx('readonly',s=>s.get(key),'lutcache');
+        if(rec&&rec.data&&rec.data.length===LUT_BYTE_LEN)return rec.data;}catch(e){}
+    const r=await fetch('vendor/luts/'+key+'.bin',{cache:'force-cache'});
+    if(!r.ok)throw new Error('LUT '+key+' unavailable ('+r.status+')');
+    const bytes=new Uint8Array(await r.arrayBuffer());
+    if(bytes.length!==LUT_BYTE_LEN)throw new Error('LUT '+key+' is '+bytes.length+' bytes, expected '+LUT_BYTE_LEN);
+    try{await lutTx('readwrite',s=>s.put({name:key,data:bytes}),'lutcache');}catch(e){}
+    return bytes;
+  })().finally(()=>{delete _lutBytesInflight[key]});
+}
+// Pull every not-yet-cached preset into IndexedDB once the app is idle, so the WEB build is
+// genuinely offline-capable after one visit (desktop/iOS read vendor/ off local disk, so they
+// never depended on this). Sequential on purpose — this is background work behind whatever the
+// user is actually doing, and 102 parallel fetches would compete with the photo they just
+// opened. Failures are ignored: the on-demand path in presetBytes retries anyway.
+function lutWarmCache(){
+  if(lutWarmCache._done)return;lutWarmCache._done=true;
+  // Native shells serve vendor/ off local disk (Tauri's cs:// handler reads dist/; Capacitor's
+  // asset handler reads www/), so there is no offline story to protect and warming would just
+  // be 11MB of pointless disk reads plus 102 IndexedDB writes on every launch. Web only.
+  if(window.__TAURI__||(typeof capNative==='function'&&capNative()))return;
+  const idle=window.requestIdleCallback||(fn=>setTimeout(()=>fn({timeRemaining:()=>0}),1500));
+  const keys=Object.keys(LUT_META||{}).filter(k=>!LUT_PRESETS[k]);
+  let i=0;
+  const step=()=>{
+    if(i>=keys.length){log(`Looks cached for offline use (${keys.length})`,'info');return;}
+    presetBytes(keys[i++]).catch(()=>{}).then(()=>idle(step));
+  };
+  idle(step);
+}
+let lastUploadedLUT=null; // {name,lut} — most recent .cube upload, candidate for the library
+// Prettify a preset key for display only (value keeps the exact key). "classic_neg_composed" → "Classic Neg Composed"
+function prettyLUT(k){return k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());}
+// Built-in LUT category order for grouped UI (dropdown optgroups + Looks gallery sections).
+// LUT_META maps key -> category string; keys missing from LUT_META fall into "Other".
+const LUT_CATEGORY_ORDER=['User Looks','C41 Still','Cinema','Reversal','Instant','Niche','B&W','Film','Spektrafilm','Other'];
+// ⚠️ Iterates LUT_META, NOT LUT_PRESETS: since the split (tools/calib/split_lut_presets.py) only the
+// core looks are still inline, so LUT_PRESETS is no longer the list of built-in presets — it is
+// the list of presets that happen not to need a fetch. LUT_META is the authoritative key list.
+function groupedLutKeys(){
+  const byCat={};
+  Object.keys(typeof LUT_META!=='undefined'?LUT_META:LUT_PRESETS).forEach(k=>{
+    // A category missing from LUT_CATEGORY_ORDER used to drop its looks from every menu
+    // silently (all 20 Spektrafilm stocks vanished that way) — file it under Other instead.
+    let cat=(typeof LUT_META!=='undefined'&&LUT_META[k])||'Other';
+    if(!LUT_CATEGORY_ORDER.includes(cat))cat='Other';
+    (byCat[cat]=byCat[cat]||[]).push(k);
+  });
+  return LUT_CATEGORY_ORDER.map(cat=>[cat,byCat[cat]||[]]).filter(([,ks])=>ks.length);
+}
+async function refreshLUTSelect(keep){
+  const sel=document.getElementById('sel-lut');if(!sel)return;
+  let lib=[];try{lib=await lutLibList()}catch(e){}
+  sel.innerHTML='<option value="">None</option>'
+    +groupedLutKeys().map(([cat,keys])=>
+      `<optgroup label="${cat}">`+keys.map(k=>`<option value="p:${k}">${prettyLUT(k)}</option>`).join('')+'</optgroup>'
+    ).join('')
+    +(lib.length?'<optgroup label="My library">'+lib.map(k=>`<option value="l:${k}">${k}</option>`).join('')+'</optgroup>':'');
+  sel.value=keep||'';
+}
+async function selectLUT(v,skipFxDefaults){
+  setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();},0);
+  const del=document.getElementById('btn-lut-del');del.disabled=!v.startsWith('l:');
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+  const rowMix=document.getElementById('row-lut-mix');
+  if(rowMix)rowMix.style.display=v?'flex':'none';
+  try{
+    if(!v){fxState.lut=null;renderPreview();log('LUT off');return}
+    let lut;
+    // presetLut(), not a fresh lutFromBytes(b64ToBytes(...)): the gallery has almost always
+    // decoded this look already, and re-decoding it here paid for that twice.
+    if(v.startsWith('p:'))lut=await presetLut(v.slice(2));
+    else{const rec=await lutLibGet(v.slice(2));if(!rec){log('LUT not found in library','err');return}lut=lutFromBytes(rec.data)}
+    FX.setLUT(lut);fxState.lut=lut;
+    // Dehancer-derived looks carry a calibrated Grain/Halation/Bloom starting point (per-film
+    // measured against Dehancer, see tools/calib/dehancer/ONE_FILM_GATE.md) -- apply it once, the
+    // first time this look is picked. Sliders stay freely adjustable afterward; skipFxDefaults
+    // (recipe/undo/session restore) and _fxAmtTouched (user already moved a slider) both
+    // suppress it so a saved edit's own amounts are never clobbered by the look's defaults.
+    if(!skipFxDefaults&&!_fxAmtTouched&&v.startsWith('p:')&&typeof LUT_FX_DEFAULTS!=='undefined'&&LUT_FX_DEFAULTS[v.slice(2)]){
+      const d=LUT_FX_DEFAULTS[v.slice(2)];
+      const setAmt=(tgId,slId,valId,ffId,amt)=>{
+        const tg=document.getElementById(tgId),sl=document.getElementById(slId),vl=document.getElementById(valId),ff=document.getElementById(ffId);
+        if(tg)tg.classList.add('on');if(sl)sl.value=amt;if(vl)vl.textContent=Math.round(amt);if(ff)ff.style.display='flex';
+      };
+      setAmt('tg-grain','sl-grain-a','vl-grain-a','ff-grain',d.grain);
+      setAmt('tg-hal','sl-hal-a','vl-hal-a','ff-hal',d.halation);
+      setAmt('tg-bloom','sl-bloom-a','vl-bloom-a','ff-bloom',d.bloom);
+      if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+      if(typeof fxUpdate==='function')fxUpdate();
+      if(typeof syncAllFxBtn==='function')syncAllFxBtn();
+      if(typeof fxHistoryPush==='function')fxHistoryPush();
+    }
+    if(!skipFxDefaults)_fxAmtTouched=false; // fresh look pick: allow its defaults to apply once
+    renderPreview();log(`LUT applied: ${v.slice(2)}`,'ok');
+    if(typeof csFirstEditLookApplied==='function')csFirstEditLookApplied();
+  }catch(e){log('LUT error: '+e.message,'err')}
+}
+// Print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation.
+function selectPrint(v){
+  const sel=document.getElementById('sel-print');if(sel&&sel.value!==v){sel.value=v;sel._chipsRender&&sel._chipsRender();}
+  try{
+    if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');if(typeof syncSectionEnabled==='function')syncSectionEnabled();return}
+    const lut=lutFromBytes(b64ToBytes(PRINT_PRESETS[v]));
+    FX.setPrintLUT(lut);fxState.print=v;renderPreview();log(`Print profile: ${prettyLUT(v)}`,'ok');
+  }catch(e){fxState.print=null;FX.setPrintLUT(null);log('Print error: '+e.message,'err')}
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled(); // Print on/off lights the rail's edited bar
+}
+async function saveLUTToLibrary(){
+  if(!lastUploadedLUT)return;
+  // askTextModal, never window.prompt — prompt() is a silent no-op under the Tauri/WKWebView
+  // shell (see askTextModal's own comment), so this button did nothing at all in the desktop app.
+  const name=(await askTextModal('Save LUT as','',lastUploadedLUT.name)||'').trim();if(!name)return;
+  try{await lutLibPut(name,lutToBytes(lastUploadedLUT.lut));await refreshLUTSelect('l:'+name);
+    document.getElementById('btn-lut-del').disabled=false;
+    log(`Saved "${name}" to LUT library`,'ok');}
+  catch(e){log('Could not save LUT: '+e.message,'err')}
+}
+async function deleteLUTFromLibrary(){
+  const sel=document.getElementById('sel-lut');const v=sel.value;
+  if(!v.startsWith('l:'))return;
+  try{await lutLibDel(v.slice(2));await refreshLUTSelect();fxState.lut=null;renderPreview();log(`Deleted "${v.slice(2)}" from library`,'ok')}
+  catch(e){log('Could not delete LUT: '+e.message,'err')}
+}
+// TIFF: browsers can't decode TIFF natively — use the embedded UTIF (incl. 16-bit and
+// LZW/ZIP-compressed Lightroom exports; 16-bit is converted to the pipeline's 8-bit).
+function isTiffFile(f){return /\.tiff?$/i.test(f.name)||f.type==='image/tiff'}
+// Best-effort read of an ICC profile's human-readable name (the 'desc' tag — textDescriptionType
+// in ICC v2, multiLocalizedUnicodeType in v4) — diagnostic only, not used for any colour math.
+// Lets us SEE what colour space a source file actually claims (e.g. "ProPhoto RGB" — Lightroom
+// Classic's External Editing default unless changed to sRGB) instead of guessing blind.
+function iccProfileDescription(icc){
+  try{
+    if(!icc||icc.length<132)return null;
+    const dv=new DataView(icc.buffer,icc.byteOffset,icc.byteLength);
+    const tagCount=dv.getUint32(128);
+    for(let i=0;i<tagCount;i++){
+      const off=132+i*12;
+      if(off+12>icc.length)break;
+      const sig=String.fromCharCode(icc[off],icc[off+1],icc[off+2],icc[off+3]);
+      if(sig!=='desc')continue;
+      const tagOff=dv.getUint32(off+4),typeSig=String.fromCharCode(icc[tagOff],icc[tagOff+1],icc[tagOff+2],icc[tagOff+3]);
+      if(typeSig==='desc'){ // ICC v2: 4 type + 4 reserved + 4 ASCII-count, then ASCII (nul-terminated)
+        const n=dv.getUint32(tagOff+8);
+        let s='';for(let k=0;k<n-1;k++)s+=String.fromCharCode(icc[tagOff+12+k]);
+        return s.trim()||null;
+      }
+      if(typeSig==='mluc'){ // ICC v4: 4 type + 4 reserved + 4 record-count + 4 record-size, then records
+        const recCount=dv.getUint32(tagOff+8),recSize=dv.getUint32(tagOff+12)||12;
+        if(recCount<1)return null;
+        const len=dv.getUint32(tagOff+16+4),strOff=dv.getUint32(tagOff+16+8);
+        let s='';for(let k=0;k<len;k+=2)s+=String.fromCharCode(dv.getUint16(tagOff+strOff+k)); // UTF-16BE
+        return s.trim()||null;
+      }
+      return null;
+    }
+  }catch(e){return null}
+  return null;
+}

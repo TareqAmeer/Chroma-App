@@ -1,0 +1,304 @@
+// ── A15: one cached photo-at-mask-resolution decode ──────────────────────────────────────────
+// Four call sites (SAM encode, the guided-filter guide, Refine edges, the sky heuristic) each
+// created a canvas, drew the photo into it and called getImageData — the expensive part, since
+// getImageData forces a readback. Pressing "Refine edges" on a sky mask therefore decoded the
+// same photo at the same size three times over. Cached per (photo, w, h); the key includes the
+// image object itself so switching photos invalidates it without any explicit teardown.
+let _mskSrcCache=null;
+function mskSourceData(w,h,img){
+  img=img||((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg);
+  if(!img||!w||!h)return null;
+  if(_mskSrcCache&&_mskSrcCache.img===img&&_mskSrcCache.w===w&&_mskSrcCache.h===h)return _mskSrcCache.data;
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.drawImage(img,0,0,w,h);
+  const data=cx.getImageData(0,0,w,h).data;
+  _mskSrcCache={img,w,h,data};
+  return data;
+}
+// Painting/refining changes the MASK, never the photo, so the cache only has to drop when the
+// photo itself does. Called from installFXImages/fxSelectImage via fxInvalidateMaskSource.
+function fxInvalidateMaskSource(){_mskSrcCache=null;}
+function mskTexDims(width,height){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  const iw=width||(img&&(img.naturalWidth||img.width))||400,ih=height||(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=2048,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+// EdgeSAM/SAM2's own internal working resolution for the ENCODE/prompt step (unrelated to how
+// the resulting mask is stored — see mskTexDims above).
+function samInputDims(){
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+function mskEnsureDims(m,width,height){
+  const{w,h}=mskTexDims(width,height);
+  if(m.mtW===w&&m.mtH===h&&m.px&&m.px.length===w*h)return;
+  const nw=new Uint8ClampedArray(w*h);
+  if(m.px&&m.mtW&&m.mtH){for(let y=0;y<h;y++){const sy=Math.min(m.mtH-1,(y/h*m.mtH)|0);
+    for(let x=0;x<w;x++){const sx=Math.min(m.mtW-1,(x/w*m.mtW)|0);nw[y*w+x]=m.px[sy*m.mtW+sx];}}}
+  m.px=nw;m.mtW=w;m.mtH=h;
+}
+function _mskDepthSmoothstep(a,b,x){const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);}
+// Bake only the depth range into a photo-local coverage raster. Luminance/colour gates and
+// shapeless inversion still run later in the shared shader evaluator, preserving their order.
+function _mskDepthCoverageData(data,sw,sh,w,h,lo,hi){
+  if(!data||sw<1||sh<1||w<1||h<1||data.length!==sw*sh)return null;
+  const out=new Uint8ClampedArray(w*h),floor=Math.max(0,Math.min(1,Number(lo)||0)),ceil=Math.max(0,Math.min(1,hi==null?1:Number(hi)));
+  for(let y=0;y<h;y++){
+    const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/h-0.5)),y0=Math.floor(fy),y1=Math.min(sh-1,y0+1),ty=fy-y0;
+    for(let x=0;x<w;x++){
+      const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/w-0.5)),x0=Math.floor(fx),x1=Math.min(sw-1,x0+1),tx=fx-x0;
+      const a=data[y0*sw+x0],b=data[y0*sw+x1],c=data[y1*sw+x0],d=data[y1*sw+x1];
+      const depth=((a+(b-a)*tx)*(1-ty)+(c+(d-c)*tx)*ty)/255;
+      const gate=_mskDepthSmoothstep(floor-0.06,floor+0.03,depth)*(1-_mskDepthSmoothstep(ceil-0.03,ceil+0.06,depth));
+      out[y*w+x]=Math.round(Math.max(0,Math.min(1,gate))*255);
+    }
+  }
+  return out;
+}
+function mskDepthCoverageSource(renderer,m,w,h){
+  if(!renderer||!m||m.type!=='none'||m.origin!=='depth'||!m.depOn)return null;
+  if(!(Number(m.refineFeather)||0)&&!(Number(m.refineEdge)||0))return null;
+  const snap=renderer._depthSnapshot;if(!snap||!snap.data||!snap.w||!snap.h||snap.data.length!==snap.w*snap.h)return null;
+  const lo=m.depLo!=null?Number(m.depLo):0,hi=m.depHi!=null?Number(m.depHi):1;
+  const version=snap.version||0,key=[version,snap.w,snap.h,w,h,lo,hi].join(':');
+  const entries=renderer._mskDepthCoverageCache||(renderer._mskDepthCoverageCache=new Map()),cached=entries.get(key);
+  if(cached&&cached.data===snap.data)return cached;
+  const source={px:_mskDepthCoverageData(snap.data,snap.w,snap.h,w,h,lo,hi),w,h,data:snap.data,version,key};
+  if(!source.px)return null;
+  entries.set(key,source);while(entries.size>32)entries.delete(entries.keys().next().value);
+  return source;
+}
+let _mskTexBufs=null;
+function mskBuildTex(renderer=FX,masks=fxState.masks){
+  const ref=renderer._maskReferenceSize;
+  const{w,h}=mskTexDims(renderer===FX?undefined:(ref&&ref.w||renderer.imgW),renderer===FX?undefined:(ref&&ref.h||renderer.imgH));
+  // Two w*h*4 staging buffers at 2048px are ~16MB each — reallocating both on every rebuild (a
+  // brush stroke rebuilds constantly) churned 32MB per stroke sample. Cache and reuse; only
+  // reallocate when the mask resolution itself changes, i.e. on a photo swap.
+  if(!_mskTexBufs||_mskTexBufs.w!==w||_mskTexBufs.h!==h){
+    _mskTexBufs={w,h,buf:new Uint8Array(w*h*4),buf2:new Uint8Array(w*h*4)};
+  }
+  const buf=_mskTexBufs.buf,buf2=_mskTexBufs.buf2;
+  buf.fill(0);buf2.fill(0);   // reused buffers must be cleared — a deleted mask's channel would otherwise persist
+  masks.slice(0,MSK_MAX).forEach((m,i)=>{
+    const depthSource=mskDepthCoverageSource(renderer,m,w,h);
+    if(m.type!=='brush'&&!depthSource)return;
+    if(m.type==='brush')mskEnsureDims(m,w,h);
+    const px=depthSource?mskRefinedPixels(m,depthSource):mskRefinedPixels(m),dst=i<4?buf:buf2,ch=i<4?i:i-4;
+    for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j];
+  });
+  renderer.setMaskTex(buf,w,h);
+  renderer.setMaskTex2(buf2,w,h);
+  _mskTexDirty=false;
+}
+// The authored mask remains in m.px. Feather and Edge always derive a cached effective
+// selection from that source, so slider movement never compounds edge changes into the mask.
+// The cache is intentionally private and omitted from snapshots; all render paths use this
+// texture builder, including tiled exports.
+function _mskBoxExtrema(src,w,h,r,wantMax){
+  if(r<=0)return Uint8ClampedArray.from(src);
+  const tmp=new Uint8ClampedArray(src.length),out=new Uint8ClampedArray(src.length);
+  const pass=(input,output,length,count,stride)=>{
+    const line=new Int32Array(length*2+1);
+    for(let n=0;n<count;n++){
+      const base=n*stride;let head=0,tail=0,next=0;
+      for(let pos=0;pos<length;pos++){
+        const end=Math.min(length-1,pos+r);
+        while(next<=end){const val=input[base+next];while(tail>head&&(wantMax?input[base+line[tail-1]]<=val:input[base+line[tail-1]]>=val))tail--;line[tail++]=next++;}
+        const start=Math.max(0,pos-r);while(head<tail&&line[head]<start)head++;
+        output[base+pos]=input[base+line[head]];
+      }
+    }
+  };
+  // Sliding-window deque makes each separable pass linear regardless of radius.
+  pass(src,tmp,w,h,w);
+  // Columns are traversed with a strided accessor through a temporary transposed raster.
+  const transposed=new Uint8ClampedArray(src.length);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)transposed[x*h+y]=tmp[y*w+x];
+  pass(transposed,out,h,w,h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)tmp[y*w+x]=out[x*h+y];
+  out.set(tmp);
+  return out;
+}
+function _mskBlurCoverage(src,w,h,r){
+  if(r<=0)return Uint8ClampedArray.from(src);
+  const tmp=new Float32Array(src.length),out=new Uint8ClampedArray(src.length),diam=2*r+1;
+  for(let y=0;y<h;y++){
+    let sum=0;for(let k=0;k<=Math.min(w-1,r);k++)sum+=src[y*w+k];
+    for(let x=0;x<w;x++){const lo=Math.max(0,x-r),hi=Math.min(w-1,x+r);tmp[y*w+x]=sum/(hi-lo+1);const add=x+r+1,drop=x-r;if(add<w)sum+=src[y*w+add];if(drop>=0)sum-=src[y*w+drop];}
+  }
+  for(let x=0;x<w;x++){
+    let sum=0;for(let k=0;k<=Math.min(h-1,r);k++)sum+=tmp[k*w+x];
+    for(let y=0;y<h;y++){const lo=Math.max(0,y-r),hi=Math.min(h-1,y+r);out[y*w+x]=Math.round(sum/(hi-lo+1));const add=y+r+1,drop=y-r;if(add<h)sum+=tmp[add*w+x];if(drop>=0)sum-=tmp[drop*w+x];}
+  }
+  return out;
+}
+function mskRefinedPixels(m,source){
+  if(!source)mskEnsureDims(m);
+  const src=source?source.px:m.px,srcW=source?source.w:m.mtW,srcH=source?source.h:m.mtH,srcIdentity=source?source.px:m.px,sourceKey=source&&source.key;
+  if(!src||!srcW||!srcH)return new Uint8ClampedArray(0);
+  const feather=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
+  const edgeSign=source&&m.invert?-1:1,edge=Math.max(-100,Math.min(100,(Number(m.refineEdge)||0)*edgeSign));
+  if(!feather&&!edge)return src;
+  const key=[srcW,srcH,feather,edge,srcIdentity,source&&source.version];
+  const c=m._refineCache;
+  if(c&&c.w===srcW&&c.h===srcH&&c.feather===feather&&c.edge===edge&&c.src===srcIdentity&&c.sourceKey===sourceKey&&c.version===(source&&source.version))return c.px;
+  const radius=Math.max(1,Math.round(Math.max(srcW,srcH)*0.018));
+  let px=src;
+  if(edge){const r=Math.max(1,Math.round(radius*Math.abs(edge)/100));px=_mskBoxExtrema(px,srcW,srcH,r,edge>0);}
+  if(feather){const r=Math.max(1,Math.round(radius*feather/100));px=_mskBlurCoverage(px,srcW,srcH,r);}
+  m._refineCache={w:srcW,h:srcH,feather,edge,src:srcIdentity,sourceKey,version:source&&source.version,px};
+  return px;
+}
+// Sky masks and ready Depth Range sources use the same non-destructive refinement path.
+function mskRefinementSupported(m){
+  if(!m)return false;
+  if(m.type==='brush'&&m.px&&m.px.length&&m.mtW>0&&m.mtH>0)return !!(mskIsAI(m)||m.origin==='sky');
+  return !!(m.type==='none'&&m.origin==='depth'&&m.depOn&&typeof FX!=='undefined'&&FX&&FX._depthSnapshot);
+}
+function mskRefinementSourceReset(m){if(!m)return;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;}
+function mskRefineControls(m){
+  if(!mskRefinementSupported(m))return '';
+  const f=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
+  const e=Math.max(-100,Math.min(100,Number(m.refineEdge)||0));
+  return '<div class="msk-refine-controls"><div class="fx-row"><div class="fx-label">Feather</div>'
+    +'<input class="fx-slider" type="range" min="0" max="100" step="1" value="'+f+'" oninput="mskRefinementSet(\'refineFeather\',this.value,this)"><div class="fx-val">'+f+'</div></div>'
+    +'<div class="fx-row"><div class="fx-label">Edge</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="'+e+'" oninput="mskRefinementSet(\'refineEdge\',this.value,this)"><div class="fx-val">'+e+'</div></div>'
+    +'<div class="btn-row"><button class="btn bgh" onclick="mskRefinementReset()">Reset refinement</button></div></div>';
+}
+function mskRefinementSet(key,value,input){
+  const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
+  const n=Number(value);if(key!=='refineFeather'&&key!=='refineEdge')return;
+  m[key]=Number.isFinite(n)?Math.max(key==='refineEdge'?-100:0,Math.min(100,n)):0;
+  if(input&&input.nextElementSibling)input.nextElementSibling.textContent=String(m[key]);
+  delete m._refineCache;_mskTexDirty=true;
+  fxScheduleRender();
+  if(!mskRefinementSet._timer)fxHistoryPush();
+  clearTimeout(mskRefinementSet._timer);mskRefinementSet._timer=setTimeout(()=>{mskRefinementSet._timer=null;fxUpdate();},250);
+}
+function mskRefinementReset(){
+  const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
+  mskRefinementSourceReset(m);_mskTexDirty=true;
+  fxHistoryPush();mskRebuild();fxUpdate();
+}
+function mskRefineEdges(m){
+  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;if(!img)return;
+  mskEnsureDims(m);
+  const w=m.mtW,h=m.mtH,d=mskSourceData(w,h,img);if(!d)return;
+  const I=new Float32Array(w*h),P=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(m.px[j]||0)/255;}
+  const R=8,EPS=1e-4;
+  const meanI=_boxFilterJS(I,w,h,R),meanP=_boxFilterJS(P,w,h,R),IP=new Float32Array(w*h),II=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){IP[j]=I[j]*P[j];II[j]=I[j]*I[j];}
+  const corrIP=_boxFilterJS(IP,w,h,R),corrII=_boxFilterJS(II,w,h,R),a=new Float32Array(w*h),b=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){const varI=corrII[j]-meanI[j]*meanI[j],covIP=corrIP[j]-meanI[j]*meanP[j];a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];}
+  const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R),out=new Uint8ClampedArray(w*h);
+  for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
+  m.px=out;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+// Box filter via a per-row then per-column RUNNING SUM — genuinely O(w*h) regardless of radius,
+// which is what keeps the guided filter below responsive at mskTexDims (2048px) resolution.
+//
+// ⚠️ This function previously CLAIMED to be a prefix sum in its comment but was written as a
+// naive O(w*h*r) window sum: it computed a full row total into an `acc` variable, never used it,
+// and then re-summed all 2r+1 taps per pixel. The guided filter calls it six times, so at
+// 2048x1365 with r=8 that was ~2.6s of blocked main thread on every press of "Refine edges"
+// (measured; test/perf_bench.mjs holds the budget and diffs the output against a straightforward
+// reference implementation so a faster filter can never quietly become a different filter).
+//
+// The window at x is [max(0,x-r), min(w-1,x+r)] — clamped, so edge pixels average a shorter
+// window rather than wrapping or zero-padding. Stepping x->x+1 therefore adds index x+1+r when
+// it is still inside the row, and drops index x-r when that index was actually in the previous
+// window (it is not, while the window is still clamped against the left edge). The accumulator
+// is a plain JS number (float64), so it is if anything more accurate than the old per-pixel
+// float32 re-summation.
+function _boxFilterJS(src,w,h,r){
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const row=y*w;
+    let s=0;
+    const first=Math.min(w-1,r);                 // window at x=0 is [0, min(w-1,r)]
+    for(let k=0;k<=first;k++)s+=src[row+k];
+    for(let x=0;x<w;x++){
+      const x0=x-r<0?0:x-r, x1=x+r>w-1?w-1:x+r;
+      tmp[row+x]=s/(x1-x0+1);
+      const add=x+1+r, rem=x-r;
+      if(add<=w-1)s+=src[row+add];
+      if(rem>=0)s-=src[row+rem];
+    }
+  }
+  for(let x=0;x<w;x++){
+    let s=0;
+    const first=Math.min(h-1,r);
+    for(let k=0;k<=first;k++)s+=tmp[k*w+x];
+    for(let y=0;y<h;y++){
+      const y0=y-r<0?0:y-r, y1=y+r>h-1?h-1:y+r;
+      out[y*w+x]=s/(y1-y0+1);
+      const add=y+1+r, rem=y-r;
+      if(add<=h-1)s+=tmp[add*w+x];
+      if(rem>=0)s-=tmp[rem*w+x];
+    }
+  }
+  return out;
+}
+// Edge-aware refine (guided filter, He/Sun/Tang 2010): snaps a rough brush/sky/AI mask to real
+// luminance edges in the photo instead of its own soft/blocky boundary. Guide = the photo's own
+// greyscale at mskTexDims resolution (same downscale mskGenerateSky already uses); input = the
+// mask itself, both normalized to 0..1. Bakes the result straight into m.px, so preview, loupe and
+// every export tile agree automatically — no per-frame shader cost, no renderTiled halo needed.
+function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);}
+// One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
+// and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
+// there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
+function mskGenerateSky(m){
+  // A re-detect replaces the authored source. Clear the old derived settings/cache before any
+  // early return or raster write so the newly generated source always starts at its own baseline.
+  m.aiProvenance=null;
+  mskRefinementSourceReset(m);
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
+  const{w,h}=mskTexDims();
+  const d=mskSourceData(w,h,img);if(!d){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
+  const px=new Uint8ClampedArray(w*h);
+  for(let y=0;y<h;y++){
+    const rowW=1-_smoothstepJS(0.35,0.85,y/h); // strong at top, fades out by 85% down
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+      const lum=(0.2126*r+0.7152*g+0.0722*b)/255;
+      const blueness=Math.max(0,Math.min(1,((b-r)/255)*2));
+      let score=rowW*(0.5+0.5*blueness)*Math.min(1,lum*1.3);
+      if(rowW>0.5&&lum>0.75)score=Math.max(score,rowW*0.9); // bright overcast sky
+      px[y*w+x]=Math.max(0,Math.min(255,Math.round(score*255)));
+    }
+  }
+  m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;_mskRecordAIProvenance(m,typeof curItem==='function'?curItem():null,null,true);
+}
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();fxHistoryPush();}
+// Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of
+// positive/negative point prompts for SAM: a coarse grid over the top portion of the frame
+// (where sky realistically lives) picks each cell's best-scoring pixel as a positive point if
+// it clears a confidence floor, plus a couple of negative points from the strongest LOW-score
+// pixels near the bottom of the frame so SAM has an explicit "not this" signal too.
+function _skySeedPoints(m){
+  const w=m.mtW,h=m.mtH,px=m.px;if(!w||!h||!px||!px.length)return[];
+  const pts=[];
+  const COLS=4,ROWS=3,POS_THRESH=110;
+  for(let ry=0;ry<ROWS;ry++)for(let rx=0;rx<COLS;rx++){
+    const x0=Math.floor(rx*w/COLS),x1=Math.floor((rx+1)*w/COLS);
+    const y0=Math.floor(ry*h/ROWS),y1=Math.floor((ry+1)*h/ROWS);
+    let best=-1,bx=0,by=0;
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const v=px[y*w+x];if(v>best){best=v;bx=x;by=y;}}
+    if(best>=POS_THRESH)pts.push({nx:(bx+0.5)/w,ny:(by+0.5)/h,positive:true});
+  }
+  // negative seeds: lowest-scoring pixels in the bottom third (ground/foreground, never sky)
+  const by0=Math.floor(h*2/3);let worst=256,wx=0,wy=by0;
+  for(let y=by0;y<h;y++)for(let x=0;x<w;x++){const v=px[y*w+x];if(v<worst){worst=v;wx=x;wy=y;}}
+  if(worst<40)pts.push({nx:(wx+0.5)/w,ny:(wy+0.5)/h,positive:false});
+  return pts;
+}

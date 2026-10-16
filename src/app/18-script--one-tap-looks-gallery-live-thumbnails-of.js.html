@@ -1,0 +1,223 @@
+// ── one-tap looks gallery (live thumbnails of the loaded photo through each preset) ──
+// Decoded-LUT cache. ⚠️ LRU-CAPPED, and that cap is the point: each entry is a
+// Float32Array(33³*3) = 431 KB, so the old unbounded object retained ~49 MB once the gallery
+// had rendered all 113 looks — for thumbnails that are never looked at again. A Map preserves
+// insertion order, so "oldest key" is just keys().next().
+const _presetLutCache=new Map();
+const PRESET_LUT_CACHE_MAX=24;                 // ~10 MB, comfortably more than one screenful
+async function presetLut(key){
+  const hit=_presetLutCache.get(key);
+  if(hit){_presetLutCache.delete(key);_presetLutCache.set(key,hit);return hit;} // refresh recency
+  const lut=lutFromBytes(await presetBytes(key));
+  _presetLutCache.set(key,lut);
+  while(_presetLutCache.size>PRESET_LUT_CACHE_MAX)_presetLutCache.delete(_presetLutCache.keys().next().value);
+  return lut;
+}
+// Category filter for the gallery/grid — 113 built-in looks need grouping to stay scannable.
+// 'All' shows every category with section-header dividers; picking a chip narrows to just that
+// category (Original stays visible either way so you can always get back to no-LUT).
+let fxLookCatFilter=window.__TAURI__?'User Looks':'All',fxLookSearch=''; // desktop opens on your own looks
+// Free-text filter beside the chips. At 113 looks the categories alone stopped being enough —
+// finding "portra 800" meant knowing it lives under C41 Still and then reading the whole group.
+// Subsequence match on the pretty name, same forgiving rule the ⌘K palette uses.
+function fxLookSearchChanged(v){
+  fxLookSearch=(v||'').trim().toLowerCase();
+  buildLookGallery();
+}
+function _lookMatches(key){
+  if(!fxLookSearch)return true;
+  const hay=prettyLUT(key).toLowerCase();
+  let i=0;for(const ch of fxLookSearch){i=hay.indexOf(ch,i);if(i<0)return false;i++;}
+  return true;
+}
+function buildLookCatChips(){
+  const host=document.getElementById('fx-looks-cats');if(!host)return;
+  const cats=['All',...(window.csLookSpecials?csLookSpecials():[]),...groupedLutKeys().map(([c])=>c)];
+  if(!cats.includes(fxLookCatFilter))fxLookCatFilter='All';
+  host.innerHTML='';
+  const shown=cats; // phones scroll one row of chips instead of hiding most behind "More"
+  shown.forEach(c=>{
+    const b=document.createElement('button');b.className='btn bgh'+(c===fxLookCatFilter?' on':'');
+    b.textContent=c;
+    b.onclick=()=>{fxLookCatFilter=c;buildLookCatChips();buildLookGallery();};
+    host.appendChild(b);
+    if(c===fxLookCatFilter&&host.scrollWidth>host.clientWidth)requestAnimationFrame(()=>{host.scrollLeft=Math.max(0,b.offsetLeft-host.clientWidth/2+b.offsetWidth/2);});
+  });
+}
+function buildLookGallery(){
+  const host=document.getElementById('fx-looks'),ctrl=document.getElementById('fx-looks-ctrl');
+  if(!host||!ctrl)return;
+  const work=fxWork||fxImg;
+  // Empty state: with no photo the preset grid can't render, and the panel used to show nothing.
+  let empty=document.getElementById('fx-looks-empty');
+  if(!empty){empty=document.createElement('div');empty.id='fx-looks-empty';empty.textContent='Open a photo to pick a look.';empty.style.cssText='margin-top:14px;font-size:var(--fs-2);color:var(--mut)';ctrl.parentNode.insertBefore(empty,ctrl);}
+  empty.hidden=!!work;
+  if(!work){ctrl.style.display='none';return;}
+  ctrl.style.display='block';host.innerHTML='';
+  buildLookCatChips();
+  let pxd;try{pxd=getPx(work,132);}catch(e){ctrl.style.display='none';return;}
+  const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'';
+  // entries: mix of ['val','label'] cells and ['__hdr__','Category Name'] section dividers.
+  // 'All' interleaves a header before each category; a specific filter shows just that group
+  // (no headers needed, there's only one).
+  const groups=groupedLutKeys();
+  let entries=[['','Original']];
+  if(fxLookCatFilter==='All'){
+    groups.forEach(([cat,keys])=>{
+      const ks=keys.filter(_lookMatches);
+      if(!ks.length)return;                     // a search can empty a whole category — drop its header too
+      entries.push(['__hdr__',cat]);
+      ks.forEach(k=>entries.push(['p:'+k,prettyLUT(k)]));
+    });
+  }else{
+    const sp=window.csLookSpecialKeys?csLookSpecialKeys(fxLookCatFilter):null;
+    const grp=sp?[fxLookCatFilter,sp]:groups.find(([cat])=>cat===fxLookCatFilter);
+    (grp?grp[1]:[]).filter(_lookMatches).forEach(k=>entries.push(['p:'+k,prettyLUT(k)]));
+  }
+  // Cells are created immediately (so layout/click targets exist), but a cell only RENDERS once
+  // it scrolls into view. This used to queue one requestAnimationFrame per entry unconditionally
+  // — at 113 looks that is ~113 frames (≈1.9s) of thumbnail work on every photo load, crop apply
+  // and geometry undo, almost all of it for cells below the fold. Same IntersectionObserver
+  // pool pattern the Library grid already uses for its own thumbs (library-ui.js _thumbIO), plus
+  // a small per-frame batch so a fast scroll doesn't render one cell per frame.
+  // A rebuild during rendering (gen check) abandons the stale queue.
+  const gen=(buildLookGallery._gen=(buildLookGallery._gen||0)+1);
+  if(buildLookGallery._io)buildLookGallery._io.disconnect();
+  const queue=[];
+  let pumping=false;
+  const io=buildLookGallery._io=(typeof IntersectionObserver==='function')
+    ? new IntersectionObserver(ents=>{
+        ents.forEach(e=>{
+          if(!e.isIntersecting||e.target._lookDone)return;
+          e.target._lookDone=true;              // one render per cell, ever — _reseed may have claimed it
+          io.unobserve(e.target);
+          queue.push(e.target._lookJob);
+        });
+        pump();
+      },{root:null,rootMargin:'300px 0px'})     // start a screenful early so scrolling feels instant
+    : null;
+  const MARGIN=300;
+  // ⚠️ An IntersectionObserver delivers NOTHING while document.visibilityState is 'hidden', and
+  // the Looks card is display:none in single-section layouts — so relying on the observer alone
+  // left the gallery permanently blank in exactly two real cases: a gallery built in a
+  // background tab, and one built while its own section was closed. Both were reproduced.
+  // So: seed synchronously from getBoundingClientRect (deterministic, works hidden or not) and
+  // let the observer handle only the cells that scroll in later. A zero-size rect means the
+  // element is not laid out at all — it must NOT count as visible, or every cell in a
+  // display:none card would qualify and we would be back to rendering all 113 eagerly.
+  // ⚠️ If the viewport height reads as 0 — an offscreen/hidden host, a headless pane, a
+  // not-yet-laid-out embed — every cell would test as "below the fold" and the gallery would
+  // stay blank FOREVER. The old eager version could not fail that way, so the degenerate case
+  // must fall back to it: no usable viewport => treat every laid-out cell as visible.
+  const vh=()=>window.innerHeight||(document.documentElement&&document.documentElement.clientHeight)||0;
+  const nearView=el=>{
+    const r=el.getBoundingClientRect();
+    if(!(r.width>0&&r.height>0))return false;    // not laid out at all (display:none card)
+    const h=vh();
+    if(h<=0)return true;                          // no usable viewport — render rather than hide
+    return r.bottom>-MARGIN&&r.top<h+MARGIN;
+  };
+  buildLookGallery._reseed=()=>{
+    if(gen!==buildLookGallery._gen||!io)return;
+    let added=0;
+    host.querySelectorAll('.look-cell').forEach(cell=>{
+      if(!cell._lookJob||cell._lookDone||!nearView(cell))return;
+      cell._lookDone=true;io.unobserve(cell);queue.push(cell._lookJob);added++;
+    });
+    if(added)pump();
+  };
+  const RENDER_PER_FRAME=5;
+  async function pump(){
+    if(pumping)return;pumping=true;
+    while(queue.length){
+      if(gen!==buildLookGallery._gen){pumping=false;return;} // gallery rebuilt — drop the queue
+      for(let n=0;n<RENDER_PER_FRAME&&queue.length;n++){
+        const job=queue.shift();if(!job)continue;
+        try{
+          const out=job.val?applyLUTtoPx(px,await presetLut(job.val.slice(2))):px;
+          if(gen!==buildLookGallery._gen){pumping=false;return;}
+          job.cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out),w,h),0,0);
+        }catch(e){
+          // A vendor/luts fetch can fail (offline before the warm-up finished). Leave the cell
+          // blank and label it rather than killing the rest of the queue.
+          job.cv.parentElement&&job.cv.parentElement.classList.add('look-cell-err');
+        }
+      }
+      await new Promise(r=>requestAnimationFrame(r));
+    }
+    pumping=false;
+  }
+  let curCat=fxLookCatFilter==='All'?'':fxLookCatFilter;
+  entries.forEach(([val,label])=>{
+    if(val==='__hdr__'){
+      const hdr=document.createElement('div');hdr.className='look-cat-hdr';hdr.textContent=label;curCat=label;
+      host.appendChild(hdr);return;
+    }
+    const cell=document.createElement('div');cell.className='look-cell'+(val===cur?' sel':'')+(window.csIsFav&&csIsFav(val)?' fav':'');
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    cell.appendChild(cv);
+    const nm=document.createElement('div');nm.className='look-nm';nm.textContent=label;cell.appendChild(nm);
+    if(val){const st=document.createElement('button');st.type='button';st.className='look-fav';st.textContent='\u2605';st.title='Favourite';st.setAttribute('aria-label','Favourite '+label);
+      st.onclick=e=>{e.stopPropagation();if(window.csToggleFav)csToggleFav(cell,val);};cell.appendChild(st);}
+    cell.title=label+(curCat&&val?' — '+curCat:'');
+    cell.onclick=()=>{
+      // Tap the already-chosen look again: jump to its Strength slider (phone editors' convention).
+      if(val&&cell.classList.contains('sel')){const mx=document.getElementById('row-lut-mix');if(mx&&mx.style.display!=='none'){mx.scrollIntoView({block:'nearest',behavior:'smooth'});mx.classList.remove('lk-flash');void mx.offsetWidth;mx.classList.add('lk-flash');return;}}
+      fxPickLookCell(cell,val);};
+    host.appendChild(cell);
+    cell._lookJob={val,cv};
+    // ⚠️ observe AFTER appendChild — an unattached element never intersects anything, so
+    // observing first would leave every cell permanently blank.
+    if(io)io.observe(cell);else{cell._lookDone=true;queue.push(cell._lookJob);}
+  });
+  if(io)buildLookGallery._reseed();              // paint whatever is already on screen, without waiting on the observer
+  else pump();                                   // no IntersectionObserver at all: render them all, as before
+}
+// Shared by click and arrow-key nav so both paths apply the look + update .sel identically.
+function fxPickLookCell(cell,val){
+  const sel=document.getElementById('sel-lut');if(sel)sel.value=val;selectLUT(val);
+  const host=document.getElementById('fx-looks');
+  if(host)host.querySelectorAll('.look-cell').forEach(c=>c.classList.remove('sel'));
+  cell.classList.add('sel');
+  // Clicking a cell doesn't move focus to it (the cell itself has no tabindex — the GRID is
+  // the single tab stop, per the wireframe's own #preset-grid tabindex="0"), so without this
+  // the host never has focus and a subsequent arrow press falls through to the browser's
+  // native "scroll the nearest scrollable ancestor" behaviour instead of reaching our keydown
+  // handler at all. Must match the native-scroll (focus-preserving) behaviour, not jump the page.
+  if(host&&document.activeElement!==host)host.focus({preventScroll:true});
+}
+// 3.4.10: arrow keys move the preset selection through the live grid. The column count is
+// READ from the grid's own computed style every keypress (grid-template-columns token count)
+// rather than hardcoded — .looks-grid is 3 cols by default but 2 cols under .fx-deskb (CSS
+// above), and mobile/tablet widths could add more break points later; a hardcoded stride would
+// silently navigate diagonally the moment the CSS column count changes.
+function initLookGalleryKeyNav(){
+  const host=document.getElementById('fx-looks');if(!host||host._kbdWired)return;host._kbdWired=true;
+  const liveCols=()=>{
+    const tmpl=getComputedStyle(host).gridTemplateColumns.trim();
+    const n=tmpl?tmpl.split(/\s+/).length:0;
+    return n>0?n:1;
+  };
+  host.addEventListener('keydown',e=>{
+    if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' '].includes(e.key))return;
+    const cells=[...host.querySelectorAll('.look-cell')];if(!cells.length)return;
+    let idx=cells.findIndex(c=>c.classList.contains('kbd-focus'));
+    if(idx<0)idx=Math.max(0,cells.findIndex(c=>c.classList.contains('sel')));
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();const c=cells[idx];if(window.sk2PeekEnd)window.sk2PeekEnd(true);if(c)fxPickLookCell(c,c._lookJob?c._lookJob.val:'');return;}
+    e.preventDefault();
+    const cols=liveCols();
+    let next=idx;
+    if(e.key==='ArrowLeft')next=idx-1;
+    else if(e.key==='ArrowRight')next=idx+1;
+    else if(e.key==='ArrowUp')next=idx-cols;
+    else if(e.key==='ArrowDown')next=idx+cols;
+    next=Math.max(0,Math.min(cells.length-1,next));
+    cells.forEach(c=>c.classList.remove('kbd-focus'));
+    cells[next].classList.add('kbd-focus');
+    cells[next].scrollIntoView({block:'nearest'});
+    // Swiss v2: arrow keys preview (scrub) a look; Enter/Space or a click commits it.
+    if(typeof window.sk2PeekLook==='function')window.sk2PeekLook(cells[next]);
+    else fxPickLookCell(cells[next],cells[next]._lookJob?cells[next]._lookJob.val:'');
+  });
+  host.addEventListener('focusout',()=>{host.querySelectorAll('.look-cell.kbd-focus').forEach(c=>c.classList.remove('kbd-focus'));if(window.sk2PeekEnd)window.sk2PeekEnd();});
+}

@@ -1,0 +1,95 @@
+// ── Recipe metadata (look/print profile) into the exported file, as an XMP packet ──────────────
+// Backlog item 1: exports previously carried NO record of which look/print profile produced them
+// — `canvas.toBlob` re-encodes from scratch and nothing wrote a look name in anywhere. XMP is the
+// natural fit since the app already treats XMP as the metadata source of truth elsewhere (sidecar
+// writes, session recipes). Deliberately just look name + print profile, not the full adjustment
+// recipe — those two answer "which look produced this" at a glance; sliders/masks already have a
+// much richer home in the .xmp sidecar / session file, and duplicating all of that into every
+// exported JPEG/PNG's XMP packet would bloat every file for marginal benefit.
+function _xmpEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function buildRecipeXmp(lookName,printProfile){
+  const look=_xmpEsc(lookName||'None');
+  const printTag=printProfile?`\n   <cs:PrintProfile>${_xmpEsc(printProfile)}</cs:PrintProfile>`:'';
+  const xml=`<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>\n`+
+    `<x:xmpmeta xmlns:x="adobe:ns:meta/">\n`+
+    ` <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\n`+
+    `  <rdf:Description rdf:about="" xmlns:cs="http://chromasmith.app/xmp/1.0/">\n`+
+    `   <cs:Look>${look}</cs:Look>${printTag}\n`+
+    `   <cs:Software>Chromasmith ${typeof BUILD!=='undefined'?BUILD:''}</cs:Software>\n`+
+    `  </rdf:Description>\n`+
+    ` </rdf:RDF>\n`+
+    `</x:xmpmeta>\n`+
+    `<?xpacket end="w"?>`;
+  return xml;
+}
+// current look/print display names, read from the same <select>s the export UI already shows
+function _exportRecipeNames(){
+  const lutSel=document.getElementById('sel-lut'),printSel=document.getElementById('sel-print');
+  const lutOpt=lutSel&&lutSel.selectedOptions&&lutSel.selectedOptions[0];
+  const printOpt=printSel&&printSel.selectedOptions&&printSel.selectedOptions[0];
+  const look=(lutOpt&&lutOpt.value)?lutOpt.textContent.trim():'None';
+  const print=(printOpt&&printOpt.value)?printOpt.textContent.trim():'';
+  return {look,print};
+}
+function mergeExportSidecarXmp(recipeXml,sidecarXml,keepGps){
+  if(!sidecarXml)return recipeXml;
+  const parser=new DOMParser(),source=parser.parseFromString(sidecarXml,'application/xml'),target=parser.parseFromString(recipeXml,'application/xml');
+  if(source.getElementsByTagName('parsererror').length)throw Error('Source XMP is invalid; export metadata was not discarded');
+  const ns='http://www.w3.org/1999/02/22-rdf-syntax-ns#',rdf=target.getElementsByTagNameNS(ns,'RDF')[0];
+  const sourceRdf=source.getElementsByTagNameNS(ns,'RDF')[0];
+  if(!sourceRdf)throw Error('Source XMP has no RDF metadata');
+  // Preserve whole source descriptions, including namespaces and fields unknown to this app.
+  for(const child of [...sourceRdf.children])rdf.appendChild(target.importNode(child,true));
+  if(!keepGps){
+    for(const node of [...rdf.getElementsByTagName('*')]){
+      if(/^GPS/i.test(node.localName)){node.remove();continue;}
+      for(const attr of [...node.attributes])if(/^GPS/i.test(attr.localName))node.removeAttributeNode(attr);
+    }
+  }
+  return new XMLSerializer().serializeToString(target);
+}
+function injectRecipeXmp(out,ext,lookName,printProfile,sidecarXml,keepGps=true){
+  const xml=mergeExportSidecarXmp(buildRecipeXmp(lookName,printProfile),sidecarXml,keepGps);
+  try{
+    const xmp=new TextEncoder().encode(xml);
+    if(ext==='png'){
+      const kw=new TextEncoder().encode('XML:com.adobe.xmp');
+      const data=new Uint8Array(kw.length+1+2+2+xmp.length); // keyword\0 + comp(1) + method(1) + lang\0 + xkw\0 + text
+      let o=0;data.set(kw,o);o+=kw.length;data[o++]=0; // keyword, null
+      data[o++]=0;data[o++]=0; // compression flag=0, method=0
+      data[o++]=0; // empty language tag, null-terminated
+      data[o++]=0; // empty translated keyword, null-terminated
+      data.set(xmp,o);
+      const chunk=pngChunk('iTXt',data);
+      return pngSpliceAfterIHDR(out,chunk);
+    }else{ // JPEG: separate APP1 segment from Exif's, identified by its own signature
+      const sig=new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0');
+      const segLen=2+sig.length+xmp.length; // length field covers everything after the FF E1 marker
+      if(segLen>65535)throw Error('Source XMP exceeds JPEG metadata segment size');
+      const seg=new Uint8Array(2+segLen);
+      seg[0]=0xFF;seg[1]=0xE1;seg[2]=(segLen>>8)&0xFF;seg[3]=segLen&0xFF;
+      seg.set(sig,4);seg.set(xmp,4+sig.length);
+      // insert right after SOI, before whatever metadata injectMetadata already spliced in
+      const res=new Uint8Array(out.length+seg.length);
+      res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length);
+      return res;
+    }
+  }catch(e){if(sidecarXml)throw e;return out}
+}
+// ═══════════════════════════
+// LUT PRESETS + LIBRARY
+// ═══════════════════════════
+// Storage format everywhere: Uint8, 3 bytes/entry, .cube FILE ORDER (R fastest — same as
+// parseCube reads). 8-bit quantization loses nothing: FX.setLUT uploads an 8-bit GPU
+// texture anyway. lutFromBytes converts to the Float32 li() layout the rest of the app uses.
+function b64ToBytes(s){const bin=atob(s);const u=new Uint8Array(bin.length);for(let i=0;i<u.length;i++)u[i]=bin.charCodeAt(i);return u}
+function lutFromBytes(bytes){
+  const lut=new Float32Array(SZ*SZ*SZ*3);let n=0;
+  for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);lut[i]=bytes[n++]/255;lut[i+1]=bytes[n++]/255;lut[i+2]=bytes[n++]/255}
+  return lut;
+}
+function lutToBytes(lut){
+  const u=new Uint8Array(SZ*SZ*SZ*3);let n=0;const q=v=>Math.max(0,Math.min(255,Math.round(v*255)));
+  for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);u[n++]=q(lut[i]);u[n++]=q(lut[i+1]);u[n++]=q(lut[i+2])}
+  return u;
+}

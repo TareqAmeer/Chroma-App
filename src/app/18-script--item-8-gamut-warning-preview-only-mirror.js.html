@@ -1,0 +1,438 @@
+// ── Item 8: gamut warning — preview-only, mirrors mskShowSel's contract (opt-in per render()
+// call via opts.gamutWarn, never passed by any export/renderTiled call site, so it can never
+// appear in an exported file by construction). Scoped small on purpose: a per-pixel "this would
+// clip on any channel" zebra overlay, not a full ICC soft-proof simulation.
+let fxGamutWarn=false;
+// Histogram clipping overlay: blue = crushed shadows, red = blown highlights, toggled separately
+// from the histogram's corner triangles. Shares the gamutWarn uniform: 1 lo, 2 hi, 3 both, 4 zebra.
+let fxClipLo=false,fxClipHi=false;
+// CHR-172: focus peaking — paints the sharpest edges of the CURRENT preview red so in-focus vs
+// soft frames show at fit-to-screen. Pure 2D overlay read back from #fx-canvas (no shader
+// change): luma Sobel magnitude on a ≤900px copy, keep roughly the strongest 4% of edges
+// (adaptive per photo, so a soft frame shows almost nothing). Rebuilt after every preview render.
+let fxPeakOn=false;
+function fxTogglePeak(){fxPeakOn=!fxPeakOn;if(fxPeakOn)fxPeakUpdate();else{const o=document.getElementById('fx-peak');if(o)o.remove();}
+  toast(fxPeakOn?'Focus peaking on — red marks the sharpest edges':'Focus peaking off');}
+// Shared by the Editor and the Library Quick Look loupe: draws the peaking mask for `src` (a
+// canvas or loaded <img>, natural size sw x sh) into overlay canvas `o`, sized to the ≤900px working copy.
+function fxPeakRender(src,sw,sh,o){
+  const k=Math.min(1,900/Math.max(sw,sh)),w=Math.max(2,sw*k|0),h=Math.max(2,sh*k|0);
+  const t=fxPeakUpdate._t||(fxPeakUpdate._t=document.createElement('canvas'));t.width=w;t.height=h;
+  const tc=t.getContext('2d',{willReadFrequently:true});tc.drawImage(src,0,0,w,h);
+  const d=tc.getImageData(0,0,w,h).data,L=new Float32Array(w*h);
+  for(let i=0,j=0;j<L.length;i+=4,j++)L[j]=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];
+  const M=new Float32Array(w*h),hist=new Uint32Array(256);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const i=y*w+x;
+    const gx=L[i-w+1]+2*L[i+1]+L[i+w+1]-L[i-w-1]-2*L[i-1]-L[i+w-1],gy=L[i+w-1]+2*L[i+w]+L[i+w+1]-L[i-w-1]-2*L[i-w]-L[i-w+1];
+    const m=Math.min(255,Math.sqrt(gx*gx+gy*gy)/4);M[i]=m;hist[m|0]++;}
+  let need=w*h*0.04,thr=255;for(;thr>0&&need>0;thr--)need-=hist[thr];
+  thr=Math.max(thr,24); // floor: a featureless/blurred frame must not light up its few weak edges
+  o.width=w;o.height=h;const oc=o.getContext('2d'),od=oc.createImageData(w,h),p=od.data;
+  for(let j=0;j<M.length;j++)if(M[j]>=thr){const q=j*4;p[q]=255;p[q+1]=40;p[q+2]=40;p[q+3]=230;}
+  oc.putImageData(od,0,0);
+}
+window.fxPeakRender=fxPeakRender;
+function fxPeakUpdate(){
+  const src=document.getElementById('fx-canvas');if(!src||!src.width||!src.offsetWidth)return;
+  let o=document.getElementById('fx-peak');
+  if(!o){o=document.createElement('canvas');o.id='fx-peak';o.style.cssText='position:absolute;pointer-events:none;image-rendering:auto';src.parentElement.appendChild(o);}
+  fxPeakRender(src,src.width,src.height,o);
+  o.style.left=src.offsetLeft+'px';o.style.top=src.offsetTop+'px';o.style.width=src.offsetWidth+'px';o.style.height=src.offsetHeight+'px';
+  o.style.transform=src.style.transform||'';o.style.transformOrigin=src.style.transformOrigin||'';
+}
+function fxClipCode(){return fxGamutWarn?4:(fxClipLo?1:0)+(fxClipHi?2:0)}
+function toggleGamutWarn(){
+  fxGamutWarn=!fxGamutWarn;
+  const btn=document.getElementById('btn-gamut-warn');
+  if(btn)btn.classList.toggle('on',fxGamutWarn);
+  renderPreview();
+}
+// One entry point dispatching to the 4 scope renderers below — all share the SAME downsampled
+// sample buffer (drawHistogram._tmp), so switching modes costs nothing extra per renderPreview
+// call. ffmpeg's vf_waveform/vf_vectorscope conventions (additive intensity, Rec.709 Cb/Cr
+// wheel with the 6 colour-bar targets + the 123° skin-tone line) — ported here as JS/canvas2D,
+// not vendored, per the "port conventions, write the JS" call on this feature.
+function drawHistogram(){
+  const src=document.getElementById('fx-canvas');
+  const hc=document.getElementById('fx-hist');
+  if(!src||!hc||!fxHistOn)return;
+  // Sample a downscaled copy — into ONE persistent scratch canvas (runs on every renderPreview
+  // while the scope overlay is open; allocating a fresh canvas + context each time churned the
+  // allocator for no benefit).
+  const tmp=drawHistogram._tmp||(drawHistogram._tmp=document.createElement('canvas'));
+  const scale=Math.min(1,200/src.width);
+  tmp.width=Math.max(1,(src.width*scale)|0);
+  tmp.height=Math.max(1,(src.height*scale)|0);
+  const tctx=tmp.getContext('2d',{willReadFrequently:true});
+  tctx.drawImage(src,0,0,tmp.width,tmp.height);
+  const px=tctx.getImageData(0,0,tmp.width,tmp.height).data;
+  if(fxScopeMode==='wave')drawScopeWaveform(hc,px,tmp.width,tmp.height,null);
+  else if(fxScopeMode==='parade')drawScopeParade(hc,px,tmp.width,tmp.height);
+  else if(fxScopeMode==='vector')drawScopeVectorscope(hc,px,tmp.width,tmp.height);
+  else drawScopeHistogram(hc,px);
+}
+function drawScopeHistogram(hc,px){
+  const W=180,H=80,N=256;
+  // Backing store at device pixels (CSS size stays 180x80) so the traces stay crisp on Retina.
+  const dpr=Math.max(1,Math.min(3,window.devicePixelRatio||1));
+  hc.width=Math.round(W*dpr);hc.height=Math.round(H*dpr);hc.style.width=W+'px';hc.style.height=H+'px';
+  const ctx=hc.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  const rH=new Float32Array(N),gH=new Float32Array(N),bH=new Float32Array(N);
+  for(let i=0;i<px.length;i+=4){rH[px[i]]++;gH[px[i+1]]++;bH[px[i+2]]++;}
+  const peak=Math.max(1,...rH,...gH,...bH);
+  ctx.clearRect(0,0,W,H);
+  const drawCh=(arr,col)=>{
+    ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=1;ctx.globalAlpha=0.75;
+    for(let i=0;i<N;i++){const x=i*W/N,y=H-(arr[i]/peak*(H-4));if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+    ctx.stroke();ctx.globalAlpha=1;
+  };
+  drawCh(rH,'#f55');drawCh(gH,'#5f5');drawCh(bH,'#58f');
+}
+// Luma (or one channel, when chOff is 0/1/2) column-vs-level accumulation, ffmpeg vf_waveform
+// style: x = source column, y = 255-level, brightness = how many source pixels of that column
+// landed at that level. Additive so a solid block reads as one bright horizontal band.
+function _scopeWaveAccum(px,srcW,srcH,outW,outH,chOff){
+  const acc=new Float32Array(outW*outH);
+  for(let y=0;y<srcH;y++)for(let x=0;x<srcW;x++){
+    const i=(y*srcW+x)*4;
+    const v=chOff==null?(px[i]*0.2126+px[i+1]*0.7152+px[i+2]*0.0722):px[i+chOff];
+    const ox=Math.min(outW-1,(x/srcW*outW)|0);
+    const oy=Math.min(outH-1,outH-1-((v/255*outH)|0));
+    acc[oy*outW+ox]++;
+  }
+  return acc;
+}
+function drawScopeWaveform(hc,px,srcW,srcH,chOff){
+  const W=180,H=80;
+  hc.width=W;hc.height=H;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const acc=_scopeWaveAccum(px,srcW,srcH,W,H,chOff);
+  const peak=Math.max(1,...acc);
+  const img=ctx.createImageData(W,H);
+  const col=chOff===0?[255,80,80]:chOff===1?[80,255,80]:chOff===2?[100,150,255]:[220,220,220];
+  for(let i=0;i<acc.length;i++){
+    const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.4); // sqrt: a single bright pixel should still be visible, not lost under sparse-column normalization
+    img.data[i*4]=col[0];img.data[i*4+1]=col[1];img.data[i*4+2]=col[2];img.data[i*4+3]=a*255;
+  }
+  ctx.putImageData(img,0,0);
+}
+function drawScopeParade(hc,px,srcW,srcH){
+  const PW=60,H=80,W=PW*3;
+  hc.width=W;hc.height=H;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  [0,1,2].forEach((chOff,slot)=>{
+    const acc=_scopeWaveAccum(px,srcW,srcH,PW,H,chOff);
+    const peak=Math.max(1,...acc);
+    const img=ctx.createImageData(PW,H);
+    const col=chOff===0?[255,80,80]:chOff===1?[80,255,80]:[100,150,255];
+    for(let i=0;i<acc.length;i++){
+      const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.4);
+      img.data[i*4]=col[0];img.data[i*4+1]=col[1];img.data[i*4+2]=col[2];img.data[i*4+3]=a*255;
+    }
+    ctx.putImageData(img,slot*PW,0);
+  });
+  ctx.strokeStyle='rgba(255,255,255,.15)';ctx.beginPath();
+  ctx.moveTo(PW,0);ctx.lineTo(PW,H);ctx.moveTo(PW*2,0);ctx.lineTo(PW*2,H);ctx.stroke();
+}
+// Rec.709 Cb/Cr scatter on a 100×100 wheel — same convention as ffmpeg's vf_vectorscope: the
+// 6 colour-bar target boxes at 75% saturation plus the I-axis skin-tone line at 123° (see
+// CLAUDE.md §5b — the Skin Tone tool already measures hue on this same axis for a reason).
+function drawScopeVectorscope(hc,px,srcW,srcH){
+  const S=140;hc.width=S;hc.height=S;
+  const ctx=hc.getContext('2d');
+  ctx.clearRect(0,0,S,S);
+  const cx=S/2,cy=S/2,R=S/2-6;
+  ctx.strokeStyle='rgba(255,255,255,.25)';ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx-R,cy);ctx.lineTo(cx+R,cy);ctx.moveTo(cx,cy-R);ctx.lineTo(cx,cy+R);ctx.stroke();
+  // Skin-tone (I) line at 123° from the Cr(+U) axis — the same angle broadcast vectorscopes mark.
+  ctx.strokeStyle='rgba(255,210,80,.4)';ctx.beginPath();
+  const skA=123*Math.PI/180;ctx.moveTo(cx,cy);ctx.lineTo(cx+R*Math.cos(skA),cy-R*Math.sin(skA));ctx.stroke();
+  const acc=new Float32Array(S*S);
+  for(let y=0;y<srcH;y++)for(let x=0;x<srcW;x++){
+    const i=(y*srcW+x)*4,r=px[i],g=px[i+1],b=px[i+2];
+    const cb=-0.1146*r-0.3854*g+0.5*b,cr=0.5*r-0.4542*g-0.0458*b; // Rec.709, 8-bit centered (0 = neutral)
+    const ox=Math.min(S-1,Math.max(0,(cx+cr/128*R)|0));
+    const oy=Math.min(S-1,Math.max(0,(cy-cb/128*R)|0));
+    acc[oy*S+ox]++;
+  }
+  const peak=Math.max(1,...acc);
+  const img=ctx.getImageData(0,0,S,S);
+  for(let i=0;i<acc.length;i++){
+    if(acc[i]<=0)continue;
+    const a=Math.min(1,Math.sqrt(acc[i]/peak)*1.6);
+    img.data[i*4]=220;img.data[i*4+1]=220;img.data[i*4+2]=220;img.data[i*4+3]=Math.max(img.data[i*4+3],a*255);
+  }
+  ctx.putImageData(img,0,0);
+  // 6 target boxes (R/G/B/C/M/Y at 75% saturation), Rec.709 — small unfilled squares so a graded
+  // colour bar chart's dots should land inside them.
+  const targets=[['R',255,0,0],['G',0,255,0],['B',0,0,255],['C',0,255,255],['M',255,0,255],['Y',255,255,0]];
+  ctx.font='7px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  targets.forEach(([label,r,g,b])=>{
+    const cb=(-0.1146*r-0.3854*g+0.5*b)*0.75,cr=(0.5*r-0.4542*g-0.0458*b)*0.75;
+    const tx=cx+cr/128*R,ty=cy-cb/128*R;
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.strokeRect(tx-4,ty-4,8,8);
+    ctx.fillStyle='rgba(255,255,255,.5)';ctx.fillText(label,tx,ty-7);
+  });
+}
+
+// ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
+function _fxZoomFootprint(){
+  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||cv.clientWidth||0,
+    h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||cv.clientHeight||0};
+}
+function _applyZoom(smooth){
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(!zw)return;
+  // smooth=true (dbl-tap / zoom buttons / reset) animates the transform like a native
+  // editor; live pinch/pan calls omit it so the image stays glued to the fingers.
+  zw.style.transition=smooth?'transform .22s ease':'';
+  if(smooth){clearTimeout(zw._smoothT);zw._smoothT=setTimeout(()=>{zw.style.transition='';},260);}
+  // transform-origin is 0 0 and translate happens before scale, so a local point x lands at
+  // scale*(x+pan). fxPanX/Y are the raw USER drag offset in both branches below — pointermove
+  // always just adds the screen-delta/zoom to whatever fxPanX/Y already were, regardless of
+  // which regime that offset gets used in here.
+  const {w,h}=_fxZoomFootprint();
+  // Centre-anchored at EVERY zoom (one continuous formula — the old "only below 100%" branch
+  // jumped at z=1, so zoom-in-off-centre then zoom-out landed the photo in a corner). With
+  // pan=0 the frame centre stays fixed for any zoom; pan is a free user offset on top.
+  const baseX=w*(1-fxZoom)/(2*fxZoom),baseY=h*(1-fxZoom)/(2*fxZoom);
+  zw.style.transform=`scale(${fxZoom}) translate3d(${(baseX+fxPanX).toFixed(2)}px,${(baseY+fxPanY).toFixed(2)}px,0)`; // translate3d keeps the photo on its own GPU layer: WebKit smeared edge pixels into streaks when a panned layer was repainted
+  if(fxZoom>1)fxEnsureFullQuality('zoom');
+  _updateZoomReadout();
+  if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
+  if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
+  if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
+}
+// The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
+// new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
+// the footprint; then re-derive the centring offset from the new size.
+function _zoomRefit(oldW){
+  const nw=_fxZoomFootprint().w;
+  const changed=oldW>0&&nw>0&&Math.abs(nw-oldW)>0.5;
+  if(changed){const r=nw/oldW;fxPanX*=r;fxPanY*=r;}
+  // Only when the size actually moved (or below 100%, the old new-photo re-centre): _applyZoom
+  // schedules a re-render, which would call back here — unconditional would loop.
+  if(changed||fxZoom<1)_applyZoom();
+}
+function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
+// Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
+// needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
+// export. No-op everywhere else (browser, non-RAW, already promoted).
+function fxEnsureFullQuality(why){
+  // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
+  // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
+  const it=curItem();
+  // Phones: zooming must NOT trigger the full-resolution decode — it holds the whole frame several times
+  // over (wasm output + 16-bit buffer + canvas) and the OS kills the page. Zoom keeps the half-size proxy;
+  // export still decodes the full frame on its own path.
+  if(it&&it._rawHalf&&why==='zoom'&&typeof isMemoryConstrained==='function'&&isMemoryConstrained())return Promise.resolve();
+  if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
+  return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
+}
+// Replaces a browser RAW entry's half-size proxy with the full-resolution decode. One in-flight
+// decode per entry; _rawGen lets a RAW-profile reload supersede a promotion already running.
+function fxPromoteWebRaw(it){
+  if(!it||!it._rawHalf||!it.rawFile)return Promise.resolve();
+  if(it._rawFullP)return it._rawFullP;
+  const gen=it._rawGen=(it._rawGen||0)+1;
+  if(it===curItem()&&typeof toast==='function')toast('Loading full-resolution RAW…');
+  log(`${it.name}: decoding full resolution…`,'info');
+  return it._rawFullP=loadRw2(it.rawFile).then(r=>{
+    if(it._rawGen!==gen)return;
+    it.img=r.canvas;delete it._rawHalf;
+    if(it===curItem()){fxImg=it.img;try{autoDetectBW(it.img)}catch(_){}updateWork();renderPreview();}
+  }).catch(e=>{
+    log(`${it.name}: full-resolution decode failed — ${errStr(e)}`,'err');
+    throw e;
+  }).finally(()=>{if(it._rawGen===gen)delete it._rawFullP;});
+}
+function _updateZoomReadout(){
+  const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
+  pct.textContent=fxLoupe?'1:1':Math.round(fxZoom/FX_FIT*100)+'%';
+  const sl=document.getElementById('fx-zoom-slider');
+  if(sl&&document.activeElement!==sl){sl.value=Math.round(fxZoom/FX_FIT*100);fxPaintSlider(sl);}
+}
+// Absolute zoom set (from the slider), anchored on the frame centre.
+function zoomSet(z){
+  if(fxLoupe)toggleLoupe();
+  fxZoom=Math.max(0.25,Math.min(8,z*FX_FIT));
+  _applyZoom();
+}
+// Zoom by a multiplicative step, anchored on the frame centre.
+function zoomBy(factor){
+  if(fxLoupe)toggleLoupe();                 // leave loupe before CSS-zooming
+  _zoomAt(fxZoom*factor);                   // no anchor = frame centre, pan untouched
+  _applyZoom(true);
+}
+// Set fxZoom to nz keeping the photo point under screen (cx,cy) fixed. Screen = L + z*(p+base(z)+pan),
+// base(z)=w(1-z)/(2z), so the invariant reduces to pan += (u-w/2)*(1/zNew-1/zOld) with u the
+// anchor in the wrapper's own unscaled box (L recovered from its current bounding rect).
+function _zoomAt(nz,cx,cy){
+  const zw=document.getElementById('fx-zoom-wrap');
+  const prev=fxZoom;
+  fxZoom=Math.max(0.25,Math.min(8,nz));
+  if(!zw||cx==null||fxZoom===prev)return;
+  const {w,h}=_fxZoomFootprint();if(!w||!h)return;
+  const r=zw.getBoundingClientRect();
+  const bx=w*(1-prev)/(2*prev),by=h*(1-prev)/(2*prev);
+  const L=r.left-prev*(bx+fxPanX),T=r.top-prev*(by+fxPanY);
+  fxPanX+=(cx-L-w/2)*(1/fxZoom-1/prev);
+  fxPanY+=(cy-T-h/2)*(1/fxZoom-1/prev);
+}
+function zoomFit(){if(fxLoupe)toggleLoupe();else _resetZoom(true);}
+// Mirrors the wireframe's own zoomctl mousedown/mouseup pair (Editor (Developer) View.dc.html:457-458)
+// — the slider's onmousedown sets .active (see fx-zoom-slider markup), this clears it on ANY
+// mouseup so a drag that ends off the slider still resets the hover-only % visibility.
+window.addEventListener('mouseup',()=>{const z=document.getElementById('fx-zoom-ctrl');if(z)z.classList.remove('active');});
+// True 1:1 loupe: render a NATIVE-resolution crop through the full pipeline (scOverride =
+// fullWidth/REF) so grain & halation appear at REAL export scale — the CSS zoom only
+// magnifies the ~1800px preview buffer and can't show that.
+function toggleLoupe(){
+  if(!fxWork){log('Load an image first','warn');return;}
+  fxLoupe=!fxLoupe;
+  if(fxLoupe)fxEnsureFullQuality();
+  const btn=document.getElementById('btn-loupe');if(btn)btn.classList.toggle('on',fxLoupe);
+  if(fxLoupe){
+    // Carry the current CSS-zoom view-centre into the loupe instead of snapping to the
+    // middle. transform is scale(z)·translate(pan) with origin 0 0, so the frame centre
+    // (screen x=w/2) maps to local x=(w/2)/z−pan → normalised cx = 0.5/z − pan/w.
+    const {w,h}=_fxZoomFootprint();
+    loupeCX=Math.min(1,Math.max(0,0.5-fxPanX/w));
+    loupeCY=Math.min(1,Math.max(0,0.5-fxPanY/h));
+    _resetZoom();fxZoom=1;fxLoupeSeed=Math.random()*100;
+  }
+  _updateZoomReadout();
+  renderPreview();
+}
+// Make every slider's value readout type-editable: tap it, type a number, Enter/blur to apply.
+// Keeps the lightweight contenteditable <div> so all existing `.textContent = ...` display
+// updates keep working; on commit we just set the slider value (it auto-clamps to min/max via
+// the range input) and re-fire its native `input` handler (fxUpdate / geomStraighten).
+function initEditableVals(){
+  document.querySelectorAll('.fx-val[id^="vl-"]').forEach(el=>{
+    const sl=document.getElementById('sl-'+el.id.slice(3));
+    if(!sl||el._editWired)return;el._editWired=true;
+    el.contentEditable='true';el.spellcheck=false;
+    el.setAttribute('inputmode','text');        // full keyboard so the minus sign is available
+    el.title='Tap to type a value';
+    const commit=()=>{
+      if(document.body.classList.contains('mobile-fx'))return; // phone edits values in the precision sheet; a stray focus/blur here re-reads the unit-scaled readout ("+2.00 EV") as a raw slider value and clobbers the recipe
+      // An unedited focus/blur is a no-op: re-reading the unit-scaled readout as a raw value used to clobber the recipe.
+      if(el._textAtFocus!=null&&(el.textContent||'')===el._textAtFocus){el._textAtFocus=null;return;}
+      el._textAtFocus=null;
+      const n=parseFloat((el.textContent||'').replace(/[^0-9.+-]/g,''));
+      if(!isNaN(n))sl.value=(sl.id==='sl-straighten'&&typeof _stA2S==='function')?_stA2S(Math.max(-45,Math.min(45,n))):csTypedToRaw(sl.id,n); // typed display units (EV, deg, px...) map back to raw via CS_CONTROL_UNIT_SPECS; straighten: typed value is an angle, slider is on a curved scale
+      sl.dispatchEvent(new Event('input',{bubbles:true})); // runs the slider's own handler → updates display + render
+    };
+    el.addEventListener('focus',()=>{el._textAtFocus=el.textContent||'';const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){e.preventDefault();el.blur();}
+      else if(e.key==='Escape'){e.preventDefault();sl.dispatchEvent(new Event('input',{bubbles:true}));el.blur();}
+    });
+    el.addEventListener('blur',commit);
+  });
+}
+function initZoomPan(){
+  const wrap=document.getElementById('fx-wrap');
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(!wrap||!zw||wrap._zoomWired)return;wrap._zoomWired=true;
+  // Scroll-to-zoom
+  wrap.addEventListener('wheel',e=>{
+    if(!fxWork||fxLoupe)return;        // loupe is a fixed 1:1 — scroll doesn't change its scale
+    e.preventDefault();
+    // E1: a trackpad delivers wheel ticks in bursts with brief pauses between them, and each
+    // pause was long enough to let _fxZoomRenderDebounced's 90ms settle timer fire a full
+    // renderFullResCrop — so a single scroll gesture could trigger several expensive full-res
+    // renders instead of one. Mirror the slider path's _fxPreviewInteracting gate: stay
+    // "interacting" (cheap capped preview) for the whole burst, then render once for real.
+    _fxPreviewInteracting=true;
+    clearTimeout(_fxZoomInteractTimer);
+    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();},150);
+    // 2.5% per tick: a trackpad pinch arrives as a rapid burst of wheel events.
+    _zoomAt(fxZoom*(e.deltaY<0?1.025:0.975),e.clientX,e.clientY);
+    _applyZoom();
+  },{passive:false});
+  // Drag-to-pan (CSS zoom) OR drag-to-move the loupe crop
+  let pd=null;
+  zw.addEventListener('pointerdown',e=>{
+    if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
+    if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return; // a picked slider owns one-finger swipes: the photo stays put until two fingers zoom/pan
+    e.preventDefault();if(pd&&pd.id!==e.pointerId)return; // a pinch's second finger never drives the pan
+    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
+    zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
+    _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
+  });
+  // Loupe pan used to call renderPreview() — a full re-render through the WHOLE effects
+  // pipeline (LUT/HSL/curves/masks/halation's multi-pass blur/grain/artifacts) at full loupe
+  // resolution — on EVERY pointermove, dozens of times/sec while dragging. Lightroom's 1:1 view
+  // never recomputes on pan at all: it just slides an already-rendered bitmap. Same idea here —
+  // slide the CURRENT canvas content via a cheap CSS translate for instant feedback during the
+  // drag, and debounce the real recompute (which actually moves the source crop) to fire once
+  // the drag pauses, same "cheap during interaction, real render once it settles" pattern
+  // _fxZoomRenderDebounced already uses for the normal full-res preview.
+  let _loupeDragT=null;
+  zw.addEventListener('pointermove',e=>{
+    if(!pd||pd.id!==e.pointerId||_pinching)return;
+    if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return;
+    if(fxLoupe){
+      const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
+      // Divide by fxZoom: this translate lands INSIDE the wrapper's own scale(fxZoom) transform,
+      // so without compensating, panning would visually track the mouse fxZoom× too fast.
+      FX.cv.style.transform=`translate(${dx/fxZoom}px,${dy/fxZoom}px)`;
+      const dpr=Math.min(window.devicePixelRatio||1,2);
+      const src=fxWork,fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
+      loupeCX=Math.min(1,Math.max(0,pd.lcx-dx*dpr/fw));
+      loupeCY=Math.min(1,Math.max(0,pd.lcy-dy*dpr/fh));
+      clearTimeout(_loupeDragT);
+      _loupeDragT=setTimeout(()=>{FX.cv.style.transform='';renderPreview();},120);
+    } else {
+      fxPanX=pd.px+(e.clientX-pd.x)/fxZoom;
+      fxPanY=pd.py+(e.clientY-pd.y)/fxZoom;
+      _applyZoom();
+    }
+  });
+  const pup=()=>{
+    pd=null;zw.classList.remove('dragging');
+    _fxPreviewInteracting=false;
+    if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';renderPreview();}
+    else if(fxFullResPreview)renderPreview();
+  };
+  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup();};
+  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',pupOwn);
+  // Double-click to reset
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();_zoomAt(2.5,e.clientX,e.clientY);_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
+  // Pinch: zooms about the fingers' midpoint and pans with it; one-finger pan is suspended until all
+  // fingers lift, so a finger left behind after a pinch cannot yank the photo to a stale anchor.
+  let _pt={},_pinching=false,_pmid=null;
+  wrap.addEventListener('touchstart',e=>{[...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});},{passive:true});
+  wrap.addEventListener('touchmove',e=>{
+    if(e.touches.length===2&&!fxLoupe){
+      e.preventDefault();
+      // A pinch's first finger fires pointerdown before the second lands, briefly starting a
+      // paint/AI-scribble stroke on that first touch — discard it now that this is clearly a
+      // 2-finger zoom, not a mask gesture.
+      if(typeof window.chromasmithAbortMaskStroke==='function')window.chromasmithAbortMaskStroke();
+      _fxPreviewInteracting=true;  // E1: pinch never set this — see the wheel handler above
+      const [t0,t1]=[e.touches[0],e.touches[1]];
+      const dist=Math.hypot(t0.clientX-t1.clientX,t0.clientY-t1.clientY);
+      const p0=_pt[t0.identifier]||{x:t0.clientX,y:t0.clientY};
+      const p1=_pt[t1.identifier]||{x:t1.clientX,y:t1.clientY};
+      const prev=Math.hypot(p0.x-p1.x,p0.y-p1.y)||dist;
+      const mx=(t0.clientX+t1.clientX)/2,my=(t0.clientY+t1.clientY)/2;
+      if(!_pinching){_pinching=true;_pmid={x:mx,y:my};}
+      _zoomAt(fxZoom*(dist/prev),mx,my);
+      fxPanX+=(mx-_pmid.x)/fxZoom;fxPanY+=(my-_pmid.y)/fxZoom;_pmid={x:mx,y:my};
+      _applyZoom();
+    }
+    [...e.changedTouches].forEach(t=>_pt[t.identifier]={x:t.clientX,y:t.clientY});
+  },{passive:false});
+  wrap.addEventListener('touchend',e=>{
+    [...e.changedTouches].forEach(t=>delete _pt[t.identifier]);
+    if(e.touches.length===0&&_pinching){_pinching=false;_pmid=null;}
+    else if(e.touches.length===1)_pmid=null;
+    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxFullResPreview)renderPreview();}
+  },{passive:true});
+}

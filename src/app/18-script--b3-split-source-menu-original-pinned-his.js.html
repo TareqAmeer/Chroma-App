@@ -1,0 +1,101 @@
+// ── B3: split-source menu (Original / Pinned / History / Styles / Exports) ────────────────────
+function _fxSplitSrcLabel(src){
+  if(!src||src==='orig')return 'Original';
+  if(src==='pin')return 'Pinned';
+  if(src.hist!==undefined)return (fxHistory[src.hist]&&fxHistory[src.hist].label)||`Step ${src.hist}`;
+  if(src.style!==undefined)return `Style: ${src.style}`;
+  if(src.export!==undefined)return `Export v${src.export}`;
+  return 'Original';
+}
+function _fxSplitRow(text,onclick,active){
+  const row=document.createElement('div');
+  row.style.cssText='padding:7px 9px;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(active?';background:var(--hov)':'');
+  row.onmouseenter=()=>row.style.background='var(--hov)';
+  row.onmouseleave=()=>row.style.background=active?'var(--hov)':'';
+  row.textContent=text;
+  row.onclick=onclick;
+  return row;
+}
+function _fxSplitHead(text){
+  const h=document.createElement('div');
+  h.style.cssText='padding:6px 9px 2px;font-size:10px;letter-spacing:var(--ls-3);text-transform:uppercase;color:var(--mut)';
+  h.textContent=text;
+  return h;
+}
+function fxSetSplitSrc(src){
+  fxSplitSrc=src;
+  if(!fxSplit){fxSplit=true;const btn=document.getElementById('btn-split');if(btn)btn.classList.add('on');const b=document.getElementById('btn-before');if(b)b.style.display='none';initSplitDrag();}
+  const pop=document.getElementById('fx-split-popover');if(pop)pop.style.display='none';
+  renderPreview();
+}
+// 2026-09-09: content-building split out of fxToggleSplitMenu so the SAME list can render
+// into either the floating web/mobile popover (#fx-split-popover, unchanged behaviour below) or
+// a plain inline block inside the merged settings menu on desktop (settingsSplitBuild()) — a
+// "submenu" in the sense of just being static content in the dropdown, no second floating layer
+// or viewport-clamping math needed there since the whole menu already scrolls.
+async function _fxSplitListInto(container,closeFn){
+  container.innerHTML='';
+  const pick=(src)=>{fxSetSplitSrc(src);closeFn();};
+  container.appendChild(_fxSplitHead('Divider direction'));
+  container.appendChild(_fxSplitRow('Vertical',()=>{fxSplitAxis='vertical';_applySplitPos();},fxSplitAxis==='vertical'));
+  container.appendChild(_fxSplitRow('Horizontal',()=>{fxSplitAxis='horizontal';_applySplitPos();},fxSplitAxis==='horizontal'));
+  container.appendChild(_fxSplitHead('Compare against'));
+  container.appendChild(_fxSplitRow('Original',()=>pick('orig'),fxSplitSrc==='orig'));
+  container.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)pick('pin');},fxSplitSrc==='pin'));
+  container.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();pick('pin');}));
+  const hist=fxHistory;
+  if(hist.length>1){
+    container.appendChild(_fxSplitHead('History'));
+    [...hist].map((h,i)=>({h,i})).reverse().forEach(({h,i})=>{
+      container.appendChild(_fxSplitRow(`${i}: ${h.label}`,()=>pick({hist:i}),fxSplitSrc&&fxSplitSrc.hist===i));
+    });
+  }
+  const styles=stylesList();
+  if(styles.length){
+    container.appendChild(_fxSplitHead('Presets'));
+    styles.forEach(s=>{container.appendChild(_fxSplitRow(s.name,()=>pick({style:s.name}),fxSplitSrc&&fxSplitSrc.style===s.name));});
+  }
+  if(typeof window.chromasmithGetExportHistory==='function'){
+    container.appendChild(_fxSplitHead('Exports'));
+    try{
+      const list=await window.chromasmithGetExportHistory();
+      if(list&&list.length){
+        [...list].reverse().forEach(entry=>{
+          container.appendChild(_fxSplitRow(`v${entry.version}`,()=>{
+            try{
+              const recipe=JSON.parse(decodeURIComponent(escape(atob(entry.recipe))));
+              pick({export:entry.version,recipe});
+            }catch(err){log('Could not read that export recipe: '+(err&&err.message||err),'err');}
+          },fxSplitSrc&&fxSplitSrc.export===entry.version));
+        });
+      }
+    }catch(err){/* desktop-only feature — silently skip if it errors */}
+  }
+}
+async function fxToggleSplitMenu(e){
+  if(e)e.stopPropagation();
+  const pop=document.getElementById('fx-split-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  await _fxSplitListInto(pop,()=>{pop.style.display='none';});
+  pop.style.display='block';
+  fxClampPopoverToViewport(pop);
+}
+// Desktop-only: same list, rendered inline into the settings menu (see settingsBuild()).
+async function settingsSplitBuild(){
+  const container=document.getElementById('fx-settings-split-list');
+  if(!container)return;
+  await _fxSplitListInto(container,()=>settingsClose());
+  const chk='<svg class="fx-ovf-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  container.insertAdjacentHTML('afterbegin',
+    `<button class="fx-ovf-item${fxSplit?' on':''}" onclick="viewMenuClose();toggleSplit()"><span>Split before / after</span>${chk}</button>`
+    // CHR-178: desktop hides the preview-tools Reference button, so its entries live here.
+    +(document.getElementById('fx-ref-win')
+      ?`<button class="fx-ovf-item on" onclick="viewMenuClose();fxRefClose()"><span>Close reference photo</span>${chk}</button>`
+      :`<button class="fx-ovf-item" onclick="viewMenuClose();fxRefSnapshot()"><span>Pin this photo as reference</span></button><button class="fx-ovf-item" onclick="viewMenuClose();fxRefPickFile()"><span>Reference photo from file…</span></button>`)
+    +`<button class="fx-ovf-item${fxPeakOn?' on':''}" onclick="viewMenuClose();fxTogglePeak()"><span>Focus peaking</span>${chk}</button>`);
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('fx-split-popover');
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-split-menu')wrap.style.display='none';
+});

@@ -1,0 +1,30 @@
+// ── A19: capability flags instead of comparing `origin` strings at each call site ─────────────
+// A mask's ORIGIN (how it was created) and its CAPABILITIES (what the UI should offer for it) are
+// different questions, and conflating them is what let `origin!=='ai'` survive in four call sites
+// while `origin==='ai'` was fixed in five — a Skin mask has origin 'skin' with ai:true, so the
+// negated form silently excluded it and scribbling did literally nothing (CLAUDE.md 5b).
+// Ask what a mask CAN DO, not what it was called. mskIsAI and the lint rule stay as backstops.
+function mskCaps(m){
+  if(!m)return{raster:false,segmentable:false,skinTools:false,toneTool:false,shapeless:false,sky:false,painterly:false,coatDepth:false,eyeBright:false};
+  const ai=mskIsAI(m);
+  return{
+    raster:m.type==='brush',            // has a px buffer: paint, erase, refine edges
+    segmentable:ai,                     // scribble-to-select via the on-device model
+    // skinTools is HUMAN-ONLY (faceparse.rs is a human face-parsing model — running it on a Coat
+    // mask's fur would find nothing meaningful, or worse, something that looks plausible and
+    // isn't). toneTool is the shared "even out a patchy tone" guided flow, offered to both Skin
+    // and Coat masks since colRangeWeight/skinUniformity genuinely don't care what's under them.
+    skinTools:m.origin==='skin',        // Auto-exclude face features — skin masks only
+    toneTool:m.origin==='skin'||m.origin==='coat',  // the guided Skin/Coat Tone flow
+    shapeless:m.type==='none',          // Colour/Luminance Range — the gates do the selecting
+    sky:m.origin==='sky',               // offers "Re-detect sky"
+    painterly:m.type==='brush'&&!ai,    // hand-painted: show the brush hint, no scribble UI
+    coatDepth:m.origin==='coat',        // "Red depth" one-slider exp+sat push — see mskCoatDepth
+    eyeBright:m.origin==='coatEye'      // "Eye brightness" one-slider exp+highlights push
+  };
+}
+
+// Skin-tone / colour-range fields, shared by EVERY mask type (a colour gate is useful on a
+// linear gradient or a painted mask too, not just the Skin preset). A factory, not a shared
+// constant, so masks never alias one object. All strengths default to 0 => a freshly added
+// mask renders bit-identically to before this feature existed.

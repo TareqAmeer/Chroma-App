@@ -1,0 +1,42 @@
+// ── Coat pair: "+ Coat" creates a coat mask AND, on its first successful segmentation, a second
+// eye-brightness mask alongside it — one button, two masks, two direct one-slider strengths.
+// Deliberately NOT the Skin-Tone/Uniformity convergence machinery: "deepen the coat's red" and
+// "brighten the eyes" are plain directional pushes (darker+more saturated / brighter), not a
+// contraction toward a sampled target — the simpler, more predictable move for what was asked.
+// m.exp/m.sat/m.sh are the SAME per-mask adjustment fields the ordinary Exposure/Saturation/
+// Shadows sliders already drive (see ADJ_FIELDS and the mskC/mskD packing in render()), just
+// driven by one combined "strength" instead of three separate sliders.
+function mskCoatDepth(v){
+  const m=fxState.masks[mskSel];if(!m||m.origin!=='coat')return;
+  m.coatDepth=v;
+  m.exp=-0.6*(v/100);   // up to -0.6 stops, darker
+  m.sat=0.55*(v/100);   // up to +0.55 saturation, more vivid red
+  // ⚠️ Ease off the darkening on already-bright/overexposed fur — but ease off, don't exempt it.
+  // First attempt (lumHi=0.72) protected brights almost completely (measured 97% less darkening
+  // than midtones) — that traded one glaring mismatch for another: an almost-untouched bright
+  // patch sitting next to a much-darker treated coat reads as its OWN harsh seam, just inverted.
+  // Measured on a real backlit photo (geneva/__TM3938.jpg's sun-catching ear) at a few lumHi
+  // values and picked the one where bright fur still visibly deepens, just less than midtones —
+  // 0.80 measures 54% LESS darkening on the brightest fur (dropped 0.047 vs midtones' 0.071 at
+  // the same strength), a difference of degree rather than an on/off boundary. mskD's lum-CEILING
+  // gate (already wired into every mask's own selection weight, smoothstep-feathered not a hard
+  // cutoff — see mskShapeWeight) is what does this, fading the mask's effect out gradually as a
+  // pixel's own pre-existing luminance climbs.
+  m.lumHi=v>0?0.80:1;
+  const lb=document.getElementById('msk-coatdepth-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}
+function mskEyeBright(v){
+  const m=fxState.masks[mskSel];if(!m||m.origin!=='coatEye')return;
+  m.eyeBright=v;
+  m.exp=0.45*(v/100);   // up to +0.45 stops, unambiguously brighter
+  m.sh=0.5*(v/100);     // up to +0.5 shadow lift, opens the dark iris/fur without blowing any catchlight highlight
+  const lb=document.getElementById('msk-eyebright-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}
+// Auto-placed the FIRST time a Coat mask gets a real selection (called from samRunPoints, right
+// after m.px is installed) — never again after that, so re-scribbling the coat later doesn't
+// keep spawning new eye masks. Position is a heuristic from the coat's own bounding box (same
+// self-calibrating idea mskFaceAutoExclude's head-crop uses for a human) — there is no per-animal
+// eye detector here, so this is a STARTING POINT: an ordinary Radial mask the user drags/resizes
+// onto the actual eye(s), not a claim of automatic eye detection.

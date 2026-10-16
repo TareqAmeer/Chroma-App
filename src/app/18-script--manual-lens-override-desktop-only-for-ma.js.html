@@ -1,0 +1,76 @@
+// ── Manual lens override (desktop only) — for manual/adapted lenses (TTArtisan and similar)
+// that write no lens EXIF at all, so the fallbacks in lens_correct.rs have nothing to recover.
+// Lets the user pick a lens directly from the bundled lensfun DB's own list instead.
+let _fxLensProfiles=null;
+async function fxLensManualInit(){
+  const row=document.getElementById('row-lens-manual');
+  if(!row||!window.__TAURI__)return; // stays hidden in browser/iOS builds — matches Auto's own gating
+  row.style.display='flex';
+  try{
+    _fxLensProfiles=await window.__TAURI__.core.invoke('list_lens_profiles');
+    if(typeof log==='function')log('Manual lens list: loaded '+(_fxLensProfiles&&_fxLensProfiles.length)+' entries','info');
+  }catch(e){
+    if(typeof log==='function')log('Manual lens list: '+(e&&e.message||e),'err');
+    return;
+  }
+  const sel=document.getElementById('sel-lens-manual');
+  if(!sel||!_fxLensProfiles)return;
+  const frag=document.createDocumentFragment();
+  _fxLensProfiles.forEach((l,i)=>{
+    const o=document.createElement('option');
+    o.value=String(i);o.textContent=l.maker+' '+l.model;
+    frag.appendChild(o);
+  });
+  sel.appendChild(frag);
+  try{
+    const savedIdx=localStorage.getItem('chromasmithLensManualIdx');
+    const savedFocal=localStorage.getItem('chromasmithLensManualFocal');
+    if(savedIdx!=null&&savedIdx!==''){
+      sel.value=savedIdx;
+      const focalEl=document.getElementById('in-lens-manual-focal');
+      if(focalEl&&savedFocal)focalEl.value=savedFocal;
+      fxLensManualApply(false);
+    }
+  }catch(e){}
+}
+function fxLensManualChanged(){
+  const sel=document.getElementById('sel-lens-manual');
+  const idx=sel&&sel.value;
+  const focalRow=document.getElementById('row-lens-manual-focal');
+  if(!idx){ // "None (auto-detect)"
+    if(focalRow)focalRow.style.display='none';
+    try{localStorage.removeItem('chromasmithLensManualIdx');}catch(e){}
+    window.chromasmithLensOverride='';window.chromasmithLensOverrideFocal=0;
+    if(typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+    return;
+  }
+  const l=_fxLensProfiles&&_fxLensProfiles[parseInt(idx,10)];
+  if(!l)return;
+  if(focalRow)focalRow.style.display='flex';
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  // Prime lens (fixed focal length) — auto-fill so the user isn't asked for a number they may
+  // not know off-hand for an old manual lens. Zooms (focal_min!==focal_max) start blank.
+  if(focalEl&&l.focal_min===l.focal_max)focalEl.value=l.focal_min;
+  try{localStorage.setItem('chromasmithLensManualIdx',idx);}catch(e){}
+  fxLensManualApply(true);
+}
+function fxLensManualFocalChanged(){
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  try{if(focalEl)localStorage.setItem('chromasmithLensManualFocal',focalEl.value);}catch(e){}
+  fxLensManualApply(true);
+}
+function fxLensManualApply(reload){
+  const sel=document.getElementById('sel-lens-manual');
+  const idx=sel&&sel.value;
+  const l=idx?_fxLensProfiles&&_fxLensProfiles[parseInt(idx,10)]:null;
+  const focalEl=document.getElementById('in-lens-manual-focal');
+  const focal=focalEl?parseFloat(focalEl.value)||0:0;
+  if(!l||focal<=0){window.chromasmithLensOverride='';window.chromasmithLensOverrideFocal=0;return;}
+  window.chromasmithLensOverride=l.maker+' '+l.model;
+  window.chromasmithLensOverrideFocal=focal;
+  // Picking a manual lens only has an effect while Auto is on — the correction pass itself is
+  // gated on auto_lens in raw_decode.rs, same as EXIF-detected lenses.
+  const tg=document.getElementById('tg-lens-auto');
+  if(tg&&!tg.classList.contains('on')){tg.classList.add('on');window.chromasmithAutoLens=true;try{localStorage.setItem('chromasmithAutoLens','1');}catch(e){}}
+  if(reload&&typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+}

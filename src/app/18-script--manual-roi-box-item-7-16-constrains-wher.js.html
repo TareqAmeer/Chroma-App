@@ -1,0 +1,75 @@
+// ── Manual ROI box (item 7/16) — constrains WHERE Auto level searches, for the documented
+// ambiguous-scene failure (CLAUDE.md: a lake's far shoreline can genuinely outscore the true
+// horizon). Stored per-item (it._ahRoi), never persisted to session/XMP — this is a lightweight
+// aid for the current Auto level run, not an edit, so it deliberately doesn't touch
+// getUISnapshot/_SESS_SELECTS or any save format.
+let _ahRoiArmed=false,_ahRoiDrag=null;
+function ahRoiSyncUI(){
+  const it=curItem(),roi=it&&it._ahRoi;
+  const ov=document.getElementById('fx-ahroi-overlay'),rect=document.getElementById('fx-ahroi-rect');
+  const clearBtn=document.getElementById('btn-ah-roi-clear');
+  if(clearBtn)clearBtn.style.display=roi?'':'none';
+  if(ov)ov.style.display=roi?'':'none';
+  if(rect&&roi){rect.setAttribute('x',roi.x0);rect.setAttribute('y',roi.y0);
+    rect.setAttribute('width',Math.max(0.001,roi.x1-roi.x0));rect.setAttribute('height',Math.max(0.001,roi.y1-roi.y0));}
+}
+function ahRoiArm(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  _ahRoiArmed=true;
+  const btn=document.getElementById('btn-ah-roi');if(btn)btn.classList.add('on');
+  const wrap=document.getElementById('fx-zoom-wrap');if(wrap)wrap.style.cursor='crosshair';
+  toast('Drag a box around the horizon on the photo',true);
+}
+function ahRoiClear(){
+  const it=curItem();if(it)it._ahRoi=null;
+  ahRoiSyncUI();
+}
+function _ahRoiFrac(e){
+  const pt=fxPointerToCanvasPx(e);if(!pt||!FX.cv.width||!FX.cv.height)return null;
+  return{x:Math.min(1,Math.max(0,pt.x/FX.cv.width)),y:Math.min(1,Math.max(0,pt.y/FX.cv.height))};
+}
+(function(){
+  const wrap=document.getElementById('fx-zoom-wrap');
+  if(!wrap)return;
+  wrap.addEventListener('pointerdown',(e)=>{
+    if(!_ahRoiArmed)return;
+    const p=_ahRoiFrac(e);if(!p)return;
+    e.preventDefault();
+    _ahRoiDrag={x0:p.x,y0:p.y,x1:p.x,y1:p.y};
+    const ov=document.getElementById('fx-ahroi-overlay');if(ov)ov.style.display='';
+    const rect=document.getElementById('fx-ahroi-rect');
+    if(rect){rect.setAttribute('x',p.x);rect.setAttribute('y',p.y);rect.setAttribute('width',0.001);rect.setAttribute('height',0.001);}
+  });
+  wrap.addEventListener('pointermove',(e)=>{
+    if(!_ahRoiDrag)return;
+    const p=_ahRoiFrac(e);if(!p)return;
+    _ahRoiDrag.x1=p.x;_ahRoiDrag.y1=p.y;
+    const rect=document.getElementById('fx-ahroi-rect');
+    if(rect){
+      const x0=Math.min(_ahRoiDrag.x0,_ahRoiDrag.x1),y0=Math.min(_ahRoiDrag.y0,_ahRoiDrag.y1);
+      const x1=Math.max(_ahRoiDrag.x0,_ahRoiDrag.x1),y1=Math.max(_ahRoiDrag.y0,_ahRoiDrag.y1);
+      rect.setAttribute('x',x0);rect.setAttribute('y',y0);
+      rect.setAttribute('width',Math.max(0.001,x1-x0));rect.setAttribute('height',Math.max(0.001,y1-y0));
+    }
+  });
+  window.addEventListener('pointerup',()=>{
+    if(!_ahRoiDrag)return;
+    const it=curItem();
+    const x0=Math.min(_ahRoiDrag.x0,_ahRoiDrag.x1),y0=Math.min(_ahRoiDrag.y0,_ahRoiDrag.y1);
+    const x1=Math.max(_ahRoiDrag.x0,_ahRoiDrag.x1),y1=Math.max(_ahRoiDrag.y0,_ahRoiDrag.y1);
+    const tooSmall=(x1-x0)<0.03||(y1-y0)<0.03;   // an accidental click/tiny drag clears rather than sets a useless sliver
+    if(it)it._ahRoi=tooSmall?null:{x0,y0,x1,y1};
+    _ahRoiDrag=null;_ahRoiArmed=false;
+    const btn=document.getElementById('btn-ah-roi');if(btn)btn.classList.remove('on');
+    wrap.style.cursor='';
+    ahRoiSyncUI();
+    if(!tooSmall)toast('Region set — Auto level will search only inside it',true);
+  });
+})();
+// Straighten slider is quadratic: fine steps near level (subtle corrections), full +-45 at the ends.
+function _stS2A(s){const t=(parseFloat(s)||0)/45;return Math.round(45*t*Math.abs(t)*20)/20;}
+function _stA2S(a){const t=Math.max(-1,Math.min(1,(a||0)/45));return 45*Math.sign(t)*Math.sqrt(Math.abs(t));}
+function geomStraightenSlider(v){geomStraighten(_stS2A(v));}
+function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(2)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
+function geomResetRotate(){const it=curItem();if(!it||!it.geom)return;it.geom.rot=0;it.geom.flipH=false;it.geom.flipV=false;broadcastGeom();updateWork();renderPreview();buildLookGallery();fxHistoryPush();}
+function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}

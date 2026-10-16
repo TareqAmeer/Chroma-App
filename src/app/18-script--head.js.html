@@ -1,0 +1,52 @@
+<script>
+// BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
+// (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
+const BUILD='1.1016F';
+{const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
+// User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
+// PREPEND a short entry here in any session that ships a user-visible change, same discipline as
+// bumping BUILD above — a few bullet points, not a commit-message dump. Newest first.
+const WHATSNEW=[
+  {date:'2026-10-11',items:[
+    'Batch scope status now follows the active tool and photo, including per-photo masks and geometry.'
+  ]},
+  {date:'2026-10-11',items:[
+    'The brush size ring now appears as soon as a touch or pen starts a stroke.',
+    'Local masks now have a separate Sharpen control for edge contrast.'
+  ]},
+  {date:'2026-10-07',items:[
+    'Android photos now save in Pictures/Chromasmith and survive uninstalling the app.',
+    'Existing Android exports are moved to permanent photo storage after verification.'
+  ]},
+  {date:'2026-10-07',items:[
+    'Android exports read fewer pixels while preserving the full image and edit quality.',
+    'Full-resolution JPEG export is restored when Android reduces a large photo during loading.'
+  ]},
+  {date:'2026-10-06',items:[
+    'Faster full-resolution JPEG exports on Android, with export quality preserved.',
+    'Export completion notifications no longer open Android notification or alarm settings.',
+    'Android JPEG encoding and saving to Photos are faster; repeated exports preserve existing photos.'
+  ]},
+  {date:'2026-10-05',items:[
+    'Library galleries keep the same photos in place while scrolling and updating.',
+  ]},
+  {date:'2026-08-28',items:[
+    'Desktop app now opens far more RAW formats (ARRIRAW, Canon CRW/CR2/CR3, Fuji RAF, Hasselblad 3FR/FFF, Kodak, Leaf/Phase One IIQ, Leica RWL, Mamiya MEF, Minolta MRW, Nikon NEF/NRW, Pentax PEF/PTX, Samsung SRW, Sigma X3F, Sony SRF/SR2, and more) alongside the existing Panasonic/Sony support.',
+    'Desktop app now also opens EXR, HDR, TGA, DDS, QOI, JPEG XL, and Netpbm (PBM/PGM/PPM/PAM) stills, in the editor and the Library.',
+    'Web/iOS build accepts the same wider RAW list where the browser’s decoder supports it, and now shows a clear "opens in the desktop app" message instead of silently ignoring a file it can’t open.',
+  ]},
+  {date:'2026-07-26',items:[
+    'Mac menu bar: new Photo, View and Help menus (culling flags, rotate/flip, copy/paste edit, zoom, split/histogram toggles, this shortcuts panel).',
+    'Basic Adjustments can now be made independent per photo in a batch ("This photo only") instead of always applying to the whole batch.',
+    'Batch export shows a per-photo status list (rendering/saved/failed) instead of one bar that reads "done" either way.',
+    'Lightroom "Edit In" now supports selecting several photos at once.',
+    'Crop/rotate/flip/straighten are per-photo with an "Apply to all photos" button; FX/adjustments still apply to the whole batch automatically.',
+    'Batch edits now show the Edited badge and save history for every photo in the batch, not just a single open photo.',
+    '"Edit in Chromasmith" from Lightroom now shows up in Recents.',
+    'LUT categories renamed: Fujify Looks → User Looks, Dehancer Online → Dehancer.',
+  ]},
+];
+function whatsNewHtml(){
+  return WHATSNEW.map(e=>`<div style="margin-bottom:14px"><div style="font-family:var(--mono);font-size:11px;color:var(--mut);margin-bottom:4px">${e.date}</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.5">${e.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`).join('');
+}
+window.chromasmithShowWhatsNew=function(){if(typeof _csModal==='function')_csModal("What's New",whatsNewHtml());};

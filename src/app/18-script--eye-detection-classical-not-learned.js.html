@@ -1,0 +1,383 @@
+// ── Eye detection: classical, not learned ────────────────────────────────────────────────────
+// A first version guessed the eye position as a fixed fraction of the coat mask's own bounding
+// box — measured wrong on every real photo tried (a fluffy head with the ears up, a tilted pose,
+// or eyes hidden under fur bangs all break a fixed fraction). No trained landmark model exists in
+// this app for animals (faceparse.rs is human-only, see its own doc comment) and bundling one is
+// its own project — so this is a classical detector instead: a dog's eye is a small, roughly
+// round DARK region, usually with a small bright CATCHLIGHT highlight near its centre, and real
+// eyes come as a horizontally-separated, similarly-sized, similarly-placed PAIR — which a nostril,
+// a shadow fold, or a single stray dark curl of fur is not. Scored on all three; if no confident
+// pair turns up (eyes closed, occluded, extreme angle), this DECLINES rather than guessing — same
+// philosophy as auto-horizon's own "an ambiguous answer is worse than an honest no" rule.
+//
+// Returns {cx,cy,rx,ry} in TOP-DOWN normalised fractions (0,0 = top-left) spanning both eyes, or
+// null. Caller is responsible for flipping cy into the stored bottom-up mask convention.
+function _mskDetectEyes(m){
+  if(!m||!m.px||!m.mtW||!m.mtH)return null;
+  const bbox=_mskSubjectBBox(m);if(!bbox)return null;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)return null;
+  const w=m.mtW,h=m.mtH;
+  const d=mskSourceData(w,h,img);if(!d)return null;
+  const bh=bbox.y1-bbox.y0;
+  // Eyes are never in the lower half of a whole-subject selection — restrict the search to a
+  // "head band" (top 45% of the selection's own bbox) so legs/paws/tail can't compete, without
+  // assuming exactly where in that band the head actually is (pose/crop vary too much). Measured
+  // on a real photo: 60% reached far enough down to include an open mouth's dark interior, which
+  // out-competed the real eyes for the "best dark pair" — 45% is the tightened, re-measured value.
+  const headY0=bbox.y0,headY1=Math.min(bbox.y1,bbox.y0+Math.round(bh*0.45));
+  const headX0=bbox.x0,headX1=bbox.x1,headW=Math.max(1,headX1-headX0);
+  if(headY1<=headY0||headX1<=headX0)return null;
+  const luma=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;
+    const inHead=y>=headY0&&y<=headY1&&x>=headX0&&x<=headX1&&(m.px[i]||0)>32;
+    luma[i]=inHead?(0.2126*d[i*4]+0.7152*d[i*4+1]+0.0722*d[i*4+2]):128;  // outside -> neutral, can never win
+  }
+  // Blur radius scaled to a PLAUSIBLE EYE size (a fraction of the head band's own width), not a
+  // fixed pixel count — fur strands are much finer texture than this and get smoothed away, while
+  // an eye-sized dark region survives as a genuine local peak in "darker than its surround".
+  const r=Math.max(2,Math.round(headW*0.035));
+  const localMean=_boxFilterMean(luma,w,h,r*3);
+  const darkness=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)darkness[i]=localMean[i]-luma[i];
+  let dmax=0;
+  for(let y=headY0;y<=headY1;y++)for(let x=headX0;x<=headX1;x++){const v=darkness[y*w+x];if(v>dmax)dmax=v;}
+  if(dmax<8)return null;   // no meaningfully dark region anywhere in the head band
+  const floor=dmax*0.45;   // adaptive, not absolute — works in both flat and contrasty light
+  const cand=[];
+  const step=Math.max(1,Math.round(r*0.5));
+  for(let y=headY0+r;y<=headY1-r;y+=step)for(let x=headX0+r;x<=headX1-r;x+=step){
+    const i=y*w+x,v=darkness[i];
+    if(v<floor)continue;
+    let isMax=true;
+    for(let dy=-r;dy<=r&&isMax;dy+=r)for(let dx=-r;dx<=r&&isMax;dx+=r){
+      if(!dx&&!dy)continue;
+      const yy=y+dy,xx=x+dx;
+      if(yy<0||yy>=h||xx<0||xx>=w)continue;
+      if(darkness[yy*w+xx]>v)isMax=false;
+    }
+    if(!isMax)continue;
+    let hasCatch=false;
+    const cr=Math.max(1,Math.round(r*0.4));
+    for(let dy=-cr;dy<=cr&&!hasCatch;dy++)for(let dx=-cr;dx<=cr&&!hasCatch;dx++){
+      const yy=y+dy,xx=x+dx;if(yy<0||yy>=h||xx<0||xx>=w)continue;
+      if(luma[yy*w+xx]>210)hasCatch=true;
+    }
+    cand.push({x,y,score:v+(hasCatch?dmax*0.3:0)});
+  }
+  if(cand.length<2)return null;
+  cand.sort((a,b)=>b.score-a.score);
+  const top=cand.slice(0,12);
+  // Best symmetric pair: similarly high, roughly level, separated by a plausible inter-eye gap —
+  // all as fractions of the head band's own width, so it scales with a close-up vs a full-body
+  // shot. Bounds re-measured against a real photo (see the head-band comment above): the original
+  // dx<=0.65*headW/dy<=0.18*headW were loose enough to match a false pair once the mouth was in
+  // play. Also prefers pairs sitting HIGHER in the head band — nose/mouth/chin are always below
+  // the eyes within it, never above, so "higher" is a real, not arbitrary, tiebreaker.
+  let best=null;
+  for(let i=0;i<top.length;i++)for(let j=i+1;j<top.length;j++){
+    const a=top[i],b=top[j];
+    const dx=Math.abs(a.x-b.x),dy=Math.abs(a.y-b.y);
+    if(dx<headW*0.14||dx>headW*0.42)continue;
+    if(dy>headW*0.10)continue;
+    const avgY=(a.y+b.y)/2,yFrac=(avgY-headY0)/Math.max(1,headY1-headY0);   // 0=top of band,1=bottom
+    const symScore=a.score+b.score-dy*2-yFrac*dmax*1.5;
+    if(!best||symScore>best.symScore)best={a,b,symScore};
+  }
+  if(!best)return null;
+  const{a,b}=best;
+  const spanX=Math.abs(a.x-b.x);
+  return{
+    cx:(a.x+b.x)/2/w,cy:(a.y+b.y)/2/h,
+    rx:Math.max(0.02,(spanX/2+r*1.6)/w),
+    ry:Math.max(0.018,(r*2.2)/h),
+  };
+}
+function _mskAddCoatEyeMask(coatM){
+  if(fxState.masks.length>=MSK_MAX)return;   // silently skip — the coat mask itself still succeeded
+  const det=_mskDetectEyes(coatM);
+  if(!det){
+    log('Could not confidently find the eyes (hidden under fur, closed, or a difficult angle) — add a Radial mask by hand if you want to brighten them.','warn');
+    return;
+  }
+  // det.cy is TOP-DOWN; m.cy is stored BOTTOM-UP (see the mask-thumbnail preview's `(1-m.cy)*H`
+  // and the drag handler, both of which treat it that way) — flip once, here.
+  const em={type:'radial',origin:'coatEye',cx:det.cx,cy:1-det.cy,rx:det.rx,ry:det.ry,
+    rot:0,feather:0.35,eyeBright:35,..._mskAdjustDefaults()};
+  Object.assign(em,_mskSkinDefaults());
+  em.name='Eyes';
+  em.exp=0.45*0.35;em.sh=0.5*0.35;   // mskEyeBright's formula pre-applied at the default strength (35)
+  // ⚠️ The coat mask covers the WHOLE animal, eyes included — so its own darkening (Red depth)
+  // was ALSO landing on the eye pixels, fighting the eye mask's brightening on the exact same
+  // region. Measured on a real photo: at default strengths (35/35) the eye region's luminance came
+  // out flat-to-slightly-DARKER despite a positive exposure/shadow push, because coat's stronger
+  // negative exposure (-0.21 at 35) was winning. 'subtract previous mask' cuts the immediately-
+  // PRECEDING mask's shape out of this one's own — so inserting the eye mask right before the
+  // coat mask and flagging coat.subtract removes the coat effect from the eye area entirely,
+  // leaving the eye mask's own brightening as the only thing acting on it.
+  const coatIdx=fxState.masks.indexOf(coatM);
+  if(coatIdx<0){fxState.masks.push(em);}
+  else{fxState.masks.splice(coatIdx,0,em);coatM.subtract=true;}
+  log('Added an eye-brightness mask over the detected eyes — nudge it if it is slightly off.','info');
+}
+// Each preset is just a set of the existing values — no new machinery, and every one of them can
+// be taken apart in Advanced afterwards.
+const MSK_SKIN_PRESETS={
+  even:{label:'Even out tan',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  match:{label:'Match face to chest',uH:70,uS:65,uL:40,preserve:55,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  warm:{label:'Warm up',uH:35,uS:30,uL:10,preserve:80,tanDepth:10,tanWarm:35,tanOneWay:true,tanOneWayAmt:100},
+  deepen:{label:'Deepen tan',uH:45,uS:45,uL:20,preserve:75,tanDepth:45,tanWarm:20,tanOneWay:true,tanOneWayAmt:100}
+};
+// Same machinery, fur-appropriate labels/defaults. No one-way clamp by default (see mskAdd's
+// 'coat' branch): sun-bleaching lightens as often as shade darkens, unlike skin tanning which only
+// ever goes one direction.
+const MSK_COAT_PRESETS={
+  even:{label:'Even out coat',uH:55,uS:50,uL:25,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  sunfix:{label:'Fix sun-bleaching',uH:65,uS:55,uL:45,preserve:60,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0},
+  deepen:{label:'Deepen coat',uH:45,uS:45,uL:20,preserve:75,tanDepth:35,tanWarm:15,tanOneWay:true,tanOneWayAmt:100},
+  warm:{label:'Warm undertone',uH:35,uS:30,uL:10,preserve:80,tanDepth:5,tanWarm:35,tanOneWay:false,tanOneWayAmt:0}
+};
+// The same origin-specific starting point mskAdd's 'skin'/'coat' branches set at creation —
+// factored out so "Reset" can return to it later without duplicating the two constants.
+function _mskToneBlendDefaults(origin){
+  return origin==='coat'
+    ? {uH:0,uS:0,uL:0,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:false,tanOneWayAmt:0}
+    : {uH:0,uS:0,uL:0,preserve:70,tanDepth:0,tanWarm:0,tanOneWay:true,tanOneWayAmt:100};
+}
+// Undoing a bad Strength/Depth/Warmth/Preserve/Only-darken combination used to mean zeroing five
+// sliders by hand. Deliberately leaves the SELECTION (crSamples/crOn/crRange/crRangeC) and the
+// TARGET (tgtMode/tgtHex) alone — those represent real work (picks, segmentation) the user almost
+// certainly still wants; only the "how hard and which way" blend settings reset.
+function mskToneReset(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  Object.assign(m,_mskToneBlendDefaults(m.origin));
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+  toast('Blend settings reset',true);
+}
+function mskSkinPreset(k){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const p=(m.origin==='coat'?MSK_COAT_PRESETS:MSK_SKIN_PRESETS)[k];if(!p)return;
+  Object.keys(p).forEach(key=>{if(key!=='label')m[key]=p[key];});
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Arms the eyedropper AND switches the preview to Selection in one action. Previously the help
+// text simply instructed the user to go and find a separate segmented control first — if you
+// cannot see the selection, the samples cannot be judged.
+let _mskPrevModeBeforePick=null;
+function mskPickSkin(){
+  if(!_mskCrEyeActive&&mskPreviewMode!=='select'){
+    _mskPrevModeBeforePick=mskPreviewMode;
+    mskSetPreviewMode('select');
+  }else if(_mskCrEyeActive&&_mskPrevModeBeforePick){
+    mskSetPreviewMode(_mskPrevModeBeforePick);_mskPrevModeBeforePick=null;
+  }
+  mskCrEyedropper();
+}
+// How much of the mask's shape actually passes the colour gate. CLAUDE.md 5b establishes that a
+// FLAT weight matters more than a high one (1 sample measured 0.04-1.00 and made hue DIVERGE;
+// 3 samples measured 0.86-1.00), so the panel shows the number instead of describing it in a
+// paragraph nobody reads. Sampled on a coarse grid — this is a UI readout, not a render.
+function mskSkinCoverage(m){
+  if(!m||!m.crOn||!m.crSamples||!m.crSamples.length)return null;
+  const cv=FX&&FX.cv;if(!cv||!cv.width)return null;
+  try{
+    // Sample only the mask's own bounding box, not the whole frame — a mask that covers a small
+    // fraction of a large photo was spending all 48x48 samples mostly on pixels the mask doesn't
+    // even touch, wasting resolution and under-reporting coverage for a tightly cropped subject.
+    const bbox=(m.px&&m.mtW&&m.mtH)?_mskSubjectBBox(m):null;
+    let sx=0,sy=0,sw=cv.width,sh=cv.height;
+    if(bbox){
+      const fx0=bbox.x0/m.mtW,fy0=bbox.y0/m.mtH,fx1=(bbox.x1+1)/m.mtW,fy1=(bbox.y1+1)/m.mtH;
+      sx=Math.floor(fx0*cv.width);sy=Math.floor(fy0*cv.height);
+      sw=Math.max(1,Math.ceil((fx1-fx0)*cv.width));sh=Math.max(1,Math.ceil((fy1-fy0)*cv.height));
+    }
+    // S used to be a flat 48 regardless of how much source area it was covering — now scoped to
+    // the bbox (above), a small tight selection gets plenty of resolution at 48, but a large one
+    // (a full-body Skin mask on a big photo) was still only sampled at 48x48 despite having far
+    // more source pixels available. Scale S with the crop's own size, capped so a huge selection
+    // doesn't blow the readback cost past what a UI number needs.
+    const S=Math.max(32,Math.min(96,Math.round(Math.max(sw,sh)/8)));
+    const t=document.createElement('canvas');t.width=S;t.height=S;
+    const cx=t.getContext('2d',{willReadFrequently:true});
+    cx.drawImage(cv,sx,sy,sw,sh,0,0,S,S);
+    const d=cx.getImageData(0,0,S,S).data;
+    let hit=0,tot=0;
+    for(let i=0;i<S*S;i++){
+      const[h,C]=rgb2oklch(d[i*4]/255,d[i*4+1]/255,d[i*4+2]/255);
+      // ⚠️ crRange is passed RAW (0..100) — crWeightJS divides by 100 itself. Pre-dividing here
+      // collapsed the kernel to ~zero width and made this readout report 0% for every photo.
+      const w=crWeightJS(h,C,m.crSamples,(m.crRange!=null?m.crRange:35),(m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35)));
+      tot++;if(w>0.5)hit++;
+    }
+    return tot?Math.round(hit/tot*100):null;
+  }catch(e){return null;}
+}
+function _mskRow(label,k,val,min,max,sc,flip,title){
+  const sv=Math.round(flip?(1-val)*100:val/sc);
+  return '<div class="fx-row"'+(title?' title="'+title.replace(/"/g,'&quot;')+'"':'')+'><div class="fx-label">'+label+'</div>'
+    +'<input class="fx-slider" type="range" min="'+min+'" max="'+max+'" value="'+sv+'" data-k="'+k+'" data-sc="'+sc+'" data-fl="'+(flip?1:0)+'" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+sv+'</div></div>';
+}
+function mskSlide(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
+  m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
+  if(m.origin==='depth'&&(el.dataset.k==='depLo'||el.dataset.k==='depHi'))delete m._refineCache; // range creates a fresh derived source; keep the user's refinement settings
+  el.nextElementSibling.textContent=el.dataset.k==='colHue'?Math.round(v)+'°':Math.round(v);
+  // Widening/narrowing the colour gate changes WHICH pixels are selected, so the mean value that
+  // "preserve modeling" anchors to has to be re-measured (debounced — it reads back the canvas).
+  if(el.dataset.k==='crRange'||el.dataset.k==='crRangeC')mskSrcVDebounced();
+  fxUpdate();
+}
+// hue(0-360)+sat(0-1) at a fixed 50% lightness -> #rrggbb, for the native <input type="color"> picker.
+function _hslToHex(h,s){
+  h=((h%360)+360)%360;const c=(1-Math.abs(2*0.5-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=0.5-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+  const to255=v=>Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#'+to255(r)+to255(g)+to255(b);
+}
+function _hexToHueSat(hex){
+  const n=parseInt(hex.slice(1),16),r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  let h=0;if(d>0){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360;}
+  const l=(mx+mn)/2,s=d===0?0:d/(1-Math.abs(2*l-1));
+  return[h,s];
+}
+function mskColSwatchSync(){
+  const pk=document.getElementById('msk-col-picker'),m=fxState.masks[mskSel];
+  if(pk&&m)pk.value=_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65);
+}
+function mskColPicked(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const[h,s]=_hexToHueSat(el.value);
+  m.colHue=h;m.colSat=Math.max(0.08,s); // floor sat so a near-grey pick still reads as a color, not a no-op tint
+  const hueSl=document.getElementById('msk-col-hue');
+  if(hueSl){hueSl.value=Math.round(h);hueSl.nextElementSibling.textContent=Math.round(h)+'°';}
+  fxUpdate();
+}
+// ══ SKIN TONE — colour-range gate + uniformity ══════════════════════════════════════════════
+// The Monk Skin Tone scale (Ellis Monk / Google, 2023) — 10 shades, CC BY 4.0, purpose-built for
+// imaging and finer-grained at the darker end than the alternatives. Used as the TARGET palette so
+// a tan tone can be aimed at even when it appears nowhere in the photo. Deliberately not the
+// Fitzpatrick scale: that classifies skin's UV reactivity and has no official RGB values.
+const MST_SWATCHES=['#f6ede4','#f3e7db','#f7ead0','#eadaba','#d7bd96','#a07e56','#825c43','#604134','#3a312a','#292420'];
+function _hexToRgb01(hex){const n=parseInt(hex.slice(1),16);return[((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255];}
+// Resolve a mask's TARGET tone to one hsv triple. Keeping the target independent of the gate
+// centre is the whole point: the gate says which pixels (must come from the photo), the target
+// says where they go (need not exist in the photo at all). Tan then nudges only the target — never
+// the pixels — which is why pushing it can't over-cook the parts that were already dark.
+// Mean of the picked samples. Hue is CIRCULAR — a plain average of 0.98 and 0.02 gives 0.5
+// (cyan) instead of 0.0 (red), and skin straddles the wrap point exactly (sheen sits just below
+// 1.0, matte skin just above 0.0), so this has to go through atan2 of the unit vectors.
+function crSampleMean(samples){
+  if(!samples||!samples.length)return{h:0,s:0,v:0};
+  let x=0,y=0,s=0,v=0;
+  for(const p of samples){const a=(p.h||0)*2*Math.PI;x+=Math.cos(a);y+=Math.sin(a);s+=p.s||0;v+=p.v||0;}
+  const n=samples.length;
+  let h=Math.atan2(y/n,x/n)/(2*Math.PI);if(h<0)h+=1;
+  return{h,s:s/n,v:v/n};
+}
+// ⚠️ Verified consistent across Print profiles: skinUniformity() runs in the LUT PASS, and Print
+// LUTs apply later in the comp pass (§3's pipeline order) — so a Monk swatch always resolves
+// against the pre-print graded pixel, never a print-shifted one. A swatch aims at the same place
+// regardless of which Print profile (or none) is selected.
+function mskSkinTarget(m){
+  let h,s,v;
+  if(m.tgtMode==='match'||!m.tgtMode){const mn=crSampleMean(m.crSamples);h=mn.h;s=mn.s;v=mn.v;}
+  else{const[r,g,b]=_hexToRgb01(m.tgtHex||'#d7bd96');[h,s,v]=rgb2oklch(r,g,b);}  // swatch/custom/ref are all absolute
+  const td=(m.tanDepth||0)/100,tw=(m.tanWarm||0)/100;
+  if(tw){ // rotate the target toward the warm skin hue, the short way round the wheel.
+    // 0.085 turn in OKLAB hue, not 25/360: Oklab's hue angles are not HSV's — skin measures
+    // h = 0.06..0.14 here where HSV placed it at 0.01..0.06.
+    const TAN_H=0.085;let dh=TAN_H-h;
+    if(dh>0.5)dh-=1;if(dh<-0.5)dh+=1;
+    h=(h+dh*tw+1)%1;
+  }
+  s=Math.min(0.4,s*(1+0.50*td));   // CHROMA now, not HSV saturation: real skin sits ~0.02..0.10
+  v=Math.max(0,v*(1-0.25*td));     // Oklab L is perceptual, so a given darkening reads stronger
+  return{h,s,v};
+}
+// Mean value (HSV V) of the pixels the colour gate actually passes — the anchor "preserve
+// modeling" needs so lightness uniformity can relocate the skin's overall LEVEL instead of
+// collapsing every pixel onto one flat value. Measured from the graded preview canvas (the space
+// the shader gate evaluates in), over a downsample so it stays cheap, and stored on the mask so
+// preview / loupe / every export tile all use the SAME number — re-measuring per tile would make
+// each tile converge to a different level and show up as blocks.
+// JS mirror of colRangeWeight() — MUST stay in step with the shader version, including the
+// max-over-samples union and the hHalf/sHalf formulas.
+const CR_CORE=0.45;   // must equal the shader's CR_CORE
+function _crAxisJS(d,half){
+  const core=CR_CORE*half;
+  if(d<=core)return 1;
+  const t=Math.min(1,Math.max(0,(d-core)/Math.max(half-core,1e-6)));
+  return 1-t*t;
+}
+function crWeightJS(h,C,samples,hRange,cRange){
+  if(!samples||!samples.length)return 1;
+  if(cRange==null)cRange=hRange;   // legacy 2-arg callers: chroma range follows hue range
+  const R=hRange/100,RC=cRange/100,hHalf=0.02+R*0.14,cHalf=0.012+RC*0.10;
+  let w=0;
+  for(const p of samples){
+    let dh=Math.abs(h-(p.h||0));if(dh>0.5)dh=1-dh;
+    const cw=_crAxisJS(dh,hHalf)*_crAxisJS(Math.abs(C-(p.s||0)),cHalf);
+    if(cw>w)w=cw;
+  }
+  // Chroma floor — mirrors colRangeWeight. Replaced the two luminance-gated cuts the HSV gate
+  // needed; see that function for the measurements behind the thresholds.
+  return w*_smoothstepJS(0.010,0.016,C);
+}
+// Shared downsample for mskMeasureSrcV — several Skin masks on one photo (e.g. one per person in
+// a group shot) each used to draw+readback their OWN 180px copy of FX.cv independently. A 50ms
+// cache (short relative to mskSrcVDebounced's 60ms debounce, so a genuinely new render still gets
+// a fresh readback) lets back-to-back measurements across masks share one canvas draw + one
+// getImageData call instead of paying for each separately.
+let _srcVFrameCache=null;
+function _srcVFrameData(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width)return null;
+  const now=performance.now();
+  if(_srcVFrameCache&&_srcVFrameCache.cvw===cv.width&&_srcVFrameCache.cvh===cv.height&&now-_srcVFrameCache.ts<50)
+    return _srcVFrameCache;
+  const N=180,cw=cv.width,ch=cv.height;
+  const sc=Math.min(1,N/Math.max(cw,ch)),tw=Math.max(1,Math.round(cw*sc)),th=Math.max(1,Math.round(ch*sc));
+  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+  try{tc.getContext('2d').drawImage(cv,0,0,tw,th);}catch(err){return null;}
+  const data=tc.getContext('2d').getImageData(0,0,tw,th).data;
+  _srcVFrameCache={cvw:cw,cvh:ch,tw,th,data,ts:now};
+  return _srcVFrameCache;
+}
+function mskMeasureSrcV(m){
+  if(!m||!m.crOn||!m.crSamples||!m.crSamples.length||!FX.cv){if(m){m.srcV=null;m.srcH=null;m.srcC=null;}return;}
+  _fxEnsureNormalRender();
+  const frame=_srcVFrameData();
+  if(!frame){m.srcV=null;m.srcH=null;m.srcC=null;return;}
+  const d=frame.data;
+  const R=(m.crRange!=null?m.crRange:35),RC=(m.crRangeC!=null?m.crRangeC:R);
+  // srcH/srcC (weighted circular hue mean, weighted chroma mean) are NOT fed to the shader — only
+  // srcV is. They exist so the "Now" swatch (see mskRebuild's skin/coat branch) can show the mean
+  // of the ACTUAL gated pixels rather than crSampleMean's mean of just the picked/seeded samples,
+  // which is what Preserve modeling's srcV already anchors to — the two numbers used to be able to
+  // disagree visibly on a lopsided selection, since one measured the picks and the other measured
+  // the region the picks selected.
+  let acc=0,wsum=0,hx=0,hy=0,cacc=0;
+  for(let i=0;i<d.length;i+=4){
+    const[h,C,L]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
+    const w=crWeightJS(h,C,m.crSamples,R,RC);if(w<=0)continue;
+    acc+=w*L;wsum+=w;   // srcV is Oklab L — the space the shader compares it against
+    const a=h*2*Math.PI;hx+=w*Math.cos(a);hy+=w*Math.sin(a);cacc+=w*C;
+  }
+  m.srcV=wsum>1e-6?acc/wsum:null;   // null => the shader falls back to the target's own value
+  if(wsum>1e-6){
+    let hh=Math.atan2(hy/wsum,hx/wsum)/(2*Math.PI);if(hh<0)hh+=1;
+    m.srcH=hh;m.srcC=cacc/wsum;
+  }else{m.srcH=null;m.srcC=null;}
+}
+let _mskSrcVT=null;
+function mskSrcVDebounced(){clearTimeout(_mskSrcVT);_mskSrcVT=setTimeout(()=>{
+  const m=fxState.masks[mskSel];if(!m)return;
+  mskMeasureSrcV(m);fxUpdate();
+},60);}
+let _mskCrEyeActive=false;

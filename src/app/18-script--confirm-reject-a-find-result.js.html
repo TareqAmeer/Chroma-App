@@ -1,0 +1,313 @@
+// ── Confirm/reject a Find result ──────────────────────────────────────────────────────────────
+// subject_locate has no presence signal (subject.rs) and the score can't distinguish a hit from a
+// miss (both measure 0.70-0.79) — so unlike the outlier-reference heuristic (which has real vector
+// data to work with), this can only ever be a per-SUBJECT tally, not "which reference is at
+// fault": a Find queries the merged prototype, not one reference. Still a real, cheap signal that
+// nothing else here provides — repeated user-marked misses on one subject means something about
+// its references (collectively) isn't working, worth surfacing even without pinpointing which one.
+function _subjFindStatsKey(subjId){return 'cs.subjFindStats.'+subjId;}
+function _subjFindStatsGet(subjId){
+  try{const v=JSON.parse(localStorage.getItem(_subjFindStatsKey(subjId))||'null');return(v&&Array.isArray(v.ok))?v:{ok:[]};}
+  catch(e){return{ok:[]};}
+}
+function _subjFindStatsRecord(subjId,wasOk){
+  const s=_subjFindStatsGet(subjId);
+  s.ok.push(!!wasOk);
+  if(s.ok.length>10)s.ok=s.ok.slice(-10);   // rolling window — old feedback about old references shouldn't haunt a subject forever
+  try{localStorage.setItem(_subjFindStatsKey(subjId),JSON.stringify(s));}catch(e){}
+  return s;
+}
+function subjFindConfirm(wasOk){
+  const m=fxState.masks[mskSel];
+  if(!m||!m._subjPending)return;
+  const{subjId,subjName}=m._subjPending;
+  _subjFindStatsRecord(subjId,wasOk);
+  if(wasOk)_subjRecordSighting(subjName,m,true);
+  delete m._subjPending;
+  if(!wasOk)toast(`Noted — check ${subjName}'s references (⋯ menu) if this keeps happening`,true);
+  mskRebuild();
+}
+function _subjFindStatsHint(subjId){
+  const s=_subjFindStatsGet(subjId);
+  if(s.ok.length<3)return '';
+  const wrong=s.ok.filter(v=>!v).length;
+  if(wrong/s.ok.length<0.4)return '';
+  return ' <span style="color:var(--warn,#c90)" title="'+wrong+' of your last '+s.ok.length+' Finds for this subject were marked wrong — its references may need attention.">⚠ '+wrong+'/'+s.ok.length+' recent misses</span>';
+}
+function mskDelete(){if(mskSel<0)return;
+  if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
+  fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();}
+function mskInvert(){const m=fxState.masks[mskSel];if(!m)return;m.invert=!m.invert;if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();}
+// Lightroom-style "Duplicate" / "Duplicate Inverted" from a mask's own context menu.
+// _mskCloneLive round-trips through the snapshot form so a brush/sky/AI raster (a typed array)
+// is copied, not aliased — painting on the duplicate must not paint on the original.
+function mskDuplicate(inverted){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const d=_mskCloneLive(m);
+  d.id=_mskNewId(); // a duplicate is an independent operand identity
+  delete d.name; // let mskAutoLabel derive a fresh "<Origin> N" rather than duplicating the name too
+  if(inverted)d.invert=!d.invert;
+  fxState.masks.splice(mskSel+1,0,d);
+  mskSel=mskSel+1;_mskTexDirty=true;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Explicit opt-in for the one case masks ARE meant to be shared across a batch: deep-clones
+// the CURRENT photo's mask set onto every other loaded photo, overwriting whatever masks they
+// had. Masks are per-photo by default (see installFXImages/fxSelectImage) specifically so this
+// never happens silently — this button is the only path that does it, and it says so.
+function mskCopyToAll(){
+  if(_mskSemanticCopyJob)return;
+  if(fxImages.length<2)return;
+  fxImages[fxCurIdx].masks=fxState.masks; // persist the source photo's own array first
+  // Each target photo needs its OWN raster, not a shared reference — painting on one photo must
+  // not paint on the rest. _mskCloneLive round-trips through the snapshot form, which copies the
+  // typed array (a JSON clone would have turned it into an object and silently lost the mask).
+  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(_mskCloneLive);
+  if(fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky'))log('Static copy: AI and sky raster pixels were copied as-is from the source photo. Use “Copy + re-evaluate” to regenerate supported selections.','warn');
+  if(typeof hapt==='function')hapt();
+  toast(`Copied ${fxState.masks.length} mask(s) as-is to ${fxImages.length-1} other photo(s)`,true);
+}
+
+let _mskSemanticCopyJob=null,_mskSemanticCopyUndo=null;
+function _mskPortableMaskSignature(masks){
+  return JSON.stringify((masks||[]).map(m=>{
+    const px=m&&m.px;let hash=2166136261;
+    if(px)for(let i=0;i<px.length;i++){hash^=px[i];hash=Math.imul(hash,16777619);}
+    return[_mskToSnap(m,true),m&&m.mtW||0,m&&m.mtH||0,px?px.length:0,hash>>>0];
+  }));
+}
+async function _mskPortableCopyProcess(sourceMasks,targets,deps){
+  const results=[];
+  for(let ti=0;ti<targets.length;ti++){
+    const target=targets[ti];
+    if(deps.cancelled()){
+      for(let ri=ti;ri<targets.length;ri++)results.push({item:targets[ri].item,status:'cancelled',message:'Cancelled before processing'});
+      break;
+    }
+    deps.progress(ti,target,results);
+    const unsupported=sourceMasks.filter(deps.isUnsupported);
+    if(unsupported.length){
+      results.push({item:target.item,status:'skipped',message:'Unsupported AI mask(s): '+unsupported.map(m=>m.name||m.origin||m.id).join(', ')});
+      continue;
+    }
+    try{
+      await deps.select(target);
+      if(deps.cancelled()){results.push({item:target.item,status:'cancelled',message:'Cancelled'});continue;}
+      if(deps.current()!==target.item){results.push({item:target.item,status:'stale',message:'Active photo changed before recomputation'});continue;}
+      const beforeSignature=deps.signature(target.item);
+      const candidates=sourceMasks.map(deps.clone);
+      let warning='';
+      for(const candidate of candidates){
+        if(!deps.needsReevaluation(candidate))continue;
+        deps.clearSourceRaster(candidate);
+        const outcome=await deps.reevaluate(candidate,target);
+        if(!outcome||!outcome.ok)throw new Error(outcome&&outcome.error||'Mask recomputation failed');
+        if(outcome.warning)warning+=(warning?'; ':'')+outcome.warning;
+        if(deps.cancelled())throw new Error('Cancelled while recomputing this photo');
+        if(deps.current()!==target.item)throw new Error('Active photo changed during recomputation');
+      }
+      if(deps.cancelled()){results.push({item:target.item,status:'cancelled',message:'Cancelled'});continue;}
+      if(deps.current()!==target.item)throw new Error('Active photo changed before commit');
+      if(deps.signature(target.item)!==beforeSignature)throw new Error('Target masks changed during recomputation; existing edits were preserved');
+      const committed=await deps.commit(target,candidates);
+      const messages=[warning,committed&&committed.warning].filter(Boolean);
+      results.push({item:target.item,status:'applied',message:messages.join('; ')||'Re-evaluated supported masks'});
+    }catch(e){
+      const cancelled=deps.cancelled();
+      results.push({item:target.item,status:cancelled?'cancelled':'failed',message:String(e&&e.message||e)});
+      if(cancelled){for(let ri=ti+1;ri<targets.length;ri++)results.push({item:targets[ri].item,status:'cancelled',message:'Cancelled before processing'});break;}
+    }
+  }
+  return results;
+}
+async function _mskPortableUndoProcess(entries,restoreTarget,deps){
+  const results=[],remaining=[];
+  try{
+    for(let i=0;i<entries.length;i++){
+      const entry=entries[i];
+      if(deps.cancelled()){remaining.push(...entries.slice(i));break;}
+      if(deps.signature(entry.item)!==entry.afterSignature){results.push({item:entry.item,status:'conflict',message:'Changed since copy; preserved current masks'});continue;}
+      try{
+        await deps.select(entry);
+        if(deps.cancelled()){remaining.push(...entries.slice(i));break;}
+        if(deps.current()!==entry.item||deps.signature(entry.item)!==entry.afterSignature){
+          results.push({item:entry.item,status:'conflict',message:'Changed before undo; preserved current masks'});continue;
+        }
+        await deps.restore(entry);results.push({item:entry.item,status:'undone',message:'Original masks restored'});
+      }catch(e){
+        remaining.push(entry);results.push({item:entry.item,status:'failed',message:'Undo save failed: '+String(e&&e.message||e)});
+      }
+    }
+  }finally{
+    if(deps.canRestoreFocus())await deps.restoreFocus(restoreTarget);
+  }
+  return{results,remaining};
+}
+function _mskPortablePublish(job,results,stage){
+  const done=results.length,total=job.targets.length,applied=results.filter(r=>r.status==='applied').length;
+  const failed=results.filter(r=>r.status!=='applied'&&r.status!=='cancelled').map(r=>`${r.item.name||'Photo'}: ${r.message}`);
+  const cancelled=job.cancelled||results.some(r=>r.status==='cancelled');
+  const perPhoto=results.map(r=>`${r.item.name||'Photo'}: ${r.status}${r.message&&(r.status!=='applied'||r.message!=='Re-evaluated supported masks')?` (${r.message})`:''}`).join(' · ');
+  const current=results.length?`${applied} applied · ${results.filter(r=>r.status==='skipped').length} skipped · ${results.filter(r=>r.status==='failed'||r.status==='stale').length} failed · ${results.filter(r=>r.status==='cancelled').length} cancelled${perPhoto?' — '+perPhoto:''}${stage==='working'&&job.current?' · '+job.current:''}`:job.current||'Preparing';
+  if(typeof window.libActivityJob==='function')window.libActivityJob('mask-semantic-copy',{jobId:job.id,label:'Copy + re-evaluate masks',stage,done,total,current,
+    outcome:stage==='done'?(cancelled?'cancelled':failed.length?'partial':'completed'):undefined,failed:failed.length?failed:undefined,
+    cancelFn:stage==='working'?()=>{job.cancelled=true;job.current='Cancellation requested; finishing current model call…';}:null});
+}
+async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=curItem()){
+  if(typeof window.chromasmithSaveMaskSetForCurrentPhoto==='function')return await window.chromasmithSaveMaskSetForCurrentPhoto(masksToWrite,expectedMasks,targetItem);
+  throw new Error('Per-photo mask persistence is unavailable for this target');
+}
+function _mskPortableIsUnsupported(m){
+  if(m.origin==='sky')return false;
+  return mskIsAI(m)&&!(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));
+}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));}
+async function _mskPortableReevaluate(m,target){
+  const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
+  const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';
+  const hasBox=!!(m&&m.aiBox&&_samNormalizeBox(m.aiBox));
+  if(savedBackend==='sam_box'&&!hasBox)return{ok:false,error:'Saved EdgeSAM box provenance cannot be replayed because this mask has no valid rectangle prompt'};
+  if(hasBox&&savedBackend&&savedBackend!=='sam_box')return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
+  if(m.origin==='sky'){
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
+    const refinement={feather:m.refineFeather,edge:m.refineEdge};
+    mskGenerateSky(m); // Reads the currently selected target photo; never retain source pixels.
+    // Sky redetection resets derived controls by design; semantic copy carries user intent to the
+    // target raster, so restore those per-mask settings before optional SAM refinement.
+    m.refineFeather=refinement.feather;m.refineEdge=refinement.edge;
+    if(!m.px||!m.px.length)return{ok:false,error:'Sky heuristic could not read this photo'};
+    m.aiPoints=_skySeedPoints(m);
+    _mskRecordAIProvenance(m,target.item,null,true);
+    if(m.aiPoints.length){
+      const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
+      if(!result.ok&&/Photo changed/.test(result.error||''))return{ok:false,error:result.error};
+      if(!result.ok&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement is unavailable for this target ('+result.error+')'};
+      if(!result.ok)return{ok:true,warning:'Sky heuristic regenerated for target; SAM refinement unavailable ('+result.error+')'};
+    }
+    if(!m.aiPoints.length&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement could not run because no stable prompt points were regenerated'};
+    return{ok:true,warning:m.aiPoints.length?'Sky selection regenerated and SAM-refined':'Sky heuristic regenerated; no stable SAM seed points'};
+  }
+  const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
+  return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
+}
+async function mskCopyAndReevaluate(){
+  if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;
+  if(!window.__TAURI__){log('Copy + re-evaluate needs the desktop app with on-device SAM. Static copy remains available.','warn');return;}
+  if(typeof window.chromasmithFlushPendingSave==='function')await window.chromasmithFlushPendingSave();
+  const sourceIndex=fxCurIdx,sourceItem=fxImages[sourceIndex],sourceSelection=mskSel;
+  const sourceMasks=fxState.masks.map(_mskCloneLive);
+  const targets=fxImages.map((item,index)=>({item,index,label:item.name||`Photo ${index+1}`,hadMasks:Object.prototype.hasOwnProperty.call(item,'masks')})).filter(t=>t.index!==sourceIndex);
+  const job={id:'mask-copy-'+Date.now()+'-'+Math.random().toString(36).slice(2),sourceIndex,sourceItem,sourceSelection,targets,
+    cancelled:false,internalSwitch:false,expectedIndex:sourceIndex,current:'Preparing'};
+  _mskSemanticCopyJob=job;mskRebuild();_mskPortablePublish(job,[],'working');
+  const undoEntries=[];
+  try{
+    const results=await _mskPortableCopyProcess(sourceMasks,targets,{
+      cancelled:()=>job.cancelled||fxCurIdx!==job.expectedIndex,
+      current:()=>curItem(),
+      signature:item=>_mskPortableMaskSignature(item===curItem()?fxState.masks:(item.masks||[])),
+      clone:_mskCloneLive,
+      isUnsupported:_mskPortableIsUnsupported,
+      needsReevaluation:_mskPortableNeedsReevaluation,
+      clearSourceRaster:m=>{m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;delete m._refineCache;delete m._refineSourceHash;},
+      select:async target=>{job.current=`Opening ${target.label}`;job.internalSwitch=true;try{fxSelectImage(target.index);job.expectedIndex=target.index;}finally{job.internalSwitch=false;}},
+      progress:(i,target,results)=>{job.current=`${i+1}/${targets.length}: ${target.label}`;_mskPortablePublish(job,results,'working');},
+      reevaluate:_mskPortableReevaluate,
+      commit:async(target,candidates)=>{
+        const hadMasks=target.hadMasks;
+        const liveBefore=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+        const before=liveBefore.map(_mskCloneLive);
+        // Persist the target-only candidate before changing editor state. This keeps a failed
+        // sidecar write atomic and prevents fxUpdate/autosave from broadcasting a half-commit.
+        const saveResult=await _mskPersistPortableCurrent(candidates,before,target.item);
+        const stillBefore=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+        if(_mskPortableMaskSignature(stillBefore)!==_mskPortableMaskSignature(before)){
+          const latest=stillBefore.map(_mskCloneLive),latestSignature=_mskPortableMaskSignature(latest);
+          try{await _mskPersistPortableCurrent(latest,candidates,target.item);}
+          catch(e){throw new Error('Target masks changed during save; latest sidecar recovery failed ('+String(e&&e.message||e)+')');}
+          const afterRecovery=target.item===curItem()?fxState.masks:(target.item.masks||[]);
+          if(_mskPortableMaskSignature(afterRecovery)!==latestSignature)throw new Error('Target changed again during sidecar recovery; check the latest mask edits before continuing');
+          throw new Error('Target masks changed during save; latest edits were restored to the sidecar');
+        }
+        target.item.masks=candidates;
+        if(target.item===curItem()){
+          fxState.masks=candidates;mskSel=Math.min(sourceSelection,candidates.length-1);
+          _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();
+        }
+        undoEntries.push({item:target.item,index:target.index,hadMasks,before,after:candidates,afterSignature:_mskPortableMaskSignature(candidates)});
+        const warnings=[];
+        if(saveResult&&saveResult.queued)warnings.push('Saved to the offline edit queue');
+        return warnings.length?{warning:warnings.join('; ')}:null;
+      }
+    });
+    if(undoEntries.length)_mskSemanticCopyUndo={entries:undoEntries,sourceIndex,sourceItem,sourceSelection};
+    _mskPortablePublish(job,results,'done');
+    const applied=results.filter(r=>r.status==='applied').length,skipped=results.filter(r=>r.status==='skipped').length,failed=results.filter(r=>r.status==='failed'||r.status==='stale').length;
+    results.forEach(r=>log(`${r.item.name||'Photo'}: ${r.status}${r.message?` — ${r.message}`:''}`,r.status==='applied'?'ok':r.status==='cancelled'?'info':'warn'));
+    log(`Mask re-evaluation: ${applied} applied, ${skipped} skipped, ${failed} failed${job.cancelled?' (cancelled)':''}. This batch has its own guarded Undo action in the mask panel.`,'info');
+  }catch(e){
+    if(undoEntries.length)_mskSemanticCopyUndo={entries:undoEntries,sourceIndex,sourceItem,sourceSelection};
+    const result={item:sourceItem,status:'failed',message:String(e&&e.message||e)};
+    _mskPortablePublish(job,[result],'done');log('Mask re-evaluation failed: '+result.message,'err');
+  }finally{
+    const ownsCurrent=fxCurIdx===job.expectedIndex&&(curItem()===sourceItem||curItem()===fxImages[job.expectedIndex]);
+    if(ownsCurrent&&fxImages[sourceIndex]===sourceItem){job.internalSwitch=true;try{fxSelectImage(sourceIndex);mskSel=sourceSelection;mskRebuild();fxUpdate();renderPreview();}finally{job.internalSwitch=false;}}
+    _mskSemanticCopyJob=null;mskRebuild();
+  }
+}
+async function mskUndoPortableCopy(){
+  const undo=_mskSemanticCopyUndo;if(!undo||_mskSemanticCopyJob)return;
+  // Undo focus is the photo selected when the user starts Undo, not the source photo from copy.
+  const restoreTarget={item:curItem(),index:fxCurIdx,selection:mskSel};
+  const entries=[...undo.entries];
+  const job={id:'mask-copy-undo-'+Date.now(),sourceIndex:restoreTarget.index,sourceItem:restoreTarget.item,
+    sourceSelection:restoreTarget.selection,targets:entries.map(e=>({item:e.item,index:e.index,label:e.item.name||`Photo ${e.index+1}`})),
+    cancelled:false,internalSwitch:false,expectedIndex:restoreTarget.index,current:'Undoing'};
+  _mskSemanticCopyJob=job;mskRebuild();
+  let summary;
+  try{
+    summary=await _mskPortableUndoProcess(entries,restoreTarget,{
+      cancelled:()=>job.cancelled||fxCurIdx!==job.expectedIndex,
+      current:()=>curItem(),
+      signature:item=>_mskPortableMaskSignature(item===curItem()?fxState.masks:(item.masks||[])),
+      select:async entry=>{job.internalSwitch=true;try{fxSelectImage(entry.index);job.expectedIndex=entry.index;}finally{job.internalSwitch=false;}},
+      restore:async entry=>{
+        const copied=(entry.item===curItem()?fxState.masks:(entry.item.masks||[])).map(_mskCloneLive);
+        const restored=entry.before.map(_mskCloneLive);
+        await _mskPersistPortableCurrent(restored,copied,entry.item);
+        const current=(entry.item===curItem()?fxState.masks:(entry.item.masks||[]));
+        if(_mskPortableMaskSignature(current)!==entry.afterSignature){
+          const latest=current.map(_mskCloneLive),latestSignature=_mskPortableMaskSignature(latest);
+          try{await _mskPersistPortableCurrent(latest,restored,entry.item);}
+          catch(e){throw new Error('Target masks changed during undo save; latest sidecar recovery failed ('+String(e&&e.message||e)+')');}
+          const afterRecovery=entry.item===curItem()?fxState.masks:(entry.item.masks||[]);
+          if(_mskPortableMaskSignature(afterRecovery)!==latestSignature)throw new Error('Target changed again during undo sidecar recovery; check the latest mask edits before continuing');
+          throw new Error('Target masks changed during undo save; latest edits were restored to the sidecar');
+        }
+        if(entry.hadMasks)entry.item.masks=restored;else delete entry.item.masks;
+        if(entry.item===curItem()){
+          fxState.masks=restored;mskSel=Math.min(restoreTarget.selection,restored.length-1);
+          _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();
+        }
+      },
+      canRestoreFocus:()=>fxCurIdx===job.expectedIndex&&fxImages[restoreTarget.index]===restoreTarget.item,
+      restoreFocus:async target=>{job.internalSwitch=true;try{fxSelectImage(target.index);mskSel=target.selection;mskRebuild();fxUpdate();renderPreview();}finally{job.internalSwitch=false;}}
+    });
+    _mskSemanticCopyUndo=summary.remaining.length?{...undo,entries:summary.remaining}:null;
+    const undone=summary.results.filter(r=>r.status==='undone').length;
+    const details=summary.results.filter(r=>r.status!=='undone').map(r=>`${r.item.name||'Photo'}: ${r.message}`);
+    log(`Mask re-evaluation undo: ${undone} photo(s) restored${details.length?`; ${details.join('; ')}`:''}.`,'info');
+  }finally{
+    _mskSemanticCopyJob=null;mskRebuild();
+  }
+}
+
+function mskCancelPortableCopy(){
+  if(!_mskSemanticCopyJob)return;
+  _mskSemanticCopyJob.cancelled=true;
+  _mskSemanticCopyJob.current='Cancellation requested; finishing current model call…';
+  _mskPortablePublish(_mskSemanticCopyJob,[],'working');mskRebuild();
+}

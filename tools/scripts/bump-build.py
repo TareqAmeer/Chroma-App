@@ -31,7 +31,7 @@ print("BUILD ->", new)
 
 # Keep src/app/ (docs/plans/refactor-plan.md) in step: patch the staged + working segment that holds the stamp.
 import glob, os
-for seg in sorted(glob.glob("src/app/*-script.js.html")):
+for seg in sorted(glob.glob("src/app/*-script*.js.html")):
     try:
         staged_seg = sh("git", "show", ":" + seg).decode("utf-8")
     except subprocess.CalledProcessError:

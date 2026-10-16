@@ -1,0 +1,217 @@
+// ── More than one instance of a taught subject in one photo (a litter, two dogs, etc) ──────────
+// subjFind is an argmax — one point, one mask. subject_locate_multi (subject.rs's locate_topk)
+// instead returns several separated candidate points; each is handed to the SAME single-point
+// sam_points/sam2_points decoder a manual scribble tap already uses, installed as its OWN new
+// mask rather than overwriting the current one, so multiple instances end up independently
+// adjustable exactly like any other set of masks.
+let _subjMultiResults=null,_subjMultiBusy=false;
+// "Instance separation" controls locate_topk's min_cell_dist (Rust, main.rs) — how far apart (in
+// the 64x64 feature grid) two candidates must be to count as separate instances rather than the
+// same blob's own neighbouring cells. Close suits a litter of small, tightly-packed subjects;
+// Far suits two large subjects that could otherwise both claim cells inside the same margin.
+// Persisted across calls in this module (not per-subject) since it's a "how does this photo look"
+// setting, not a per-subject one.
+const SUBJ_SEP_PRESETS={close:3,normal:6,far:12};
+let _subjSep='normal',_subjMaxN=4;
+async function subjFindInstances(idx){
+  if(_subjMultiBusy)return;
+  const s=(_subjects||[])[idx];if(!s)return;
+  await samEnsureEncoded();
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — try again in a moment');return;}
+  _subjMultiBusy=true;_subjMultiResults=null;mskRebuild();
+  try{
+    const hits=await window.__TAURI__.core.invoke('subject_locate_multi',{token,id:s.id,maxN:_subjMaxN,minCellDist:SUBJ_SEP_PRESETS[_subjSep]||6});
+    _subjMultiResults={subjIdx:idx,name:s.name,hits:hits||[]};
+    if(!hits||hits.length<2)toast(`${s.name}: only one distinct location found`,true);
+  }catch(e){
+    const raw=String(e&&e.message||e);
+    toast(/encoder-mismatch/.test(raw)?`${s.name} was taught with a different model — re-teach it on a photo`:'Could not scan for instances — '+raw);
+  }finally{_subjMultiBusy=false;mskRebuild();}
+}
+function subjSetSep(v){_subjSep=v;if(_subjMultiResults)subjFindInstances(_subjMultiResults.subjIdx);else mskRebuild();}
+function subjSetMaxN(v){_subjMaxN=Math.max(2,Math.min(8,parseInt(v)||4));if(_subjMultiResults)subjFindInstances(_subjMultiResults.subjIdx);else mskRebuild();}
+/// Installs one candidate point as a brand-new AI mask (not overwriting the current selection),
+/// via the exact same accumulated-point path a manual scribble stroke uses.
+async function subjUseInstance(hitIdx){
+  const r=_subjMultiResults;if(!r||!r.hits[hitIdx])return;
+  const hit=r.hits[hitIdx];
+  mskAdd('ai');
+  const m=fxState.masks[fxState.masks.length-1];
+  if(!m)return;
+  m.aiPoints=[{nx:hit.x,ny:hit.y,positive:true}];
+  mskSel=fxState.masks.length-1;
+  await samRunPoints(m);
+  // Used to clear _subjMultiResults here, which meant the SECOND candidate could never be added
+  // without re-running the whole scan — self-defeating for a feature whose entire point is "there
+  // are several of these, handle each". The list is only cleared on an actual photo switch now
+  // (fxSelectImage), which is when it would genuinely go stale.
+  mskRebuild();
+  toast(`${r.name} — added as a new mask`,true);
+}
+// Companion to subjUseInstance: adds the SAME candidate as an eraser mask instead of a plain one.
+// isExclude subtracts from every other non-eraser mask (mskMoreMenu's "Use as eraser" already does
+// this by hand for any existing mask) — building "every instance except this one" used to mean
+// Add-as-new-mask then a separate trip to that mask's own ⋯ menu; one click here does both.
+async function subjExcludeInstance(hitIdx){
+  const r=_subjMultiResults;if(!r||!r.hits[hitIdx])return;
+  const hit=r.hits[hitIdx];
+  mskAdd('ai');
+  const m=fxState.masks[fxState.masks.length-1];
+  if(!m)return;
+  m.isExclude=true;m.name=r.name+' (excluded)';
+  m.aiPoints=[{nx:hit.x,ny:hit.y,positive:true}];
+  mskSel=fxState.masks.length-1;
+  await samRunPoints(m);
+  mskRebuild();
+  toast(`${r.name} — added as an eraser (excluded from other masks)`,true);
+}
+function subjMultiResultsHtml(){
+  const r=_subjMultiResults;if(!r)return '';
+  const rows=r.hits.map((h,i)=>
+    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1">Candidate '+(i+1)+'</div>'
+    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjUseInstance('+i+')">Add as new mask</button>'
+    +'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjExcludeInstance('+i+')" title="Add this one as an eraser instead — subtracted from every other mask, for building \'every instance except this one\'.">Exclude instead</button></div>').join('');
+  const sepRow='<div class="fx-row" style="align-items:center;gap:6px" title="How far apart two candidates must be to count as separate instances rather than the same subject\'s own neighbouring cells. Tighten for a litter of small, closely-packed subjects; loosen for two large ones."><div class="fx-label" style="order:1">Separation</div>'
+    +'<div class="seg" style="order:2">'+['close','normal','far'].map(k=>'<button class="'+(_subjSep===k?'on':'')+'" onclick="subjSetSep(\''+k+'\')">'+k[0].toUpperCase()+k.slice(1)+'</button>').join('')+'</div></div>';
+  const maxRow='<div class="fx-row" style="align-items:center;gap:6px" title="Most instances to look for."><div class="fx-label" style="order:1">Max instances</div>'
+    +'<input class="fx-slider" style="order:2" type="range" min="2" max="8" step="1" value="'+_subjMaxN+'" oninput="this.nextElementSibling.textContent=this.value" onchange="subjSetMaxN(this.value)">'
+    +'<div class="fx-val" style="order:3">'+_subjMaxN+'</div></div>';
+  return '<div class="fx-sub" style="margin-top:6px">Possible instances of '+_esc(r.name)+'</div>'
+    +sepRow+maxRow
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No additional distinct locations found.</div>')
+    +'<div class="msk-hint">Each candidate becomes its own mask so you can check, adjust or delete it independently. Not a confidence ranking — check each on the photo.</div>';
+}
+function subjMenu(idx,ev){
+  const s=(_subjects||[])[idx];if(!s)return;
+  ev&&ev.stopPropagation();
+  const outlierNotes=_subjRefOutlierNotes(s);
+  const refItems=(s.refs||[]).map((r,j)=>({label:(r.label||r.id)+outlierNotes[j],fn:()=>subjRefMenu(s,r,idx,ev),img:_subjThumbGet(s.id,r.id)}));
+  const items=[
+    {label:'Rename…',fn:async()=>{
+      const n=(await askTextModal('Rename subject','',s.name)||'').trim();if(!n)return;
+      // ⚠️ This comment used to claim rename "rides the same upsert as teaching, re-sending the
+      // first reference" — checked against subject.rs's actual rename_subject() and that's not
+      // what happens: it's a plain name-field update with no reference touched at all, so
+      // renaming can never drop, reorder or duplicate a reference. Fixing the stale claim here
+      // rather than leaving a future reader to re-derive it from the Rust source.
+      try{await window.__TAURI__.core.invoke('subject_rename',{id:s.id,name:n});await subjRefresh();mskRebuild();}
+      catch(e){toast('Rename failed — '+(e&&e.message||e));}
+    }},
+    {label:'References…',fn:()=>_subjPopup(refItems.length?refItems:[{label:'No references',fn:()=>{}}],ev)},
+    // Covers "taught the same subject twice under two names" — subject_locate has no presence
+    // signal (subject.rs), so noticing that only after a second "Remember" is the normal case,
+    // not a mistake to avoid entirely. Only offered when there's something to merge into.
+    ...((_subjects||[]).length>1?[{label:'Merge into…',fn:()=>{
+      const others=(_subjects||[]).filter(o=>o.id!==s.id)
+        .map(o=>({label:o.name,fn:async()=>{
+          // Preview before committing — a merge deletes `s` outright and there's no undo for it
+          // once the Rust side has rewritten subjects.json. Overlap is computed CLIENT-SIDE from
+          // data already in `_subjects`, not a guess: it's the same by-id de-dup merge_subjects
+          // itself does, just run here first to show the number instead of finding out after.
+          const sIds=new Set((s.refs||[]).map(r=>r.id)),oIds=new Set((o.refs||[]).map(r=>r.id));
+          const overlap=[...sIds].filter(id=>oIds.has(id)).length;
+          const totalAfter=oIds.size+sIds.size-overlap;
+          const msg=`Merge "${s.name}" into "${o.name}"?\n\n`
+            +`"${o.name}" will end up with ${totalAfter} reference${totalAfter===1?'':'s'} `
+            +`(${o.refs.length} + ${s.refs.length}${overlap?`, ${overlap} shared`:''}).\n\n`
+            +`"${s.name}" will be deleted. This can't be undone from the UI.`;
+          if(!(await confirmModal(msg,'Merge')))return;
+          try{
+            await window.__TAURI__.core.invoke('subject_merge',{keepId:o.id,otherId:s.id});
+            // Thumbnails are keyed by (subjId, refId) and never leave the client — a merge on the
+            // RUST side moves references from s.id to o.id in subjects.json, so without this the
+            // absorbed references' thumbnails would just orphan under a subject id nothing points
+            // to any more, and the merged list would show broken/missing thumbs for them.
+            (s.refs||[]).forEach(r=>{
+              const t=_subjThumbGet(s.id,r.id);
+              if(t){localStorage.setItem(_subjThumbKey(o.id,r.id),t);_subjThumbRemove(s.id,r.id);}
+            });
+            await subjRefresh();mskRebuild();
+            toast(`${s.name} merged into ${o.name}`,true);
+          }catch(e){toast('Could not merge — '+(e&&e.message||e));}
+        }}));
+      _subjPopup(others,ev);
+    }}]:[]),
+    {label:'Forget '+s.name,fn:async()=>{
+      try{
+        await window.__TAURI__.core.invoke('subject_delete',{id:s.id});
+        (s.refs||[]).forEach(r=>_subjThumbRemove(s.id,r.id));
+        await subjRefresh();mskRebuild();toast('Forgot '+s.name,true);
+      }catch(e){toast('Could not forget — '+(e&&e.message||e));}
+    }},
+  ];
+  _subjPopup(items,ev);
+}
+/// Sub-menu for ONE reference: rename its label, replace it with the current selection (same
+/// concept as re-teaching from that photo, but explicit — doesn't require the photo whose path
+/// originally produced this reference to still be the one open), or remove it.
+function subjRefMenu(s,r,idx,parentEv){
+  const items=[
+    {label:'Rename…',fn:async()=>{
+      const n=(await askTextModal('Rename reference',r.id,r.label||'')||'').trim();if(!n)return;
+      try{await window.__TAURI__.core.invoke('subject_rename_ref',{id:s.id,refId:r.id,label:n});await subjRefresh();mskRebuild();}
+      catch(e){toast('Rename failed — '+(e&&e.message||e));}
+    },img:_subjThumbGet(s.id,r.id)},
+    {label:'Replace with current selection',fn:()=>subjReplaceRef(idx,r.id),img:_subjThumbGet(s.id,r.id)},
+    {label:'Remove reference',fn:()=>subjRemoveRef(s.id,r.id)},
+  ];
+  _subjPopup(items,parentEv);
+}
+/// Re-teaches under the SAME reference id `r.id` rather than deriving one from the current photo
+/// — subject.rs's upsert_subject already replaces a reference in place when the id matches
+/// (`existing.refs.iter_mut().find(|r| r.id == reference.id)`), so this is a one-click "swap this
+/// specific bad reference for a better shot of the same subject" instead of the two-step
+/// remove-then-re-teach-and-hope-the-new-refId-doesn't-collide dance.
+async function subjReplaceRef(idx,refId){
+  const s=(_subjects||[])[idx];if(!s)return;
+  const m=fxState.masks[mskSel];
+  if(!m||!m.px||!m.px.length){toast('Select the replacement subject first — scribble over it');return;}
+  const token=subjToken();
+  if(!token){toast('This photo is not prepared yet — scribble once to run AI Select');return;}
+  const raster=new Uint8Array(m.px.length);raster.set(m.px);
+  _subjBusy=true;mskRebuild();
+  try{
+    const item=(typeof curItem==='function')?curItem():null;
+    const refLabel=(item&&item.name)||refId;
+    _subjThumbRemove(s.id,refId);_subjSaveThumb(s.id,refId,m);
+    await _samFramedInvoke('subject_learn',{id:s.id,name:s.name,token,refId,refLabel},raster);
+    await subjRefresh();mskRebuild();
+    const density=_subjSelectionDensity(m);
+    if(density!=null&&density<0.35)log(`Loose selection (${Math.round(density*100)}% of its own box is actually painted) for this replacement — a tighter scribble usually helps.`,'warn');
+    toast(`Replaced reference for ${s.name}`,true);
+  }catch(e){toast('Could not replace — '+(e&&e.message||e));}
+  finally{_subjBusy=false;mskRebuild();}
+}
+async function subjRemoveRef(id,refId){
+  try{
+    const s=await window.__TAURI__.core.invoke('subject_remove_ref',{id,refId});
+    _subjThumbRemove(id,refId);
+    await subjRefresh();mskRebuild();
+    toast(s?`Removed — ${(s.refs||[]).length} reference${(s.refs||[]).length===1?'':'s'} left`:'That was its last reference — subject forgotten',true);
+  }catch(e){toast('Could not remove — '+(e&&e.message||e));}
+}
+function _subjPopup(items,ev){
+  document.querySelectorAll('.subj-pop').forEach(n=>n.remove());
+  const pop=document.createElement('div');
+  pop.className='subj-pop';
+  pop.style.cssText='position:fixed;z-index:var(--z-system);background:var(--glass-bg,var(--sur2));backdrop-filter:blur(20px);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;color:var(--txt);font-family:var(--sans);min-width:200px;box-shadow:var(--lift-2)';
+  items.forEach(it=>{
+    const b=document.createElement('div');
+    b.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px';
+    // Optional per-item thumbnail (a reference's saved crop, e.g.) — built as a real <img> element,
+    // never innerHTML, so it's safe alongside a label string that may contain a user-typed name.
+    if(it.img){const im=document.createElement('img');im.src=it.img;im.style.cssText='width:22px;height:22px;border-radius:4px;object-fit:cover;flex:0 0 auto';b.appendChild(im);}
+    const lb=document.createElement('span');lb.textContent=it.label;lb.style.cssText='overflow:hidden;text-overflow:ellipsis';b.appendChild(lb);
+    b.onmouseenter=()=>b.style.background='var(--sur2)';
+    b.onmouseleave=()=>b.style.background='';
+    b.onclick=()=>{pop.remove();it.fn();};
+    pop.appendChild(b);
+  });
+  document.body.appendChild(pop);
+  const r=ev&&ev.target&&ev.target.getBoundingClientRect?ev.target.getBoundingClientRect():{left:100,bottom:100};
+  pop.style.left=Math.min(r.left,innerWidth-pop.offsetWidth-8)+'px';
+  pop.style.top=Math.min(r.bottom+4,innerHeight-pop.offsetHeight-8)+'px';
+  const close=(e)=>{if(!pop.contains(e.target)){pop.remove();document.removeEventListener('mousedown',close);}};
+  setTimeout(()=>document.addEventListener('mousedown',close),0);
+}

@@ -1,0 +1,286 @@
+// ── Film negative (CHR-262) ─────────────────────────────────────────────────────────────────
+// Recipe lives entirely in the section's own inputs (tg-filmneg, sel-fneg-mode, sl-fneg-*), so undo,
+// session, copy/paste, per-photo overrides and the snapshot lists carry it with no extra plumbing.
+// Base colour (br/bg/bb) is the mean of an ORIGINAL-image patch in the same 0..1 display-encoded
+// values the shader samples; bx/by are that patch's centre as a fraction of the original image, kept
+// so the pick is reproducible and independent of crop, rotation, zoom and the live grade.
+// Math (shader fnConv == film_negative.rs): out = FN_OUT * (in / base)^-p, p = exponent * ratio.
+const FN_OUT=0.02;
+// Version 0 remains the existing display-domain recipe. Native version 1 is sampled and
+// developed in the decoder's camera-linear coordinates, bound to its source/profile signature.
+function fnNativeRecipe(it){
+  if(Object.prototype.hasOwnProperty.call(it||{},'_filmExportRecipe'))return it._filmExportRecipe;
+  let values;
+  if(it===curItem())values=secVals('filmneg');
+  else values=it?.secOverride?.filmneg||fxState.sharedSec?.filmneg;
+  if(!values||+values['sl-fneg-domain']!==1||!values.__on)return null;
+  const ref=['br','bg','bb'].map(c=>+values['sl-fneg-'+c]);
+  if(!fnHasBase(ref))return null;
+  const p=Math.max(.05,+values['sl-fneg-exp']||1.5),bw=values['sel-fneg-mode']==='bw';
+  const mean=ref.reduce((a,b)=>a+b)/3;
+  return{domain:'camera-linear16-v1',sourceKey:+values['sl-fneg-source'],ref:bw?[mean,mean,mean]:ref,exp:bw?[p,p,p]:[p*(+values['sl-fneg-red']||1.36),p,p*(+values['sl-fneg-blue']||.86)],out:FN_OUT,bw};
+}
+function fnNativeNeedsDevelop(it){
+  if(!it||!window.__TAURI__)return false;
+  const recipe=fnNativeRecipe(it);
+  const key=JSON.stringify(recipe);
+  return !!(recipe||it.img?._filmApplied)&&key!==it.img?._filmRecipeKey&&key!==it._filmFailedKey;
+}
+async function fnNativeSource(it){
+  if(it.img?._filmRaw)return it.img._filmRaw;
+  if(!it.rawFile)throw new Error('Native film calibration needs the original RAW; reopen it from its source.');
+  const r=await loadRw2(it.rawFile,{filmSource:true});
+  if(!r.canvas._filmRaw)throw new Error('Native film decoder is unavailable.');
+  return r.canvas._filmRaw;
+}
+async function fnEnsureNative(it){
+  if(it?._filmFailedKey===JSON.stringify(fnNativeRecipe(it)))throw new Error('Native film develop failed; repick the base or change the recipe before export.');
+  if(!fnNativeNeedsDevelop(it))return;
+  const recipe=fnNativeRecipe(it),key=JSON.stringify(recipe);
+  if(it._filmPending?.key===key)return it._filmPending.promise;
+  const generation=it._filmGen=(it._filmGen||0)+1,original=it.img;
+  const promise=(async()=>{
+    const decoder=await fnNativeSource(it),result=await decoder.filmDevelop(recipe);
+    if(it._filmGen!==generation||it.img!==original||JSON.stringify(fnNativeRecipe(it))!==key)return;
+    const c=document.createElement('canvas');c.width=result.width;c.height=result.height;
+    c.getContext('2d').putImageData(new ImageData(result.data,result.width,result.height),0,0);
+    c._filmRaw=decoder;c._filmApplied=!!recipe;c._filmRecipeKey=key;
+    it.img=c;delete it.fullImg;it._nrHighApplied=false;it._fullCleanupApplied=false;
+    if(it===curItem()){fxImg=c;updateWork();renderPreview();}
+  })();
+  it._filmPending={key,promise};
+  try{await promise;delete it._filmFailedKey;}catch(e){it._filmFailedKey=key;throw e;}finally{if(it._filmGen===generation)delete it._filmPending;}
+}
+async function fnNativeExportItem(it,recipe){
+  if(!recipe&&!it.img?._filmApplied)return it;
+  if(!window.__TAURI__)throw new Error('Native film calibration requires the desktop RAW decoder.');
+  const decoder=await fnNativeSource(it),result=await decoder.filmDevelop(recipe);
+  const c=document.createElement('canvas');c.width=result.width;c.height=result.height;
+  c.getContext('2d').putImageData(new ImageData(result.data,result.width,result.height),0,0);
+  c._filmRaw=decoder;c._filmApplied=!!recipe;c._filmRecipeKey=JSON.stringify(recipe);
+  const exported={...it,img:c,_filmExportRecipe:recipe,_nrHighApplied:false,_fullCleanupApplied:false};delete exported.fullImg;
+  return exported;
+}
+async function fnPickNativeBase(it,ox,oy){
+  const original=it.img,W=original.naturalWidth||original.width,H=original.naturalHeight||original.height;
+  try{
+    const decoder=await fnNativeSource(it),r=await decoder.filmBase(ox/W,oy/H);
+    if(it!==curItem()||it.img!==original)return{ok:false,reason:'photo-changed'};
+    for(const [id,value]of Object.entries({'br':r.rgb[0],'bg':r.rgb[1],'bb':r.rgb[2],'bx':r.nx,'by':r.ny,'domain':1,'source':r.sourceKey}))document.getElementById('sl-fneg-'+id).value=value;
+    // Native calibration is frame-owned: sharing across differently white-balanced RAWs is unsafe.
+    it.secOverride=it.secOverride||{};it.secOverride.filmneg=secVals('filmneg');
+    it.secOverride.filmneg.__needsBaseReview=false;
+    const tg=document.getElementById('tg-filmneg');if(!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
+    await fnEnsureNative(it);
+    buildFilmstrip();fnSyncStatus();
+    fnSetStatus('Native camera-linear base set from '+r.n+' source pixels. Use manual ratios; source/profile changes require another pick.',false);
+    return{ok:true,...r};
+  }catch(e){fnSetStatus(errStr(e),true);return{ok:false,msg:errStr(e)};}
+}
+let _fnPickActive=false,_fnMsg='';
+function fnNum(id,d){const el=document.getElementById(id);const v=el?parseFloat(el.value):NaN;return isFinite(v)?v:d;}
+function fnBase(){return[fnNum('sl-fneg-br',0),fnNum('sl-fneg-bg',0),fnNum('sl-fneg-bb',0)];}
+function fnHasBase(b){b=b||fnBase();return b.every(v=>v>0.002);}
+function fnIsBW(){return((document.getElementById('sel-fneg-mode')||{}).value)==='bw';}
+function computeFilmNeg(){
+  const tg=document.getElementById('tg-filmneg');
+  const base=fnBase();
+  if(!(tg&&tg.classList.contains('on'))||!fnHasBase(base))return{enabled:false,bw:false,out:FN_OUT,ref:[1,1,1],exp:[1,1,1]};
+  const p=Math.max(0.05,fnNum('sl-fneg-exp',1.5));
+  if(fnIsBW()){
+    const m=(base[0]+base[1]+base[2])/3;
+    return{enabled:true,bw:true,out:FN_OUT,ref:[m,m,m],exp:[p,p,p],domain:fnNum('sl-fneg-domain',0)===1?'camera-linear16-v1':'display-v0'};
+  }
+  return{enabled:true,bw:false,out:FN_OUT,ref:base,exp:[p*fnNum('sl-fneg-red',1.36),p,p*fnNum('sl-fneg-blue',0.86)],domain:fnNum('sl-fneg-domain',0)===1?'camera-linear16-v1':'display-v0'};
+}
+function fnSetStatus(msg,warn){
+  _fnMsg=msg;const el=document.getElementById('fneg-status');
+  if(el){el.textContent=msg;el.classList.toggle('fx-hint-warn',!!warn);}
+  if(warn)log('Film negative: '+msg,'warn');
+}
+function fnSyncStatus(){
+  const el=document.getElementById('fneg-status');if(!el)return;
+  const b=fnBase();
+  const needsReview=!!curItem()?.secOverride?.filmneg?.__needsBaseReview;
+  el.textContent=needsReview?'Review this frame: its film base differed from the roll base. Pick the rebate before export.':fnHasBase(b)?('Film base '+b.map(v=>Math.round(v*255)).join(' / ')+(fnNum('sl-fneg-bx',-1)>=0?' (picked at '+Math.round(fnNum('sl-fneg-bx',0)*100)+'%, '+Math.round(fnNum('sl-fneg-by',0)*100)+'%)':'')):'No film base picked: pick the clear rebate to enable the conversion.';
+  el.classList.toggle('fx-hint-warn',needsReview);
+}
+// Inverse of applyGeomTo: a pixel of the geometry-applied working image -> the original image.
+function fnWorkToOrig(it,wx,wy){
+  const g=it.geom||defGeom(),img=it.img;
+  const W0=img.naturalWidth||img.width,H0=img.naturalHeight||img.height;
+  const rot=((g.rot%360)+360)%360,swap=rot===90||rot===270;
+  const rw=swap?H0:W0,rh=swap?W0:H0;
+  let cw=rw,ch=rh;const ang=(g.angle||0)*Math.PI/180;
+  if(g.angle){const d=inscribedSameAspect(rw,rh,ang);cw=Math.max(1,Math.round(d.w));ch=Math.max(1,Math.round(d.h));}
+  let x=wx,y=wy;
+  if(g.crop){x+=Math.max(0,Math.round(g.crop.x*cw));y+=Math.max(0,Math.round(g.crop.y*ch));}
+  if(g.angle){const dx=x-cw/2,dy=y-ch/2,c=Math.cos(ang),s=Math.sin(ang);x=dx*c+dy*s+rw/2;y=-dx*s+dy*c+rh/2;}
+  if(g.rot||g.flipH||g.flipV){
+    const r=rot*Math.PI/180,c=Math.cos(r),s=Math.sin(r),ux=x-rw/2,uy=y-rh/2;
+    let qx=ux*c+uy*s,qy=-ux*s+uy*c;
+    if(g.flipH)qx=-qx;if(g.flipV)qy=-qy;
+    x=qx+W0/2;y=qy+H0/2;
+  }
+  return{x,y};
+}
+// Mean colour of a square ORIGINAL-image patch (display-encoded 0..1). Fails visibly on a clipped,
+// near-black or non-uniform patch instead of returning a number that looks plausible.
+function fnSampleBaseOrig(it,ox,oy){
+  const img=it&&it.img;if(!img)return{ok:false,msg:'No photo loaded.'};
+  const W=img.naturalWidth||img.width,H=img.naturalHeight||img.height;
+  const cx=Math.round(ox),cy=Math.round(oy);
+  if(!(cx>=0&&cy>=0&&cx<W&&cy<H))return{ok:false,msg:'That point is outside the original image.'};
+  const R=Math.max(4,Math.min(24,Math.round(Math.min(W,H)*0.01)));
+  const x0=Math.max(0,cx-R),y0=Math.max(0,cy-R),x1=Math.min(W,cx+R+1),y1=Math.min(H,cy+R+1),w=x1-x0,h=y1-y0;
+  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
+  const cx2=tc.getContext('2d',{willReadFrequently:true});cx2.drawImage(img,x0,y0,w,h,0,0,w,h);
+  const d=cx2.getImageData(0,0,w,h).data,n=w*h;
+  const m=[0,0,0],q=[0,0,0];
+  for(let i=0;i<d.length;i+=4)for(let c=0;c<3;c++){const v=d[i+c]/255;m[c]+=v;q[c]+=v*v;}
+  const mean=m.map(v=>v/n),sd=q.map((v,c)=>Math.sqrt(Math.max(0,v/n-mean[c]*mean[c])));
+  if(Math.max(...mean)>0.985)return{ok:false,msg:'The picked area is clipped to white. A scan that clips the rebate cannot give a base colour; rescan with less exposure.'};
+  if(Math.min(...mean)<0.02)return{ok:false,msg:'The picked area is nearly black, so it is not clear film base. Click the lightest unexposed rebate.'};
+  if(Math.max(...sd.map((v,c)=>v/mean[c]))>0.12)return{ok:false,msg:'The picked area is not uniform (edge, dust or image content). Click a clean patch of rebate.'};
+  return{ok:true,rgb:mean,nx:ox/W,ny:oy/H,n};
+}
+function fnPickBaseAtOrig(ox,oy){
+  const it=curItem();
+  if(window.__TAURI__&&it&&(it.rawFile||it.img?._filmRaw))return fnPickNativeBase(it,ox,oy);const r=fnSampleBaseOrig(it,ox,oy);
+  if(!r.ok){fnSetStatus(r.msg,true);return r;}
+  const set=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v;}};
+  set('sl-fneg-domain',0);
+  set('sl-fneg-br',r.rgb[0].toFixed(4));set('sl-fneg-bg',r.rgb[1].toFixed(4));set('sl-fneg-bb',r.rgb[2].toFixed(4));
+  set('sl-fneg-bx',r.nx.toFixed(5));set('sl-fneg-by',r.ny.toFixed(5));
+  const tg=document.getElementById('tg-filmneg');
+  if(tg&&!tg.classList.contains('on'))toggleFX('filmneg');else fxUpdate();
+  if(it.secOverride?.filmneg)it.secOverride.filmneg.__needsBaseReview=false;
+  buildFilmstrip();
+  fnSetStatus('Film base set from '+r.n+' original pixels. Auto balance can now tune the red and blue ratios.',false);
+  return r;
+}
+function fnPickBase(){
+  _fnPickActive=!_fnPickActive;
+  const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.toggle('on',_fnPickActive);
+  if(FX.cv)FX.cv.style.cursor=_fnPickActive?'crosshair':'';
+  if(_fnPickActive)log('Click the unexposed film base (the clear rebate) to set the negative base colour','info');
+}
+function fnPickBaseClick(e){
+  _fnPickActive=false;
+  const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.remove('on');
+  if(FX.cv)FX.cv.style.cursor='';
+  if(fxLoupe){fnSetStatus('Exit the 1:1 view (Fit) before picking the film base.',true);return;}
+  const it=curItem(),wk=fxWork||fxImg;if(!it||!wk)return;
+  const pt=fxPointerToCanvasPx(e);if(!pt)return;
+  const ww=wk.naturalWidth||wk.width,wh=wk.naturalHeight||wk.height;
+  const o=fnWorkToOrig(it,pt.x*ww/FX.cv.width,pt.y*wh/FX.cv.height);
+  fnPickBaseAtOrig(o.x,o.y);
+}
+// Auto balance: assumes (1) a base was picked from the rebate and is the lightest unexposed film,
+// and (2) the scene's geometric-mean colour is neutral. Solves p_R/p_G = mean(log G/base)/mean(log R/base)
+// over the exposed pixels. It NEVER derives the base from the scene, and refuses to apply a result
+// it cannot trust.
+function fnAutoBalance(){
+  const it=curItem();if(!it||!it.img){fnSetStatus('Load a photo first.',true);return{ok:false};}
+  const base=fnBase();
+  if(fnNum('sl-fneg-domain',0)===1){fnSetStatus('Native RAW auto balance requires camera-linear scene samples; use manual ratios for this calibration.',true);return{ok:false,reason:'native-domain'};}
+  if(!fnHasBase(base)){fnSetStatus('Auto balance needs a picked film base. It will not estimate the base from the scene average; use Pick film base on the rebate first.',true);return{ok:false,reason:'no-base'};}
+  if(fnIsBW()){fnSetStatus('Auto balance only applies to colour negatives (Type is Black and white).',true);return{ok:false,reason:'bw'};}
+  const img=it.img,W=img.naturalWidth||img.width,H=img.naturalHeight||img.height,k=Math.min(1,320/Math.max(W,H));
+  const w=Math.max(1,Math.round(W*k)),h=Math.max(1,Math.round(H*k));
+  const tc=document.createElement('canvas');tc.width=w;tc.height=h;
+  const cx=tc.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0,w,h);
+  const d=cx.getImageData(0,0,w,h).data;
+  const L=[0,0,0];let n=0;
+  for(let i=0;i<d.length;i+=4){
+    const v=[d[i]/255,d[i+1]/255,d[i+2]/255];
+    if(v.some(x=>x>0.985||x<0.01))continue;                 // clipped or crushed: no information
+    if(v.some((x,c)=>x>base[c]*1.02))continue;               // lighter than the base cannot be exposed film
+    if(v.every((x,c)=>x>=base[c]*0.9))continue;              // rebate / sprocket border, not scene
+    for(let c=0;c<3;c++)L[c]+=Math.log(v[c]/base[c]);
+    n++;
+  }
+  const frac=n/(w*h);
+  if(n<2000||frac<0.2){fnSetStatus('Auto balance is not reliable here: only '+Math.round(frac*100)+'% of the frame is usable exposed film (need 20%). Set the ratios by hand.',true);return{ok:false,reason:'coverage',frac};}
+  const m=L.map(v=>v/n);
+  if(m.some(v=>v>-0.03)){fnSetStatus('Auto balance is not reliable: the scene has almost no density above the picked base. Check that the base was picked on the rebate.',true);return{ok:false,reason:'no-density'};}
+  const red=m[1]/m[0],blue=m[1]/m[2];
+  if(!(red>=0.4&&red<=2.5&&blue>=0.4&&blue<=2.5)){fnSetStatus('Auto balance gave an implausible result (red '+red.toFixed(2)+', blue '+blue.toFixed(2)+') and was not applied. The film base is probably wrong, or the scene is strongly coloured; set the ratios by hand.',true);return{ok:false,reason:'implausible',red,blue};}
+  const set=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v.toFixed(2);if(typeof fxPaintSlider==='function')fxPaintSlider(el);}};
+  set('sl-fneg-red',red);set('sl-fneg-blue',blue);
+  fxUpdate();
+  fnSetStatus('Auto balance set red '+red.toFixed(2)+', blue '+blue.toFixed(2)+' from '+Math.round(frac*100)+'% of the frame. Assumes the picked base is the rebate and the scene averages neutral.',false);
+  return{ok:true,red,blue,frac};
+}
+// Roll level: copy this photo's base + exponents to every open photo and flag the ones that had a
+// different base of their own (they were overridden, so review them).
+function fnApplyBaseToRoll(){
+  const it=curItem(),b=fnBase();
+  if(fnNum('sl-fneg-domain',0)===1){fnSetStatus('Native camera-linear bases must be sampled per RAW frame because camera white balance and profiles may differ. Roll copying is available for display-domain scans.',true);return{ok:false,reason:'native-domain'};}
+  if(!it||!fnHasBase(b)){fnSetStatus('Pick the film base on this photo first.',true);return{ok:false};}
+  const cur=secVals('filmneg'),keys=['sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sel-fneg-mode','__on'];
+  const flagged=[];let own=0;
+  (fxImages||[]).forEach((o,i)=>{
+    const ov=o.secOverride&&o.secOverride.filmneg;if(!ov||o===it)return;
+    own++;
+    const ob=[parseFloat(ov['sl-fneg-br']),parseFloat(ov['sl-fneg-bg']),parseFloat(ov['sl-fneg-bb'])];
+    const needsReview=ob.every(v=>v>0.002)&&ob.some((v,c)=>Math.abs(v-b[c])/b[c]>0.08);
+    if(needsReview)flagged.push(o.name||('photo '+(i+1)));
+    keys.forEach(kk=>{ov[kk]=cur[kk];});ov['sl-fneg-bx']='-1';ov['sl-fneg-by']='-1';
+    ov.__needsBaseReview=needsReview;
+  });
+  if(own||(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg=JSON.parse(JSON.stringify(cur));if(!(it.secOverride&&it.secOverride.filmneg)){fxState.sharedSec.filmneg['sl-fneg-bx']=cur['sl-fneg-bx'];}}
+  fxUpdate();
+  buildFilmstrip();
+  const n=(fxImages||[]).length;
+  fnSetStatus(own?('Base applied to '+own+' photo(s) that had their own. '+(flagged.length?flagged.length+' had a different base and may need review: '+flagged.slice(0,5).join(', ')+'.':'None had a different base.')):('All '+n+' open photo(s) follow this base already (Film Negative applies to all photos).'),flagged.length>0);
+  return{ok:true,own,flagged};
+}
+let _wbEyedropperActive=false;
+function wbEyedropper(){
+  _wbEyedropperActive=!_wbEyedropperActive;
+  const btn=document.getElementById('btn-wb-eye');
+  if(btn)btn.classList.toggle('on',_wbEyedropperActive);
+  if(FX.cv)FX.cv.style.cursor=_wbEyedropperActive?'crosshair':'';
+  if(_wbEyedropperActive)log('Click a neutral (white/grey) area to set white balance','info');
+}
+function wbEyedropperClick(e){
+  if(!_wbEyedropperActive)return;
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before using the WB eyedropper','warn');return;}
+  _wbEyedropperActive=false;
+  const btn=document.getElementById('btn-wb-eye');if(btn)btn.classList.remove('on');
+  if(FX.cv)FX.cv.style.cursor='';
+  const src=fxWork||fxImg;if(!src)return;
+  // Sample from source image: map CSS click → source image pixel (borders/matte aware)
+  const pt=fxPointerToCanvasPx(e);if(!pt)return;
+  const cx=Math.round(pt.x),cy=Math.round(pt.y);
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  const sx=Math.min(sw-1,Math.max(0,Math.round(cx*sw/FX.cv.width)));
+  const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
+  // Average a 5x5 neighborhood, not a single pixel — one pixel is noisy on grainy/high-ISO
+  // sources, so two clicks on the SAME visually-neutral patch could produce different WB.
+  const K=5,half=(K-1)/2;
+  const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
+  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  const s2l=c=>(c/=255,c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4));
+  let lr=0,lg=0,lb=0;
+  for(let i=0;i<d5.length;i+=4){lr+=s2l(d5[i]);lg+=s2l(d5[i+1]);lb+=s2l(d5[i+2]);}
+  const n5=K*K;lr/=n5;lg/=n5;lb/=n5;
+  if(lg<0.002){log('Sampled area is too dark for WB — pick a lighter neutral','warn');return;}
+  // Solve: make sampled pixel neutral after the shader's temp/tint shifts
+  // lin.r *= (1+0.22*t), lin.b *= (1-0.22*t) → solve for t to equalise R & B
+  const tempRaw=(lb-lr)/(0.22*(lr+lb+1e-9));
+  const newTemp=Math.max(-1,Math.min(1,tempRaw));
+  // After temp, solve tint: G channel should match corrected R: lg*(1-0.14*ti) = lr*(1+0.22*t)
+  const targetGrey=lr*(1+0.22*newTemp);
+  const tintRaw=lg>0.002?(1-targetGrey/lg)/0.14:0;
+  const newTint=Math.max(-1,Math.min(1,tintRaw));
+  const tg=document.getElementById('tg-adjust');
+  if(!tg.classList.contains('on'))toggleFX('adjust');
+  const tsl=document.getElementById('sl-adj-temp');if(tsl)tsl.value=Math.round(newTemp*100);
+  const ttl=document.getElementById('sl-adj-tint');if(ttl)ttl.value=Math.round(newTint*100);
+  fxUpdate();
+  log(`WB eyedropper: temp ${Math.round(newTemp*100)}, tint ${Math.round(newTint*100)}`,'ok');
+}

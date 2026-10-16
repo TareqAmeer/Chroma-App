@@ -1,0 +1,484 @@
+// ── Export: upload into the app-created "Chromasmith" album ───────────────────
+function gpSaveEnabled(){try{return localStorage.getItem('gpSaveExports')==='1'}catch(e){return false}}
+function gpToggleSave(){
+  try{localStorage.setItem('gpSaveExports',gpSaveEnabled()?'0':'1')}catch(e){}
+  gpUpdateUI();
+  if(gpSaveEnabled()&&!gpConnected())gpAuth().catch(e=>log('Google Photos: '+(e&&e.message||e),'warn'));
+}
+async function gpAlbumId(){
+  let id=null;try{id=localStorage.getItem('gpAlbumId')}catch(e){}
+  if(id)return id;
+  const j=await(await gpFetch('https://photoslibrary.googleapis.com/v1/albums',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({album:{title:'Chromasmith'}})})).json();
+  try{localStorage.setItem('gpAlbumId',j.id)}catch(e){}
+  return j.id;
+}
+async function gpUploadItems(items,onProg){ // items: [{content:Uint8Array,fname,mime}] → returns #created
+  let albumId=await gpAlbumId();
+  const toks=[];
+  for(let i=0;i<items.length;i++){
+    const it=items[i];
+    if(onProg)onProg('Uploading to Google Photos '+(i+1)+'/'+items.length+'…');
+    const r=await gpFetch('https://photoslibrary.googleapis.com/v1/uploads',{method:'POST',
+      headers:{'Content-Type':'application/octet-stream','X-Goog-Upload-Content-Type':it.mime,'X-Goog-Upload-Protocol':'raw'},
+      body:it.content});
+    toks.push({tok:await r.text(),fname:it.fname});
+  }
+  let created=0;
+  for(let i=0;i<toks.length;i+=50){ // batchCreate caps at 50 items per call
+    const newItems=toks.slice(i,i+50).map(t=>({simpleMediaItem:{uploadToken:t.tok,fileName:t.fname}}));
+    const create=aid=>gpFetch('https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({albumId:aid,newMediaItems:newItems})});
+    let r;
+    try{r=await create(albumId)}
+    catch(e){ // cached album deleted on photos.google.com → recreate once and retry
+      if(!/album|invalid|not.?found/i.test(e&&e.message||''))throw e;
+      try{localStorage.removeItem('gpAlbumId')}catch(_){}
+      albumId=await gpAlbumId();r=await create(albumId);
+    }
+    const j=await r.json();
+    (j.newMediaItemResults||[]).forEach(x=>{
+      const bad=x.status&&x.status.code&&x.status.code!==0;
+      if(bad)log('Google Photos rejected an item: '+(x.status.message||'unknown error'),'warn');else created++;
+    });
+  }
+  return created;
+}
+function gpUpdateUI(){
+  const c=document.getElementById('btn-gp-connect');
+  if(c){c.className='btn '+(gpConnected()?'bsec':'bgh');c.innerHTML=''+(gpConnected()?'Connected ✓':'Connect');}
+  const s=document.getElementById('tg-gp-save');
+  if(s)s.classList.toggle('on',gpSaveEnabled());
+}
+gpUpdateUI();
+
+// ═══════════════════════════
+// LIGHTROOM CLOUD BROWSER ("Connect Lightroom")
+// ═══════════════════════════
+// Desktop-only (see #lr-section's inline style + the deskx CSS override) — needs the same
+// native OS-browser + loopback-redirect OAuth flow as Google Photos above (adobe_oauth_loopback
+// in main.rs is a thin copy of google_oauth_loopback; RFC 8252 loopback redirect_uris are
+// provider-agnostic). Reuses askTextModal/pkceVerifier/pkceChallenge as-is — those helpers were
+// already generic, not Google-specific.
+// ⚠️ Unlike Google Cloud Console's self-serve "Testing" mode, Adobe's Lightroom Partner APIs
+// (the lr_partner_apis/lr_partner_rendition_apis scopes below) have historically required
+// Adobe's own partner approval on top of just creating a project.
+// ⚠️ Adobe's "Native App" OAuth credential type (what a Lightroom-API project actually issues)
+// does NOT use an HTTP loopback redirect like Google's "Desktop app" client type — it redirects
+// to a registered CUSTOM URL SCHEME instead (adobe+<id>://adobeid/<client-id>). macOS routes that
+// through Launch Services exactly like a file-open, which main.rs's RunEvent::Opened handler
+// picks up (see PendingOAuth there) via tauri-plugin-deep-link's scheme registration
+// (tauri.conf.json's plugins.deep-link.desktop.schemes). LR_REDIRECT_URI below is the EXACT
+// string Adobe's console shows for THIS integration — it's fixed per-project, not something we
+// construct; a different Adobe project would need this updated to match.
+const LR_IMS_AUTH='https://ims-na1.adobelogin.com/ims/authorize/v2';
+const LR_IMS_TOKEN='https://ims-na1.adobelogin.com/ims/token/v3';
+const LR_API='https://lr.adobe.io/v2';
+const LR_SCOPES='openid,AdobeID,lr_partner_apis,lr_partner_rendition_apis,offline_access';
+const LR_REDIRECT_URI='adobe+5e575447f1fc4a4228c93a157e8422d9f310dd31://adobeid/d89cbea4405644259449bd17670da630';
+function lrClientId(){try{return(localStorage.getItem('lrClientId')||'').trim()}catch(e){return''}}
+async function lrAskClientId(force){
+  let cid=lrClientId();
+  if(cid&&!force)return cid;
+  const msg='Paste your Adobe API client ID (Developer Console → your project → Credentials).\n\nMust have the Lightroom APIs added — these require Adobe partner approval beyond a self-serve project (Adobe Developer Console → your project → Add API → Lightroom APIs). See Guide → "Can I browse my Lightroom cloud photos?". Note: LR_REDIRECT_URI in this file is fixed to ONE specific Adobe integration — a different client ID from a DIFFERENT Adobe project needs that constant updated to match, not just the ID pasted here.';
+  const picked=await askTextModal('Adobe API Client ID',msg,cid||'');
+  cid=(picked||'').trim();
+  if(cid){try{localStorage.setItem('lrClientId',cid)}catch(e){}}
+  return cid;
+}
+function lrTok(){try{const t=JSON.parse(sessionStorage.getItem('lrTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t}catch(e){}return null}
+function lrConnected(){return!!lrTok()}
+// Opens the system browser at Adobe's consent screen, then waits for the custom-scheme callback
+// (see the comment above LR_REDIRECT_URI) via a live event listener — registered BEFORE the
+// browser opens, so unlike PendingOpen's cold-launch file-handoff case there's no listener-not-
+// attached-yet race to guard against here (the callback can only arrive after the user finishes
+// an interactive sign-in in the browser, well after this function has already set up its
+// listener). client_secret retry logic mirrors gpAuthNative's — see that function's comments.
+async function lrAuthNative(cid){
+  const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
+  const authUrl=LR_IMS_AUTH+'?'+new URLSearchParams({
+    client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
+    scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
+  const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
+  const callbackPromise=new Promise((resolve,reject)=>{
+    let unlisten=null;
+    const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
+    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>{
+      clearTimeout(timeout);if(unlisten)unlisten();resolve(e.payload);
+    }).then(un=>{unlisten=un;});
+  });
+  try{await invoke('open_url_native',{url:authUrl})}
+  catch(e){throw new Error('Could not open the sign-in page: '+(e&&e.message||e))}
+  const callbackUrl=await callbackPromise;
+  let params;
+  try{params=new URL(callbackUrl).searchParams}
+  catch(e){throw new Error('Lightroom sign-in failed: could not parse the callback URL')}
+  if(params.get('error'))throw new Error('Lightroom sign-in failed: '+params.get('error'));
+  const code=params.get('code');
+  if(!code)throw new Error('Lightroom sign-in failed: no authorization code returned');
+  const exchange=async(secret)=>{
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri:LR_REDIRECT_URI};
+    if(secret)body.client_secret=secret;
+    // http_native, not fetch(): Adobe's IMS token endpoint doesn't answer the CORS preflight
+    // for the tauri:// origin, so WKWebView fetch() dies with its generic "Load failed" — the
+    // exact failure mode download_url_native already fixes for Google Photos. Native HTTP has
+    // no CORS; non-2xx comes back as data (status+body) so the secret-retry logic below still
+    // sees Adobe's JSON error_description.
+    const r=await invoke('http_native',{method:'POST',url:LR_IMS_TOKEN,
+      headers:[['Content-Type','application/x-www-form-urlencoded']],
+      body:new URLSearchParams(body).toString()});
+    let json={};try{json=JSON.parse(r.body)}catch(e){}
+    return{ok:r.status>=200&&r.status<300,json,status:r.status};
+  };
+  let secret='';try{secret=(localStorage.getItem('lrClientSecret')||'').trim()}catch(e){}
+  let res2=await exchange(secret);
+  const needsSecret=!res2.ok&&/client_secret/i.test(res2.json.error_description||res2.json.error||'')&&!secret;
+  if(needsSecret){
+    const picked=await askTextModal('Adobe client secret',
+      'Adobe also needs this API client\'s secret for the sign-in exchange (Developer Console → your project → Credentials → "Client secret"). It stays on this device.','');
+    secret=(picked||'').trim();
+    if(secret){try{localStorage.setItem('lrClientSecret',secret)}catch(e){}res2=await exchange(secret);}
+  }
+  const tokJson=res2.json;
+  if(!res2.ok||!tokJson.access_token)throw new Error('Lightroom token exchange failed: '+(tokJson.error_description||tokJson.error||res2.status));
+  const tok={at:tokJson.access_token,exp:Date.now()+(tokJson.expires_in||3600)*1000,cid};
+  try{sessionStorage.setItem('lrTok',JSON.stringify(tok))}catch(e){}
+  return tok;
+}
+async function lrAuth(){
+  const cached=lrTok();if(cached)return cached;
+  // The panel itself is only ever visible under body.deskx (native shell, or the ?deskx=1 test
+  // flag which CAN be set in a plain browser — see the flag's own comment) — guard here too so
+  // clicking Connect there fails with a clean message instead of a raw TypeError on the missing
+  // window.__TAURI__ bridge, same reasoning as gpAuth's window.__TAURI__ check.
+  if(!window.__TAURI__)throw new Error('Lightroom cloud browsing is desktop-app only');
+  const cid=await lrAskClientId();
+  if(!cid)throw new Error('No Adobe client ID set');
+  return lrAuthNative(cid);
+}
+// Lightroom's API prefixes every JSON response with `while (1) {}` (JSON-hijacking protection,
+// documented Adobe behavior) — must be stripped before parsing, or JSON.parse throws on every
+// single call.
+async function lrApiGet(path){
+  const tok=await lrAuth();
+  // Native HTTP (see exchange() above): lr.adobe.io also rejects the tauri:// CORS preflight.
+  const r=await window.__TAURI__.core.invoke('http_native',{method:'GET',url:LR_API+path,
+    headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid]],body:null});
+  const text=r.body.replace(/^while\s*\(1\)\s*\{\s*\}\s*/,'');
+  const ok=r.status>=200&&r.status<300;
+  let json;try{json=JSON.parse(text)}catch(e){throw new Error('Lightroom API returned unparsable data (status '+r.status+')')}
+  if(!ok)throw new Error('Lightroom API error: '+(json.message||r.status));
+  return json;
+}
+let lrCatalogId=null;
+// Ensures token + catalog id — the shared precondition for every cloud call.
+async function lrEnsureCatalog(){
+  await lrAuth();
+  if(lrCatalogId)return lrCatalogId;
+  // GET /v2/catalog (singular) is the documented way to get the user's cloud catalog — the
+  // /account response does NOT carry a catalog object (the old `account.catalog.id` read
+  // always came back undefined → "No Lightroom catalog found" even on a working account).
+  const cat=await lrApiGet('/catalog');
+  lrCatalogId=cat&&cat.id;
+  if(!lrCatalogId)throw new Error('No Lightroom catalog found on this account');
+  return lrCatalogId;
+}
+async function lrConnectToggle(){
+  if(lrConnected()){
+    try{sessionStorage.removeItem('lrTok')}catch(e){}
+    lrCatalogId=null;
+    lrUpdateUI();toast('Lightroom disconnected',true);
+    return;
+  }
+  try{
+    await lrEnsureCatalog();
+    lrUpdateUI();toast('Lightroom connected ✓',true);
+  }catch(e){
+    log('Lightroom connect failed: '+(e&&e.message||e),'err');
+    toast('Lightroom connect failed — see log');
+    throw e;
+  }
+}
+async function lrListAlbums(){
+  await lrEnsureCatalog();
+  const data=await lrApiGet(`/catalogs/${lrCatalogId}/albums?subtype=collection`);
+  return (data.resources||[]).map(a=>({id:a.id,name:(a.payload&&a.payload.name)||a.id}));
+}
+async function lrListAssets(albumId){
+  await lrEnsureCatalog();
+  // Paginated (links.next) — a single limit=100 page silently truncated big albums. Capped at
+  // 5 pages (500 assets) to bound the sidebar-click cost; links.next.href is relative to /v2.
+  let path=`/catalogs/${lrCatalogId}/albums/${albumId}/assets?limit=100&embed=asset`;
+  const out=[];
+  for(let page=0;page<5&&path;page++){
+    const data=await lrApiGet(path);
+    (data.resources||[]).map(r=>r.asset).filter(Boolean).forEach(a=>out.push({
+      id:a.id,
+      name:(a.payload&&a.payload.importSource&&a.payload.importSource.fileName)||a.id,
+      captured:(a.payload&&a.payload.captureDate)||'',
+      meta:lrAssetMeta(a.payload||{})
+    }));
+    const next=data.links&&data.links.next&&data.links.next.href;
+    path=next?('/'+String(next).replace(/^\/?(v2\/)?/,'')):null;
+  }
+  return out;
+}
+// Defensive metadata pull from a Lightroom asset payload — the shape varies by import source,
+// so read every place a field commonly lives and take the first hit. Used to fill the metadata
+// panel while a soft 2048 preview is showing (the 2048 rendition carries no EXIF); the RAW
+// master and the full-size JPEG both carry real EXIF, so this is a fallback, not the main path.
+function lrAssetMeta(p){
+  const src=p.importSource||{},dev=p.develop||{},xmp=p.xmp||{},x=xmp.tiff||xmp.exif||{};
+  const num=(v)=>typeof v==='number'?v:(parseFloat(v)||0);
+  const iso=src.iso||x.ISOSpeedRatings||x.ISO;
+  const fnum=src.fNumber||x.FNumber||x.ApertureValue;
+  const exp=src.exposureTime||x.ExposureTime;
+  const foc=src.focalLength||x.FocalLength;
+  return {
+    make:src.cameraMake||x.Make||'',
+    model:src.cameraModel||src.camera||x.Model||'',
+    lens:src.lens||src.lensModel||x.Lens||x.LensModel||'',
+    iso:iso?('ISO '+iso):'',
+    aperture:fnum?('f/'+num(fnum)):'',
+    shutter:exp?(num(exp)<1?('1/'+Math.round(1/num(exp))):(num(exp)+'s')):'',
+    focalLen:foc?(Math.round(num(foc))+'mm'):'',
+    date:p.captureDate||''
+  };
+}
+// Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
+// headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
+async function lrRenditionBlob(assetId,type){
+  const tok=await lrAuth();
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf],{type:'image/jpeg'});
+}
+// The untouched ORIGINAL (for these assets, the RW2) via the master endpoint. ⚠️ Adobe's
+// partner API commonly returns 403 here on non-elevated tiers (documented limitation) — the
+// caller surfaces that as "original download not permitted, use Edited full-size instead".
+async function lrMasterBlob(assetId){
+  const tok=await lrAuth();
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/master`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf]);
+}
+async function lrRenditionUrl(assetId,type){
+  try{return URL.createObjectURL(await lrRenditionBlob(assetId,type))}
+  catch(e){return null}
+}
+// ⚠️ Rendition availability (root-caused via Adobe docs after "HTTP 404" reports): Lightroom
+// cloud PRE-generates only thumbnail2x/640/1280/2048 on upload. "2560" and "fullsize" exist
+// only AFTER an async POST …/renditions with an X-Generate-Renditions header — a plain GET
+// for them (the old code requested 2560) 404s on every asset, always. Renditions carry the
+// user's Lightroom develop edits baked in — which is the point of this import ("edit in LR,
+// finish in Chromasmith") — so `master` (the untouched original) is deliberately NOT used.
+async function lrGenerateRendition(assetId,type){
+  const tok=await lrAuth();
+  const r=await window.__TAURI__.core.invoke('http_native',{method:'POST',
+    url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions`,
+    headers:[['Authorization','Bearer '+tok.at],['X-API-Key',tok.cid],['X-Generate-Renditions',type]],
+    body:''});
+  const ok=r.status>=200&&r.status<300;
+  if(!ok)log(`Lightroom generate-rendition (${type}) → HTTP ${r.status}${r.body?': '+String(r.body).slice(0,120):''}`,'warn');
+  return ok;
+}
+// Records that the currently-open editor photo came from a Lightroom album, so opening the
+// Library afterward returns to that album instead of the last local folder (see library-ui.js
+// toggleLibrary). Cleared to a folder origin whenever a local photo is opened.
+function lrMarkOrigin(albumId,albumName){
+  window.chromasmithOpenedOrigin={source:'lr',albumId:albumId||'',albumName:albumName||''};
+}
+// Import a cloud asset at the chosen quality.
+//   quality 'raw'      → the untouched original (RW2) via the master endpoint (full RAW+DCP
+//                        pipeline; no LR develop edits). 403 on some tiers → clear message.
+//   quality 'fullsize' → the edited full-size JPEG (LR develop baked in): instant 2048 preview,
+//                        then generate+poll+swap the full-size. Metadata comes with the JPEG.
+// `opts` carries {albumId, albumName, meta} for origin tracking + the 2048 metadata fallback.
+async function lrImportAsset(assetId,name,quality,opts){
+  quality=quality||'fullsize';opts=opts||{};
+  const base=(name||assetId).replace(/\.[^.]+$/,'');
+  try{
+    toast('Importing from Lightroom…',true);
+    if(quality==='raw'){
+      let blob;
+      try{blob=await lrMasterBlob(assetId);}
+      catch(e){
+        if(/HTTP 40[13]/.test(e&&e.message||'')){
+          log('Original (RAW) download isn’t permitted on this Lightroom API tier — choose Edited full-size instead','warn');
+          toast('Original download not allowed — use Edited full-size');return;
+        }
+        throw e;
+      }
+      // Keep the true extension so the RAW decode + DCP path runs (fall back to .jpg on doubt).
+      const ext=(name&&/\.(rw2|raw|dng|cr2|cr3|nef|arw|orf|tif|tiff|jpg|jpeg)$/i.test(name))?name.split('.').pop():'RW2';
+      const fname=`${base}.${ext}`;
+      const saved=await lrSaveToDisk(fname,blob);
+      lrMarkOrigin(opts.albumId,opts.albumName);
+      await loadFXImages([new File([blob],fname)]);
+      log(`Imported original RAW from Lightroom: ${fname}${saved?' → '+saved:''}`,'ok');
+      return;
+    }
+    // Edited full-size: instant 2048 first.
+    const blob=await lrRenditionBlob(assetId,'2048');
+    const fname=base+'.jpg';
+    const saved=await lrSaveToDisk(fname,blob);
+    lrMarkOrigin(opts.albumId,opts.albumName);
+    await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
+    // The 2048 rendition carries no EXIF — fill the panel from the asset payload meanwhile.
+    if(opts.meta&&fxImages[fxCurIdx]){
+      const prev=fxImages[fxCurIdx].exif||{};
+      fxImages[fxCurIdx].exif={...prev,...Object.fromEntries(Object.entries(opts.meta).filter(([,v])=>v))};
+      if(typeof showExif==='function')showExif(fxImages[fxCurIdx].exif);
+    }
+    log(`Imported from Lightroom at 2048px: ${fname}${saved?' → '+saved:''}`,'ok');
+    lrUpgradeToFullsize(assetId,base,saved).catch(e=>log('Edited full-size unavailable — kept 2048px ('+(e&&e.message||e)+')','warn'));
+  }catch(e){
+    log('Lightroom import failed: '+(e&&e.message||e),'err');
+    toast('Lightroom import failed — see log');
+  }
+}
+async function lrSaveToDisk(fname,blob){
+  if(!window.__TAURI__)return '';
+  try{
+    const buf=new Uint8Array(await blob.arrayBuffer());
+    const res=await window.__TAURI__.core.invoke('save_to_lr_downloads',{filename:fname,dataB64:_u8b64(buf)});
+    return res.path||'';
+  }catch(e){log('Could not save "'+fname+'" to the Lightroom Download folder: '+(e&&e.message||e),'warn');return ''}
+}
+async function lrUpgradeToFullsize(assetId,base,savedPath){
+  // Progress events for the Library's cloud cards (library-ui.js listens): start/done/fail.
+  const emit=(phase)=>{try{window.dispatchEvent(new CustomEvent('lr-fullsize-state',{detail:{stem:base,phase}}))}catch(e){}};
+  emit('start');
+  if(!await lrGenerateRendition(assetId,'fullsize')){
+    log('Full-size rendition unavailable for this account — keeping 2048px','warn');emit('fail');return;
+  }
+  // Poll with backoff (generation is async; docs say up to minutes). ~2min budget.
+  let blob=null;
+  try{
+    for(let wait=2000,total=0;total<120000;total+=wait,wait=Math.min(wait*2,15000)){
+      await new Promise(r=>setTimeout(r,wait));
+      try{blob=await lrRenditionBlob(assetId,'fullsize');break}
+      catch(e){if(!/HTTP 404/.test(e&&e.message||''))throw e}
+    }
+  }catch(e){emit('fail');throw e}
+  if(!blob){log('Full-size rendition not ready after 2min — keeping 2048px','warn');emit('fail');return;}
+  const fname=base+'.jpg';
+  const saved=await lrSaveToDisk(fname,blob);
+  // Swap the in-editor image only if this photo is still the one open. Name-based identity —
+  // fname is exactly what lrImportAsset loaded, so a same-stem match means "same import".
+  const cur=fxImages[fxCurIdx];
+  if(cur&&cur.name===fname){
+    await loadFXImages([new File([blob],fname,{type:'image/jpeg'})]);
+  }
+  log(`Full-size ready: ${fname}${saved?' → '+saved:''}`,'ok');
+  toast('Full-size version loaded',true);
+  emit('done');
+}
+// The Export-panel widget is gone — the Library's Cloud section (library-ui.js) is the UI now.
+// lrUpdateUI just notifies it to re-render its connect state.
+function lrUpdateUI(){
+  try{window.dispatchEvent(new CustomEvent('lr-cloud-state'))}catch(e){}
+}
+// Clean API surface for library-ui.js (desktop-only; every call is __TAURI__-gated upstream).
+window.lrCloud={
+  connected:lrConnected,
+  connect:lrConnectToggle,        // toggles: connects when disconnected, disconnects when connected
+  askClientId:lrAskClientId,
+  albums:lrListAlbums,
+  assets:lrListAssets,
+  thumbBlob:(id)=>lrRenditionBlob(id,'thumbnail2x'),
+  importAsset:lrImportAsset,
+};
+
+// ═══════════════════════════
+// FILE HANDLING
+// ═══════════════════════════
+function dzo(e,el){e.preventDefault();el.classList.add('over')}function dzl(el){el.classList.remove('over')}
+function dzd(e,t){e.preventDefault();e.currentTarget.classList.remove('over');if(t==='fx-img'){loadFXImages(e.dataTransfer.files);return}const f=e.dataTransfer.files[0];if(f)hf(f,t)}
+function fi(e,t){if(t==='fx-img'){loadFXImages(e.target.files);return}const f=e.target.files[0];if(f)hf(f,t)}
+async function hf(file,type){
+  log(`Loaded: ${file.name}`);
+  if(type==='before'){ST.beforeFile=file;setDZ('dz-before','fn-before',file.name);chkStart()}
+  else if(type==='target'){ST.targetFile=file;setDZ('dz-target','fn-target',file.name);
+    const stem=file.name.replace(/\.[^.]+$/,'').replace(/[^a-zA-Z0-9 _-]/g,'_');
+    const mn=document.getElementById('match-name');if(mn)mn.value=stem;
+    chkStart()}
+  else if(type==='start'){const ext=file.name.split('.').pop().toLowerCase();if(ext==='cube'){ST.startFile=await file.text();ST.startType='lut'}else{ST.startFile=await file.text();ST.startType='xmp'}setDZ('dz-start','fn-start',file.name)}
+  else if(type==='cp-src'){ST.cpSrcFile=file;setDZ('dz-cp-src','fn-cp-src',file.name);chkCP()}
+  else if(type==='cp-ref'){ST.cpRefFile=file;setDZ('dz-cp-ref','fn-cp-ref',file.name);chkCP()}
+  else if(type==='fx-img'){await loadFXImages([file]);return} // route through the real loader (geom/gallery/metadata)
+  else if(type==='fx-lut'){
+    let lut,name;
+    if(/\.cube$/i.test(file.name)){const txt=await file.text();lut=parseCube(txt);name=file.name.replace(/\.cube$/i,'');}
+    else{ // an image: expect a Lightroom-processed LUT chart export (see makeLutChart)
+      let cv;
+      if(isTiffFile(file)){cv=(await loadTiff(file)).canvas}
+      else{const im=await loadImg(file);cv=document.createElement('canvas');cv.width=im.naturalWidth||im.width;cv.height=im.naturalHeight||im.height;cv.getContext('2d').drawImage(im,0,0);}
+      if(!isChartImage(cv.width,cv.height)){log(`Not a LUT chart (${cv.width}×${cv.height}; expected the ${chartSize().w}×${chartSize().h} chart or a same-ratio resize). Use "LUT chart" to download it first.`,'err');return}
+      lut=chartToLUT(cv);name=file.name.replace(/\.[^.]+$/,'');
+      log('LUT chart read — preset captured as a 33³ LUT (global color/tone only; re-add grain via FX)','ok');
+    }
+    FX.setLUT(lut);fxState.lut=lut;setDZ('dz-fx-lut','fn-fx-lut',file.name);
+    lastUploadedLUT={name,lut};
+    const sv=document.getElementById('btn-lut-save');if(sv)sv.disabled=false;
+    const dlb=document.getElementById('btn-lut-dl');if(dlb)dlb.disabled=false;
+    const sel=document.getElementById('sel-lut');if(sel)sel.value=''; // custom upload overrides preset selection
+    renderPreview();log('LUT loaded for FX')}
+  else if(type.startsWith('dev-')){const idx=parseInt(type.split('-')[1]);if(ST.history[idx]){ST.history[idx].deviceFile=file;setDZ(`dz-dev-${idx}`,`fn-dev-${idx}`,file.name);const btn=document.getElementById(`btn-ref-${idx}`);if(btn)btn.disabled=false}}
+}
+function chkStart(){document.getElementById('btn-start').disabled=!(ST.beforeFile&&ST.targetFile)}
+function cpUpdateBatchTargets(){
+  const b=document.getElementById('btn-cp-batch'),note=document.getElementById('cp-batch-targets');if(!b)return;
+  const canApply=typeof window.chromasmithApplyColorCopyToSelection==='function',n=(ST.cpTargetPaths||[]).length,ready=!!(ST.cpSrcFile&&ST.cpRefFile);
+  b.hidden=!canApply;b.disabled=!(canApply&&n&&ready);
+  b.textContent=n?`Apply match to ${n} selected photo${n===1?'':'s'}`:'Apply match to selected photos';
+  if(note){note.hidden=!canApply;note.textContent=n?`The generated look will be applied to all ${n} selected Library photo${n===1?'':'s'}; their other edit settings are kept.`:'Choose “Colour Copy: match selection…” from the Library to set target photos.';}
+}
+function chkCP(){const ok=ST.cpSrcFile&&ST.cpRefFile;if(ok)cpPreviewBuild();document.getElementById('btn-cp').disabled=!ok;document.getElementById('btn-cp-xmp').disabled=!ok;const lk=document.getElementById('btn-cp-look');if(lk)lk.disabled=!ok;const sb=document.getElementById('btn-cp-sliders');if(sb)sb.disabled=!ok;cpUpdateBatchTargets()}
+// CHR-221: pass the Library selection through to the batch action so changing views cannot
+// silently change which photos receive the Color Copy look. which: 'src' | 'ref'.
+window.chromasmithColourCopySet=function(which,file,targetPaths){
+  if(!file)return;
+  if(which==='ref'){ST.cpRefFile=file;setDZ('dz-cp-ref','fn-cp-ref',file.name);}else{ST.cpSrcFile=file;setDZ('dz-cp-src','fn-cp-src',file.name);if(Array.isArray(targetPaths))ST.cpTargetPaths=[...new Set(targetPaths.filter(p=>typeof p==='string'&&p))];}
+  chkCP();if(typeof switchTab==='function')switchTab('copy');
+  const n=ST.cpTargetPaths.length;toast(which==='ref'?'Set as Colour Copy reference':n?`Set Color Copy photo and ${n} selected target${n===1?'':'s'}`:'Set as Colour Copy photo',true);
+};
+function setDZ(dzId,fnId,name){const dz=document.getElementById(dzId);if(dz)dz.classList.add('loaded');const fn=document.getElementById(fnId);if(fn)fn.textContent=name}
+
+// ═══════════════════════════
+// UI UTILS
+// ═══════════════════════════
+function yd(){return new Promise(r=>setTimeout(r,0))}
+function setP(id,v){const el=document.getElementById(id);if(el)el.style.width=Math.round(v)+'%'}
+function showPB(id){const el=document.getElementById(id);if(el)el.style.display='block'}
+function hidePB(id){const el=document.getElementById(id);if(el){el.style.display='none';const pf=el.querySelector('.pf');if(pf)pf.style.width='0%'}}
+// `quiet` records at error severity in the log WITHOUT raising a toast. It exists for the three
+// call sites that use 'err' to mean "a developer should look at this", not "your action failed":
+// the layout probe, and the two global error/unhandledrejection handlers. Those handlers are the
+// reason this option is not optional — they fire for every stray rejection in the app (an aborted
+// fetch, a cancelled decode), and a red pill for each would teach people to ignore the channel
+// within a session, taking the real failures down with it.
+function log(msg,type='',quiet){const a=document.getElementById('log-area'),now=new Date();const d=document.createElement('div');d.className='ll';
+  // msg routinely embeds user-controlled filenames (export progress, load errors, etc.) — escape
+  // before building the span so a filename containing "<"/">" can't inject markup into the log.
+  const escMsg=String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  d.innerHTML=`<span class="lt">${now.toLocaleTimeString()}</span><span class="lm ${type}">${escMsg}</span>`;a.appendChild(d);a.scrollTop=a.scrollHeight;
+  // ⚠️ #log-area is display:none unless body.log-on, so for the app's whole life every one of
+  // the ~20 `log(…, 'err')` call sites — "Failed to load <file>", "LUT error", "Could not save
+  // LUT", "Chart error" — failed COMPLETELY SILENTLY: the user clicked, nothing happened, and
+  // the explanation went into a drawer they had no reason to open. Errors now also surface as
+  // a toast. Deliberately only 'err': 'warn' entries here really are diagnostics ("HDR probe
+  // write failed"), and toasting them would train people to ignore the channel.
+  if(type==='err'&&!quiet)toast(msg,'err');}
+function switchTab(n){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.getElementById(`panel-${n}`).classList.add('active');applyMobileFx();if(n==='collage'&&typeof clInit==='function')clInit();if(typeof applyClLayout==='function')applyClLayout();
+  // Match/Copy/Collage/Guide are their own pages: the Studio's photo controls leave the top bar and
+  // the page name takes the middle, with a way back to the Studio.
+  document.body.classList.toggle('cs-page-other',n!=='fx');
+  let pt=document.getElementById('fx-page-title');const bar=document.getElementById('fx-deskbar');
+  if(bar&&!pt){pt=document.createElement('div');pt.id='fx-page-title';
+    pt.innerHTML='<button type="button" class="fx-page-back" title="Back to the Studio">← Studio</button><span></span>';
+    pt.querySelector('button').onclick=()=>switchTab('fx');bar.appendChild(pt);}
+  const pname={match:'Match & Refine',copy:'Color Copy',collage:'Collage',guide:'Guide'}[n]||'';
+  if(pt)pt.querySelector('span').textContent=pname;
+  const pb=document.getElementById('pb-title');if(pb)pb.textContent=pname;
+}

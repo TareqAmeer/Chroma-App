@@ -1,0 +1,91 @@
+// ── Export/import the whole taught-subjects store ────────────────────────────────────────────
+// subjects.json lives in the app's own support directory with no UI path to it — moving taught
+// subjects to another machine, or just backing them up, meant finding the file by hand (or not
+// realising it existed at all). subject_list's own JSON shape (id/name/prototype/refs/encoder) IS
+// the export format — no separate serialisation to keep in sync — and subject_import (Rust) is
+// additive (see its own doc comment): importing a backup can never delete a subject taught since.
+async function subjExport(){
+  if(!_subjects||!_subjects.length){toast('No subjects to export yet');return;}
+  await saveFile(JSON.stringify(_subjects,null,2),'chromasmith-subjects.json','application/json');
+}
+async function subjImportFile(file){
+  if(!file)return;
+  try{
+    const parsed=JSON.parse(await file.text());
+    const list=Array.isArray(parsed)?parsed:(parsed&&Array.isArray(parsed.subjects)?parsed.subjects:null);
+    if(!list)throw new Error('not a Chromasmith subjects file');
+    const merged=await window.__TAURI__.core.invoke('subject_import',{subjects:list});
+    await subjRefresh();mskRebuild();
+    toast(`Imported — ${merged.length} subject${merged.length===1?'':'s'} total`,true);
+  }catch(e){log('Subject import failed: '+(e&&e.message||e),'err');toast('Not a valid subjects file');}
+  finally{const inp=document.getElementById('subj-import-input');if(inp)inp.value='';}
+}
+function subjToken(){return _sam2Token||_samToken;}
+// Which encoder `subjToken()` currently resolves to — "sam2-1024" (71-80% recall, the encoder
+// worth teaching on) or "edgesam-1024" (58-65%, only used while SAM2's background encode hasn't
+// landed yet — see samEnsureEncoded2). Tags MUST match subject.rs's ENC_SAM2/ENC_EDGESAM exactly,
+// since that's what a subject's stored `encoder` field is compared against.
+function _subjCurEncoder(){return _sam2Token?'sam2-1024':(_samToken?'edgesam-1024':null);}
+function subjPanelHtml(m){
+  if(!window.__TAURI__)return '';
+  if(_subjects===null){subjRefresh().then(()=>{if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();});return '';}
+  const hasSel=!!(m.px&&m.px.length);
+  const curEnc=_subjCurEncoder();
+  const rows=(_subjects||[]).map((s,i)=>{
+    const n=(s.refs||[]).length;
+    // Flag it BEFORE Find is clicked, not only as an error toast after — a stored subject taught
+    // under a different encoder than the one this session currently has ready will always fail.
+    const mismatch=curEnc&&s.encoder&&s.encoder!==curEnc;
+    // Whichever reference has a thumbnail first — usually the first-taught one, but a subject
+    // taught before this feature existed (or on another machine) may have none, and that's fine.
+    const thumb=(s.refs||[]).map(r=>_subjThumbGet(s.id,r.id)).find(Boolean);
+    const findStatsHint=_subjFindStatsHint(s.id);
+    return '<div class="fx-row" style="align-items:center;gap:6px">'
+      +(thumb?'<img src="'+thumb+'" style="order:0;width:28px;height:28px;border-radius:5px;object-fit:cover;flex:0 0 auto" alt="">':'')
+      +'<div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'
+        +_esc(s.name)+' — taught from '+n+' photo'+(n===1?'':'s')+' using '+_esc(s.encoder||'an unknown encoder')+'">'+_esc(s.name)
+      +'<span style="color:var(--mut);font-variant-numeric:tabular-nums"> · '+n+'</span>'
+      +(mismatch?' <span style="color:var(--warn,#c90)" title="Taught with '+_esc(s.encoder)+', this session currently has '+_esc(curEnc)+' ready — Find will fail until you re-teach or the matching encoder loads.">⚠</span>':'')
+      +findStatsHint
+      +'</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFind('+i+')" title="Find '+_esc(s.name)+' in this photo and select it. Always check the result — this suggests, it does not guarantee.">'+icon('wand',12)+' Find</button>'
+      +'<button class="btn bgh" style="order:3;padding:3px 6px" onclick="subjFindInstances('+i+')" title="More than one '+_esc(s.name)+' in this photo? Look for several distinct locations, each installed as its own mask.">'+(_subjMultiBusy?'…':'×?')+'</button>'
+      +(hasSel?'<button class="btn bgh" style="order:4;padding:3px 8px" onclick="subjTeach('+i+')" title="Add the CURRENT selection as another reference photo. More references help, and a varied one helps most.">+ Ref</button>':'')
+      +((typeof fxImages!=='undefined'&&fxImages&&fxImages.length>1)?'<button class="btn bgh" style="order:5;padding:3px 6px" onclick="subjFindAll('+i+')" title="Check every other loaded photo for '+_esc(s.name)+' (coarse pass — jump to a result and Find again for a real check).">'+(_subjScanBusy?'…':'Scan all')+'</button>':'')
+      +'<button class="btn bgh" style="order:6;padding:3px 6px" onclick="subjMenu('+i+',event)" title="References, rename, forget">⋯</button>'
+      +'</div>';
+  }).join('');
+  // Readiness line: teaching before SAM2's background encode lands silently locks a subject onto
+  // the weaker EdgeSAM path (58-65% recall vs 71-80% — subject.rs's own measured table). Waiting a
+  // few seconds for "Improving selection quality…" to finish before hitting Remember/+ Ref is the
+  // single highest-leverage thing a user can do here, so say so instead of staying silent about it.
+  const readiness=_sam2Encoding
+    ?'<div style="font-size:var(--fs-1);color:var(--acc);font-family:var(--sans);margin-top:3px"><span style="display:inline-block;animation:fxspin 0.8s linear infinite">◠</span> Preparing the higher-accuracy model — teaching now will use the faster, less accurate one. Worth waiting a few seconds.</div>'
+    :(curEnc==='edgesam-1024'?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Using the faster EdgeSAM model (lower accuracy). The higher-accuracy model did not become available for this photo.</div>':'');
+  const pendingHtml=m._subjPending
+    ?'<div class="fx-row" style="align-items:center;gap:6px;background:var(--sur2);border-radius:6px;padding:4px 6px"><div class="fx-label" style="order:1">Was that '+_esc(m._subjPending.subjName)+'?</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFindConfirm(true)">'+icon('flagGreen',12)+' Yes</button>'
+      +'<button class="btn bgh" style="order:3;padding:3px 8px" onclick="subjFindConfirm(false)">'+icon('flagRed',12)+' No</button></div>'
+    :'';
+  return '<div class="fx-sub" style="margin-top:8px">Subjects</div>'
+    +pendingHtml
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">Select something, then <b>Remember</b> it to find the same subject in other photos.</div>')
+    +(hasSel?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="subjTeach(-1)" title="Name this selection so you can find the same subject in other photos. Measured reliability (~77-80% recall on one dog across varied conditions) is a general guide, not a per-species guarantee — a person, a different animal, or a busier scene may do better or worse.">'+icon('star',14)+(_subjBusy?' Working…':' Remember this subject')+'</button></div>':'')
+    +((_subjects||[]).some(s=>(s.refs||[]).length<3)?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:3px">Three or more reference photos works noticeably better than one — add a few taken in different places.</div>':'')
+    +readiness
+    +(_subjLowConfPending?'<div class="fx-row" style="align-items:center;gap:6px;background:var(--sur2);border-radius:6px;padding:4px 6px"><div class="fx-label" style="order:1">'+_esc(_subjLowConfPending.s.name)+' matched at only '+_subjLowConfPending.header.score.toFixed(3)+'</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjApplyLowConf()">Use it anyway</button></div>':'')
+    +('<div class="fx-row" style="align-items:center;gap:6px" title="Apple Photos-style: suppress a Find result below this raw similarity instead of always applying it. Off by default — score cannot reliably tell a hit from a miss (subject.rs measures both around 0.70-0.79), so treat this as a personal tolerance, not a real confidence cutoff."><div class="fx-label" style="order:1">Minimum similarity</div>'
+      +'<input class="fx-slider" style="order:2" type="range" min="0" max="0.95" step="0.01" value="'+_subjMinScore+'" oninput="this.nextElementSibling.textContent=(+this.value).toFixed(2)" onchange="subjSetMinScore(this.value)">'
+      +'<div class="fx-val" style="order:3">'+_subjMinScore.toFixed(2)+'</div></div>')
+    +subjMultiResultsHtml()
+    +subjScanResultsHtml()
+    +('<div class="btn-row" style="margin-top:6px">'
+      +((_subjects||[]).length?'<button class="btn bgh" onclick="subjExport()" title="Save every taught subject (names, references, prototypes) as a JSON file — to back up or move to another machine.">'+icon('export',14)+' Export…</button>':'')
+      +'<button class="btn bgh" onclick="document.getElementById(\'subj-import-input\').click()" title="Load a subjects file exported from this app (this or another machine). Adds/replaces by name — never deletes an existing subject not in the file.">'+icon('image',14)+' Import…</button>'
+      +'<input type="file" id="subj-import-input" accept="application/json,.json" style="display:none" onchange="subjImportFile(this.files[0])">'
+      +'</div>');
+}
+function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+/// Teaches a subject from the current mask raster. `idx` -1 creates a new one (prompting for a
+/// name), otherwise it adds another reference to an existing subject.

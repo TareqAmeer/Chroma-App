@@ -1,0 +1,49 @@
+// ── ICC embedding (for TIFF sources, whose profile can't be spliced from the source bytes) ──
+const _crcTab=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function crc32(bytes){let c=0xFFFFFFFF;for(let i=0;i<bytes.length;i++)c=_crcTab[(c^bytes[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function pngChunk(type,data){ // type: 4-char string; data: Uint8Array
+  const len=data.length,out=new Uint8Array(12+len);
+  out[0]=(len>>>24)&255;out[1]=(len>>>16)&255;out[2]=(len>>>8)&255;out[3]=len&255;
+  for(let i=0;i<4;i++)out[4+i]=type.charCodeAt(i);
+  out.set(data,8);
+  const crc=crc32(out.subarray(4,8+len));
+  out[8+len]=(crc>>>24)&255;out[9+len]=(crc>>>16)&255;out[10+len]=(crc>>>8)&255;out[11+len]=crc&255;
+  return out;
+}
+function pngSpliceAfterIHDR(out,chunk){ // sig(8)+IHDR(25) = 33 bytes
+  const res=new Uint8Array(out.length+chunk.length);
+  res.set(out.subarray(0,33),0);res.set(chunk,33);res.set(out.subarray(33),33+chunk.length);
+  return res;
+}
+// The rendering pipeline always outputs sRGB-referenced pixels (s2l/l2s gamma conversion
+// throughout, applyTone/applyGrade etc.), REGARDLESS of what colour space the ORIGINAL source
+// file was actually in. Tag every export sRGB explicitly instead of leaving it untagged (belt-
+// and-suspenders against a stricter viewer assuming something else) — and never re-embed a TIFF
+// source's OWN icc profile (Adobe RGB/ProPhoto/a camera profile — see loadTiff's icc capture)
+// onto the re-rendered output, which is no longer actually in that profile. This function used
+// to do exactly that (embedICC, now removed) — colour-managed viewers (Preview.app, Photoshop,
+// any browser honouring embedded profiles) reinterpreted sRGB-intended pixels through the wrong,
+// foreign profile, while the app's own on-screen canvas has no such colour management and shows
+// the same values as-is, producing "the export looks different from the preview".
+function embedSRGBTag(out,ext){
+  if(ext!=='png')return out; // untagged JPEG already defaults to sRGB in virtually every viewer
+  try{return pngSpliceAfterIHDR(out,pngChunk('sRGB',new Uint8Array([0])));}
+  catch(e){return out}
+}
+function injectDPI(b,ext,dpi){
+  dpi=Math.max(1,Math.round(dpi||72));
+  if(ext==='png'){
+    const ppm=Math.round(dpi/0.0254);
+    const chunk=new Uint8Array(21),cdv=new DataView(chunk.buffer);
+    cdv.setUint32(0,9);chunk.set([0x70,0x48,0x59,0x73],4); // 'pHYs'
+    cdv.setUint32(8,ppm);cdv.setUint32(12,ppm);chunk[16]=1;
+    cdv.setUint32(17,crc32(chunk.subarray(4,17)));
+    const out=new Uint8Array(b.length+21); // insert after sig(8)+IHDR(25)=33
+    out.set(b.subarray(0,33),0);out.set(chunk,33);out.set(b.subarray(33),54);
+    return out;
+  }else{ // JPEG: patch APP0 density in place (only fires if a JFIF segment is present)
+    // APP0 layout: FFE0 len(2) 'JFIF\0'(@6..10) ver(2) units(@13) Xden(@14) Yden(@16)
+    if(b[2]===0xFF&&b[3]===0xE0&&b[6]===0x4A&&b[7]===0x46&&b[8]===0x49&&b[9]===0x46){const out=b.slice();out[13]=1;out[14]=(dpi>>8)&0xFF;out[15]=dpi&0xFF;out[16]=(dpi>>8)&0xFF;out[17]=dpi&0xFF;return out;}
+    return b;
+  }
+}

@@ -1,0 +1,10 @@
+// ── WB Eyedropper ──────────────────────────────────────────────────────────────
+// Dispatches a click on the main preview canvas to whichever eyedropper mode (if any) is
+// currently armed — WB, Point Color, or a mask's Skin Tone colour range. All are
+// mutually-exclusive momentary "click to sample" modes, so at most one is ever active at a time.
+function fxCanvasClick(e){
+  if(_fnPickActive){fnPickBaseClick(e);return;}
+  if(_wbEyedropperActive){wbEyedropperClick(e);return;}
+  if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
+  if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
+}

@@ -1,0 +1,86 @@
+// ── Scan every loaded photo for a taught subject ─────────────────────────────────────────────
+// subject_locate only ever ran against whichever ONE photo sam_encode/sam2_encode had cached
+// (SAM_EMBED/SAM2_EMBED are single-slot — see subject_grid's doc comment in main.rs), so finding
+// a subject across a whole shoot meant opening every photo by hand, waiting for its encode, then
+// clicking Find. This drives that loop from JS instead, reusing the EXISTING sam_encode/
+// subject_locate commands (no backend change, so nothing here is untested).
+// ⚠️ Never applies a mask — subject.rs's own doc comment is explicit that there's no reliable
+// presence signal (a prototype learned from SKY once scored higher than a real dog), so this only
+// ever produces a sorted list of candidates to jump to and confirm by hand, exactly like a single
+// Find. It also deliberately uses EdgeSAM only (skips the slower SAM2 background upgrade) — this
+// is a coarse "which photos are worth a look" pass, not a final answer; a real Find (SAM2-quality)
+// still happens per-photo once the user jumps there.
+let _subjScanBusy=false,_subjScanResults=null,_subjScanProgress=null,_subjScanCancel=false;
+function _samInputDimsFor(img){
+  const iw=(img&&(img.naturalWidth||img.width))||400,ih=(img&&(img.naturalHeight||img.height))||300;
+  const MAXD=1024,s=Math.min(1,MAXD/Math.max(iw,ih));
+  return{w:Math.max(2,Math.round(iw*s)),h:Math.max(2,Math.round(ih*s))};
+}
+async function subjFindAll(idx){
+  if(_subjScanBusy)return;
+  const s=(_subjects||[])[idx];if(!s)return;
+  if(typeof fxImages==='undefined'||!fxImages||fxImages.length<2){toast('Load more than one photo to scan a batch');return;}
+  _subjScanBusy=true;_subjScanCancel=false;_subjScanResults=null;
+  const todo=fxImages.map((_,i)=>i).filter(i=>i!==fxCurIdx);
+  _subjScanProgress={done:0,total:todo.length};
+  // N3.2: mirror onto the Library sidebar's shared activity indicator (library-ui.js) alongside
+  // the local inline panel below — one consistent "is anything running" place app-wide instead
+  // of this being the one scan nowhere else can see. No-op if the Library UI isn't loaded.
+  if(typeof window.libActivityJob==='function')window.libActivityJob('subject',{label:'Finding "'+s.name+'"',done:0,total:todo.length,cancelFn:subjFindAllCancel});
+  mskRebuild();
+  const origIdx=fxCurIdx;
+  const results=[];
+  for(const i of todo){
+    if(_subjScanCancel)break;   // user hit Cancel — stop early, keep whatever was found so far
+    const item=fxImages[i];
+    if(item&&item.img){
+      try{
+        const{w,h}=_samInputDimsFor(item.img);
+        const d=mskSourceData(w,h,item.img);
+        if(d){
+          const rgb=new Uint8Array(w*h*3);
+          for(let p=0,q=0;p<w*h;p++){rgb[q++]=d[p*4];rgb[q++]=d[p*4+1];rgb[q++]=d[p*4+2];}
+          const token='subj-scan-'+i+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+          await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
+          const buf=await window.__TAURI__.core.invoke('subject_locate',{token,id:s.id});
+          const dv=new DataView(buf);
+          const hlen=dv.getUint32(0,true);
+          const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+          results.push({idx:i,label:item.name||('Photo '+(i+1)),score:header.score});
+        }
+      }catch(e){/* skip a photo that fails to encode/locate rather than aborting the whole scan */}
+    }
+    _subjScanProgress.done++;
+    // Rebuild every few photos rather than every single one — this scan can touch dozens of
+    // photos and the panel doesn't need to repaint at that rate to feel live.
+    if(_subjScanProgress.done%2===0||_subjScanProgress.done===_subjScanProgress.total){
+      mskRebuild();
+      if(typeof window.libActivityJob==='function')window.libActivityJob('subject',{label:'Finding "'+s.name+'"',done:_subjScanProgress.done,total:_subjScanProgress.total,cancelFn:subjFindAllCancel});
+    }
+  }
+  // The scan's own sam_encode calls evicted whatever the user's actual current photo had cached —
+  // restore it so returning to normal editing doesn't hit a stale-token error on the next scribble.
+  _samToken=null;_sam2Token=null;
+  results.sort((a,b)=>b.score-a.score);
+  _subjScanResults={subjId:s.id,name:s.name,results,partial:_subjScanCancel,checked:results.length&&_subjScanProgress?_subjScanProgress.done:todo.length};
+  _subjScanBusy=false;_subjScanProgress=null;
+  if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('subject',{label:'Finding "'+s.name+'"'});
+  samEnsureEncoded();
+  mskRebuild();
+}
+function subjFindAllCancel(){_subjScanCancel=true;}
+function subjScanResultsHtml(){
+  if(_subjScanBusy&&_subjScanProgress){
+    const p=_subjScanProgress;
+    return '<div class="fx-sub" style="margin-top:6px">Scanning other photos…</div>'
+      +'<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1;flex:1">'+p.done+' / '+p.total+' checked</div>'
+      +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="subjFindAllCancel()">Cancel</button></div>';
+  }
+  const r=_subjScanResults;if(!r)return '';
+  const rows=r.results.slice(0,20).map(o=>
+    '<div class="fx-row" style="align-items:center;gap:6px"><div class="fx-label" style="order:1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+_esc(o.label)+'</div>'
+    +'<button class="btn bgh" style="order:2;padding:3px 8px" onclick="fxSelectImage('+o.idx+')" title="Jump to this photo and check it yourself — a scan score is not a confidence.">Go</button></div>').join('');
+  return '<div class="fx-sub" style="margin-top:6px">Scan of other loaded photos for '+_esc(r.name)+(r.partial?' (cancelled — '+r.checked+' checked)':'')+'</div>'
+    +(rows||'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans)">No other photos to check.</div>')
+    +'<div class="msk-hint">Sorted by raw similarity — not a confidence score. Open each and confirm by eye; nothing here was applied automatically.</div>';
+}

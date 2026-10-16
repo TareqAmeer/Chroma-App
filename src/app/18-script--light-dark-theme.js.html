@@ -1,0 +1,131 @@
+// ── light / dark theme ──
+function toggleTheme(){
+  const light=document.body.classList.toggle('light');
+  try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  if(window.sk2SaveViewTheme)sk2SaveViewTheme(light?'light':'dark');
+  syncThemeBtns();
+  // The docked Library filmstrip (#lib-overlay) keeps its OWN theme class (.lib-light) rather
+  // than reading body.light directly — see the fix comment on library-ui.js's
+  // syncLibThemeFromShared(). Without this call it stays on whatever theme it booted into,
+  // regardless of what the Editor's own theme toggle does (editor_ux_spec.json E6).
+  if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme();
+}
+function syncThemeBtns(){
+  const light=document.body.classList.contains('light');
+  document.querySelectorAll('.theme-ic').forEach(e=>e.innerHTML=icon(light?'moon':'sun',18));
+}
+// Absolute set (not toggle) — the View menu's Appearance radio (ovfBuild) needs "make this the
+// active choice", the same semantics Library's own data-theme opts use, not "flip whatever it is
+// now". Shares the exact same csTheme key/class toggleTheme() above uses, so the two menus never
+// drift out of sync with each other.
+// ⚠️ Do NOT rebuild the menu (ovfBuild()/settingsBuild()) from here. It used to, and that
+// innerHTML rebuild DETACHES the just-clicked button mid-event — the document-level "click
+// outside closes the menu" listener at settingsToggle's definition then runs its
+// `e.target.closest('#fx-settings')` check against an already-detached node, which fails to find
+// any ancestor, and the menu incorrectly closes on every theme click. Toggle the `.on` class on
+// the two existing buttons directly instead, exactly the targeted-update approach Library's own
+// syncViewMenuChecks() uses for the identical menu shape, and the menu correctly stays open
+// (confirmed live).
+function fxSetTheme(mode){
+  const light=mode==='light';
+  document.body.classList.toggle('light',light);
+  try{localStorage.setItem('csTheme',light?'light':'dark');}catch(e){}
+  if(window.sk2SaveViewTheme)sk2SaveViewTheme(mode);
+  syncThemeBtns();
+  if(typeof window.chromasmithSyncLibTheme==='function')window.chromasmithSyncLibTheme(); // see toggleTheme()'s comment — E6
+  // Appearance moved from #fx-overflow-menu into #fx-view-menu (viewMenuBuild) when Tools/View/⋯
+  // were split — this live-update loop still only checked the old menu, so clicking Dark/Light
+  // inside the NEW View menu correctly changed the theme but left the button's own 'on' state
+  // stale until the menu was closed and reopened (rebuilding it fresh). Both menus checked now.
+  ['fx-overflow-menu','fx-view-menu'].forEach(id=>{
+    const m=document.getElementById(id);
+    if(m)m.querySelectorAll('.fx-ovf-item').forEach(btn=>{
+      if(btn.onclick&&btn.getAttribute('onclick')?.includes("fxSetTheme('dark')"))btn.classList.toggle('on',!light);
+      if(btn.getAttribute('onclick')?.includes("fxSetTheme('light')"))btn.classList.toggle('on',light);
+    });
+    if(m)m.querySelectorAll('.theme-sw').forEach(sw=>{sw.classList.toggle('is-light',light);sw.setAttribute('aria-checked',light);});
+  });
+}
+// Desktop (Tauri) app only: the "Image Input" tab exists so web/mobile can drag/drop a photo in,
+// but the desktop app loads photos from its native Library, so the tab is dead weight there — its
+// only still-useful controls (RAW profile, Apply LUT + its buttons) move into the Looks card
+// instead. #dz-fx-img itself (and its file input, which fxPickPhotos/"+" still reach via
+// querySelector) is deliberately left behind in the now-hidden Image card: it doesn't need to be
+// visible to keep working, and physically relocating it would risk the drop-target/dz styling.
+// Runs once at boot, before the first applyFxLayout(); _eachSection() is what actually hides the
+// 'image' rail/nav entry on desktop (gated on window.__TAURI__, same check as here).
+function fxDesktopFoldImageIntoLooks(){
+  if(!window.__TAURI__)return;
+  const movable=document.getElementById('fx-image-movable');
+  const looksCard=document.querySelector('.fx-ctrl[data-fxsec="looks"]');
+  if(!movable||!looksCard)return;
+  const title=looksCard.querySelector('.fx-ctrl-title');
+  movable.classList.add('fx-folded');
+  looksCard.insertBefore(movable,title?title.nextSibling:looksCard.firstChild); // right after the title
+  // 3.4.4: Google Photos import stays a real, useful entry point on web/mobile (drag/drop is how
+  // a photo gets in there) but is redundant clutter on desktop, where photos come from the OS
+  // Library instead — hidden here rather than deleted from the markup outright.
+  const gp=document.getElementById('btn-gp-import');if(gp)gp.style.display='none';
+  fxDesktopReorderLooksPanel(looksCard,title);
+  if(typeof fxSplitLooksCard==='function')fxSplitLooksCard();
+}
+// 3.4.5/3.4.7/3.4.8: reorders the Looks panel's EXISTING elements (moves nodes, writes no new
+// markup) into the wireframe's presetbox sequence — RAW profile -> Input -> Preset section (with
+// Strength now inside it, between the category chips and the tile grid) -> Print -> Highlight
+// response -> the LUT-apply row (dropzone + chart/save/delete/download) -> test-chart button.
+// Desktop-only (called from fxDesktopFoldImageIntoLooks, same window.__TAURI__ gate) because the
+// web/mobile Looks panel has its own different accordion affordances this reorder was never
+// designed against — reordering there too risked breaking a layout this pass never looked at.
+// ⚠️ Untestable through ?libtest=1 (it stubs window.__TAURI__ falsy on purpose, so this function
+// never runs under the browser harness) — verified instead with real screenshots of the built
+// desktop app (bash desktop/install-app.sh), not the structural gates.
+function fxDesktopReorderLooksPanel(looksCard,title){
+  if(!title)return;
+  const rowOf=(el)=>el&&el.closest('.fx-row');
+  const rawRow=rowOf(document.getElementById('sel-dcp'));
+  const inputLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Input');
+  const inputSel=document.getElementById('sel-input'),inputChips=document.getElementById('chips-input');
+  const printLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Print');
+  const printSel=document.getElementById('sel-print'),printChips=document.getElementById('chips-print'),legacyLutSel=document.getElementById('sel-lut');
+  const hrLabel=Array.from(looksCard.querySelectorAll(':scope > .fx-label')).find(l=>l.textContent.trim()==='Highlight response');
+  const hrSel=document.getElementById('sel-tonemap'),hrChips=document.getElementById('chips-tonemap');
+  const strengthRow=document.getElementById('row-lut-mix');
+  const looksCtrl=document.getElementById('fx-looks-ctrl');
+  const catsRow=document.getElementById('fx-looks-cats'),grid=document.getElementById('fx-looks');
+  const clipInfo=document.getElementById('fx-clip-info');
+  const lutDz=document.getElementById('dz-fx-lut');
+  const testchartBtn=document.getElementById('btn-gp-import')&&document.getElementById('btn-gp-import').closest('.btn-row');
+  const saveDelRow=document.getElementById('btn-lut-save')&&document.getElementById('btn-lut-save').closest('.btn-row');
+  const chartDlRow=document.getElementById('btn-lut-dl')&&document.getElementById('btn-lut-dl').closest('.btn-row');
+  // 3.4.8: Strength moves INSIDE the preset section, between the category-chip row and the tile
+  // grid — not just "near" the presets, between its own two named landmarks.
+  if(strengthRow&&catsRow&&grid&&catsRow.parentElement===grid.parentElement){
+    catsRow.insertAdjacentElement('afterend',strengthRow);
+  }
+  // 3.4.3: a smaller "apply LUT" cluster — the dropzone plus chart/save/delete/download, grouped
+  // together rather than spread across three separate btn-rows with Google Photos/test-chart
+  // mixed in between them.
+  const applyLutWrap=document.createElement('div');
+  applyLutWrap.id='fx-apply-lut-row';
+  applyLutWrap.style.cssText='margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr)';
+  [lutDz,saveDelRow,chartDlRow].forEach(el=>{if(el)applyLutWrap.appendChild(el);});
+  let anchor=title;
+  const place=(el)=>{if(el&&el!==anchor){anchor.insertAdjacentElement('afterend',el);anchor=el;}};
+  // Apply LUT and its More fold sit below the Looks section, under the Strength slider. The More fold
+  // is created by the sk2 behaviour script, so it is looked up by its summary text and only moved if it exists.
+  const moreFold=Array.from(looksCard.querySelectorAll('details.sk2-more')).find(d=>d.querySelector('summary')&&d.querySelector('summary').textContent.trim()==='More');
+  const lutTail=[applyLutWrap,moreFold].filter(Boolean);
+  // Strength is sticky to the bottom of the Looks scroll area, so the LUT tail goes after the tile grid
+  // (the end of the Looks section) and reads as sitting beneath it.
+  let tailAnchor=grid||strengthRow||title;
+  lutTail.forEach(el=>{if(tailAnchor){tailAnchor.insertAdjacentElement('afterend',el);tailAnchor=el;}});
+  place(rawRow);
+  place(inputLabel);place(inputSel);place(inputChips);
+  place(clipInfo);
+  place(printLabel);place(printSel);place(printChips);place(legacyLutSel);
+  place(hrLabel);place(hrSel);place(hrChips);
+  place(testchartBtn);
+  // Preset is its own section: it sits after the Looks controls (so the Looks chevron visibly
+  // governs only what's directly under it) and survives the Looks card collapse (CSS below).
+  if(looksCtrl){looksCtrl.classList.add('fx-preset-sec');looksCard.appendChild(looksCtrl);}
+}

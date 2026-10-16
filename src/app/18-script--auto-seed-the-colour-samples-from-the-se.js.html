@@ -1,0 +1,229 @@
+// ── Auto-seed the colour samples from the segmented region ────────────────────────────────────
+// `+ Skin` is segmentation-first (CLAUDE.md §5b): SAM has already answered "which pixels are this
+// person" before any colour is picked. So the samples can be DERIVED from those pixels instead of
+// clicked — which removes the measured one-sample failure mode outright rather than warning about
+// it, because the picks are guaranteed to span the whole selected region instead of whatever one
+// spot the user happened to click.
+//
+// k-means in OKLAB LCh, k = 4, over the masked pixels. Oklab because the whole skin path is in it
+// and chroma is the axis that separates skin from bright rock (§5b's table); k = 4 because the
+// gate holds CR_MAX_SAMPLES = 6 and the shaded/lit/pale/sheen split measured on __TM3390 is about
+// four clusters — enough to cover a body, with headroom for the user to shift-click more.
+//
+// ⚠️ Hue is CIRCULAR. Every mean here goes through the same cos/sin construction crSampleMean
+// uses; averaging 0.98 and 0.02 arithmetically gives cyan, which is the bug that would make an
+// auto-seeded gate select worse than a single hand pick.
+function _circMean(hs){
+  let x=0,y=0;
+  for(const h of hs){const a=h*2*Math.PI;x+=Math.cos(a);y+=Math.sin(a);}
+  let h=Math.atan2(y/hs.length,x/hs.length)/(2*Math.PI);
+  return h<0?h+1:h;
+}
+function _circDist(a,b){let d=Math.abs(a-b);return d>0.5?1-d:d;}
+/// Samples the mask's own raster against the graded preview, returning [{h,C,v,rgb}] in Oklab.
+/// Reads the SAME canvas mskMeasureSrcV does, so the auto-seeded samples and the srcV anchor are
+/// measured in one space.
+function _mskSkinPixels(m,maxN){
+  const cv=FX.cv;if(!cv||!m.px||!m.mtW||!m.mtH)return[];
+  const w=Math.min(cv.width,420),h=Math.max(1,Math.round(w*cv.height/cv.width));
+  const t=document.createElement('canvas');t.width=w;t.height=h;
+  const c=t.getContext('2d',{willReadFrequently:true});
+  c.drawImage(cv,0,0,w,h);
+  const d=c.getImageData(0,0,w,h).data;
+  const out=[];
+  for(let y=0;y<h;y++){
+    // Nearest-neighbour into the mask raster: it is a different resolution to the preview, and
+    // this only needs to know "is this pixel in the selection", not a precise edge.
+    const my=Math.min(m.mtH-1,Math.floor(y*m.mtH/h));
+    for(let x=0;x<w;x++){
+      const mx=Math.min(m.mtW-1,Math.floor(x*m.mtW/w));
+      if(m.px[my*m.mtW+mx]<128)continue;
+      const i=(y*w+x)*4;
+      const[hh,C,v]=rgb2oklch(d[i]/255,d[i+1]/255,d[i+2]/255);
+      // ⚠️ Use §5b's MEASURED cut (0.016), not the shader's smoothstep floor (0.010). Those are
+      // different jobs: the shader ramps a weight, this decides whether a pixel may DEFINE a
+      // cluster centre. Seeding at 0.010 let grey rock inside the selection form its own cluster,
+      // and the resulting gate then leaked onto rock at 0.258 — measured in probe_tm3390.
+      if(C<0.016)continue;
+      out.push({h:hh,s:C,v,rgb:[d[i],d[i+1],d[i+2]]});
+    }
+  }
+  if(out.length>maxN){ // deterministic stride, not random — same input must give the same samples
+    const step=out.length/maxN,thin=[];
+    for(let i=0;i<maxN;i++)thin.push(out[Math.floor(i*step)]);
+    return thin;
+  }
+  return out;
+}
+function mskAutoSamples(){
+  const m=fxState.masks[mskSel];
+  if(!m){return;}
+  if(!m.px||!m.px.length){toast('Select the subject first — scribble over them');return;}
+  const subjWord=m.origin==='coat'?'coat':'skin';
+  const px=_mskSkinPixels(m,4000);
+  if(px.length<20){toast('Not enough '+subjWord+' in the selection to sample');return;}
+  // K used to be a flat 4, tuned on one photo (__TM3390.jpg). It now also responds to how spread
+  // out the selection's tone actually is (value std-dev) — a tight headshot doesn't need 4-6
+  // clusters just because it has plenty of pixels, and a group shot with strong mixed lighting
+  // genuinely does. CR_MAX_SAMPLES=8 gives this room to grow to 6 and still leave 2 slots free for
+  // a manual shift-click add-on.
+  const vMean=px.reduce((a,p)=>a+p.v,0)/px.length;
+  const vStd=Math.sqrt(px.reduce((a,p)=>a+(p.v-vMean)*(p.v-vMean),0)/px.length);
+  const kBySpread=Math.round(2+vStd*22);   // ~0 std -> 2, ~0.18 std (shade+lit+highlight) -> 6
+  const K=Math.min(6,Math.max(1,Math.min(kBySpread,Math.floor(px.length/8))));
+  // Seed on the VALUE spread rather than at random: the clusters that matter are shaded vs lit
+  // skin, so starting the centres spread along v converges to that split in a couple of passes
+  // and — unlike random seeding — gives the same answer every time it is run on the same photo.
+  const byV=px.slice().sort((a,b)=>a.v-b.v);
+  let cent=[];
+  for(let i=0;i<K;i++)cent.push(byV[Math.floor((i+0.5)*byV.length/K)]);
+  cent=cent.map(p=>({h:p.h,s:p.s,v:p.v}));
+  const asg=new Array(px.length).fill(0);
+  for(let iter=0;iter<12;iter++){
+    let moved=false;
+    for(let i=0;i<px.length;i++){
+      let best=0,bd=Infinity;
+      for(let k=0;k<K;k++){
+        // Weight the axes the way the gate does: hue and chroma decide selection, value does not
+        // (the gate has no value term), so value gets a small weight — enough to keep shaded and
+        // lit skin in separate clusters without letting brightness dominate the split.
+        const dh=_circDist(px[i].h,cent[k].h),ds=px[i].s-cent[k].s,dv=(px[i].v-cent[k].v)*0.35;
+        const d=dh*dh*4+ds*ds+dv*dv;
+        if(d<bd){bd=d;best=k;}
+      }
+      if(asg[i]!==best){asg[i]=best;moved=true;}
+    }
+    for(let k=0;k<K;k++){
+      const mem=px.filter((_,i)=>asg[i]===k);
+      if(!mem.length)continue;
+      cent[k]={h:_circMean(mem.map(p=>p.h)),
+               s:mem.reduce((a,p)=>a+p.s,0)/mem.length,
+               v:mem.reduce((a,p)=>a+p.v,0)/mem.length};
+    }
+    if(!moved)break;
+  }
+  // ⚠️ Drop MINORITY clusters before anything else. A segmentation is never perfectly tight —
+  // a rim of hair, background or rock inside the mask is a small share of the pixels but k-means
+  // gives it a centre of its own, and every sample widens the gate equally. Measured: without
+  // this the gate leaked onto grey rock (0.258) and the dog's body (0.327), and the effective
+  // weight spread across skin went from 0.039 to 0.247 — which §5b's central finding says
+  // matters MORE than the weight being high.
+  const counts=new Array(K).fill(0);
+  for(const a of asg)counts[a]++;
+  const MIN_SHARE=0.08;
+  const sized=cent.map((c,k)=>({c,n:counts[k]})).filter(o=>o.n/px.length>=MIN_SHARE)
+                  .sort((a,b)=>b.n-a.n);
+  // Drop clusters that ended up nearly identical — two samples on the same tone add no coverage
+  // and just eat one of the six slots.
+  const keep=[];
+  for(const{c}of sized){
+    if(keep.some(k=>_circDist(k.h,c.h)<0.01&&Math.abs(k.s-c.s)<0.006))continue;
+    keep.push(c);
+  }
+  if(!keep.length){toast('Could not find a consistent '+subjWord+' tone in the selection');return;}
+  // If most of the candidate clusters got dropped (as noise or near-duplicates), the survivors are
+  // few and the selection collapses back toward the "1-sample" failure mode §5b measured — warn
+  // instead of silently sampling fewer tones than the selection's actual spread suggested.
+  if(K>=3&&keep.length<=Math.ceil(K/2)){
+    toast(`Only ${keep.length} of ${K} candidate tones were consistent enough to keep — check the selection isn't including background`,'warn');
+  }
+  m.crSamples=keep.slice(0,CR_MAX_SAMPLES).map(c=>{
+    const[r,g,b]=oklch2rgb(c.h,c.s,c.v);
+    return{h:c.h,s:c.s,v:c.v,rgb:[Math.round(r*255),Math.round(g*255),Math.round(b*255)]};
+  });
+  m.crOn=true;m._okSpace=true;
+  // ⚠️ The range is deliberately LEFT ALONE at the mask's own default (measured for skin at 55;
+  // see mskAdd's 'coat' branch for why coat's default is wider), and the alternative was measured
+  // rather than assumed for skin. Narrowing it to 40 removes a gate leak onto grey rock
+  // (0.277 -> 0.000) but triples the effective-weight spread across skin (0.018 -> 0.085) and
+  // costs 6 points of chroma convergence. §5b's central finding is that FLAT weight matters more
+  // than high weight, and the leak it trades against is an artifact of measuring with a
+  // frame-sized ellipse: this button only exists on Skin/Coat masks, which are segmentation-first,
+  // so rock and other subjects are outside the SHAPE and multiplied to zero regardless of the gate.
+  // If a user does see spill, "How similar" is right there to lower.
+  mskSrcVDebounced();
+  mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  log(`Auto-sampled ${m.crSamples.length} ${subjWord} tones from the selection`,'info');
+  toast(`Sampled ${m.crSamples.length} tones from the selection`,true);
+}
+function mskCrEyedropper(force){
+  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;
+  const btn=document.getElementById('btn-msk-cr-eye');if(btn)btn.classList.toggle('on',_mskCrEyeActive);
+  if(FX.cv)FX.cv.style.cursor=_mskCrEyeActive?'crosshair':'';
+  if(_mskCrEyeActive&&force==null)log('Click the tone you want to select','info');
+}
+function mskCrEyedropperClick(e){
+  if(!_mskCrEyeActive)return true;   // returns true when it consumed the click
+  const m=fxState.masks[mskSel];if(!m){mskCrEyedropper(false);return true;}
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a skin tone','warn');return true;}
+  const avg=_pickAvgRGB(e,true);if(!avg)return true;
+  // Field names h/s/v are kept so the packing code and saved masks are unchanged, but the VALUES
+  // are Oklab hue-turn / chroma / L. rgb is stored so _mskMigrate can recompute after a space swap.
+  const[h,s,v]=rgb2oklch(avg[0]/255,avg[1]/255,avg[2]/255);
+  // Shift/Alt-click ADDS a sample (Lightroom's Color Range convention) instead of replacing —
+  // one pick can't cover a whole body, so building up a locus is the normal case, not the
+  // exception. Stays armed while adding so several picks are one gesture each.
+  const add=!!(e.shiftKey||e.altKey);
+  if(!add||!m.crSamples.length)m.crSamples=[];
+  if(m.crSamples.length>=CR_MAX_SAMPLES){log(`Maximum ${CR_MAX_SAMPLES} color samples`,'warn');mskCrEyedropper(false);return true;}
+  m.crSamples.push({h,s,v,rgb:[Math.round(avg[0]),Math.round(avg[1]),Math.round(avg[2])]});
+  m.crOn=true;
+  if(!add)mskCrEyedropper(false);
+  mskMeasureSrcV(m);
+  mskRebuild();fxUpdate();
+  // mskAutoSamples' k-means seeding already rejects candidate cluster centres below this SAME
+  // 0.016 chroma cut (§5b: it's what separates skin from near-neutral rock/sunglasses) before a
+  // sample is ever created. A manual eyedropper pick had no such check — a near-neutral click
+  // (shadowed sunglasses, an underexposed patch) silently produced a sample the shader's own
+  // smoothstep(0.010,0.016,...) floor then contributes almost nothing from, with no sign to the
+  // user of why that pick "didn't do anything".
+  if(s<0.016){
+    log(`Low colour purity (${s.toFixed(3)}) on that pick — it will barely widen the selection. Try a spot with more visible ${m.origin==='coat'?'coat':'skin'} tone, not a near-neutral area.`,'warn');
+  }else{
+    log(m.crSamples.length>1
+      ?`${m.crSamples.length} tones selected — shift-click to add more`
+      :'Tone targeted — SHIFT-click more patches of skin (shaded, paler, pinker) to cover all of it','ok');
+  }
+  return true;
+}
+// Color purity range starts LINKED to Hue range (crRangeC null => the shader/JS both fall back to
+// crRange — see colRangeWeight/crWeightJS) so an untouched mask behaves exactly as it did with one
+// shared slider. Dragging the Color purity slider unlinks it (mskSlide just writes a real number).
+// Nothing else told the user the two were coupled, so moving Hue range on a mask where Color
+// purity had NOT been touched silently moved both — this makes the coupling visible and gives a
+// one-click way back to it after diverging them on purpose.
+function _mskCrLinkNote(m){
+  if(m.crRangeC==null)return '<div class="msk-hint" style="opacity:var(--op-6)">Linked to Hue range — drag it to set an independent value.</div>';
+  return '<div class="msk-hint" style="opacity:var(--op-6)">Independent of Hue range. <a href="javascript:void(0)" onclick="mskCrRelink()">Re-link</a></div>';
+}
+function mskCrRelink(){const m=fxState.masks[mskSel];if(!m)return;m.crRangeC=null;mskSrcVDebounced();mskRebuild();fxUpdate();}
+function mskCrToggle(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.crOn=!!el.checked;mskMeasureSrcV(m);mskRebuild();fxUpdate();
+}
+// ROADMAP R7 — Depth Range gate toggle, sibling to mskCrToggle above.
+function mskDepToggle(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.depOn=!!el.checked;
+  if(m.depOn&&m.depLo==null){m.depLo=0;m.depHi=1;}
+  if(m.origin==='depth')delete m._refineCache;
+  mskRebuild();fxUpdate();
+}
+function mskCrDropSample(i){
+  const m=fxState.masks[mskSel];if(!m||!m.crSamples)return;
+  m.crSamples.splice(i,1);
+  if(!m.crSamples.length)m.crOn=false;
+  mskMeasureSrcV(m);mskRebuild();fxUpdate();
+}
+function mskTgtMode(mode){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtMode=mode;mskRebuild();fxUpdate();
+}
+function mskTgtSwatch(hex){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtHex=hex;m.tgtMode='swatch';mskRebuild();fxUpdate();
+}
+function mskTgtPicked(el){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.tgtHex=el.value;m.tgtMode='custom';fxUpdate();
+}

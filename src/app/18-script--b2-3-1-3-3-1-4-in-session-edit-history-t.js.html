@@ -1,0 +1,176 @@
+// ── B2/3.1.3/3.1.4: in-session edit-history timeline, COMBINED with the export-version list
+// (editor_ux_spec.json, 2026-09-09 — was two entirely separate popovers: #btn-export-history
+// only ever showed exported versions via chromasmithGetExportHistory, and #btn-history/
+// fxToggleTimelinePopover only ever showed the in-session undo stack (fxHistory). A user hitting
+// the export-history button expecting edit history saw only exports (or nothing, if no exports
+// exist yet) — "the edit history timeline doesn't work" was really "you're looking at the wrong
+// one of two". Both buttons now open this SAME popover with ONE interleaved list.
+async function fxTimelineScrub(idx){
+  idx=Math.max(0,Math.min(fxHistory.length-1,idx|0));
+  await _fxTimelinePreviewEnd(idx);
+}
+// Hover previews never move fxHistIdx or create history entries. Serialize async restores and
+// invalidate queued previews on exit/commit so a slow LUT load cannot land after the selection.
+let _fxTimelinePreviewBase=-1,_fxTimelinePreviewToken=0,_fxTimelinePreviewQueue=Promise.resolve();
+function _fxTimelinePreview(idx){
+  if(_fxTimelinePreviewBase<0)_fxTimelinePreviewBase=fxHistIdx;
+  const token=++_fxTimelinePreviewToken;
+  _fxTimelinePreviewQueue=_fxTimelinePreviewQueue.then(async()=>{
+    if(token!==_fxTimelinePreviewToken)return;
+    await _fxHistoryRestore(idx);
+    if(token===_fxTimelinePreviewToken)fxSyncTopbarDisabled();
+  });
+  return _fxTimelinePreviewQueue;
+}
+function _fxTimelinePreviewEnd(commitIdx=-1){
+  const base=_fxTimelinePreviewBase;
+  if(base<0&&commitIdx<0)return _fxTimelinePreviewQueue;
+  _fxTimelinePreviewBase=-1;
+  const token=++_fxTimelinePreviewToken,target=commitIdx>=0?commitIdx:base;
+  if(commitIdx>=0)fxHistIdx=commitIdx;
+  _fxTimelinePreviewQueue=_fxTimelinePreviewQueue.then(async()=>{
+    if(token!==_fxTimelinePreviewToken)return;
+    if(commitIdx>=0)await _fxHistoryTransition(base,target);
+    else await _fxHistoryRestore(target);
+    if(token===_fxTimelinePreviewToken)fxSyncTopbarDisabled();
+  });
+  return _fxTimelinePreviewQueue;
+}
+// 2026-09-09: same split as the split-compare menu above — content-building factored out of
+// fxToggleTimelinePopover so it can render into either the floating web/mobile popover
+// (unchanged below) or inline into the desktop settings menu (settingsHistoryBuild()).
+// showReset is false for the settings-menu render: ovfBuild()'s own "Reset all edits" row
+// already covers it there, and repeating it would be a second control for the same action in
+// the same dropdown.
+async function _fxTimelineListInto(container,closeFn,showReset){
+  container.innerHTML='';
+  const rail=document.createElement('input');
+  rail.type='range';rail.min=0;rail.max=Math.max(0,fxHistory.length-1);rail.value=fxHistIdx;
+  rail.style.cssText='width:100%';
+  rail.oninput=()=>_fxTimelinePreview(parseInt(rail.value,10));
+  rail.onchange=()=>{_fxTimelinePreviewEnd(parseInt(rail.value,10));_fxTimelineListInto(container,closeFn,showReset);};
+  container.appendChild(rail);
+  const list=document.createElement('div');
+  list.style.cssText='margin-top:6px';
+  // Edit-history rows (in-session undo stack) — ts is already ms (Date.now() at push time).
+  const editRows=[...fxHistory].map((h,i)=>({kind:'edit',i,label:h.label,ts:h.ts}));
+  // Export-history rows, if the Library backend exposes any — ts is SECONDS (export_history.rs
+  // convention), so ×1000 to compare against fxHistory's ms timestamps on one shared timeline.
+  let exportRows=[];
+  if(typeof window.chromasmithGetExportHistory==='function'){
+    try{
+      const exp=await window.chromasmithGetExportHistory();
+      exportRows=(exp||[]).map(entry=>({kind:'export',entry,label:`Export v${entry.version}`,ts:entry.ts*1000}));
+    }catch(e){/* Library backend not reachable — edit history alone still renders below */}
+  }
+  const merged=[...editRows,...exportRows].sort((a,b)=>b.ts-a.ts); // newest first, one shared order
+  if(!merged.length){
+    list.innerHTML='<div style="padding:8px;font-size:11px;color:var(--mut)">No history yet</div>';
+  }
+  merged.forEach(row=>{
+    const isCur=row.kind==='edit'&&row.i===fxHistIdx;
+    const el=document.createElement('button');
+    el.type='button';el.style.cssText='width:100%;text-align:left;color:inherit;background:transparent;border:0;padding:6px 8px;font:inherit;font-size:11px;cursor:pointer;border-radius:5px;display:flex;justify-content:space-between;gap:8px'+(isCur?';background:var(--hov)':'');
+    el.setAttribute('aria-current',isCur?'step':'false');
+    el.onmouseenter=()=>{el.style.background='var(--hov)';if(row.kind==='edit')_fxTimelinePreview(row.i);};
+    el.onmouseleave=()=>{if(row.kind==='edit')_fxTimelinePreviewEnd();el.style.background=isCur?'var(--hov)':'';};
+    el.onfocus=()=>{if(row.kind==='edit')_fxTimelinePreview(row.i);};
+    el.onblur=()=>{if(row.kind==='edit')_fxTimelinePreviewEnd();};
+    const d=new Date(row.ts);
+    const timeStr=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:row.kind==='edit'?'2-digit':undefined});
+    const tag=row.kind==='export'?'<span style="color:var(--acc);margin-right:5px">⬆</span>':'';
+    const escLbl=String(row.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); // matches log()'s own inline escape — no shared esc() helper in this file
+    el.innerHTML=`<span>${tag}${row.kind==='edit'?row.i+': '+escLbl:escLbl}</span><span style="color:var(--mut)">${timeStr}</span>`;
+    el.onclick=async()=>{
+      if(row.kind==='edit'){await _fxTimelinePreviewEnd(row.i);_fxTimelineListInto(container,closeFn,showReset);return;}
+      try{const snap=JSON.parse(decodeURIComponent(escape(atob(row.entry.recipe))));await applyUISnapshot(snap);fxUpdate();log(`Restored v${row.entry.version} recipe`,'info');}
+      catch(e){log('Failed to restore that version: '+(e&&e.message||e),'err');}
+      closeFn();
+    };
+    list.appendChild(el);
+  });
+  container.appendChild(list);
+  if(showReset){
+    // 3.1.14: reset also lives here, not just behind shift-click on Undo — a discoverable path to
+    // the same fxResetAll() (no confirmation dialog: undo can recover it, see E3).
+    const resetRow=document.createElement('div');
+    resetRow.style.cssText='margin-top:6px;padding-top:6px;border-top:1px solid var(--bdr);padding-left:8px;padding-right:8px;padding-bottom:6px;font-size:11px;cursor:pointer;border-radius:5px;color:var(--err)';
+    resetRow.textContent='Reset all edits';
+    resetRow.onmouseenter=()=>resetRow.style.background='var(--hov)';
+    resetRow.onmouseleave=()=>resetRow.style.background='';
+    resetRow.onclick=()=>{closeFn();fxResetAll();};
+    container.appendChild(resetRow);
+  }
+}
+// Desktop hides #btn-history, so the popover's own wrapper is zero-width and it lands far right. Anchor under the visible trigger (Undo).
+function fxAnchorPopover(pop){
+  const a=['btn-undo-db','btn-export-history','btn-history'].map(i=>document.getElementById(i)).find(b=>b&&b.offsetParent!==null);
+  pop.style.transform='';
+  if(!a){pop.style.position='';pop.style.left='';pop.style.top='';pop.style.right='';return;}
+  const r=a.getBoundingClientRect();
+  pop.style.position='fixed';pop.style.right='auto';pop.style.margin='0';
+  pop.style.left=r.left+'px';pop.style.top=(r.bottom+6)+'px';
+}
+async function fxToggleTimelinePopover(){
+  const pop=document.getElementById('fx-timeline-popover');
+  if(!pop)return;
+  if(pop.style.display!=='none'){pop.style.display='none';return;}
+  await _fxTimelineListInto(pop,()=>{pop.style.display='none';},true);
+  pop.style.display='block';
+  fxAnchorPopover(pop);
+  fxClampPopoverToViewport(pop);
+}
+// Desktop-only: same combined edit+export list, inline in the settings menu.
+async function settingsHistoryBuild(){
+  const container=document.getElementById('fx-settings-history-list');
+  if(!container)return;
+  await _fxTimelineListInto(container,()=>settingsClose(),false);
+}
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('fx-timeline-popover');
+  // btn-undo-db: a long-press-opened popover's mouseup fires a click on the SAME button
+  // afterwards — without this exemption that click reads as "outside" and immediately
+  // re-closes the popover the hold just opened (see fxUndoMousedown/fxUndoBtnClick).
+  if(wrap&&wrap.style.display!=='none'&&!wrap.contains(e.target)&&e.target.id!=='btn-history'&&e.target.id!=='btn-export-history'&&e.target.id!=='btn-undo-db'&&!e.target.closest('#btn-undo-db'))wrap.style.display='none';
+});
+// Screen-space rectangle of the photo being compared (the composed canvas when borders are on,
+// else the render canvas). The divider and the before/after clip both live in THIS box; anchoring
+// the line to the whole stage (as it was) made it stick out past the photo and, on the horizontal
+// axis, disagree with where the image was actually clipped.
+function _splitBox(wrap){
+  const w=wrap.getBoundingClientRect();
+  const bd=document.getElementById('fx-canvas-bd');
+  const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:(FX&&FX.cv);
+  if(!cv)return w;
+  const c=cv.getBoundingClientRect();
+  if(!c.width||!c.height)return w;
+  return{left:c.left,top:c.top,width:c.width,height:c.height,right:c.right,bottom:c.bottom};
+}
+function _applySplitPos(){
+  const wrap=document.getElementById('fx-wrap');
+  const line=document.getElementById('fx-split-line');
+  const orig=document.getElementById('fx-canvas-orig');
+  if(!wrap)return;
+  const pct=(fxSplitPos*100).toFixed(1)+'%',horizontal=fxSplitAxis==='horizontal';
+  if(line){line.dataset.axis=horizontal?'horizontal':'vertical';line.setAttribute('aria-orientation',horizontal?'horizontal':'vertical');const w=wrap.getBoundingClientRect(),b=_splitBox(wrap);
+    if(horizontal){line.style.left=(b.left-w.left)+'px';line.style.width=b.width+'px';line.style.top=(b.top-w.top+b.height*fxSplitPos)+'px';line.style.height='';}
+    else{line.style.top=(b.top-w.top)+'px';line.style.height=b.height+'px';line.style.left=(b.left-w.left+b.width*fxSplitPos)+'px';line.style.width='';}
+    line.style.bottom='auto';line.style.display='block';}
+  // The before canvas occupies the leading side, the current canvas the trailing side.
+  if(orig&&orig.style.display!=='none'){orig.style.clipPath=horizontal?`inset(0 0 ${(100-fxSplitPos*100).toFixed(1)}% 0)`:`inset(0 ${(100-fxSplitPos*100).toFixed(1)}% 0 0)`;}
+  if(FX&&FX.cv&&fxSplit){FX.cv.style.clipPath=horizontal?`inset(${pct} 0 0 0)`:`inset(0 0 0 ${pct})`;}
+}
+
+// ══ LIVE HISTOGRAM ════════════════════════════════════════════════════════════
+let fxScopeMode='hist'; // 'hist' | 'wave' | 'parade' | 'vector'
+function toggleHist(){
+  fxHistOn=!fxHistOn;
+  const btn=document.getElementById('btn-hist');
+  if(btn)btn.classList.toggle('on',fxHistOn);
+  const hc=document.getElementById('fx-hist');
+  if(hc)hc.style.display=fxHistOn?'block':'none';
+  const sel=document.getElementById('sel-scope-mode');
+  if(sel)sel.style.display=fxHistOn?'':'none';
+  if(fxHistOn)drawHistogram();
+}
+function fxScopeModeChanged(v){fxScopeMode=v;drawHistogram();}

@@ -1,0 +1,280 @@
+// ── B2: human-readable per-step label, diffed against the PREVIOUS top-of-stack snapshot.
+// Reuses PASTE_CATEGORIES' field groupings (sliders/toggles/selects/colors/extra) so the
+// history timeline's labels and the selective-paste picker stay driven by one taxonomy instead
+// of two that could drift apart.
+function _fxFieldLabel(id){ // best-effort human name from the existing DOM label, not a 2nd hand-rolled table
+  const lab=document.querySelector('#sl-'+id+', #tg-'+id+', #'+id);
+  const row=lab&&lab.closest('.fx-row');
+  const txt=row&&row.querySelector('.fx-label');
+  if(txt&&txt.textContent.trim())return txt.textContent.trim();
+  return _fxPrettyId(id);
+}
+// Last-resort human name for a control id with no .fx-label in the DOM (mostly toggles, whose
+// switch sits in a section header): never show "tg-hal-white" to a person. Section toggles use
+// the rail's own names (CS_NAMES); sub-ids read as "Section: detail".
+const _FX_ID_WORDS={lut:'Look',hal:'Halation',art:'Artifacts',vig:'Vignette',nr:'Noise reduction',deconv:'Sharpen',hsl:'Colour Mixer',
+  b1:'Border 1',b2:'Border 2',noremjet:'no rem-jet',extreme:'extreme',white:'white',adj:'Tone',sat:'saturation',vib:'vibrance',exp:'exposure',
+  con:'contrast',hi:'highlights',sh:'shadows',wh:'whites',bl:'blacks',temp:'temperature',pv:'vertical perspective',ph:'horizontal perspective',
+  ca:'chromatic aberration',defr:'defringe',dist:'distortion',src:'source',fmt:'format',sel:'',tg:'',sl:'',cl:'colour'};
+function _fxPrettyId(id){
+  const base=String(id).replace(/^(tg|sel|sl|cl)-/,'');
+  if(typeof CS_NAMES!=='undefined'&&CS_NAMES[base])return CS_NAMES[base];
+  const toks=base.split('-').filter(Boolean);if(!toks.length)return String(id);
+  const word=t=>_FX_ID_WORDS[t]!==undefined&&_FX_ID_WORDS[t]!==''?_FX_ID_WORDS[t]:t;
+  const first=(typeof CS_NAMES!=='undefined'&&CS_NAMES[toks[0]])||word(toks[0]);
+  const rest=toks.slice(1).map(word).join(' ');
+  const out=rest?first+': '+rest:first;
+  return out.charAt(0).toUpperCase()+out.slice(1);
+}
+window._fxPrettyId=_fxPrettyId;
+function snapDiffLabel(prevSnap,nextSnap){
+  if(!prevSnap)return 'Edit';
+  const changes=[]; // {kind:'field'|'struct', text}
+  PASTE_CATEGORIES.forEach(c=>{
+    c.sliders.forEach(id=>{
+      const a=prevSnap.sliders&&prevSnap.sliders[id],b=nextSnap.sliders&&nextSnap.sliders[id];
+      if(a!==undefined&&b!==undefined&&String(a)!==String(b)){
+        const d=parseFloat(b)-parseFloat(a);
+        changes.push({kind:'field',text:`${_fxFieldLabel(id)} ${d>=0?'+':''}${(+d.toFixed(2))} → ${b}`});
+      }
+    });
+    c.toggles.forEach(id=>{
+      const a=prevSnap.toggles&&prevSnap.toggles[id],b=nextSnap.toggles&&nextSnap.toggles[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:`${_fxFieldLabel(id)} ${b?'on':'off'}`});
+    });
+    (c.selects||[]).forEach(id=>{
+      const a=prevSnap.selects&&prevSnap.selects[id],b=nextSnap.selects&&nextSnap.selects[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:`${_fxFieldLabel(id)}: ${b||'—'}`});
+    });
+    (c.colors||[]).forEach(id=>{
+      const a=prevSnap.colors&&prevSnap.colors[id],b=nextSnap.colors&&nextSnap.colors[id];
+      if(a!==undefined&&b!==undefined&&a!==b)changes.push({kind:'field',text:_fxFieldLabel(id)});
+    });
+    (c.extra||[]).forEach(k=>{
+      const a=JSON.stringify(prevSnap[k]),b=JSON.stringify(nextSnap[k]);
+      if(a!==b)changes.push({kind:'struct',text:c.label});
+    });
+  });
+  if(JSON.stringify(prevSnap.geom)!==JSON.stringify(nextSnap.geom))changes.push({kind:'struct',text:'Crop'});
+  if(JSON.stringify(prevSnap.canvas)!==JSON.stringify(nextSnap.canvas))changes.push({kind:'struct',text:'Canvas'});
+  if(!changes.length)return 'Edit';
+  if(changes.length===1)return changes[0].text;
+  return `${changes.length} changes`;
+}
+// ⚠️ History deliberately does NOT serialize raster masks into its JSON string. Encoding a
+// 2048x1365 brush mask costs ~3.7MB of base64 per entry and this runs on a 400ms debounce after
+// every slider tick — 20 entries used to retain well over a hundred megabytes (measured: 9.5MB
+// for a mere 512x384 mask). Instead each entry holds the raster BY REFERENCE and copy-on-write
+// (mskPxForWrite) guarantees nobody mutates an array a history entry is pointing at. A
+// slider-only session therefore keeps ONE raster shared across all 20 entries.
+function fxHistoryPush(opts){
+  opts=opts||{};
+  if(_fxHistLocked)return;
+  fxEnsureFullQuality('edit'); // first real edit → full-resolution source (see fxEnsureFullQuality)
+  const snap=getUISnapshot({skipRaster:true});
+  const j=JSON.stringify(snap);
+  const rasters=fxState.masks.map(m=>(m.px&&m.px.length)?m.px:null);
+  // The JSON alone cannot detect a paint stroke (the raster is not in it), so compare raster
+  // identity too — copy-on-write makes a mutated raster a DIFFERENT array object, so reference
+  // equality is exactly the right test and costs nothing.
+  const cur=fxHistory[fxHistIdx];
+  if(!opts.force&&cur&&cur.j===j&&cur.rasters.length===rasters.length&&cur.rasters.every((p,i)=>p===rasters[i]))return;
+  const prev=cur?cur.snap:null;   // kept as an object; re-parsing it per push was pure waste
+  fxHistory=fxHistory.slice(0,fxHistIdx+1);
+  const entry={j,snap,rasters,label:opts.label||snapDiffLabel(prev,snap),ts:Date.now()};
+  if(opts.geometryBatch)entry.geometryBatch=opts.geometryBatch;
+  fxHistory.push(entry);
+  if(fxHistory.length>20){fxHistory.shift();}
+  fxHistIdx=fxHistory.length-1;
+  fxSyncTopbarDisabled();
+  // Freeze every live raster: an entry now references these exact arrays, so the next in-place
+  // write must clone first.
+  fxState.masks.forEach(m=>{if(m.px&&m.px.length)m._pxFrozen=true;});
+  // The persistence hooks below DO need the raster — a sidecar or saved session without it would
+  // silently lose the mask. Only pay the base64 encode when a raster actually exists.
+  if(typeof window.chromasmithOnEdit==='function'||typeof sessionAutosave==='function'){
+    const full=rasters.some(Boolean)?getUISnapshot():snap;
+    if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
+    if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+  }
+}
+// Restores one history entry. applyUISnapshot rebuilds the mask objects from the raster-less
+// JSON, so the shared rasters have to be re-attached afterwards — and re-frozen, because the
+// entry still points at them.
+async function _fxHistoryRestore(i){
+  const e=fxHistory[i];if(!e)return;
+  _fxHistLocked=true;
+  // Awaited: applyUISnapshot's LUT restore (selectLUT) loads bytes asynchronously (inline →
+  // IndexedDB → fetch). Firing it and moving on used to let fxUpdate()/renderPreview() below
+  // paint BEFORE the LUT swap landed, so a reset/undo/redo that changed the LUT stuck on the
+  // stale frame until something else (e.g. switching photos) forced a later re-render.
+  await applyUISnapshot(JSON.parse(e.j));
+  fxState.masks.forEach((m,k)=>{
+    const p=e.rasters[k];
+    if(p){m.px=p;m._pxFrozen=true;}
+  });
+  _mskTexDirty=true;
+  if(typeof mskRebuild==='function')mskRebuild();
+  fxUpdate();
+  _fxHistLocked=false;
+}
+// A batch geometry operation is attached only to its history edge, not copied into every
+// ordinary snapshot. IDs come from WeakMaps, so the edge retains tiny geometry objects rather
+// than photo/Image objects or their potentially large decoded frames.
+function _fxApplyGeometryBatchEdge(edge,forward){
+  const batch=edge&&edge.geometryBatch;
+  if(!batch||batch.epoch!==_fxGeomBatchEpoch)return false;
+  let changed=false;const currentById=new Map(fxImages.map(item=>[_fxGeomBatchItemId(item),item]));
+  for(const record of batch.items){
+    const item=currentById.get(record.itemId);
+    if(!item||_fxGeomBatchSourceKey(item)!==record.sourceKey)continue;
+    item.geom=JSON.parse(JSON.stringify(forward?record.after:record.before));
+    changed=true;
+  }
+  return changed;
+}
+function _fxCaptureGeometryBatchTargets(from,to){
+  const step=to>from?1:-1,itemsById=new Map(fxImages.map(item=>[_fxGeomBatchItemId(item),item])),captured=new Map();
+  const visit=edgeIndex=>{
+    const batch=fxHistory[edgeIndex]?.geometryBatch;if(!batch||batch.epoch!==_fxGeomBatchEpoch)return;
+    for(const record of batch.items){
+      const item=itemsById.get(record.itemId);
+      if(!item||_fxGeomBatchSourceKey(item)!==record.sourceKey||captured.has(record.itemId))continue;
+      captured.set(record.itemId,{item,itemId:record.itemId,sourceKey:record.sourceKey,before:JSON.parse(JSON.stringify(item.geom||defGeom()))});
+    }
+  };
+  if(to>from)for(let edge=from+1;edge<=to;edge++)visit(edge);
+  else if(to<from)for(let edge=from;edge>to;edge--)visit(edge);
+  return [...captured.values()];
+}
+function _fxFinishGeometryBatchTargets(captured,epoch){
+  if(epoch!==_fxGeomBatchEpoch)return null;
+  const items=[],currentItems=new Set(fxImages);
+  for(const row of captured){
+    if(!currentItems.has(row.item)||_fxGeomBatchSourceKey(row.item)!==row.sourceKey)continue;
+    const after=JSON.parse(JSON.stringify(row.item.geom||defGeom()));
+    if(JSON.stringify(row.before)!==JSON.stringify(after))items.push({itemId:row.itemId,sourceKey:row.sourceKey,before:row.before,after});
+  }
+  return items.length?{epoch,items}:null;
+}
+async function _fxHistoryTransition(from,to){
+  await _fxHistoryRestore(to);
+  if(from===to)return;
+  let geometryChanged=false;
+  if(to>from){
+    for(let edge=from+1;edge<=to;edge++)if(_fxApplyGeometryBatchEdge(fxHistory[edge],true))geometryChanged=true;
+  }else{
+    // Batch metadata belongs to the edge after its parent index: undo leaves `from` first.
+    for(let edge=from;edge>to;edge--)if(_fxApplyGeometryBatchEdge(fxHistory[edge],false))geometryChanged=true;
+  }
+  if(geometryChanged){
+    const item=curItem();if(item){
+      const angle=(item.geom&&item.geom.angle)||0,ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
+      if(ss){ss.value=_stA2S(angle);fxPaintSlider(ss);}if(sv)sv.textContent=angle.toFixed(2)+'°';
+    }
+    broadcastGeom();updateWork();renderPreview();buildLookGallery();
+  }
+}
+// 3.1.14: hold Undo opens edit history, shift-click resets, reset also lives in the history
+// dropdown already (fxToggleTimelinePopover's own list has no reset row — see the NOTE below).
+// Click alone still just undoes — the common case shouldn't need a modifier.
+let _undoHoldTimer=null, _undoLongPressed=false;
+function fxUndoMousedown(e){
+  if(e.button!==0||e.shiftKey)return; // shift-click is handled by the click handler, not a hold
+  _undoLongPressed=false;
+  _undoHoldTimer=setTimeout(()=>{
+    _undoLongPressed=true;
+    if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();
+    if(typeof hapt==='function')hapt();
+  },450);
+}
+function fxUndoMouseup(){if(_undoHoldTimer){clearTimeout(_undoHoldTimer);_undoHoldTimer=null;}}
+function fxUndoBtnClick(e){
+  if(_undoLongPressed){_undoLongPressed=false;return;} // the hold already acted — click is the mouseup of that same press
+  if(e.shiftKey){fxResetAll();return;}
+  fxUndo();
+}
+// Brief centred "Undo : Exposure" label over the photo, so it is clear what an undo/redo changed.
+let _fxHistFlashT=0;
+function fxHistFlash(verb,label){
+  const wrap=document.getElementById('fx-wrap');if(!wrap)return;
+  let el=document.getElementById('fx-hist-flash');
+  if(!el){el=document.createElement('div');el.id='fx-hist-flash';wrap.appendChild(el);}
+  label=label&&label!=='Edit'?String(label).replace(/\s[+-]?[\d.]+ → .*$/,''):''; // "Exposure +1 → 1" → "Exposure"
+  el.textContent=verb+(label?' : '+label:'');
+  el.classList.add('on');clearTimeout(_fxHistFlashT);
+  _fxHistFlashT=setTimeout(()=>el.classList.remove('on'),900);
+}
+async function fxUndo(){
+  if(fxHistIdx<=0){log('Nothing to undo','info');return;}
+  const from=fxHistIdx;fxHistIdx--;await _fxHistoryTransition(from,fxHistIdx);
+  if(typeof hapt==='function')hapt();
+  log('Undo','info');fxHistFlash('Undo',fxHistory[fxHistIdx+1]&&fxHistory[fxHistIdx+1].label);
+  fxSyncTopbarDisabled();
+}
+async function fxRedo(){
+  if(fxHistIdx>=fxHistory.length-1){log('Nothing to redo','info');return;}
+  const from=fxHistIdx;fxHistIdx++;await _fxHistoryTransition(from,fxHistIdx);
+  if(typeof hapt==='function')hapt();
+  log('Redo','info');fxHistFlash('Redo',fxHistory[fxHistIdx]&&fxHistory[fxHistIdx].label);
+  fxSyncTopbarDisabled();
+}
+// 3.1.2: undo/redo greyed out and unclickable when there's nothing to undo/redo, matching the
+// wireframe's .ibtn.disabled (opacity .35, pointer-events:none — done here with the real
+// `disabled` attribute instead, so a stray click can't fire the handler at all). Export's
+// disabled state already exists on #btn-fx-export (many call sites — see 9593/15892/16085/
+// etc.) and is mirrored onto the deskbar's Export button by the same MutationObserver pattern
+// #fx-fab-export already uses, further down this boot block — not reimplemented here.
+function fxSyncTopbarDisabled(){
+  const undo=document.getElementById('btn-undo-db'),redo=document.getElementById('btn-redo-db');
+  if(undo)undo.disabled=fxHistIdx<=0;
+  if(redo)redo.disabled=fxHistIdx>=fxHistory.length-1;
+  // 2026-09-10: "Show original" has nothing to compare against in the same state Undo does —
+  // reuse that exact signal rather than a second one that could drift out of sync with it.
+  const before=document.getElementById('btn-before');
+  if(before)before.disabled=fxHistIdx<=0;
+}
+async function fxResetAll(){
+  if(!fxHistory.length)return;
+  if(typeof hapt==='function')hapt();
+  const from=fxHistIdx,epoch=_fxGeomBatchEpoch,captured=_fxCaptureGeometryBatchTargets(from,0);
+  await _fxHistoryTransition(from,0);   // re-attaches entry 0's shared rasters; a bare applyUISnapshot would drop every brush mask
+  if(typeof syncAllFxBtn==='function')syncAllFxBtn(); // applyUISnapshot restores tg-* pixels but never re-syncs the ALL FX button's own highlight
+  const geometryBatch=_fxFinishGeometryBatchTargets(captured,epoch);
+  fxHistoryPush(geometryBatch?{force:true,label:'Reset all edits',geometryBatch}:undefined);
+  fxUpdate();
+  log('Reset all edits','info');
+}
+
+// ══ SPLIT BEFORE/AFTER ════════════════════════════════════════════════════════
+function toggleSplit(){
+  fxSplit=!fxSplit;
+  const btn=document.getElementById('btn-split');
+  if(btn)btn.classList.toggle('on',fxSplit);
+  const line=document.getElementById('fx-split-line');
+  const orig=document.getElementById('fx-canvas-orig');
+  if(!fxSplit){
+    if(line)line.style.display='none';
+    if(orig)orig.style.display='none';
+    if(FX&&FX.cv)FX.cv.style.clipPath='';
+    document.getElementById('btn-before').style.display='';
+  } else {
+    document.getElementById('btn-before').style.display='none';
+    initSplitDrag();
+  }
+  renderPreview();
+}
+function initSplitDrag(){
+  const line=document.getElementById('fx-split-line');
+  const wrap=document.getElementById('fx-wrap');
+  if(!line||line._splitWired)return;line._splitWired=true;
+  line.tabIndex=0;line.setAttribute('role','separator');line.setAttribute('aria-label','Before and after divider');
+  const point=e=>{const r=_splitBox(wrap),horizontal=fxSplitAxis==='horizontal';const size=horizontal?r.height:r.width;if(!size)return;const coordinate=horizontal?e.clientY-r.top:e.clientX-r.left;fxSplitPos=Math.max(0.05,Math.min(0.95,coordinate/size));_applySplitPos();};
+  line.addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;e.preventDefault();line.setPointerCapture?.(e.pointerId);point(e);});
+  line.addEventListener('pointermove',e=>{if(line.hasPointerCapture?.(e.pointerId))point(e);});
+  const release=e=>{if(line.hasPointerCapture?.(e.pointerId))line.releasePointerCapture(e.pointerId);};
+  line.addEventListener('pointerup',release);line.addEventListener('pointercancel',release);
+  line.addEventListener('keydown',e=>{const horizontal=fxSplitAxis==='horizontal',negative=horizontal?'ArrowUp':'ArrowLeft',positive=horizontal?'ArrowDown':'ArrowRight';if(e.key!==negative&&e.key!==positive&&e.key!=='Home'&&e.key!=='End')return;e.preventDefault();if(e.key==='Home')fxSplitPos=.05;else if(e.key==='End')fxSplitPos=.95;else fxSplitPos=Math.max(.05,Math.min(.95,fxSplitPos+(e.key===positive?.01:-.01)*(e.shiftKey?5:1)));_applySplitPos();});
+  line.addEventListener('dblclick',()=>{fxSplitPos=.5;_applySplitPos();});
+  window.addEventListener('resize',()=>{if(fxSplit)_applySplitPos();});
+}

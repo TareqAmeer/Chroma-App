@@ -1,0 +1,260 @@
+// ── Depth estimation (ROADMAP R7) — desktop-only (depth.rs, main.rs's depth_run), same
+// framed-request/response idiom as _faceparseRunLayers above. Computed ONCE per photo, on
+// demand (first time either the Depth Range mask type or the Depth Blur effect actually needs
+// it), and cached on the image element itself (img._depthMap) so switching tools/masks never
+// re-runs inference. A downsized working resolution (512 long edge) is plenty — the model's own
+// fixed input is 518x518 anyway (see vendor/depth/README.md), and the result is upsampled back
+// to this working size, not the photo's full resolution, then bilinearly upscaled again by the
+// GPU sampler at render time (same "resolution-independent" convention mskTexDims already uses
+// for raster masks).
+let _depthRunning=false;
+function fxHasDepthMap(){
+  const it=(typeof curItem==='function')?curItem():null;
+  return !!(it&&it.img&&it.img._depthMap);
+}
+function fxDepthForGeom(map,geom){
+  if(!map||!map.data||!map.w||!map.h||map.data.length!==map.w*map.h)return null;
+  const g=geom||{},key=JSON.stringify([g.rot||0,!!g.flipH,!!g.flipV,g.angle||0,g.crop||null]);
+  // Normally immutable per photo; fingerprint bytes to detect replacement in-place.
+  let fingerprint=2166136261;for(let i=0;i<map.data.length;i++)fingerprint=Math.imul(fingerprint^map.data[i],16777619);
+  fingerprint=(fingerprint>>>0)+':'+map.data.length+':'+map.w+'x'+map.h;
+  if(map._geomDepthCache&&map._geomDepthCache.key===key&&map._geomDepthCache.fingerprint===fingerprint)return map._geomDepthCache.source;
+  if(!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle){const source={data:map.data,w:map.w,h:map.h,identity:map,fingerprint};map._geomDepthCache={key,fingerprint,source};return source;}
+  const cv=document.createElement('canvas');cv.width=map.w;cv.height=map.h;
+  const cx=cv.getContext('2d'),rgba=new Uint8ClampedArray(map.w*map.h*4);
+  for(let i=0;i<map.data.length;i++){const j=i*4,v=map.data[i];rgba[j]=rgba[j+1]=rgba[j+2]=v;rgba[j+3]=255;}
+  cx.putImageData(new ImageData(rgba,map.w,map.h),0,0);
+  const warped=applyGeomTo(cv,g),w=warped.naturalWidth||warped.width,h=warped.naturalHeight||warped.height;
+  const pixels=warped.getContext('2d',{willReadFrequently:true}).getImageData(0,0,w,h).data,out=new Uint8Array(w*h);
+  for(let i=0;i<out.length;i++)out[i]=pixels[i*4];
+  const source={data:out,w,h,identity:map,fingerprint,geometry:key};map._geomDepthCache={key,fingerprint,source};return source;
+}
+function fxSyncDepthTexture(renderer,item){
+  if(!renderer)return null;
+  if(!item){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
+  const map=item.img&&item.img._depthMap;
+  if(!map){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
+  const source=fxDepthForGeom(map,item.geom);
+  if(!source){if(renderer._depthSnapshot)renderer.clearDepthTex();if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);return null;}
+  if(renderer._depthSourceIdentity!==source)renderer.setDepthTex(source.data,source.w,source.h,source);
+  if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(item);
+  return source;
+}
+function mskDepthPreviewSource(item){
+  const it=item===undefined?((typeof curItem==='function'&&curItem())||null):item;
+  const map=it&&it.img&&it.img._depthMap,source=fxDepthForGeom(map,it&&it.geom);
+  return source&&source.data&&source.w>0&&source.h>0&&source.data.length===source.w*source.h?source:null;
+}
+function mskDepthPreviewFinish(state){
+  if(!state||state.closed)return;state.closed=true;
+  if(window.__mskDepthPreview===state)window.__mskDepthPreview=null;
+  state.canvas.width=state.canvas.height=0;state.dialog.remove();
+  // Native dialog focus restoration runs after the close event; defer ours one frame so the
+  // persistent panel trigger wins over the browser's restoration to <body>.
+  if(state.restore!==false&&state.trigger&&state.trigger.isConnected)setTimeout(()=>{if(!window.__mskDepthPreview&&state.trigger.isConnected)state.trigger.focus({preventScroll:true});},0);
+}
+function mskDepthPreviewClose(restore=true){
+  const state=window.__mskDepthPreview;if(!state)return;
+  state.restore=restore;
+  if(state.dialog.open){state.dialog.close();mskDepthPreviewFinish(state);}
+  else{state.dialog.remove();mskDepthPreviewFinish(state);}
+}
+function mskDepthPreviewOpen(trigger){
+  const item=(typeof curItem==='function'&&curItem())||null,source=mskDepthPreviewSource(item);
+  if(!item||!source)return false;
+  mskDepthPreviewClose(false);
+  const dialog=document.createElement('dialog');dialog.className='msk-depth-preview-dialog';
+  dialog.setAttribute('aria-labelledby','msk-depth-preview-title');
+  const head=document.createElement('div');head.className='msk-depth-preview-head';
+  const title=document.createElement('h2');title.id='msk-depth-preview-title';title.textContent='Depth map preview';
+  const close=document.createElement('button');close.type='button';close.className='btn bgh';close.textContent='Close';close.setAttribute('aria-label','Close depth map preview');close.style.minHeight='32px';
+  head.append(title,close);
+  const note=document.createElement('p');note.className='msk-depth-preview-note';
+  note.textContent='Model estimate · Relative depth. Darker regions are farther away; brighter regions are nearer.';
+  const canvas=document.createElement('canvas');canvas.className='msk-depth-preview-canvas';canvas.width=source.w;canvas.height=source.h;
+  canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Grayscale estimate of relative depth for the current photo');
+  const rgba=new Uint8ClampedArray(source.w*source.h*4);
+  for(let i=0;i<source.data.length;i++){const j=i*4,v=source.data[i];rgba[j]=rgba[j+1]=rgba[j+2]=v;rgba[j+3]=255;}
+  canvas.getContext('2d').putImageData(new ImageData(rgba,source.w,source.h),0,0);
+  const legend=document.createElement('div');legend.className='msk-depth-preview-legend';
+  const far=document.createElement('span');far.textContent='Farther';
+  const ramp=document.createElement('span');ramp.className='msk-depth-preview-ramp';ramp.setAttribute('aria-hidden','true');
+  const near=document.createElement('span');near.textContent='Nearer';legend.append(far,ramp,near);
+  dialog.append(head,note,canvas,legend);
+  const state={dialog,canvas,item,source,trigger:trigger||document.activeElement,restore:true,closed:false};
+  window.__mskDepthPreview=state;
+  dialog.addEventListener('close',()=>mskDepthPreviewFinish(state));
+  dialog.addEventListener('cancel',e=>{e.preventDefault();mskDepthPreviewClose(true);});
+  close.addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+  document.body.appendChild(dialog);
+  try{dialog.showModal();close.focus();return true;}
+  catch(e){dialog.remove();mskDepthPreviewFinish(state);return false;}
+}
+function mskDepthPreviewSync(item){
+  const state=window.__mskDepthPreview;if(!state)return;
+  const it=item===undefined?((typeof curItem==='function'&&curItem())||null):item;
+  if(!it||it!==state.item||mskDepthPreviewSource(it)!==state.source)mskDepthPreviewClose(false);
+}
+function mskDepthPreviewButton(enabled,reason){
+  return '<div class="btn-row"><button type="button" class="btn bgh msk-depth-preview-open" id="btn-msk-depth-preview"'
+    +(enabled?'':' disabled title="'+String(reason||'Depth estimate is not ready for this photo.').replace(/"/g,'&quot;')+'"')
+    +' onclick="mskDepthPreviewOpen(this)">Preview depth map</button></div>'
+    +(!enabled?'<div class="msk-hint">'+String(reason||'Depth estimate is not ready for this photo.').replace(/</g,'&lt;')+'</div>':'');
+}
+async function fxEnsureDepthMap(){
+  // ⚠️ Was `if(!capNative())return null` — capNative() checks window.Capacitor (the iOS shell),
+  // but depth_run is a TAURI desktop command (main.rs/depth.rs), exactly like every other
+  // Tauri-only invoke in this file (_samFramedInvoke's own SAM/faceparse callers all gate on
+  // window.__TAURI__, never capNative()). Because Capacitor is never present in the desktop
+  // Tauri shell, that check made this function return null immediately, every single call, on
+  // the REAL desktop app — so Depth Range never worked there, AND each no-op null resolved so
+  // fast that mskRebuild()'s own `.then(()=>mskRebuild())` at its Depth Range UI block re-fired
+  // on every rebuild, forming an unbounded rebuild loop (confirmed: 20+ recursive calls/second,
+  // pinning the renderer indefinitely) the instant a mask panel with any mask was opened on
+  // Tauri. See the _depthMapAttempted guard below for the second, independent fix (don't retry
+  // forever even on a genuine depth_run failure).
+  if(!window.__TAURI__)return null;        // browser/iOS build has no Rust depth_run — see README
+  const it=(typeof curItem==='function')?curItem():null;
+  const img=it&&it.img;
+  if(!img)return null;
+  if(img._depthMap){if(curItem()===it&&typeof FX!=='undefined')fxSyncDepthTexture(FX,it);return img._depthMap;}
+  if(img._depthMapAttempted)return null;   // already tried (and failed) for this photo — see caller
+  if(_depthRunning)return null;
+  _depthRunning=true;
+  img._depthMapAttempted=true;
+  const endActivity=fxPhotoActivity(it,'Estimating depth…');
+  try{
+    const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+    if(!sw||!sh)return null;
+    const long=512,scale=long/Math.max(sw,sh);
+    const dw=Math.max(1,Math.round(sw*scale)),dh=Math.max(1,Math.round(sh*scale));
+    const cv=document.createElement('canvas');cv.width=dw;cv.height=dh;
+    const cx=cv.getContext('2d');cx.drawImage(img,0,0,dw,dh);
+    const d=cx.getImageData(0,0,dw,dh).data;
+    const rgb=new Uint8Array(dw*dh*3);
+    for(let i=0,j=0;i<dw*dh;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const buf=await _samFramedInvoke('depth_run',{width:dw,height:dh},rgb);
+    const dv=new DataView(buf);
+    const hlen=dv.getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(header.width!==dw||header.height!==dh||body.length!==dw*dh){
+      log('Depth estimate returned an unexpected size — skipping','error');
+      return null;
+    }
+    img._depthMap={data:new Uint8Array(body),w:dw,h:dh};
+    if(curItem()===it&&typeof FX!=='undefined')fxSyncDepthTexture(FX,it);
+    return img._depthMap;
+  }catch(e){
+    log('Depth estimate failed: '+(e&&e.message||e),'error');
+    return null;
+  }finally{_depthRunning=false;endActivity();}
+}
+/// Places one or more of the 4 face-parse layers (union, max not sum) into a full mtW*mtH raster.
+function _facePlace(r,groupIdxs){
+  const{mtW,mtH,cropX0,cropY0,cropSize,layers}=r;
+  const out=new Uint8ClampedArray(mtW*mtH);
+  for(const g of groupIdxs){
+    const layer=layers[g];
+    for(let y=0;y<cropSize;y++)for(let x=0;x<cropSize;x++){
+      const idx=(cropY0+y)*mtW+(cropX0+x),v=layer[y*cropSize+x];
+      if(v>out[idx])out[idx]=v;
+    }
+  }
+  return out;
+}
+async function _mskApplyFaceFallback(mask,item,group,silent){
+  if(![1,3,4].includes(group)||!window.__TAURI__)return false;
+  if(_faceparseRunning)return false;
+  _faceparseRunning=true;
+  try{
+    const parsed=await _faceparseRunLayers(mask);
+    if(curItem()!==item)return false;
+    const px=_facePlace(parsed,[group]);
+    let selected=false;for(let i=0;i<px.length;i++)if(px[i]>32){selected=true;break;}
+    if(!selected){if(!silent&&typeof toast==='function')toast('Face Parse found no '+({1:'glasses',3:'hair',4:'face skin'}[group])+' in this selection. The AI Select mask is still available to brush-correct.',false);return false;}
+    mask.px=px;mask.mtW=parsed.mtW;mask.mtH=parsed.mtH;_mskTexDirty=true;
+    if(!silent&&typeof toast==='function')toast(({1:'Glasses',3:'Hair',4:'Face skin'}[group])+' selected with Face Parse. Review and brush-correct the result.',true);
+    return true;
+  }catch(e){
+    if(!silent&&typeof toast==='function')toast('Face Parse fallback failed. The AI Select mask remains available to brush-correct.',false);
+    log('Face Parse fallback failed: '+(e&&e.message||e),'warn');return false;
+  }finally{_faceparseRunning=false;}
+}
+async function mskFaceAutoExclude(){
+  if(!window.__TAURI__){log('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}
+  const m=fxState.masks[mskSel];
+  if(!m||m.origin!=='skin'){log('Select a Skin mask first','warn');return;}
+  if(!mskIsAI(m)||!m.px||!m.px.length){log('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
+  if(_faceparseRunning)return;
+  _faceparseRunning=true;
+  const endActivity=fxPhotoActivity(curItem(),'Finding face features…');
+  if(typeof toast==='function')toast('Finding face features…',true);
+  try{
+    const r=await _faceparseRunLayers(m);
+    // Union (max), not sum: these are independent features and we want "any of them", not a
+    // brighter alpha where two happen to overlap.
+    const combined=_facePlace(r,[0,1,2,3]);
+    // Reuse the mask if we already made one (re-running after moving/resizing the subject
+    // scribble should refine in place, not pile up new masks against the 4-mask cap), else create
+    // a fresh eraser. A full mtW*mtH buffer is always reallocated at the CURRENT resolution rather
+    // than resized in place — simplest way to stay correct if the photo's working size changed
+    // (crop/rotate) since the last run.
+    let fm=fxState.masks.find(x=>x.origin==='faceauto');
+    if(!fm){
+      if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+      fm={type:'brush',origin:'faceauto'};
+      Object.assign(fm,_mskSkinDefaults());
+      fm.isExclude=true;fm.name='Face features';
+      fxState.masks.push(fm);
+    }
+    fm.mtW=r.mtW;fm.mtH=r.mtH;fm.px=combined;
+    _mskTexDirty=true;
+    mskSel=fxState.masks.indexOf(fm);
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    if(typeof toast==='function')toast('Excluded lips, eyes, glasses and hair','ok');
+    log('Face features excluded from the Skin selection (lips, eyes+brows, glasses, hair)','ok');
+  }catch(e){
+    const msg='Face-feature exclusion failed — '+(e&&e.message||e);
+    log(msg,'err');if(typeof toast==='function')toast(msg);
+  }finally{
+    _faceparseRunning=false;endActivity();
+  }
+}
+// Lightroom's People mask lets you select individual features (facial skin, lips, eyes, hair…) as
+// their OWN target, not just exclude them. faceparse.rs only classifies 4 groups (eyes_brows,
+// glasses, lips, hair — see that file's doc comment for why no finer classes like teeth/sclera
+// exist here), so that's what's offered — a plain new AI-origin mask, not tied to Skin/Coat, so
+// it picks up the generalised Uniformity block (above) or any other adjustment on its own.
+const FACE_FEATURES=[{i:0,label:'Eyes & brows'},{i:1,label:'Glasses'},{i:2,label:'Lips'},{i:3,label:'Hair'}];
+async function mskFaceSelectFeature(groupIdx){
+  if(!window.__TAURI__){log('Face-feature selection needs the desktop app (on-device model)','warn');return;}
+  const src=fxState.masks[mskSel];
+  if(!src||!mskIsAI(src)||!src.px||!src.px.length){log('Scribble to select the subject first — the face crop is derived from that selection','warn');return;}
+  if(_faceparseRunning)return;
+  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+  _faceparseRunning=true;
+  const feat=FACE_FEATURES.find(f=>f.i===groupIdx);
+  const endActivity=fxPhotoActivity(curItem(),'Finding '+(feat?feat.label.toLowerCase():'feature')+'…');
+  if(typeof toast==='function')toast('Finding '+(feat?feat.label.toLowerCase():'feature')+'…',true);
+  try{
+    const r=await _faceparseRunLayers(src);
+    const px=_facePlace(r,[groupIdx]);
+    let has=false;for(let i=0;i<px.length;i++)if(px[i]>32){has=true;break;}
+    if(!has){log((feat?feat.label:'That feature')+' was not found in this selection (occluded, or not facing the camera?)','warn');toast('Not found — try a clearer view',false);return;}
+    const nm={type:'brush',origin:'ai',ai:true,px,mtW:r.mtW,mtH:r.mtH,aiPoints:[],name:feat?feat.label:'Face feature',..._mskAdjustDefaults()};
+    Object.assign(nm,_mskSkinDefaults());
+    fxState.masks.push(nm);mskSel=fxState.masks.length-1;
+    _mskTexDirty=true;
+    if(typeof hapt==='function')hapt();
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    toast((feat?feat.label:'Feature')+' selected — added as a new mask',true);
+  }catch(e){
+    const msg='Face-feature selection failed — '+(e&&e.message||e);
+    log(msg,'err');if(typeof toast==='function')toast(msg);
+  }finally{
+    _faceparseRunning=false;endActivity();mskRebuild();
+  }
+}

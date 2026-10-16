@@ -1,0 +1,119 @@
+// ── PKCE helpers (RFC 7636) — the desktop loopback flow is a public/installed OAuth client
+// (no client secret), so the authorization code exchange is secured with a code_verifier/
+// code_challenge pair instead. Web Crypto is available in both the browser and the Tauri
+// WKWebView, so this needs no native code. ──────────────────────────────────────────────────
+function pkceVerifier(){
+  const b=new Uint8Array(64);crypto.getRandomValues(b);
+  return btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function pkceChallenge(verifier){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+// Desktop shell sign-in: system browser + loopback redirect (RFC 8252), PKCE code exchange.
+// See google_oauth_loopback in desktop/src-tauri/src/main.rs for the native half.
+async function gpAuthNative(cid){
+  const verifier=pkceVerifier(),challenge=await pkceChallenge(verifier);
+  const template='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+    // Google's documented loopback format is EXACTLY "http://127.0.0.1:<port>" — no path.
+    // A trailing "/callback" (or even "/") is outside the pattern their validator matches for
+    // this client type, which is what actually produced "Error 400: invalid_request / doesn't
+    // comply with Google's OAuth 2.0 policy" even after the {PORT}-encoding bug was fixed.
+    client_id:cid,redirect_uri:'http://127.0.0.1:{PORT}',response_type:'code',
+    scope:GP_SCOPES,state:'gpcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
+  const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
+  let result;
+  try{result=await invoke('google_oauth_loopback',{authUrlTemplate:template})}
+  catch(e){throw new Error('Google sign-in failed: '+(e&&e.message||e))}
+  const params=new URLSearchParams(result.query);
+  if(params.get('error'))throw new Error('Google sign-in failed: '+params.get('error'));
+  const code=params.get('code');
+  if(!code)throw new Error('Google sign-in failed: no authorization code returned');
+  const redirect_uri=`http://127.0.0.1:${result.port}`; // MUST exactly match the auth request — no path
+  // Google quirk: "Desktop app" OAuth clients are issued a client_secret and the token
+  // endpoint REQUIRES it in the code exchange even with PKCE (unlike a spec-pure public
+  // client). Include it when the user has provided one; if the exchange comes back
+  // invalid_client without it, prompt once and retry.
+  const exchange=async(secret)=>{
+    const body={client_id:cid,code,code_verifier:verifier,grant_type:'authorization_code',redirect_uri};
+    if(secret)body.client_secret=secret;
+    const r=await fetch('https://oauth2.googleapis.com/token',{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams(body).toString()});
+    return {ok:r.ok,json:await r.json().catch(()=>({})),status:r.status};
+  };
+  let secret='';try{secret=(localStorage.getItem('gpClientSecret')||'').trim()}catch(e){}
+  let res2=await exchange(secret);
+  // Google's actual response for a missing/wrong secret is error:'invalid_request' with an
+  // error_description mentioning "client_secret" — NOT error:'invalid_client' as first assumed,
+  // so that exact-match check never fired and the raw Google error ("client_secret is missing")
+  // just surfaced to the user with no prompt. Match on the description text instead.
+  const needsSecret=!res2.ok&&/client_secret/i.test(res2.json.error_description||'')&&!secret;
+  if(needsSecret){
+    const picked=await askTextModal('Google client secret',
+      'Google also needs this OAuth client’s secret for the sign-in exchange (Desktop-app clients have one — Google Cloud Console → Credentials → your client → "Client secret"). It stays on this device.','');
+    secret=(picked||'').trim();
+    if(secret){try{localStorage.setItem('gpClientSecret',secret)}catch(e){}res2=await exchange(secret);}
+  }
+  const tokJson=res2.json;
+  if(!res2.ok||!tokJson.access_token)throw new Error('Google token exchange failed: '+(tokJson.error_description||tokJson.error||res2.status));
+  const at=tokJson.access_token,exp=Date.now()+(tokJson.expires_in||3600)*1000;
+  try{sessionStorage.setItem('gpTok',JSON.stringify({at,exp}))}catch(e){}
+  gpUpdateUI();
+  return at;
+}
+// Interactive sign-in — MUST run under a user gesture (opens a popup). Resolves with the token.
+async function gpAuth(){
+  const cached=gpTok();if(cached)return cached;
+  const cid=await gpAskClientId();
+  if(!cid)throw new Error('No Google client ID set');
+  if(window.__TAURI__)return gpAuthNative(cid);
+  // redirect_uri = this exact page URL — must be listed under BOTH "Authorized JavaScript
+  // origins" (origin only) and "Authorized redirect URIs" (full URL) on the OAuth client.
+  const redirect=location.origin+location.pathname;
+  const url='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({
+    client_id:cid,redirect_uri:redirect,response_type:'token',scope:GP_SCOPES,
+    state:'gpcb',include_granted_scopes:'true'}).toString();
+  const t0=Date.now();
+  try{localStorage.removeItem('gpTokRelay')}catch(e){}
+  const win=window.open(url,'gpauth','width=500,height=680');
+  if(!win){toast('Allow pop-ups for this site to connect Google Photos');return Promise.reject(new Error('Popup blocked'))}
+  return new Promise((res,rej)=>{
+    let done=false,iv=0;
+    const finish=(err,at)=>{if(done)return;done=true;clearInterval(iv);window.removeEventListener('storage',onSt);
+      gpUpdateUI();if(err)rej(err instanceof Error?err:new Error(err));else res(at)};
+    // ⚠️ win.closed is USELESS here — COOP disowns the popup so it reads true immediately.
+    // Rely on the storage relay + a hard timeout only.
+    const check=()=>{
+      let r=null;try{r=JSON.parse(localStorage.getItem('gpTokRelay')||'null')}catch(e){}
+      if(r&&r.t>=t0){
+        try{localStorage.removeItem('gpTokRelay')}catch(e){}
+        if(r.at){try{sessionStorage.setItem('gpTok',JSON.stringify({at:r.at,exp:r.exp}))}catch(e){}finish(null,r.at)}
+        else finish('Google sign-in failed: '+(r.err||'no token returned'));
+        return;
+      }
+      if(Date.now()-t0>180e3)finish('Sign-in timed out — close the Google window and try again');
+    };
+    const onSt=e=>{if(e.key==='gpTokRelay')check()};
+    window.addEventListener('storage',onSt);
+    iv=setInterval(check,400);
+  });
+}
+function gpDisconnect(){
+  const at=gpTok();
+  try{sessionStorage.removeItem('gpTok')}catch(e){}
+  if(at)fetch('https://oauth2.googleapis.com/revoke?token='+encodeURIComponent(at),{method:'POST'}).catch(()=>{});
+  gpUpdateUI();toast('Google Photos disconnected',true);
+}
+function gpConnectToggle(){
+  if(gpConnected()){gpDisconnect();return}
+  gpAuth().then(()=>toast('Google Photos connected ✓',true))
+    .catch(e=>{log('Google Photos connect: '+(e&&e.message||e),'warn')});
+}
+async function gpFetch(url,opts={},retry=true){
+  let at=gpTok();if(!at)at=await gpAuth();
+  const r=await fetch(url,{...opts,headers:{...(opts.headers||{}),Authorization:'Bearer '+at}});
+  if(r.status===401&&retry){try{sessionStorage.removeItem('gpTok')}catch(e){}gpUpdateUI();return gpFetch(url,opts,false)}
+  if(!r.ok){let m='';try{m=((await r.json()).error||{}).message||''}catch(e){}throw new Error('Google Photos HTTP '+r.status+(m?': '+m:''))}
+  return r;
+}

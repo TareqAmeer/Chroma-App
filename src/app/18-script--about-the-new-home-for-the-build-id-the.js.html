@@ -1,0 +1,54 @@
+// ── About: the new home for the build ID, the offline claim and the diagnostics entry points ──
+// All of these used to sit in the header or the ⋯ menu, where they were the first thing anyone
+// saw. They are real and worth keeping — "nothing leaves this machine" is the app's whole pitch,
+// and a build stamp is how you spot a stale Pages/Safari cache — they just aren't chrome.
+function csAbout(){
+  if(typeof _csModal!=='function')return;
+  _csModal('CHRO-MA-SMITH',
+    '<div style="font-size:13px;line-height:1.6">'
+    +'<p style="margin:0 0 12px">Film emulation and color grading, entirely on this device.</p>'
+    +'<p style="margin:0 0 14px;color:var(--mut)">Photos are never uploaded. Every LUT, grain and '
+    +'halation pass runs in your browser; the app works with the network switched off.</p>'
+    +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
+    +`<span>Version</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">v. ${BUILD}</span></div>`
+    +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
+    +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
+    +'<div class="btn-row" style="margin-top:0">'
+    +'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();toggleLog()">Show log</button>'
+    +'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();document.body.classList.add(\'diag-on\');applyFxLayout()">Show diagnostics tools</button>'
+    +(window.chromasmithClearImageCache
+      ?'<button class="btn bgh" onclick="document.getElementById(\'cs-modal-ov\').remove();chromasmithClearImageCache()">Clear image cache</button>':'')
+    +'</div></div>');
+}
+window.csAbout=csAbout;
+{const bs=document.getElementById('build-stamp');if(bs)bs.textContent='v. '+BUILD;}
+{const nb=document.getElementById('ni-build');if(nb)nb.textContent='v. '+BUILD;}
+try{if(localStorage.getItem('csTheme')==='light')document.body.classList.add('light');}catch(e){}
+// deskx (DRK-style desktop layout): normally applied by the Tauri shell
+// (desktop-native.js); "?deskx=1" lets it be exercised in a plain browser for testing.
+// mac-titlebar-overlay rides along with it: every wireframe/visual reference this mode is
+// tested against was built for macOS's titleBarStyle:Overlay traffic-light layout (desktop-
+// native.js only adds this class for real under CS_PLATFORM.os==='macos' — see its own comment
+// on the #fx-deskbar 84px-padding rule, docs/windows-port.md Phase 3), so the browser escape
+// hatch keeps simulating that, not Windows' native-titlebar layout, which no wireframe covers.
+try{if(new URLSearchParams(location.search).has('deskx')){document.body.classList.add('deskx');document.body.classList.add('mac-titlebar-overlay');}}catch(e){}
+// Also give a plain (non-Tauri) wide browser window the same grouped-rail, photo-left layout
+// as the real desktop shell — previously only Tauri or the explicit ?deskx=1 escape hatch got
+// it, so a wide GitHub Pages window fell back to fx-deskb's un-grouped section list with
+// tools on the left instead. Every `deskx`-gated branch in this file (buildToolRail's
+// FX_GROUPS consolidation, fxSection, fxPreviewMaxH/renderPreview sizing) is pure layout
+// logic — none of it touches a Tauri-only API — so it's safe to widen the same class rather
+// than fork a separate one. Skipped entirely when the real Tauri shell is present (it owns
+// the class there, including on a narrower window where deskx should still apply).
+try{
+  if(!window.__TAURI__){
+    const _mqDeskx=window.matchMedia('(min-width:701px) and (not ((max-height:500px) and (pointer:coarse)))');
+    const _applyDeskxWidth=()=>{
+      if(new URLSearchParams(location.search).has('deskx'))return; // explicit override always wins
+      document.body.classList.toggle('deskx',_mqDeskx.matches);
+      if(typeof applyFxLayout==='function')applyFxLayout();
+    };
+    _applyDeskxWidth();
+    _mqDeskx.addEventListener('change',_applyDeskxWidth);
+  }
+}catch(e){}

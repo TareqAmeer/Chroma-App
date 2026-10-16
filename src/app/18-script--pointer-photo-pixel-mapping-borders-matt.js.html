@@ -1,0 +1,113 @@
+// ── Pointer → photo-pixel mapping, borders/matte aware ───────────────────────────────────────
+// ⚠️ Every canvas pointer handler used to read FX.cv.getBoundingClientRect() directly. That is
+// wrong whenever Borders or the Canvas matte is on: applyPreviewBorders composites the photo plus
+// its frame into #fx-canvas-bd and then sets FX.cv to display:none. A display:none element
+// reports an all-zero rect, so `FX.cv.width / rect.width` became Infinity and every pick, brush
+// stroke and WB eyedropper landed on garbage — the reported "pick color does nothing when the
+// photo has a border" bug.
+//
+// applyPreviewBorders publishes the offset of the photo WITHIN the composited canvas here, so
+// this resolves against whichever canvas is actually on screen and subtracts the frame.
+let _fxDisplayMap=null;   // {el, offX, offY, w, h} — all in COMPOSITED-canvas pixels
+// Canvas tool listeners (mask brush, AI scribble, retouch) must be on BOTH canvases: with
+// Borders/Canvas matte on, #fx-canvas is display:none and only #fx-canvas-bd receives pointer
+// events — listeners bound to #fx-canvas alone silently stopped working ("adding a border breaks
+// tools"). applyPreviewBorders replays this list onto #fx-canvas-bd when it creates it.
+const _fxCvListeners=[];
+function fxCanvasOn(type,fn,opts){
+  _fxCvListeners.push([type,fn,opts]);
+  const cv=document.getElementById('fx-canvas');if(cv)cv.addEventListener(type,fn,opts);
+  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.addEventListener(type,fn,opts);
+}
+// The canvas actually on screen (the composited border/matte canvas when that is showing).
+function fxVisibleCanvas(){
+  const bd=document.getElementById('fx-canvas-bd');
+  return (bd&&bd.style.display!=='none'&&bd.width)?bd:FX.cv;
+}
+function fxPointerToCanvasPx(e){
+  const bd=document.getElementById('fx-canvas-bd');
+  const usingBd=_fxDisplayMap&&bd&&bd.style.display!=='none'&&_fxDisplayMap.el===bd;
+  const el=usingBd?bd:FX.cv;
+  const rect=el.getBoundingClientRect();
+  if(!rect.width||!rect.height)return null;         // never divide by a collapsed rect
+  const sc=el.width/rect.width;                     // CSS px -> this canvas's own pixels
+  let x=(e.clientX-rect.left)*sc, y=(e.clientY-rect.top)*sc;
+  if(usingBd){
+    // strip the border/matte inset, then rescale from the photo's box to FX.cv's pixel grid
+    x=(x-_fxDisplayMap.offX)*(FX.cv.width/_fxDisplayMap.w);
+    y=(y-_fxDisplayMap.offY)*(FX.cv.height/_fxDisplayMap.h);
+    if(x<0||y<0||x>FX.cv.width||y>FX.cv.height)return null;  // clicked the frame, not the photo
+  }
+  return{x,y};
+}
+function _pickAvgRGB(e,fromCanvas){
+  if(fromCanvas)_fxEnsureNormalRender();
+  const src=fromCanvas?FX.cv:(fxWork||fxImg);if(!src)return null;
+  const pt=fxPointerToCanvasPx(e);if(!pt)return null;
+  const cx=Math.round(pt.x),cy=Math.round(pt.y);
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  const sx=Math.min(sw-1,Math.max(0,Math.round(cx*sw/FX.cv.width)));
+  const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
+  const K=5,half=(K-1)/2;
+  const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
+  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  let ar=0,ag=0,ab=0;const n5=K*K;
+  for(let i=0;i<d5.length;i+=4){ar+=d5[i];ag+=d5[i+1];ab+=d5[i+2];}
+  return[ar/n5,ag/n5,ab/n5];
+}
+function pcEyedropperClick(e){
+  if(!_pcEyedropperActive)return;
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a point color','warn');return;}
+  _pcEyedropperActive=false;
+  const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.remove('on');
+  if(FX.cv)FX.cv.style.cursor='';
+  const avg=_pickAvgRGB(e,false);if(!avg)return;
+  const[ar,ag,ab]=avg;
+  const[h,s]=r2hsv(ar/255,ag/255,ab/255);
+  fxState.pointColors.push({h,s,rgb:[Math.round(ar),Math.round(ag),Math.round(ab)],hue:0,sat:0,lum:0,range:35,smoothness:50});
+  pcSel=fxState.pointColors.length-1;
+  const tg=document.getElementById('tg-pointcolor');
+  if(tg&&!tg.classList.contains('on'))toggleFX('pointcolor'); // also bakes+renders
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+  log('Point color added — adjust Hue/Saturation/Luminance/Range below','ok');
+}
+function pcRebuild(){
+  const row=document.getElementById('pc-list');if(!row)return;row.innerHTML='';
+  (fxState.pointColors||[]).forEach((pt,i)=>{
+    const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
+    bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
+    bt.title=`Point ${i+1}`;
+    bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
+    row.appendChild(bt);
+  });
+}
+function pcSyncUI(){
+  const pt=fxState.pointColors[pcSel];
+  const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
+  const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
+  if(!pt)return;
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
+    const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
+    if(sl)sl.value=v;if(vl)vl.textContent=v;
+  });
+}
+function pcSlider(key,v){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  pt[key]=parseFloat(v)||0;
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
+  bakeHsl();fxUpdate();
+}
+function pcDelete(){
+  if(pcSel<0||!fxState.pointColors[pcSel])return;
+  fxState.pointColors.splice(pcSel,1);
+  pcSel=Math.min(pcSel,fxState.pointColors.length-1);
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+}
+function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bakeHsl();fxUpdate();}
+
+// ══ FILM ARTIFACTS ═════════════════════════════════════════════════════════════
+function artReshuffle(){fxState.artSeed=Math.random()*100;fxUpdate();log('Artifacts reshuffled','info');}

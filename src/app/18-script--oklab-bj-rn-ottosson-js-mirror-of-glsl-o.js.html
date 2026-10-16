@@ -1,0 +1,92 @@
+// ── OKLAB (Björn Ottosson) — JS mirror of GLSL_OKLAB. MUST stay in step with it: crWeightJS and
+// mskMeasureSrcV reproduce the shader's gate to compute srcV, and any divergence shows up as the
+// frequency separation quietly anchoring to the wrong level.
+// ⚠️ Only the SKIN path moves to Oklab. applyHSL / applyPointColors / deriveXMP stay on r2hsv —
+// they are separately calibrated and changing their space would move every look and preset.
+function _okCbrt(x){return Math.sign(x)*Math.pow(Math.abs(x),1/3);}
+function rgb2oklab(r,g,b){
+  const R=s2l(r),G=s2l(g),B=s2l(b);
+  const l=0.4122214708*R+0.5363325363*G+0.0514459929*B;
+  const m=0.2119034982*R+0.6806995451*G+0.1073969566*B;
+  const s2=0.0883024619*R+0.2817188376*G+0.6299787005*B;
+  const l_=_okCbrt(l),m_=_okCbrt(m),s_=_okCbrt(s2);
+  return[0.2104542553*l_+0.7936177850*m_-0.0040720468*s_,
+         1.9779984951*l_-2.4285922050*m_+0.4505937099*s_,
+         0.0259040371*l_+0.7827717662*m_-0.8086757660*s_];
+}
+// Returns [hueTurn, chroma, L] so it slots into the existing [h,s,v] call sites unchanged.
+function rgb2oklch(r,g,b){
+  const[L,a,b2]=rgb2oklab(r,g,b);
+  const C=Math.hypot(a,b2);
+  let h=Math.atan2(b2,a)/(2*Math.PI);if(h<0)h+=1;
+  return[h,C,L];
+}
+function oklch2rgb(h,C,L){
+  const a=C*Math.cos(h*2*Math.PI),b2=C*Math.sin(h*2*Math.PI);
+  const l_=L+0.3963377774*a+0.2158037573*b2;
+  const m_=L-0.1055613458*a-0.0638541728*b2;
+  const s_=L-0.0894841775*a-1.2914855480*b2;
+  const l=l_*l_*l_,m=m_*m_*m_,s2=s_*s_*s_;
+  return[l2s( 4.0767416621*l-3.3077115913*m+0.2309699292*s2),
+         l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s2),
+         l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s2)];
+}
+const MSK_MAX=8;   // must match mskA..mskK[8] in the lut shader and the two maskTex/maskTex2 raster channels
+const CR_MAX_SAMPLES=8;   // must match mskCS's 2-per-vec4 packing and colRangeWeight's unrolled max.
+// Raised from 6: auto-seeding (mskAutoSamples, k=4) already claims 4 of the old 6 slots, leaving
+// only 2 for a manual shift-click add-on — too little headroom on a subject with more than two
+// extra tonal zones (group shots, mixed lighting). 8 gives auto-seed the same 4 plus 4 free slots.
+
+// ══ RASTER MASK STORAGE ══════════════════════════════════════════════════════════════════════
+// A raster mask's `px` is a Uint8ClampedArray of 0..255 coverage, one byte per pixel, at
+// mskTexDims() resolution (up to 2048px on the long edge = ~2.8M px).
+//
+// ⚠️ It used to be a plain `new Array(w*h)` of JS numbers — 8 bytes per pixel instead of 1, and
+// far worse once serialized: `JSON.stringify` writes each entry as up to 4 characters of text.
+// Combined with history retaining 20 snapshots, ONE brush mask on a 24MP photo cost well over a
+// hundred megabytes (measured: 9.5MB of history JSON for a mere 512x384 mask). Typed storage
+// plus base64 for the serialized form is ~14x smaller in memory and ~3x smaller on disk.
+//
+// ⚠️ A Uint8ClampedArray does NOT survive JSON.stringify — it serializes to {"0":..,"1":..},
+// which is both enormous and lossy on the way back. Every persistence path (session save,
+// Library sidecar, copy/paste recipe, undo history) must therefore go through _mskToSnap /
+// _mskFromSnap rather than JSON-cloning a live mask directly.
+// Deep copy for plain state (curves/HSL/geometry/canvas). structuredClone is available in every
+// engine this app runs in; the JSON fallback keeps an ancient WKWebView from throwing.
+const _clone=(v)=>{try{return structuredClone(v);}catch(e){return JSON.parse(JSON.stringify(v));}};
+function _pxToB64(px){
+  let bin='';const CH=0x8000;                      // chunked: apply() blows the stack on ~2.8M args
+  for(let i=0;i<px.length;i+=CH)bin+=String.fromCharCode.apply(null,px.subarray(i,Math.min(i+CH,px.length)));
+  return btoa(bin);
+}
+function _pxFromB64(s){
+  const bin=atob(s),a=new Uint8ClampedArray(bin.length);
+  for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
+  return a;
+}
+// Snapshot (plain-JSON) form of a live mask. `skipRaster` is for the undo-history path, which
+// keeps the raster alive by REFERENCE instead (see fxHistoryPush) — encoding it there would
+// re-pay base64 on every debounced slider tick for data that is already in memory.
+// ⚠️ Both directions must clone the nested arrays, not alias them. A shallow copy would leave a
+// live mask and the snapshot it came from sharing one crSamples/aiPoints array, so adding an
+// eyedropper sample would retroactively mutate the undo entry it was restored from.
+function _mskToSnap(m,skipRaster){
+  const o={};
+  for(const k in m){if(k==='px'||k[0]==='_')continue;o[k]=m[k];}
+  o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
+  if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
+  if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
+  if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
+  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
+  return o;
+}
+function _mskFromSnap(o){
+  const m=Object.assign({},o);
+  m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
+  if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
+  if(o.aiBox)m.aiBox=Object.assign({},o.aiBox);
+  if(o.aiProvenance)m.aiProvenance=_mskNormalizeAIProvenance(o.aiProvenance);
+  return _mskMigrate(m);
+}
+function _mskCloneLive(m){return _mskFromSnap(_mskToSnap(m));}
+window.chromasmithMaskToSnapshot=m=>_mskToSnap(m);

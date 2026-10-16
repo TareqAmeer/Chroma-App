@@ -1,0 +1,81 @@
+// ── LUT chart: self-serve Lightroom-preset → LUT workflow ──
+// Download the chart, import it into Lightroom, apply any preset, export it
+// (sRGB, full size), then drop the export back on the LUT drop zone → the exact
+// 33³ LUT of that preset, ready to apply/save. Patches are 24px and read back as
+// the mean of the inner 50%, so grain/sharpening/NR in the export cancel out.
+// NOTE: a LUT captures the preset's GLOBAL color/tone only — sharpening, noise
+// reduction, grain and local masks can't live in a LUT (use the FX grain instead).
+const CHART={cell:24,cols:231,rows:156,margin:48}; // 231×156=36036 cells ≥ 33³; canvas 5640×3840
+function chartSize(){return{w:CHART.cols*CHART.cell+2*CHART.margin,h:CHART.rows*CHART.cell+2*CHART.margin}}
+function makeLutChart(){
+  const{w,h}=chartSize(),c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d');
+  x.fillStyle='#808080';x.fillRect(0,0,w,h);
+  for(let i=0;i<SZ*SZ*SZ;i++){
+    const r=i%SZ,g=(i/SZ|0)%SZ,b=(i/(SZ*SZ)|0);
+    const col=i%CHART.cols,row=i/CHART.cols|0;
+    x.fillStyle=`rgb(${Math.round(r*255/(SZ-1))},${Math.round(g*255/(SZ-1))},${Math.round(b*255/(SZ-1))})`;
+    x.fillRect(CHART.margin+col*CHART.cell,CHART.margin+row*CHART.cell,CHART.cell,CHART.cell);
+  }
+  // corner fiducials (cosmetic orientation/framing aid)
+  x.fillStyle='#000';[[8,8],[w-28,8],[8,h-28],[w-28,h-28]].forEach(([fx,fy])=>x.fillRect(fx,fy,20,20));
+  x.fillStyle='#fff';[[13,13],[w-23,13],[13,h-23],[w-23,h-23]].forEach(([fx,fy])=>x.fillRect(fx,fy,10,10));
+  return c;
+}
+async function downloadLutChart(){
+  try{
+    const blob=await new Promise(r=>makeLutChart().toBlob(r,'image/png'));
+    await saveFile(new Uint8Array(await blob.arrayBuffer()),'chromasmith_lut_chart.png','image/png');
+    log('LUT chart downloaded — Lightroom: import it, apply your preset, export (JPEG/TIFF, sRGB, full size), then drop the export on the LUT zone','ok');
+  }catch(e){log('Chart error: '+errStr(e),'err')}
+}
+function isChartImage(w,h){const s=chartSize();return Math.abs(w/h-s.w/s.h)<0.01&&w>=s.w/5}
+function chartToLUT(imgCanvas){
+  const w=imgCanvas.width,h=imgCanvas.height,s=chartSize();
+  const sx=w/s.w,sy=h/s.h; // tolerate resized exports; sampling scales along
+  const x=imgCanvas.getContext('2d'),d=x.getImageData(0,0,w,h).data;
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  for(let i=0;i<SZ*SZ*SZ;i++){
+    const r=i%SZ,g=(i/SZ|0)%SZ,b=(i/(SZ*SZ)|0);
+    const col=i%CHART.cols,row=i/CHART.cols|0;
+    const x0=Math.round((CHART.margin+col*CHART.cell+CHART.cell*0.25)*sx),
+          x1=Math.max(x0+1,Math.round((CHART.margin+col*CHART.cell+CHART.cell*0.75)*sx)),
+          y0=Math.round((CHART.margin+row*CHART.cell+CHART.cell*0.25)*sy),
+          y1=Math.max(y0+1,Math.round((CHART.margin+row*CHART.cell+CHART.cell*0.75)*sy));
+    let sr=0,sg=0,sb=0,n=0;
+    for(let yy=y0;yy<y1;yy++)for(let xx=x0;xx<x1;xx++){const p=4*(yy*w+xx);sr+=d[p];sg+=d[p+1];sb+=d[p+2];n++}
+    const j=li(r,g,b);lut[j]=sr/n/255;lut[j+1]=sg/n/255;lut[j+2]=sb/n/255;
+  }
+  return lut;
+}
+// DB v2 adds a SECOND store, 'lutcache', for the built-in presets that live in vendor/luts/.
+// ⚠️ They must NOT share the 'luts' store: lutLibList() is a bare getAllKeys() feeding the
+// "My library" optgroup, so 102 cached built-ins in there would all show up as the user's own
+// uploaded LUTs. The upgrade is additive and guarded by objectStoreNames, so an existing v1
+// database keeps every user LUT it already holds.
+function lutDB(){return new Promise((res,rej)=>{const rq=indexedDB.open('chromasmith',2);
+  rq.onupgradeneeded=()=>{const db=rq.result;
+    if(!db.objectStoreNames.contains('luts'))db.createObjectStore('luts',{keyPath:'name'});
+    if(!db.objectStoreNames.contains('lutcache'))db.createObjectStore('lutcache',{keyPath:'name'});};
+  rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)})}
+function lutTx(mode,fn,store){return lutDB().then(db=>new Promise((res,rej)=>{const rq=fn(db.transaction(store||'luts',mode).objectStore(store||'luts'));rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error)}))}
+const lutLibList=()=>lutTx('readonly',s=>s.getAllKeys());
+const lutLibGet=n=>lutTx('readonly',s=>s.get(n));
+const lutLibPut=(n,d)=>lutTx('readwrite',s=>s.put({name:n,data:d}));
+const lutLibDel=n=>lutTx('readwrite',s=>s.delete(n));
+// A single readonly transaction captures user-owned LUTs; built-in lutcache is regenerable.
+async function csBackupUserAssets(){
+  const db=await lutDB();
+  try{return await new Promise((resolve,reject)=>{
+    const tx=db.transaction('luts','readonly'),rq=tx.objectStore('luts').getAll();let records;
+    rq.onsuccess=()=>{records=rq.result;};
+    tx.onerror=()=>reject(tx.error||new Error('Could not read user LUTs'));
+    tx.onabort=()=>reject(tx.error||new Error('User LUT snapshot was interrupted'));
+    tx.oncomplete=()=>{try{resolve({formatVersion:1,luts:records.map(rec=>{
+      const bytes=rec.data instanceof ArrayBuffer?new Uint8Array(rec.data):new Uint8Array(rec.data);
+      if(!rec.name||bytes.length!==LUT_BYTE_LEN)throw new Error(`Invalid user LUT: ${rec.name||'unnamed'}`);
+      let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+      return{name:rec.name,bytesBase64:btoa(binary)};
+    })});}catch(e){reject(e);}};
+  });}finally{db.close();}
+}

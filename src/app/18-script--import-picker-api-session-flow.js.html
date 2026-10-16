@@ -1,0 +1,206 @@
+// ── Import: Picker API session flow ───────────────────────────────────────────
+let _gpImportBusy=false;
+async function gpImportClick(){ // entry point (button onclick)
+  if(_gpImportBusy){toast('Google Photos import already running…');return}
+  // Already signed in → claim this click's popup allowance with a same-origin about:blank
+  // (COOP keeps same-origin popups attached, so we can still steer it to the picker after
+  // the async session create). Not signed in → gpAuth() needs the popup slot instead; the
+  // picker tab then gets a one-tap fallback if the browser blocks it. Grab it BEFORE the
+  // (now async, modal-based) client-ID prompt so the click's user-gesture popup allowance
+  // isn't lost waiting on the modal.
+  const preWin=gpTok()?window.open('about:blank','_blank'):null;
+  if(!gpClientId()&&!(await gpAskClientId())){if(preWin&&!preWin.closed)preWin.close();return}
+  gpImportPhotos(preWin);
+}
+function gpTapOpen(uri){ // popup blocked → a real <a> the user taps (fresh activation)
+  let h=document.getElementById('gp-tap-open');
+  if(!h){h=document.createElement('a');h.id='gp-tap-open';h.target='_blank';h.rel='noopener';
+    h.style.cssText='position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-system);background:var(--acc);color:#000;font:600 13px system-ui;padding:11px 18px;border-radius:22px;text-decoration:none;box-shadow:none';
+    document.body.appendChild(h);}
+  h.href=uri;h.textContent='Tap to open the Google Photos picker';
+  // target=_blank is a no-op in the WKWebView shell (no browser chrome to open a tab in) —
+  // this fallback link only did anything in the actual web build. Route through the native
+  // opener under Tauri so the tap actually does something instead of nothing.
+  if(window.__TAURI__)h.onclick=e=>{e.preventDefault();window.__TAURI__.core.invoke('open_url_native',{url:uri}).catch(err=>log('Could not open browser: '+(err&&err.message||err),'err'))};
+}
+function gpTapClear(){const h=document.getElementById('gp-tap-open');if(h)h.remove()}
+async function gpImportPhotos(preWin){
+  _gpImportBusy=true;
+  try{
+    await gpAuth();
+    const sess=await(await gpFetch('https://photospicker.googleapis.com/v1/sessions',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+    let opened=false;
+    if(window.__TAURI__){
+      // The WKWebView shell has no browser chrome — window.open()/target=_blank silently do
+      // nothing here (same reason the OAuth consent screen needs google_oauth_loopback's
+      // native `open` spawn instead of a popup). Skip the popup dance entirely; go straight to
+      // the system browser. preWin (an about:blank popup, opened only for the web-build path)
+      // is never actually usable under Tauri, so close it rather than leave a blank window.
+      if(preWin&&!preWin.closed)try{preWin.close()}catch(e){}
+      try{await window.__TAURI__.core.invoke('open_url_native',{url:sess.pickerUri});opened=true}
+      catch(e){console.error('open_url_native',e)}
+    }else{
+      if(preWin&&!preWin.closed){try{preWin.location.href=sess.pickerUri;opened=true}catch(e){}}
+      if(!opened){const w=window.open(sess.pickerUri,'_blank');if(w)opened=true}
+    }
+    if(!opened)gpTapOpen(sess.pickerUri);
+    toast('Pick photos in Google Photos, then hit Done',true);
+    log('Waiting for your Google Photos selection…','info');
+    const pc=sess.pollingConfig||{};
+    const ivMs=Math.max(1,parseFloat(pc.pollInterval||'3')||3)*1000;
+    const deadline=Date.now()+Math.min(parseFloat(pc.timeoutIn||'900')||900,900)*1000;
+    let ready=false;
+    while(Date.now()<deadline){
+      await new Promise(r=>setTimeout(r,ivMs));
+      const s=await(await gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id))).json();
+      if(s.mediaItemsSet){ready=true;break}
+    }
+    gpTapClear();
+    if(!ready){toast('Google Photos pick timed out');return}
+    let items=[],pageToken='';
+    do{
+      const u='https://photospicker.googleapis.com/v1/mediaItems?sessionId='+encodeURIComponent(sess.id)+'&pageSize=100'+(pageToken?'&pageToken='+encodeURIComponent(pageToken):'');
+      const j=await(await gpFetch(u)).json();
+      items=items.concat(j.mediaItems||[]);pageToken=j.nextPageToken||'';
+    }while(pageToken);
+    const photos=items.filter(m=>m.type!=='VIDEO'&&m.mediaFile&&m.mediaFile.baseUrl);
+    const skippedVid=items.length-photos.length;
+    if(skippedVid)log('Skipped '+skippedVid+' video(s) — CHRO-MA-SMITH is photos-only','warn');
+    if(!photos.length){toast('No photos picked');return}
+    const files=[];
+    // "Load failed" (WKWebView's generic fetch()-network-abort string, distinct from gpFetch's
+    // own "Google Photos HTTP nnn" for real HTTP errors) turned up on large RAW/HEIC downloads
+    // — a plain unbounded fetch().blob() with no timeout is more exposed to a transient
+    // WKWebView network hiccup on a 20-50MB transfer than on a small JPEG. Retry a few times
+    // with backoff for exactly that failure mode; a genuine HTTP error (403/404/etc, which
+    // gpFetch throws with an "HTTP" message) isn't retried since it won't succeed on repeat.
+    // XMLHttpRequest, not fetch(): 3 retries of the SAME fetch()-based transport all failed
+    // identically with "Load failed" — that rules out transient network flakiness (a real retry
+    // target) and points at fetch()'s streaming response-body implementation in this WKWebView
+    // specifically. XHR uses a distinct, non-streaming (buffer-then-deliver) code path in
+    // WebKit that has historically been more reliable for exactly this shape of request — a
+    // large, authenticated, cross-origin binary download — so it's worth trying as the primary
+    // transport rather than just retrying the one that's already failing consistently.
+    const xhrBlob=(url,at)=>new Promise((resolve,reject)=>{
+      const xhr=new XMLHttpRequest();
+      xhr.open('GET',url,true);
+      xhr.responseType='blob';
+      xhr.setRequestHeader('Authorization','Bearer '+at);
+      xhr.onload=()=>{
+        if(xhr.status>=200&&xhr.status<300)resolve(xhr.response);
+        else reject(new Error('Google Photos HTTP '+xhr.status));
+      };
+      xhr.onerror=()=>reject(new Error('XHR network error'));
+      xhr.ontimeout=()=>reject(new Error('XHR timed out'));
+      xhr.timeout=120000;
+      xhr.send();
+    });
+    // Under Tauri, download NATIVELY in Rust: the googleusercontent.com CDN rejects the
+    // Authorization-header GET's CORS preflight for the tauri:// origin, so fetch AND XHR both
+    // fail transport-independently ("Load failed"/"XHR network error"). The native path
+    // (download_url_native) has no CORS and returns the raw bytes; a real HTTP error comes back
+    // as "HTTP nnn" so it's still distinguishable from the transport issue this fixes.
+    const nativeBlob=async(url,at)=>{
+      const buf=await window.__TAURI__.core.invoke('download_url_native',{url,bearer:at});
+      return new Blob([buf]);
+    };
+    const downloadWithRetry=async(url,attempts=3)=>{
+      let at=gpTok();if(!at)at=await gpAuth();
+      const fetchOne=window.__TAURI__?()=>nativeBlob(url,at):()=>xhrBlob(url,at);
+      for(let a=1;a<=attempts;a++){
+        try{return await fetchOne()}
+        catch(e){
+          const isHttpError=/HTTP \d/.test(e&&e.message||'');
+          if(isHttpError||a===attempts)throw e;
+          log(`Download attempt ${a} failed (${e&&e.message||e}) — retrying…`,'warn');
+          await new Promise(r=>setTimeout(r,500*a));
+        }
+      }
+    };
+    // Consolidated (not per-file) accounting so the log stays scannable — the recurring
+    // complaint was that GP saves silently vanished; the fix is to make every outcome
+    // observable in ONE place at the end, not to spam a line per file mid-import.
+    let savedCount=0,saveFailCount=0,rawTwinCount=0;
+    const lastSavedDir={path:''};
+    const savedPaths=[]; // parallel to `files` — '' when not saved to disk (web build / failure)
+    for(let i=0;i<photos.length;i++){
+      toast('Downloading '+(i+1)+'/'+photos.length+' from Google Photos…',true);
+      const mf=photos[i].mediaFile;
+      try{
+        // "=d" = original bytes; the baseUrl needs the Bearer header (a plain img src 403s)
+        const blob=await downloadWithRetry(mf.baseUrl+'=d');
+        const fname=mf.filename||('gphotos_'+(i+1)+'.jpg');
+        // Cache to ~/Documents/Google Photos Download/ (Tauri only) so re-opening this photo
+        // later — e.g. from the Library's pinned "Google Photos Download" entry — reads it
+        // off disk instead of re-downloading. A save failure is now surfaced (not swallowed):
+        // it's logged individually since it means the file genuinely isn't on disk, which is
+        // exactly the bug this replaces ("files never appear in the folder", silently).
+        let savedName=fname,savedPath='';
+        if(window.__TAURI__){
+          try{
+            const buf=await blob.arrayBuffer();
+            const res=await window.__TAURI__.core.invoke('save_to_gphotos_downloads',{filename:fname,dataB64:_u8b64(new Uint8Array(buf))});
+            savedCount++;
+            lastSavedDir.path=res.path;savedPath=res.path;
+            if(res.renamed){rawTwinCount++;savedName=res.path.split('/').pop()}
+          }catch(e){
+            saveFailCount++;
+            log('Could not save "'+fname+'" to the Google Photos Download folder: '+(e&&e.message||e),'err');
+          }
+        }
+        savedPaths.push(savedPath);
+        files.push(new File([blob],savedName,{type:mf.mimeType||blob.type||'image/jpeg'}));
+      }catch(e){log('Failed to download '+(mf.filename||'a photo')+': '+(e&&e.message||e),'err')}
+    }
+    gpFetch('https://photospicker.googleapis.com/v1/sessions/'+encodeURIComponent(sess.id),{method:'DELETE'}).catch(()=>{});
+    if(!files.length){toast('Google Photos import failed — see log');return}
+    await loadFXImages(files);
+    // Unify metadata: the in-browser JPEG EXIF reader (readExifTags) that loadFXImages just
+    // ran is missing LensModel/GPS/etc — the SAME gap "jpegs aren't showing full metadata"
+    // reports. For anything we actually saved to disk this session, re-read it through Rust's
+    // fuller kamadak-exif/rawler parser (the same one the Library uses) and merge it in, so a
+    // Google Photos import shows identical metadata to opening the same file from the Library.
+    if(window.__TAURI__){
+      for(let i=0;i<fxImages.length;i++){
+        const p=savedPaths[i];
+        if(!p)continue;
+        try{
+          const m=await window.__TAURI__.core.invoke('get_meta',{path:p});
+          const prev=fxImages[i].exif||{};
+          fxImages[i].exif={...prev,
+            model:m.model||m.camera||prev.model||'',make:m.make||prev.make||'',
+            lens:m.lens||prev.lens||'',shutter:m.shutter||prev.shutter||'',
+            aperture:m.aperture||prev.aperture||'',iso:m.iso?`ISO ${m.iso}`:(prev.iso||''),
+            focalLen:m.focal_len||prev.focalLen||'',date:m.date||prev.date||''};
+        }catch(e){console.error('get_meta (gp import)',p,e)}
+      }
+      if(typeof showExif==='function'&&fxImages[fxCurIdx])showExif(fxImages[fxCurIdx].exif||{});
+    }
+    if(window.__TAURI__){
+      if(saveFailCount){
+        log(`Saved ${savedCount}/${savedCount+saveFailCount} to the Google Photos Download folder — ${saveFailCount} failed (see above)`,'warn');
+      }else if(savedCount){
+        log(`Saved ${savedCount} photo(s) to the Google Photos Download folder`,'info');
+      }
+    }
+    // Google Photos' Picker API only ever returns whatever base media Google has — for a
+    // RAW+JPEG pair (or iPhone ProRAW) that is very often the JPEG twin, even for a file named
+    // "IMG_1234.DNG". No request parameter fixes this (it's a Picker limitation, not a bug on
+    // our end), so rather than one warning line per affected file, show ONE consolidated
+    // banner explaining why and pointing at the actual fix (Files/USB import).
+    if(rawTwinCount){
+      // Confirmed against Google's own API behaviour (issuetracker.google.com/issues/112096115):
+      // the Picker/Library API's baseUrl+"=d" is documented to sometimes serve the JPEG half of
+      // a RAW+JPEG pair instead of the RAW original, even when photos.google.com's own Download
+      // button on the SAME item does return the real RAW — it's a longstanding Google API gap,
+      // not a Chromasmith transport bug (this app already downloads natively in Rust with the
+      // exact "=d" original-quality parameter Google's docs specify).
+      log(`Google's Photos API only served a JPEG copy of ${rawTwinCount} RAW file${rawTwinCount>1?'s':''} — imported as JPG (renamed to match). This is a known limitation of Google's Picker API (it can silently substitute the JPEG half of a RAW+JPEG pair); photos.google.com's own "Download" button on the same photo usually gets the true RAW. Download it there and import via Files or a USB card instead.`,'warn');
+    }
+    toast('Imported '+files.length+' photo'+(files.length>1?'s':'')+' from Google Photos ✓',true);
+  }catch(e){
+    log('Google Photos import: '+(e&&e.message||e),'err');
+    toast('Google Photos import failed — see log');
+  }finally{_gpImportBusy=false;gpTapClear();
+    if(preWin&&!preWin.closed){try{preWin.close()}catch(e){}}}
+}

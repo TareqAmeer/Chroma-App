@@ -1,0 +1,112 @@
+// ── Live-fit: while the bottom sheet animates or is being dragged, rescale the EXISTING
+// preview canvas via cheap CSS width/height each frame (GPU composite scale — no WebGL
+// re-render) so the photo continuously tracks the moving sheet like INS/DRK.
+// The transitionend/drag-end renderPreview() then redraws it crisp at the final size.
+// Targets whichever canvas is actually visible (the borders/canvas-matte overlay
+// #fx-canvas-bd replaces #fx-canvas when active — see applyPreviewBorders).
+let _lfRaf=0,_lfUntil=0;
+function fxLiveFitStop(){_lfUntil=0;if(_lfRaf){cancelAnimationFrame(_lfRaf);_lfRaf=0;}}
+function fxLiveFit(ms){
+  if(!document.body.classList.contains('mobile-fx')&&!document.body.classList.contains('deskx'))return;
+  _lfUntil=performance.now()+(ms||360);
+  const wrap=document.getElementById('fx-wrap');
+  const bd=document.getElementById('fx-canvas-bd');
+  const cv=(bd&&bd.style.display!=='none'&&bd.width)?bd:document.getElementById('fx-canvas');
+  if(!wrap||!cv)return;
+  const w0=parseFloat(cv.style.width)||cv.clientWidth,h0=parseFloat(cv.style.height)||cv.clientHeight;
+  const nativeW=cv.width||w0,nativeH=cv.height||h0;
+  if(!nativeW||!nativeH)return;
+  // CHR-163: fit to the CONTENT box (fxWrapInner — what renderPreview uses), not clientWidth/
+  // Height, which include the wrap's 16px inset. Fitting the padded box made the canvas wider
+  // than #fx-canvas{max-width:100%} allows, so CSS clamped the width on its own while the
+  // pinned height lagged until the final renderPreview — the photo resized width-then-height.
+  const fit=()=>{
+    const {w:aw,h:ah}=fxWrapInner();
+    const zw=document.getElementById('fx-zoom-wrap');
+    if(aw>0&&ah>0&&cv.id==='fx-canvas'&&zw&&zw.style.width){
+      // Zoomed-in full-res mode: #fx-zoom-wrap holds the photo footprint and cv is only the crisp
+      // tile inside it. Re-fit the FOOTPRINT (and scale the tile with it until its re-render), then
+      // re-anchor the pan so the same part of the photo stays in view.
+      const fw=parseFloat(zw.style.width),fh=parseFloat(zw.style.height);
+      const k=Math.min(aw/fw,ah/fh);
+      if(fw>0&&fh>0&&Math.abs(k-1)>0.002){
+        zw.style.width=(fw*k)+'px';zw.style.height=(fh*k)+'px';
+        ['width','height','left','top'].forEach(p=>{const v=parseFloat(cv.style[p]);if(!isNaN(v))cv.style[p]=(v*k)+'px';});
+        _zoomRefit(fw);
+      }
+      return;
+    }
+    if(aw>0&&ah>0){
+      // Use the CURRENT canvas intrinsic dimensions, not the previous photo's CSS dimensions.
+      // A pasted edit can switch from portrait to landscape while this observer is still
+      // settling; scaling stale w0/h0 independently was the direct squeeze/stretch path.
+      const s=Math.min(aw/nativeW,ah/nativeH,1);
+      const oldW=_fxZoomFootprint().w;
+      cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
+      // Full-res crop mode pins #fx-zoom-wrap to the photo footprint and cv is only the crisp
+      // tile — its own re-render re-fits; here the footprint IS the canvas, so re-anchor the pan.
+      if(cv.id==='fx-canvas')_zoomRefit(oldW);
+    }
+  };
+  const step=()=>{fit();_lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;};
+  fit(); // same frame as the size change (ResizeObserver runs pre-paint) — no one-frame lag
+  if(_lfRaf)return; // already running — the deadline extension above is enough
+  _lfRaf=requestAnimationFrame(step);
+}
+// E4 fix (2026-09-10): a plain OS window resize (drag the window edge/titlebar — NOT the
+// sheet/panel-toggle transitions fxLiveFit already tracks above) had NO listener at all.
+// renderPreview() pins #fx-canvas's CSS width/height to explicit px on every render (see its
+// "pin CSS size; backing store is dpr-scaled" comment) computed from #fx-wrap's dimensions AT
+// THAT MOMENT — it never re-runs on window resize. Continuous resize left that pinned px height
+// stale while `#fx-canvas{max-width:100%}` (only width, not height) kept clamping the WIDTH down
+// to the shrinking wrap — an increasing width/height mismatch = the reported "squeeze". Discrete
+// breakpoint snapshots (test/ui_audit.mjs) never see it because each load calls renderPreview
+// fresh at that one viewport with no resize in between. fxLiveFit already exists for exactly
+// this continuous-rescale job (cheap CSS-only, no WebGL re-render each frame); reuse it here,
+// then land one crisp renderPreview() once the drag settles, mirroring the sheet/panel pattern.
+let _fxWinResizeT=0;
+window.addEventListener('resize',()=>{
+  if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+  fxLiveFit(220);
+  clearTimeout(_fxWinResizeT);
+  _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+});
+// HARD RULE (2026-09-10, after the sidebar-drag squeeze turned out to be the same bug as E4
+// under a different trigger): every past "photo gets squeezed/stretched" report has been a NEW
+// event source changing #fx-wrap's box size with nobody telling the canvas — window resize (E4),
+// the panel/rail drag (this report), and there is no reason to believe those are the last two.
+// Patching triggers one at a time is exactly the failure mode that produced two of these; a
+// ResizeObserver on #fx-wrap itself is trigger-agnostic — it fires for ANY cause of a size
+// change (window resize, sidebar/rail drag, sheet open/close, deskx breakpoint flip, a future
+// dock/split-view feature, zoom, devtools opening) without needing its own listener. It is the
+// single source of truth for "the wrap changed size, keep the photo in sync" and should not be
+// duplicated by adding yet another one-off resize/transition listener for a future container.
+(function(){
+  const wrap=document.getElementById('fx-wrap');
+  if(!wrap||typeof ResizeObserver==='undefined')return;
+  let _rt=0,_fitFrame=0;
+  new ResizeObserver(()=>{
+    if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+    // Refit on the next frame: resizing the observed wrap synchronously can trigger
+    // WebKit's ResizeObserver delivery loop when a mobile sheet changes height.
+    cancelAnimationFrame(_fitFrame);_fitFrame=requestAnimationFrame(()=>fxLiveFit(220));
+    clearTimeout(_rt);
+    _rt=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+  }).observe(wrap);
+})();
+// Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).
+(function(){
+  const p=document.querySelector('.fx-panel');
+  if(p)p.addEventListener('transitionend',e=>{
+    if(e.propertyName==='height'&&document.body.classList.contains('mobile-fx')&&!cropMode){fxLiveFitStop();renderPreview();}
+  });
+})();
+// Same idea for deskx: the tools-panel toggle animates .fx-layout's grid-template-columns
+// (200ms), which is what actually resizes #fx-wrap; fxLiveFit tracks it continuously, this
+// fires the one crisp final renderPreview() once the grid has actually finished moving.
+(function(){
+  const l=document.querySelector('.fx-layout');
+  if(l)l.addEventListener('transitionend',e=>{
+    if(e.propertyName==='grid-template-columns'&&document.body.classList.contains('deskx')&&!cropMode){fxLiveFitStop();renderPreview();}
+  });
+})();

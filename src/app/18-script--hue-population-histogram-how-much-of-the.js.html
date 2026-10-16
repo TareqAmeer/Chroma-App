@@ -1,0 +1,142 @@
+// ── hue-population histogram: how much of the CURRENT image falls in each of the 8 bands,
+// as a clickable bar row above the chips (click a bar = select that band, same as its chip).
+// Sampled from a small offscreen downscale of the graded preview canvas — cheap (a few
+// thousand pixels), recomputed on image load / preset change, not per-slider-drag.
+const HSL_HIST_BUCKETS=48; // continuous spectrum resolution — independent of the 8 band zones
+function hslHistCompute(n){
+  const buckets=n||HSL_HIST_BUCKETS;
+  const cv=document.getElementById('fx-canvas');if(!cv||!cv.width||!cv.height)return new Array(buckets).fill(0);
+  const N=64,tmp=document.createElement('canvas');tmp.width=N;tmp.height=N;
+  const tx=tmp.getContext('2d',{willReadFrequently:true});
+  try{tx.drawImage(cv,0,0,N,N);}catch(e){return new Array(buckets).fill(0);}
+  let px;try{px=tx.getImageData(0,0,N,N).data;}catch(e){return new Array(buckets).fill(0);}
+  const counts=new Array(buckets).fill(0);let total=0;
+  for(let i=0;i<px.length;i+=4){
+    const r=px[i]/255,g=px[i+1]/255,b=px[i+2]/255;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+    if(d<0.03)continue; // near-neutral — doesn't belong to any hue bucket
+    let h;if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;
+    h=(h*60+360)%360;
+    counts[Math.min(buckets-1,Math.floor(h/360*buckets))]++;
+    total++;
+  }
+  return total?counts.map(c=>c/total):counts;
+}
+let hslPreviewBand=null;
+function _hslActiveBand(){return hslPreviewBand||hslBand;}
+// Continuous spectrum bars (their own sampled hue's colour) plus 8 invisible overlay zones,
+// one per band range, for hover-preview + click-select with a pale grey selected-range overlay —
+// approved Color Mixer pilot, 2026-09-13, replacing the old 8 discrete band-coloured bars.
+function hslBuildHist(){
+  const row=document.getElementById('hsl-hist');if(!row)return;
+  const counts=hslHistCompute(),mx=Math.max(...counts,0.001);
+  row.innerHTML='';
+  counts.forEach((c,i)=>{
+    const bar=document.createElement('span');bar.className='hsl-hist-bar';
+    bar.style.height=Math.max(3,Math.round(c/mx*100))+'px';
+    const hueDeg=(i+0.5)/counts.length*360;
+    bar.style.background=`hsl(${hueDeg.toFixed(0)},72%,58%)`;
+    row.appendChild(bar);
+  });
+  const active=_hslActiveBand();
+  HSL_BANDS.forEach((b,i)=>{
+    const zone=document.createElement('button');zone.type='button';zone.className='hsl-hist-zone'+(b===active?' on':'');
+    zone.style.left=(i*12.5)+'%';zone.style.width='12.5%';
+    zone.title='Select '+b;zone.setAttribute('aria-label','Select '+b);zone.setAttribute('aria-pressed',String(b===active));
+    zone.onclick=()=>hslSetBand(b,true);
+    row.appendChild(zone);
+  });
+}
+function hslSetBand(b){hslBand=b;hslPreviewBand=null;hslSyncUI();}
+function hslPreviewSet(b){if(hslPreviewBand===b)return;hslPreviewBand=b;hslBuildHist();hslBuildChips();}
+function hslPreviewClear(){if(!hslPreviewBand)return;hslPreviewBand=null;hslBuildHist();hslBuildChips();}
+// Hover a histogram zone previews that band's chip/selection state without committing the
+// selection — leaving is a no-op, clicking calls hslSetBand. Delegated once; hslBuildHist()
+// replaces the zone elements on every rebuild but never re-adds this listener.
+{
+  const histEl=document.getElementById('hsl-hist');
+  if(histEl){
+    // Touch: the finger stays "on" the first zone it hit (implicit pointer capture), so pick the
+    // band from the finger's x instead, and commit whichever band it rests on at lift-off.
+    const bandAt=e=>{const r=histEl.getBoundingClientRect();if(!r.width)return null;
+      return HSL_BANDS[Math.min(HSL_BANDS.length-1,Math.max(0,Math.floor((e.clientX-r.left)/r.width*HSL_BANDS.length)))];};
+    let scrub=null;
+    histEl.style.touchAction='pan-y';
+    histEl.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;scrub={x:e.clientX,y:e.clientY,band:bandAt(e)};});
+    histEl.addEventListener('pointermove',e=>{
+      if(scrub){if(Math.abs(e.clientY-scrub.y)>Math.abs(e.clientX-scrub.x)+12){scrub=null;hslPreviewClear();return;}
+        const b=bandAt(e);if(b){scrub.band=b;hslPreviewSet(b);}return;}
+      const zone=e.target.closest&&e.target.closest('.hsl-hist-zone');
+      if(zone)hslPreviewSet(zone.getAttribute('aria-label').replace('Select ',''));
+    });
+    histEl.addEventListener('pointerup',e=>{if(!scrub)return;const b=scrub.band;scrub=null;if(b)hslSetBand(b);});
+    histEl.addEventListener('pointercancel',()=>{scrub=null;hslPreviewClear();});
+    histEl.addEventListener('pointerleave',e=>{if(!scrub)hslPreviewClear();});
+  }
+}
+function hslSyncUI(opts){
+  opts=opts||{};
+  hslBuildChips();
+  if(opts.deferHist){
+    const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,0));
+    idle(()=>hslBuildHist(),{timeout:1000});
+  }else hslBuildHist();
+  [['hue','h'],['sat','s'],['lum','l']].forEach(([k,sfx])=>{
+    const v=(fxState.hsl[k]&&fxState.hsl[k][hslBand])||0;
+    const sl=document.getElementById('sl-hsl-'+sfx),vl=document.getElementById('vl-hsl-'+sfx);
+    if(sl){sl.value=v;hslKnob(sl,k);fxPaintSlider(sl);}if(vl)vl.textContent=v;
+  });
+  // Hue/Saturation/Luminance tracks all tint toward the selected band's colour — Hue as a
+  // narrow spectrum centred on the band's own hue (matching the ±45° range the slider actually
+  // moves, see bakeHsl's *0.45), Sat/Lum as a grey/black-to-band and band-to-white ramp.
+  const col=HSL_COLS[hslBand];
+  const hDeg=HSL_HUE_DEG[hslBand];
+  const slH=document.getElementById('sl-hsl-h');
+  if(slH)slH.style.setProperty('--sl-grad',`linear-gradient(to right,hsl(${((hDeg-45+360)%360)},70%,55%),hsl(${hDeg},70%,55%),hsl(${((hDeg+45)%360)},70%,55%))`);
+  const slS=document.getElementById('sl-hsl-s');if(slS)slS.style.setProperty('--sl-grad','linear-gradient(to right,#888,'+col+')');
+  const slL=document.getElementById('sl-hsl-l');if(slL)slL.style.setProperty('--sl-grad','linear-gradient(to right,#000,'+col+',#fff)');
+  // Per-band hue/sat/lum edits aren't tracked by the generic fxMarkModifiedSliders()/.fx-mod
+  // snapshot (a slider's "default" is band-relative here, not one fixed value) — this is what
+  // actually drives the header's "Reset | All" visibility for this section.
+  document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
+}
+// Draft: thumb fills with the selected band's colour once that slider leaves 0.
+function hslKnob(sl,k){const on=!!((fxState.hsl[k]&&fxState.hsl[k][hslBand])||0);sl.classList.toggle('fx-knob-on',on);sl.style.setProperty('--knob',HSL_COLS[hslBand]);}
+function hslSlider(k,v){
+  fxState.hsl[k][hslBand]=parseFloat(v)||0;
+  const vl=document.getElementById('vl-hsl-'+{hue:'h',sat:'s',lum:'l'}[k]);if(vl)vl.textContent=v;
+  const sl=document.getElementById('sl-hsl-'+{hue:'h',sat:'s',lum:'l'}[k]);if(sl)hslKnob(sl,k);
+  document.querySelector('.fx-ctrl[data-fxsec="hsl"]')?.classList.toggle('fx-has-hsledit',!hslIdentity());
+  clearTimeout(_hslBakeT);_hslBakeT=setTimeout(()=>{bakeHsl();hslBuildChips();},40);
+  fxUpdate();
+}
+function hslResetBand(){['hue','sat','lum'].forEach(k=>{delete fxState.hsl[k][hslBand];});bakeHsl();hslSyncUI();fxUpdate();}
+function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate();}
+
+// ══ POINT COLOR — pick an exact colour from the photo, then shift hue/sat/lum within an
+// adjustable Range around that exact pick (see applyPointColors/pcWeight). Multiple points can
+// coexist; each keeps its own picked centre + shifts + range. Baked into the SAME 33³ LUT as the
+// Color Mixer above (see bakeHsl) so no extra shader stage is needed. ═══
+let pcSel=-1,_pcEyedropperActive=false;
+function pcEyedropper(){
+  _pcEyedropperActive=!_pcEyedropperActive;
+  const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.toggle('on',_pcEyedropperActive);
+  if(FX.cv)FX.cv.style.cursor=_pcEyedropperActive?'crosshair':'';
+  if(_pcEyedropperActive)log('Click a color in the photo to target it','info');
+}
+// Shared eyedropper sampling: click → a 5x5-averaged RGB triple (averaged so one click on a
+// grainy/high-ISO area doesn't land on a single noisy outlier pixel). Same click→pixel mapping
+// as the WB eyedropper. `fromCanvas` samples the PREVIEW canvas (i.e. the GRADED pixel) instead
+// of the source — which is what a shader-side gate must be centred on, since it sees post-LUT,
+// post-basicAdjust colour. preserveDrawingBuffer:true is already set on the GL context, so
+// drawing FX.cv into a 2D canvas reads back reliably.
+// Both canvas readers below (the colour-range eyedropper and mskMeasureSrcV) must see the real
+// graded photo. If the preview is currently showing the red SELECTION map they'd sample that
+// instead, so force one normal render first; the caller's own fxUpdate() puts the map back.
+function _fxEnsureNormalRender(){
+  if(typeof mskShowSelIdx!=='function'||mskShowSelIdx()<0)return;
+  if(!FX||!FX.cv||!FX.cv.width)return;
+  if(typeof fxLoupe!=='undefined'&&fxLoupe)return;  // the loupe render has its own uv window; a
+                                                    // plain full-frame re-render would clobber it
+  try{FX.render(getFXParams(),FX.cv.width,FX.cv.height,{glowScale:fxGlowScale(),showSel:-1});}catch(err){}
+}

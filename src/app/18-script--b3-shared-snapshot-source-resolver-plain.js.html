@@ -1,0 +1,195 @@
+// ── B3: shared snapshot-source resolver. Plain top-level function (not closured inside the
+// split-toolbar UI) so a later Library compare-pair mode can call it too — see CLAUDE.md-adjacent
+// plan notes. Resolves a `fxSplitSrc`-shaped descriptor to whatever renderSnapshotTo(B1) accepts.
+function resolveSplitSnapshot(src){
+  if(!src||src==='orig')return 'orig';
+  if(src==='pin')return fxPinned||'orig'; // nothing pinned yet → fall back to original, never throw
+  if(src.hist!==undefined){
+    const e=fxHistory[src.hist];
+    if(!e)return 'orig';
+    // This snapshot is fed straight to renderSnapshotTo, which applies it without going through
+    // _fxHistoryRestore — so the raster-less history JSON has to be re-hydrated here or the
+    // "before" side of a split would render that step WITHOUT its brush masks.
+    const snap=JSON.parse(e.j);
+    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p);});
+    return snap;
+  }
+  if(src.style!==undefined){
+    const st=stylesList().find(s=>s.name===src.style);
+    return st?st.recipe:'orig';
+  }
+  if(src.export!==undefined){
+    // Export versions are fetched async (window.chromasmithGetExportHistory) at MENU-SELECT time,
+    // not here — the resolver itself must stay synchronous for renderPreview's hot path. The
+    // decoded recipe is cached on the descriptor by the menu handler below.
+    return src.recipe||'orig';
+  }
+  return 'orig';
+}
+function fxComparePreviousBegin(e){
+  if(!fxImages.length||fxCompare||fxComparePreviousSnapshot!==null||fxHistIdx<=0)return false;
+  // Freeze the previous committed recipe at keydown; rehydrate its brush rasters via the
+  // same history resolver as split compare. Rendering this snapshot never applies it to the edit.
+  fxComparePreviousSnapshot=resolveSplitSnapshot({hist:fxHistIdx-1});
+  fxComparePreviousCode=e?.code||'Space';
+  renderPreview();
+  return true;
+}
+function fxComparePreviousEnd(){
+  if(fxComparePreviousSnapshot===null)return;
+  fxComparePreviousSnapshot=null;fxComparePreviousCode='';renderPreview();
+}
+window.addEventListener('blur',fxComparePreviousEnd);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')fxComparePreviousEnd();});
+document.addEventListener('keyup',e=>{
+  if(fxComparePreviousSnapshot!==null&&(e.code||'')===fxComparePreviousCode){e.preventDefault();fxComparePreviousEnd();}
+},true);
+function renderPreview(){
+  const nativeItem=typeof curItem==='function'?curItem():null;
+  if(window.__TAURI__&&nativeItem&&fnNativeNeedsDevelop(nativeItem)){fnEnsureNative(nativeItem).catch(e=>fnSetStatus(errStr(e),true));return;}
+  if(typeof fxCompare!=='undefined'&&fxCompare&&typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
+  // Preview requests are also the app's central signal for recipe and photo changes. Debounce
+  // the export render and invalidate any in-flight result immediately while the sheet is open.
+  fxSoftProofSchedule();
+  // Video export keeps the original main renderer because its encoder streams frames through FX.
+  if(window.__csVideoExporting)return;
+  const work=fxWork||fxImg;
+  if(!work||!FX.ok)return;
+  if(cropMode)return;            // crop overlay owns the canvas while active
+  if(fxLoupe){renderLoupe();return;}
+  const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
+  const wrap=document.getElementById('fx-wrap');
+  const deskx=document.body.classList.contains('deskx');
+  // deskx: no 900px cap — the photo fills the whole preview cell (DRK-style). The GPU
+  // cost is bounded by the BACKING-STORE cap below, not the CSS size.
+  // Content box on phones too: clientWidth includes the canvas inset, so the render came out wider
+  // than fxLiveFit's fit and the photo jumped (and a zoomed view shifted) every time the sheet moved.
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900);
+  const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
+  const sc=Math.min(1,maxW/iw,maxH/ih);
+  const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
+  const _previewComposition=(()=>{const p=getFXParams();return !!(
+    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
+    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));})();
+  // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
+  // normal full-frame path for framed/matted images, whose composition must span the whole
+  // image rather than be rebuilt from only the visible source tile.
+  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
+    const Pc=fxCompare?fxCompareParams():getFXParams();
+    _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
+    if(renderFullResCrop(Pc,iw,ih,cw,ch)){
+      const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
+      const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+      document.getElementById('fx-no-img').style.display='none';
+      document.getElementById('fx-info').textContent=`Full res ${Math.round(fxZoom*100)}% — native-quality crop of ${iw}×${ih}`;
+      document.getElementById('btn-fx-export').disabled=false;
+      if(fxHistOn)drawHistogram();
+      if(fxPeakOn)fxPeakUpdate();
+      return;
+    }
+  }
+  _fxHideFullBase();fxInvalidateFullBase();             // leaving crop mode — underlay stale, hide it
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(zw){zw.style.width='';zw.style.height='';}
+  FX.cv.style.transform='';                            // clear any full-res-crop offset
+  // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
+  // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
+  // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
+  // shell raises the cap to 3x for a noticeably sharper preview; the browser/Pages build is
+  // left untouched since we can't verify perf/memory headroom on arbitrary mobile Safari.
+  // deskx: CSS width can now reach ~1600+, so cap the backing store at 4800px wide (crisp on a
+  // 2400px-wide window at dpr 2, i.e. a maximized 5K/6K display) instead of letting cw*dpr grow
+  // unbounded. Raised from 3200 (was capped for a 1440p window) — GPU cost is one full-screen
+  // shader pass per render, not per-pixel-scaled work elsewhere, so 1.5x the linear dimension
+  // (2.25x the pixels) stays comfortably inside the existing drag_renders/frame budgets, which
+  // are keyed to render COUNT, not per-render duration (test/perf_bench.mjs).
+  let dpr=Math.min(window.devicePixelRatio||1,capNative()?3:2);
+  // The display footprint is still fit-to-window, but the backing store should retain at
+  // least half of the source detail for usable editing. This is a resolution change, not a
+  // layout change: the preview remains responsive while faces, texture and masks stop being
+  // judged from a tiny ~500px proxy.
+  if(cw>0&&ch>0){
+    const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
+    dpr=Math.max(dpr,halfSourceDpr);
+  }
+  if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
+  // Full-res preview: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT preview;
+  // when the user explicitly opts into Full res, honor it at every zoom level (still clamped to
+  // the source's own resolution). Framed/matted previews stay on this whole-frame path so their
+  // composition remains coherent while zooming.
+  if(fxFullResPreview&&!_fxPreviewInteracting){
+    dpr=Math.min(iw/(cw||1),ih/(ch||1));
+  }
+  let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
+  // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
+  // only handles Fit and the split/interacting fallbacks.)
+  // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)
+  const P=fxCompare?fxCompareParams():getFXParams();
+  // Video only: a deterministic per-frame grain seed (see fxVideoFrameSeed) instead of the
+  // photo default (Math.random() inside FX.render itself when opts.seed is omitted) — a photo
+  // re-rolling grain on every renderPreview() call is harmless jitter between edits, but a video
+  // frame must look IDENTICAL every time it's shown, or pausing/scrubbing back to the same frame
+  // would visibly reroll the grain. {} spreads to nothing, so photo behavior is untouched.
+  const _curIsVideo=!!(curItem()&&curItem().kind==='video');
+  const vSeedOpt=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed(curItem()):null;
+  // hdrIntermediate/dither are ALSO video-only for now: a still's 12-14-bit source plus grain
+  // already dithers the S-curve/LUT quantization for free (see CLAUDE.md §12), so there is
+  // nothing to fix and nothing should change for photos. Video starts from 8-bit 4:2:0.
+  const seedOpt=(vSeedOpt!=null?{seed:vSeedOpt}:{});
+  if(_curIsVideo)Object.assign(seedOpt,{hdrIntermediate:true,dither:true});
+  // Preview proxy (B6): scales the LIVE PREVIEW's WebGL backing store only — export always
+  // renders at full quality regardless of this. Every other frame-drop mechanism in this app
+  // (fxVideoPlayTick) is about keeping playback live; this is about keeping it live in the FIRST
+  // place on a heavy grade over 4K footage, the way any NLE's proxy/quarter-res preview does.
+  if(_curIsVideo&&typeof fxVideoPreviewQuality==='number'&&fxVideoPreviewQuality<1){
+    pw=Math.max(2,Math.round(pw*fxVideoPreviewQuality));
+    ph=Math.max(2,Math.round(ph*fxVideoPreviewQuality));
+  }
+  // Once settled this is fxGlowScale() — i.e. the scale the export uses, so the preview stays
+  // faithful; only interim frames mid-drag are cheaper. See fxPreviewGlowScale.
+  const gs=fxPreviewGlowScale();
+  // ⚠️ In split mode this render is DISCARDED — renderSnapshotTo below repaints FX.cv with the
+  // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
+  // here as well meant split view paid for the graded frame TWICE on every single preview
+  // update. Only render it up front when we are not about to throw it away.
+  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
+  const _oldFootW=_fxZoomFootprint().w;
+  FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
+  // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
+  // to only run below 100%, so a zoomed-in photo jumped when the sheet changed the preview size).
+  _zoomRefit(_oldFootW);
+  document.getElementById('fx-no-img').style.display='none';
+  // Split view: render original into overlay canvas, clip each side at fxSplitPos
+  if(fxComparePreviousSnapshot!==null){
+    const origCv=document.getElementById('fx-canvas-orig');
+    renderSnapshotTo(origCv,fxComparePreviousSnapshot,pw,ph,mskPreviewRenderOptions({gamutWarn:fxClipCode(),...seedOpt}));
+    if(origCv){origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';origCv.style.clipPath='';}
+    FX.render(getFXParams(),pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
+    const splitLine=document.getElementById('fx-split-line');if(splitLine)splitLine.style.display='none';
+    FX.cv.style.clipPath='';
+  }else if(fxSplit){
+    const origCv=document.getElementById('fx-canvas-orig');
+    renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
+    origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
+    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
+    _applySplitPos();
+  } else {
+    const orig=document.getElementById('fx-canvas-orig');
+    if(orig){orig.style.display='none';orig.style.clipPath='';}
+    if(FX&&FX.cv)FX.cv.style.clipPath='';
+  }
+  // Compose from the actual backing-store render. Passing cw/ch here downsampled a 2k×3k
+  // preview back to the ~500×750 fit footprint before the border was added, making bordered
+  // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
+  if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
+  applyPreviewBorders(P,pw,ph);
+  document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
+    ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}`
+    :`Preview ${pw}\u00d7${ph}`;
+  fxRefreshDims();
+  document.getElementById('btn-fx-export').disabled=false;
+  if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
+  if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
+  fxSecondDisplayUpdate();
+}

@@ -1,0 +1,197 @@
+// ── Selective paste (darktable idiom: choose WHICH parts of a copied recipe to apply, rather
+// than all-or-nothing) — each category's apply() copies its own slice of a SOURCE snapshot onto
+// a BASE snapshot (the current live state), so unchecked categories are left exactly as they
+// were instead of being overwritten. Field lists mirror getFXParams'/_FX_SNAP_*'s own grouping.
+const PASTE_CATEGORIES=[
+  {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
+  {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
+  {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
+  {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat'],toggles:['tg-nr'],selects:[]},
+  {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
+  {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale'],toggles:[],selects:[]},
+  {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
+  {key:'artifacts',label:'Film Artifacts',sliders:['art-du','art-sc','art-lk'],toggles:['tg-art'],selects:[],extra:['artSeed','dustMode']},
+  {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
+  {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
+  {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
+  {key:'redeye',label:'Red-eye corrections',sliders:[],toggles:[],selects:[],extra:['redeye']},
+  {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:['sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'],extra:['canvas','frameShuffle'],colors:['cl-b1','cl-b2']},
+  {key:'geometry',label:'Crop / Geometry',sliders:[],toggles:[],selects:[],extra:['geom']},
+  {key:'retouch',label:'Retouch / Healing',sliders:[],toggles:[],selects:[],extra:['heal']},
+  {key:'decode',label:'RAW Decode',sliders:[],toggles:[],selects:['sel-input','sel-tonemap'],extra:['rawNr','rawNrHighStrength','nativeNr','demosaicAlgo']},
+];
+const _PASTE_SELECTION_KEY='chromasmith-paste-fields-v1';
+function _pasteFieldEntries(c){return[
+  ...c.sliders.map(id=>({key:'slider:'+id,label:_fxFieldLabel(id)})),
+  ...(c.toggles||[]).map(id=>({key:'toggle:'+id.replace(/^tg-/,''),label:_fxFieldLabel(id)})),
+  ...(c.selects||[]).map(id=>({key:'select:'+id,label:_fxFieldLabel(id)})),
+  ...(c.colors||[]).map(id=>({key:'color:'+id,label:_fxFieldLabel(id)})),
+  ...(c.extra||[]).map(id=>({key:'extra:'+id,label:({geom:'Crop / rotate / flip',heal:'Healing spots',curves:'Tone curve',curveMode:'Tone curve mode',curveParam:'Parametric curve',hsl:'Color mixer (HSL)',pointColors:'Point color selections',wheels:'Color wheels',canvas:'Canvas settings',frameShuffle:'Film frame variation',artSeed:'Film artifact seed',dustMode:'Dust color',masks:'Local masks',rawNr:'RAW noise reduction',rawNrHighStrength:'High-quality RAW NR strength',nativeNr:'Legacy RAW NR state',demosaicAlgo:'RAW demosaic algorithm'})[id]||id}))
+];}
+function _pasteAllFieldKeys(){return PASTE_CATEGORIES.flatMap(_pasteFieldEntries).map(f=>f.key);}
+function _pasteExpandKeys(keys){
+  const fields=new Set(_pasteAllFieldKeys()),expanded=[];
+  (keys||[]).forEach(k=>{const c=PASTE_CATEGORIES.find(o=>o.key===k);if(c)_pasteFieldEntries(c).forEach(f=>expanded.push(f.key));else if(fields.has(k))expanded.push(k);});
+  return [...new Set(expanded)];
+}
+function _pasteSelectionGet(allowed,fallback){
+  let saved;try{saved=JSON.parse(localStorage.getItem(_PASTE_SELECTION_KEY)||'null')}catch(e){}
+  const keys=Array.isArray(saved)?_pasteExpandKeys(saved):(fallback||_pasteAllFieldKeys());
+  return allowed?keys.filter(k=>allowed.includes(k)):keys;
+}
+function _pasteEscapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function pasteEditSelectiveApply(base,src,checkedKeys){
+  const chosen=new Set(checkedKeys||[]);
+  PASTE_CATEGORIES.forEach(c=>{
+    const has=(kind,id)=>chosen.has(c.key)||chosen.has(kind+':'+id);
+    c.sliders.forEach(id=>{if(has('slider',id)&&src.sliders&&src.sliders[id]!==undefined){base.sliders=base.sliders||{};base.sliders[id]=src.sliders[id];}});
+    // Categories list DOM ids ("tg-grain"); snapshots key toggles without the prefix ("grain").
+    c.toggles.forEach(tid=>{const id=tid.replace(/^tg-/,'');if(has('toggle',id)&&src.toggles&&src.toggles[id]!==undefined){base.toggles=base.toggles||{};base.toggles[id]=src.toggles[id];}});
+    (c.selects||[]).forEach(id=>{if(has('select',id)&&src.selects&&src.selects[id]!==undefined){base.selects=base.selects||{};base.selects[id]=src.selects[id];}});
+    (c.colors||[]).forEach(id=>{if(has('color',id)&&src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
+    (c.extra||[]).forEach(k=>{if(has('extra',k)&&src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
+  });
+  return base;
+}
+window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);
+async function _pasteChooseFields(title,initialKeys,allowedKeys,confirmLabel){
+  const allowed=new Set(allowedKeys||_pasteAllFieldKeys());
+  const initial=new Set((initialKeys||[]).filter(k=>allowed.has(k)));
+  const esc=_pasteEscapeHtml;
+  const rows=PASTE_CATEGORIES.map(c=>{
+    const fields=_pasteFieldEntries(c).filter(f=>allowed.has(f.key));if(!fields.length)return'';
+    const all=fields.every(f=>initial.has(f.key));
+    return `<details open style="padding:3px 0"><summary style="cursor:pointer;list-style:none"><label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-weight:600"><input type="checkbox" class="paste-group-cb paste-cat-cb" data-group="${c.key}" value="${c.key}"${all?' checked':''}>${esc(c.label)}</label></summary><div style="padding-left:22px">`
+      +fields.map(f=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer"><input type="checkbox" class="paste-field-cb" data-group="${c.key}" value="${esc(f.key)}"${initial.has(f.key)?' checked':''}>${esc(f.label)}</label>`).join('')+'</div></details>';
+  }).join('');
+  _csModal(title,`<div style="max-height:55vh;overflow:auto">${rows}</div><div class="btn-row" style="margin-top:14px;justify-content:flex-end"><button class="btn bgh" id="paste-cancel">Cancel</button><button class="btn bpri" id="paste-confirm">${esc(confirmLabel||'Continue')}</button></div>`);
+  const ov=document.getElementById('cs-modal-ov');
+  return new Promise(resolve=>{
+    let settled=false;const observer=new MutationObserver(()=>{if(!ov.isConnected)finish(null);});observer.observe(document.documentElement,{childList:true,subtree:true});
+    const finish=value=>{if(settled)return;settled=true;observer.disconnect();document.removeEventListener('keydown',onEsc,true);ov.removeEventListener('click',onBackdrop);resolve(value);};
+    const onEsc=e=>{if(e.key==='Escape'&&document.getElementById('cs-modal-ov')===ov){e.stopImmediatePropagation();ov.remove();finish(null);}};
+    const onBackdrop=e=>{if(e.target===ov)finish(null);};
+    document.addEventListener('keydown',onEsc,true);ov.addEventListener('click',onBackdrop);
+    const syncGroup=group=>{const groupBox=ov.querySelector('.paste-group-cb[data-group="'+group+'"]');const boxes=[...ov.querySelectorAll('.paste-field-cb[data-group="'+group+'"]')];if(groupBox){const count=boxes.filter(b=>b.checked).length;groupBox.checked=count===boxes.length;groupBox.indeterminate=count>0&&count<boxes.length;}};
+    ov.querySelectorAll('.paste-group-cb').forEach(box=>box.onchange=()=>{ov.querySelectorAll('.paste-field-cb[data-group="'+box.dataset.group+'"]')
+      .forEach(child=>{child.checked=box.checked;});box.indeterminate=false;});
+    ov.querySelectorAll('.paste-field-cb').forEach(box=>box.onchange=()=>syncGroup(box.dataset.group));
+    ov.querySelector('#paste-cancel').onclick=()=>{ov.remove();finish(null);};
+    ov.querySelector('#paste-confirm').onclick=()=>{const keys=[...ov.querySelectorAll('.paste-field-cb:checked')].map(cb=>cb.value);ov.remove();
+      try{localStorage.setItem(_PASTE_SELECTION_KEY,JSON.stringify(keys));}catch(e){}finish(keys);};
+  });
+}
+// Shows the category picker, then calls onConfirm(mergedSnapshot) — the caller applies it to the
+// live editor AND/OR writes it to sidecar(s), since that differs between the single-photo
+// context-menu paste and the Photo-menu paste (see library-ui.js).
+window.chromasmithPasteEditSelective=function(recipeB64,onConfirm){
+  let src;try{src=JSON.parse(decodeURIComponent(escape(atob(recipeB64))));}catch(e){log('Could not read copied edit: '+e.message,'err');return;}
+  _pasteChooseFields('Paste Edit — choose what to apply',_pasteSelectionGet(),_pasteAllFieldKeys(),'Paste').then(checked=>{
+    if(!checked||!checked.length)return;
+    const base=getUISnapshot(),merged=pasteEditSelectiveApply(base,src,checked);
+    onConfirm(merged,{source:src,keys:checked});
+  });
+};
+// Returns the in-flight LUT-load promise (or undefined if the LUT selector didn't change) so
+// callers that need the restore to be VISUALLY complete (undo/redo/reset/timeline) can await
+// it. Stays otherwise synchronous start-to-finish — renderSnapshotTo's split-compare path
+// depends on that (see its own comment) and must not be made to await anything here.
+function applyUISnapshot(s,opts){
+  if(s.sliders&&s.sliders['fneg-br']!==undefined&&s.sliders['fneg-domain']===undefined){s.sliders={...s.sliders,'fneg-domain':0,'fneg-source':0};}
+  let _inpaintPromise=null;
+  const _decodeBefore={nr:window.chromasmithRawNr||'fast',strength:window.chromasmithRawNrHighStrength,demosaic:window.chromasmithDemosaicAlgo||''};
+  // Pre-v2 recipes (undo history, XMP sidecar, session save) stored the exposure SLIDER value
+  // under the old /50 (±2 stop) mapping; getFXParams now divides by /20 (±5 stops), so replaying
+  // an old raw slider value unchanged would apply 2.5x the intended exposure shift. Rescale once.
+  if(s.sliders&&s.sliders['adj-exp']!==undefined&&s.ver!==2){
+    s.sliders['adj-exp']=Math.max(-100,Math.min(100,parseFloat(s.sliders['adj-exp'])*(20/50)));
+  }
+  // Retouch. An ABSENT key means "leave alone" (selective paste, same rule as `selects` — see
+  // the harness note in CLAUDE.md §2); an explicit null means "this state had no repairs", which
+  // is what makes undoing back past the first spot actually clear it.
+  if(s.heal!==undefined){
+    const hit=curItem();
+    if(hit)hit.heal=s.heal?_clone(s.heal):[];
+    if(typeof healSyncUI==='function')healSyncUI();
+  }
+  if(s.inpaint!==undefined){const hit=curItem();if(hit){hit.inpaint=s.inpaint?_clone(s.inpaint):[];if(window.chromasmithInpaintRestore)_inpaintPromise=window.chromasmithInpaintRestore(hit);else if(hit.inpaint.some(p=>p.enabled!==false))hit._inpaintError='Accepted erase repairs need the desktop app and their asset folder';}}
+  if(s.redeye!==undefined){const hit=curItem();if(hit)hit.redeye=s.redeye?_clone(s.redeye):[];if(typeof redeyeSyncUI==='function')redeyeSyncUI();}
+  _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
+  if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
+  _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
+  let _lutPromise;
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){const next=String(s.selects[id]??''),changed=el.value!==next;el.value=next;el._chipsRender&&el._chipsRender();if(id==='sel-lut'&&changed)_lutPromise=selectLUT(el.value,true);if(id==='sel-print'&&changed)selectPrint(el.value);}});
+  _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
+  if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
+  if(s.curveParam)fxState.curveParam=JSON.parse(JSON.stringify(s.curveParam));
+  if(s.curveMode!==undefined){
+    fxState.curveMode=s.curveMode;
+    ['s','d','l','h'].forEach(k=>{const sl=document.getElementById('sl-crv-'+k),vv=document.getElementById('vl-crv-'+k),val=(fxState.curveParam&&fxState.curveParam[k])||0;if(sl)sl.value=val;if(vv)vv.textContent=val;});
+    if(typeof curveSetMode==='function')curveSetMode(s.curveMode);
+  }
+  if(s.wheels){fxState.wheels=JSON.parse(JSON.stringify(s.wheels));if(typeof WHEEL_NAMES!=='undefined')WHEEL_NAMES.forEach(wheelSyncUI);}
+  if(s.hsl){fxState.hsl=JSON.parse(JSON.stringify(s.hsl));bakeHsl();hslSyncUI({deferHist:true});}
+  if(s.pointColors){fxState.pointColors=JSON.parse(JSON.stringify(s.pointColors));pcSel=Math.min(pcSel,fxState.pointColors.length-1);pcRebuild();pcSyncUI();bakeHsl();}
+  if(s.artSeed!=null)fxState.artSeed=s.artSeed;
+  if(s.frameShuffle!=null)fxState.frameShuffle=s.frameShuffle;
+  _borderUISync();
+  if(s.dustMode!==undefined){fxState.dustMode=s.dustMode;if(typeof dustModeBuildChips==='function')dustModeBuildChips();}
+  if(s.masks){fxState.masks=s.masks.map(_mskFromSnap);mskSel=Math.min(mskSel,fxState.masks.length-1);mskRebuild();
+    if(fxImages[fxCurIdx])fxImages[fxCurIdx].masks=fxState.masks;} // keep the per-photo array reference (fxSelectImage/installFXImages) in sync with a restored recipe
+  if(s.canvas){fxState.canvas=JSON.parse(JSON.stringify(s.canvas));cvBuildChips();}
+  if(s.geom!==undefined&&fxImages.length){            // restore geometry (undo a crop/rotate/flip/straighten) — CURRENT photo only, geometry is per-photo
+    const cit=curItem();if(cit)cit.geom=s.geom?JSON.parse(JSON.stringify(s.geom)):defGeom();
+    const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
+    const ang=(s.geom&&s.geom.angle)||0;if(ss){ss.value=_stA2S(ang);fxPaintSlider(ss);}if(sv)sv.textContent=ang.toFixed(2)+'°';
+    if(cropMode)cropExit();
+    // opts.skipRender: the caller (loadFXImages) is about to replace fxImages and installFXImages runs its own
+    // updateWork()+buildLookGallery() — re-rendering the OUTGOING photo here cost ~1.2s at 24MP (CHR-121).
+    if(!(opts&&opts.skipRender)){updateWork();buildLookGallery();}
+  }
+  // Restore whether THIS photo's Basic Adjustments were independent — must run AFTER the
+  // sliders above are already written to the DOM (domAdjustVals() reads them live), or an
+  // undo/redo/recipe restore could silently flip a photo back to tracking the shared value.
+  if(s.adjustIndependent!==undefined&&fxImages.length){
+    const cit=curItem();
+    if(cit){
+      if(s.adjustIndependent)cit.adjustOverride=domAdjustVals();
+      else{cit.adjustOverride=null;fxState.sharedAdjust=domAdjustVals();}
+      if(typeof adjSyncScopeUI==='function')adjSyncScopeUI();
+    }
+  }
+  if(s.rawNr!==undefined||s.nativeNr!==undefined){
+    // s.rawNr is authoritative when present; s.nativeNr (older sidecars) maps Off/Fast only —
+    // an old recipe can never have meant High, since that tier didn't exist when it was saved.
+    window.chromasmithRawNr=s.rawNr||(s.nativeNr===false?'off':'fast');
+    if(s.rawNrHighStrength>=0&&s.rawNrHighStrength<=100)window.chromasmithRawNrHighStrength=s.rawNrHighStrength;
+    if(typeof fxRawNrSyncUI==='function')fxRawNrSyncUI();
+  }
+  if(s.demosaicAlgo!==undefined){
+    window.chromasmithDemosaicAlgo=s.demosaicAlgo;
+    fxDemosaicSyncUI();
+  }
+  if(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined){
+    const it=curItem();if(it&&(_decodeBefore.nr!==window.chromasmithRawNr||_decodeBefore.strength!==window.chromasmithRawNrHighStrength||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo))it._nrHighApplied=false;
+    const needsDecode=(_decodeBefore.nr!==window.chromasmithRawNr&&window.chromasmithRawNr!=='high')||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo;
+    // These options are baked into native RAW pixels, so re-open the current source after an
+    // applied recipe/undo changes them. High-tier NR remains opt-in; selecting it reveals the
+    // existing "Denoise now" action and never launches that expensive pass implicitly.
+    if(needsDecode&&window.chromasmithReloadCurrentPhoto){const reload=window.chromasmithReloadCurrentPhoto();if(reload&&typeof reload.catch==='function')reload.catch(e=>log('RAW settings changed, but re-decode failed: '+e.message,'err'));}
+  }
+  if(typeof nrSyncGate==='function')nrSyncGate();
+  // A snapshot swap (session restore, recipe, undo/redo, style, selective paste) moves sliders
+  // without firing their input events, so the modified-from-default dots have to be refreshed here
+  // rather than only on user interaction.
+  if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
+  if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
+  return _inpaintPromise?Promise.all([_lutPromise,_inpaintPromise]):_lutPromise;
+}
+// History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
+// brush masks carrying full w*h pixel arrays in the snapshot: (1) the dedup check used to
+// re-stringify the stored previous entry on EVERY push — a second full serialization of a
+// potentially multi-hundred-KB snapshot per slider tick; storing the string makes it a plain
+// string compare. (2) 20 retained parsed object trees (each with brush pixel arrays) cost far
+// more RAM than 20 strings. applyUISnapshot deep-copies out of whatever it's given, so parsing
+// on undo/redo (rare) is safe and cheap relative to pushing (every edit).

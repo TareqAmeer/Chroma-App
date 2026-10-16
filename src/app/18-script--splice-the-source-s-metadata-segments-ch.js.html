@@ -1,0 +1,82 @@
+// ── splice the source's metadata segments/chunks into the freshly-encoded export ──
+function jpegMetaSegs(b){ // APPn (0xE0-0xEF) + COM (0xFE) segments before SOS, in order
+  const segs=[];let i=2;
+  while(i<b.length-1){
+    if(b[i]!==0xFF){i++;continue;}
+    const m=b[i+1];
+    if(m===0xD8||m===0x01||(m>=0xD0&&m<=0xD7)){i+=2;continue;}
+    if(m===0xDA||m===0xD9)break;
+    const len=(b[i+2]<<8)|b[i+3];
+    if((m>=0xE0&&m<=0xEF)||m===0xFE)segs.push(b.subarray(i,i+2+len));
+    i+=2+len;
+  }
+  return segs;
+}
+// Pixels are baked upright at load (loadImg). The source EXIF still says e.g. Orientation=6,
+// so copying it verbatim makes viewers rotate already-upright pixels. Force Orientation→1.
+// Returns the same segment unchanged unless it's an APP1/Exif segment carrying a 0x0112 tag.
+function neutralizeExifOrientation(seg){
+  try{
+    if(seg[0]!==0xFF||seg[1]!==0xE1)return seg; // not APP1
+    if(!(seg[4]===0x45&&seg[5]===0x78&&seg[6]===0x69&&seg[7]===0x66))return seg; // not 'Exif'
+    const t=10; // TIFF header starts after 'Exif\0\0'
+    const le=seg[t]===0x49&&seg[t+1]===0x49; // 'II' little-endian, else 'MM' big-endian
+    const u16=o=>le?(seg[o]|(seg[o+1]<<8)):((seg[o]<<8)|seg[o+1]);
+    const u32=o=>le?(seg[o]|(seg[o+1]<<8)|(seg[o+2]<<16)|(seg[o+3]<<24))>>>0:((seg[o]<<24)|(seg[o+1]<<16)|(seg[o+2]<<8)|seg[o+3])>>>0;
+    const ifd0=t+u32(t+4), n=u16(ifd0);
+    for(let e=0;e<n;e++){
+      const off=ifd0+2+e*12;
+      if(u16(off)===0x0112){ // Orientation tag → SHORT value lives in first 2 bytes of value field
+        const copy=seg.slice(); const vo=off+8;
+        if(le){copy[vo]=1;copy[vo+1]=0;}else{copy[vo]=0;copy[vo+1]=1;}
+        return copy;
+      }
+    }
+  }catch(e){}
+  return seg;
+}
+function injectMetadataJPEG(out,src){
+  try{
+    const metas=jpegMetaSegs(src).map(neutralizeExifOrientation);
+    if(!metas.length)return out;
+    // drop whatever leading APPn segments the re-encoder wrote (e.g. a bare JFIF), keep the rest
+    let cut=2,i=2;
+    while(i<out.length-1){
+      if(out[i]!==0xFF){i++;continue;}
+      const m=out[i+1];
+      if(!((m>=0xE0&&m<=0xEF)||m===0xFE))break;
+      const len=(out[i+2]<<8)|out[i+3];i+=2+len;cut=i;
+    }
+    let total=2;for(const s of metas)total+=s.length;
+    const tail=out.subarray(cut),res=new Uint8Array(total+tail.length);
+    res.set(out.subarray(0,2),0); // SOI
+    let off=2;for(const s of metas){res.set(s,off);off+=s.length;}
+    res.set(tail,off);
+    return res;
+  }catch(e){return out}
+}
+function pngMetaChunks(b){ // ancillary chunks worth preserving: iCCP, eXIf, tEXt/zTXt/iTXt
+  const KEEP=new Set(['iCCP','eXIf','tEXt','zTXt','iTXt','pHYs']);
+  const chunks=[];let i=8;
+  while(i<b.length-12){
+    const len=((b[i]<<24)|(b[i+1]<<16)|(b[i+2]<<8)|b[i+3])>>>0;
+    const type=String.fromCharCode(b[i+4],b[i+5],b[i+6],b[i+7]);
+    if(type==='IDAT'||type==='IEND')break;
+    if(KEEP.has(type))chunks.push(b.subarray(i,i+12+len));
+    i+=12+len;
+  }
+  return chunks;
+}
+function injectMetadataPNG(out,src){
+  try{
+    const metas=pngMetaChunks(src).filter(c=>String.fromCharCode(c[4],c[5],c[6],c[7])!=='pHYs'); // pHYs handled by injectDPI
+    if(!metas.length)return out;
+    let total=0;for(const c of metas)total+=c.length;
+    const res=new Uint8Array(out.length+total);
+    res.set(out.subarray(0,33),0); // sig(8)+IHDR(25)
+    let off=33;for(const c of metas){res.set(c,off);off+=c.length;}
+    res.set(out.subarray(33),off);
+    return res;
+  }catch(e){return out}
+}
+function injectMetadata(out,src,ext){return ext==='png'?injectMetadataPNG(out,src):injectMetadataJPEG(out,src);}

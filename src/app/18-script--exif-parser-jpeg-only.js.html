@@ -1,0 +1,855 @@
+// ── EXIF parser (JPEG only) ────────────────────────────────────────────────────
+function _fmtShutter(s){if(!s||s<=0)return'';return s>=1?s.toFixed(s>=10?0:1)+'s':'1/'+Math.round(1/s)+'s';}
+function readExifTags(b){
+  const res={};
+  if(!b||b.length<12)return res;
+  // HEIC/HEIF, PNG (eXIf), WebP (EXIF), TIFF carry no JPEG APP1 segment: locate the embedded TIFF
+  // block and re-wrap it as a synthetic JPEG APP1 so the one parser below handles every format.
+  if(!(b[0]===0xFF&&b[1]===0xD8)){
+    const isTiff=o=>(b[o]===0x49&&b[o+1]===0x49&&b[o+2]===0x2A&&b[o+3]===0)||(b[o]===0x4D&&b[o+1]===0x4D&&b[o+2]===0&&b[o+3]===0x2A);
+    let t=-1;
+    if(isTiff(0))t=0;
+    else for(let k=0;k<b.length-12;k++){
+      if(b[k]===0x45&&b[k+1]===0x78&&b[k+2]===0x69&&b[k+3]===0x66&&b[k+4]===0&&b[k+5]===0&&isTiff(k+6)){t=k+6;break;} // "Exif\0\0"+TIFF
+      if(b[k]===0x65&&b[k+1]===0x58&&b[k+2]===0x49&&b[k+3]===0x66&&isTiff(k+4)){t=k+4;break;} // PNG eXIf chunk data
+    }
+    if(t<0)return res;
+    const tiff=b.subarray(t,Math.min(b.length,t+65000)),w=new Uint8Array(12+tiff.length),L=tiff.length+8;
+    w.set([0xFF,0xD8,0xFF,0xE1,L>>8,L&255,0x45,0x78,0x69,0x66,0,0]);w.set(tiff,12);
+    return readExifTags(w);
+  }
+  try{
+    let i=2;
+    while(i<b.length-3){
+      if(b[i]!==0xFF){i++;continue;}
+      const m=b[i+1];if(m===0xDA||m===0x00)break;
+      const len=(b[i+2]<<8|b[i+3])>>>0;
+      if(m===0xE1&&len>10){
+        const sig=String.fromCharCode(b[i+4],b[i+5],b[i+6],b[i+7],b[i+8],b[i+9]);
+        if(sig==='Exif\0\0'){
+          const base=i+4+6;
+          const le=b[base]===0x49;
+          const r16=o=>le?(b[o]|b[o+1]<<8):(b[o]<<8|b[o+1]);
+          const r32=o=>(le?(b[o]|b[o+1]<<8|b[o+2]<<16|b[o+3]<<24):(b[o]<<24|b[o+1]<<16|b[o+2]<<8|b[o+3]))>>>0;
+          const rstr=(o,n)=>{let s='';for(let k=0;k<n&&b[o+k];k++)s+=String.fromCharCode(b[o+k]);return s.trim();};
+          const rrat=o=>r32(o+4)?r32(o)/r32(o+4):0;
+          const ifd0=base+r32(base+4),n0=r16(ifd0);
+          let exifOff=0;
+          for(let e=0;e<n0;e++){
+            const eo=ifd0+2+e*12,tag=r16(eo),cnt=r32(eo+4),voff=eo+8;
+            const doff=base+r32(voff); // offset-based value (for RATIONAL/ASCII > 4 bytes)
+            if(tag===0x010F)res.make=rstr(doff,cnt);
+            else if(tag===0x0110)res.model=rstr(doff,cnt);
+            else if(tag===0x9003)res.date=rstr(doff,cnt).replace('T',' ');
+            else if(tag===0x8769)exifOff=doff; // ExifIFD offset
+          }
+          if(exifOff){
+            const ne=r16(exifOff);
+            for(let e=0;e<ne;e++){
+              const eo=exifOff+2+e*12,tag=r16(eo),type=r16(eo+2),cnt=r32(eo+4),voff=eo+8;
+              const doff=base+r32(voff);
+              if(tag===0x829A)res.shutter=_fmtShutter(rrat(doff));
+              else if(tag===0x829D)res.aperture='f/'+rrat(doff).toFixed(1);
+              // ISO (0x8827) is usually SHORT (type 3, inline) but some cameras write it as
+              // LONG (type 4, also inline at 4 bytes) or an offset-based SHORT array — the old
+              // unconditional r16(voff) silently mis-read those as 0 or garbage.
+              else if(tag===0x8827)res.iso='ISO '+(type===4?r32(voff):(type===3&&cnt>1?r16(doff):r16(voff)));
+              else if(tag===0x920A)res.focalLen=rrat(doff).toFixed(0)+'mm';
+              else if(tag===0xA434)res.lens=rstr(doff,cnt); // LensModel — previously never read
+              else if(tag===0x9003&&!res.date)res.date=rstr(doff,20).replace('T',' ');
+            }
+          }
+        }
+      }
+      i+=2+len;
+    }
+  }catch(_){}
+  return res;
+}
+// Info-panel rows for a video clip. Everything here already exists on the item from
+// loadFXVideoFile's demux probe — it simply had nowhere to be displayed.
+function _videoInfoRows(it){
+  const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const row=(lb,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${lb}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
+  const fmtSize=b=>b?(b>=1048576?(b/1048576).toFixed(1)+' MB':Math.round(b/1024)+' KB'):'';
+  const secs=(it.durationUs||0)/1e6;
+  const dur=secs?`${Math.floor(secs/60)}:${String(Math.round(secs%60)).padStart(2,'0')}`:'';
+  const cs=it.colorSpace||{};
+  const gamut=[cs.primaries,cs.transfer].filter(Boolean).join(' / ');
+  return row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')
+    +row('Dimensions',(it.img&&it.img.width)?`${it.img.width}×${it.img.height}`:'')
+    +row('Duration',dur)
+    +row('Frame Rate',it.fps?it.fps.toFixed(2)+' fps':'')
+    +row('Frames',it.frameCount||'')
+    +row('Codec',it.codec?it.codec.toUpperCase():'')
+    +row('Color',gamut)
+    +row('Dynamic Range',it.isHdr?'HDR — tone-mapped to SDR for grading':'SDR')
+    +row('Rotation',it.rotation?it.rotation+'°':'')
+    +row('Size',fmtSize(it.fileSize))
+    +row('File Format',it.ext?it.ext.toUpperCase():'');
+}
+// People & Pets in the Info panel (people-pets wireframes screen I) — desktop-only
+// (window.__TAURI__), same gate the Subjects panel already uses, since `catalog_faces_for_path`
+// is a Tauri command with no browser/web-build equivalent. Deliberately lives here rather than
+// as its own rail section: it's a fact about the current photo, exactly like the EXIF block it
+// sits beside, not a grading control. `_fxPeoplePathToken` guards against the redundant
+// catalog_faces_for_path round trips showExif's several call sites would otherwise fire on every
+// zoom/pan re-render of the SAME photo — only a genuine photo change re-queries.
+let _fxPeoplePathToken='';
+// Outlines face `f` (0..1 box of the whole photo) on the editor canvas. The canvas's on-screen
+// rect already includes zoom/pan transforms, so fractions map straight onto it. Skipped in crop
+// mode, where the canvas no longer shows the whole frame.
+function fxShowFaceBox(f,chip){
+  const cv=document.getElementById('fx-canvas');
+  if(!f||!cv||(typeof cropMode!=='undefined'&&cropMode))return;
+  let box=document.getElementById('fx-face-box');
+  if(!box){box=document.createElement('div');box.id='fx-face-box';document.body.appendChild(box);}
+  const r=cv.getBoundingClientRect();
+  const pad=0.15*Math.max(f.x1-f.x0,f.y1-f.y0);
+  const x0=Math.max(0,f.x0-pad),y0=Math.max(0,f.y0-pad),x1=Math.min(1,f.x1+pad),y1=Math.min(1,f.y1+pad);
+  Object.assign(box.style,{left:(r.left+x0*r.width)+'px',top:(r.top+y0*r.height)+'px',
+    width:((x1-x0)*r.width)+'px',height:((y1-y0)*r.height)+'px',display:'block'});
+  document.querySelectorAll('.fx-people-chip.hl').forEach(c=>c.classList.remove('hl'));
+  if(chip)chip.classList.add('hl');
+}
+function fxHideFaceBox(){
+  const box=document.getElementById('fx-face-box');if(box)box.style.display='none';
+  document.querySelectorAll('.fx-people-chip.hl').forEach(c=>c.classList.remove('hl'));
+}
+async function fxRenderPeoplePanel(){
+  const el=document.getElementById('fx-people');if(!el)return;
+  if(!window.__TAURI__){el.innerHTML='';return;}
+  const it=fxImages[fxCurIdx]||fxImages[0];
+  const path=it&&it.path;
+  if(!path){el.innerHTML='';_fxPeoplePathToken='';return;}
+  if(path===_fxPeoplePathToken)return; // same photo already rendered — a zoom/pan re-render, not a photo change
+  _fxPeoplePathToken=path;
+  let faces;
+  try{faces=await window.__TAURI__.core.invoke('catalog_faces_for_path',{path});}
+  catch(e){el.innerHTML='';return;}
+  if(_fxPeoplePathToken!==path)return; // superseded by a newer photo before this resolved
+  if(!faces||!faces.length){
+    // Empty is ambiguous — "genuinely no faces in this photo" and "never scanned yet" both land
+    // here otherwise (this Info tab had no way to tell them apart, unlike the Library sidebar's
+    // own "Not Face-Scanned" collection count, which is exactly the gap this closes for a single
+    // open photo). Best-effort: a path the catalog can't resolve, or a video, both come back
+    // null and fall back to the plain "no people" blank, same as before this existed.
+    let scanned=null;
+    try{scanned=await window.__TAURI__.core.invoke('catalog_face_scan_status',{path});}catch(e){}
+    if(_fxPeoplePathToken!==path)return;
+    el.innerHTML=(scanned===false)?'<div class="fx-people-pending">Not yet scanned for faces</div>':'';
+    return;
+  }
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chips=faces.map(f=>{
+    const named=!!f.name;
+    const label=named?esc(f.name):'Who is this?';
+    return `<span class="fx-people-chip${named?'':' unnamed'}" data-face-id="${f.face_id}" data-person-id="${f.person_id||''}">`+
+      `<span class="fx-people-ava" data-face-id="${f.face_id}"><img alt=""></span>${label}</span>`;
+  }).join('');
+  el.innerHTML=`<div class="fx-people-row">${chips}</div>`;
+  const byId=new Map(faces.map(f=>[f.face_id,f]));
+  el.querySelectorAll('.fx-people-chip[data-face-id]').forEach(chip=>{
+    const f=byId.get(parseInt(chip.dataset.faceId,10));
+    chip.addEventListener('mouseenter',()=>fxShowFaceBox(f,chip));
+    chip.addEventListener('mouseleave',()=>{if(!chip._naming)fxHideFaceBox();});
+  });
+  el.querySelectorAll('.fx-people-ava[data-face-id]').forEach(ava=>{
+    const fid=parseInt(ava.dataset.faceId,10);
+    const img=ava.querySelector('img');
+    if(!Number.isFinite(fid))return;
+    window.__TAURI__.core.invoke('catalog_face_crop',{faceId:fid}).then(buf=>{
+      const url=URL.createObjectURL(new Blob([buf],{type:'image/jpeg'}));
+      img.src=url;img.classList.add('loaded');img.onload=()=>URL.revokeObjectURL(url);
+    }).catch(()=>{});
+  });
+  el.querySelectorAll('.fx-people-chip[data-face-id]').forEach(chip=>{
+    chip.onclick=async()=>{
+      const fid=parseInt(chip.dataset.faceId,10);
+      const current=chip.textContent.trim();
+      chip._naming=true;fxShowFaceBox(byId.get(fid),chip);
+      const name=await window.askTextModal(chip.classList.contains('unnamed')?'Who is this?':'Rename',
+        '',chip.classList.contains('unnamed')?'':current);
+      chip._naming=false;fxHideFaceBox();
+      if(!name)return;
+      try{
+        // ⚠️ catalog_split_faces ALWAYS creates a new person when given into_name — it doesn't
+        // check for an existing match (that's the review-mode picker's job in library-ui.js,
+        // which has its own peopleList to search). This prompt has no such list, so it must look
+        // one up itself here, or naming a face after someone who already exists would silently
+        // create a duplicate person instead of merging into them.
+        const people=await window.__TAURI__.core.invoke('catalog_people').catch(()=>[]);
+        const existing=(people||[]).find(p=>!p.auto&&p.name.toLowerCase()===name.toLowerCase());
+        await window.__TAURI__.core.invoke('catalog_split_faces',
+          existing?{faceIds:[fid],intoId:existing.id,intoName:null}:{faceIds:[fid],intoId:null,intoName:name});
+        _fxPeoplePathToken=''; // force a re-query — this photo's faces just changed
+        fxRenderPeoplePanel();
+      }catch(e){if(typeof toast==='function')toast('Could not name this face','err');}
+    };
+  });
+}
+// Keywords: same per-photo sidecar tags the Library's own Get Info popover already edits
+// (get_sidecar/set_keywords — desktop/library-ui.js's renderInfoPanel/addKeywordToPhoto), just
+// reachable from the Editor's Info tab too, using the identical Tauri commands directly rather
+// than routing through library-ui.js (which may not even be loaded — see chromasmith-22.html's
+// note on the desktop/web split). Same _fxKeywordsPathToken re-query guard as People & Pets above.
+let _fxKeywordsPathToken='';
+async function fxRenderKeywordsPanel(){
+  const el=document.getElementById('fx-keywords');if(!el)return;
+  if(!window.__TAURI__){el.innerHTML='';return;}
+  const it=fxImages[fxCurIdx]||fxImages[0];
+  const path=it&&it.path;
+  if(!path){el.innerHTML='';_fxKeywordsPathToken='';return;}
+  if(path===_fxKeywordsPathToken)return;
+  _fxKeywordsPathToken=path;
+  let sc;
+  try{sc=await window.__TAURI__.core.invoke('get_sidecar',{path});}catch(e){el.innerHTML='';return;}
+  if(_fxKeywordsPathToken!==path)return;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const keywords=sc.keywords||[];
+  const chips=keywords.map(k=>{
+    const leaf=k.split('|').pop();
+    return `<span class="fx-kw-chip" data-kw="${esc(k)}" title="${esc(k)}">${esc(leaf)}<span class="fx-kw-chip-x" data-kw-remove="${esc(k)}">×</span></span>`;
+  }).join('');
+  el.innerHTML=`<div class="fx-people-row"><div style="width:100%">`
+    +`<div class="fx-label" style="width:auto;margin-bottom:6px">Keywords</div>`
+    +`<div id="fx-kw-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${chips}</div>`
+    +`<input id="fx-kw-add" placeholder="Add keyword…" class="fx-select" style="width:100%;background-image:none">`
+    +`</div></div>`;
+  fxRenderAutoTags(path,keywords);
+  el.querySelectorAll('[data-kw-remove]').forEach(x=>{
+    x.onclick=async(e)=>{
+      e.stopPropagation();
+      const kw=x.dataset.kwRemove;
+      const next=keywords.filter(k=>k!==kw);
+      try{await window.__TAURI__.core.invoke('set_keywords',{path,keywords:next});_fxKeywordsPathToken='';fxRenderKeywordsPanel();}
+      catch(e2){if(typeof toast==='function')toast('Could not remove that keyword','err');}
+    };
+  });
+  const addInput=document.getElementById('fx-kw-add');
+  if(addInput)addInput.onkeydown=async(e)=>{
+    if(e.key!=='Enter')return;
+    e.stopPropagation();
+    const v=addInput.value.trim();if(!v)return;
+    if(keywords.includes(v)){addInput.value='';return;}
+    const next=[...keywords,v];
+    try{await window.__TAURI__.core.invoke('set_keywords',{path,keywords:next});_fxKeywordsPathToken='';fxRenderKeywordsPanel();}
+    catch(e2){if(typeof toast==='function')toast('Could not add that keyword','err');}
+  };
+}
+// Auto tags ("In this photo": dog, beach, park…) + where it was taken, from the catalog's AI
+// index (catalog_photo_tag_info). Click a tag to save it as a keyword; "Analyze now" indexes this
+// one photo when the background pass hasn't reached it yet. Always renders a real state.
+async function fxRenderAutoTags(path,keywords){
+  const el=document.getElementById('fx-autotags');if(!el||!window.__TAURI__)return;
+  const inv=window.__TAURI__.core.invoke;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div><div class="fx-autotag-hint">Checking…</div>`;
+  let info;
+  try{info=await inv('catalog_photo_tag_info',{path});}catch(e){info=null;}
+  if(_fxKeywordsPathToken!==path||!document.body.contains(el))return;
+  // Detected tags were just saved as real keywords — redraw the keyword chips from the sidecar.
+  if(info&&info.keywords_added){_fxKeywordsPathToken='';fxRenderKeywordsPanel();return;}
+  const have=new Set((keywords||[]).map(k=>k.split('|').pop().toLowerCase()));
+  const tags=((info&&info.tags)||[]).filter(t=>!have.has(t.term.toLowerCase()));
+  const place=info&&info.place;
+  const placeBits=place?[place.split(', ')[0],place.split(', ').pop()].filter((v,i,a)=>a.indexOf(v)===i&&!have.has(v.toLowerCase())):[];
+  let body;
+  if(!info||info.photo_id==null)body=`<div class="fx-autotag-hint">Add this folder to the Gallery to auto-tag it.</div>`;
+  else if(!info.analyzed)body=`<div class="fx-autotag-hint">Not analyzed yet — the Gallery tags photos in the background.</div>`
+    +`<button class="fx-autotag-btn" id="fx-autotag-analyze">Analyze now</button>`;
+  else if(!tags.length&&!placeBits.length)body=`<div class="fx-autotag-hint">${(info.tags||[]).length?'All detected tags are saved as keywords.':'Nothing recognised with confidence.'}</div>`;
+  else body=`<div style="display:flex;flex-wrap:wrap;gap:4px">`
+    +placeBits.map(p=>`<span class="fx-autotag-chip" data-add="${esc(p)}" title="Taken in ${esc(place)} — click to save as a keyword">⌖ ${esc(p)} +</span>`).join('')
+    +tags.map(t=>`<span class="fx-autotag-chip" data-add="${esc(t.term)}" title="Detected automatically (${Math.round(t.score*100)}%) — click to save as a keyword">${esc(t.term)} +</span>`).join('')
+    +`</div>`+(tags.length+placeBits.length>1?`<button class="fx-autotag-btn" id="fx-autotag-all">Add all</button>`:'');
+  el.innerHTML=`<div class="fx-label" style="width:auto;margin-bottom:6px">In this photo</div>`+body;
+  const save=async(add)=>{
+    const sc=await inv('get_sidecar',{path});
+    const cur=sc.keywords||[];
+    const next=[...cur,...add.filter(a=>!cur.includes(a))];
+    await inv('set_keywords',{path,keywords:next});
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+  el.querySelectorAll('[data-add]').forEach(c=>{c.onclick=()=>save([c.dataset.add]).catch(()=>{if(typeof toast==='function')toast('Could not add that keyword','err');});});
+  const all=document.getElementById('fx-autotag-all');
+  if(all)all.onclick=()=>save([...placeBits,...tags.map(t=>t.term)]).catch(()=>{});
+  const an=document.getElementById('fx-autotag-analyze');
+  if(an)an.onclick=async()=>{
+    an.disabled=true;an.textContent='Analyzing…';
+    try{await inv('catalog_clip_embed',{photoIds:[info.photo_id]});}catch(e){if(typeof toast==='function')toast('Could not analyze this photo','err');}
+    _fxKeywordsPathToken='';fxRenderKeywordsPanel();
+  };
+}
+window.fxRefreshAutoTags=()=>{_fxKeywordsPathToken='';if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();};
+// CHR-164: ONE definition of "the photo's full size" — the full-resolution decode when the item
+// carries one (RAW opens on a display proxy first), else the loaded image itself.
+function fxFullDimsText(it){
+  const f=(it&&(it.fullImg||it.img))||null;
+  const w=f&&(f.naturalWidth||f.width),h=f&&(f.naturalHeight||f.height);
+  return w&&h?`${w}×${h}`:'';
+}
+// Header shows what's loaded right now (proxy until the full decode is in, then the full size);
+// the table's Dimensions row is always the full size. Both are re-synced on every preview render
+// so a background full-quality promotion updates them instead of leaving stale numbers behind.
+// CHR-194: called by library-ui.js's autosave. "saved" is only ever set after the sidecar write
+// resolved — never optimistically. st: pending | saving | saved | queued | error | ''.
+window.chromasmithSaveState=function(st,onRetry){
+  const el=document.getElementById('cs-save-state');if(!el)return;
+  clearTimeout(el._t);el.className=st==='error'?'err':'';el.hidden=!st;el.textContent='';
+  const T={pending:'Edited',saving:'Saving…',saved:'Saved locally',queued:'Saved offline — applies when the drive reconnects',error:'Couldn\'t save edit'};
+  el.textContent=T[st]||'';el.title=st==='saved'?'Edit written to the photo\'s sidecar — safe to close':'';
+  if(st==='error'&&onRetry){const b=document.createElement('button');b.type='button';b.textContent='Retry';b.onclick=onRetry;el.appendChild(b);}
+};
+let _csPhotoSourceMode='',_csPhotoRenderMode='';
+window.chromasmithSourceRenderUpdate=function(update={}){
+  if(update.source!==undefined)_csPhotoSourceMode=update.source;
+  if(update.render!==undefined)_csPhotoRenderMode=update.render;
+  const el=document.getElementById('cs-source-render-state');if(!el)return;
+  const sourceText={checking:'Checking source…',original:'Original available',offlineCache:'Offline full-quality cache',offlinePreview:'Reduced-quality offline preview',missing:'Source unavailable'}[_csPhotoSourceMode]||'';
+  const renderText={checking:'Loading preview…',preview:'Preview · full resolution on demand',loading:'Loading full resolution…',full:'Full resolution ready',unavailable:'Full resolution unavailable'}[_csPhotoRenderMode]||'';
+  if(!sourceText&&!renderText){el.hidden=true;el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
+  const visible=[sourceText,renderText].filter(Boolean).join(' · ');
+  const sourceDetail={checking:'Checking whether the original or an offline cached copy can be used.',original:'The original photo source was readable when this photo opened.',offlineCache:'The original is unavailable; editing is using a full-quality offline cached copy.',offlinePreview:'The original and full-quality offline cache are unavailable. This is a reduced-quality preview; reconnect the source drive and reopen for full-resolution editing.',missing:'The source could not be read. Reconnect the drive and reopen the photo.'}[_csPhotoSourceMode]||'';
+  const renderDetail={checking:'The editor is loading the first preview.',preview:'The visible image is a fast preview. Full-resolution pixels load when needed.',loading:'The full-resolution image is being loaded and rendered.',full:'The full-resolution image is ready for detailed edits and export.',unavailable:'Full-resolution pixels are unavailable from this source.'}[_csPhotoRenderMode]||'';
+  const detail=[sourceDetail,renderDetail].filter(Boolean).join(' ');
+  if(el.textContent!==visible)el.textContent=visible;
+  if(el.title!==detail)el.title=detail;
+  if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
+  el.dataset.source=_csPhotoSourceMode;el.dataset.render=_csPhotoRenderMode;el.hidden=false;
+};
+function fxRefreshDims(){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it||it.kind==='video')return;
+  const s=document.getElementById('db-title-status');
+  if(s&&!s.classList.contains('spin')){const t=fxDimsFmt(it.name,it.img,it.ext);if(t&&s.textContent!==t)s.textContent=t;}
+  const d=document.getElementById('fx-exif-dims');
+  if(d){const t=fxFullDimsText(it);if(t&&d.textContent!==t)d.textContent=t;}
+}
+function showExif(exif){
+  const el=document.getElementById('fx-exif');if(!el)return;
+  if(typeof fxRenderPeoplePanel==='function')fxRenderPeoplePanel();
+  if(typeof fxRenderKeywordsPanel==='function')fxRenderKeywordsPanel();
+  // ⚠️ A video has no EXIF, so this used to return early and the Info panel showed nothing at all
+  // for a clip — no duration, codec, frame rate or colour space, even though the demuxer had all
+  // of it. Video gets its own block built from the item's own probe data.
+  const _it=fxImages[fxCurIdx]||fxImages[0]||{};
+  if(_it.kind==='video'){el.innerHTML=_videoInfoRows(_it);return;}
+  if(!exif||!Object.keys(exif).filter(k=>exif[k]).length){el.innerHTML='';return;}
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chip=(lb,val)=>val?`<div class="fx-exif-chip"><span class="fx-exif-chip-lb">${lb}</span><span>${esc(val)}</span></div>`:'';
+  // exif.iso already carries its own "ISO " prefix (set wherever it's parsed, e.g. EXIF tag
+  // 0x8827) because other call sites show it standalone with no separate label. This chip strip
+  // ALSO has its own "ISO" label, so passing the prefixed string through printed "ISO ISO 400".
+  // Strip it here rather than at every producer, since those other bare-display call sites are
+  // exactly why the prefix belongs on the value in the first place.
+  const isoVal=exif.iso?String(exif.iso).replace(/^ISO\s*/i,''):'';
+  const chips=[chip('ISO',isoVal),chip('Aperture',exif.aperture),chip('Shutter',exif.shutter),chip('Focal',exif.focalLen)].filter(Boolean);
+  const row=(label,val)=>val?`<div class="fx-exif-row"><span class="fx-exif-lb">${label}</span><span class="fx-exif-val">${esc(val)}</span></div>`:'';
+  // DRK-style order: Date, Dimensions, [ISO ƒ ⏱ mm chip strip], File Name, Size, Format,
+  // Lens, Camera Make, Camera Model. Extra fields (dims/fileName/fileSize/format/make) are
+  // attached by the loaders / library opener; missing ones simply don't render.
+  const it=fxImages[fxCurIdx]||fxImages[0]||{};
+  const dims=fxFullDimsText(it);
+  const fmtDate=d=>{if(!d)return'';const m=String(d).match(/^(\d{4})[:-](\d{2})[:-](\d{2})/);
+    if(!m)return d;const MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${MO[parseInt(m[2],10)-1]||m[2]} ${parseInt(m[3],10)}, ${m[1]}`;};
+  const fmtSize=b=>b?(b>=1048576?(b/1048576).toFixed(1)+' MB':Math.round(b/1024)+' KB'):'';
+  let make=exif.make||'',model=exif.model||'';
+  if(!make&&model.includes(' ')){const i=model.indexOf(' ');make=model.slice(0,i);model=model.slice(i+1);}
+  el.innerHTML=
+    row('Date',fmtDate(exif.date))+row('Dimensions',dims).replace('class="fx-exif-val"','class="fx-exif-val" id="fx-exif-dims"')+
+    (chips.length?`<div class="fx-exif-grid">${chips.join('')}</div>`:'')+
+    row('File Name',it.name?(it.ext?`${it.name}.${it.ext}`:it.name):'')+row('Size',fmtSize(it.fileSize))+
+    row('File Format',it.ext?it.ext.toUpperCase():'')+
+    row('Lens Model',exif.lens)+row('Camera Make',make)+row('Camera Model',model)+
+    _icoFrameRow(it);
+}
+// ROADMAP.md F6 — minimal ICO/CUR frame picker: a numeric stepper, shown ONLY when the loaded
+// icon actually has more than one directory entry (icoFrameCount set by the RUST_ONLY_RE-style
+// desktop-only load path above). Deliberately small — a dropdown/stepper, not a filmstrip — this
+// format is a rare edit target, not a primary workflow.
+function _icoFrameRow(it){
+  if(!it||!(it.icoFrameCount>1))return'';
+  const n=it.icoFrameCount;
+  return `<div class="fx-exif-row"><span class="fx-exif-lb">Frame</span><span class="fx-exif-val">`+
+    `<input type="number" min="0" max="${n-1}" value="${it.icoFrame||0}" style="width:3em" `+
+    `onchange="fxSetIcoFrame(this.value)"> of ${n}</span></div>`;
+}
+// Re-decodes the CURRENT photo's stashed ICO bytes at a different directory entry and swaps the
+// canvas in place — mirrors the initial decode in loadFXImages exactly (same
+// window.chromasmithDecodeStill call), so a chosen frame renders through the identical path.
+async function fxSetIcoFrame(v){
+  const it=fxImages[fxCurIdx];
+  if(!it||!it._icoBytes||typeof window.chromasmithDecodeStill!=='function')return;
+  const n=Math.max(0,Math.min(it.icoFrameCount-1,parseInt(v,10)||0));
+  try{
+    const{canvas}=await window.chromasmithDecodeStill(it._icoBytes,'ico',n);
+    it.img=canvas;it.icoFrame=n;
+    fxImg=it.img;updateWork();renderPreview();
+  }catch(e){log(`Could not switch ICO frame: ${errStr(e)}`,'err')}
+}
+// The Basic Adjustments panel (exposure/contrast/.../skin) is the one FX section that can be
+// made INDEPENDENT per photo (adjScopeToggle) — everything else (LUT, curves, HSL, grain,
+// halation, bloom, etc.) still applies to the whole batch automatically. `adjValsOverride`, when
+// given, is a raw-slider-value object (see domAdjustVals) sourced from that photo's own
+// it.adjustOverride instead of the live DOM — used by exportFX so each photo renders with ITS
+// own Adjust values instead of whichever photo happens to be previewed at export time.
+// ══ MATCH SERIES TO A REFERENCE ═══════════════════════════════════════════════════════════
+// Batch editing shares one fxState across every photo, which is right for a LOOK and wrong for
+// exposure and white-balance drift: a set walked through changing light has each frame metered
+// slightly differently, so one shared exposure leaves half the shoot too dark. This solves a
+// per-photo offset instead, and writes it into that photo's own `adjustOverride` — the exact
+// mechanism the manual "make this photo independent" toggle already uses, so nothing downstream
+// (render, export, session, XMP) needs to know this feature exists.
+//
+// ⚠️ Deliberately only exposure + white balance. Contrast, saturation and the look are what the
+// user CHOSE; matching those too would flatten a set to one frame's interpretation and undo the
+// grade. Drift is a capture problem, not a taste problem.
+const MATCH_STAT_PX=160;   // longest edge for the statistics pass — a match is a global average,
+                           // and sampling more pixels costs time without moving the numbers
+/// Robust per-channel statistics for one photo, measured on the SOURCE pixels (pre-grade), since
+/// the offsets have to be independent of whatever look is currently applied.
+function _matchStats(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const sc=Math.min(1,MATCH_STAT_PX/Math.max(w0,h0));
+  const w=Math.max(1,Math.round(w0*sc)),h=Math.max(1,Math.round(h0*sc));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data;
+  // Trimmed means: a bright sky or a black frame edge would otherwise drag the average and make
+  // the correction chase the background rather than the subject. Collect, sort, drop the tails.
+  const R=[],G=[],B=[],L=[];
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i]/255,g=d[i+1]/255,b=d[i+2]/255;
+    R.push(r);G.push(g);B.push(b);L.push(0.2126*r+0.7152*g+0.0722*b);
+  }
+  const trimmed=(a)=>{
+    a.sort((p,q)=>p-q);
+    const lo=Math.floor(a.length*0.10),hi=Math.ceil(a.length*0.90);
+    let s=0,n=0;for(let i=lo;i<hi;i++){s+=a[i];n++;}
+    return n?s/n:0.5;
+  };
+  return{r:trimmed(R),g:trimmed(G),b:trimmed(B),lum:Math.max(1e-4,trimmed(L))};
+}
+/// Solves the exposure/temp/tint offsets that carry `tgt` onto `ref`.
+///
+/// ⚠️ Exposure is solved in STOPS (a log ratio), not as a linear difference: the slider is
+/// exposure-compensation, so a photo half as bright needs +1 stop regardless of where it sits on
+/// the scale. A linear delta would over-correct the shadows and under-correct the highlights.
+function _matchOffsets(ref,tgt){
+  const stops=Math.log2(ref.lum/Math.max(1e-4,tgt.lum));
+  // White balance from the channel ratios AFTER equalising brightness, or an exposure difference
+  // would masquerade as a colour cast.
+  const norm=(s)=>({r:s.r/Math.max(1e-4,s.lum),g:s.g/Math.max(1e-4,s.lum),b:s.b/Math.max(1e-4,s.lum)});
+  const nr=norm(ref),nt=norm(tgt);
+  // Temp moves blue against red; tint moves green against the other two — the same axes the
+  // Temp/Tint sliders drive, so the solved numbers land on the controls the user already reads.
+  const temp=((nr.r-nr.b)-(nt.r-nt.b))*100;
+  const tint=((nr.g-(nr.r+nr.b)/2)-(nt.g-(nt.r+nt.b)/2))*100;
+  const clamp=(v,l)=>Math.max(-l,Math.min(l,v));
+  // The exposure slider is ±5 stops over ±100 (see getFXParams' /20), so stops*20 is the slider
+  // value. Capped well short of the rail: a solved correction bigger than ~2 stops means the two
+  // frames are not the same scene, and silently pushing the slider to 100 would look like a bug.
+  return{exp:Math.round(clamp(stops*20,40)),temp:Math.round(clamp(temp,40)),tint:Math.round(clamp(tint,40))};
+}
+/// Matches every loaded photo to `refIdx`, writing per-photo adjustOverride values.
+// CHR-178: reference photo window. A pinned image floats over the editor (draggable, resizable)
+// so a photo can be graded by eye toward another — any file on disk, the Library photo passed
+// in by library-ui.js, or a snapshot of the current graded preview (handy before switching to
+// the next photo in a batch). Session-only by design: the object URL dies with the page.
+let _fxRefUrl=null;
+function fxRefShow(url,label){
+  if(_fxRefUrl&&_fxRefUrl!==url)URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=url;
+  let w=document.getElementById('fx-ref-win');
+  if(!w){
+    w=document.createElement('div');w.id='fx-ref-win';
+    w.innerHTML='<div class="ref-bar"><span></span><button class="btn bgh ref-match" title="Nudge this photo\'s exposure and white balance toward the reference">Match to this</button><button class="btn-icon" title="Change reference">'+icon('folder',14)+'</button><button class="btn-icon" title="Close reference">'+icon('close',14)+'</button></div><img alt="Reference photo">';
+    const[bMatch,bChange,bClose]=w.querySelectorAll('button');
+    bMatch.onclick=()=>fxRefMatchCurrent();bChange.onclick=()=>fxRefPickFile();bClose.onclick=()=>fxRefClose();
+    const bar=w.querySelector('.ref-bar');
+    bar.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;const r=w.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
+      const mv=ev=>{w.style.left=Math.max(0,Math.min(innerWidth-60,ev.clientX-dx))+'px';w.style.top=Math.max(0,Math.min(innerHeight-30,ev.clientY-dy))+'px';};
+      const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);};addEventListener('pointermove',mv);addEventListener('pointerup',up);});
+    const wrap=document.getElementById('fx-wrap'),r=wrap?wrap.getBoundingClientRect():{right:innerWidth,top:80};
+    w.style.left=Math.max(8,r.right-336)+'px';w.style.top=(r.top+16)+'px';
+    document.body.appendChild(w);
+  }
+  {const im=w.querySelector('img');im.onerror=()=>{fxRefClose();toast('Can\'t preview that file as a reference (RAW?) — open it and use "Pin this photo as edited"',false);};im.src=url;}w.querySelector('.ref-bar span').textContent=label||'Reference';w.style.display='flex';
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.add('on');
+}
+function fxRefClose(){const w=document.getElementById('fx-ref-win');if(w)w.remove();if(_fxRefUrl){URL.revokeObjectURL(_fxRefUrl);_fxRefUrl=null;}
+  const b=document.getElementById('btn-fx-ref');if(b)b.classList.remove('on');}
+// "Match to this": solves the exposure / temp / tint offsets that carry what the CURRENT photo
+// looks like now (rendered preview) onto the reference, with the same _matchStats/_matchOffsets the
+// series match uses, and writes them into this photo's own adjust values. Repeating it converges.
+function fxRefMatchCurrent(){
+  const w=document.getElementById('fx-ref-win'),ref=w&&w.querySelector('img'),it=curItem();
+  if(!ref||!ref.complete||!ref.naturalWidth){toast('The reference is still loading',false);return;}
+  if(!it||!it.img||it.kind==='video'||!FX||!FX.cv||!FX.cv.width){toast('Open a photo to match first',false);return;}
+  renderPreview();
+  let cur=it.img;try{const{px,w,h}=FX.getPixels();if(px&&w&&h){const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(px.buffer,px.byteOffset,px.length),w,h),0,0);cur=c;}}catch(e){}
+  let cs=_matchStats(cur);if(cs.lum<=0.001){cs=_matchStats(it.img);} // blank read-back: fall back to the source
+  const off=_matchOffsets(_matchStats(ref),cs);
+  const base=it.adjustOverride||domAdjustVals(),cl=v=>Math.max(-100,Math.min(100,v));
+  const v={...base,exp:cl((base.exp||0)+off.exp),temp:cl((base.temp||0)+off.temp),tint:cl((base.tint||0)+off.tint)};
+  it.adjustOverride=v;applyAdjustVals(v);
+  {const tg=document.getElementById("tg-adjust");if(tg&&!tg.classList.contains("on"))toggleFX("adjust");} // Tone must be on for exposure/temp to apply
+  updateWork();renderPreview();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(off.exp||off.temp||off.tint?`Matched toward the reference (exposure ${off.exp>=0?'+':''}${off.exp}, temp ${off.temp>=0?'+':''}${off.temp}, tint ${off.tint>=0?'+':''}${off.tint})`:'Already close to the reference',true);
+  return off;
+}
+function fxRefPickFile(){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)fxRefShow(URL.createObjectURL(f),f.name);};inp.click();}
+function fxRefSnapshot(){
+  const cv=FX&&FX.cv;if(!cv||!cv.width){toast('Open a photo first');return;}
+  renderPreview();cv.toBlob(b=>{if(!b){toast('Could not capture the preview');return;}
+    const it=curItem();fxRefShow(URL.createObjectURL(b),(it&&it.name?it.name+' — ':'')+'as edited');},'image/jpeg',0.92);
+}
+window.chromasmithSetReference=(blob,label)=>fxRefShow(URL.createObjectURL(blob),label);
+function fxRefMenu(btn){
+  if(document.getElementById('fx-ref-win')){fxRefClose();return;}
+  const r=btn.getBoundingClientRect();
+  const m=document.createElement('div');m.className='cs-ctx';
+  m.style.cssText=`position:fixed;left:${r.left}px;top:${r.bottom+6}px;z-index:9999;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:8px;padding:4px;font-size:12px;min-width:200px;box-shadow:var(--lift-2)`;
+  [['Pin this photo as edited',fxRefSnapshot],['Choose a photo…',fxRefPickFile]].forEach(([t,fn])=>{const it=document.createElement('div');it.className='cs-ctx-it';it.style.cssText='padding:7px 10px;border-radius:5px;cursor:pointer';it.textContent=t;it.onclick=()=>{m.remove();fn();};m.appendChild(it);});
+  document.body.appendChild(m);setTimeout(()=>document.addEventListener('click',()=>m.remove(),{once:true}),0);
+}
+async function matchSeriesToReference(refIdx){
+  if(fxImages.length<2){toast('Load a set of photos first');return;}
+  refIdx=(refIdx==null)?fxCurIdx:refIdx;
+  const ref=fxImages[refIdx];
+  if(!ref||!ref.img){toast('Reference photo is not loaded');return;}
+  const base=domAdjustVals();                 // the shared grade every photo starts from
+  const refStat=_matchStats(ref.img);
+  let changed=0;
+  for(let i=0;i<fxImages.length;i++){
+    const it=fxImages[i];
+    if(!it||!it.img||it.kind==='video')continue;
+    if(i===refIdx){it.adjustOverride=null;continue;}   // the reference itself follows the batch
+    const off=_matchOffsets(refStat,_matchStats(it.img));
+    // Offsets ride ON TOP of the shared grade rather than replacing it — the look stays, only the
+    // capture drift is corrected.
+    const v={...base};
+    v.exp=Math.max(-100,Math.min(100,(base.exp||0)+off.exp));
+    v.temp=Math.max(-100,Math.min(100,(base.temp||0)+off.temp));
+    v.tint=Math.max(-100,Math.min(100,(base.tint||0)+off.tint));
+    it.adjustOverride=v;
+    if(off.exp||off.temp||off.tint)changed++;
+  }
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  if(typeof syncAdjustScopeUI==='function')syncAdjustScopeUI();
+  toast(`Matched ${changed} photo(s) to ${ref.name}`,true);
+  log(`Match series: ${changed} photo(s) adjusted to reference "${ref.name}"`,'ok');
+}
+/// Undoes it: every photo goes back to following the shared batch values.
+function matchSeriesClear(){
+  let n=0;
+  fxImages.forEach(it=>{if(it.adjustOverride){it.adjustOverride=null;n++;}});
+  updateWork();renderPreview();buildLookGallery();fxHistoryPush();
+  toast(n?`${n} photo(s) back to the shared grade`:'Nothing to clear',true);
+}
+let _adjSharpMaskPreview=false;
+let _mskSharpMaskPreview=false;
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
+function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:(f==='sharp-radius'?1:0));if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+function computeAdjustBlock(v){
+  v=v||domAdjustVals();
+  return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
+    exposure:(v.exp||0)/20,   // ±5 stops (slider stays -100..100)
+    contrast:(v.con||0)/200,  // ±0.5
+    highlights:(v.hi||0)/100, shadows:(v.sh||0)/100,
+    whites:(v.wh||0)/100, blacks:(v.bl||0)/100,
+    temp:(v.temp||0)/100, tint:(v.tint||0)/100,
+    vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
+    sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpRadius:(v['sharp-radius']==null?1:Math.max(0.5,Math.min(3,v['sharp-radius']))), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
+    wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
+    skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
+}
+function getFXParams(adjValsOverride,contextOverride){return{
+  // ROADMAP.md R1 — scene-referred highlight roll-off (default OFF, identity-gated: absent/falsy
+  // reproduces today's hard clamp exactly, so every export golden stays byte-identical without
+  // this key ever needing to be read at render()). No UI control yet — set via
+  // `fxState.useTonemap=true` (console / a saved Style) or a recipe's `state.useTonemap` for now;
+  // wiring an actual toggle is a follow-up once the effect itself is validated.
+  tonemap:!!fxState.useTonemap,
+  // ROADMAP.md R2 — which highlight-rolloff curve useTonemap applies, when it's on. Has a real
+  // UI control (chip row next to Input, id sel-tonemap) even though useTonemap itself doesn't yet.
+  // ROADMAP.md R4: 'native' is only meaningfully different from BT.2390 when the active look
+  // is one of the 16 baked spektra_* colour-negative stocks (SPEKTRA_SHOULDER_KEYS) — the JS
+  // side below (render()) falls back to BT.2390 (tonemapStyle 0) whenever a native selection
+  // doesn't match a shouldered look, so the shader never has to guard against a missing texture.
+  tonemapStyle:(function(){const v=(document.getElementById('sel-tonemap')||{}).value;
+    return v==='agx'?1:(v==='native'?2:0);})(),
+  lutKey:(document.getElementById('sel-lut')||{}).value||'',
+  lut:fxState.lut,
+  lutMix:fxState.lutMix!=null?fxState.lutMix:1,
+  print:fxState.print,
+  input:contextOverride&&Object.prototype.hasOwnProperty.call(contextOverride,'input')?contextOverride.input:((document.getElementById('sel-input')||{}).value||''),   // '' standard | 'vlog' V-Log source
+  // HLG input transform — enabled ONLY for a video whose engine delivered the frame
+  // unconverted (see fxNeedsHlgTransform). Photos and correctly-converted clips get
+  // enabled:false, so this is identity everywhere else and the export goldens are untouched.
+  hlg:(function(){const it=typeof curItem==='function'?curItem():null;
+    return (it&&it.kind==='video'&&it.needsHlg)?{enabled:true,lw:400}:{enabled:false};})(),
+  curves:!!(document.getElementById('tg-curves')||{classList:{contains:()=>false}}).classList.contains('on')&&!curvesIdentity(),
+  // ROADMAP R11 — lift/gamma/gain wheels, identity-gated the same way (§3's established
+  // convention): all-neutral wheels never even compute cdlSOP into a non-identity uniform.
+  cdl:!!(document.getElementById('tg-wheels')||{classList:{contains:()=>false}}).classList.contains('on')&&!cdlIdentity(),
+  cdlSOP:cdlComputeSOP(),
+  hsl:(!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity())||
+      (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),
+  masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
+  adjust:computeAdjustBlock(adjValsOverride),
+  filmNeg:computeFilmNeg(),
+  // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
+  // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
+  // tg-nr defaults to "on" in the markup, so this is unchanged for anyone who already had it
+  // dialed in; switching it off zeroes luma/color/hlDesat, which render()'s existing
+  // luma>0||color>0||hlDesat>0 gate already treats as fully off — no render()/shader change needed.
+  nr:(function(){const on=!(document.getElementById('tg-nr')&&!document.getElementById('tg-nr').classList.contains('on'));
+    return{luma:(on?adjVal('sl-nr-lum'):0)/100, color:(on?adjVal('sl-nr-col'):0)/100, detail:adjVal('sl-nr-det')/100, contrast:adjVal('sl-nr-con')/100,
+      colorDetail:(adjVal('sl-nr-color-detail')-50)/50, colorSmooth:(adjVal('sl-nr-smooth')-50)/50,
+      hlDesat:(on?adjVal('sl-nr-hldesat'):0)/100};})(),
+  // ROADMAP.md R6 — deconvolution sharpening (damped Richardson-Lucy). amount 0..1 (Amount
+  // slider is 0-100), radius in reference-image pixels (Radius slider 0-100 -> 0-8px, see the
+  // shader-side clamp in render()). Both default 0/1.5 -> amount 0 means the whole pass is
+  // skipped (see render()'s dcAmt>0 gate), so this key is safe to always compute. tg-deconv
+  // defaults to "on" (same rationale as tg-nr above); off just zeroes amount.
+  deconv:{amount:((!(document.getElementById('tg-deconv')&&!document.getElementById('tg-deconv').classList.contains('on')))?adjVal('sl-deconv-amt'):0)/100, radius:1.5+(adjVal('sl-deconv-rad')/100)*6.5},
+  // Lens correction: manual-only (no per-lens profile database — see the shader comment for
+  // why). dist/vig/ca in -0.5..0.5, small enough that the single-term radial model stays
+  // well-behaved at the frame corners.
+  // Gate weave / film breath: video only, and derived from fxVideoFrameSeed so they share the
+  // grain's per-frame hash rather than inventing a second (and possibly periodic) sequence.
+  // A still has no frame index, so filmMotion is null and the shader uniforms stay at identity.
+  filmMotion:(function(){
+    const it=(typeof curItem==='function')?curItem():null;
+    if(!it||it.kind!=='video')return null;
+    const wv=adjVal('sl-gate-weave')/100, br=adjVal('sl-film-breath')/100;
+    if(!wv&&!br)return null;
+    const f=(it.curFrame||0)+1;
+    // Two decorrelated hashes per frame (different salts) so the x and y wobble aren't the same
+    // number, which would make the frame slide along a diagonal instead of wandering.
+    const hx=fxHash01(f*2.0)-0.5, hy=fxHash01(f*2.0+1.0)-0.5, hb=fxHash01(f*3.0+7.0)-0.5;
+    // Peak ~1.5px at full slider, expressed in uv so it is resolution-independent (a fixed pixel
+    // wobble would be invisible in a downscaled preview and huge at export).
+    const amp=wv*1.5/Math.max(1,(it.img&&(it.img.width||it.img.videoWidth))||1920);
+    return{weave:[hx*2*amp,hy*2*amp],breath:1+hb*2*br*0.06};
+  })(),
+  filmFrame:(function(){
+    const sel=document.getElementById('sel-film-frame');
+    const style=(sel&&sel.value)||'none';
+    if(style==='none')return null;
+    return{style,customUrl:fxState.frameUrl||null};
+  })(),
+  lens:{dist:adjVal('sl-lens-dist')/200, vig:adjVal('sl-lens-vig')/200, ca:adjVal('sl-lens-ca')/1000, defringe:adjVal('sl-lens-defr')/100,
+    // Perspective in -0.4..0.4: past that the near edge stretches faster than any amount of
+    // Scale can hide, so the slider stops where the result stops being usable.
+    pv:adjVal('sl-lens-pv')/250, ph:adjVal('sl-lens-ph')/250,
+    rot:adjVal('sl-lens-rot')*Math.PI/1800,   // slider is tenths of a degree
+    scale:1/(1+adjVal('sl-lens-scale')/100)},
+  grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
+  artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
+    dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
+  halation:{enabled:document.getElementById('tg-hal').classList.contains('on'),amount:parseFloat(document.getElementById('sl-hal-a').value),radius:parseFloat(document.getElementById('sl-hal-r').value),
+    white:!!(document.getElementById('tg-hal-white')||{}).classList?.contains('on'), // neutral glow (B&W)
+    noRemjet:!!(document.getElementById('tg-hal-noremjet')||{}).classList?.contains('on'), // strong no-backing halation
+    extreme:!!(document.getElementById('tg-hal-extreme')||{}).classList?.contains('on'), // ≈×5-6 stylised halation
+    protect:parseFloat((document.getElementById('sl-hal-p')||{value:0}).value)/100*0.15}, // slider 0-100 → linear-lum threshold 0..0.15 (eyes ~0.05-0.07)
+  bloom:{enabled:document.getElementById('tg-bloom').classList.contains('on'),amount:parseFloat(document.getElementById('sl-bloom-a').value),threshold:parseFloat(document.getElementById('sl-bloom-th').value)/100,radius:parseFloat(document.getElementById('sl-bloom-r').value)},
+  // ROADMAP R7 — depth-driven lens blur (real depth, needs a computed depth map — see
+  // fxDepthMapFor/depthTx) and tilt-shift (a plain vertical focus band, no model needed — see
+  // render()'s dof composite for why these two share one compositor with different weight
+  // sources). Both absent/false by default -> render()'s dofOn stays false -> comp writes
+  // straight to outFb exactly as before every golden was recorded.
+  depthBlur:{enabled:!!(document.getElementById('tg-depthblur')||{classList:{contains:()=>false}}).classList.contains('on')&&fxHasDepthMap(),
+    amount:adjVal('sl-depthblur-a')||60,focus:(adjVal('sl-depthblur-focus')||70)/100,
+    band:adjVal('sl-depthblur-band')||6,falloff:adjVal('sl-depthblur-fall')||30},
+  tiltShift:{enabled:!!(document.getElementById('tg-tiltshift')||{classList:{contains:()=>false}}).classList.contains('on'),
+    amount:adjVal('sl-tiltshift-a')||60,focus:(adjVal('sl-tiltshift-focus')||50)/100,
+    band:adjVal('sl-tiltshift-band')||12,falloff:adjVal('sl-tiltshift-fall')||35},
+  debug:parseFloat((document.getElementById('sel-debug')||{}).value||0),
+  vignette:document.getElementById('tg-vig').classList.contains('on')?(adjVal('sl-vig')/100):0,
+  canvas:{enabled:!!(document.getElementById('tg-canvas')||{classList:{contains:()=>false}}).classList.contains('on'),
+    ar:fxState.canvas.ar,zoom:adjVal('sl-canvas-z')/100||1,bg:fxState.canvas.bg,blur:fxState.canvas.blur,
+    blurAmt:fxState.canvas.blurAmt==null?60:fxState.canvas.blurAmt,bgImg:fxState.canvas.blur?_cvBgImg:null},
+  bordersEnabled:document.getElementById('tg-borders').classList.contains('on'),
+  b1:_borderLayerParams('b1'),
+  b2:_borderLayerParams('b2'),
+  redEyeOps:(typeof curItem==='function'&&curItem()&&curItem().redeye)||[],
+  frameShuffle:fxState.frameShuffle||0,
+};}
+// One border layer (inner b1 / outer b2): plain colour band or real-scan film frame.
+function _borderLayerParams(k){
+  const v=id=>document.getElementById(id);
+  return{thickness:parseFloat(v('sl-'+k+'-t').value),color:v('cl-'+k).value,
+    type:(v('sel-'+k+'-type')||{}).value||'plain',
+    grain:parseFloat((v('sl-'+k+'-g')||{value:0}).value)||0,
+    glow:parseFloat((v('sl-'+k+'-glow')||{value:0}).value)||0,
+    pos:parseFloat((v('sl-'+k+'-pos')||{value:0}).value)||0,
+    src:(v('sel-'+k+'-src')||{}).value||'all'};
+}
+// True 1:1 loupe: render a NATIVE-resolution crop (centred on loupeCX/CY) through the full
+// pipeline with scOverride = fullWidth/REF, so grain & halation render at the SAME pixel scale
+// as export — unlike the normal preview, which CSS-upscales a ~1800px buffer and shows grain/
+// glow at the wrong size. Grain is exact (per-pixel); halation within ~3σ of the crop edge is
+// slightly under-fed (no out-of-crop neighbours) — centre the detail you're inspecting.
+function renderLoupe(){
+  const src=fxWork;if(!src||!FX.ok)return;
+  const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
+  const wrap=document.getElementById('fx-wrap');
+  const zw=document.getElementById('fx-zoom-wrap');
+  if(zw){zw.style.width='';zw.style.height='';}
+  // deskx: don't cap at 900 — same reasoning as renderPreview's own maxW (a large desktop window
+  // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
+  const deskx=document.body.classList.contains('deskx');
+  const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900); // content box, same as renderPreview
+  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
+  // was ALWAYS captured/rendered at this same fixed cw×ch×dpr resolution — so zooming the loupe
+  // past 100% just stretched an unchanged buffer with GPU bilinear, and the more you zoomed the
+  // blurrier it got relative to the real export (which always renders at true native res). Fix:
+  // re-render AT the zoomed-to resolution from a proportionally TIGHTER source crop, so higher
+  // zoom means more magnification of real source detail, not a stretched fixed buffer.
+  const z=Math.max(0.25,Math.min(8,fxZoom||1));
+  const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z),fh));
+  const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
+  const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
+  const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
+  crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
+  const P=fxCompare?fxCompareParams():getFXParams();
+  const REF=FXR.CAL.refWidth;
+  FX.setImage(crop);
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+    uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
+  FX.setImage(fxWork);                                              // restore working texture for later renders
+  FX.cv.style.display='block';FX.cv.style.clipPath='';
+  // Unscaled (fxZoom=1) footprint — the wrapper's own transform:scale(fxZoom) (see _applyZoom)
+  // brings this to outW/outH's actual device-pixel size on screen, matching what was just
+  // rendered 1:1 instead of double-applying zoom (once here, once via CSS).
+  FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px';
+  const loupeOps=(P.redEyeOps||[]).map(o=>({...o,x:(o.x*fw-ox)/cropW,y:(o.y*fh-oy)/cropH,rx:o.rx*fw/cropW,ry:o.ry*fh/cropH}));
+  drawRedEyePreview({...P,redEyeOps:loupeOps});
+  const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
+  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+  document.getElementById('fx-no-img').style.display='none';
+  document.getElementById('fx-info').textContent=`1:1 — native ${cropW}×${cropH}px crop · grain & halation at true export scale · drag to move`;
+  document.getElementById('btn-fx-export').disabled=false;
+  if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
+}
+// On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
+// the viewport — otherwise a portrait image would fill the screen and bury the controls.
+// Mobile: measure the LIVE preview area (flex-allocated — full height when the tool sheet is
+// closed, reduced while it's open) so the render always fits what's actually on screen.
+function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include the fixed canvas inset padding)
+  const w=document.getElementById('fx-wrap');if(!w)return{w:0,h:0};
+  const cs=getComputedStyle(w);
+  return{w:w.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0),h:w.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0)};
+}
+function fxPreviewMaxH(){
+  if(window.innerWidth<=700){
+    const wrap=document.getElementById('fx-wrap');
+    const h=wrap?fxWrapInner().h:0;
+    // fallback derives from --app-h (the JS-owned true visible height) so CSS and JS agree
+    const appH=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--app-h'))||window.innerHeight;
+    return Math.max(220,h||appH*0.42);
+  }
+  if(document.body.classList.contains('deskx')){
+    // deskx: the wrap is a flex cell that IS the available space — measure it live, same as
+    // the mobile branch, so JS sizing can never drift from the CSS grid.
+    const wrap=document.getElementById('fx-wrap');
+    return Math.max(360,(wrap&&fxWrapInner().h)||window.innerHeight-52);
+  }
+  return Math.max(360,window.innerHeight-150);
+}
+// Full-res zoomed preview = render ONLY the visible crop at native scale (the 1:1 loupe's
+// recipe: FX.setImage(crop) + uvOff/uvScale for grain/artifact continuity + scOverride so
+// halation/grain blur at true export scale). The previous approach — render the ENTIRE image
+// (24MP+) through the whole FX chain, then let CSS scale it — was seconds-per-frame on an
+// Intel iGPU AND looked mushy: the giant canvas got GPU-minified into the viewport, aliasing
+// the grain. Cost is now proportional to the viewport, so pans re-render quickly too.
+// A 30% padding halo around the visible region keeps small pans showing real pixels until the
+// debounced re-render lands. Returns false if the crop degenerates (caller falls through).
+// Coarse full-frame underlay for smooth full-res panning. The crisp crop (renderFullResCrop)
+// only covers the visible viewport + a small halo, so during a pan the CSS transform used to
+// drag that small tile across the BLACK preview background (the "void"), and the crisp
+// re-render only fired ~180ms AFTER motion stopped — the felt "slowness". Instead we render the
+// WHOLE frame through the FX chain ONCE at a moderate resolution into a 2D underlay canvas that
+// lives inside the zoom wrapper (so it rides the same scale·translate). During a pan the
+// underlay always shows content (soft but present, GPU-FX-free); the crisp native crop lands on
+// top the moment motion settles. Rebuilt only when the image/params/geometry change (dirty flag).
+let _fxFullBase={canvas:null,dirty:true,w:0,h:0};
+function fxInvalidateFullBase(){_fxFullBase.dirty=true;}
+function _fxEnsureFullResBase(iw,ih){
+  if(!_fxFullBase.dirty&&_fxFullBase.canvas&&_fxFullBase.w===iw&&_fxFullBase.h===ih)return _fxFullBase.canvas;
+  // Moderate cap: 2560px long edge is enough to look reasonable while dragging, cheap to render
+  // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path.
+  const cap=2560,sc=Math.min(1,cap/Math.max(iw,ih));
+  const bw=Math.max(1,Math.round(iw*sc)),bh=Math.max(1,Math.round(ih*sc));
+  const P=fxCompare?fxCompareParams():getFXParams();
+  FX.render(P,bw,bh,{glowScale:fxGlowScale()}); // whole frame, moderate res, one time
+  let c=_fxFullBase.canvas;
+  if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
+  c.width=bw;c.height=bh;
+  c.getContext('2d').drawImage(FX.cv,0,0,FX.cv.width,FX.cv.height,0,0,bw,bh);
+  _fxFullBase.dirty=false;_fxFullBase.w=iw;_fxFullBase.h=ih;
+  return c;
+}
+// Show the coarse underlay at the full-frame footprint (cw×ch) so any pan keeps content on
+// screen. Sits behind FX.cv inside the zoom wrapper, inheriting its transform.
+function _fxShowFullBase(iw,ih,cw,ch){
+  const base=_fxEnsureFullResBase(iw,ih);
+  const el=document.getElementById('fx-canvas-fullbase');
+  if(!el)return;
+  if(el.width!==base.width||el.height!==base.height){el.width=base.width;el.height=base.height;}
+  el.getContext('2d').drawImage(base,0,0);
+  el.style.width=cw+'px';el.style.height=ch+'px';el.style.display='block';
+}
+function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase');if(el)el.style.display='none';}
+function renderFullResCrop(P,iw,ih,cw,ch){
+  const src=fxWork;
+  const wrap=document.getElementById('fx-wrap');
+  const zw=document.getElementById('fx-zoom-wrap');
+  // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
+  // translated inside it, but its layout box must not become the pan/clamp reference.
+  {const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
+  const z=fxZoom;
+  // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
+  const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
+  const padX=visW*0.18,padY=visH*0.18;
+  const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
+  const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
+  const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
+  if(x1-x0<2||y1-y0<2)return false;
+  const cropX=Math.max(0,Math.round(x0/cw*iw)),cropY=Math.max(0,Math.round(y0/ch*ih));
+  const cropW=Math.min(iw-cropX,Math.round((x1-x0)/cw*iw)),cropH=Math.min(ih-cropY,Math.round((y1-y0)/ch*ih));
+  if(cropW<2||cropH<2)return false;
+  // Output at displayed device resolution, capped at 2× the crop's native pixels (beyond-native
+  // zoom magnifies real detail like the loupe, no point rendering further) and a GPU-safe 8192.
+  const sysdpr=Math.min(window.devicePixelRatio||1,2);
+  let outW=(x1-x0)*z*sysdpr,outH=(y1-y0)*z*sysdpr;
+  // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
+  // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
+  // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
+  outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
+  const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
+  crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
+  const REF=FXR.CAL.refWidth;
+  FX.setImage(crop);
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
+  FX.setImage(fxWork);
+  // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
+  // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
+  // where that part of the full image belongs. Cleared by the normal render path.
+  FX.cv.style.display='block';FX.cv.style.clipPath='';
+  FX.cv.style.width=(x1-x0)+'px';FX.cv.style.height=(y1-y0)+'px';
+  FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
+  return true;
+}

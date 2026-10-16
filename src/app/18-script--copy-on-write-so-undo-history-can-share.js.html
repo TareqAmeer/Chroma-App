@@ -1,0 +1,143 @@
+// ── Copy-on-write, so undo history can share rasters instead of copying them ──────────────────
+// fxHistoryPush marks every live raster frozen (some history entry now points at that exact
+// array). The next in-place mutation clones once, then keeps mutating freely until the next
+// push. Result: a slider-only edit session retains ONE raster across all 20 history entries
+// rather than 20 copies, while a genuine paint stroke still gets its own undoable state.
+// Only mskPaintAt mutates in place — every other writer already assigns a fresh array.
+function mskPxForWrite(m){
+  if(m._pxFrozen&&m.px){m.px=new Uint8ClampedArray(m.px);m._pxFrozen=false;}
+  return m.px;
+}
+function _mskSkinDefaults(){return{
+  clarity:0,                                // wide-radius midtone contrast; negative smooths
+  crOn:false,crSamples:[],crRange:35,        // colour gate: up to CR_MAX_SAMPLES picks + one range
+  uH:0,uS:0,uL:0,preserve:70,                 // uniformity strengths; see "preserve modeling" in the shader
+  tgtMode:'match',tgtHex:'#d7bd96',            // where gated pixels move to (match pick / MST swatch / custom)
+  tanDepth:0,tanWarm:0,srcV:null,_okSpace:true,
+  amount:100,name:'',muted:false,     // amount = master scale on the whole mask; name = user label
+  tex:0,sharp:0,isExclude:false,tanOneWay:false,tanOneWayAmt:0,
+  nr:0};}  // Texture: +sharpen/-soften; isExclude: eraser; nr: 0..100 edge-aware NR strength (unipolar).
+  // tanOneWayAmt (0..100): strength of the one-way clamp, replacing the old hard on/off. 0 behaves
+  // exactly like tanOneWay:false (skin can lighten toward the target); 100 exactly like
+  // tanOneWay:true (skin only ever darkens). Values in between allow a SMALL amount of shadow lift
+  // instead of none at all — some photos want "mostly darken" rather than an absolute clamp.
+// Masks saved by an older build have none of the fields above. Fill them in on load (defaults are
+// all-zero, so a restored recipe renders exactly as it did) — without this the panel would read
+// undefined into its sliders and the target resolver would see no tgtMode.
+function _mskMigrate(m){
+  if(!m||typeof m!=='object')return m;
+  if(!m.id)m.id=_mskNewId();
+  // tanOneWayAmt replaces the old boolean tanOneWay. Derive it from the legacy field BEFORE the
+  // generic default-fill below runs (which would otherwise stamp in the default 0 first and hide
+  // a saved mask's true setting).
+  if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
+  const d=_mskSkinDefaults();
+  for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  if(m.aiProvenance!==undefined||m.origin==='ai'||m.origin==='sky'||m.ai)m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
+  // Raster storage normalisation. Three shapes reach here and all must end up as one:
+  //   pxb64          — current serialized form
+  //   plain Array    — every mask saved before the typed-array change (sessions, sidecars, XMP)
+  //   Uint8Clamped   — already live (re-migration is a no-op)
+  // Anything else (missing/empty) leaves px alone so analytic masks stay rasterless.
+  if(m.pxb64){m.px=_pxFromB64(m.pxb64);delete m.pxb64;}
+  else if(Array.isArray(m.px))m.px=Uint8ClampedArray.from(m.px);
+  m._pxFrozen=false;   // a freshly-materialised raster is owned by this mask, never shared
+  // The colour gate shipped with a single centre (crH/crS/crV) before it took multiple samples.
+  // Fold a legacy single pick into crSamples[0] so an older saved mask keeps selecting the same
+  // pixels; the max-over-samples union with n=1 is identical to the old single-centre kernel.
+  if(!m.crSamples.length&&(m.crH!==undefined||m.crS!==undefined)){
+    m.crSamples=[{h:m.crH||0,s:m.crS||0,v:m.crV||0,rgb:m.crRgb||null}];
+  }
+  // Samples used to hold HSV; they now hold Oklab hue/chroma/L. Anything carrying rgb is
+  // RECOMPUTED rather than reinterpreted — feeding HSV numbers to an Oklab gate selects almost
+  // nothing and would look exactly like the tool being broken.
+  if(m.crSamples&&m.crSamples.length&&!m._okSpace){
+    m.crSamples=m.crSamples.map(p=>{
+      if(!p.rgb)return p;
+      const[h,C,L]=rgb2oklch(p.rgb[0]/255,p.rgb[1]/255,p.rgb[2]/255);
+      return Object.assign({},p,{h,s:C,v:L});
+    });
+  }
+  m._okSpace=true;
+  if(m.crSamples.length>CR_MAX_SAMPLES)m.crSamples.length=CR_MAX_SAMPLES;
+  // Feather is stored 0..0.5 now that the slider maps to the range the shader actually uses.
+  // Anything above 0.5 rendered identically to 0.5 before (the falloff start clamped at 0), so
+  // clamping is visually a no-op — it just stops the slider reading past 100.
+  if(m.feather>0.5)m.feather=0.5;
+  return m;
+}
+// Provenance identifies the inference path that actually produced the current semantic raster.
+// Native commands do not report a verified artifact revision or digest, so those remain null.
+const _MSK_AI_PROVENANCE_VERSION=1,_MSK_AI_PROMPT_SCHEMA_VERSION=1,_MSK_SKY_SEED_VERSION='sky-grid-v1';
+function _mskNormalizeAIProvenance(p){
+  if(!p||typeof p!=='object'||p.schemaVersion!==_MSK_AI_PROVENANCE_VERSION)return null;
+  const backend=['sam_points','sam2_points','sam_box'].includes(p.backend)?p.backend:null;
+  const modelId=p.modelId==='edge-sam'||p.modelId==='sam2-hiera-tiny'?p.modelId:null;
+  const source=p.sourceLocation&&p.sourceLocation.kind==='path'&&typeof p.sourceLocation.value==='string'?{kind:'path',value:p.sourceLocation.value}:null;
+  return{schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:p.promptSchemaVersion===_MSK_AI_PROMPT_SCHEMA_VERSION?_MSK_AI_PROMPT_SCHEMA_VERSION:null,
+    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
+    modelVersion:null,artifactDigest:null,sourceLocation:source,skySeedAlgorithmVersion:p.skySeedAlgorithmVersion===_MSK_SKY_SEED_VERSION?_MSK_SKY_SEED_VERSION:null,
+    recordedAt:typeof p.recordedAt==='string'?p.recordedAt:null};
+}
+function _mskRecordAIProvenance(m,item,backend,skySeed){
+  if(!m||!['ai','sky'].includes(m.origin))return;
+  const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
+  m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
+    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':null,
+    modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
+    skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
+}
+// Stable composition identity. Legacy flags bind to a stable preceding ID once. Broken explicit
+// references remain attached and fail closed in the renderer, so deletion/corruption never widens
+// a selection or silently retargets it after a reorder.
+function _mskNewId(){return'msk-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);}
+function _mskEnsureIds(masks){
+  const reserved=new Set();
+  // Keep every unique persisted ID before minting IDs for legacy masks. Otherwise an early
+  // missing ID could take a later mask's legitimate `legacy-mask-N` identity.
+  masks.forEach(m=>{if(m.id)reserved.add(m.id);});
+  const seen=new Set();
+  masks.forEach((m,i)=>{
+    if(!m.id||seen.has(m.id)){
+      let id='legacy-mask-'+i,n=1;
+      while(reserved.has(id)||seen.has(id))id='legacy-mask-'+i+'-'+n++;
+      m.id=id;reserved.add(id);
+    }
+    seen.add(m.id);
+  });
+  masks.forEach((m,i)=>{
+    if(!m.compositionMigrated){
+      const wasLegacy=!m.composeOp;
+      if(wasLegacy){
+      if(m.intersect)m.composeOp='intersect';
+      else if(m.subtract)m.composeOp='subtract';
+      }
+      if(wasLegacy&&!m.operandId&&m.composeOp&&i>0)m.operandId=masks[i-1].id;
+      m.compositionMigrated=true;
+    }
+    m.subtract=m.composeOp==='subtract';
+    m.intersect=m.composeOp==='intersect';
+  });
+  return masks;
+}
+// Return a bounded dependency-first render order plus per-slot validity. Invalid and cyclic
+// operations stay in the model for the UI to repair, and their coverage is zero in every consumer.
+function _mskCompositionPlan(masks){
+  const byId=new Map(masks.map((m,i)=>[m.id,i])),order=[],valid=new Array(masks.length).fill(undefined),visiting=new Set();
+  function visit(i){
+    if(valid[i]!==undefined)return valid[i];
+    if(visiting.has(i))return false;
+    visiting.add(i);
+    const m=masks[i],op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+    let ok=!op;
+    if(op){
+      const target=byId.get(m.operandId);
+      ok=['add','subtract','intersect'].includes(op)&&target!==undefined&&target!==i;
+      if(ok)ok=visit(target);
+    }
+    visiting.delete(i);valid[i]=!!ok;order.push(i);
+    return valid[i];
+  }
+  masks.forEach((_,i)=>visit(i));
+  return{order,valid};
+}

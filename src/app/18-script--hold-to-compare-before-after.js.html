@@ -1,0 +1,1177 @@
+// ── "hold to compare" before/after ──
+function initCompareButton(){
+  const b=document.getElementById('btn-before');if(!b||b._wired)return;b._wired=true;
+  const on=e=>{e.preventDefault();fxCompare=true;renderPreview();},
+        off=()=>{if(fxCompare){fxCompare=false;renderPreview();}};
+  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);
+  b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off);
+}
+window.addEventListener('resize',()=>{if(cropMode)positionCropRect();});
+// Memory-constrained = touch device (iPhone/iPad). The FX pipeline's scratch buffers are the
+// problem at high MP, NOT the output size — so we keep FULL native resolution and instead
+// (1) compute the halation/bloom blur at reduced res (glowScale=2 → ~4× less scratch memory),
+// and (2) for very large images, render in tiles so peak memory stays bounded. Desktop (where
+// the user says it already works) keeps glowScale=1 / never tiles → byte-identical to before.
+function isMemoryConstrained(){
+  const coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
+  const iOS=/iP(hone|ad|od)/.test(navigator.platform)||(/Mac/.test(navigator.platform)&&navigator.maxTouchPoints>1);
+  const lowMem=typeof navigator.deviceMemory==='number'&&navigator.deviceMemory<=4;
+  return iOS||lowMem||coarse;
+}
+function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduced glow on phones
+// PREVIEW-ONLY glow scale. ⚠️ Deliberately separate from fxGlowScale() rather than making that
+// function interaction-aware: fxGlowScale() is also read by processToCanvas on the EXPORT path,
+// and an export that happened to start while _fxPreviewInteracting was still true would silently
+// render its halation at half resolution. Only renderPreview may use this.
+function fxPreviewGlowScale(){return _fxPreviewInteracting?Math.max(2,fxGlowScale()):fxGlowScale();}
+// Tile aggressively on phones: the single-shot path needs ~4 full-res GPU buffers, which is
+// what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
+function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
+// Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
+function fxSetCapturedExportDepth(renderer,P){
+  if(!Object.prototype.hasOwnProperty.call(P,'_exportDepthMap'))return;
+  const d=P._exportDepthMap;
+  if(d&&d.data){const source=fxDepthForGeom(d,P.geom);if(source)renderer.setDepthTex(source.data,source.w,source.h,source);else renderer.clearDepthTex();}
+  else renderer.clearDepthTex();
+}
+async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
+  const previousMaskSize=renderer._maskReferenceSize;
+  renderer._maskReferenceSize={w:iw,h:ih};
+  try{
+    if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
+    renderer.setImage(src);
+    fxSetCapturedExportDepth(renderer,P);
+    renderer.render(P,iw,ih,{glowScale:fxGlowScale()});
+    const{px,w,h}=renderer.getPixels();
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
+    return applyRedEyeCorrections(c,P.redEyeOps);
+  }finally{renderer._maskReferenceSize=previousMaskSize;}
+}
+// Port of GEGL's red-eye-removal point operation (GNOME commit 1870ad1d8c26be68be88e07ff2b56044dc417df8):
+// test adjusted channels using RED_FACTOR=.5133333, GREEN_FACTOR=1, BLUE_FACTOR=.1933333,
+// then replace red with (adjusted green + adjusted blue)/(2*RED_FACTOR). The drawn pupil mask
+// and darken blend follow Lightroom Classic's documented interface. The elliptical mask keeps
+// processing within the manually selected pupil; all coordinates use the working image.
+function applyRedEyeCorrections(canvas,ops){
+  if(!ops||!ops.length)return canvas;
+  const w=canvas.width,h=canvas.height,x=canvas.getContext('2d',{willReadFrequently:true});
+  for(const op of ops){
+    if(op.enabled===false)continue;
+    const cx=op.x*w,cy=op.y*h,rx=Math.max(1,(op.rx||0.02)*w),ry=Math.max(1,(op.ry||op.rx||0.02)*h);
+    const x0=Math.max(0,Math.floor(cx-rx)),x1=Math.min(w-1,Math.ceil(cx+rx)),y0=Math.max(0,Math.floor(cy-ry)),y1=Math.min(h-1,Math.ceil(cy+ry));
+    const iw=x1-x0+1,ih=y1-y0+1;if(iw<1||ih<1)continue;
+    const id=x.getImageData(x0,y0,iw,ih),d=id.data,pupil=Math.max(0.05,Math.min(0.95,(op.pupilSize==null?60:op.pupilSize)/100)),dark=Math.max(0,Math.min(1,(op.darken==null?75:op.darken)/100)),threshold=op.threshold==null?0.4:op.threshold,adjustedThreshold=(threshold-0.4)*2,prx=rx*pupil,pry=ry*pupil;
+    for(let py=0;py<ih;py++)for(let px=0;px<iw;px++){
+      const dx=(x0+px+0.5-cx)/prx,dy=(y0+py+0.5-cy)/pry,q=dx*dx+dy*dy;if(q>=1)continue;
+      const rad=Math.sqrt(q),t=Math.max(0,Math.min(1,(1-rad)/0.08)),edge=t*t*(3-2*t),i=(py*iw+px)*4,r=d[i],g=d[i+1],b=d[i+2],mode=op.mode||'human',ar=r*0.5133333,ag=g,ab=b*0.1933333;
+      if(mode==='human'){
+        if(ar>=ag-adjustedThreshold&&ar>=ab-adjustedThreshold){const corrected=Math.max(0,Math.min(255,(ag+ab)/(2*0.5133333)));
+          // The red is always removed; Darken is a separate, additional darkening of the pupil
+          // (Lightroom's model). Using Darken as the correction strength left a dark-red pupil at its default.
+          const fix=Math.round(r+(corrected-r)*edge),k=1-dark*edge;
+          d[i]=Math.round(fix*k);d[i+1]=Math.round(g*k);d[i+2]=Math.round(b*k);}
+      }else{
+        // Pet Eye: follow the channel-mixer approach documented by darktable for local pupil
+        // correction. Neutralize only the selected reflection hue, retaining the pupil's local
+        // luminance and feather. White reflection uses the same weighted-gray coefficients as
+        // darktable's documented RGB-to-gray mixer.
+        let rr=r,gg=g,bb=b;
+        if(mode==='white')rr=gg=bb=0;
+        else if(mode==='green')gg=(r+b)*0.5;
+        else if(mode==='yellow'){rr=(g+b)*0.5;gg=(r+b)*0.5;}
+        else {const gray=.24*r+.68*g+.08*b;rr=gg=bb=gray;}
+        // White reflection is already a darkening (target 0), so Darken scales its strength; the
+        // hue modes neutralise fully and Darken then darkens the pupil on top.
+        const wt=(mode==='white'?dark:1)*edge,k=mode==='white'?1:1-dark*edge;
+        d[i]=Math.round((r+(rr-r)*wt)*k);d[i+1]=Math.round((g+(gg-g)*wt)*k);d[i+2]=Math.round((b+(bb-b)*wt)*k);
+      }
+    }
+    x.putImageData(id,x0,y0);
+  }
+  return canvas;
+}
+function drawRedEyePreview(P){
+  const cv=document.getElementById('fx-canvas-redeye');if(!cv)return;
+  if(fxCompare||!P.redEyeOps||!P.redEyeOps.some(o=>o.enabled!==false)){cv.dataset.active='0';cv.style.display='none';return;}
+  if(cv.width!==FX.cv.width||cv.height!==FX.cv.height){cv.width=FX.cv.width;cv.height=FX.cv.height;}
+  const x=cv.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,cv.width,cv.height);x.drawImage(FX.cv,0,0);applyRedEyeCorrections(cv,P.redEyeOps);
+  ['width','height','left','top'].forEach(key=>cv.style[key]=FX.cv.style[key]);cv.dataset.active='1';cv.style.display='block';
+}
+// TILED full-res render: process the image in overlapping tiles so peak GPU memory stays tiny
+// and CONSTANT regardless of resolution. Each tile is processed with a halo wide enough for the
+// blur kernel (≥3σ), then only its central region is kept — so seams are mathematically invisible.
+// Grain runs INSIDE each tile via the composite's uvOff/uvScale (local→global uv) + a fixed
+// seed: the hash is deterministic in global uv, so overlapping tiles produce identical grain —
+// seamless by construction. (The old design did grain as a final FULL-RES FX pass over the
+// assembled image, which allocated ~4 full-res GPU buffers and was exactly what crashed the
+// tab on large iPhone photos — the very thing tiling exists to avoid.)
+// Android's old 1024px tiles repeated uploads, readbacks and overlapping work 24 times for
+// a 24MP JPEG. Use 2048px for ordinary 8-bit exports when the expanded tile fits the GPU.
+// Keep the smaller working set for low-memory devices and expensive/float pipelines.
+function fxExportTileSize(P,src,halo,renderer){
+  const gl=renderer.gl;
+  const viewport=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const limit=Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_RENDERBUFFER_SIZE),viewport[0],viewport[1],2560);
+  const memory=navigator.deviceMemory;
+  // Keep float, geometric and other unvalidated spatial pipelines on their existing tile
+  // layout. Larger tiles are validated here for point adjustments, grain, glow and skin masks.
+  const conservative=P.tonemap||src._sceneLinearPresent
+    ||(P.nr&&(P.nr.luma>0||P.nr.color>0||P.nr.hlDesat>0))
+    ||(P.deconv&&P.deconv.amount>0)||(P.depthBlur&&P.depthBlur.enabled)
+    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||(P.lens.scale!=null&&P.lens.scale!==1)))
+    ||(P.tiltShift&&P.tiltShift.enabled);
+  const advanced=P.debug||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||(P.masks||[]).some(m=>m.crOn);
+  const larger=!conservative&&/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
+  return Math.max(1,Math.min(larger?2048:1024,limit-2*halo));
+}
+// Read only a tile's useful center; keep the existing shader/halo/global coordinates.
+// This removes the intermediate 2D canvas/upload and discarded halo readback on Android.
+function fxCanReadExportTile(renderer){
+  return /Android/i.test(navigator.userAgent)&&typeof renderer.gl?.readPixels==='function';
+}
+function fxReadExportTile(renderer,x,y,w,h){
+  const gl=renderer.gl,px=new Uint8Array(w*h*4),row=w*4,tmp=new Uint8Array(row);
+  gl.readPixels(x,renderer.h-y-h,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px);
+  for(let top=0;top<h>>1;top++){
+    const bottom=h-1-top;tmp.set(px.subarray(top*row,top*row+row));
+    px.copyWithin(top*row,bottom*row,bottom*row+row);px.set(tmp,bottom*row);
+  }
+  return new ImageData(new Uint8ClampedArray(px.buffer),w,h);
+}
+async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
+  const REF=FXR.CAL.refWidth,sc=iw/REF;
+  const H=FXR.CAL.halation,B=FXR.CAL.bloom;
+  let maxSig=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
+  // The skin-tone frequency separation blurs luminance at skinBlurFrac of the reference width, so a
+  // tile needs that neighbourhood too — without it each tile would compute its own local lightness
+  // from a different neighbourhood and the seams would show as brightness steps across the skin.
+  if((P.masks||[]).some(m=>m.crOn&&m.uL&&m.crSamples&&m.crSamples.length))
+    maxSig=Math.max(maxSig,FXR.CAL.skinBlurFrac*REF*sc);
+  const halo=Math.ceil(maxSig*3)+16;                 // neighbourhood the blur needs on every side
+  const TILE=fxExportTileSize(P,src,halo,renderer);
+  const out=document.createElement('canvas');out.width=iw;out.height=ih;const software=!!src._nativeJpegFull;
+  const octx=out.getContext('2d',software?{willReadFrequently:true}:undefined);
+  // Reuse backing stores for equal-sized tiles, rather than creating and destroying two
+  // canvases per tile. Resize only at the image edges; always clear transparent source pixels.
+  const centerReadback=fxCanReadExportTile(renderer);
+  const tileSrc=document.createElement('canvas'),rc=centerReadback?null:document.createElement('canvas');
+  const tileCtx=tileSrc.getContext('2d',software?{willReadFrequently:true}:undefined),rcCtx=rc?.getContext('2d');
+  const seed=Math.random()*100; // ONE seed for every tile → continuous grain across seams
+  let complete=false;
+  try{
+  fxSetCapturedExportDepth(renderer,P);
+  let tiles=0;const total=Math.ceil(iw/TILE)*Math.ceil(ih/TILE);
+  for(let ty=0;ty<ih;ty+=TILE)for(let tx=0;tx<iw;tx+=TILE){
+    const tw=Math.min(TILE,iw-tx),th=Math.min(TILE,ih-ty);
+    const sx=Math.max(0,tx-halo),sy=Math.max(0,ty-halo),ex=Math.min(iw,tx+tw+halo),ey=Math.min(ih,ty+th+halo);
+    const rw=ex-sx,rh=ey-sy;
+    if(tileSrc.width!==rw)tileSrc.width=rw;if(tileSrc.height!==rh)tileSrc.height=rh;
+    tileCtx.clearRect(0,0,rw,rh);tileCtx.drawImage(src,sx,sy,rw,rh,0,0,rw,rh);
+    renderer.setImage(tileSrc);
+    // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
+    // row (image row ey-1) is (ih-ey)/ih.
+    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
+      uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
+    if(centerReadback)octx.putImageData(fxReadExportTile(renderer,tx-sx,ty-sy,tw,th),tx,ty);
+    else{
+      const{px}=renderer.getPixels();
+      if(rc.width!==rw)rc.width=rw;if(rc.height!==rh)rc.height=rh;
+      rcCtx.putImageData(new ImageData(new Uint8ClampedArray(px.buffer),rw,rh),0,0);
+      octx.drawImage(rc,tx-sx,ty-sy,tw,th,tx,ty,tw,th);
+    } // keep only the central (halo-free) region
+    tiles++;log(`  tile ${tiles}/${total}`,'info');
+    if(onTile)onTile(tiles,total);
+    // Cancel used to be checked only BETWEEN images in exportFX — a huge single-photo tiled
+    // export ignored the Cancel button entirely until it finished. Throwing here unwinds
+    // through processToCanvas into exportFX's per-photo try/catch, which logs and moves on
+    // (and its own between-images cancel check then stops the batch).
+    if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
+    await new Promise(r=>requestAnimationFrame(r));
+  }
+  const result=applyRedEyeCorrections(out,P.redEyeOps);complete=true;return result;
+  }finally{
+    tileSrc.width=tileSrc.height=0;if(rc)rc.width=rc.height=0;
+    if(!complete)out.width=out.height=0;
+  }
+}
+// Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
+// (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
+function setExportScope(scope){fxExportScope=scope;syncExportScopeUI();}
+function syncBatchScopeStatus(){
+  const el=document.getElementById('fx-batch-scope');if(!el)return;
+  const count=fxImages.length;
+  if(!count){el.style.display='none';el.textContent='';el.removeAttribute('title');el.removeAttribute('aria-label');return;}
+  const item=curItem(),index=Math.min(fxCurIdx+1,count);
+  const activeCard=document.querySelector('.fx-ctrl.sec-active[data-fxsec]');
+  const section=activeCard&&activeCard.dataset.fxsec||'adjust';
+  const sectionName=CS_NAMES[section]||({masks:'Masks',adjustments:'Adjustments'}[section]||section);
+  const perPhoto=SEC_ALWAYS_ONE.includes(section)||(section==='adjust'?!!(item&&item.adjustOverride):!!(item&&item.secOverride&&item.secOverride[section]));
+  const scope=count===1||SEC_ALWAYS_ONE.includes(section)?'this photo only':perPhoto?'this photo (override)':`all ${count} open photos`;
+  const exportLabel=count>1?(fxExportScope==='current'?'this photo':`all ${count}`):'this photo';
+  const sectionTarget=count>1&&perPhoto?'this photo only':count>1?`all ${count} open photos`:'this photo only';
+  const visible=count>1?`Photo ${index}/${count} · ${sectionName} → ${scope} · Export ${exportLabel}`:`Photo 1 · ${sectionName}`;
+  const detail=`Photo ${index} of ${count}. ${sectionName} affects ${sectionTarget}${perPhoto&&SEC_SCOPE_DOM.includes(section)?' and overrides the shared value':''}. Basic adjustments ${item&&item.adjustOverride?'override the shared value for this photo':'follow the shared batch value unless overridden per photo'}. Masks and crop/transform always affect this photo only; copying masks or applying geometry to all photos is explicit. Export currently targets ${exportLabel}${fxExportScope==='current'?' only':' open photos'}.`;
+  if(el.textContent!==visible)el.textContent=visible;
+  if(el.title!==detail)el.title=detail;
+  if(el.getAttribute('aria-label')!==detail)el.setAttribute('aria-label',detail);
+  el.style.display='inline-flex';
+}
+function syncExportScopeUI(){
+  const n=fxImages.length,row=document.getElementById('fx-export-scope-row');
+  if(row)row.style.display=n>1?'block':'none';
+  // Same "only with a batch" rule as the export scope — matching one photo to itself is a no-op.
+  const mrow=document.getElementById('fx-match-series-row');
+  if(mrow)mrow.style.display=n>1?'block':'none';
+  const lb=document.getElementById('fx-export-scope-lb');if(lb)lb.textContent=`Export scope (${n} photos loaded)`;
+  const bAll=document.getElementById('btn-scope-all'),bCur=document.getElementById('btn-scope-cur');
+  if(bAll)bAll.className='btn '+(fxExportScope==='all'?'bsec':'bgh');
+  if(bCur)bCur.className='btn '+(fxExportScope==='current'?'bsec':'bgh');
+  const scope=n>1?fxExportScope:'all';
+  const btn=document.getElementById('btn-fx-export');if(!btn)return;
+  btn.innerHTML='Export'+(n>1?(scope==='current'?' current photo':` all (${n})`):'');
+  syncBatchScopeStatus();
+}
+// Lightroom "Edit In" handoff — see library-ui.js's window.chromasmithEditInPath wiring and
+// the write-back redirect inside exportFX's save phase below. Just arms the flag and reuses
+// the normal export path so it gets the exact same render pipeline as a real export.
+// window.chromasmithEditInPath is EITHER a single path string (one photo handed off — scope
+// forced to 'current', matching the export index against the single result) OR an array (a
+// multi-select Lightroom Edit-In — scope forced to 'all' so every handed-off photo gets
+// written back, in the same order it was opened).
+async function chromasmithSaveToLightroom(){
+  if(!window.chromasmithEditInPath){log('Not a Lightroom Edit-In session','warn');return;}
+  window.chromasmithSaveToLightroomPending=true;
+  fxExportScope=Array.isArray(window.chromasmithEditInPath)?'all':'current';
+  await exportFX();
+}
+// Export button icon spins for the whole export (body.fx-exporting), counted so overlapping calls
+// don't stop it early; finally guarantees it stops on errors and early returns too.
+let _fxExportRuns=0;
+window.addEventListener('beforeunload',e=>{if(document.body.classList.contains('fx-exporting')){e.preventDefault();e.returnValue='';}});
+// CHR-214: render the photo currently loaded in the editor (fxImages[0], with whatever recipe
+// the caller just applied) to a canvas, through the SAME processToCanvas the export uses, then
+// downscale to maxEdge. The desktop Library's "Create collage" calls this per photo so a collage
+// shows each photo's own look/grade instead of the untouched originals. No borders/canvas matte:
+// the collage draws its own.
+window.chromasmithRenderCurrentGraded=async function(maxEdge){
+  const it=fxImages[fxCurIdx]||fxImages[0];if(!it)throw new Error('no photo loaded');
+  const savedMasks=fxState.masks;fxState.masks=it.masks||savedMasks;
+  const P=getFXParams(it.adjustOverride||undefined);
+  fxState.masks=savedMasks;
+  const src=geomCanvas(it);
+  const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  const proc=await processToCanvas(P,src,iw,ih,()=>{});
+  const k=Math.min(1,(maxEdge||2400)/Math.max(proc.width,proc.height));
+  const bm=await createImageBitmap(proc,{resizeWidth:Math.max(1,Math.round(proc.width*k)),resizeHeight:Math.max(1,Math.round(proc.height*k)),resizeQuality:'high'});
+  proc.width=proc.height=0;
+  return bm;
+};
+async function fxNotifyExportFinished(plugins,started){
+  if(!plugins.LocalNotifications||(!document.hidden&&Date.now()-started<=15000))return;
+  try{
+    // Completion notices are immediate, optional work. Never take a finished export into
+    // notification/Alarms settings or wait for that UI before resolving the export promise.
+    const permission=await plugins.LocalNotifications.checkPermissions();
+    if(permission&&permission.display==='granted')await plugins.LocalNotifications.schedule({notifications:[{
+      id:Date.now()%2147483647,title:'Export finished',body:'Open Chromasmith to check the export results and destination.',isExactNotification:false
+    }]});
+  }catch(e){}
+}
+// Android's canvas.toBlob can spend seconds waiting for idle encoding slots. Encode
+// ordinary JPEG exports on a worker, using the same browser codec and quality.
+// Keep a bounded working set and fall back to the existing encoder on unsupported
+// WebViews/errors. Metadata is still restored by the normal export pipeline.
+// JPEG SOF dimensions come from the encoded source, independent of WebView's decode budget.
+function fxJpegSize(bytes){
+  if(!bytes||bytes.length<4||bytes[0]!==255||bytes[1]!==216)return null;
+  for(let p=2;p+3<bytes.length;){
+    if(bytes[p++]!==255)return null;while(bytes[p]===255)p++;
+    const marker=bytes[p++];if(marker===217||marker===218)return null;
+    if(marker===1||(marker>=208&&marker<=215))continue;
+    const n=bytes[p]*256+bytes[p+1];if(n<2||p+n>bytes.length)return null;
+    if(marker>=192&&marker<=207&&![196,200,204].includes(marker)&&n>=8){
+      const width=bytes[p+5]*256+bytes[p+6],height=bytes[p+3]*256+bytes[p+4];return width&&height?{width,height}:null;
+    }
+    p+=n;
+  }
+  return null;
+}
+function fxNeedsFullAndroidJpeg(it){
+  if(!/Android/i.test(navigator.userAgent))return false;
+  const size=fxJpegSize(it.bytes),image=it.img;
+  return !!(size&&image&&size.width*size.height>(image.naturalWidth||image.width)*(image.naturalHeight||image.height));
+}
+function fxProtectJpegDecodeLogs(){
+  const cap=window.Capacitor;if(!cap||cap._csJpegLogGuard)return;
+  // Debug bridge logging retains entire pixel replies in DevTools' console and can
+  // exhaust a constrained renderer. Keep other plugin diagnostics, exclude image payloads.
+  for(const name of ['logToNative','logFromNative']){
+    const original=cap[name];if(typeof original==='function')cap[name]=function(info,...args){if(info?.pluginId!=='JpegDecode')return original.call(this,info,...args);};
+  }
+  cap._csJpegLogGuard=true;
+}
+async function fxFullJpegRows(plugin,info,y,height){
+  const bridge=window.ChromaJpegDecode;
+  if(!bridge?.postMessage){
+    const reply=await plugin.rows({token:info.token,y,height}),binary=atob(reply.data),rgba=new Uint8ClampedArray(binary.length);
+    for(let i=0;i<binary.length;i++)rgba[i]=binary.charCodeAt(i);return rgba;
+  }
+  return new Promise((resolve,reject)=>{
+    let done=false;const timer=setTimeout(()=>finish(new Error('JPEG pixel transfer timed out')),15000);
+    const finish=(error,rgba)=>{if(done)return;done=true;clearTimeout(timer);bridge.onmessage=null;error?reject(error):resolve(rgba);};
+    bridge.onmessage=event=>{
+      try{
+        if(typeof event.data==='string'){const error=JSON.parse(event.data);if(error.token===info.token&&error.y===y)finish(new Error(error.error||'JPEG pixel transfer failed'));return;}
+        const bytes=event.data;if(!(bytes instanceof ArrayBuffer)||bytes.byteLength<44)throw new Error('Invalid JPEG pixels');
+        if(new TextDecoder().decode(new Uint8Array(bytes,0,36))!==info.token)return;
+        const header=new DataView(bytes);if(header.getUint32(36,true)!==y||header.getUint32(40,true)!==height)throw new Error('Unexpected JPEG rows');
+        finish(null,new Uint8ClampedArray(bytes,44));
+      }catch(error){finish(error);}
+    };
+    try{bridge.postMessage(JSON.stringify({token:info.token,y,height}));}catch(error){finish(error);}
+  });
+}
+async function fxDecodeFullAndroidJpeg(it){
+  const plugin=window.Capacitor?.Plugins?.JpegDecode;
+  if(!plugin?.begin||!plugin.rows||!plugin.end)throw new Error('Full-resolution JPEG decoding is unavailable. Update the Android app before exporting this photo.');
+  fxProtectJpegDecodeLogs();
+  const canvas=document.createElement('canvas'),strip=document.createElement('canvas');let info,complete=false;
+  try{
+    if(fxExportCancel)throw new Error('export cancelled');
+    info=await plugin.begin({data:_u8b64(it.bytes)});
+    const {width:w,height:h,orientation:o}=info,swap=o>=5&&o<=8;
+    const expected=fxJpegSize(it.bytes);
+    if(!expected||w!==expected.width||h!==expected.height)throw new Error('The JPEG decoder returned a reduced image');
+    canvas.width=swap?h:w;canvas.height=swap?w:h;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true}),rows=Math.min(128,Math.floor(1048576/w));strip.width=w;strip.height=rows;
+    const transforms=[[1,0,0,1,0,0],[-1,0,0,1,w,0],[-1,0,0,-1,w,h],[1,0,0,-1,0,h],
+      [0,1,1,0,0,0],[0,1,-1,0,h,0],[0,-1,-1,0,h,w],[0,-1,1,0,0,w]];
+    ctx.setTransform(...transforms[(o>=1&&o<=8?o:1)-1]);
+    const sx=strip.getContext('2d',{willReadFrequently:true});
+    for(let y=0;y<h;y+=rows){
+      if(fxExportCancel)throw new Error('export cancelled');
+      const height=Math.min(rows,h-y),rgba=await fxFullJpegRows(plugin,info,y,height);
+      if(rgba.length!==w*height*4)throw new Error('Incomplete JPEG pixels');
+      if(strip.height!==height)strip.height=height;
+      sx.putImageData(new ImageData(rgba,w,height),0,0);ctx.drawImage(strip,0,y);
+    }
+    canvas._nativeJpegFull=true;complete=true;return canvas;
+  }finally{
+    strip.width=strip.height=0;if(!complete)canvas.width=canvas.height=0;
+    if(info?.token)try{await plugin.end({token:info.token});}catch(_){}
+  }
+}
+async function fxEncodeExportCanvas(canvas,mime,quality){
+  const memory=navigator.deviceMemory,pixels=canvas.width*canvas.height;
+  const workerLimit=memory>=4?32e6:24e6;
+  const useWorker=/Android/i.test(navigator.userAgent)&&mime==='image/jpeg'
+    &&typeof memory==='number'&&memory>=2&&pixels>1e6&&pixels<=workerLimit
+    &&typeof Worker==='function'&&typeof OffscreenCanvas==='function'&&typeof createImageBitmap==='function';
+  if(useWorker){
+    let bitmap=null,worker=null,url=null,timer=null;
+    try{
+      bitmap=await createImageBitmap(canvas);
+      url=URL.createObjectURL(new Blob([`onmessage=async e=>{
+        const bitmap=e.data.bitmap;let canvas=null;
+        try{
+          canvas=new OffscreenCanvas(bitmap.width,bitmap.height);
+          canvas.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+          const blob=await canvas.convertToBlob({type:'image/jpeg',quality:e.data.quality});
+          postMessage({blob});
+        }catch(error){postMessage({error:String(error)});}
+        finally{bitmap.close();if(canvas)canvas.width=canvas.height=0;}
+      };`],{type:'application/javascript'}));
+      worker=new Worker(url);
+      const blob=await new Promise((resolve,reject)=>{
+        worker.onmessage=e=>e.data.blob?resolve(e.data.blob):reject(new Error(e.data.error||'JPEG worker failed'));
+        worker.onerror=()=>reject(new Error('JPEG worker unavailable'));
+        timer=setTimeout(()=>reject(new Error('JPEG worker timed out')),30000);
+        worker.postMessage({bitmap,quality},[bitmap]);bitmap=null;
+      });
+      if(blob.type!=='image/jpeg'||!blob.size)throw new Error('Invalid JPEG worker output');
+      return blob;
+    }catch(e){} // Preserve export availability if a WebView cannot use the worker.
+    finally{
+      if(timer)clearTimeout(timer);if(worker)worker.terminate();if(url)URL.revokeObjectURL(url);
+      if(bitmap)bitmap.close();
+    }
+  }
+  return new Promise(resolve=>canvas.toBlob(resolve,mime,quality));
+}
+async function exportFX(...a){
+  if(_fxExportRuns){if(typeof toast==='function')toast('An export is already running');return;}
+  _fxExportRuns++;document.body.classList.add('fx-exporting');
+  if(!window._expAccumulate){window._expFail=[];window._expSavedSum=0;if(!window._expOnlyItems)window._expVerUsed=fxVersion;}
+  // Phone app: keep the screen awake for the whole export (a locked phone suspends the app and
+  // the export with it), and if the app was in the background when it finished, say so with a
+  // notification. Both plugins are optional — missing ones are simply skipped.
+  const P=capNative()&&window.Capacitor.Plugins||{},t0=Date.now();
+  try{if(window.__TAURI__&&typeof window.chromasmithPrepareExportNotification==='function')await window.chromasmithPrepareExportNotification();}catch(e){}
+  try{P.KeepAwake&&await P.KeepAwake.keepAwake();}catch(e){}
+  try{return await _exportFXRun(...a);}
+  finally{if(--_fxExportRuns<=0){_fxExportRuns=0;document.body.classList.remove('fx-exporting');
+      try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
+      void fxNotifyExportFinished(P,t0);}}
+}
+async function _exportFXRun(){
+  if(!fxImages.length){log('No image loaded','warn');return}
+  await fxEnsureFullQuality(); // never export the display-tier stand-in
+  if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
+  const scope=fxImages.length>1?fxExportScope:'all';
+  const items=window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
+  // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
+  // photos and videos in one batch isn't a designed use case (Library integration explicitly
+  // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
+  // function entirely rather than threading kind-checks through every step below.
+  if(items.length===1&&items[0].kind==='video'){
+    window.__csVideoExporting=true;window.__csVideoTextureChanges=[];
+    try{await fxVideoExportSmall(items[0]);}
+    finally{
+      const changes=window.__csVideoTextureChanges||[];window.__csVideoTextureChanges=[];window.__csVideoExporting=false;
+      changes.forEach(([m,args])=>{try{FX[m](...args);}catch(e){}});
+      try{renderPreview();}catch(e){}
+    }
+    return;
+  }
+  // Freeze every still photo's renderer inputs before prompts, auth or per-photo processing can
+  // yield. The main FX stays live for the preview; this export owns a separate context and copies
+  // the active look/print/HSL/curve/stock textures exactly once here.
+  const exportRenderer=fxPrepareExportRenderer();
+  const exportRecipeNames=_exportRecipeNames();
+  const _expPs=items.map(it=>{
+    const sm=fxState.masks;fxState.masks=it.masks||[];
+    const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+    try{
+      const p=getFXParams(it.adjustOverride||undefined);p.redEyeOps=it.redeye||[];
+      let copy;try{copy=structuredClone(p);}catch(e){copy=p;}
+      const depth=it.img&&it.img._depthMap;
+      copy._nativeFilmRecipe=structuredClone(fnNativeRecipe(it));
+      copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;
+      return copy;
+    }finally{fxState.masks=sm;if(undo)undo();}
+  });
+  // High-tier neural NR is shared across the whole export the same way every other FX slider
+  // is (see the per-item loop's own comment below on masks/adjustOverride being the ONLY truly
+  // per-photo state) — window.chromasmithRawNr is the CURRENTLY active photo's setting, and
+  // that's what a batch export applies uniformly, exactly as the old single nativeNr boolean
+  // did. Not a per-photo lookup from each item's own sidecar (that would need a native round
+  // trip per RAW file before rendering even starts) — same fidelity as before, just 3-way now.
+  let exportRawNr=window.chromasmithRawNr||'fast';
+  if(exportRawNr==='high'){
+    const highCount=items.filter(it=>it.rawFile&&!it._nrHighApplied).length;
+    if(highCount>5){
+      const proceed=await confirmModal(`${highCount} of ${items.length} photo(s) use High noise reduction (~30-90s each, several minutes total).`,'Continue with High');
+      if(!proceed){
+        if(!await confirmModal('Export this batch using Fast noise reduction instead?','Use Fast')){log('Export cancelled','info');toast('Export cancelled','err');return;}
+        exportRawNr='fast';
+      }
+    }
+  }
+  const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
+  const prompt=document.getElementById('fx-save-prompt');if(prompt)prompt.innerHTML='';
+  const N=items.length;
+  fxExportCancel=false;
+  const cancelBtn=document.getElementById('btn-fx-cancel');
+  const progBox=document.getElementById('fx-export-prog'),progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
+  if(N>1){if(cancelBtn)cancelBtn.style.display='';if(progBox)progBox.style.display='block';}
+  const mobExp=document.body.classList.contains('mobile-fx');
+  if(mobExp)_expOverlay(true);   // mobile: the panel sheet may be closed — show a proper overlay
+  const setProg=(done,label)=>{if(progBar)progBar.style.width=Math.round(done/N*100)+'%';if(progTxt)progTxt.textContent=label;
+    const ef=document.getElementById('eo-fill'),et=document.getElementById('eo-txt');
+    if(ef)ef.style.width=Math.round(done/N*100)+'%';if(et)et.textContent=label;
+    // N3.2: mirror onto the Library sidebar's shared activity indicator too — this export already
+    // has its own bar/overlay (desktop progress bar + mobile _expOverlay), but nothing surfaced it
+    // in the ONE consistent place the rest of the app's long ops now use. No-op if the Library UI
+    // isn't loaded (e.g. the export_harness/plain-browser build).
+    if(typeof window.libActivityJob==='function')window.libActivityJob('export',{label:'Exporting',done,total:N,current:label,cancelFn:()=>{fxExportCancel=true;}});};
+  // Per-photo status list: a single progress bar reads "done" the same way whether every photo
+  // actually saved or a few silently didn't — the exact bug report this fixes ("log says
+  // successful but some photos don't get exported"). Only shown for N>1; a single-photo export
+  // still uses just the bar+text above.
+  const photoListEl=document.getElementById('fx-export-photolist');
+  const STATUS_ICON={pending:'· ',rendering:'… ',rendered:'✓ ',saving:'… ',saved:'✓ ',failed:'✗ '};
+  const STATUS_COLOR={pending:'var(--mut)',rendering:'var(--acc)',rendered:'var(--mut)',saving:'var(--acc)',saved:'#4caf50',failed:'#e05252'};
+  function setExportPhotoStatus(idx,status,detail){
+    if(!photoListEl)return;
+    const row=photoListEl.children[idx];if(!row)return;
+    row.style.color=STATUS_COLOR[status]||'var(--mut)';
+    row.textContent=(STATUS_ICON[status]||'')+items[idx].name+(detail?' — '+detail:'');
+  }
+  if(photoListEl){
+    if(N>1){
+      photoListEl.style.display='block';
+      photoListEl.innerHTML=items.map(it=>`<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 0">· ${it.name}</div>`).join('');
+    }else{photoListEl.style.display='none';photoListEl.innerHTML='';}
+  }
+  let failed=0;
+  let activityOutcome='completed';
+  let exportRevealPath='';
+  // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
+  // (the sign-in popup would be blocked after a long multi-photo render).
+  if(gpSaveEnabled()&&!gpTok()){
+    try{await gpAuth()}
+    catch(e){log('Google Photos sign-in failed — this export saves to device only ('+(e&&e.message||e)+')','warn')}
+  }
+  try{
+    // Filename-safe version tag: a literal dot ("v1.0") reads as a second, bogus extension
+    // to OS de-dup logic — a re-export/re-download of the same name gets "(2)" spliced in
+    // right before the dot instead of before the real extension (e.g. "photo_v1 (2).0.jpg"),
+    // which is exactly the mangled name users were seeing. Dash keeps the version unambiguous.
+    const ver=`v${fxVersion.toFixed(1).replace('.','-')}`;
+    const single=N===1;
+    let results=[]; // `let`: a native save that fails per-file prunes this before Phase 3 (below)
+    // Library source-path lookup (native shell only — see chromasmithGetOpenedPaths in
+    // library-ui.js): parallels fxImages' own order, so results[i].srcPath below lets the
+    // Google Photos-sync mirror (Phase 3) record exactly which on-disk photo each successful
+    // upload came from, instead of guessing from the output filename.
+    const libPaths=typeof window.chromasmithGetOpenedPaths==='function'?window.chromasmithGetOpenedPaths():[];
+    // ── Phase 1: render every image to bytes at FULL resolution (no share yet). Each image is
+    // its own try/catch so ONE bad/oversized/corrupt image can't silently discard every image
+    // already rendered before it — previously a single mid-batch exception skipped straight to
+    // the outer catch and `saveFiles` was never called, so a whole export could vanish with only
+    // an error logged. Now a per-image failure is logged and skipped; the rest of the batch and
+    // whatever already succeeded still gets saved. ──
+    for(let idx=0;idx<items.length;idx++){
+      if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
+      const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
+      try{
+        if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
+          setExportPhotoStatus(idx,'rendering','decoding…');
+          setProg(idx,`Decoding RAW ${idx+1}/${N}: ${it.name}…`);
+          await fxPromoteWebRaw(it);
+        }
+        // Deferred RAW cleanup (shadow NR + false-colour suppression + hue defringe): the editor
+        // only ran the chroma-wavelet tier unless "Full cleanup while editing" is on, so complete
+        // the pass on THIS photo's pixels before the render reads them. Skipped when High-tier NR
+        // runs/ran (its own decode already includes the full pass). A failure logs and continues
+        // with what is on the canvas rather than losing the export.
+        const filmRecipe=_expPs[idx]._nativeFilmRecipe;
+        it=await fnNativeExportItem(it,filmRecipe);
+        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(sourceItem)]))&&(it.rawFile||libPaths[fxImages.indexOf(sourceItem)])&&typeof window.chromasmithApplyFullCleanup==='function'){
+          setExportPhotoStatus(idx,'rendering','cleaning…');
+          setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
+          try{
+            const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(sourceItem)]);
+            if(r&&r.applied)it._fullCleanupApplied=true;
+          }catch(e){
+            log(`Full cleanup failed for ${it.name} — exporting with the chroma-only cleanup: ${(e&&e.message)||e}`,'warn');
+          }
+        }
+        // High-tier neural NR, BEFORE geomCanvas(it) below reads it.img — replaces it.img's
+        // pixels in place with the denoised decode, same mechanism the "Denoise now" button
+        // uses (window.chromasmithDenoiseHigh with an explicit item, so it applies to THIS
+        // photo regardless of which one is currently selected in the editor). Skipped if the
+        // interactive button already denoised this exact photo (it._nrHighApplied) — avoids
+        // silently re-running a 25-90s pass the user already paid for on the current photo.
+        if(exportRawNr==='high'&&it.rawFile&&!it._nrHighApplied&&typeof window.chromasmithDenoiseHigh==='function'){
+          setExportPhotoStatus(idx,'rendering','denoising…');
+          setProg(idx,`Denoising ${idx+1}/${N}: ${it.name}…`);
+          try{
+            await window.chromasmithDenoiseHigh(it,
+              (done,tot)=>{if(tot>0)setProg(idx+done/tot,`Denoising ${idx+1}/${N}: ${it.name} — ${Math.round(done/tot*100)}%…`);},
+              null);
+            it._nrHighApplied=true;
+          }catch(e){
+            log(`High-tier noise reduction failed for ${it.name} — continuing with Fast: ${(e&&e.message)||e}`,'warn');
+          }
+        }
+        // FX/adjustments are shared across the whole batch by design, but local-adjustment
+        // masks are per-photo (fxState.masks normally tracks whichever photo is CURRENTLY
+        // selected in the editor) — swap it to this item's own masks before reading params so
+        // a batch export doesn't render every photo with just the selected photo's masks.
+        // Basic Adjustments can ALSO be made per-photo (adjToggleScope/"This photo only") — pass
+        // this item's own override (or undefined to fall back to the shared DOM value) so an
+        // independent exposure tweak on one photo doesn't leak into the rest of the export.
+        const P=_expPs[idx];
+        if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
+        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);   // apply this image's rotate/flip/straighten/crop first
+        if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
+        const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+        setExportPhotoStatus(idx,'rendering');
+        setProg(idx,`Rendering ${idx+1}/${N}: ${it.name}…`);
+        log(`Rendering ${idx+1}/${N}: ${it.name} at ${iw}×${ih}${shouldTile(iw,ih)?' (tiled)':''}…`,'info');
+        await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
+        // Per-tile progress: a big tiled photo used to freeze the bar for its whole render
+        // (setProg was image-granular only) — feed the tile fraction in as a fractional image.
+        let proc;
+        try{proc=await processToCanvas(P,src,iw,ih,
+          (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);}
+        finally{if(decodedJpeg){if(decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}}
+        const w=proc.width,h=proc.height;
+        const{b1t,b2t}=borderLayerSizes(P,w);
+        await filmEdgeReady(P);   // never export before the film strips have decoded
+        // Only allocate a second full-res canvas when borders actually need one; free `proc`
+        // BEFORE encoding so at most one full-res canvas is alive at toBlob time.
+        let ec=proc;
+        if(bordersAny(P,b1t,b2t)){
+          const tw=w+2*(b1t+b2t),th=h+2*(b1t+b2t);
+          ec=document.createElement('canvas');ec.width=tw;ec.height=th;
+          drawBorderLayers(ec.getContext('2d'),proc,P,b1t,b2t,borderSeed(it,P));
+          proc.width=proc.height=0;
+        }
+        // Film frame around the bordered image, BEFORE the matte — same order the preview uses
+        // (renderPreview's stage 1b/2). ⚠️ This used to be nested inside the "canvas matte
+        // enabled" branch below, so a Film Frame with Canvas left off never rendered at export at
+        // all — silently correct in the live preview and silently dropped on export.
+        if(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none'){
+          const framed=filmFrameCompose(ec,P.filmFrame);
+          if(framed!==ec){ec.width=ec.height=0;ec=framed;}
+        }
+        // CANVAS matte (aspect ratio + background) around the bordered+framed image — same
+        // helper as the preview, so what you see is exactly what exports.
+        if(P.canvas&&P.canvas.enabled&&P.canvas.ar){
+          const matted=canvasCompose(ec,P.canvas);
+          if(matted!==ec){ec.width=ec.height=0;ec=matted;}
+        }
+        // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
+        // means the final file's long edge and the sharpening is judged at the real output size.
+        ec=await exportResample(ec);
+        // Watermark is drawn IN PLACE on ec, after resize (see applyWatermark), and deliberately
+        // skipped on a Lightroom Edit-In write-back — that path overwrites the ORIGINAL file the
+        // user opened from Lightroom, and silently burning a watermark into it would be a real
+        // (and surprising) data-loss footgun, not a stylistic export option.
+        if(!(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath))applyWatermark(ec);
+        let out,outExt,mime;
+        if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath){
+          // Write back a REAL TIFF — this used to encode PNG bytes and overwrite the .tif path
+          // with them anyway (format/extension mismatch), which is why ALL of the original
+          // file's metadata came back empty: PNG has no equivalent storage for TIFF/EXIF tags,
+          // and Lightroom's file-watcher expects the SAME format it handed off. UTIF.js (already
+          // bundled for TIFF import) can also ENCODE — see safeTiffMetaFrom's comment for exactly
+          // which tags are carried forward and why (ASCII-only subset; UTIF's minimal encoder
+          // was empirically verified to corrupt any tag containing a non-ASCII byte).
+          outExt='tif';mime='image/tiff';
+          const w=ec.width,h=ec.height;
+          const rgba=ec.getContext('2d').getImageData(0,0,w,h).data;
+          const meta=Object.assign({},it.tiffMeta,{
+            t282:[[it.dpi||72,1]],t283:[[it.dpi||72,1]],t296:[1], // XResolution/YResolution/ResolutionUnit(inches)
+            t305:['Chromasmith'], // Software — honest about provenance, not copied from the source
+          });
+          out=new Uint8Array(UTIF.encodeImage(rgba.buffer,w,h,meta));
+        }else{
+          const fmt=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+          // Widened from just png/tif/RAW: RUST_ONLY_RE sources (EXR/HDR/DDS/QOI/PNM*/JXL/…) were
+          // falling through to isPng=false and auto-exporting as JPEG, silently degrading a
+          // lossless source — the same bug the RAW/TIFF branches were already guarded against.
+          // .bmp is deliberately left OUT: it's lossless too, but it already had a defined
+          // auto→JPEG behaviour before this change and isn't part of the format-widening work.
+          const isPng=fmt==='auto'?(it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||RAW_FILE_EXT_RE.test('.'+it.ext)||RUST_ONLY_RE.test('.'+it.ext)):fmt==='png'; // lossless source → lossless out
+          const isWebp=fmt==='webp';
+          mime=isWebp?'image/webp':isPng?'image/png':'image/jpeg';outExt=isWebp?'webp':isPng?'png':'jpg';
+          let q=parseFloat((document.getElementById('sl-exp-q')||{}).value||99)/100;
+          // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
+          // fails to save the result to Photos — cap at 0.99 on touch devices.
+          if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
+          const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
+          if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
+          out=new Uint8Array(await blob.arrayBuffer());
+          if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
+            if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
+            out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
+            out=injectDPI(out,outExt,it.dpi);
+            // Item 1: record which look/print profile produced this export, since nothing else
+            // in the exported file says so and export_history.json's own recipe record never
+            // made it INTO the file itself.
+            const {look,print}=exportRecipeNames;
+            const metadataPath=libPaths[fxImages.indexOf(sourceItem)];
+            const sidecarXml=metadataPath&&window.__TAURI__?.core?await window.__TAURI__.core.invoke('read_export_sidecar',{path:metadataPath}):null;
+            out=injectRecipeXmp(out,outExt,look,print,sidecarXml,document.getElementById('tg-exp-gps')?.checked!==false);
+          }
+        }
+        // Filename pattern: the rename field now applies to BATCH exports too (it used to be
+        // single-export only — batch files were always forced to the source name + _vN.N).
+        // Tokens: {name} = source filename, {seq} = 1-based position in the batch, {date} =
+        // YYYY-MM-DD. A pattern without {name} or {seq} in a batch gets _{seq} appended so
+        // files can't overwrite each other. Leaving the field at its default ("photo") or empty
+        // keeps the old behavior (source name). "_vN.N" is only added when the field doesn't
+        // contain "{nover}" — typing {nover} anywhere opts out of the version suffix.
+        const fld=(document.getElementById('fx-fname').value||'').trim();
+        const noVer=fld.includes('{nover}');
+        const pat=fld.replace('{nover}','').trim();
+        const usesPattern=pat&&pat!=='photo'&&(single||pat.includes('{')); // batch only honors real patterns, not a leftover single-photo rename
+        let base;
+        const seqN=window._expOnlyItems?fxImages.indexOf(it)+1:idx+1; // a retry keeps each photo's original batch number
+        if(usesPattern){
+          base=pat.replace(/\{name\}/g,it.name).replace(/\{seq\}/g,String(seqN)).replace(/\{date\}/g,new Date().toISOString().slice(0,10));
+          if(!single&&!pat.includes('{name}')&&!pat.includes('{seq}'))base+='_'+seqN;
+        }else{
+          base=single?(fld||it.name):it.name;
+        }
+        // srcIdx: which item/status-row this came from — see setExportPhotoStatus below.
+        // srcPath: the item's on-disk Library source path (undefined outside the native
+        // shell, or if libPaths and fxImages have desynced) — captured HERE per-item rather
+        // than inferred from the output filename afterward, per the fxIdx lookup above.
+        const fxIdx=fxImages.indexOf(it);
+        const srcPath=fxIdx>=0?libPaths[fxIdx]:undefined;
+        // Stashed for fxSaveGainMapHeic's RAW-headroom path (_hdrHeadroomPngFor needs the
+        // FINAL export size to resize the headroom map to, after borders/matte/resample have
+        // already changed it from the graded frame's own dimensions).
+        it._exportW=ec.width;it._exportH=ec.height;
+        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx,srcPath});
+        ec.width=ec.height=0; // free big intermediates promptly
+        setProg(idx+1,`Rendered ${idx+1}/${N}`);
+        setExportPhotoStatus(idx,'rendered');
+        log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
+      }catch(e){
+        failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
+        setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
+        log(`Failed to render ${it.name}: ${e&&e.message||e} — skipping, continuing with the rest of the batch`,'err');
+        console.error(e);
+      }finally{
+        if(decodedJpeg){if(decodedGeometry&&decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}
+      }
+    }
+    // Dedupe filenames before saving: without a custom {name}/{seq} pattern, batch items fall
+    // back to their own source name (`base=it.name`) — two source photos from different
+    // folders/extensions but the same base name collide on the same rendered filename and would
+    // silently overwrite one another on save. Append _2/_3/... on any repeat.
+    {
+      const seen=new Map();
+      for(const r of results){
+        const n=(seen.get(r.fname)||0)+1;seen.set(r.fname,n);
+        if(n>1){const dot=r.fname.lastIndexOf('.');r.fname=dot<0?`${r.fname}_${n}`:`${r.fname.slice(0,dot)}_${n}${r.fname.slice(dot)}`;}
+      }
+    }
+    // ── Phase 2: save ──
+    // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write each
+    // render straight back over the file(s) Lightroom handed us instead of the normal
+    // share-sheet save, so Lightroom's own file-watcher re-imports and cloud-syncs them.
+    // window.chromasmithEditInPath is a single path (one photo) OR an array (a multi-select
+    // Edit-In) — normalize to an array and zip it against `results` in the same order items
+    // were rendered (both ultimately come from the same paths array the handoff opened).
+    // Declared here (not `const` inside the branch below) so it stays in scope for the export-
+    // history dest lookup after this if/else-if chain — undefined when the Lightroom branch (or
+    // any non-desktop path) runs instead, which the dest lookup below already treats as "no dest".
+    let sr;
+    if(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&results.length){
+      const editInPaths=Array.isArray(window.chromasmithEditInPath)?window.chromasmithEditInPath:[window.chromasmithEditInPath];
+      setProg(N,editInPaths.length>1?`Saving ${results.length} to Lightroom…`:'Saving to Lightroom…');
+      let lrFailed=0;
+      for(let i=0;i<results.length;i++){
+        const path=editInPaths[i];
+        if(!path){lrFailed++;log(`No Lightroom handoff path for rendered photo ${i+1} — skipped`,'err');continue;}
+        setExportPhotoStatus(results[i].srcIdx,'saving');
+        const gpsPolicy=document.getElementById('tg-exp-gps')?.checked===false?'remove':'preserve';
+        try{
+          // write_lightroom_tiff_raw sends the render as a raw IPC body (no base64) so a large
+          // 16-bit TIFF isn't tripled in memory (JS base64 string + btoa copy + JSON-escaped
+          // IPC copy) — that triple-copy was OOMing full-res exports. Falls back through
+          // write_lightroom_tiff (base64) then write_file_bytes for older native shells that
+          // predate one command or the other; see write_lightroom_tiff_raw's comment in main.rs.
+          try{
+            await window.__TAURI__.core.invoke('write_lightroom_tiff_raw',results[i].content,{headers:{'x-path':path,'x-gps-policy':gpsPolicy}});
+          }catch(e){
+            if(!/write_lightroom_tiff_raw/.test(e&&e.message||String(e)))throw e;
+            log('Native shell predates write_lightroom_tiff_raw — falling back to base64 save (slower, more memory)','warn');
+            const b64=_u8b64(results[i].content);
+            // write_lightroom_tiff (not write_file_bytes): reads the ORIGINAL Edit-In TIFF still on
+            // disk and splices its EXIF sub-IFD (shutter/aperture/ISO/focal/lens/DateTimeOriginal —
+            // the capture date, so Lightroom's "Captured" shows shot time, not export time), GPS,
+            // XMP and IPTC into our render before overwriting — see tiff_meta.rs. UTIF can't carry
+            // these (safeTiffMetaFrom's ASCII-only limit). Fallback for an older native shell that
+            // doesn't have the command compiled in yet.
+            try{
+              await window.__TAURI__.core.invoke('write_lightroom_tiff',{path,dataB64:b64,gpsPolicy}); // Tauri auto-camelCases Rust's snake_case param names for JS invoke() calls
+            }catch(e2){
+              if(!/write_lightroom_tiff/.test(e2&&e2.message||String(e2)))throw e2;
+              log('Native shell predates write_lightroom_tiff — saved without EXIF splice (restart the app after updating)','warn');
+              await window.__TAURI__.core.invoke('write_file_bytes',{path,dataB64:b64});
+            }
+          }
+          setExportPhotoStatus(results[i].srcIdx,'saved');
+          log('Saved back to Lightroom: '+path,'ok');
+        }catch(e){lrFailed++;setExportPhotoStatus(results[i].srcIdx,'failed',(e&&e.message||String(e)).slice(0,60));log(`Save to Lightroom failed for ${path}: `+(e&&e.message||e),'err');}
+      }
+      if(typeof toast==='function')toast(lrFailed?`Saved ${results.length-lrFailed}/${results.length} to Lightroom — ${lrFailed} failed`:'Saved to Lightroom',!lrFailed);
+      window.chromasmithSaveToLightroomPending=false;
+    }else if(results.length){
+      setProg(N,`Saving ${results.length} file(s)…`);
+      results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saving'));
+      // HDR (gain map): single photo only — the gain map is derived from ONE original file's
+      // headroom (window.chromasmithSourcePath), and a batch has no single source. Falls through
+      // to the normal save on any failure, so an HDR attempt can never lose an export.
+      if(fxHdrExportEnabled()&&results.length===1){
+        const r0=results[0];
+        const bytes=r0.content instanceof Uint8Array?r0.content:new Uint8Array(r0.content);
+        if(await fxSaveGainMapHeic(bytes,r0.fname,items[r0.srcIdx])){
+          setExportPhotoStatus(r0.srcIdx,'saved');
+          toast('Exported HDR ✓',true);
+          if(results.length)fxVersion+=.1;
+          const vEl=document.getElementById('fx-ver');if(vEl)vEl.textContent=`v${fxVersion.toFixed(1)}`;
+          try{updateWork();renderPreview();}catch(e){}
+          return;
+        }
+      }
+      sr=await saveFiles(results);
+      if(Array.isArray(sr)){
+        // Native desktop save: every file has a real per-item result, so report SAVES rather
+        // than renders — a file that never reached disk must not show (or be counted) as saved.
+        let saveFailed=0;
+        results.forEach((r,i)=>{
+          const s=sr[i];
+          if(s&&s.ok)setExportPhotoStatus(r.srcIdx,s.status==='shared'?'rendered':'saved',s.status==='shared'?'shared — save not confirmed':(s.skipped?'already exists — skipped':undefined));
+      else{saveFailed++;setExportPhotoStatus(r.srcIdx,'failed',((s&&s.err)||'save failed').slice(0,60));let dest='';try{dest=localStorage.getItem('cs-export-dir')||''}catch(_){};(window._expFail=window._expFail||[]).push({kind:'save',name:r.fname,fname:r.fname,content:r.content,mime:r.mime,dest,err:((s&&s.err)||'save failed').slice(0,80)});}
+        });
+        if(saveFailed){failed+=saveFailed;results=results.filter((r,i)=>sr[i]&&sr[i].ok);}
+      }else{
+        // saveFiles' browser/anchorDownload and iOS share-sheet paths don't report per-file
+        // success back to the caller (see saveFiles' own comments) — mark every rendered photo
+        // 'saved' once the call returns; a render FAILURE (the far more common real-world cause of
+        // "photos go missing") is still tracked precisely above, per-item, as it happens.
+        results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saved'));
+      }
+    }
+    // Recipe-only export history (Library-only — see chromasmithRecordExport in library-ui.js).
+    // Only tracks the single currently-open Library photo (state.openedPath); a multi-photo
+    // batch export doesn't map each rendered frame back to its own on-disk path here.
+    // `sr` (from saveFiles, native desktop only) carries the REAL destination path per item —
+    // only meaningful/passed for a genuine single-photo export, matching
+    // chromasmithRecordExport's own single-photo-only acceptance of it (see its comment).
+    if(results.length&&typeof window.chromasmithRecordExport==='function'){
+      const dest=(results.length===1&&Array.isArray(sr)&&sr[0]&&sr[0].ok)?sr[0].path:null;
+      try{await window.chromasmithRecordExport(fxVersion.toFixed(1),getUISnapshot(),dest);}catch(e){}
+    }
+    // ── Phase 3 (optional): mirror the exports to Google Photos. Failures here must never
+    // read as an export failure — the files above are already saved locally.
+    if(results.length&&gpSaveEnabled()&&gpTok()){
+      try{
+        setProg(N,`Uploading ${results.length} to Google Photos…`);
+        const nUp=await gpUploadItems(results,lb=>setProg(N,lb));
+        log(`Uploaded ${nUp}/${results.length} to Google Photos (album "Chromasmith")`,'ok');
+        // C3: mark each successfully-mirrored photo's SOURCE path as synced (native-shell-only
+        // optional hook — mirrors the chromasmithOnEdit/chromasmithRecordExport guard style
+        // used throughout this file). gpUploadItems doesn't report per-item success, so — like
+        // the local-save status above — every item with a known source path is recorded once
+        // the batch upload as a whole succeeds.
+        if(typeof window.chromasmithRecordSynced==='function'){
+          const syncedPaths=results.map(r=>r.srcPath).filter(Boolean);
+          if(syncedPaths.length)window.chromasmithRecordSynced(syncedPaths).catch(()=>{});
+        }
+      }catch(e){
+        log('Google Photos upload failed (files are still saved locally): '+(e&&e.message||e),'err');
+        toast('Google Photos upload failed — see log');
+      }
+    }
+    // Restore the preview's working image after per-image GL churn. Guarded on its own: if this
+    // throws (e.g. the currently-previewed photo is the one that just failed above), the files
+    // already saved above must NOT be reported as an export error — only the refresh failed.
+    try{updateWork();renderPreview();}catch(e){log('Preview refresh after export failed (exported files are unaffected): '+(e&&e.message||e),'warn');}
+    if(results.length&&!window._expOnlyItems)fxVersion+=.1;document.getElementById('fx-ver').textContent=`v${fxVersion.toFixed(1)}`;
+    if(failed&&results.length){activityOutcome='partial';log(`Export finished: ${results.length} saved, ${failed} failed (see log above)`,'warn');}
+    if(failed&&results.length)toast(`Exported ${results.length}/${N} — ${failed} failed, see log`,false);
+    {const _p=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];if(_p.length)exportRevealPath=_p[0];csExportResultKeep(results.length,failed,_p[0]);}
+    if(failed&&results.length){}
+    else if(results.length){
+      const _paths=(typeof sr!=='undefined'&&Array.isArray(sr))?sr.filter(x=>x&&x.ok&&x.path).map(x=>x.path):[];
+      const firstEdit=csFirstEditStage()==='export';
+      if(_paths.length&&window.__TAURI__){if(firstEdit)csFirstEditFinish();csExportDone(results.length,_paths[0],firstEdit);}
+      else if(capNative()&&Array.isArray(sr)&&sr.some(r=>r.status==='shared'))toast('Handed to share sheet — save not confirmed');
+      else{if(firstEdit)csFirstEditFinish();toast(firstEdit?'Your first edit is ready. Find the download in your browser.':`Exported ${results.length} photo${results.length>1?'s':''} ✓`,true);}
+    }
+    // Every photo failed (render OR native save) — say so. Without this the run ended silently,
+    // since both branches above are guarded on results.length.
+    else if(failed){activityOutcome='failed';log(`Export finished: 0 saved, ${failed} failed (see log above)`,'err');toast(`Export failed — ${failed} photo${failed>1?'s':''} not saved, see log`,false);}
+  }catch(e){
+    activityOutcome=fxExportCancel?'cancelled':'failed';
+    log('Export error: '+(e&&e.message||e),'err');console.error(e);
+    toast('Export failed — see log');
+  }finally{
+    if(btn)btn.disabled=false; // re-enable for another export
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progBox)progBox.style.display='none';
+    _expOverlay(false);
+    if(capNative()&&typeof window.chromasmithShowMobileExportResult==='function')window.chromasmithShowMobileExportResult();
+    fxExportCancel=false;
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting',outcome:activityOutcome,failedCount:failed,revealPath:exportRevealPath});
+  }
+}
+// Same border+canvas-matte compositing exportFX/canvasCompose do for stills (see CLAUDE.md §12
+// A7), reworked to draw into PRE-ALLOCATED, fixed-size canvases instead of allocating fresh ones
+// every call — border thickness and matte aspect ratio are constant for the whole clip, so their
+// output size is invariant across frames; only allocate-and-drawImage-into-existing per frame.
+// Returns the canvas actually holding the composed result (borderedCanvas or finalCanvas — never
+// gradeCanvas itself, so the caller can always treat the return value as "final size").
+function _videoComposeBorderMatte(gradeCanvas,P,dims,borderedCanvas,finalCanvas,framedCanvas){
+  const{gradedW,gradedH,b1t,b2t,borderedW,borderedH,framedW,framedH,hasFrame,finalW,finalH,hasMatte}=dims;
+  let bordered=gradeCanvas;
+  if(borderedCanvas){
+    drawBorderLayers(borderedCanvas.getContext('2d'),gradeCanvas,P,b1t,b2t,dims.borderSeed||0);
+    bordered=borderedCanvas;
+  }
+  if(hasFrame&&framedCanvas){
+    // filmFrameCompose allocates its own canvas per call, which is exactly what a per-frame loop
+    // must not do — so blit its result into the pre-allocated one and let it be garbage in one
+    // step rather than accumulating a canvas per frame.
+    const framed=filmFrameCompose(bordered,dims.filmFrame);
+    const fx=framedCanvas.getContext('2d');
+    fx.clearRect(0,0,framedW,framedH);
+    fx.drawImage(framed,0,0);
+    if(framed!==bordered)framed.width=framed.height=0;
+    bordered=framedCanvas;
+  }
+  if(!hasMatte)return bordered;
+  const CV=P.canvas;
+  const fctx=finalCanvas.getContext('2d');
+  fctx.fillStyle=CV.bg||'#000000';fctx.fillRect(0,0,finalW,finalH);
+  if(CV.blur){
+    const t=_videoComposeBorderMatte._blurTmp||(_videoComposeBorderMatte._blurTmp=document.createElement('canvas'));
+    const tw=Math.max(1,Math.round(finalW/16)),th=Math.max(1,Math.round(finalH/16));
+    t.width=tw;t.height=th;const tx=t.getContext('2d');
+    const bw=bordered.width,bh=bordered.height;
+    const s=Math.max(tw/bw,th/bh);
+    tx.drawImage(bordered,(tw-bw*s)/2,(th-bh*s)/2,bw*s,bh*s);
+    fctx.imageSmoothingEnabled=true;fctx.drawImage(t,0,0,finalW,finalH);
+    fctx.fillStyle='rgba(0,0,0,.22)';fctx.fillRect(0,0,finalW,finalH);
+  }
+  const zoom=CV.zoom||1;
+  const bw=bordered.width,bh=bordered.height;
+  fctx.drawImage(bordered,(finalW-bw*zoom)/2,(finalH-bh*zoom)/2,bw*zoom,bh*zoom);
+  return finalCanvas;
+}
+// V2 ("export it, small") — VideoEncoder + mediabunny mux, in-memory (BufferTarget) unless
+// streaming (V3, desktop) is available. Reuses the stills export progress UI.
+// ⚠️ Never getPixels() here — FX.render() draws into FX.cv (a WebGL canvas), and every frame is
+// composited by drawImage(FX.cv,...) into a 2D canvas, a GPU-side blit with no CPU readback.
+async function fxVideoExportSmall(it){
+  if(!videoSupported()){toast('Video export needs a browser with WebCodecs support',false);return;}
+  const MB=await getMediabunny();
+  // Streaming (V3): desktop only, via the native stream_open/write/close commands (see
+  // desktop-native.js's chromasmithMakeVideoStreamTarget) — writes land on disk as they're
+  // encoded instead of accumulating in one ArrayBuffer, so the size/duration caps below are a
+  // BufferTarget-only limitation and lift entirely when streaming is available. Falls back to
+  // the capped in-memory BufferTarget on the browser/Pages build, unchanged from V2.
+  const canStream=typeof window.chromasmithMakeVideoStreamTarget==='function';
+  const resSel=(document.getElementById('sel-vid-resolution')||{}).value||'1080';
+  const resCap=resSel==='source'?Infinity:parseInt(resSel,10);
+  const CAP_LONG_EDGE=Math.min(canStream?Infinity:1080,resCap),CAP_DURATION_S=canStream?Infinity:30;
+  const srcW=it.img.width,srcH=it.img.height; // RAW sample dimensions — geometry (below) may change what's actually graded
+  // Geometry (A7): crop/rotate/flip/straighten, via the SAME applyGeomTo pipeline stills use
+  // (see geomCanvas) — the export loop used to bypass it entirely, silently ignoring the Crop
+  // tool for video. Constant across the whole clip, so run it once on a throwaway canvas just to
+  // learn the post-geometry dimensions; the real per-frame transform happens in the loop below.
+  const hasGeom=!!(it.geom&&(it.geom.rot||it.geom.flipH||it.geom.flipV||it.geom.angle||it.geom.crop));
+  let geomW=srcW,geomH=srcH;
+  if(hasGeom){
+    const probe=document.createElement('canvas');probe.width=srcW;probe.height=srcH;
+    const probed=applyGeomTo(probe,it.geom);
+    geomW=probed.width;geomH=probed.height;
+  }
+  const scale=Math.min(1,CAP_LONG_EDGE/Math.max(geomW,geomH));
+  // Even dimensions: a hard H.264/HEVC requirement (4:2:0 chroma subsampling needs whole chroma blocks).
+  const outW=Math.max(2,Math.round(geomW*scale/2)*2),outH=Math.max(2,Math.round(geomH*scale/2)*2);
+  const srcFps=it.fps||30;
+  const fpsSel=(document.getElementById('sel-vid-fps')||{}).value||'source';
+  // Frame-rate decimation only — never interpolates up past the source's own rate.
+  const fps=fpsSel==='source'?srcFps:Math.min(srcFps,parseInt(fpsSel,10));
+  // Trim (V4): export only [trimIn,trimOut], with output timestamps REBASED to start at 0 — same
+  // technique the audio pass already uses for negative AAC priming timestamps below. Frame
+  // indices below are on the CLIP's own (srcFps) grid; sampling itself is time-based (see the
+  // loop), which is what makes fps decimation just a different time step over the same window.
+  const trimF0=Math.max(0,Math.min(it.trimInFrame||0,it.frameCount-1));
+  const trimF1=Math.max(trimF0,Math.min(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1,it.frameCount-1));
+  const trimStartS=trimF0/srcFps,trimDurationS=(trimF1-trimF0+1)/srcFps;
+  const outFrameCount=Math.max(1,Math.round(trimDurationS*fps));
+  const totalFrames=Math.min(outFrameCount,Math.round(CAP_DURATION_S*fps)||outFrameCount);
+  if(totalFrames<outFrameCount)log(`Export capped to the first ${CAP_DURATION_S}s of the ${trimDurationS.toFixed(1)}s trimmed range (browser export limit — the desktop app removes this cap).`,'warn');
+  if(scale<1)log(`Export capped to ${outW}×${outH} (browser export limit — ${geomW}×${geomH} source; the desktop app removes this cap).`,'warn');
+
+  // Quality (A6): bitrate scales off the SAME 20Mbps/1080p30 reference the export always used
+  // (so "High" at 1080p30 is byte-for-byte the same setting as before this control existed),
+  // adjusted for actual output area and frame rate, then multiplied by the quality tier. Film
+  // grain is pathological for H.264/HEVC at normal bitrates (it's exactly the high-frequency
+  // detail a DCT discards first) — 20 Mbps at 1080p30 is roughly 2x a typical default.
+  const qualitySel=(document.getElementById('sel-vid-quality')||{}).value||'high';
+  const qualityMult={draft:0.3,standard:0.6,high:1.0,max:1.8}[qualitySel]||1.0;
+  const BITRATE=Math.round(20_000_000*(outW*outH)/(1920*1080)*(fps/30)*qualityMult);
+  const codecSel=(document.getElementById('sel-vid-codec')||{}).value||'avc';
+  // HEVC falls back to AVC automatically: pass both, in preference order, to the same
+  // "first the browser can actually encode" probe the codec-detection already used.
+  const codec=await MB.getFirstEncodableVideoCodec(codecSel==='hevc'?['hevc','avc']:['avc'],{width:outW,height:outH,bitrate:BITRATE});
+  if(!codec){toast('No supported video encoder found in this browser',false);return;}
+  if(codecSel==='hevc'&&codec!=='hevc')log('HEVC isn\'t encodable in this browser — falling back to H.264.','info');
+
+  const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
+  fxExportCancel=false;
+  const cancelBtn=document.getElementById('btn-fx-cancel'),progBox=document.getElementById('fx-export-prog'),
+    progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
+  if(cancelBtn)cancelBtn.style.display='';
+  if(progBox)progBox.style.display='block';
+  const setProg=(frac,label)=>{if(progBar)progBar.style.width=Math.round(frac*100)+'%';if(progTxt)progTxt.textContent=label;
+    // N3.2: same shared-activity mirror exportFX's setProg does — see that comment.
+    if(typeof window.libActivityJob==='function')window.libActivityJob('export',{label:'Exporting video',done:Math.round(frac*100),total:100,current:label,cancelFn:()=>{fxExportCancel=true;}});};
+
+  // Borders + canvas matte (A7): sizes are constant for the whole clip (percentage-of-width
+  // border thickness computed off the fixed graded size, matte aspect ratio likewise fixed), so
+  // compute them ONCE and pre-allocate every canvas the per-frame loop needs — mirrors the
+  // "allocate-only-when-used" treatment exportFX gives stills.
+  const P=getFXParams(it.adjustOverride||undefined);
+  const{b1t,b2t}=borderLayerSizes(P,outW);
+  await filmEdgeReady(P);
+  const borderedW=outW+2*(b1t+b2t),borderedH=outH+2*(b1t+b2t);
+  // Film frame sits between the borders and the matte, exactly as it does for stills. Its size is
+  // as invariant across the clip as the borders are, so it folds into this same precompute rather
+  // than being called per frame.
+  const frameSz=filmFrameOutSize(borderedW,borderedH,P.filmFrame);
+  const hasFrame=frameSz.h!==borderedH||frameSz.w!==borderedW||
+    !!(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none');
+  const framedW=frameSz.w,framedH=frameSz.h;
+  const hasMatte=!!(P.canvas&&P.canvas.enabled&&P.canvas.ar);
+  let finalW=framedW,finalH=framedH;
+  if(hasMatte){
+    const ar=P.canvas.ar;
+    const mw=framedW/framedH>ar?framedW:framedH*ar,mh=framedW/framedH>ar?framedW/ar:framedH;
+    finalW=Math.max(2,Math.round(mw/2)*2);finalH=Math.max(2,Math.round(mh/2)*2);
+  }else{finalW=Math.max(2,Math.round(framedW/2)*2);finalH=Math.max(2,Math.round(framedH/2)*2);}
+  const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,
+                     framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte,borderSeed:borderSeed(it,P)};
+
+  const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
+  const gradeCtx=gradeCanvas.getContext('2d');
+  const borderedCanvas=bordersAny(P,b1t,b2t)?Object.assign(document.createElement('canvas'),{width:borderedW,height:borderedH}):null;
+  const finalCanvas=hasMatte?Object.assign(document.createElement('canvas'),{width:finalW,height:finalH}):null;
+  const framedCanvas=hasFrame?Object.assign(document.createElement('canvas'),{width:framedW,height:framedH}):null;
+  // compCanvas is the ONE canvas object bound to CanvasSource below — mediabunny reads whatever
+  // is currently drawn on it at add() time, so every frame must end by drawing INTO this same
+  // object (fades need an off-canvas source to fade FROM, hence the two-stage draw below).
+  const compCanvas=document.createElement('canvas');compCanvas.width=finalW;compCanvas.height=finalH;
+  const compCtx=compCanvas.getContext('2d');
+  const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
+  const frameCtx=frameCanvas.getContext('2d');
+  const fadeInS=Math.max(0,parseFloat((document.getElementById('vid-fade-in')||{}).value)||0);
+  const fadeOutS=Math.max(0,parseFloat((document.getElementById('vid-fade-out')||{}).value)||0);
+  const outDurationS=totalFrames/fps;
+  const fname=`${it.name}_graded.mp4`;
+  let output=null,cancelled=false,streamTarget=null,videoExportFailed=false;
+  try{
+    const target=canStream?(streamTarget=await window.chromasmithMakeVideoStreamTarget(MB,fname)):new MB.BufferTarget();
+    output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
+    const videoSource=new MB.CanvasSource(compCanvas,{codec,bitrate:BITRATE});
+    output.addVideoTrack(videoSource,{frameRate:fps});
+    // Audio passthrough (V4): re-mux the ORIGINAL encoded packets unchanged — no decode, no
+    // re-encode, so there's no quality loss and no AudioEncoder dependency (which also sidesteps
+    // Safari only gaining AudioEncoder in Safari 26). AAC only for now — MP4's universal audio
+    // codec; PCM-in-MOV (some camera apps) is a real case but gets a clean "video only" export
+    // rather than a silent transcode path, matching the plan's explicit non-goal here. Mute (A5)
+    // simply skips adding the track — no re-encode needed either way.
+    let audioSource=null,audioCodec=null;
+    if(it._mbAudioTrack&&!fxVideoMuted){
+      audioCodec=await it._mbAudioTrack.getCodec().catch(()=>null);
+      if(audioCodec==='aac'){
+        audioSource=new MB.EncodedAudioPacketSource('aac');
+        output.addAudioTrack(audioSource);
+      }else if(audioCodec){
+        log(`Audio codec "${audioCodec}" isn't supported for passthrough — exporting video only.`,'warn');
+      }
+    }
+    await output.start();
+
+    for(let f=0;f<totalFrames;f++){
+      if(fxExportCancel){cancelled=true;break;}
+      const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
+      const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
+      let sample=null;
+      for await(const s of it._mbSampleSink.samples(srcTimeS)){sample=s;break;}
+      if(!sample)continue;
+      frameCtx.clearRect(0,0,srcW,srcH);
+      sample.draw(frameCtx,0,0,srcW,srcH);
+      sample.close();
+      const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
+      FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
+      const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrameApprox}):undefined;
+      FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
+      gradeCtx.clearRect(0,0,outW,outH);
+      gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
+      // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
+      // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
+      // entirely when neither fade is configured (the common case).
+      let alpha=1;
+      if(fadeInS>0&&outTimeS<fadeInS)alpha=Math.min(alpha,outTimeS/fadeInS);
+      if(fadeOutS>0&&outTimeS>outDurationS-fadeOutS)alpha=Math.min(alpha,Math.max(0,(outDurationS-outTimeS)/fadeOutS));
+      if(alpha<1){
+        compCtx.fillStyle='#000';compCtx.fillRect(0,0,finalW,finalH);
+        compCtx.globalAlpha=alpha;compCtx.drawImage(composed,0,0);compCtx.globalAlpha=1;
+      }else if(composed!==compCanvas){
+        compCtx.clearRect(0,0,finalW,finalH);compCtx.drawImage(composed,0,0);
+      }
+      if(typeof applyWatermark==='function')applyWatermark(compCanvas);
+      await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
+      setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
+    }
+    // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
+    // add() call interleaving) — copies encoded packets straight through, windowed to the
+    // TRIMMED range and rebased to start at 0, same as the video timestamps above, so a trimmed
+    // export's audio and picture stay in sync.
+    if(audioSource&&!cancelled){
+      const audioMinT=trimStartS,audioMaxT=trimStartS+outDurationS;
+      const pktSink=new MB.EncodedPacketSink(it._mbAudioTrack);
+      const decoderConfig=await it._mbAudioTrack.getDecoderConfig().catch(()=>null);
+      // ⚠️ Real AAC streams routinely start at a NEGATIVE timestamp (encoder priming/pre-roll
+      // samples) — verified on a real iPhone clip: "Timestamps must be non-negative (got
+      // -0.044s)" on the very first packet. The standard remux fix (same one ffmpeg's
+      // `-avoid_negative_ts make_zero` does) is to shift the WHOLE stream so it starts at exactly
+      // 0, matching video's own timeline start — not clamp each packet independently, which would
+      // collapse several leading packets onto the same timestamp and confuse the muxer. When
+      // trimmed, the shift is audioMinT (plus any negative first-packet offset) rather than 0, so
+      // the kept window rebases the same way the video loop above does.
+      const firstPkt=await pktSink.getFirstPacket().catch(()=>null);
+      const negOffset=firstPkt&&firstPkt.timestamp<0?firstPkt.timestamp:0;
+      const tsOffset=audioMinT+negOffset;
+      let first=true;
+      // Include the packet straddling the in-point rather than dropping it (the standard NLE
+      // convention — MLT/ffmpeg -ss included-packet behaviour) so trimmed audio is never short.
+      let includeFromHere=false;
+      for await(const pkt of pktSink.packets()){
+        if(fxExportCancel){cancelled=true;break;}
+        const pktEnd=pkt.timestamp+(pkt.duration||0);
+        if(!includeFromHere){
+          if(pktEnd<=audioMinT)continue; // fully before the trim window — skip
+          includeFromHere=true;
+        }
+        if(pkt.timestamp>=audioMaxT)break;
+        const shifted=tsOffset!==0?pkt.clone({timestamp:Math.max(0,pkt.timestamp-tsOffset)}):pkt;
+        await audioSource.add(shifted,first?{decoderConfig}:undefined);
+        first=false;
+      }
+    }
+    if(cancelled){
+      await output.cancel();
+      if(streamTarget)await window.chromasmithCloseVideoStream(streamTarget,false); // delete the .part file
+      log('Video export cancelled','warn');
+    }else{
+      await output.finalize();
+      if(streamTarget){
+        const res=await window.chromasmithCloseVideoStream(streamTarget,true);
+        log(`Saved to ${res.path}`,'ok');
+      }else{
+        await saveFile(output.target.buffer,fname,'video/mp4');
+      }
+      toast('Video exported ✓',true);
+    }
+  }catch(e){
+    videoExportFailed=true;
+    log('Video export error: '+(e&&e.message||e),'err');console.error(e);
+    toast('Video export failed — see log',false);
+    if(output)try{await output.cancel();}catch(e2){}
+    if(streamTarget)try{await window.chromasmithCloseVideoStream(streamTarget,false);}catch(e2){}
+  }finally{
+    if(btn)btn.disabled=false;
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progBox)progBox.style.display='none';
+    fxExportCancel=false;
+    if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'cancelled':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
+    // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
+    // whichever frame the transport bar is actually showing, same as exportFX's own final
+    // preview-refresh call (kept separately try/caught there for the same reason: a failure
+    // here must never be confused with a real export failure).
+    try{updateWork();renderPreview();}catch(e3){}
+  }
+}
+
+// ═══════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════
+const _ALLFX=['grain','hal','bloom','borders'];

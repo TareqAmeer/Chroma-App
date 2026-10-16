@@ -1,0 +1,324 @@
+// ── on-canvas mask shape overlay: an SVG sized to exactly match #fx-canvas's rendered rect
+// (viewBox="0 0 1 1" so mask coords — already normalized 0..1 — map directly, no pixel math),
+// with draggable handles so radial/linear masks are visible AND editable on the photo itself
+// instead of being invisible sliders-only edits (the #1 mask complaint). Brush/sky masks have
+// no shape to show (they're already visible via their painted pixels).
+// 'select' is the odd one out: overlay/isolate are drawn HERE in JS from the mask's shape, so
+// they cannot show what the luminance or colour-range gates actually do. 'select' instead asks the
+// lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
+// way to tune a colour range without guessing. See mskShowSel in the shader / render().
+let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
+// Selection-view display settings are global UI preferences, never photo/history state. The FX
+// renderer accepts them only with a private preview token; export and tiled render calls omit it.
+let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
+let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-detect on w), not a filled overlay
+const MSK_SELVIEW_PREF_KEY='chromasmith.mask-selection-view.v1';
+const MSK_SELVIEW_DEFAULT_COLOR='#ff2626';
+const MSK_PREVIEW_RENDER_TOKEN=Symbol('mask preview only');
+function mskReadSelViewPrefs(){
+  try{
+    const p=JSON.parse(localStorage.getItem(MSK_SELVIEW_PREF_KEY)||'{}');
+    return {style:['legacy','photo','bw'].includes(p.style)?p.style:'legacy',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
+  }catch(_){return {style:'legacy',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
+}
+const _mskSelViewPrefs=mskReadSelViewPrefs();
+let mskSelViewStyle=_mskSelViewPrefs.style;
+let mskSelViewColor=_mskSelViewPrefs.color;
+let mskAlwaysShowSelection=_mskSelViewPrefs.always;
+function mskSaveSelViewPrefs(){try{localStorage.setItem(MSK_SELVIEW_PREF_KEY,JSON.stringify({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));}catch(_){} }
+function mskSelViewRgb(){
+  if(mskSelViewColor===MSK_SELVIEW_DEFAULT_COLOR)return [1,.15,.15];
+  return [1,3,5].map(i=>parseInt(mskSelViewColor.slice(i,i+2),16)/255);
+}
+function mskUpdateSelViewControls(){
+  const hasSelection=mskSel>=0&&!!fxState.masks[mskSel];
+  const show=hasSelection&&(mskPreviewMode==='select'||mskAlwaysShowSelection);
+  const showSelectionControls=hasSelection&&mskPreviewMode==='select';
+  const styleRow=document.getElementById('msk-selview-style-row'),colorRow=document.getElementById('msk-selview-color-row'),alwaysRow=document.getElementById('msk-selview-always-row');
+  const opacityRow=document.getElementById('msk-selview-opacity-row'),outlineRow=document.getElementById('msk-selview-outline-row');
+  if(styleRow)styleRow.style.display=show?'':'none';
+  if(alwaysRow)alwaysRow.style.display=show?'':'none';
+  if(colorRow)colorRow.style.display=show&&mskSelViewStyle!=='bw'?'':'none';
+  if(opacityRow)opacityRow.style.display=showSelectionControls?'':'none';
+  if(outlineRow)outlineRow.style.display=showSelectionControls?'':'none';
+  const style=document.getElementById('msk-selview-style');if(style&&style.value!==mskSelViewStyle)style.value=mskSelViewStyle;
+  const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
+  const always=document.getElementById('ck-msk-selview-always');if(always)always.checked=mskAlwaysShowSelection;
+}
+function mskSelViewOpacityInput(v){
+  mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
+  const lab=document.getElementById('vl-msk-selview-opacity');if(lab)lab.textContent=v;
+  if(typeof fxUpdate==='function')fxUpdate();
+}
+function mskSelViewOutlineToggle(v){mskSelViewOutline=!!v;if(typeof fxUpdate==='function')fxUpdate();}
+function mskSetSelViewStyle(v){if(!['legacy','photo','bw'].includes(v))return;mskSelViewStyle=v;mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+function mskSelViewColorInput(v){if(!/^#[\da-f]{6}$/i.test(v||''))return;mskSelViewColor=v.toLowerCase();mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+function mskSelViewAlwaysInput(v){mskAlwaysShowSelection=!!v;mskSaveSelViewPrefs();mskUpdateSelViewControls();mskOverlaySync();if(typeof renderPreview==='function')renderPreview();}
+const MSK_PREVMODE_HINT={
+  overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
+  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
+  select:'Showing the effective selection — shape x range gates x composition. This is the selection that drives the adjustment.',
+  off:''};
+function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
+  const hint=document.getElementById('msk-prevmode-hint');
+  if(hint)hint.textContent=MSK_PREVMODE_HINT[v]||'';
+  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  const opRow=document.getElementById('msk-selview-opacity-row'),edRow=document.getElementById('msk-selview-outline-row');
+  const showCtl=v==='select';
+  if(opRow)opRow.style.display=showCtl?'':'none';
+  if(edRow)edRow.style.display=showCtl?'':'none';
+  mskUpdateSelViewControls();
+  if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
+// Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
+// Local Adjustments section being on and a mask being selected; preview render options carry a
+// private token so export/tile callers cannot activate this path with recipe data.
+function mskShowSelIdx(){
+  if((mskPreviewMode!=='select'&&!mskAlwaysShowSelection)||mskSel<0||!fxState.masks[mskSel])return -1;
+  const tg=document.getElementById('tg-local');
+  if(tg&&!tg.classList.contains('on'))return -1;
+  return mskSel;
+}
+function mskPreviewRenderOptions(extra={}){
+  return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
+    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
+}
+function mskOverlayBox(){
+  // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
+  // they ride the same CSS transform as the canvas by construction — no getBoundingClientRect
+  // math needed (that approach lagged a frame behind the transform during zoom/pan, the
+  // "zooming moves the mask" bug). The canvas's own CSS size (set in renderPreview) is the box.
+  const cv=document.getElementById('fx-canvas');
+  if(!cv||!cv.width||!cv.height)return null;
+  // Borders/Canvas matte on: the photo sits INSET inside #fx-canvas-bd, so the box is the
+  // photo's rect within that composited canvas, not #fx-canvas's own (hidden) size at 0,0.
+  const bd=document.getElementById('fx-canvas-bd');
+  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
+    const bw=parseFloat(bd.style.width)||bd.clientWidth;if(!bw)return null;
+    const s=bw/bd.width;
+    return{left:_fxDisplayMap.offX*s,top:_fxDisplayMap.offY*s,width:_fxDisplayMap.w*s,height:_fxDisplayMap.h*s};
+  }
+  const w=parseFloat(cv.style.width)||cv.clientWidth,h=parseFloat(cv.style.height)||cv.clientHeight;
+  if(!w||!h)return null;
+  return{left:0,top:0,width:w,height:h};
+}
+// Red painted-area overlay for brush/sky/AI masks — the same idea as the radial/linear SVG
+// shape below, but there's no analytic shape to draw, only the raster m.px buffer, so it's a
+// separate <canvas> scaled up from the mask's own (small, resolution-independent) working
+// buffer onto the rendered photo's screen rect. Previously brush masks had NO visual feedback
+// at all besides the effect itself — you couldn't tell what area was actually painted without
+// toggling the adjustment sliders to extremes and looking for the edge.
+function mskPaintOverlaySync(m,box,isolate){
+  const cv=document.getElementById('msk-paint-overlay');if(!cv)return;
+  if(!m||m.type!=='brush'||!m.px||!box){cv.classList.remove('on');return;}
+  cv.style.left=box.left+'px';cv.style.top=box.top+'px';cv.style.width=box.width+'px';cv.style.height=box.height+'px';
+  cv.width=m.mtW;cv.height=m.mtH;
+  const x=cv.getContext('2d');
+  const id=x.createImageData(m.mtW,m.mtH);
+  // Isolate mode mirrors the radial/linear ".msk-dim" treatment: black out everything OUTSIDE
+  // the painted region (alpha ~0.6, matching .msk-dim's opacity) and show the real photo through
+  // where the mask is actually painted — not a flat opaque red fill over the whole buffer (that
+  // was the "isolate shows solid red" bug: alpha was hard-coded 255 for every pixel regardless
+  // of paint value v, so unpainted pixels looked identical to painted ones).
+  const ISO_THRESH=8; // 0-255 paint-strength floor below which a pixel counts as "unpainted"
+  for(let i=0;i<m.px.length;i++){
+    const v=m.px[i],j=i*4;
+    if(isolate){
+      const outside=v<ISO_THRESH;
+      id.data[j]=0;id.data[j+1]=0;id.data[j+2]=0;
+      id.data[j+3]=outside?153:0; // .6*255≈153 dim outside; fully transparent (real photo shows) inside
+    }else{
+      id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
+      id.data[j+3]=Math.round(v*0.65); // overlay mode: red tint proportional to paint strength
+    }
+  }
+  x.putImageData(id,0,0);
+  cv.classList.add('on');
+}
+function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlaySync();}catch(e){}
+  const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
+  const paintCv=document.getElementById('msk-paint-overlay');
+  // Only draw while the Masks card is actually visible on screen — ff-local's own
+  // display style already reflects both the mobile bottom-sheet and the deskx panel
+  // (toggleFX/fxSection set it), so it's the single source of truth for "is this panel open".
+  const ff=document.getElementById('ff-local');
+  const cardVisible=ff&&ff.offsetParent!==null;
+  const m=fxState.masks[mskSel];
+  // 'select' renders its own map in the shader — drawing the shape overlay on top of it too would
+  // just obscure the thing it exists to show, so it hides these JS overlays like 'off' does.
+  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!mskAlwaysShowSelection&&!cropMode&&!fxLoupe;
+  if(m&&m.type==='brush'){
+    svg.classList.remove('on');svg.innerHTML='';
+    if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
+    return;
+  }
+  if(paintCv)paintCv.classList.remove('on');
+  const showable=anyShowable&&(m.type==='radial'||m.type==='linear');
+  if(!showable||cropMode||fxLoupe){svg.classList.remove('on');svg.innerHTML='';return;}
+  const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
+  svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  svg.classList.add('on');
+  const isolate=mskPreviewMode==='isolate';
+  let shapeD='',handles='';
+  let featherLayer='';
+  if(m.type==='radial'){
+    const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot);
+    // rotate a point (dx,dy) in the ellipse's own axes into image space around (cx,cy) —
+    // must be the inverse of the shader's mskShapeWeight rotation (which rotates gm-A.xy BY
+    // -rot into ellipse axes), so a positive rot here visually matches the shader's fill.
+    const rp=(dx,dy)=>[cx+dx*cr-dy*sr,cy+dx*sr+dy*cr];
+    const ring=(rrx,rry)=>{const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push(rp(rrx*Math.cos(a),rry*Math.sin(a)).join(','));}return 'M'+pts.join('L')+'Z';};
+    // ellipse approximated as a 48-point polygon (SVG <ellipse> can't be combined with an
+    // evenodd hole in one path element the way a polygon can for the isolate dim layer).
+    shapeD=ring(rx,ry);
+    const rxH=rp(rx,0),ryH=rp(0,ry),rotH=rp(rx*1.18,0); // rotation handle sits just past the rx handle
+    handles=`<circle class="msk-handle center" data-h="c" cx="${cx}" cy="${cy}" r="0.012"/>`+
+      `<circle class="msk-handle" data-h="rx" cx="${rxH[0]}" cy="${rxH[1]}" r="0.01"/>`+
+      `<circle class="msk-handle" data-h="ry" cx="${ryH[0]}" cy="${ryH[1]}" r="0.01"/>`+
+      `<line x1="${cx}" y1="${cy}" x2="${rotH[0]}" y2="${rotH[1]}" stroke="#fff" stroke-width="0.0012" opacity=".5" vector-effect="non-scaling-stroke"/>`+
+      `<circle class="msk-handle rot" data-h="rot" cx="${rotH[0]}" cy="${rotH[1]}" r="0.011"/>`;
+    // Feather ring: the shader's falloff starts at t = max(1-2*feather, 0) of the outer radius
+    // (mskShapeWeight) and reaches full effect at t=1 — draw that inner bound as a dashed
+    // ellipse so the feather amount is actually visible, not just a number on a slider.
+    // Always draw the feather ring (even at ft≈0, where it just coincides with the outer edge)
+    // so the feather control has visible on-canvas feedback at any slider position — it used to
+    // be gated off exactly at the default feather value (0.5 → ft=0), which read as "missing".
+    const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
+    featherLayer=`<path class="msk-feather" d="${ring(rx*ft,ry*ft)}"/>`;
+    // 50%-coverage guide ring (Capture One-style inner/mid/outer read): smoothstep(ft,1,t) is
+    // symmetric around its midpoint, so the falloff crosses ~0.5 at t=(ft+1)/2.
+    const ft50=(ft+1)/2;
+    featherLayer+=`<path class="msk-feather-50" d="${ring(rx*ft50,ry*ft50)}"/>`;
+  }else{ // linear: represent the "full effect" half as a band from p0 back-extended, cut at p1
+    const{x0,y0,x1,y1,feather}=m;
+    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+    // Lightroom idiom: three parallel guide lines (full-effect edge, midline, zero-effect edge)
+    // spanning a fixed on-screen width, clipped to the photo box below — not a flooding band.
+    const G=0.35; // half-length of each guide line, in the 0..1 image box
+    const mid=[(x0+x1)/2,(y0+y1)/2];
+    const line=(cx0,cy0)=>`M${cx0-nx*G},${cy0-ny*G} L${cx0+nx*G},${cy0+ny*G}`;
+    handles=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#fff" stroke-width="0.003" vector-effect="non-scaling-stroke"/>`+
+      `<path class="msk-feather" d="${line(x0,y0)}"/>`+
+      `<path class="msk-feather msk-feather-mid" d="${line(mid[0],mid[1])}"/>`+
+      `<path class="msk-feather" d="${line(x1,y1)}"/>`+
+      `<circle class="msk-handle" data-h="p0" cx="${x0}" cy="${y0}" r="0.012"/>`+
+      `<circle class="msk-handle" data-h="p1" cx="${x1}" cy="${y1}" r="0.012"/>`;
+    const H=5; // far enough to cover the 0..1 photo box from any guide-line position
+    const sideA=[x0+nx*H,y0+ny*H],sideB=[x0-nx*H,y0-ny*H];
+    shapeD=`M${sideA[0]},${sideA[1]} L${sideB[0]},${sideB[1]} L${sideB[0]-ux*H},${sideB[1]-uy*H} L${sideA[0]-ux*H},${sideA[1]-uy*H} Z`;
+  }
+  const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
+  const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
+  svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
+  svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
+}
+let _mskDrag=null;
+function mskHandleDown(e){
+  e.stopPropagation();e.preventDefault();
+  const svg=document.getElementById('fx-mask-overlay');
+  _mskDrag={which:e.target.dataset.h,svg};
+  // Lock history for the drag: every pointermove calls fxUpdate → fxHistoryPush, which was
+  // recording an undo snapshot per mouse-movement (each including a full JSON of the masks) —
+  // one drag could flood all 20 history slots with intermediate positions. mskHandleUp pushes
+  // exactly one snapshot on release instead (same pattern fxUndo/fxRedo use).
+  _fxHistLocked=true;
+  svg.setPointerCapture(e.pointerId);
+  svg.addEventListener('pointermove',mskHandleMove);
+  svg.addEventListener('pointerup',mskHandleUp);
+}
+function mskHandlePos(e){
+  const r=document.getElementById('fx-mask-overlay').getBoundingClientRect();
+  return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];
+}
+function mskHandleMove(e){
+  if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
+  const[px,py]=mskHandlePos(e);
+  if(m.type==='radial'){
+    if(_mskDrag.which==='c'){m.cx=Math.max(0,Math.min(1,px));m.cy=Math.max(0,Math.min(1,py));}
+    else if(_mskDrag.which==='rot'){m.rot=Math.atan2(py-m.cy,px-m.cx);}
+    else if(_mskDrag.which==='rx'||_mskDrag.which==='ry'){
+      // project the pointer delta into the ellipse's own (rotated) axes — must match the
+      // shader's rotation convention (mskShapeWeight) so dragging rx/ry after a rotation
+      // resizes along the visually-rotated axis, not the raw image axis.
+      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),ddx=px-m.cx,ddy=py-m.cy;
+      const lx=ddx*cr+ddy*sr,ly=-ddx*sr+ddy*cr;
+      if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(lx));
+      else m.ry=Math.max(0.01,Math.abs(ly));
+    }
+  }else{
+    if(_mskDrag.which==='p0'){m.x0=Math.max(0,Math.min(1,px));m.y0=Math.max(0,Math.min(1,py));}
+    else{m.x1=Math.max(0,Math.min(1,px));m.y1=Math.max(0,Math.min(1,py));}
+  }
+  mskOverlaySync();fxUpdate();
+}
+function mskHandleUp(e){
+  if(!_mskDrag)return;
+  const svg=_mskDrag.svg;svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);
+  _mskDrag=null;_fxHistLocked=false;mskRebuild();fxHistoryPush();
+}
+window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskOverlaySync();});
+
+// ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
+const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
+  // adj-dehaze was missing here (T2, editor_ux_spec.json: a script cross-checking this list
+  // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
+  // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
+  // gap as deconv-amt/deconv-rad before DT1.
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
+  'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
+  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
+  // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
+  // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
+  // ever actually appear; resetDeconv() itself already worked, only the visibility signal didn't.
+  'deconv-amt','deconv-rad',
+  'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
+  'b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig','lut-mix'];
+// nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
+// deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
+// predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
+// by reset/undo/session persistence.
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv','filmneg'];
+const _FX_SNAP_SELECTS=['sel-fneg-mode','sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'];
+const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
+function getUISnapshot(opts){
+  const s={sliders:{},toggles:{},selects:{},colors:{}};
+  _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el)s.sliders[id]=el.value;});
+  _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);if(el)s.toggles[id]=el.classList.contains('on');});
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
+  _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
+  const it=curItem();s.geom=(it&&it.geom)?_clone(it.geom):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
+  // ⚠️ Retouch MUST be in the snapshot, not merely saved by healAdd. fxHistoryPush dedupes on
+  // this object's JSON, so a heal op absent from it makes two consecutive states compare equal,
+  // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
+  // so `skipRaster` does not apply and history stays cheap.
+  s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
+  s.inpaint=(it&&it.inpaint&&it.inpaint.length)?_clone(it.inpaint):null;
+  s.redeye=(it&&it.redeye&&it.redeye.length)?_clone(it.redeye):null;
+  s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
+  // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
+  // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
+  s.curves=_clone(fxState.curves);   // tone-curve control points
+  s.curveMode=fxState.curveMode;     // 'point' or 'param' — ROADMAP R11
+  s.curveParam=_clone(fxState.curveParam); // parametric Shadows/Darks/Lights/Highlights
+  s.wheels=_clone(fxState.wheels);   // lift/gamma/gain colour wheels — ROADMAP R11
+  s.hsl=_clone(fxState.hsl);         // HSL mixer band settings
+  s.pointColors=_clone(fxState.pointColors||[]); // point color picks
+  s.artSeed=fxState.artSeed;                              // artifact placement seed
+  s.frameShuffle=fxState.frameShuffle||0;                 // film-frame variation offset
+  s.dustMode=fxState.dustMode||0;                         // dust speck colour mode (0 both,1 black,2 white) — was missing, so it wasn't undoable and undo clobbered it
+  // Masks carry a typed raster that JSON cannot represent — _mskToSnap base64s it. `skipRaster`
+  // is set only by fxHistoryPush, which keeps rasters alive by reference instead.
+  s.masks=fxState.masks.map(m=>_mskToSnap(m,opts&&opts.skipRaster));
+  s.canvas=_clone(fxState.canvas);    // canvas matte (ar/bg/blur)
+  s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
+  // Baked into the native RAW decode itself (not a shader term), so it can't live as a normal
+  // toggle read at render time — it has to travel with the per-photo recipe so each photo
+  // remembers its OWN setting instead of one global switch affecting every photo. See
+  // library-ui.js's openInEditorInner, which peeks this from the sidecar BEFORE decoding.
+  s.rawNr=window.chromasmithRawNr||'fast'; // 'off'|'fast'|'high' — see NrTier in raw_decode.rs
+  s.rawNrHighStrength=window.chromasmithRawNrHighStrength; // 0-100, High-tier blend amount
+  s.nativeNr=s.rawNr!=='off'; // kept for one release: an OLDER build reading a NEWER sidecar degrades to Fast rather than Off
+  s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as rawNr above
+  return s;
+}

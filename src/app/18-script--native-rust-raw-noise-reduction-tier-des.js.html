@@ -1,0 +1,106 @@
+// ── Native (Rust) RAW noise-reduction TIER — desktop only. Off/Fast run on linear RAW data
+// during decode, before anything else touches the pixels — like Auto lens-profile, can't take
+// effect live, needs a fresh decode. Defaults to Fast (unchanged behavior from the old always-
+// on boolean). High additionally runs a ~25-90s neural denoise (rawdenoise.rs) that must NEVER
+// run automatically — see denoise_raw_high's own doc comment for why it's a separate Rust
+// command the Library's thumbnail path can't reach. Selecting High here only reveals the
+// "Denoise now" button; it does not itself trigger the expensive pass (see fxRawNrChanged).
+try{window.chromasmithRawNr=localStorage.getItem('chromasmithRawNr')||(localStorage.getItem('chromasmithNativeNr')==='0'?'off':'fast');}catch(e){window.chromasmithRawNr='fast';}
+// Blend-toward-original amount for the High tier (0-100) — see rawdenoise.rs's `strength`
+// param doc comment for why this exists: full strength measurably over-smooths fine hair/fur
+// vs DxO PureRAW on real photos even though flat-noise removal is comparable. Default 70, not
+// 100 — a deliberate compromise chosen after that same review, not the "give the user every
+// knob" default some sliders use.
+try{window.chromasmithRawNrHighStrength=parseInt(localStorage.getItem('chromasmithRawNrHighStrength'),10);if(!(window.chromasmithRawNrHighStrength>=0&&window.chromasmithRawNrHighStrength<=100))window.chromasmithRawNrHighStrength=70;}catch(e){window.chromasmithRawNrHighStrength=70;}
+function fxRawNrSyncUI(){
+  const sel=document.getElementById('sel-raw-nr');
+  if(sel){sel.value=window.chromasmithRawNr;sel._chipsRender&&sel._chipsRender();}
+  const _nrIt=(typeof curItem==='function')?curItem():null;
+  const isHigh=window.chromasmithRawNr==='high'&&!!(_nrIt&&_nrIt.rawFile); // High rows are RAW-only too
+  const rowHigh=document.getElementById('row-nr-high');
+  if(rowHigh)rowHigh.style.display=isHigh?'':'none';
+  const rowStrength=document.getElementById('row-nr-high-strength');
+  if(rowStrength)rowStrength.style.display=isHigh?'':'none';
+  const hintStrength=document.getElementById('hint-nr-high-strength');
+  if(hintStrength)hintStrength.style.display=isHigh?'':'none';
+  const slStrength=document.getElementById('sl-nr-high-strength'),vlStrength=document.getElementById('vl-nr-high-strength');
+  if(slStrength)slStrength.value=window.chromasmithRawNrHighStrength;
+  if(vlStrength)vlStrength.textContent=window.chromasmithRawNrHighStrength;
+  const it=(typeof curItem==='function')?curItem():null;
+  const btn=document.getElementById('btn-denoise-now');
+  if(btn){
+    const isRaw=!!(it&&it.rawFile);
+    btn.disabled=!isRaw||!!(it&&it._nrHighApplied);
+    btn.textContent=(it&&it._nrHighApplied)?'Denoised ✓':'Denoise now';
+    btn.title=isRaw?'':'High-tier noise reduction only applies to RAW files';
+  }
+}
+function fxRawNrChanged(val){
+  window.chromasmithRawNr=val;
+  // Per-photo, not global: stored in the recipe (getUISnapshot's rawNr field) via the SAME
+  // auto-persist path a slider drag uses — fxHistoryPush schedules the sidecar write library-
+  // ui.js's openInEditorInner later peeks before re-decoding. localStorage is only the starting
+  // DEFAULT for a photo with no saved recipe yet — it doesn't control an already-edited photo.
+  try{localStorage.setItem('chromasmithRawNr',val);}catch(e){}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(it)it._nrHighApplied=false; // tier changed — any previous High result no longer reflects the current selection
+  fxRawNrSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  // Off/Fast reload immediately (cheap — a few seconds at most). High deliberately does NOT
+  // auto-reload/auto-run: switching TO High only reveals the button, matching the two-tier
+  // design's whole point (grade fast, opt into the expensive pass explicitly).
+  if(val!=='high'){
+    const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+    const suffix=reloaded?' — reloading this photo…':' — will apply next time you open a photo';
+    if(window.__TAURI__)toast('RAW noise reduction: '+(val==='off'?'off':'Fast')+suffix,true);
+  }
+}
+function fxRawNrHighStrengthChanged(val){
+  window.chromasmithRawNrHighStrength=parseInt(val,10);
+  const vl=document.getElementById('vl-nr-high-strength');if(vl)vl.textContent=val;
+  try{localStorage.setItem('chromasmithRawNrHighStrength',val);}catch(e){}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(it)it._nrHighApplied=false; // strength changed — any previous High result used the OLD strength, no longer current
+  fxRawNrSyncUI();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+let _fxDenoiseToken=null;
+async function fxDenoiseNowClicked(){
+  if(typeof window.chromasmithDenoiseHigh!=='function'){toast('Desktop only',false);return;}
+  const it=(typeof curItem==='function')?curItem():null;
+  if(!it||!it.rawFile){toast('High-tier noise reduction only applies to RAW files',false);return;}
+  const btn=document.getElementById('btn-denoise-now'),cancelBtn=document.getElementById('btn-denoise-cancel');
+  const progRow=document.getElementById('row-nr-high-progress'),bar=document.getElementById('nr-high-progress-bar');
+  const endActivity=fxPhotoActivity(it,'Denoising RAW…');
+  btn.disabled=true;btn.textContent='Denoising…';
+  if(cancelBtn)cancelBtn.style.display='';
+  if(progRow)progRow.style.display='';
+  if(bar)bar.style.width='0%';
+  try{
+    const res=await window.chromasmithDenoiseHigh(
+      null, // null = the current photo (interactive path)
+      (done,total)=>{if(bar&&total>0)bar.style.width=Math.round(done/total*100)+'%';},
+      (token)=>{_fxDenoiseToken=token;}
+    );
+    if(res&&res.applied){
+      it._nrHighApplied=true;
+      toast('High-tier noise reduction applied',true);
+    }else{
+      toast('Denoise finished, but the photo changed in the meantime — result discarded',false);
+    }
+  }catch(e){
+    console.error('chromasmithDenoiseHigh',e);
+    const msg=(e&&e.message)||String(e);
+    toast(/cancel/i.test(msg)?'Noise reduction cancelled':('High-tier noise reduction failed: '+msg),false);
+  }finally{
+    _fxDenoiseToken=null;
+    if(cancelBtn)cancelBtn.style.display='none';
+    if(progRow)progRow.style.display='none';
+    fxRawNrSyncUI();
+    endActivity();
+  }
+}
+function fxDenoiseCancelClicked(){
+  if(_fxDenoiseToken&&typeof window.chromasmithCancelDenoiseHigh==='function')window.chromasmithCancelDenoiseHigh(_fxDenoiseToken);
+}
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',fxRawNrSyncUI);

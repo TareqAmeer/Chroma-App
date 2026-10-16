@@ -1,0 +1,14 @@
+// ── Guided Skin Tone ─────────────────────────────────────────────────────────────────────────
+// Presentation only. skinUniformity() in the lut shader, colRangeWeight, mskSkinTarget and
+// mskMeasureSrcV are all untouched — this just stops the tool presenting eight pieces of
+// internal vocabulary ("Uniformity: Hue", "Preserve modeling", "Tan darkens only") as the
+// primary interface.
+//
+// Strength drives uH and uS together because that is the 90% case; the individual axes stay
+// available under Advanced for anyone who wants them.
+function mskSkinStrength(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.uH=v;m.uS=v;
+  const lb=document.getElementById('msk-strength-val');if(lb)lb.textContent=Math.round(v);
+  fxUpdate();
+}

@@ -1,0 +1,400 @@
+// ── Tauri-native save path (the desktop shell) ────────────────────────────────
+// The desktop shell used to fall through to the browser <a download> loop below, which after a
+// multi-minute full-res batch render has no user activation left: WKWebView silently dropped
+// everything past the first few files (a user exporting 11 photos got 4), and anchorDownload
+// can neither fail nor report, so the app still said "Exported 11 photos ✓". Rust writes each
+// file to ~/Downloads instead, one invoke per file, and hands back the real path.
+// Returns a per-item [{ok,path,err}] so the caller can report SAVES, not renders — or null if
+// this isn't the native shell (or it predates the command), meaning "unreportable, fall through".
+function tauriNative(){return !!(window.__TAURI__&&window.__TAURI__.core);}
+// ══ HDR (GAIN MAP) EXPORT ════════════════════════════════════════════════════════════════════
+// Native/desktop only. The gain map is derived at write time from the ORIGINAL file's headroom
+// (gainmap.rs), so the render pipeline stays SDR and every calibrated look keeps working — see
+// that module's header for why this shape was chosen over an extended-range pipeline.
+let fxHdrHeadroom=1.0;
+async function fxSyncHdrOption(){
+  const row=document.getElementById('fx-hdr-row'),note=document.getElementById('fx-hdr-note');
+  if(!row)return;
+  const path=window.chromasmithSourcePath;
+  const it=typeof curItem==='function'?curItem():null;
+  // Photos only: a video's HDR story is HLG, not gain maps (they are a stills format).
+  if(!capNative()||!path||!it||it.kind==='video'){row.style.display='none';if(note)note.style.display='none';fxHdrHeadroom=1.0;return;}
+  // RAW: headroom comes from OUR OWN decode (see applyDcpLUT's hrOut / hrByteForHeadroom),
+  // computed once at load and stashed on the canvas — no round trip needed. source_has_hdr
+  // (Core Image's RAW pipeline) was measured to find nothing for a RAW file, which is why this
+  // is a SEPARATE check rather than the only one.
+  const fromRaw=!!(it.img&&it.img._hdrHeadroomPresent);
+  let has=fromRaw;
+  if(!has){
+    try{has=await window.__TAURI__.core.invoke('source_has_hdr',{path});}
+    catch(e){has=false;}   // older shell without the command — silently stay SDR
+  }
+  row.style.display=has?'':'none';
+  if(note){
+    note.style.display=has?'':'none';
+    const _uhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+    note.textContent=has?(_uhdr?'This photo carries HDR highlight detail. Chrome, Edge and Lightroom show it; everything else sees the SDR version.':'This photo carries HDR highlight detail. Photos, Preview and iPhone show it; everything else sees the SDR version.'):'';
+    if(_uhdr&&row)row.title='Writes an Ultra HDR JPEG whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.';
+  }
+  if(!has){const t=document.getElementById('tg-exp-hdr');if(t)t.checked=false;}
+}
+function fxHdrExportEnabled(){
+  const t=document.getElementById('tg-exp-hdr');
+  return !!(t&&t.checked&&capNative()&&window.chromasmithSourcePath);
+}
+// Writes ONE graded photo as a gain-map HEIC. Returns false when it could not (no headroom, older
+// shell, any failure), so the caller falls straight through to the normal SDR save rather than
+// losing the export.
+// Builds the headroom map for ONE export, pixel-aligned to the graded output. The headroom data
+// lives at RAW-DECODE resolution (see applyDcpLUT's hrOut); the graded export has been through
+// crop/rotate/flip/straighten and a final resize. Rather than re-deriving that transform chain
+// by hand — a second copy that could silently drift from the real one — this runs the headroom
+// map through the EXACT SAME `applyGeomTo` the photo itself uses, then a plain resize to the
+// export's own final size. Gain maps are inherently smooth/low-frequency, so exact-to-the-pixel
+// alignment through borders/matte/frame isn't needed the way it would be for the photo itself.
+function _hdrHeadroomPngFor(it,outW,outH){
+  const hr=it.img&&it.img._hdrHeadroom;
+  if(!hr)return null;
+  const src=document.createElement('canvas');src.width=hr.w;src.height=hr.h;
+  const sx=src.getContext('2d');
+  // Grayscale: replicate the single channel into R/G/B so it round-trips through a plain PNG,
+  // and CIColorMatrix (gainmap.rs) reads all three channels identically.
+  const id=sx.createImageData(hr.w,hr.h);
+  for(let i=0,j=0;i<hr.data.length;i++,j+=4){const v=hr.data[i];id.data[j]=v;id.data[j+1]=v;id.data[j+2]=v;id.data[j+3]=255;}
+  sx.putImageData(id,0,0);
+  const geomed=(typeof applyGeomTo==='function')?applyGeomTo(src,it.geom||defGeom()):src;
+  const out=document.createElement('canvas');out.width=outW;out.height=outH;
+  out.getContext('2d').drawImage(geomed,0,0,outW,outH);
+  if(geomed!==src)geomed.width=geomed.height=0;
+  src.width=src.height=0;
+  return out;
+}
+/// Writes ONE graded photo as a gain-map HEIC. `it` is the source fxImages[] entry the graded
+/// bytes came from — RAW headroom is per-photo (its own decode), so unlike everything else in
+/// exportFX this genuinely needs the item, not just the bytes. Returns false when it could not
+/// (no headroom, older shell, any failure), so the caller falls straight through to the normal
+/// SDR save rather than losing the export.
+async function fxSaveGainMapHeic(pngBytes,fname,it){
+  const source=window.chromasmithSourcePath;
+  if(!source)return false;
+  // Ultra HDR is a JPEG container (Windows, docs/windows-port.md Phase 4); the HEIC path stays
+  // macOS-only (Core Image). Same headroom-map contract either way, just a different command
+  // and container extension — see gainmap_uhdr.rs / gainmap.rs's write_gainmap_*_from_map.
+  const isUhdr=window.CS_PLATFORM&&window.CS_PLATFORM.hdrExport==='uhdr';
+  const outName=fname.replace(/\.[^.]+$/,'')+(isUhdr?'.jpg':'.heic');
+  const q=(parseFloat((document.getElementById('sl-exp-q')||{}).value)||92)/100;
+  // RAW path: OUR OWN headroom, computed at decode time — see gainmap.rs's "HDR from RAW" note
+  // for why CIRAWFilter can't do this for this camera's files.
+  if(it&&it.img&&it.img._hdrHeadroom){
+    try{
+      const outW=(pngBytes&&it._exportW)||0,outH=(pngBytes&&it._exportH)||0;
+      // Dimensions come from the caller (set right before this call — see exportFX) rather than
+      // re-decoding pngBytes into an <img> just to read its size.
+      const hrCanvas=_hdrHeadroomPngFor(it,outW,outH);
+      if(!hrCanvas)return false;
+      const hrBlob=await new Promise(res=>hrCanvas.toBlob(res,'image/png'));
+      hrCanvas.width=hrCanvas.height=0;
+      const hrBytes=new Uint8Array(await hrBlob.arrayBuffer());
+      // Length-prefixed two-blob body: headroom PNG, then the graded PNG — see main.rs's
+      // write_gainmap_heic_from_map / write_gainmap_uhdr_from_map for the exact framing this
+      // must match (both commands share the same request shape).
+      const body=new Uint8Array(4+hrBytes.length+pngBytes.length);
+      new DataView(body.buffer).setUint32(0,hrBytes.length,true);
+      body.set(hrBytes,4);body.set(pngBytes,4+hrBytes.length);
+      const wrote=await window.__TAURI__.core.invoke(isUhdr?'write_gainmap_uhdr_from_map':'write_gainmap_heic_from_map',body,{headers:{
+        'x-filename':_u8b64(new TextEncoder().encode(outName)),
+        'x-quality':String(q),'x-max-stops':'2'}});
+      if(wrote){log(`Saved ${wrote} (HDR gain map, from RAW headroom)`,'ok');return true;}
+      log('No RAW headroom in this photo — exported as SDR','info');
+      return false;
+    }catch(e){
+      log('HDR-from-RAW export failed, falling back to SDR: '+(e&&e.message||e),'warn');
+      return false;
+    }
+  }
+  // Non-RAW path (iPhone HEIC etc.): unchanged — Core Image's own expand-to-HDR on the source
+  // file already works for these (measured headroom 1.37-1.40 on real iPhone photos). macOS-only
+  // (write_gainmap_heic has no Windows/uHDR counterpart yet — only the RAW-headroom path above
+  // does), so this always writes .heic regardless of CS_PLATFORM.hdrExport.
+  try{
+    const heicName=fname.replace(/\.[^.]+$/,'')+'.heic';
+    const wrote=await window.__TAURI__.core.invoke('write_gainmap_heic',pngBytes,{headers:{
+      'x-source':_u8b64(new TextEncoder().encode(source)),
+      'x-filename':_u8b64(new TextEncoder().encode(heicName)),
+      'x-quality':String(q)}});
+    if(wrote){log(`Saved ${wrote} (HDR gain map)`,'ok');return true;}
+    log('Source had no HDR headroom — exported as SDR','info');
+    return false;
+  }catch(e){
+    log('HDR export failed, falling back to SDR: '+(e&&e.message||e),'warn');
+    return false;
+  }
+}
+// Export destination (desktop shell only). Persisted in localStorage, pushed to Rust on boot.
+function fxExportDirLabel(d){return d?(d.split(/[\\/]/).filter(Boolean).pop()||d):'Downloads';}
+function fxExportDirUI(d){
+  const row=document.getElementById('fx-exportdir-row');if(!row)return;
+  row.style.display='';
+  const b=document.getElementById('fx-exportdir-btn'),x=document.getElementById('fx-exportdir-reset');
+  b.textContent=fxExportDirLabel(d);b.title=d||'Downloads';x.style.display=d?'':'none';
+}
+async function fxChooseExportDir(reset){
+  let d='';
+  if(!reset){
+    try{d=await window.__TAURI__.core.invoke('plugin:dialog|open',{options:{directory:true,multiple:false,title:'Choose export folder'}});}catch(e){d=null;}
+    if(!d)return;
+  }
+  try{await window.__TAURI__.core.invoke('set_export_dir',{path:d});
+    try{localStorage.setItem('cs-export-dir',d);}catch(e){}
+    fxExportDirUI(d);}
+  catch(e){toast('Folder unavailable');}
+}
+(function(){
+  if(!tauriNative())return;
+  let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}
+  const go=()=>{fxExportDirUI(d);if(d)window.__TAURI__.core.invoke('set_export_dir',{path:d}).catch(()=>{fxExportDirUI('');});};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
+})();
+async function saveFilesNative(items){
+  const out=[];
+  for(const it of items){
+    // Raw IPC body (not base64) — a full-res export through the base64 path is the same triple
+    // copy that OOMed Lightroom TIFF saves; see write_lightroom_tiff_raw's comment in main.rs.
+    const bytes=typeof it.content==='string'?new TextEncoder().encode(it.content)
+      :(it.content instanceof Uint8Array?it.content:new Uint8Array(it.content));
+    try{
+      const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname)),'x-collision':expCollidePolicy()}});
+      if(r&&r.bytes===0&&bytes.length>0){out.push({ok:true,path:r.path||it.fname,skipped:true});log(`Skipped ${it.fname} (already exists)`,'warn');}
+      else{out.push({ok:true,path:r&&r.path||it.fname});log(`Saved ${r&&r.path||it.fname}`,'ok');}
+    }catch(e){
+      const msg=e&&e.message||String(e);
+      // Older native shell without the command compiled in: bail out entirely so the caller
+      // falls through to the previous behaviour rather than reporting the whole batch failed.
+      if(/save_export_file_raw/.test(msg)&&/not (found|allowed)|unknown|Command/i.test(msg)){
+        log('Native shell predates save_export_file_raw — falling back to browser downloads (restart the app after updating)','warn');
+        return null;
+      }
+      out.push({ok:false,err:msg});
+      log(`Save failed for ${it.fname}: ${msg}`,'err');
+    }
+  }
+  return out;
+}
+// The 1000ms revoke was unconditionally too short: callers stagger these clicks 300ms apart, so
+// file #4 was clicked at t≈900ms and lost its blob source at t=1000ms while still queued — one
+// half of the "only the first few files land" bug. The URL is released on a.remove() regardless,
+// so a long timeout costs nothing.
+function anchorDownload(content,fname,mime){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type:mime}));a.download=fname;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},60000);}
+async function saveFile(content,fname,mime='application/octet-stream'){
+  if(tauriNative()){
+    const r=await saveFilesNative([{content,fname,mime}]);
+    if(r){if(r[0].ok)toast('Saved to '+fxExportDirLabel((()=>{try{return localStorage.getItem('cs-export-dir')||''}catch(e){return ''}})())+' ✓',true);else toast('Save failed — see log');return}
+  }
+  if(capNative()){
+    try{
+      const receipts=await capShareFiles([{content,fname,mime}]);
+      const r=receipts&&receipts[0];
+      toast(r?.ok?(r.status==='shared'?'Handed to share sheet — save not confirmed':'Saved ✓'):(r?.err||'Could not save the file'),!!r?.ok);
+      window.chromasmithShowMobileExportResult?.();return receipts;
+    }catch(e){toast('Could not save the file: '+(e.message||e),false);return [{ok:false,fname,err:e.message||String(e)}];}
+  }
+  try{const file=new File([content],fname,{type:mime});
+    if(useShareSheet()&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}
+  catch(e){if(e&&e.name==='AbortError')return} // user dismissed the share sheet
+  anchorDownload(content,fname,mime);
+}
+// Save MANY files at once. iOS share() needs a live user-activation, which a long multi-image
+// render consumes — so try one combined share() inline, and if it rejects, surface a one-tap
+// button that re-enters share() under a fresh gesture (instead of silently dribbling files to
+// Downloads one-by-one, the bug the user hit). Desktop just downloads each file.
+// Returns a per-item [{ok,path,err}] when the save path can actually report success (the
+// Tauri desktop shell), else null — every browser/iOS path below is fire-and-forget.
+async function saveFiles(items){ // items: [{content,fname,mime}]
+  if(!items.length)return null;
+  if(tauriNative()){
+    const r=await saveFilesNative(items);
+    if(r)return r;
+  }
+  if(capNative()){
+    // Native saves report every file. Never silently fall back to browser downloads.
+    return await capShareFiles(items);
+  }
+  if(expCollidePolicy()==='skip'){
+    // A browser can't see the download folder, so "skip" means: don't write a name this session already wrote.
+    const keep=items.filter(it=>!_expSessionNames.has(it.fname)),n=items.length-keep.length;
+    if(n){log(`Skipped ${n} file(s) already exported this session`,'warn');toast(`${n} file(s) skipped — already exported`);}
+    items=keep;if(!items.length)return null;
+  }
+  items.forEach(it=>_expSessionNames.add(it.fname));
+  const files=items.map(it=>new File([it.content],it.fname,{type:it.mime}));
+  const canShare=useShareSheet()&&navigator.canShare&&navigator.canShare({files});
+  if(canShare){
+    try{await navigator.share({files,title:'CHRO-MA-SMITH export'});return}
+    catch(e){
+      if(e&&e.name==='AbortError')return; // user cancelled — done, don't also download
+      // activation expired (NotAllowedError) → offer an explicit tap to re-share
+      showSaveButton(files,items);
+      return;
+    }
+  }
+  // Mobile/touch browsers commonly cap navigator.canShare({files}) at a smaller file-count or
+  // total-size than a full-res batch export hits — canShare returns false for the WHOLE batch
+  // even though single-photo exports (saveFile, one file) are well under that cap and share
+  // fine. The desktop staggered-anchorDownload loop below is a silent no-op here: iOS Safari has
+  // no "Downloads" UI for it, and every click() after the first happens outside the original tap's
+  // user-activation window, so nothing visible happens — a batch export just looked "finished"
+  // with nothing to show for it. Offer an explicit per-photo save instead of falling through.
+  if(useShareSheet()){showSaveButton(files,items);return;}
+  // Desktop path: Chrome/Safari block a burst of same-tick downloads as "multiple automatic
+  // downloads" after the first one, so the 2nd+ files silently never save. Stagger them.
+  for(const it of items){anchorDownload(it.content,it.fname,it.mime);await new Promise(r=>setTimeout(r,300))}
+}
+function showSaveButton(files,items){
+  const host=document.getElementById('fx-save-prompt')||(()=>{const d=document.createElement('div');d.id='fx-save-prompt';d.style.cssText='margin:10px 0';const ex=document.getElementById('btn-fx-export');ex&&ex.parentNode.appendChild(d);return d})();
+  host.innerHTML='';
+  // Whole-batch share() may fail purely because of file COUNT/SIZE, while each photo shared
+  // ALONE is well within the same browser's own limits (exactly what saveFile's single-photo
+  // path already relies on) — so ONE tap still works: loop share() per photo instead of once
+  // for the whole array. Each iteration is a fresh call, so even if a browser's transient-
+  // activation window doesn't survive past the first native share sheet, the catch below just
+  // downloads that one (and every remaining one) directly instead of stalling — the user never
+  // has to tap again regardless of how the browser behaves.
+  if(items.length>1&&useShareSheet()){
+    const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
+    b.innerHTML=`Tap to save ${items.length} photos to Photos`;
+    b.onclick=async()=>{
+      b.disabled=true;
+      for(let i=0;i<items.length;i++){
+        b.innerHTML=`Saving ${i+1} of ${items.length}…`;
+        try{await navigator.share({files:[files[i]],title:'CHRO-MA-SMITH export'});}
+        catch(e){
+          if(e&&e.name==='AbortError')continue; // this one photo skipped — keep going with the rest
+          anchorDownload(items[i].content,items[i].fname,items[i].mime);
+        }
+      }
+      host.innerHTML='';log(`Saved ${items.length} photos`,'ok');
+    };
+    host.appendChild(b);
+    log(`Tap "Save ${items.length} photos" — this browser can't share them all in one native sheet, so it'll step through them automatically`,'info');
+    return;
+  }
+  const b=document.createElement('button');b.className='btn bpri';b.style.width='100%';
+  b.innerHTML=`Tap to save ${items.length} photo${items.length>1?'s':''} to Photos`;
+  b.onclick=async()=>{try{await navigator.share({files,title:'CHRO-MA-SMITH export'});host.innerHTML='';log('Saved to Photos','ok');}
+    catch(e){if(e&&e.name==='AbortError')return;items.forEach(it=>anchorDownload(it.content,it.fname,it.mime));host.innerHTML='';log('Saved via download','ok');}};
+  host.appendChild(b);
+  log(`Tap "Save ${items.length} photo${items.length>1?'s':''}" to add to your gallery`,'info');
+}
+function dl(content,fname,mime='application/octet-stream'){saveFile(content,fname,mime)}
+function dlItem(idx,t){const item=ST.history[idx];if(!item)return;const n=`${ST.baseName}_${item.ver}`;if(t==='lut'){dl(writeCube(item.lut,n),`${n}.cube`);log(`Downloaded ${n}.cube`,'ok')}else{dl(item.xmp,`${n}.xmp`,'text/xml');log(`Downloaded ${n}.xmp`,'ok')}}
+
+// ═══════════════════════════
+// GOOGLE PHOTOS (optional, online-only — inert unless the user connects)
+// ═══════════════════════════
+// Import picks photos via Google's own Picker API UI (in-app library browsing was removed
+// from Google's API in March 2025 — filtering/selection happens on photos.google.com);
+// export uploads app-created images with the Library API "appendonly" scope into a
+// "Chromasmith" album. Everything is client-side REST with a user-supplied OAuth client ID
+// (localStorage "gpClientId") — no server, no bundled key, nothing loads until used.
+// Sign-in is a MANUAL implicit-flow popup (see the state=gpcb handler next to BUILD):
+// COOP same-origin (needed for RAW/SharedArrayBuffer) disowns popups, so the token comes
+// back via a localStorage relay + storage event instead of window.opener/postMessage.
+const GP_SCOPES='https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/photoslibrary.appendonly';
+// Default OAuth client ID (client IDs are public by design; the consent screen is in Testing
+// mode so only registered test users can complete sign-in). Override any time via the ID… button.
+// ⚠️ This is a "Web application"-type client, wired for the GitHub Pages https origin — it
+// CANNOT complete sign-in in the desktop shell (see gpClientId's window.__TAURI__ branch and
+// gpAuthNative below), which needs a separate "Desktop app"-type client instead.
+const GP_DEFAULT_CLIENT_ID='1074476279331-nqd78kh57q7s9j5kte4f30hv0b93cl95.apps.googleusercontent.com';
+function gpClientId(){
+  try{const own=(localStorage.getItem('gpClientId')||'').trim();if(own)return own}catch(e){}
+  // Never silently fall back to the shared Web-app default under Tauri — it's the wrong OAuth
+  // client type for the desktop loopback flow and would fail with a confusing server error.
+  // Returning '' here makes gpAskClientId's `if(!cid)` prompt for a real "Desktop app" client.
+  return window.__TAURI__?'':GP_DEFAULT_CLIENT_ID;
+}
+// window.prompt() is silently a no-op in the Tauri/WKWebView shell (wry's WKUIDelegate doesn't
+// implement runJavaScriptTextInputPanelWithPrompt), so under __TAURI__ this returned '' instantly
+// with zero UI feedback — the exact "Google Photos button does nothing" symptom. Use an in-page
+// <dialog> instead, which is plain DOM and works identically in the browser and the WKWebView shell.
+function askTextModal(title,msg,defVal){
+  return new Promise(res=>{
+    let dlg=document.getElementById('fx-ask-modal');
+    if(!dlg){
+      dlg=document.createElement('dialog');dlg.id='fx-ask-modal';
+      // --bg/--txt, not --bg/--fg: there is no --fg token, so the old `var(--fg,#eee)` always
+      // fell through to a hardcoded grey that missed the real text colour and ignored the light
+      // theme entirely. Same reason --sans replaces --mono here — this dialog names masks and
+      // Styles now, not just OAuth client IDs, and --mono is for numerals (see :root).
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML='<div id="fx-ask-title" style="font-weight:600;margin-bottom:6px"></div>'+
+        '<div id="fx-ask-msg" style="font-size:12px;color:var(--mut);white-space:pre-wrap;margin-bottom:10px"></div>'+
+        '<input id="fx-ask-input" type="text" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--sur2);color:inherit;font-family:var(--sans);font-size:13px">'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+        '<button type="button" id="fx-ask-cancel" class="btn bgh">Cancel</button>'+
+        '<button type="button" id="fx-ask-ok" class="btn bpri">OK</button></div>';
+      document.body.appendChild(dlg);
+    }
+    dlg.querySelector('#fx-ask-title').textContent=title;
+    // Most callers (rename a mask, name a Style) pass no explanatory body — collapse the row
+    // rather than leaving its 10px bottom margin as a floating gap under the title.
+    const msgEl=dlg.querySelector('#fx-ask-msg');
+    msgEl.textContent=msg||'';msgEl.style.display=msg?'':'none';
+    const input=dlg.querySelector('#fx-ask-input');input.value=defVal||'';
+    const finish=v=>{dlg.close();res(v)};
+    dlg.querySelector('#fx-ask-ok').onclick=()=>finish(input.value.trim());
+    dlg.querySelector('#fx-ask-cancel').onclick=()=>finish(null);
+    dlg.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();finish(input.value.trim())}else if(e.key==='Escape'){finish(null)}};
+    dlg.showModal();
+    input.focus();input.select();
+  });
+}
+// ⚠️ window.confirm() has the EXACT same silent-no-op bug as window.prompt() (see askTextModal's
+// own comment) and it went unfixed for a long time because nobody checked the sibling API when
+// prompt() was fixed. Verified against wry 0.55.1's actual source
+// (wry-0.55.1/src/wkwebview/class/wry_web_view_ui_delegate.rs): its WKUIDelegate implements
+// window-close, the open-file panel, media-capture permission and popup creation — none of the
+// three JS-dialog methods (alert/confirm/prompt). Per WKUIDelegate's documented default, an
+// unimplemented runJavaScriptConfirmPanel makes confirm() return `false` IMMEDIATELY, no dialog
+// ever shown. Every `if(!confirm(...))return` in the app therefore ALWAYS took the early return
+// in the packaged desktop build: Reset All Edits, Delete Style, Delete export preset, and (in
+// library-ui.js) Reset Edit/Delete version/Move to Trash/Delete album all silently did nothing,
+// and the High-NR batch-export prompt silently self-cancelled every time. confirmModal() is the
+// same <dialog> pattern as askTextModal — real DOM, works identically in the browser and the
+// WKWebView shell — resolving true/false instead of a string.
+function confirmModal(msg,okLabel){
+  return new Promise(res=>{
+    let dlg=document.getElementById('fx-confirm-modal');
+    if(!dlg){
+      dlg=document.createElement('dialog');dlg.id='fx-confirm-modal';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML='<div id="fx-confirm-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+        '<button type="button" id="fx-confirm-cancel" class="btn bgh">Cancel</button>'+
+        '<button type="button" id="fx-confirm-ok" class="btn bpri"></button></div>';
+      document.body.appendChild(dlg);
+    }
+    dlg.querySelector('#fx-confirm-msg').textContent=msg;
+    dlg.querySelector('#fx-confirm-ok').textContent=okLabel||'OK';
+    const finish=v=>{dlg.close();res(v)};
+    dlg.querySelector('#fx-confirm-ok').onclick=()=>finish(true);
+    dlg.querySelector('#fx-confirm-cancel').onclick=()=>finish(false);
+    dlg.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();finish(true)}else if(e.key==='Escape'){finish(false)}};
+    dlg.showModal();
+    dlg.querySelector('#fx-confirm-cancel').focus();
+  });
+}
+async function gpAskClientId(force){
+  let cid=gpClientId();
+  if(cid&&!force)return cid;
+  const msg=window.__TAURI__
+    ?'Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nMust be an OAuth client of type "Desktop app" (not "Web application") — create one free in Google Cloud Console → APIs & Services → Credentials → Create Credentials → OAuth client ID → Desktop app. See Guide → "Can I use Google Photos?" for the full steps.'
+    :'Paste your Google OAuth client ID (ends in .apps.googleusercontent.com).\n\nOne-time free setup — see Guide → "Can I use Google Photos?" for the console steps.';
+  const picked=await askTextModal('Google OAuth Client ID',msg,cid||'');
+  cid=(picked||'').trim();
+  if(cid){try{localStorage.setItem('gpClientId',cid)}catch(e){}}
+  gpUpdateUI();
+  return cid;
+}
+function gpTok(){try{const t=JSON.parse(sessionStorage.getItem('gpTok')||'null');if(t&&t.at&&t.exp>Date.now()+60e3)return t.at}catch(e){}return null}
+function gpConnected(){return !!gpTok()}

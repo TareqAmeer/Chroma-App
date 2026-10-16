@@ -1,0 +1,2121 @@
+// ── HLG (BT.2100) -> Rec.709 ─────────────────────────────────────────────────────────────────
+// Applied ONLY when the browser engine hands us an UNCONVERTED HLG frame. Measured on a real
+// iPhone HLG clip (IMG_8015.MOV, frame 0, identical downsample):
+//     ffmpeg naive, no conversion   mean=137.2  meanSat=29.6
+//     Apple ColorSync HLG->709      mean=124.1  meanSat=41.3   <- the target
+//     WKWebView (the desktop app)   mean=137.5  meanSat=30.1   <- i.e. NOT converted
+//     Chromium (the web build)      mean=122.9  meanSat=41.3   <- converted correctly
+// WKWebView decodes HLG and tags the VideoFrame bt709/sRGB WITHOUT converting it, which is why
+// HLG footage rendered flat and ~30% under-saturated in the desktop app. See fxNeedsHlgTransform.
+//
+// ⚠️ This is the STANDARD chain, not a hand-rolled curve. Every constant comes from the ITU
+// specs and each step is cross-checked against the colour-science reference library in
+// tools/calib/hlg_to_709.py (inverse OETF matches to 2.6e-9; full EOTF to 3.1e-6 cd/m^2):
+//   1. HLG inverse OETF                                    [BT.2100]
+//   2. OOTF with system gamma = 1.2 + 0.42*log10(L_W/1000)  [BT.2408 formula, NOT fitted]
+//   3. normalise by HLG reference white = 203 cd/m^2        [BT.2408; == eotf_BT2100_HLG(0.75)]
+//   4. linear BT.2020 -> linear BT.709
+//   5. clip, sRGB encode                                    [the space this pipeline works in]
+// L_W defaults to 400 nits — the documented nominal for HLG-mastered material, and the best
+// match to Apple's own conversion (mean abs error 6-8/255 across the sweep).
+// ⚠️ Never rename these to "sample"/"output"/"filter" — reserved words in GLSL ES (CLAUDE.md 3).
+const float HLG_A=0.17883277, HLG_B=0.28466892, HLG_C=0.55991073;
+const float HLG_REF_WHITE_NITS=203.0;
+vec3 hlgInvOetf(vec3 e){
+  vec3 lo=(e*e)/3.0;
+  vec3 hi=(exp((e-HLG_C)/HLG_A)+HLG_B)/12.0;
+  return mix(lo,hi,step(vec3(0.5),e));
+}
+vec3 hlg2rec709(vec3 c,float lW){
+  c=clamp(c,0.0,1.0);
+  vec3 lin=hlgInvOetf(c);                                    // scene linear, BT.2020
+  float ys=dot(lin,vec3(0.2627,0.6780,0.0593));              // BT.2020 luma
+  float g=1.2+0.42*(log(lW/1000.0)/2.302585093);             // BT.2408 system gamma (log10)
+  lin=lW*lin*pow(max(ys,1e-9),g-1.0);                        // OOTF -> display cd/m^2
+  lin/=HLG_REF_WHITE_NITS;                                   // reference white -> 1.0
+  lin=mat3( 1.660491,-0.124550,-0.018151,
+           -0.587641, 1.132900,-0.100579,
+           -0.072850,-0.008349, 1.118730)*lin;               // linear BT.2020 -> linear BT.709
+  lin=clamp(lin,0.0,1.0);                                    // hard clip (BT.2407 would desaturate)
+  return mix(lin*12.92, 1.055*pow(max(lin,1e-6),vec3(1.0/2.4))-0.055, step(vec3(0.0031308),lin));
+}
+vec3 vlog2rec709(vec3 c){
+  vec3 lin=vec3(vlogInv(c.r),vlogInv(c.g),vlogInv(c.b));
+  lin=mat3(1.806576,-0.170090,-0.025206,
+          -0.695697, 1.305955,-0.154468,
+          -0.110879,-0.135865, 1.179674)*lin;   // column-major: V-Gamut -> Rec.709
+  lin=clamp(lin,0.0,1.0);
+  return vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+}
+float gmp(float v,float c,float w){return exp(-(v-c)*(v-c)/(2.0*w*w));}
+// Same hue-rotation matrix the "CSS hue-rotate filter" spec uses (Rec.601 luma weights) — a
+// well-established, cheap approximation; exact for a pure rotation of the RGB cube around the
+// grey axis, which is all a "Hue" slider needs to do.
+vec3 hueRotate(vec3 c,float deg){
+  float a=radians(deg),cs=cos(a),sn=sin(a);
+  mat3 m=mat3(
+    0.213+cs*0.787-sn*0.213, 0.213-cs*0.213+sn*0.143, 0.213-cs*0.213-sn*0.787,
+    0.715-cs*0.715-sn*0.715, 0.715+cs*0.285+sn*0.140, 0.715-cs*0.715+sn*0.715,
+    0.072-cs*0.072+sn*0.928, 0.072-cs*0.072-sn*0.283, 0.072+cs*0.928+sn*0.072);
+  vec3 r=m*c;
+  return useTonemap<0.5?clamp(r,0.0,1.0):r;                 // ROADMAP.md R1 — don't clip a rotated highlight
+}
+// LR-style Color paint: mixes toward a FIXED target hue at the pixel's own luminance
+// (not a rotation of whatever hue is already there, like TH.y/hueRotate above) — a genuine
+// tint-with-a-chosen-color control per mask, distinct from the existing Temp/Tint white-balance
+// sliders.
+vec3 hsl2rgb(vec3 hsl){
+  float h=hsl.x,s=hsl.y,l=hsl.z;
+  float cc=(1.0-abs(2.0*l-1.0))*s;
+  float x=cc*(1.0-abs(mod(h*6.0,2.0)-1.0));
+  float m=l-cc*0.5;
+  vec3 rgb;
+  if(h<1.0/6.0)rgb=vec3(cc,x,0.0);
+  else if(h<2.0/6.0)rgb=vec3(x,cc,0.0);
+  else if(h<3.0/6.0)rgb=vec3(0.0,cc,x);
+  else if(h<4.0/6.0)rgb=vec3(0.0,x,cc);
+  else if(h<5.0/6.0)rgb=vec3(x,0.0,cc);
+  else rgb=vec3(cc,0.0,x);
+  return rgb+m;
+}
+vec3 tintToward(vec3 c,float hueDeg,float amt,float sat){
+  float l=dot(c,vec3(.2126,.7152,.0722));
+  vec3 target=hsl2rgb(vec3(mod(hueDeg,360.0)/360.0,clamp(sat,0.0,1.0),l));
+  return mix(c,target,clamp(amt,0.0,1.0));
+}
+${GLSL_OKLAB}
+// COLOUR-RANGE GATE — restricts a mask to pixels near a picked hue/saturation, so a rough brush
+// or a frame-filling radial can still land on skin only. Same weighted-kernel shape as pcWeight
+// (Point Color) for a consistent feel, re-centred on the pick and driven by its own Range.
+// NOTE: deliberately does NOT carry over pcWeight's "min(1, s*3)" saturation floor. That term
+// stops the 8-band mixer touching neutrals, but skin highlights and specular sheen are genuinely
+// low-saturation — the floor would drop the brightest skin out of the selection and leave a
+// bright halo along every highlight. The ws gaussian, centred on the PICKED saturation, already
+// rejects neutrals correctly.
+// FLAT-TOPPED kernel: full weight out to CR_CORE of the half-width, then a smooth falloff to 0.
+// A plain parabola (1-(d/half)^2) only reaches exactly 1.0 AT the sample point, so every other
+// pixel is slightly under-selected — and since uniformity moves each pixel by w*u*(target-x), an
+// uneven w competes with the distance term and dilutes the contraction (CLAUDE.md 5b). A plateau
+// makes the weight exactly 1.0 across the whole sampled band, which is what the contraction needs,
+// while keeping a soft edge so the selection boundary never reads as a hard cut.
+// ⚠️ Do NOT name a parameter "half" — it is a RESERVED WORD in GLSL ES. Doing so fails to compile
+// the fragment shader, and the failure is SILENT in a way the backtick trap is not: the page loads
+// fine and simply renders with every mask doing nothing, which looks like a logic bug for hours.
+const float CR_CORE=0.45;
+float crAxis(float d,float hw){
+  float core=CR_CORE*hw;
+  if(d<=core)return 1.0;
+  float t=clamp((d-core)/max(hw-core,1e-6),0.0,1.0);
+  return 1.0-t*t;
+}
+// Kernel for ONE sample centre. Split out so the multi-sample union below stays readable.
+float crSampleWeight(vec2 hc,float ch,float cc,float hHalf,float cHalf){
+  float dh=abs(hc.x-ch);if(dh>0.5)dh=1.0-dh;
+  return crAxis(dh,hHalf)*crAxis(abs(hc.y-cc),cHalf);
+}
+float colRangeWeight(vec3 c,vec4 G,vec4 S0,vec4 S1,vec4 S2,vec4 S3){
+  int n=int(G.x+0.5);
+  if(n<1)return 1.0;
+  vec3 lch=rgb2oklch(c);
+  vec2 hc=lch.zy;                                 // (hue turn, chroma) — the two gate axes
+  float hHalf=0.02+G.w*0.14;                      // hue range 0-100 -> +/-7deg .. +/-58deg
+  float cHalf=0.012+G.y*0.10;                     // chroma range 0-100; skin spans ~0.019..0.075
+  // UNION, not sum: overlapping samples must not push past 1, and a pixel belongs to the selection
+  // if it is near ANY pick. Keeping the weight FLAT across the sampled region is what lets the
+  // uniformity contraction actually converge — see CLAUDE.md 5b.
+  float w=crSampleWeight(hc,S0.x,S0.y,hHalf,cHalf);
+  if(n>1)w=max(w,crSampleWeight(hc,S0.z,S0.w,hHalf,cHalf));
+  if(n>2)w=max(w,crSampleWeight(hc,S1.x,S1.y,hHalf,cHalf));
+  if(n>3)w=max(w,crSampleWeight(hc,S1.z,S1.w,hHalf,cHalf));
+  if(n>4)w=max(w,crSampleWeight(hc,S2.x,S2.y,hHalf,cHalf));
+  if(n>5)w=max(w,crSampleWeight(hc,S2.z,S2.w,hHalf,cHalf));
+  if(n>6)w=max(w,crSampleWeight(hc,S3.x,S3.y,hHalf,cHalf));
+  if(n>7)w=max(w,crSampleWeight(hc,S3.z,S3.w,hHalf,cHalf));
+  // CHROMA FLOOR — skin always carries some chroma; rock, snow, concrete, sunglasses and pupils do
+  // not. This ONE threshold replaces the two hand-tuned luminance-gated cuts the HSV version
+  // needed, and that simplification is the whole reason for moving to Oklab. Measured on
+  // __TM3390.jpg: rock C=0.0046 and sunglass lenses C=0.0051..0.0101, against C=0.0186 for the
+  // darkest real skin (shadowed pec) and C=0.0201 for the darkest beard — so 0.010..0.016 clears
+  // both ends on a single perceptually-uniform axis, replacing two brightness-conditioned hacks.
+  // ⚠️ This is why HSV had to go: the old dark-value cut needed to reject near-black sunglasses
+  // (HSV v=0.02..0.05) but the darkest BEARD pixels sit at v=0.14, so the same cut scored them 0.12
+  // and punched visible holes through the beard and chest. In chroma those cases are 2x apart
+  // instead of overlapping, and both land correctly with one threshold.
+  w*=smoothstep(0.010,0.016,lch.y);
+  return w;
+}
+// SKIN TONE UNIFORMITY — the one CONTRACTIVE operator in the app. Every other colour control
+// here (adjSkin, applyHSL, applyPointColors, maskAdjust) is additive: "x -> x + delta", which
+// leaves the spread of the selected tones untouched. On a subject whose face is sun-exposed and
+// whose chest is pale, adding a constant moves both equally — the chest stays pale RELATIVE to a
+// face that is now over-cooked. This instead pulls toward a reference: "x -> x + u*(target - x)",
+// so distance to the target shrinks by (1-u). Far-from-target pixels move a lot, near-target
+// pixels barely move, and the spread collapses onto one tone. "Tan" then moves the TARGET (in
+// JS), never the pixels, so pushing it deepens the whole selection instead of compounding on the
+// parts that were already dark.
+// LUM is the exception, and it needed FREQUENCY SEPARATION to work at all. Write v = vLow + vHigh,
+// where vLow is the local (blurred) lightness and vHigh the fine detail. Then
+//     v' = v + w*u*(target - vLow)
+// moves only the LOW-frequency component toward the target and leaves vHigh untouched BY
+// CONSTRUCTION — so an uneven tan evens out while pores, stubble and the shading that gives a body
+// its form all survive intact. That is the pro dodge-and-burn move, expressed in one term.
+// The two alternatives are both worse and were what shipped first:
+//   vRef = v     -> per-pixel contraction: closes the gap but crushes the whole lightness range
+//                   flat (measured: all skin collapsed into v 0.61-0.66, plasticky).
+//   vRef = srcV  -> the gated region's global mean: a pure offset, form intact but the tan
+//                   difference barely closes (14% at Preserve 70).
+// U.w ("Preserve modeling") now blends LOCAL (0) -> GLOBAL mean (1), i.e. from true evening-out to
+// a plain level shift, with the local end as the useful default. When the blur buffer is unavailable
+// (useSkinLum 0) it falls back to the pixel's own value, which is the old behaviour.
+vec3 skinUniformity(vec3 c,float w,vec4 U,vec4 T,float vLow,float oneWay){
+  if(w<=0.001||(U.x==0.0&&U.y==0.0&&U.z==0.0))return c;
+  vec3 lch=rgb2oklch(c);                          // x=L, y=chroma, z=hue turn
+  float dh=T.x-lch.z;                             // shortest way round the hue wheel
+  if(dh>0.5)dh-=1.0;
+  if(dh<-0.5)dh+=1.0;
+  lch.z=fract(lch.z+w*U.x*dh+1.0);
+  lch.y+=w*U.y*(T.y-lch.y);
+  float local=useSkinLum>0.5?vLow:lch.x;
+  float vRef=mix(local,T.w,U.w);
+  float dL=T.z-vRef;
+  // ONE-WAY TAN: tanning should only ever darken. Without this, any skin already darker than the
+  // target gets LIGHTENED toward it — so shadowed areas, the underside of the jaw and the edges of
+  // hair are lifted, which reads as a flat, washed-out patch rather than a tan.
+  // "oneWay" is now a 0..1 STRENGTH, not a hard flag: at 1 it's the original full clamp, at 0 no
+  // clamp at all, and in between it blends toward the clamp — lets a photo allow a little shadow
+  // lift instead of an absolute one-way rule.
+  dL=mix(dL,min(dL,0.0),oneWay);
+  lch.x+=w*U.z*dL;
+  vec3 rgb=oklch2rgb(vec3(useTonemap<0.5?clamp(lch.x,0.0,1.0):max(lch.x,0.0),max(lch.y,0.0),lch.z));
+  return useTonemap<0.5?clamp(rgb,0.0,1.0):rgb;              // ROADMAP.md R1 — skin convergence keeps highlight headroom
+}
+vec3 maskAdjust(vec3 c,float w,vec4 A,vec2 TH,vec4 CT){ // A: exp,con,temp,sat | TH: tint,hue(deg) | CT: colHue(deg),colAmt,rot(unused here),colSat — weighted by w
+  vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+  lin*=exp2(A.x*w);                                        // exposure (stops), linear light
+  lin.r*=1.0+0.22*A.z*w;lin.b*=1.0-0.22*A.z*w;             // temp (matches basicAdjust scaling)
+  lin.g*=1.0-0.14*TH.x*w;lin.r*=1.0+0.05*TH.x*w;lin.b*=1.0+0.05*TH.x*w; // tint (matches basicAdjust)
+  c=vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);                    // ROADMAP.md R1 — masked highlight roll-off
+  c=(c-0.5)*(1.0+A.y*w)+0.5;                               // contrast around mid-grey
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  float l=dot(clamp(c,0.0,1.0),vec3(.2126,.7152,.0722));   // luma proxy always reads a clamped copy, like basicAdjust's zone gate
+  c=mix(vec3(l),c,1.0+A.w*w);                              // saturation
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  if(TH.y!=0.0)c=mix(c,hueRotate(c,TH.y),w);
+  if(CT.y>0.0)c=tintToward(c,CT.x,CT.y*w,CT.w);
+  return c;
+}
+// ROADMAP R11 — Lift/Gamma/Gain colour wheels, applied as the real ASC-CDL (American Society
+// of Cinematographers Color Decision List) Slope/Offset/Power transform, same formula behind
+// DaVinci Resolve's primary wheels and OpenColorIO's CDLTransform:
+//     out = clamp( (in * slope + offset) ^ power , 0, 1 )   per channel
+// slope/offset/power are computed on the CPU from the 3 wheels' (hue,radius)+luminance state
+// (cdlComputeSOP in the JS — see tools/calib/verify_cdl.mjs for the Node-side validation) and passed
+// in as plain vec3 uniforms, so the shader itself is just the formula, nothing to get wrong.
+// useCDL is identity-gated in getFXParams (cdlIdentity()) exactly like useCurve/useHsl, so an
+// all-neutral wheel state costs nothing and stays byte-identical to today's export goldens.
+uniform vec3 cdlSlope;uniform vec3 cdlOffset;uniform vec3 cdlPower;uniform float useCDL;
+vec3 applyCDL(vec3 c){
+  if(useCDL<0.5)return c;
+  vec3 base=max(c*cdlSlope+cdlOffset,0.0);                 // pow() of a negative base is undefined in GLSL
+  vec3 o=vec3(pow(base.r,cdlPower.r),pow(base.g,cdlPower.g),pow(base.b,cdlPower.b));
+  return clamp(o,0.0,1.0);
+}
+vec3 basicAdjust(vec3 c){
+  if(adjOn<0.5)return c;
+  // exposure + white balance in linear light
+  vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+  lin*=exp2(adjExp);
+  lin.r*=1.0+0.22*adjTemp; lin.b*=1.0-0.22*adjTemp;          // temp: + warmer
+  lin.g*=1.0-0.14*adjTint; lin.r*=1.0+0.05*adjTint; lin.b*=1.0+0.05*adjTint; // tint: + magenta
+  c=vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  // contrast: S-curve around mid-grey (display space)
+  c=(c-0.5)*(1.0+adjCon)+0.5;
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  // tonal zones (highlights/shadows/whites/blacks) keyed on luminance
+  float lv=dot(clamp(c,0.0,1.0),vec3(.2126,.7152,.0722)); // zone gating always reads a clamped proxy — gmp's gaussians are meant for the 0..1 display range regardless of tonemap
+  float t=adjSh*0.30*gmp(lv,.25,.20)+adjHi*0.30*gmp(lv,.80,.16)+adjWh*0.18*gmp(lv,.92,.10)+adjBl*0.22*gmp(lv,.10,.12);
+  c=c+t;
+  if(useTonemap<0.5)c=clamp(c,0.0,1.0);
+  // saturation + vibrance (vibrance scales weaker on already-saturated pixels)
+  float l=dot(c,vec3(.2126,.7152,.0722));
+  c=mix(vec3(l),c,1.0+adjSat);
+  float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),sv=mx>0.0?(mx-mn)/mx:0.0;
+  c=mix(vec3(l),c,1.0+adjVib*(1.0-sv));
+  // Skin warmth: independent of Adobe/DCP colour-science matching (proven impractical —
+  // Lightroom's per-shot chromatic-adaptation is proprietary/undocumented). Instead this is
+  // a manual, hue-gated dial so skin can be tuned to taste in ONE control instead of the full
+  // 8-band HSL mixer. Targets the orange/skin hue band (~10-45deg) via a soft gaussian gate
+  // (same shape convention as applyHSL's per-band weighting), unaffected by other hues.
+  if(adjSkin!=0.0&&mx>1e-4){
+    float mx2=max(c.r,max(c.g,c.b)),mn2=min(c.r,min(c.g,c.b)),d2=mx2-mn2;
+    float h=0.0;
+    if(d2>1e-5){
+      if(mx2==c.r)h=mod((c.g-c.b)/d2,6.0);
+      else if(mx2==c.g)h=(c.b-c.r)/d2+2.0;
+      else h=(c.r-c.g)/d2+4.0;
+      h*=60.0;
+    }
+    float skinGate=exp(-pow((h-27.0)/22.0,2.0))*smoothstep(0.0,0.12,sv);
+    vec3 lin2=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+    lin2.r*=1.0+0.30*adjSkin*skinGate; lin2.b*=1.0-0.30*adjSkin*skinGate;
+    c=vec3(l2sp(lin2.r),l2sp(lin2.g),l2sp(lin2.b));
+  }
+  // Dehaze — cheap haze-weighted contrast/black-point/saturation lift, NOT a physical dark-channel
+  // model (see ROADMAP item 9). Haze reads as BRIGHT + DESATURATED (a hazy sky or distant ridge),
+  // so gate the whole effect on exactly that combination: the hazy region moves a lot, an already-
+  // saturated foreground barely moves at all — the thing plain Contrast/Saturation can't do because
+  // neither is keyed on brightness+desaturation together. Negative values do the inverse (adds
+  // atmospheric haze back in) by construction, since every term below is linear in adjDehaze.
+  if(adjDehaze!=0.0){
+    float lv2=dot(c,vec3(.2126,.7152,.0722));
+    float mx3=max(c.r,max(c.g,c.b)),mn3=min(c.r,min(c.g,c.b)),sv3=mx3>0.0?(mx3-mn3)/mx3:0.0;
+    float haze=smoothstep(0.35,0.85,lv2)*(1.0-smoothstep(0.05,0.35,sv3));
+    float amt=adjDehaze*haze;
+    c=clamp((c-0.5)*(1.0+0.35*amt)+0.5,0.0,1.0);  // extra contrast in the haze band
+    c=clamp(c-0.22*amt,0.0,1.0);                   // pull the veil toward black (amt<0 lifts it — adds haze)
+    float l2=dot(c,vec3(.2126,.7152,.0722));
+    c=clamp(mix(vec3(l2),c,1.0+0.7*amt),0.0,1.0);  // saturation lift, same haze gate
+  }
+  return clamp(c,0.0,1.0);
+}
+float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-gate/subtract
+  vec4 A=mskA[i],B=mskB[i];
+  float w;
+  if(B.w>0.5){w=i<4?texture(maskTex,gm)[i]:texture(maskTex2,gm)[i-4];}      // painted/sky raster mask, packed channel i (slots 4-7 in maskTex2)
+  else if(B.x<0.5){vec2 d0=gm-A.xy;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
+    vec2 d1=vec2(d0.x*cr+d0.y*sr,-d0.x*sr+d0.y*cr); // rotate into the ellipse's own (unrotated) axes
+    vec2 dd=d1/max(A.zw,vec2(1e-4));float t=length(dd);
+    // Feather = where the falloff STARTS, as a fraction of the radius: f=0 is a hard edge at the
+    // ellipse boundary, f=1 is a gradient all the way from the centre. NOTE the stored value is
+    // 0..0.5 (the slider maps 0-100 -> 0-0.5): the original "1.0-2.0*f" form saturated at f=0.5,
+    // so every value above it was identical and the top half of the slider did nothing. Keeping
+    // the 2x here preserves how every already-saved mask renders while the slider regains its
+    // full travel. Flat interior (LOW feather) is what lets Skin Tone uniformity converge
+    // evenly — see CLAUDE.md 5b.
+    float f=clamp(B.y,0.01,0.5);w=1.0-smoothstep(max(1.0-2.0*f,0.0),1.0,t);}
+  // type 2 = SHAPELESS: the whole frame, so the colour and/or luminance range gates are the only
+  // thing selecting. Invert is deliberately NOT applied here — inverting a full-frame shape gives
+  // zero everywhere. For these masks it inverts the GATES instead, in the mask loop.
+  else if(B.x>1.5){w=1.0;return w;}
+  else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
+  // Shapeless masks invert only after every gate below (including depth). A baked depth raster
+  // uses the texture branch above, but keeps B.x>1.5 so the same combined-invert rule applies.
+  if(B.z>0.5&&B.x<1.5)w=1.0-w;
+  return w;
+}
+// Compose complete shape/invert/range/depth coverage once, shared by adjustments and Selection
+// preview. The CPU packs a dependency-first order, so nested references take at most eight steps.
+// Amount/mute are adjustment strength and never change the coverage another mask can reference.
+void mskSelectionWeights(vec2 gm2,vec2 uv2,vec3 srcCol,vec3 gateCol2,out float weights[8]){
+  float base[8];
+  for(int i=0;i<8;i++){
+    base[i]=0.0;weights[i]=0.0;
+    if(float(i)>=mskN)continue;
+    float w=mskShapeWeight(i,gm2);
+    vec4 D=mskD[i];
+    if(D.x>0.001||D.y<0.999){float lv2=dot(srcCol,vec3(.2126,.7152,.0722));
+      w*=smoothstep(D.x-0.12,D.x+0.03,lv2)*(1.0-smoothstep(D.y-0.03,D.y+0.12,lv2));}
+    w*=colRangeWeight(gateCol2,mskG[i],mskCS[i*4],mskCS[i*4+1],mskCS[i*4+2],mskCS[i*4+3]);
+    bool depthUnavailable=false;
+    {vec4 Dep=mskDep[i];if(Dep.x>0.5){
+      if(useDepthTx>0.5){float dv2=texture(depthTx,uv2).r;
+        w*=smoothstep(Dep.y-0.06,Dep.y+0.03,dv2)*(1.0-smoothstep(Dep.z-0.03,Dep.z+0.06,dv2));}
+      else{w=0.0;depthUnavailable=true;}}}
+    if(mskB[i].x>1.5&&mskB[i].z>0.5)w=1.0-w;
+    if(depthUnavailable)w=0.0;
+    base[i]=clamp(w,0.0,1.0);
+  }
+  for(int step=0;step<8;step++){
+    if(float(step)>=mskN)break;
+    int i=int(mskTopo[step]+0.5);
+    if(i<0||i>=8||float(i)>=mskN)continue;
+    if(mskO[i].y<0.5){weights[i]=0.0;continue;}
+    float w=base[i];int operand=int(mskO[i].x);
+    if(operand>=0&&operand<8&&operand!=i){
+      if(mskE[i].x>2.5)w=max(w,weights[operand]);
+      else if(mskE[i].x>1.5)w=min(w,weights[operand]);
+      else if(mskE[i].x>0.5)w=max(0.0,w-weights[operand]);
+    }
+    weights[i]=clamp(w,0.0,1.0);
+  }
+  // Erasers are a global subtraction tool, but their own coverage includes all range gates and
+  // composition. Keep this after graph resolution so all consumers see the same effective edge.
+  for(int i=0;i<8;i++){
+    if(float(i)>=mskN||mskJ[i].y>0.5)continue;
+    for(int j=0;j<8;j++){
+      if(float(j)>=mskN)break;
+      if(i!=j&&mskJ[j].y>0.5)weights[i]=max(0.0,weights[i]-weights[j]);
+    }
+  }
+}
+float mskSelWAt(int i,vec2 gm2,vec2 uv2){
+  vec3 srcCol=texture(img,uv2).rgb;
+  vec3 gateCol2=useSkinCol>0.5?texture(skinCol,uv2).rgb:srcCol;
+  float weights[8];mskSelectionWeights(gm2,uv2,srcCol,gateCol2,weights);
+  return weights[i];
+}
+// Range weight for the per-mask NR bilateral filter (see the mskAnyNR block in main() below).
+// Declared before use — see CLAUDE.md §3 on GLSL function ordering. exp(-dl^2/(2*sigR^2)) with
+// sigR=0.08 (78.125 == 1/(2*0.08*0.08)), chosen ~1.3x a typical sensor-noise sigma of 0.06 — the
+// standard sigma-ratio convention (Tomasi & Manduchi 1998), validated numerically in Node first.
+float nrRangeW(vec3 samp,vec3 center){
+  float dl=dot(samp-center,vec3(.2126,.7152,.0722));
+  return exp(-dl*dl*78.125);
+}
+// CHR-262: negative-to-positive conversion, the same math as desktop/src-tauri/src/film_negative.rs
+// (reference input -> reference output, per-channel negative power). A pure power is closed under a
+// gamma change, so the exponent means the same on display-encoded or linear working values. Samples
+// are floored at 0.001 so a black pixel reaches a large finite output instead of infinity.
+vec3 fnConv(vec3 v){
+  vec3 q=max(v,vec3(0.001))/max(fnRef,vec3(0.002));
+  vec3 o=fnOut*exp(-fnExp*log(q));
+  if(fnBW>.5)o=vec3(dot(o,vec3(.2126,.7152,.0722)));
+  return clamp(o,vec3(0.0),vec3(8.0));
+}
+// Every source-image tap used by the early detail operators goes through here so sharpen, wavelet and
+// noise taps see the converted positive rather than the negative.
+vec4 fnTex(vec2 p){
+  vec4 t=texture(img,p);
+  if(fnOn>.5)t.rgb=fnConv(t.rgb);
+  return t;
+}
+// Four-tap cross low-pass for a compact custom multiscale band control. This is not RawTherapee's
+// Haar Contrast-by-Detail-Levels implementation; radii are measured in source texture pixels.
+vec3 waveletLow(vec2 p,float radius){
+  vec2 off=texSize*radius;
+  return (fnTex(vidUV(p+vec2(off.x,0.))+vidWeave).rgb+
+          fnTex(vidUV(p-vec2(off.x,0.))+vidWeave).rgb+
+          fnTex(vidUV(p+vec2(0.,off.y))+vidWeave).rgb+
+          fnTex(vidUV(p-vec2(0.,off.y))+vidWeave).rgb)*(0.25*vidBreath);
+}
+void main(){vec4 c=fnTex(vidUV(uv)+vidWeave);
+if(vidBreath!=1.0)c.rgb*=vidBreath;
+// Source-pixel high-pass, computed ONCE. Used by the global Sharpen/Clarity below and, when any
+// mask asks for it, by the per-mask Texture control in the mask loop. Hoisted (rather than
+// recomputed there) so the 4 extra taps are paid at most once per pixel — and skipped entirely
+// when nothing needs it, so the default path costs exactly what it did before.
+vec3 srcHP=vec3(0.0);
+bool needHP=(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.))||mskAnyTex>0.5||mskAnySharp>0.5;
+if(needHP){
+  vec3 nb=(fnTex(vidUV(uv+vec2(0.,texSize.y)))+fnTex(vidUV(uv-vec2(0.,texSize.y)))
+          +fnTex(vidUV(uv+vec2(texSize.x,0.)))+fnTex(vidUV(uv-vec2(texSize.x,0.)))).rgb*0.25;
+  srcHP=c.rgb-nb;
+}
+// WIDE source high-pass, for per-mask Clarity. Deliberately a separate, larger radius rather
+// than reusing srcHP: Texture (radius 1) moves skin GRAIN, Clarity (radius 3) moves the
+// midtone structure a portrait retoucher actually reaches for, and at the same radius the two
+// controls would just be one control with two names. Gated so the 4 extra taps are never paid
+// by a photo that doesn't ask for them, exactly like mskAnyTex.
+vec3 srcHPW=vec3(0.0);
+if(mskAnyClarity>0.5){
+  float rW=3.0;
+  vec3 nbW=(fnTex(vidUV(uv+vec2(0.,texSize.y*rW)))+fnTex(vidUV(uv-vec2(0.,texSize.y*rW)))
+           +fnTex(vidUV(uv+vec2(texSize.x*rW,0.)))+fnTex(vidUV(uv-vec2(texSize.x*rW,0.)))).rgb*0.25;
+  srcHPW=c.rgb-nbW;
+}
+vec3 srcHPSharp=srcHP,srcHPWSharp=srcHPW;
+if(adjSharp!=0.0&&abs(adjSharpRadius-1.0)>0.001){
+  vec2 sharpOff=texSize*adjSharpRadius;
+  vec3 sharpNb=(fnTex(vidUV(uv+vec2(0.,sharpOff.y)))+fnTex(vidUV(uv-vec2(0.,sharpOff.y)))
+               +fnTex(vidUV(uv+vec2(sharpOff.x,0.)))+fnTex(vidUV(uv-vec2(sharpOff.x,0.)))).rgb*0.25;
+  srcHPSharp=c.rgb-sharpNb;
+  if(adjSharpDetail>0.5){
+    vec2 wideOff=sharpOff*3.0;
+    vec3 wideNb=(fnTex(vidUV(uv+vec2(0.,wideOff.y)))+fnTex(vidUV(uv-vec2(0.,wideOff.y)))
+                +fnTex(vidUV(uv+vec2(wideOff.x,0.)))+fnTex(vidUV(uv-vec2(wideOff.x,0.)))).rgb*0.25;
+    srcHPWSharp=c.rgb-wideNb;
+  }
+}
+float sharpKeep=1.0;
+bool showSharpMask=adjSharpMaskPreview>0.5;
+if(adjSharpMask>0.0&&(adjSharp!=0.0||showSharpMask)){
+  vec2 sharpDX=vec2(texSize.x,0.0),sharpDY=vec2(0.0,texSize.y);
+  float lumL=dot(fnTex(vidUV(uv-sharpDX)).rgb,vec3(.2126,.7152,.0722));
+  float lumR=dot(fnTex(vidUV(uv+sharpDX)).rgb,vec3(.2126,.7152,.0722));
+  float lumU=dot(fnTex(vidUV(uv-sharpDY)).rgb,vec3(.2126,.7152,.0722));
+  float lumD=dot(fnTex(vidUV(uv+sharpDY)).rgb,vec3(.2126,.7152,.0722));
+  float edge=max(abs(lumR-lumL),abs(lumD-lumU));
+  float threshold=0.12*adjSharpMask;
+  sharpKeep=smoothstep(threshold,threshold+0.025,edge);
+}
+float localSharpEdge=0.0;
+if(mskAnySharpMask>0.5||mskShowSharpMask>=0.0){
+  float localLumL=dot(fnTex(vidUV(uv-vec2(texSize.x,0.0))).rgb,vec3(.2126,.7152,.0722));
+  float localLumR=dot(fnTex(vidUV(uv+vec2(texSize.x,0.0))).rgb,vec3(.2126,.7152,.0722));
+  float localLumU=dot(fnTex(vidUV(uv-vec2(0.0,texSize.y))).rgb,vec3(.2126,.7152,.0722));
+  float localLumD=dot(fnTex(vidUV(uv+vec2(0.0,texSize.y))).rgb,vec3(.2126,.7152,.0722));
+  localSharpEdge=max(abs(localLumR-localLumL),abs(localLumD-localLumU));
+}
+if(adjOn>.5&&adjSharp!=0.&&abs(adjSharpDetail-0.5)>0.001&&(mskAnyClarity<0.5)){
+  float detailRadius=3.0;
+  vec3 nbDetail=(fnTex(vidUV(uv+vec2(0.,texSize.y*detailRadius)))+fnTex(vidUV(uv-vec2(0.,texSize.y*detailRadius)))
+                +fnTex(vidUV(uv+vec2(texSize.x*detailRadius,0.)))+fnTex(vidUV(uv-vec2(texSize.x*detailRadius,0.)))).rgb*0.25;
+  srcHPW=c.rgb-nbDetail;
+}
+// Per-mask Noise Reduction: a small, FIXED 3x3 bilateral filter (Tomasi & Manduchi 1998 — spatial
+// Gaussian x range Gaussian) on SOURCE pixels, same pre-grade/post-apply convention as Texture and
+// Clarity above. Unlike a box blur, taps that differ a lot in luminance from the center (i.e.
+// across an edge) are down-weighted, so it smooths grain within a region without blurring across
+// a boundary — validated numerically in Node against a synthetic step+noise chart before this GLSL
+// was written (9-tap bilateral cut flat-region noise variance ~2.7x vs the untouched noisy image,
+// while a same-tap-count box blur nearly DOUBLED the edge error by bleeding across the boundary).
+// Spatial weights are baked constants for the fixed ring (sigS=0.9 texel): orthogonal neighbours
+// 0.540, diagonal neighbours 0.291, center is always 1.0. Gated on mskAnyNR exactly like
+// mskAnyTex/mskAnyClarity, so the 8 extra taps are never paid by a photo that doesn't ask for them.
+vec3 srcNR=vec3(0.0);
+if(mskAnyNR>0.5){
+  vec3 cc=c.rgb;
+  vec3 s10=fnTex(vidUV(uv+vec2(0.0,-texSize.y))).rgb;
+  vec3 s01=fnTex(vidUV(uv+vec2(-texSize.x,0.0))).rgb;
+  vec3 s21=fnTex(vidUV(uv+vec2(texSize.x,0.0))).rgb;
+  vec3 s12=fnTex(vidUV(uv+vec2(0.0,texSize.y))).rgb;
+  vec3 s00=fnTex(vidUV(uv+vec2(-texSize.x,-texSize.y))).rgb;
+  vec3 s20=fnTex(vidUV(uv+vec2(texSize.x,-texSize.y))).rgb;
+  vec3 s02=fnTex(vidUV(uv+vec2(-texSize.x,texSize.y))).rgb;
+  vec3 s22=fnTex(vidUV(uv+vec2(texSize.x,texSize.y))).rgb;
+  float w10=0.540*nrRangeW(s10,cc),w01=0.540*nrRangeW(s01,cc),w21=0.540*nrRangeW(s21,cc),w12=0.540*nrRangeW(s12,cc);
+  float w00=0.291*nrRangeW(s00,cc),w20=0.291*nrRangeW(s20,cc),w02=0.291*nrRangeW(s02,cc),w22=0.291*nrRangeW(s22,cc);
+  float wsum=1.0+w10+w01+w21+w12+w00+w20+w02+w22;
+  srcNR=(cc+s10*w10+s01*w01+s21*w21+s12*w12+s00*w00+s20*w20+s02*w02+s22*w22)/wsum;
+}
+// CHR-261: compact, zero-default multiscale detail contrast. Fine/Small/Medium bands are
+// differences between progressively wider low-pass scales. Residual adjusts the remaining
+// Uniforms are already normalised to -1..1 by the recipe builder (slider/100) - do NOT divide again.
+// low-frequency image around the working-value midpoint (0.5). Input may be display encoded or
+// extended-range scene-linear depending on setImage(); this control does not claim a linear-light
+// midpoint. All taps are skipped when controls are neutral.
+if(adjOn>.5&&(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResidual!=0.)){
+  vec3 detailDelta=vec3(0.0);
+  vec3 low1=vec3(0.0),low2=vec3(0.0),low4=vec3(0.0);
+  if(adjWavelet1!=0.||adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResidual!=0.)low1=waveletLow(uv,1.0);
+  if(adjWavelet2!=0.||adjWavelet3!=0.||adjWaveletResidual!=0.)low2=waveletLow(uv,2.0);
+  if(adjWavelet3!=0.||adjWaveletResidual!=0.)low4=waveletLow(uv,4.0);
+  if(adjWavelet1!=0.)detailDelta+=(c.rgb-low1)*adjWavelet1;
+  if(adjWavelet2!=0.)detailDelta+=(low1-low2)*adjWavelet2;
+  if(adjWavelet3!=0.)detailDelta+=(low2-low4)*adjWavelet3;
+  if(adjWaveletResidual!=0.)detailDelta+=(low4-vec3(0.5))*adjWaveletResidual;
+  c.rgb=clamp(c.rgb+detailDelta,0.0,1.0);
+}
+// Sharpening / Clarity: unsharp mask on source pixels BEFORE LUT (smooth LUT preserves HP detail).
+// adjSharp blends radius-1 edges with radius-3 texture; default detail 0.5 is radius-1 only.
+// adjClarity weights by midtone mask (4*lum*(1-lum)).
+if(adjOn>.5&&(adjSharp!=0.||adjClarity!=0.)){
+  vec3 hp=mix(srcHPSharp,srcHPWSharp,clamp((adjSharpDetail-0.5)*2.0,0.0,1.0));
+  float lv=dot(c.rgb,vec3(.2126,.7152,.0722));
+  float cw=4.*lv*(1.-lv);
+  // Detail below 0.5 = edge-only: fade out small-amplitude high-pass (fine texture) for Sharpen only,
+  // so the lower half of the slider is not a dead zone. Detail 0.5 leaves hpS == hp exactly.
+  vec3 hpS=hp;
+  if(adjSharpDetail<0.499){
+    float edgeLo=(0.5-adjSharpDetail)*2.0;
+    float hpMag=max(abs(hp.r),max(abs(hp.g),abs(hp.b)));
+    hpS=hp*smoothstep(0.0,0.02+0.2*edgeLo,hpMag);
+  }
+  c.rgb=clamp(c.rgb+hpS*adjSharp*sharpKeep+hp*(adjClarity*cw),0.,1.);
+}
+// Texture (global): a MID-frequency, luminance-only, edge-protected detail move. Deliberately NOT
+// Sharpen's radius-1 high-pass: it measures against an 8-tap ring at radius 2.5 texels (so it picks
+// up pores, fabric and foliage rather than pixel-level edges), adds the result to luminance only
+// (no colour fringing), and fades out where the local difference is already large so hard edges
+// do not halo. Positive crisps surface detail, negative smooths it. Gated: zero cost at default.
+if(adjOn>.5&&adjTexture!=0.){
+  float rT=2.5,rD=rT*0.7071;
+  vec3 nbT=(texture(img,vidUV(uv+vec2(0.,texSize.y*rT)))+texture(img,vidUV(uv-vec2(0.,texSize.y*rT)))
+           +texture(img,vidUV(uv+vec2(texSize.x*rT,0.)))+texture(img,vidUV(uv-vec2(texSize.x*rT,0.)))
+           +texture(img,vidUV(uv+texSize*rD))+texture(img,vidUV(uv-texSize*rD))
+           +texture(img,vidUV(uv+vec2(texSize.x,-texSize.y)*rD))+texture(img,vidUV(uv+vec2(-texSize.x,texSize.y)*rD))).rgb*0.125;
+  float hlT=dot(c.rgb-nbT,vec3(.2126,.7152,.0722));
+  float protT=1.-smoothstep(0.05,0.22,abs(hlT));
+  c.rgb=clamp(c.rgb+vec3(hlT*adjTexture*4.0*protT),0.,1.);
+}
+// Input transform BEFORE the look LUT (sharpen above runs on raw source values — consistent
+// for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
+if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
+if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
+if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,c.rgb*sc+of).rgb;
+  if(useStockShoulder>.5){
+    // Per-channel: only headroom past white gets replaced (log2<=0 => c.rgb<=1.0 => identity,
+    // leaving the LUT's own already-correct [0,1] mapping alone). Stops are clamped to the
+    // baked texture's 0..4 domain -- beyond +4 stops the real model was already flat (verified
+    // in the bake's own validation: tail slope ~0 by u=1.0), so clamping there is a no-op on
+    // the curve shape, not a truncation.
+    vec3 stops=log2(max(c.rgb,vec3(1e-6)));
+    vec3 u=clamp(stops*0.25,0.0,1.0);
+    vec3 shoulder=vec3(texture(stockShoulderTex,vec2(u.r,.5)).r,
+                        texture(stockShoulderTex,vec2(u.g,.5)).g,
+                        texture(stockShoulderTex,vec2(u.b,.5)).b);
+    graded=vec3(c.rgb.r<=1.0?graded.r:shoulder.r,
+                c.rgb.g<=1.0?graded.g:shoulder.g,
+                c.rgb.b<=1.0?graded.b:shoulder.b);
+  }
+  c.rgb=mix(lb,graded,lutMix);}
+if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
+c.rgb=basicAdjust(c.rgb);
+c.rgb=applyCDL(c.rgb);
+if(mskN>0.5){
+  vec2 gm=uvOffL+uv*uvScaleL;
+  // Local (low-frequency) lightness for the skin frequency separation. LOCAL uv on purpose — the
+  // buffer was built from this render's own source, and a tile's halo covers the blur's reach.
+  float vLow=useSkinLum>0.5?texture(skinLum,uv).a:0.0;
+  // Gate on the averaged colour, adjust the sharp one. See lumdown for why.
+  // Range gates use the incoming comp-pass source consistently, before global grading. The
+  // outline helper samples this same image at neighbouring texels, so its edge matches the fill.
+  vec3 sourceForMask=texture(img,uv).rgb;
+  vec3 gateCol=useSkinCol>0.5?texture(skinCol,uv).rgb:sourceForMask;
+  float selWeights[8];mskSelectionWeights(gm,uv,sourceForMask,gateCol,selWeights);
+  for(int i=0;i<8;i++){
+    if(float(i)>=mskN)break;
+    float coverage=selWeights[i];
+    float w=coverage*mskE[i].w;              // Amount/mute scale this adjustment, never operand coverage
+    if(mskShowSharpMask>=0.0&&abs(mskShowSharpMask-float(i))<0.5){
+      float threshold=0.12*max(mskL[i].y,0.01);
+      float keep=smoothstep(threshold,threshold+0.025,localSharpEdge);
+      o=vec4(vec3(clamp(coverage*keep,0.0,1.0)),1.0);
+      return;
+    }
+    // "Selection" preview mode: paint this mask's EFFECTIVE weight (shape x lum gate x colour
+    // gate) over a greyscale photo and stop. The JS/SVG overlay can only draw the shape, so it
+    // cannot show what the gates do — and a colour range is untunable if you cannot see it.
+    if(mskShowSel>=0.0&&abs(mskShowSel-float(i))<0.5){
+      float g=dot(c.rgb,vec3(.2126,.7152,.0722));
+      float wv=clamp(coverage,0.0,1.0);
+      float outlineWeight=0.0;
+      if(mskShowSelOutline>0.5){
+        // Edge-only outline: re-evaluate the effective weight at 4 neighbouring texels and paint
+        // red only where it changes sharply (the selection BOUNDARY), leaving the interior showing
+        // the plain photo — cheaper and clearer than a filled overlay for judging a feathered edge.
+        vec2 gs=texSize*uvScaleL;
+        float wL=mskSelWAt(i,gm-vec2(gs.x,0.0),uv-vec2(texSize.x,0.0));
+        float wR=mskSelWAt(i,gm+vec2(gs.x,0.0),uv+vec2(texSize.x,0.0));
+        float wU=mskSelWAt(i,gm-vec2(0.0,gs.y),uv-vec2(0.0,texSize.y));
+        float wD=mskSelWAt(i,gm+vec2(0.0,gs.y),uv+vec2(0.0,texSize.y));
+        outlineWeight=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
+      }
+      if(mskShowSelMode>1.5){
+        float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
+        o=vec4(vec3(displayWeight),1.0);
+      }else{
+        float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
+        vec3 base=mskShowSelMode>0.5?c.rgb:vec3(g);
+        vec3 overlay=mskShowSelMode>0.5?mskShowSelColor:vec3(1.0,0.15,0.15);
+        if(mskShowSelMode<0.5&&any(greaterThan(abs(mskShowSelColor-vec3(1.0,0.15,0.15)),vec3(0.0001))))overlay=mskShowSelColor;
+        o=vec4(mix(base,overlay,displayWeight*mskShowSelOp),1.0);
+      }
+      return;
+    }
+    if(mskJ[i].y>0.5)continue;                                   // eraser coverage is previewable but applies no adjustment
+    if(w>0.001){
+      vec4 D=mskD[i];
+      // Texture: add or SUBTRACT the source high-pass inside the mask. Negative softens, which is
+      // the most-wanted local move in portrait work (calm skin texture while eyes stay sharp) and
+      // was impossible before — masks carried no detail controls at all. The high-pass is measured
+      // on SOURCE pixels while this applies post-grade; that mismatch is deliberate and matches
+      // what the global Sharpen/Clarity already do.
+      if(mskJ[i].x!=0.0){c.rgb=c.rgb+srcHP*(mskJ[i].x*w);if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);}
+      // Local Sharpen uses the same radius-1 source edge response as global Sharpen, but is
+      // independently weighted by the mask's effective selection and Amount. Its zero default
+      // preserves existing masks; positive values add edge contrast, negative values soften it.
+      if(mskL[i].x!=0.0){
+        float localSharpKeep=1.0;
+        if(mskL[i].x>0.0&&mskL[i].y>0.0){float threshold=0.12*mskL[i].y;localSharpKeep=smoothstep(threshold,threshold+0.025,localSharpEdge);}
+        c.rgb=c.rgb+srcHP*(mskL[i].x*w*localSharpKeep*0.75);if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Clarity: midtone-weighted wide-radius contrast, the same 4*l*(1-l) weighting the global
+      // Clarity uses — so it builds structure in the midtones without touching highlight
+      // roll-off or crushing shadows, and negative smooths.
+      if(mskJ[i].w!=0.0){
+        float lvC=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722)); // midtone-weight proxy always reads a clamped copy
+        c.rgb=c.rgb+srcHPW*(mskJ[i].w*w*4.0*lvC*(1.0-lvC));
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Noise Reduction: mix toward the bilateral-filtered source by strength*w. Unipolar (no
+      // "negative NR") — see mskK[i].x's comment for why this is unlike Texture/Clarity.
+      if(mskK[i].x>0.0){
+        c.rgb=mix(c.rgb,srcNR,mskK[i].x*w);
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
+      c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
+      if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
+        float lv3=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722));
+        float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
+        c.rgb=c.rgb+t3;
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Match the Basic Adjustments tonal windows and gains. Skip the entire zero path so
+      // existing masks retain their exact operation sequence and output.
+      if(mskK[i].y!=0.0||mskK[i].z!=0.0){
+        float lvWB=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722));
+        float tWB=(mskK[i].y*0.18*gmp(lvWB,.92,.10)+mskK[i].z*0.22*gmp(lvWB,.10,.12))*w;
+        c.rgb=c.rgb+tWB;
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+      // Local Dehaze follows the Basic Adjustments heuristic but scales every stage by this
+      // mask's effective coverage. Guard both the control and computed amount so haze-gate-zero
+      // pixels (for example a saturated foreground) do not get clipped or rounded needlessly.
+      if(mskK[i].w!=0.0){
+        float lvDH=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float mxDH=max(c.r,max(c.g,c.b)),mnDH=min(c.r,min(c.g,c.b)),svDH=mxDH>0.0?(mxDH-mnDH)/mxDH:0.0;
+        float hazeDH=smoothstep(0.35,0.85,lvDH)*(1.0-smoothstep(0.05,0.35,svDH));
+        float amtDH=mskK[i].w*hazeDH*w;
+        if(amtDH!=0.0){
+          c.rgb=clamp((c.rgb-0.5)*(1.0+0.35*amtDH)+0.5,0.0,1.0);
+          c.rgb=clamp(c.rgb-0.22*amtDH,0.0,1.0);
+          float lvDH2=dot(c.rgb,vec3(.2126,.7152,.0722));
+          c.rgb=clamp(mix(vec3(lvDH2),c.rgb,1.0+0.7*amtDH),0.0,1.0);
+        }
+      }
+      // Local Vibrance uses the global saturation-aware weighting on the current graded colour.
+      // It runs after this mask's local controls in the LUT pass; global Vibrance remains later,
+      // in the comp pass after print, so their ordering is intentionally not identical.
+      if(mskDep[i].w!=0.0){
+        float lvV=dot(c.rgb,vec3(.2126,.7152,.0722));
+        float mxV=max(c.r,max(c.g,c.b)),mnV=min(c.r,min(c.g,c.b)),svV=mxV>0.0?(mxV-mnV)/mxV:0.0;
+        c.rgb=mix(vec3(lvV),c.rgb,1.0+mskDep[i].w*(1.0-svV)*w);
+        if(useTonemap<0.5)c.rgb=clamp(c.rgb,0.0,1.0);
+      }
+    }
+  }
+}
+if(showSharpMask){o=vec4(vec3(sharpKeep),1.0);return;}
+if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
+  vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
+  c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
+o=c;}`);
+
+    // SOURCE EMISSION v22 — rule-based model (linear light), replacing the v5
+    // red-surplus model which badly mismatched Dehancer (it never halated green/
+    // cyan/purple/yellow/red, and pink-flooded the gray bars by self-emitting).
+    // Derived from a dense pixel-loss fit (tools/calib/optimize_hal.py) directly against
+    // the Dehancer halation-only PNG (loss 0.0287→0.0239, ~17% better than v5):
+    //   sat  = max(rgb) - min(rgb)                              (0 for neutral gray)
+    //   emit = smoothstep(thr,thr+knee,lum) *
+    //          ( kW * lum^powL  +  kC * sat *
+    //            max(R + aG*G - bB*max(B-R,0) + bP*min(R,B), 0) )
+    //   (bB term is asymmetric — only the blue EXCESS over red; bP*min(R,B) is a
+    //   "magenta-ness" booster, zero whenever either channel is zero — see v22.1b
+    //   note at FXR.CAL.halation for why both purple-specific terms are needed.)
+    // Two emission drivers, matching how real film halation actually works (any
+    // bright source scatters off the backing and re-exposes in the backing's
+    // red-orange dye color):
+    //   • kW*lum^powL  (powL≈3.9, steep): a "brightness toward white" term — white
+    //     halates strongly, mid-grays (lum~0.5) almost not at all. FIXES the pink-
+    //     flooded gray bars (their self-emission collapses near zero).
+    //   • kC*sat*(warm-weighted RGB): a saturation/warmth term — saturated colors
+    //     (red, orange, green, cyan, purple, yellow) glow; neutral grays (sat=0)
+    //     don't; blue is suppressed (bB≈0.97); warm is boosted (aG≈0.20). FIXES
+    //     missing color halation incl. red, while keeping blue minimal.
+    // The resulting glow is tinted red-orange by gainG≈0.08×gainR (below), and the
+    // channel-split σ_R≫σ_G naturally produces a thin warm/amber inner rim fading
+    // to deep red further out — the "tiny inner glow at bright edges" cue, with no
+    // separate term needed (verified: a dedicated inner-glow component converged to
+    // ~zero gain in tools/calib/optimize_innerglow.py — it adds bleed risk, not signal).
+    // Bloom:
+    //   emit = smoothstep(thr, thr+knee, lum) * lum^power  (lum-gated, neutral)
+    this.progs.src=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;
+uniform float thr,knee,power,bluesupp,mode,powL,kW,kC,aG,bP,powLg,gA,gB;
+float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
+void main(){
+  vec3 c=texture(img,uv).rgb;
+  vec3 lin=vec3(s2l(c.r),s2l(c.g),s2l(c.b));
+  float lum=dot(lin,vec3(.2126,.7152,.0722));
+  float bright=smoothstep(thr,thr+knee,lum);
+  if(mode<0.5){
+    // halation: rule-based emission (see comment block above).
+    //   bluesupp doubles as bB (blue-suppression weight in the warmth term).
+    //   ASYMMETRIC blue suppression: bB only discounts the blue EXCESS over red
+    //   (max(B-R,0)), not raw B. The old symmetric "R - bB*B" made saturated
+    //   purple (R≈B, e.g. 200,0,200) collapse to ~0 emission (R and B nearly
+    //   cancel) even though Dehancer clearly halates purple (~70% of red's
+    //   strength). This form leaves red/orange/yellow/green/purple/warm
+    //   (B<=R) completely unaffected by bB, while still suppressing
+    //   blue/cyan/cool (B>R) in proportion to their blue excess.
+    //   MAGENTA/PURPLE DRIVER (+bP*min(R,B)): purple still under-halates vs
+    //   Dehancer at full strength (0.187 vs 0.325) even with the asymmetric fix,
+    //   because this chart's purple swatch is (200,0,200) -- R==B exactly, so
+    //   "max(B-R,0)=0" and bB has NO effect on it (it's purely an R/B-excess
+    //   suppressor, not a purple booster). min(R,B) is a clean "magenta-ness"
+    //   detector: it is PROVABLY zero whenever either channel is zero -- i.e.
+    //   for red/orange/yellow/green (B=0) and cyan/blue (R=0) -- and only
+    //   activates where R and B are both present together (magenta/purple/pink,
+    //   and slightly for warm/red-with-blue-tint). Validated: adding it moves
+    //   ONLY the purple gap (0.187->0.327, matching Dehancer's 0.325) with every
+    //   other color's gap-R and interior-flood value bit-identical.
+    float sat=max(lin.r,max(lin.g,lin.b))-min(lin.r,min(lin.g,lin.b));
+    float white=pow(clamp(lum,0.0,1.0),powL);
+    float magenta=min(lin.r,lin.b);
+    float color=sat*max(lin.r+aG*lin.g-bluesupp*max(lin.b-lin.r,0.0)+bP*magenta,0.0);
+    float emitR=bright*(kW*white+kC*color);   // warm "backing dye" — fires for ALL bright sources
+    // GREEN emission: drives the yellow band at a bright edge (red spreads wider than green via
+    // sigma-split, so near the edge R+G=yellow, deeper R-only=red). HUE-GATED so it appears only
+    // for sources where green is present and not red-dominated (white/grey/yellow/green/cyan), and
+    // NOT for red/orange/purple (otherwise they get a wrong yellow rim). gate = smoothstep over
+    // (G-R) in linear: ~1 when G>=R (white,grey,yellow,green,cyan), ~0 when R>>G (red,orange,purple).
+    float white_g=pow(clamp(lum,0.0,1.0),powLg);
+    float gate=smoothstep(gA,gB,lin.g-lin.r);
+    float emitG=bright*white_g*gate;
+    o=vec4(emitR,emitG,0.0,1.);  // .r=warm backing, .g=yellow driver — blurred per-channel (sigR,sigG)
+  } else {
+    // bloom: lum-gated source COLOR — bloom carries hue of source light
+    float gate=bright*pow(clamp(lum,0.,1.),power);
+    o=vec4(lin*gate,1.);
+  }
+}`);
+
+    // AREA-NORMALIZED separable Gaussian (energy-conserving): divide by the
+    // weight sum. For halation/bloom sigmas (~8-12px) the 3-sigma radius fits
+    // in +/-48 taps, so this is a DENSE 1:1 kernel — no pixel-skipping, no grid
+    // artefacts (the failure mode of the old adaptStep code).
+    this.progs.blur=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 dir;uniform float sig;
+void main(){
+  vec4 s=vec4(0.);float t=0.;
+  int r=min(int(sig*3.)+1,48);
+  for(int i=-48;i<=48;i++){
+    if(abs(i)>r)continue;
+    float w=exp(-float(i*i)/(2.*sig*sig));
+    s+=texture(img,uv+dir*float(i))*w;
+    t+=w;
+  }
+  o=t>0.?s/t:vec4(0.);
+}`);
+
+    // ROADMAP.md R6 — DECONVOLUTION SHARPENING (damped Richardson-Lucy). Unlike the existing
+    // unsharp-mask Sharpen/Clarity (adjSharp/adjClarity, which only amplify existing edge
+    // contrast), this models the lens/sensor blur as a small Gaussian PSF and iteratively
+    // INVERTS it — recovering real detail, not just boosting contrast at edges. Validated in
+    // plain Node first (see calib's rl_validate script / CLAUDE.md's R6 entry): at 3 iterations
+    // damped RL beats unsharp mask on both detail recovery AND noise/ringing amplification on a
+    // synthetic noisy-blurred edge. Runs as its own tiny multi-pass sub-pipeline (this program +
+    // the existing separable `blur` program, ping-ponged — see render()'s "deconv" stage) rather
+    // than being crammed into the single-pass `lut` shader, because RL needs a fresh blur of the
+    // CURRENT ESTIMATE on every iteration.
+    //   ratio = obs / reblur(est)                          (classic RL correction ratio)
+    //   U     = tanh(|obs-reblur(est)| / dampT)             (damping: ~0 near convergence/noise
+    //                                                         floor, ~1 on real structure)
+    //   step  = clamp(1 + U*(ratio-1), 1-maxStep, 1+maxStep) (per-iteration step CAP — the
+    //                                                         "conservative ring-artifact cap"
+    //                                                         ROADMAP.md explicitly calls for)
+    //   est'  = est * step
+    // This is the damped-RL family (White 1994 / Dey et al. 2006 style damping), not invented —
+    // see the Node validation for the measured effect of dampT/maxStep on ringing.
+    this.progs.deconvUpdate=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D obs,est,reblur;
+uniform float dampT,maxStep;
+void main(){
+  vec3 o3=texture(obs,uv).rgb;
+  vec3 e3=texture(est,uv).rgb;
+  vec3 r3=texture(reblur,uv).rgb;
+  vec3 ratio=o3/max(r3,vec3(1e-4));
+  vec3 diff=o3-r3;
+  vec3 U=vec3(tanh(abs(diff.r)/dampT),tanh(abs(diff.g)/dampT),tanh(abs(diff.b)/dampT));
+  vec3 step_=vec3(1.0)+U*(ratio-vec3(1.0));
+  step_=clamp(step_,vec3(1.0-maxStep),vec3(1.0+maxStep));
+  o=vec4(clamp(e3*step_,0.0,1.0),1.0);
+}`);
+    // Final Amount blend: mix(original, RL-deconvolved result, amount) — same UX pattern as
+    // every other Amount/strength slider in the app (0 = bit-identical to today).
+    this.progs.deconvMix=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D obs,est;
+uniform float amount;
+void main(){
+  o=vec4(mix(texture(obs,uv).rgb,texture(est,uv).rgb,amount),1.0);
+}`);
+
+    // LUMINANCE DOWNSAMPLE for the skin-tone frequency separation. A 4x4 box average straight into
+    // a quarter-res buffer: the two Gaussian passes that follow then need a sigma 4x smaller, which
+    // keeps them inside the blur shader's 48-tap cap (a 2%-of-width sigma is ~80px at 4000px, i.e.
+    // 240 taps at full res — impossible). Box-averaging first is also what makes the downsample
+    // alias-free, so the low-frequency estimate doesn't shimmer.
+    this.progs.lumdown=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 texSize;
+${GLSL_OKLAB}
+void main(){
+  vec3 sc=vec3(0.);
+  for(int j=0;j<4;j++)for(int i=0;i<4;i++){
+    vec2 off=(vec2(float(i),float(j))-1.5)*texSize;
+    sc+=texture(img,uv+off).rgb;
+  }
+  sc/=16.;
+  // rgb = the 4x4-averaged COLOUR, used to evaluate the colour-range gate; a = its luminance,
+  // which the two Gaussian passes then blur further for the frequency separation. Gating on an
+  // averaged colour is the point: sunlit rock and foliage carry enough per-pixel chroma noise that
+  // a scattering of their pixels are genuinely skin-coloured, so a per-pixel gate speckles across
+  // the whole background. Averaging first removes isolated noise while the ADJUSTMENT still lands
+  // on the original sharp pixel — select from a denoised copy, apply to the real one.
+  // .a is Oklab L, NOT a Rec.709 luma: skinUniformity compares this against an Oklab target, so a
+  // luma here would be a silent unit mismatch — the low-frequency reference and the target would
+  // live on different scales and Preserve modeling would drift.
+  o=vec4(sc,rgb2oklab(sc).x);
+}`);
+
+    // TRIPLE-SIGMA HALATION BLUR — same shader for both H and V passes.
+    // H-pass: input has scalar emit in all 3 channels (from hsrc);
+    //   output .r = Gaussian blur at sigR, .g = at sigG, .b = at sigB.
+    // V-pass: input has per-channel H-blurs; each channel V-blurred at its sigma,
+    //   completing a full 2D Gaussian per channel independently.
+    this.progs.blur_hal=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 dir;uniform float sigR,sigG,sigB;
+void main(){
+  vec3 s=vec3(0.),t=vec3(0.);
+  float sm=max(max(sigR,sigG),sigB);
+  int r=min(int(sm*3.)+1,64);
+  for(int i=-64;i<=64;i++){
+    if(abs(i)>r)continue;
+    float fi=float(i);
+    vec3 e=texture(img,uv+dir*fi).rgb;
+    vec3 w=vec3(exp(-fi*fi/(2.*sigR*sigR)),exp(-fi*fi/(2.*sigG*sigG)),exp(-fi*fi/(2.*sigB*sigB)));
+    s+=e*w;t+=w;
+  }
+  o=vec4(s/max(t,vec3(1e-6)),1.);
+}`);
+
+    // LENS CORRECTION — manual distortion / vignette / chromatic-aberration, run FIRST (on
+    // the raw decoded source, before NR/sharpen/LUT) so downstream crop/masks/export tiling
+    // see the corrected geometry. No camera/lens profile database — the RW2s this app reads
+    // don't expose usable distortion coefficients in an easily-parseable form (checked: no
+    // compact correction tag, only opaque vendor binary blobs), so this is manual-only, the
+    // same fallback most lens-correction UIs offer before a profile is found. Single-term
+    // radial model (classic "Brown-Conrady lite") — good enough for a slider, not a profile.
+    this.progs.lens=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale;uniform vec2 aspect;uniform vec2 texSize;
+// PERSPECTIVE / KEYSTONE — a real projective transform, not a shear. Converging verticals (the
+// building-shot problem) are a perspective effect, so undoing them needs the division: a shear
+// straightens the edges but leaves the spacing wrong, which reads as a stretched building rather
+// than a corrected one. Both terms live in the DENOMINATOR, which is what makes this a homography.
+//
+// This maps OUTPUT coordinates back to SOURCE ones, so it composes with the distortion scaling
+// below in the reverse of the order a reader expects: perspective is applied to the output point
+// FIRST, and the result is then scaled by the distortion model to find the pixel to sample.
+vec2 lensPersp(vec2 c){
+  if(lnsRot!=0.0){
+    float sa=sin(lnsRot),ca2=cos(lnsRot);
+    c=vec2(ca2*c.x-sa*c.y,sa*c.x+ca2*c.y);
+  }
+  float d=1.0+lnsPV*c.y+lnsPH*c.x;
+  // Guard the pole: at d<=0 the homography flips the image through infinity. Clamping instead of
+  // letting it wrap keeps an over-driven slider ugly-but-sane rather than kaleidoscopic.
+  d=max(d,0.15);
+  return c/d*lnsScale;
+}
+// Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
+// chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue
+// channels — that fixes a fringe that is uniform across the frame, and does nothing for the
+// local, edge-only fringing that survives it (or that a fast lens produces wide open). This
+// instead finds pixels that are BOTH near a luminance edge AND strongly purple or green, and
+// pulls their chroma toward the local luminance, which is what Lightroom's own defringe does.
+vec3 defringe(vec3 col,vec2 uvc,float amt){
+  float l=dot(col,vec3(.2126,.7152,.0722));
+  // Local luminance gradient: fringes only exist at edges, so gating on one keeps flat purple
+  // or green SUBJECTS (a lilac shirt, foliage) untouched — the failure that makes a naive
+  // "desaturate purple" defringe unusable on real photos.
+  float lx=dot(texture(img,uvc+vec2(texSize.x,0.)).rgb,vec3(.2126,.7152,.0722))
+          -dot(texture(img,uvc-vec2(texSize.x,0.)).rgb,vec3(.2126,.7152,.0722));
+  float ly=dot(texture(img,uvc+vec2(0.,texSize.y)).rgb,vec3(.2126,.7152,.0722))
+          -dot(texture(img,uvc-vec2(0.,texSize.y)).rgb,vec3(.2126,.7152,.0722));
+  float edge=smoothstep(0.04,0.20,length(vec2(lx,ly)));
+  // Purple = red and blue both above green; green fringe = the converse. Measured against the
+  // channel MEAN rather than a hue angle so it stays cheap and has no wrap-around case.
+  float purple=max(0.0,min(col.r,col.b)-col.g);
+  float grn=max(0.0,col.g-max(col.r,col.b));
+  float fringe=smoothstep(0.02,0.14,max(purple,grn));
+  return mix(col,vec3(l),clamp(amt*edge*fringe,0.0,1.0));
+}
+void main(){
+  vec2 c=uv-0.5; vec2 ca=c*aspect;              // aspect-correct so the effect is circular, not elliptical
+  float r2=dot(ca,ca);
+  float distScale=1.0+lnsDist*r2;                 // + pulls corners in (fixes barrel), - pushes out (fixes pincushion)
+  float caScaleR=1.0+lnsCA*r2, caScaleB=1.0-lnsCA*r2;
+  vec2 cp=lensPersp(c);
+  vec2 uvG=0.5+cp*distScale;
+  vec2 uvR=0.5+cp*distScale*caScaleR, uvB=0.5+cp*distScale*caScaleB;
+  vec3 col=vec3(texture(img,uvR).r,texture(img,uvG).g,texture(img,uvB).b);
+  if(lnsDefr>0.0)col=defringe(col,uvG,lnsDefr);
+  float vig=1.0+lnsVig*r2;                        // + brightens corners (fixes vignetting)
+  col*=clamp(vig,0.0,4.0);
+  bool outside=uvG.x<0.0||uvG.x>1.0||uvG.y<0.0||uvG.y>1.0;
+  o=vec4(outside?vec3(0.0):clamp(col,0.0,1.0),1.0);
+}`);
+
+    // NOISE REDUCTION — edge-aware (bilateral) luminance denoise + wider chroma denoise,
+    // run on the SOURCE before sharpen/LUT (so it tames sensor noise, not film grain). Only
+    // runs when Luminance or Color amount > 0 (otherwise the pass is skipped entirely, so the
+    // default path is byte-identical). Luma/chroma split: keep a bilateral-denoised luminance
+    // (edges preserved) and a spatially-blurred chroma (colour noise is coarse and cheap to kill).
+    // nrScale (=fullImageWidth/REF, same convention as the halation sigmas), nrChromaStep and
+    // nrChromaSig widen the 9x9 tap grid in absolute pixels so chroma NR reaches real high-ISO
+    // blotch size at full/export resolution instead of the old fixed ±3px (invisible past a
+    // downscaled preview, and too narrow at 24MP even at full strength — v1 of this fix still
+    // wasn't enough: a real ISO 6400+ frame's chroma blotches run 5-15px across, well past the
+    // ~8px max reach the first pass gave). The Gaussian weight is now computed in the SAME
+    // real-pixel offset used for sampling (dC, not the raw tap index), so widening the step
+    // widens the blur radius itself, not just the sample spacing — a true wider blur, not a
+    // sparser sample of the same small radius. Luma keeps a much tighter step so edge/detail
+    // preservation doesn't degrade.
+    this.progs.nr=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform vec2 texSize;uniform float nrLuma,nrColor,nrDetail,nrContrast,nrColorDetail,nrColorSmooth,nrScale,nrChromaStep,nrChromaSig,nrHlDesat;
+float yl(vec3 c){return dot(c,vec3(0.299,0.587,0.114));}
+void main(){
+  vec3 c0=texture(img,uv).rgb; float l0=yl(c0);
+  // range sigma on luma shrinks as Detail rises, so strong edges stop being averaged across
+  float sigR=mix(0.22,0.035,clamp(nrDetail,0.,1.));
+  float lumaStep=clamp(nrScale,1.0,2.5); // tight — edge/detail preservation, only mildly scaled
+  // Near-black pixels have almost no real signal (measured: mean ~2/255 in a true-black patch),
+  // so the sensor's per-pixel chroma variance reads as highly visible colour speckle relative
+  // to that near-zero base — a flat-strength blur measurably still leaves ~45% of the chroma
+  // std behind there. Real shadows have no fine chroma detail worth preserving anyway (it's
+  // read noise, not signal), so widen the chroma reach further as luma approaches 0 — the same
+  // shape Lightroom's Color NR uses (aggressive in true blacks, gentle by midtones). Tapers out
+  // by ~15% luma so midtone chroma detail is untouched.
+  // ⚠️ Scaling the sample offset AND sigma by the SAME factor is a no-op on blur strength — a
+  // self-similar rescale samples the identical Gaussian *shape* just moved further out, so the
+  // same ~handful of taps end up significantly weighted either way (measured: no improvement).
+  // sigBoost must grow FASTER than the offset so sigma widens relative to the tap spacing —
+  // that's what actually pulls more of the 9x9 grid's 81 taps into the weighted average.
+  float darkBoost=mix(2.4,1.0,smoothstep(0.0,0.15,l0));
+  float sigBoost=mix(4.2,1.0,smoothstep(0.0,0.15,l0));
+  vec3 lsum=vec3(0.); float lw=0.;   // bilateral (edge-preserving) accumulation
+  vec3 csum=vec3(0.); float cw=0.;   // spatial-only accumulation (for chroma)
+  for(int y=-4;y<=4;y++){
+    for(int x=-4;x<=4;x++){
+      vec2 off=vec2(float(x),float(y));
+      vec2 dC=off*nrChromaStep*darkBoost;
+      float csig=nrChromaSig*sigBoost*(1.0+0.65*clamp(nrColorSmooth,-1.0,1.0))
+        *(1.0+0.65*max(-nrColorDetail,0.0));
+      float ws=exp(-dot(dC,dC)/(2.*csig*csig));
+      vec3 cC=texture(img,uv+dC*texSize).rgb;
+      // Color Detail is centered at zero (UI value 50), preserving the previous renderer
+      // exactly by default. Higher values reject chroma samples across colour edges; lower
+      // values intentionally smooth across those edges. Smoothness widens the spatial kernel.
+      vec3 chromaDelta=(cC-yl(cC))-(c0-l0);
+      float edgeSigma=0.32/(1.0+max(nrColorDetail,0.0)*1.1);
+      float edgeWeight=exp(-dot(chromaDelta,chromaDelta)/(2.0*edgeSigma*edgeSigma));
+      ws*=mix(1.0,edgeWeight,max(nrColorDetail,0.0));
+      csum+=cC*ws; cw+=ws;
+      vec2 dL=off*lumaStep;
+      float wsl=exp(-dot(dL,dL)/(2.*1.6*1.6));
+      vec3 cL=texture(img,uv+dL*texSize).rgb;
+      float dl=yl(cL)-l0; float wr=exp(-dl*dl/(2.*sigR*sigR));
+      lsum+=cL*wsl*wr; lw+=wsl*wr;
+    }
+  }
+  vec3 bil=lsum/max(lw,1e-4);   // edge-preserving denoise: take its luminance
+  vec3 spa=csum/max(cw,1e-4);   // full blur: take its chroma
+  float denoisedY=yl(bil);
+  // Contrast restores part of the original local luminance residual after smoothing. A zero
+  // default keeps the existing output exact; this control matters only while luma NR is active.
+  float y=mix(mix(l0,denoisedY,clamp(nrLuma,0.,1.)),l0,clamp(nrContrast,0.,1.)*clamp(nrLuma,0.,1.));
+  vec3 chroma=mix(c0-l0, spa-yl(spa), clamp(nrColor,0.,1.));
+  // Highlight Desaturation — manual, off by default (see the UI tooltip). Demosaic false-color
+  // fringing on bright specular highlights (sunlit water, glints) resists ordinary chroma NR:
+  // the artifact partially survives coarse smoothing/protection tuned to preserve real colored
+  // edges elsewhere, and a global fix for it kept regressing OTHER photos when tried at the
+  // native-decode level (see raw_decode.rs history) — hence a per-photo manual override instead
+  // of a change to the shared pipeline. Real content this bright is near-neutral anyway, so
+  // above ~0.45 luma, fade the chroma toward zero; smoothstep keeps it a smooth blend into
+  // shadows, not a hard cutoff. Threshold measured (not guessed): on a real sunlit-water photo,
+  // 0.45-0.80 brought the highlight chroma-noise band to within ~8% of Lightroom's own level
+  // (a tighter 0.85-0.97 band barely helped, 8%->only 2% closed — most of the visible fringing
+  // sits well below "obviously blown white"). Reaching this far down WILL flatten real midtone
+  // colour too at high Amount — an accepted tradeoff for a manual, off-by-default, per-photo
+  // control the user dials in only when a specific image needs it.
+  float hl=smoothstep(0.45,0.80,y);
+  chroma*=(1.0-hl*clamp(nrHlDesat,0.,1.));
+  o=vec4(clamp(vec3(y)+chroma,0.,1.),1.);
+}`);
+
+    // COMPOSITE — LINEAR-light screen of RGB glows, then back to sRGB, then grain.
+    //   hGlow.rgb = per-channel halation blurs (σ_R, σ_G, σ_B independently).
+    //   bGlow.rgb = source-colored bloom glow (carries hue of source light).
+    //   Per-channel gains halR/halG/halB produce the warm backing color gradient
+    //   automatically from the physics (σ_R >> σ_G → red spreads wider than green).
+    this.progs.comp=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D base,hGlow,bGlow,hEmit;
+uniform highp sampler3D printLut;       // optional print-profile 3D LUT (Kodak/Fuji print)
+uniform float halR,halG,halB,halProt,halWhite,blmA,grA,grFreq,grPowG,grWi,grWs,seed,debug,vigAmt,usePrint,halHP,adjSat2,adjVib2,gamutWarn;
+uniform float useTonemap; // ROADMAP.md R1 (scene-referred highlight roll-off), default 0/off — see the comment at the clamp/shoulder site below
+uniform float tonemapStyle; // ROADMAP.md R2: 0=BT.2390 knee (default), 1=AgX filmic — only read when useTonemap>0.5
+uniform float useDither,ditherSeed; // TPDF dither at final quantization — see the JS call site's comment
+uniform float dustA,scrA,leakA,fxSeed,artAsp,dustMode; // film artifacts (dust/scratches/light leak) + stable seed + image aspect; dustMode: 0=both,1=black,2=white
+uniform vec3 grK;     // per-channel grain gain (R,G,B)
+uniform vec2 grHi;    // highlight rolloff gate (lo,hi)
+uniform vec2 uvOff,uvScale; // map local uv → GLOBAL image uv so grain is continuous across tiles
+float s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
+float l2s(float c){return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
+vec3 S2L(vec3 c){return vec3(s2l(c.r),s2l(c.g),s2l(c.b));}
+vec3 L2S(vec3 c){return vec3(l2s(c.r),l2s(c.g),l2s(c.b));}
+vec3 screen(vec3 a,vec3 b){return 1.-(1.-a)*(1.-b);}
+// ROADMAP.md R1 — scene-referred highlight roll-off, ITU-R BT.2390's own Hermite-spline knee
+// (the same real broadcast-standard family this file already uses precisely elsewhere for HLG,
+// CLAUDE.md §12): identity below KS, a smooth cubic shoulder from (KS,KS) to (1,CEIL) above it,
+// clamped flat at CEIL beyond input 1.0 (BT.2390's own spline is only well-behaved for its
+// bounded t∈[0,1] domain — verified: evaluating the polynomial at t=1 collapses exactly to CEIL,
+// so clamping t there is the correct extension, not a hack). KS<1 is what makes this a REAL
+// roll-off rather than a clip that merely moved: without float FBOs upstream (see this shader's
+// own "base" texture, gated the same way — the "lut" FBO only becomes RGBA16F when this flag is
+// on) nothing above display-8-bit-1.0 would ever survive to reach this function anyway.
+float bt2390Knee(float x,float ks,float ceil_){
+  float t=clamp((x-ks)/max(1.0-ks,1e-6),0.0,1.0);
+  float t2=t*t,t3=t2*t;
+  return (2.0*t3-3.0*t2+1.0)*ks+(t3-2.0*t2+t)*(1.0-ks)+(-2.0*t3+3.0*t2)*ceil_;
+}
+vec3 tonemapShoulder(vec3 lin){
+  const float KS=0.8,CEIL=1.0; // knee starts at 80% of white, shoulders smoothly up to white
+  return vec3(
+    lin.r<=KS?lin.r:bt2390Knee(lin.r,KS,CEIL),
+    lin.g<=KS?lin.g:bt2390Knee(lin.g,KS,CEIL),
+    lin.b<=KS?lin.b:bt2390Knee(lin.b,KS,CEIL)
+  );
+}
+// ROADMAP.md R2 — AgX filmic highlight roll-off, an alternative to the BT.2390 knee above.
+// Ported verbatim (matrices, EV range, sigmoid coefficients — nothing re-derived) from
+// three.js's AgXToneMapping (MIT, github.com/mrdoob/three.js,
+// src/renderers/shaders/ShaderChunk/tonemapping_pars_fragment.glsl.js), itself a direct port of
+// Google Filament's AgX (github.com/google/filament/pull/7236), which is Troy Sobotka's AgX as
+// shipped in Blender — a documented, widely-replicated transform (CLAUDE.md's own rule: port a
+// real reference, don't invent one). Input/output are Linear-sRGB, same contract as
+// tonemapShoulder above, so it drops into the same L2S(...) call site with no extra conversion.
+const mat3 AGX_INSET=mat3(
+  vec3(0.856627153315983,0.137318972929847,0.11189821299995),
+  vec3(0.0951212405381588,0.761241990602591,0.0767994186031903),
+  vec3(0.0482516061458583,0.101439036467562,0.811302368396859)
+);
+const mat3 AGX_OUTSET=mat3(
+  vec3(1.1271005818144368,-0.1413297634984383,-0.14132976349843826),
+  vec3(-0.11060664309660323,1.157823702216272,-0.11060664309660294),
+  vec3(-0.016493938717834573,-0.016493938717834257,1.2519364065950405)
+);
+const mat3 AGX_SRGB_TO_REC2020=mat3(
+  vec3(0.6274,0.0691,0.0164),
+  vec3(0.3293,0.9195,0.0880),
+  vec3(0.0433,0.0113,0.8956)
+);
+const mat3 AGX_REC2020_TO_SRGB=mat3(
+  vec3(1.6605,-0.1246,-0.0182),
+  vec3(-0.5876,1.1329,-0.1006),
+  vec3(-0.0728,-0.0083,1.1187)
+);
+vec3 agxContrastApprox(vec3 x){ // iolite-engine.com/blog_posts/minimal_agx_implementation, mean err^2 3.67e-6
+  vec3 x2=x*x,x4=x2*x2;
+  return 15.5*x4*x2-40.14*x4*x+31.96*x4-6.868*x2*x+0.4298*x2+0.1191*x-0.00232;
+}
+vec3 agxToneMap(vec3 lin){
+  const float AGX_MIN_EV=-12.47393,AGX_MAX_EV=4.026069; // log2(2^-10 * 0.18) .. log2(2^6.5 * 0.18)
+  vec3 c=AGX_INSET*(AGX_SRGB_TO_REC2020*lin);
+  c=log2(max(c,vec3(1e-10)));
+  c=clamp((c-AGX_MIN_EV)/(AGX_MAX_EV-AGX_MIN_EV),0.0,1.0);
+  c=agxContrastApprox(c);
+  c=AGX_OUTSET*c;
+  c=pow(max(vec3(0.0),c),vec3(2.2));
+  return clamp(AGX_REC2020_TO_SRGB*c,0.0,1.0);
+}
+float h21(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+// VALUE noise for film grain: lattice hash + smooth interp → CLUMPS of a controllable size.
+// ⚠️ Use hash12 (Dave Hoskins), NOT h21 — h21's 127.1 multiplier has a 0.1 fractional residue, so
+// adjacent lattice cells barely differ → a REPEATING tiled pattern (visible streaks/"organized
+// grid", the v1 grain bug). hash12 decorrelates cleanly. Quintic interp + 3 octaves ROTATED
+// between each other so no axis-aligned grid survives. Unit std ≈ 0.157 (baked into grK).
+float hash12(vec2 p){vec3 p3=fract(vec3(p.xyx)*0.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
+float vlat(vec2 P){vec2 i=floor(P),f=fract(P);f=f*f*f*(f*(f*6.-15.)+10.);
+  float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
+  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y)-0.5;}
+float vnoise(vec2 P){mat2 R=mat2(0.80,-0.60,0.60,0.80);vec2 P1=R*P,P2=R*P1;
+  return 0.6*vlat(P1+10.0)+0.3*vlat(P2*2.04+50.0)+0.18*vlat(P*8.33+90.0);}
+void main(){
+  vec3 base_s=texture(base,uv).rgb;
+  vec3 rawH=texture(hGlow,uv).rgb;
+  vec3 rawB=texture(bGlow,uv).rgb;
+  // HIGH-PASS GLOW: keep only the part of the blur that spread BEYOND the local
+  // emission (max(blur(emit) - emit, 0)). In a flat colored block blur(emit) ~=
+  // emit so the glow ~= 0 (no interior flooding -> fixes the red-bar-turns-orange
+  // bug for every color); at gaps/edges blur(emit) > local emit so the halo is
+  // full. emit is the scalar pre-blur source (replicated in hEmit.rgb).
+  // PER-CHANNEL high-pass: hEmit carries (emitR, emitG) so each channel subtracts its OWN local
+  // emission — red and green high-pass at their own scale, keeping the warm/yellow blend smooth.
+  // halHP (default 1) = high-pass strength. No-remjet film (no anti-halation backing) floods
+  // interiors too, so it lowers halHP → less local emit is subtracted → the wide blur survives
+  // across flat regions (bold, smoothly-flooded no-remjet glow instead of a carved dark ring).
+  vec3 emv=texture(hEmit,uv).rgb;
+  rawH=max(rawH-emv*halHP,0.0);
+  // Warm film glow uses the channel-split emission (σ_R wide red, σ_G narrow green → yellow band).
+  // White glow (B&W photos): the emission only writes .rg, so a channel-split glow can never be
+  // neutral (its blue is always 0 → yellow). Instead drive ALL THREE channels from the neutral
+  // brightness backing (rawH.r = emitR, which fires for every bright source) so the glow is a true
+  // grey — works identically for standard, no-remjet and extreme.
+  vec3 hg=(halWhite>0.5)?vec3(rawH.r*halR):rawH*vec3(halR,halG,halB);
+  // SHADOW PROTECT (user slider, default 0 = calibrated Dehancer behavior): attenuate
+  // the halation glow RECEIVED by dark pixels so small dark features fully surrounded
+  // by bright emitters (eyes, nostrils) do not flood red. halProt is the linear-light
+  // luminance below which protection ramps in (0 disables).
+  if(halProt>0.0){
+    float bl=dot(S2L(base_s),vec3(.2126,.7152,.0722));
+    hg*=smoothstep(0.0,halProt,bl);
+  }
+  vec3 bg=rawB*blmA;                   // source-colored bloom
+  // ---- diagnostic views ----
+  if(debug>0.5){
+    if(debug<1.5){o=vec4(clamp(rawH*3.,0.,1.),1.);return;}   // halation raw RGB
+    if(debug<2.5){o=vec4(clamp(rawB*3.,0.,1.),1.);return;}   // bloom raw RGB
+    o=vec4(L2S(clamp(hg,0.,1.)),1.);return;                   // halation gain-applied
+  }
+  // ---- real composite in LINEAR light ----
+  vec3 lin=S2L(base_s);
+  lin=screen(lin, bg);   // bloom first (source-colored)
+  lin=screen(lin, hg);   // halation: warm backing via channel-split σ
+  // ROADMAP.md R4: tonemapStyle 2 ("Film stock (native)") only changes the LUT PASS's own
+  // per-channel replacement above white (stockShoulderTex) -- this comp-stage knee/AgX choice
+  // for the REST of the composite (halation/bloom highlights etc.) has no native-stock
+  // equivalent, so 2 falls through to the same BT.2390 knee as the default (0). Only exactly 1
+  // (AgX) takes the agxToneMap branch -- a plain "tonemapStyle&gt;0.5" test here would have
+  // wrongly routed native's 2 into AgX too.
+  vec3 res=L2S(useTonemap>0.5?((tonemapStyle>0.5&&tonemapStyle<1.5)?agxToneMap(max(lin,0.0)):tonemapShoulder(max(lin,0.0))):clamp(lin,0.,1.));
+  // ---- FILM GRAIN — in the NEGATIVE (before print). Value-noise CLUMPS (not 1px white noise),
+  //      per-channel signal-dependent σ = grA·grK·v^grPowG·highlightGate, with a shared+
+  //      independent mix (corr≈0.4). Calibrated to Dehancer per film format (FXR.CAL.grain).
+  if(grA>0.){
+    vec2 guv=uvOff+uv*uvScale;          // global image uv (continuous across tiles / 1:1 loupe)
+    vec2 P=guv*grFreq+vec2(seed);       // grFreq = clump-cells across the image (fixed-pixel grain)
+    float nS=vnoise(P);                  // shared luminance-correlated component
+    vec3 nC=vec3(vnoise(P+11.1),vnoise(P+23.7),vnoise(P+37.3));  // per-channel independent
+    vec3 v=clamp(res,0.,1.);
+    vec3 gate=1.0-smoothstep(vec3(grHi.x),vec3(grHi.y),v);       // grain rolls off in highlights
+    vec3 sig=grA*grK*pow(v,vec3(grPowG))*gate;
+    res+=(grWi*nC+grWs*nS)*sig;          // mix preserves unit variance, gives the measured ~0.4 corr
+  }
+  // ---- FILM ARTIFACTS — negative defects, applied BEFORE the print (like grain). All coords are
+  //      IMAGE-RELATIVE (q = fraction of image height, aspect-corrected) so the preview, the 1:1
+  //      loupe and the tiled export all place identical artifacts; fxSeed is stable per image
+  //      (user "Reshuffle" re-rolls it), so export always matches preview.
+  if(dustA>0.||scrA>0.||leakA>0.){
+    vec2 g2=uvOff+uv*uvScale;
+    vec2 q=vec2(g2.x*artAsp,g2.y);
+    if(dustA>0.){
+      // sparse dust: one candidate per 0.02-height cell; center kept 0.2 from the cell edge so a
+      // speck (max r 0.16 cell) never clips at a cell border. Rare cells become elongated hairs.
+      vec2 Pd=q/0.02;vec2 idc=floor(Pd);
+      if(hash12(idc+fxSeed)<dustA*0.10){
+        vec2 ctr=idc+0.2+0.6*vec2(hash12(idc+7.31+fxSeed),hash12(idc+13.77+fxSeed));
+        vec2 dv=Pd-ctr;
+        float hh=hash12(idc+3.7+fxSeed);
+        if(hh>0.86){float an=hh*40.0;vec2 dr=vec2(cos(an),sin(an));dv=vec2(dot(dv,dr)*0.22,dot(dv,vec2(-dr.y,dr.x)));}
+        float rr=0.06+0.10*hash12(idc+21.13+fxSeed);
+        float spot=smoothstep(rr,rr*0.35,length(dv));
+        float liteR=step(0.3,hash12(idc+31.7+fxSeed));            // 70% light (dust on the neg prints white)
+        float lite=dustMode<0.5?liteR:(dustMode<1.5?0.0:1.0);     // dustMode forces all-black or all-white specks
+        float op=(0.45+0.5*hash12(idc+41.3+fxSeed))*clamp(dustA*2.0,0.,1.);
+        res=mix(res,vec3(lite>0.5?0.93:0.06),spot*op);
+      }
+    }
+    if(scrA>0.){
+      // thin vertical scratches: one candidate per 0.08-height column, wobbling x via value noise,
+      // faded in/out along y (lifetime gating) so they never run the full frame edge to edge.
+      float sxc=q.x/0.08;float sid=floor(sxc);
+      if(hash12(vec2(sid,fxSeed*3.7))<scrA*0.45){
+        float xl=(sid+0.15+0.7*hash12(vec2(sid,fxSeed+9.1)))*0.08+0.002*vlat(vec2(q.y*12.0,sid*7.7+fxSeed));
+        float line=smoothstep(0.0011,0.0002,abs(q.x-xl));
+        float vis=smoothstep(0.05,0.35,0.5+vlat(vec2(sid*13.1+fxSeed,q.y*5.0)));
+        float lop=(0.25+0.35*hash12(vec2(sid,fxSeed+17.3)))*clamp(scrA*1.6,0.,1.);
+        res=mix(res,vec3(0.88),line*vis*lop);
+      }
+    }
+    if(leakA>0.){
+      // warm light leak from a random left/right edge: wide orange blob + hotter red core,
+      // screen-blended in LINEAR light (a leak EXPOSES the negative), gently noise-modulated.
+      float side=step(0.5,hash12(vec2(fxSeed,1.71)));
+      vec2 lc=vec2(side*artAsp,0.25+0.5*hash12(vec2(fxSeed,2.93)));
+      float dl=length(q-lc);
+      float R=0.45+0.25*hash12(vec2(fxSeed,4.13));
+      float blob=exp(-dl*dl/(R*R))*(0.75+0.25*vlat(q*3.0+fxSeed));
+      vec3 leak=vec3(1.0,0.30,0.05)*blob*leakA;
+      leak+=vec3(0.9,0.05,0.02)*exp(-dl*dl/(R*R*0.25))*leakA*0.5;
+      vec3 l2=S2L(res);l2=1.-(1.-l2)*(1.-clamp(leak,0.,1.));res=L2S(l2);
+    }
+  }
+  // ---- print profile (Kodak/Fuji): 2nd 3D LUT applied AFTER film + halation + GRAIN — Dehancer
+  //      order (negative+grain → print), so the print stock modulates the grain as on real film.
+  if(usePrint>.5){float psc=32./33.,pof=.5/33.;res=texture(printLut,clamp(res,0.,1.)*psc+pof).rgb;}
+  // SATURATION / VIBRANCE applied AFTER the print stage (matches Dehancer's grade-after-print
+  // order). Moving them here means desaturating actually neutralizes the print's neutral tint
+  // (print maps grey -> a warm/cool cast; pulling saturation to 0 must collapse the PRINTED
+  // pixel to its luma, not re-tint an already-grey pixel). Identity when both are 0 (default).
+  if(adjSat2!=0.0||adjVib2!=0.0){
+    float sl=dot(res,vec3(.2126,.7152,.0722));
+    res=mix(vec3(sl),res,1.0+adjSat2);
+    float smx=max(res.r,max(res.g,res.b)),smn=min(res.r,min(res.g,res.b)),ssv=smx>0.0?(smx-smn)/smx:0.0;
+    res=mix(vec3(sl),res,1.0+adjVib2*(1.0-ssv));
+    res=clamp(res,0.0,1.0);
+  }
+  // VIGNETTE — applied last (post-grain), darkens corners in display space
+  if(vigAmt>0.){vec2 vc=uv*2.-1.;float vd=dot(vc,vc);res*=1.-smoothstep(0.3,1.5,vd)*vigAmt;}
+  // TPDF (triangular) dither: sum of two independent uniforms in [0,1) minus 1 gives a
+  // triangular distribution in [-1,1); scaled to +/-1 LSB at 8-bit. Masks banding from a hard
+  // S-curve/LUT on a low-bit-depth (4:2:0 video) source hitting an 8-bit canvas. Off by default
+  // (useDither=0) so every still golden is untouched — see the JS call site for why.
+  if(useDither>0.5){
+    float d=hash12(gl_FragCoord.xy+ditherSeed)+hash12(gl_FragCoord.xy*1.37+ditherSeed+7.0)-1.0;
+    res+=d/255.0;
+  }
+  // GAMUT WARNING — preview-only diagnostic overlay (item 8), same "never in export" contract as
+  // the mask Selection view: only preview render() call sites ever pass gamutWarn=1 (see the JS
+  // opts.gamutWarn plumbing), so this branch is dead code on every export/render-tiled path by
+  // construction, not by a runtime check here. Flags any pixel about to clip on ANY channel at
+  // this, the FINAL display clamp, with a diagonal zebra stripe (the standard video-scope
+  // convention for "this would clip") — verified in isolation (a synthetic WebGL2 program fed a
+  // deliberately out-of-range vec3 through this exact branch) to actually zebra rather than emit
+  // the clamped colour.
+  // render() now forces hdrIntermediate whenever opts.gamutWarn is set (see the _initBufs call
+  // site), so the "lut" FBO is RGBA16F while this toggle is on and basicAdjust/curves/masks
+  // clipping is caught here too, not just clipping introduced after the lut pass. Falls back to
+  // the old 8-bit-only scope silently on hardware without EXT_color_buffer_float (_hdrSupported()).
+  if(gamutWarn>0.5&&gamutWarn<3.5){
+    bool cHi=gamutWarn>1.5&&any(greaterThanEqual(res,vec3(0.998)));
+    bool cLo=(gamutWarn<1.5||gamutWarn>2.5)&&all(lessThanEqual(res,vec3(0.004)));
+    if(cHi){o=vec4(1.0,0.23,0.12,1.0);return;}
+    if(cLo){o=vec4(0.25,0.45,1.0,1.0);return;}
+  }
+  if(gamutWarn>3.5&&(any(lessThan(res,vec3(0.0)))||any(greaterThan(res,vec3(1.0))))){
+    float stripe=mod(floor((gl_FragCoord.x+gl_FragCoord.y)/4.0),2.0);
+    o=vec4(vec3(stripe),1.0);return;
+  }
+  o=vec4(clamp(res,0.,1.),1.);
+}`);
+
+    // ROADMAP R7 — depth-driven lens blur / tilt-shift composite. Takes the comp pass's finished
+    // frame (dofSrc) plus 3 progressively-blurred copies of it (dofL1<dofL2<dofL3, built with
+    // `blur` at increasing sigma — see render()'s dofOn block) and continuously blends between
+    // the two layers adjacent to a per-pixel defocus amount `a`, exactly the math validated in
+    // plain Node BEFORE this shader was written (no jump at a layer boundary, monotonic in `a` —
+    // see the depth_blend_validate script referenced from CLAUDE.md's R7 entry). Two selectable
+    // weight sources share this one compositor: real depth (a per-photo map from
+    // vendor/depth/README.md's model, `dofMode=0`) or a plain vertical-position band for
+    // miniature-style tilt-shift (`dofMode=1`, no model needed — the standard real technique for
+    // that look is a focus band around one image row, not depth). ⚠️ `dofBand`/`dofFalloff` are
+    // measured in the SAME 0..1 space as the value being gated (depth 0..1, or global image-
+    // relative uv.y via uvOffL/uvScaleL so a tile/export composes identically to every other
+    // local-adjust mask in this file).
+    this.progs.dof=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler2D;
+in vec2 uv;out vec4 o;
+uniform sampler2D dofSrc,dofL1,dofL2,dofL3,depthTx;
+uniform float dofMode;      // 0 = depth blur, 1 = tilt-shift (vertical band)
+uniform float dofFocus;     // depth mode: focus depth 0..1 (0=far,1=near). tilt-shift: focus uv.y
+uniform float dofBand;      // half-width of the sharp band (0..1) — 0 for depth mode
+uniform float dofFalloff;   // distance beyond the band over which blur ramps to max (>0)
+uniform float dofR1,dofR2,dofR3; // blur radii driving dofL1/L2/L3 — MUST match the sigmas used to build them
+uniform vec2 uvOffL,uvScaleL;
+void main(){
+  vec3 c0=texture(dofSrc,uv).rgb;
+  float val;
+  if(dofMode>0.5){vec2 gm=uvOffL+uv*uvScaleL;val=gm.y;}
+  else{val=texture(depthTx,uv).r;}
+  float dist=max(0.0,abs(val-dofFocus)-dofBand);
+  float a=clamp(dist/max(dofFalloff,1e-4),0.0,1.0);
+  float target=a*dofR3;
+  vec3 c1=texture(dofL1,uv).rgb,c2=texture(dofL2,uv).rgb,c3=texture(dofL3,uv).rgb;
+  vec3 outc;
+  if(target<=dofR1){float t=dofR1>0.0?target/dofR1:0.0;outc=mix(c0,c1,t);}
+  else if(target<=dofR2){float t=(target-dofR1)/max(dofR2-dofR1,1e-4);outc=mix(c1,c2,t);}
+  else{float t=clamp((target-dofR2)/max(dofR3-dofR2,1e-4),0.0,1.0);outc=mix(c2,c3,t);}
+  o=vec4(outc,1.0);
+}`);
+  }
+  // float16: allocate RGBA16F instead of RGBA8 (see the `lut` FBO's use of this at _initBufs).
+  // Requires EXT_color_buffer_float to be RENDERABLE in WebGL2 (linear-filterable half-float
+  // sampling is core, but using one as a framebuffer colour attachment is not) — callers must
+  // check _hdrSupported() first; this method assumes the caller already downgraded to false.
+  _allocTex(n,tw,th,float16){const gl=this.gl;
+    const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    if(float16)gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,tw,th,0,gl.RGBA,gl.HALF_FLOAT,null);
+    else gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,tw,th,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this.txs[n]=t;const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);this.fbs[n]=f;
+  }
+  // Cached feature probe for rendering to an RGBA16F framebuffer (the `lut` FBO holds the fully
+  // graded base — see CLAUDE.md §12's "RGBA8 intermediate problem": an 8-bit source through a
+  // hard S-curve and two 3D LUTs into an 8-bit buffer bands in skies, and video starts from
+  // 8-bit 4:2:0 rather than a still's 12-14-bit source, so it can't rely on grain-as-dither to
+  // hide it the way stills do). Feature-detected and cached; falls back to RGBA8 silently.
+  _hdrSupported(){
+    if(this._hdrSupportedCache==null)this._hdrSupportedCache=!!this.gl.getExtension('EXT_color_buffer_float');
+    return this._hdrSupportedCache;
+  }
+  // glowScale (gs) downsamples ONLY the halation/bloom blur buffers. The blur is
+  // low-frequency, so computing it at 1/gs resolution and bilinearly upsampling in the
+  // composite is visually identical — but cuts the 6 scratch buffers to 1/gs² of their
+  // memory. The full-res `lut` base + the full-res composite/grain are untouched, so the
+  // EXPORTED IMAGE stays at native resolution. This is what lets a 24MP photo export on
+  // iOS (≈860MB → ≈430MB of GPU memory at gs=2) without the tab being killed.
+  _initBufs(w,h,gs,hdrIntermediate,resources){gs=gs||1;hdrIntermediate=!!hdrIntermediate&&this._hdrSupported();resources=resources||{};
+    const resourceKey=[resources.lens?1:0,resources.nr?1:0,resources.deconv?1:0,resources.dof?1:0,resources.glow?1:0].join('');
+    if(this.w===w&&this.h===h&&this.gs===gs&&this.hdrIntermediate===hdrIntermediate&&this._resourceKey===resourceKey)return;const gl=this.gl;
+    this.cv.width=w;this.cv.height=h;
+    Object.values(this.fbs).forEach(f=>gl.deleteFramebuffer(f));
+    Object.values(this.txs).forEach(t=>gl.deleteTexture(t));
+    this.fbs={};this.txs={};
+    const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
+    this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
+    if(resources.lens)this._allocTex('lens',w,h);                         // lens-corrected source (only used when Lens on)
+    if(resources.nr)this._allocTex('nr',w,h);                             // denoised source (only used when NR on)
+    // ROADMAP.md R6 — deconvolution sharpening scratch chain: dcEstA/dcEstB ping-pong the RL
+    // estimate across iterations, dcBlurH/dcBlurV are the separable-Gaussian reblur-of-estimate
+    // scratch (reuses progs.blur, same shader the halation/skin chains use), deconvOut is the
+    // final Amount-blended result the `lut` pass samples from. Full-res like lens/nr (only paid
+    // for when Deconvolution amount>0 — see render()'s dcOn gate).
+    if(resources.deconv)['dcEstA','dcEstB','dcBlurH','dcBlurV','deconvOut'].forEach(n=>this._allocTex(n,w,h));
+    // ROADMAP R7 — depth blur / tilt-shift scratch: dofSrc holds the comp pass's finished frame
+    // when the feature is on (instead of comp writing straight to outFb); dofHtmp is reused as
+    // the horizontal-blur scratch for all three radii in turn (they run sequentially, never
+    // concurrently, so one scratch buffer suffices — same reuse-across-sequential-passes idea as
+    // the halation chain's own scratch buffers); dofL1/L2/L3 hold the three progressively-blurred
+    // full-res layers progs.dof blends between. Full-res like lens/nr above — only ever WRITTEN
+    // when P.depthBlur/P.tiltShift is enabled (render()'s dofOn gate), so this is idle memory,
+    // not idle GPU time, when the feature is off.
+    if(resources.dof)['dofSrc','dofHtmp','dofL1','dofL2','dofL3'].forEach(n=>this._allocTex(n,w,h));
+    // ROADMAP.md R1: hemitF/the halation-bloom scratch chain also need to be float when the
+    // scene-referred tonemap is active, or a >1.0 highlight from the (now-float) `lut` FBO gets
+    // clamped right back to 8-bit the moment the emission pass writes it — same reasoning as
+    // `lut` above, just extended down the rest of the chain the comp shader's tonemapShoulder
+    // ultimately reads from.
+    if(resources.glow){
+      this._allocTex('hemitF',w,h,hdrIntermediate);                       // FULL-res halation emit (for a sharp high-pass)
+      ['bsrc','bglow_h','bglow_v','hsrc','hglow_h','hglow_v'].forEach(n=>this._allocTex(n,w2,h2,hdrIntermediate)); // reduced-res glow
+    }
+    // Quarter-res luminance ping-pong for the skin-tone frequency separation (see progs.lumdown).
+    const w4=Math.max(1,Math.ceil(w/4)),h4=Math.max(1,Math.ceil(h/4));
+    // The LUT pass always binds these texture units, even when no skin luminance gate is active.
+    // Keep the tiny quarter-res targets allocated so a disabled gate never leaves an undefined
+    // texture bound; the resource flag only controls whether the expensive luminance pass runs.
+    ['sklo_a','sklo_b'].forEach(n=>this._allocTex(n,w4,h4));
+    this._allocTex('skbox',w4,h4);
+    this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;this._resourceKey=resourceKey;
+  }
+  setImage(img){const gl=this.gl;
+    // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
+    // delete it here, only the one-shot photo texture. Without this guard, loading a photo
+    // right after grading a video would delete the still-live video texture out from under it.
+    if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
+    this.imgTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.imgTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    // ROADMAP.md R1: a RAW with real measured headroom (img._sceneLinearPresent — the SAME
+    // hrOut>12 signal that already gates the HDR gain-map export toggle) uploads the genuine
+    // extended-range float buffer instead of the always-8-bit canvas ImageData, so a real
+    // blown sky/window survives onto the GPU as e.g. 3.0 rather than being clamped to 1.0
+    // before this call ever runs. Falls back to the ordinary 8-bit path for every other image
+    // (PNG/JPEG, or a RAW with no measured headroom) — those never carry `_sceneLinear` at all,
+    // so `this.usingSceneLinear` stays false and nothing downstream changes for them.
+    this.usingSceneLinear=!!(img&&img._sceneLinearPresent&&img._sceneLinear&&this._hdrSupported());
+    if(this.usingSceneLinear){
+      const{data,w,h}=img._sceneLinear;
+      const rgba=new Float32Array(w*h*4);
+      for(let i=0,j=0;i<w*h;i++,j+=4){rgba[j]=data[3*i];rgba[j+1]=data[3*i+1];rgba[j+2]=data[3*i+2];rgba[j+3]=1;}
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.FLOAT,rgba);
+      this.imgW=w;this.imgH=h;
+    }else{
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+      this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this._ensureLutTx();
+  }
+  // Lazy neutral-passthrough 3D LUT init, shared by setImage and setVideoFrame — was originally
+  // inlined at the end of setImage only; hoisted out so both source paths initialize it exactly
+  // once on first use, instead of silently depending on which one happened to run first.
+  _ensureLutTx(){const gl=this.gl;
+  if (!this.lutTx) {
+    this.lutTx = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D, this.lutTx);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+
+    // 2x2x2 neutral passthrough LUT data
+    const idData = new Uint8Array([
+      0,0,0,255,   255,0,0,255,   0,255,0,255,   255,255,0,255,
+      0,0,255,255, 255,0,255,255, 0,255,255,255, 255,255,255,255
+    ]);
+
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, idData);
+  }
+  }
+  // setVideoFrame(src,w,h) — sibling to setImage for VideoFrame/canvas sources drawn from a
+  // decoded video sample. Uses a PERSISTENT texture (this.vidTx) reallocated only when the
+  // frame size changes (texImage2D), and texSubImage2D otherwise — the cheap upload path a
+  // fixed-size video clip should always hit after its first frame. imgTx is aliased to vidTx
+  // so the rest of the pipeline (the `img` sampler binding, basicAdjust, masks, etc.) needs
+  // zero changes to grade a video frame exactly like a photo.
+  // ⚠️ CORRECTED: the original comment here claimed skipping UNPACK_FLIP_Y_WEBGL was needed to
+  // preserve a zero-copy blit path for a raw VideoFrame upload — but this method never uploads a
+  // raw VideoFrame, only a plain 2D canvas that mediabunny's sample.draw() already rendered onto
+  // (see loadFXVideoFile/fxVideoSeekTo/fxVideoExportSmall). A canvas source needs EXACTLY the
+  // same flip setImage() already applies to photo canvases, or every video frame uploads
+  // vertically mirrored — this was shipping as "the export comes out upside down" until fixed.
+  setVideoFrame(src,w,h){const gl=this.gl;
+    const needAlloc=!this.vidTx||this.vidW!==w||this.vidH!==h;
+    if(needAlloc){
+      if(this.vidTx)gl.deleteTexture(this.vidTx);
+      this.vidTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+      this.vidW=w;this.vidH=h;
+    }else{
+      gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+    }
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    // Delete a stale one-shot photo texture before aliasing over it (mirrors setImage's own guard).
+    if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
+    this.imgTx=this.vidTx;
+    this.imgW=w;this.imgH=h;
+    this._ensureLutTx();
+  }
+  setLUT(lut){const gl=this.gl;if(this.lutTx)gl.deleteTexture(this.lutTx);
+    this._lutSnapshot=lut?new Float32Array(lut):null;
+    const d=new Uint8Array(SZ*SZ*SZ*3);
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+      const s=li(r,g,b),ds=(b*S2+g*SZ+r)*3;
+      d[ds]=lut[s]*255+.5|0;d[ds+1]=lut[s+1]*255+.5|0;d[ds+2]=lut[s+2]*255+.5|0;
+    }
+    this.lutTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_3D,this.lutTx);
+    // RGB8/UNSIGNED_BYTE at width 33 → rows are 33*3=99 bytes. WebGL's default
+    // UNPACK_ALIGNMENT is 4, which expects rows padded to 100 and reads past our
+    // buffer → texImage3D throws INVALID_OPERATION, leaving the LUT texture incomplete
+    // (every sample reads black → blank preview AND export). Force tight packing.
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
+  }
+  // Print-profile 3D LUT (Kodak/Fuji print), applied in the comp pass AFTER halation.
+  // Pass null to clear. Mirrors setLUT's tight-packing fix.
+  setPrintLUT(lut){const gl=this.gl;if(this.printTx){gl.deleteTexture(this.printTx);this.printTx=null;}
+    this._printLutSnapshot=lut?new Float32Array(lut):null;
+    if(!lut)return;
+    const d=new Uint8Array(SZ*SZ*SZ*3);
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+      const s=li(r,g,b),ds=(b*S2+g*SZ+r)*3;
+      d[ds]=lut[s]*255+.5|0;d[ds+1]=lut[s+1]*255+.5|0;d[ds+2]=lut[s+2]*255+.5|0;
+    }
+    this.printTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_3D,this.printTx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);
+  }
+  // HSL-mixer 3D LUT: takes PRE-PACKED bytes (SZ³·3, x=r fastest — same layout setLUT builds).
+  setHslLUT(d){const gl=this.gl;this._hslSnapshot=new Uint8Array(d);if(!this.hslTx)this.hslTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D,this.hslTx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB8,SZ,SZ,SZ,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
+  // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
+  setCurveTex(d){const gl=this.gl;this._curveSnapshot=new Uint8Array(d);if(!this.curveTx)this.curveTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.curveTx);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  // ROADMAP.md R4 — native film-stock highlight shoulder: 256x1 RGB8 (R/G/B columns = the three
+  // baked per-channel roll-off curves, u in [0,1] -> 0..4 stops above white). Same shape/upload
+  // convention as setCurveTex above but RGB (not RGBA) since the source .bin is tightly packed
+  // 256*3 bytes — UNPACK_ALIGNMENT must drop to 1 or the last row of a non-4-multiple width
+  // upload reads garbage/throws (256*3=768 is div-by-4 actually, but keep this defensive since a
+  // future stock could bake a non-256 width). Stored on this.txs.stockShoulder (generic bucket)
+  // so the existing binding fallback (`this.txs[name]`) picks it up with no new special-case.
+  setStockShoulderTex(d){const gl=this.gl;this._stockShoulderSnapshot=new Uint8Array(d);if(!this.txs.stockShoulder)this.txs.stockShoulder=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,256,1,0,gl.RGB,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  // Painted/sky raster masks: up to 8 packed one-per-channel (slot i -> channel i) into TWO
+  // RGBA textures (slots 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS at a fixed
+  // resolution (mskTexDims) independent of image size. FLIP_Y to match imgTx's convention so it
+  // samples correctly in the same global uv (uvOffL/uvScaleL) the analytic radial/linear masks
+  // already use.
+  setMaskTex(data,w,h){const gl=this.gl;if(!this.maskTx)this.maskTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.maskTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  setMaskTex2(data,w,h){const gl=this.gl;if(!this.maskTx2)this.maskTx2=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.maskTx2);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  // ROADMAP R7 — one single-channel relative-depth map per photo (0=far,255=near — see
+  // vendor/depth/README.md), consumed by BOTH the Depth Range mask gate (colRangeWeight's sibling
+  // in the lut pass) and the depth-blur compositor (progs.dof) above. Uploaded ONCE per photo
+  // (like setMaskTex), never recomputed per mask/per frame — the same "compute once, reuse many"
+  // rule CLAUDE.md §5b's `srcV` uniform already follows. R8 (single channel) keeps this a quarter
+  // the bytes of an RGBA upload for the same resolution.
+  setDepthTex(data,w,h,sourceIdentity=data){const gl=this.gl;const snapshot={data:new Uint8Array(data),w,h,identity:sourceIdentity,version:(this._depthMapVersion||0)+1};this._depthMapVersion=snapshot.version;this._depthSnapshot=snapshot;this._depthSourceIdentity=sourceIdentity;this._mskDepthCoverageCache=null;if(!this.depthTx)this.depthTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,this.depthTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.R8,w,h,0,gl.RED,gl.UNSIGNED_BYTE,data);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    this.hasDepthTx=true;}
+  clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this._depthSourceIdentity=null;this._depthMapVersion=(this._depthMapVersion||0)+1;this._mskDepthCoverageCache=null;this.hasDepthTx=false;}
+  resetTextureSnapshotFrom(source){
+    if(source._lutSnapshot)this.setLUT(source._lutSnapshot);
+    else{if(this.lutTx)this.gl.deleteTexture(this.lutTx);this.lutTx=null;this._ensureLutTx();this._lutSnapshot=null;}
+    this.setPrintLUT(source._printLutSnapshot);
+    if(source._hslSnapshot)this.setHslLUT(source._hslSnapshot);
+    else{if(this.hslTx)this.gl.deleteTexture(this.hslTx);this.hslTx=null;this._hslSnapshot=null;}
+    if(source._curveSnapshot)this.setCurveTex(source._curveSnapshot);
+    else{if(this.curveTx)this.gl.deleteTexture(this.curveTx);this.curveTx=null;this._curveSnapshot=null;}
+    if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
+    else{if(this.txs.stockShoulder)this.gl.deleteTexture(this.txs.stockShoulder);this.txs.stockShoulder=null;this._stockShoulderSnapshot=null;}
+    this.clearDepthTex();
+  }
+  _pass(prog,fb,uniforms,bindings,vp){
+    const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
+    // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
+    // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
+    // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
+    // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
+    // never ran) and LUT toggling. Distinguish by sampler-name instead.
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    Object.entries(uniforms).forEach(([k,v])=>{
+    const loc = gl.getUniformLocation(prog,k);
+
+    if (v instanceof Float32Array) {
+        if(k==='mskTopo[0]')gl.uniform1fv(loc,v); // scalar dependency-order array; other packed masks are vec4 arrays
+        else gl.uniform4fv(loc, v);          // vec4 uniform arrays (local-adjust masks)
+    } else if (Array.isArray(v)) {
+        if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
+        else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
+    } else if (SAMPLERS[k]) {
+        gl.uniform1i(loc, v);
+    } else {
+        gl.uniform1f(loc, v);
+    }
+});   // <-- this was lost
+
+gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);
+const al=gl.getAttribLocation(prog,'a');
+gl.enableVertexAttribArray(al);
+gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);
+gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+  // opts.glowScale (gs): downsample factor for the halation/bloom blur buffers (1 = full,
+  //   2 = half-res glow → ~4× less scratch memory, visually identical).
+  // opts.scOverride: force the sigma-scale (=fullImageWidth/REF) — used by the tiled path so
+  //   a tile blurs with the WHOLE image's radius, not the tile's.
+  // opts.uvOff/uvScale: map this render's local uv → global image uv (grain continuity for tiles).
+  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;
+    // ROADMAP.md R1: the scene-referred tonemap needs the SAME float intermediate video already
+    // uses (opts.hdrIntermediate) — OR'd in here rather than requiring every still call site to
+    // remember to pass it, since "tonemap is on" already implies "float FBOs are needed" by
+    // construction. P.tonemap is false by default everywhere, so this is a no-op for every
+    // existing call site (identical to `opts&&opts.hdrIntermediate` alone).
+    // this.usingSceneLinear (set by setImage, ROADMAP.md R1): a RAW with real measured headroom
+    // forces the float chain + shoulder on its own — the manual P.tonemap flag stays available
+    // for testing/demo purposes independent of real source data.
+    const tonemapOn=P.tonemap||this.usingSceneLinear;
+    // 3.1.5 fix: the gamut-warning overlay reads the `lut` FBO after basicAdjust/curves/masks —
+    // if that FBO is 8-bit those stages' clipping is already GPU-clamped before the check ever
+    // runs, so the toggle could never catch anything but post-lut clipping. Force the float
+    // intermediate whenever gamutWarn is requested; _initBufs still falls back to RGBA8 on
+    // hardware without EXT_color_buffer_float, so this is a silent no-op there, not a crash.
+    const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
+    const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
+    this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
+      deconv:!!(dc0.amount>0),
+      dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
+      glow:!!((P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||P.debug),
+      skinGate:anyGate0,
+      skinLum:anyGate0&&masks0.some(m=>m.crOn&&m.uL),
+    });
+    const w2=this.w2,h2=this.h2;
+    const iw2=1/w2,ih2=1/h2;          // texel step in the REDUCED-res glow buffers
+    // ── CALIBRATED CONSTANTS (measured from Dehancer targets, ref width 2400px) ──
+    // Halation v6: channel-split σ_R=6.14 σ_G=2.62 σ_B=1.0 px; gain_R=6.89 gain_G=0.109 @amount70
+    // Bloom v6:    source-coloured; σ=12.42 gain=0.111 @amount40
+    const C=FXR.CAL;
+    const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
+    const H=C.halation, B=C.bloom;
+    // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
+    const dbg=P.debug||0;
+    const hOn=P.halation.enabled||dbg>0, bOn=P.bloom.enabled||dbg>0;
+    // No-remjet film (no anti-halation backing) halates much more strongly AND shows a bright
+    // yellow edge band (boosted green) fading to orange/red — PER-CHANNEL calibration in
+    // FXR.CAL.halation.noRemjet (see tools/calib/optimize_noremjet.py). "Extreme" multiplies the
+    // no-remjet gains further (≈×5–6 of standard) for a stylised look; it implies no-remjet.
+    const wantNR=!!(P.halation.noRemjet||P.halation.extreme);
+    const NR=(wantNR&&H.noRemjet)?H.noRemjet:null;
+    const ext=(P.halation.extreme&&H.extremeScale)?H.extremeScale:1;
+    const amtH=hOn?(P.halation.amount/H.defAmount):0;
+    const bGain=bOn?B.gain*(P.bloom.amount/B.defAmount):0;
+    const halWhite=!!P.halation.white;   // neutral/white glow (B&W photos) instead of warm film glow
+    // per-channel gains (at amount=defAmount): no-remjet overrides R/G/B; ext scales up.
+    const gainR=(NR?NR.gainR:H.gainR)*ext, gainG=(NR?NR.gainG:H.gainG)*ext, gainB=(NR?(NR.gainB||0):H.gainB)*ext;
+    // Halation: radius slider scales σ_R; σ_G,σ_B track the calibrated ratio. No-remjet widens
+    // each channel by its own scale (σ_G scale vs σ_R sets the yellow-band width).
+    const sSR=NR?NR.sigmaScaleR:1, sSG=NR?NR.sigmaScaleG:1;
+    const hSigR=Math.max(0.5,(P.halation.radius||H.sigmaR)*sSR*sc);
+    // White mode: equalise the per-channel blur so the glow is neutral grey (no red fringe).
+    const hSigG=halWhite?hSigR:Math.max(0.3,hSigR*(H.sigmaG/H.sigmaR)*(sSG/sSR));
+    const hSigB=halWhite?hSigR:Math.max(0.2,hSigR*(H.sigmaB/H.sigmaR));
+    const bSig=Math.max(0.5, (P.bloom.radius? P.bloom.radius : B.sigma)*sc);
+    const bThr=(P.bloom.threshold!=null)?P.bloom.threshold:B.thr;
+    // Glow runs in the reduced buffers: each reduced texel spans `gs` full-res pixels, so the
+    // blur sigma must be divided by gs to keep the SAME spatial spread (and it costs fewer taps).
+    const RG=[w2,h2]; // reduced viewport for every emit/blur pass
+    const hSigR2=Math.max(0.4,hSigR/gs),hSigG2=Math.max(0.3,hSigG/gs),hSigB2=Math.max(0.2,hSigB/gs),bSig2=Math.max(0.4,bSig/gs);
+
+    // Pass 1: LUT grade + basic adjustments -> lut (sRGB), FULL resolution (the export base)
+    const A=P.adjust||{};
+    // Local-adjust masks: pack up to 4 masks into vec4 uniform arrays; global-uv mapped via
+    // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
+    const allMasks=P.masks||[];_mskEnsureIds(allMasks);
+    const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
+    const mskRef=this._maskReferenceSize,md=mskTexDims(this===FX?undefined:(mskRef&&mskRef.w||this.imgW),this===FX?undefined:(mskRef&&mskRef.h||this.imgH));
+    // Preserve the native GPU depth comparison as the exact zero-refinement baseline.
+    // Build a derived raster only when Feather/Edge actually modifies that selection.
+    const depthMaskSources=MK.map(m=>((Number(m.refineFeather)||0)||(Number(m.refineEdge)||0))?mskDepthCoverageSource(this,m,md.w,md.h):null);
+    // These uniform-staging arrays are allocated ONCE per renderer and zero-filled per
+    // frame, not reallocated. render() is the hottest function in the app (every preview tick,
+    // every export tile), and eleven fresh typed arrays per call was pure allocator churn for
+    // buffers whose size never changes.
+    const U=this._mskU||(this._mskU={
+      mA:new Float32Array(32),mB:new Float32Array(32),mC:new Float32Array(32),mD:new Float32Array(32),
+      mE:new Float32Array(32),mF:new Float32Array(32),mG:new Float32Array(32),mH:new Float32Array(32),
+      mI:new Float32Array(32),
+      mS:new Float32Array(128),  // colour-gate samples: 8 masks x 8 samples x (h,s) = 32 vec4
+      mJ:new Float32Array(32),   // per-mask detail: x = Texture
+      mK:new Float32Array(32),   // per-mask detail: x = Noise Reduction (bilateral) strength 0..1
+      mL:new Float32Array(32),   // per-mask local Sharpen amount, identity at zero
+      mO:new Float32Array(32),   // x = resolved operand slot, y = valid graph node
+      mTopo:new Float32Array(8), // dependency-first order; adjustments still apply in user list order
+      mDep:new Float32Array(32)});// ROADMAP R7: x = Depth Range gate on/off, y = depLo, z = depHi
+    const mA=U.mA,mB=U.mB,mC=U.mC,mD=U.mD,mE=U.mE,mF=U.mF,mG=U.mG,mH=U.mH,mI=U.mI,mS=U.mS,mJ=U.mJ,mK=U.mK,mL=U.mL,mO=U.mO,mTopo=U.mTopo,mDep=U.mDep;
+    // ⚠️ MUST clear: the packing loop below only writes slots for masks that EXIST, so a stale
+    // value from a previous frame with more masks would otherwise linger in an unused slot.
+    mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mL.fill(0);mO.fill(0);mTopo.fill(-1);mDep.fill(0);
+    const composePlan=_mskCompositionPlan(MK);
+    composePlan.order.forEach((slot,rank)=>{mTopo[rank]=slot;});
+    MK.forEach((m,i)=>{const o=i*4;
+      if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
+      else if(m.type==='none'){mB[o]=2;if(depthMaskSources[i])mB[o+3]=1;} // shapeless range mask; depth source is rasterized when ready
+      else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
+      else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
+      mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
+      mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
+      mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
+      mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
+      // ROADMAP R7 — Depth Range gate, same on/off + floor/ceiling shape as the luminance gate
+      // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
+      // for every mask that never turned it on, so this is a pure no-op for them.
+      mDep[o]=m.depOn&&!depthMaskSources[i]?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
+      mDep[o+3]=m.vibrance||0; // local Vibrance: signed normalized saturation-aware adjustment
+      const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+      const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
+      mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
+      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;
+      mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
+      // slot (amount 0) rather than dropping the mask from the array, because removing it would
+      // renumber shader slots and force every stored operand ID to resolve again.
+      // Solo (UI-only, never persisted — see mskSolo) rides the same slot: every non-eraser mask
+      // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
+      // costs nothing new in the shader.
+      const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&i!==mskSolo&&!m.isExclude);
+      mE[o+3]=(m.muted||soloedOut)?0:(m.amount!=null?m.amount:100)/100;
+      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
+      mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
+      mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
+      // 0..1 strength of the one-way clamp (was a hard boolean) — see tanOneWayAmt's doc comment.
+      mJ[o+2]=(m.tanOneWayAmt!=null?m.tanOneWayAmt:(m.tanOneWay?100:0))/100;
+      mJ[o+3]=(m.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
+      mK[o]=(m.nr||0)/100;    // Noise Reduction: 0..1 unipolar mix toward the bilateral-filtered source
+      mK[o+1]=m.wh||0;        // Whites: signed -1..1, identity for legacy masks
+      mK[o+2]=m.bl||0;        // Blacks: signed -1..1, identity for legacy masks
+      mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
+      mL[o]=(m.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
+      mL[o+1]=(m.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
+      // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
+      // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
+      // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
+      const CS=(m.crOn&&m.crSamples)?m.crSamples.slice(0,CR_MAX_SAMPLES):[];
+      mG[o]=CS.length;mG[o+3]=(m.crRange!=null?m.crRange:35)/100;
+      // Chroma range defaults to following the hue range (crRangeC null) so an untouched mask
+      // behaves exactly as it did with one shared slider; setting it independently narrows/widens
+      // ONLY the colour-purity axis, e.g. to exclude wood/sand without also shrinking valid skin
+      // hue variation.
+      mG[o+1]=(m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35))/100;
+      // Two samples per vec4, 4 vec4 per mask (16 floats/mask): mskCS[i*4]=(h0,s0,h1,s1), etc.
+      CS.forEach((p,k)=>{const q=i*16+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
+      mH[o]=(m.uH||0)/100;mH[o+1]=(m.uS||0)/100;mH[o+2]=(m.uL||0)/100;
+      mH[o+3]=(m.preserve!=null?m.preserve:70)/100;
+      const tgt=mskSkinTarget(m);
+      mI[o]=tgt.h;mI[o+1]=tgt.s;mI[o+2]=tgt.v;
+      // srcV: mean value of the gated pixels, measured ONCE in JS (mskMeasureSrcV) and passed in.
+      // Must be identical for preview, loupe and every export tile — re-measuring per tile would
+      // make each tile converge to a different level and show as blocks.
+      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
+    if(MK.some(m=>m.type==='brush'||(m.origin==='depth'&&m.depOn)))mskBuildTex(this,MK);
+    const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
+    // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
+    // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
+    // skipped (reading straight from the previous stage's output name) so the default
+    // no-correction path never touches these buffers.
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
+    if(lnsOn){
+      this._pass(this.progs.lens,this.fbs.lens,
+        {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
+         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
+         texSize:[1/this.imgW,1/this.imgH],
+         aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]]);
+    }
+    const srcAfterLens=lnsOn?'lens':'img';
+    // NOISE REDUCTION: denoise into fbs.nr, then the lut pass samples that instead of imgTx.
+    // Runs at render resolution (so on export tiles it is full-res/tile-res and correct; the
+    // preview is approximate, same as sharpen/grain — the 1:1 loupe is true).
+    const nrP=P.nr, nrOn=!!(nrP&&(nrP.luma>0||nrP.color>0||nrP.hlDesat>0));
+    if(nrOn){
+      // Wider + genuinely stronger than v1: step scales 1x(off)→4x(full amount) instead of
+      // 0.75x→1.5x, and the Gaussian sigma (nrChromaSig, in the shader) now tracks the step
+      // directly so a bigger step is a wider blur, not just sparser taps of the same size.
+      const nrChromaStep=Math.max(1,sc)*(1.0+nrP.color*3.0);
+      const nrChromaSig=nrChromaStep*1.2;
+      this._pass(this.progs.nr,this.fbs.nr,
+        {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,nrContrast:nrP.contrast||0,
+         nrColorDetail:nrP.colorDetail||0,nrColorSmooth:nrP.colorSmooth||0,
+         nrScale:sc,nrChromaStep,nrChromaSig,nrHlDesat:nrP.hlDesat||0,
+         texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
+    }
+    let lutSrc=nrOn?'nr':srcAfterLens;
+    // ROADMAP.md R6 — DECONVOLUTION SHARPENING. Runs on the same "source so far" (post lens/NR,
+    // pre-LUT) stage as noise reduction, right before the lut pass consumes it — see the
+    // progs.deconvUpdate/deconvMix comment above for the algorithm. Zero-cost when amount<=0:
+    // the whole block (and its 3*2+1 extra draw calls) is skipped and lutSrc is left untouched,
+    // which is what keeps every export golden byte-identical by construction, not just by a
+    // no-op blend.
+    const dcP=P.deconv,dcAmt=(dcP&&dcP.amount)||0;
+    if(dcAmt>0){
+      // Radius is specified in reference-image (REF-width) pixels, same convention as the
+      // halation sigmas, so it scales correctly across preview/export/tile resolutions.
+      const dcSigma=Math.max(0.4,Math.min(8,(dcP.radius!=null?dcP.radius:1.5)))*sc;
+      const dcIters=3;                    // real-time budget — see the Node validation
+      const dcDampT=0.06,dcMaxStep=0.35;  // damped-RL constants, tuned in the Node validation
+      let curEst=lutSrc;                  // RL est_0 = the observed image itself
+      const names=['dcEstA','dcEstB'];
+      for(let it=0;it<dcIters;it++){
+        this._pass(this.progs.blur,this.fbs.dcBlurH,{img:0,dir:[1/this.w,0],sig:dcSigma},[[0,curEst,false]]);
+        this._pass(this.progs.blur,this.fbs.dcBlurV,{img:0,dir:[0,1/this.h],sig:dcSigma},[[0,'dcBlurH',false]]);
+        const outName=names[it%2];
+        this._pass(this.progs.deconvUpdate,this.fbs[outName],{obs:0,est:1,reblur:2,dampT:dcDampT,maxStep:dcMaxStep},
+          [[0,lutSrc,false],[1,curEst,false],[2,'dcBlurV',false]]);
+        curEst=outName;
+      }
+      this._pass(this.progs.deconvMix,this.fbs.deconvOut,{obs:0,est:1,amount:Math.min(1,dcAmt)},[[0,lutSrc,false],[1,curEst,false]]);
+      lutSrc='deconvOut';
+    }
+    // SKIN FREQUENCY SEPARATION — build a quarter-res, heavily blurred luminance of this render's
+    // own source, BEFORE the lut pass that consumes it. Only when a mask actually uses lightness
+    // uniformity, so the default path pays nothing. Sigma is a fixed fraction of the FULL image
+    // width (scOverride carries that through for tiles and the loupe, exactly as the halation
+    // sigmas do), which is what keeps the low-frequency estimate identical at every render size.
+    const anyGate=MK.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
+    const skinLumOn=anyGate&&MK.some(m=>m.crOn&&m.uL);
+    const RQ=[this.w4,this.h4];
+    if(anyGate){
+      // Box pass: 4x4-averaged colour + its luminance. Cheap (quarter res) and it is what makes the
+      // gate robust to per-pixel chroma noise in rock and foliage.
+      this._pass(this.progs.lumdown,this.fbs.skbox,{img:0,texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false]],RQ);
+    }
+    if(skinLumOn){
+      const sigQ=Math.max(1.5,Math.min(24,FXR.CAL.skinBlurFrac*REF*sc/4));  // /4 = the quarter-res buffer
+      this._pass(this.progs.blur,this.fbs.sklo_b,{img:0,dir:[1/this.w4,0],sig:sigQ},[[0,'skbox',false]],RQ);
+      this._pass(this.progs.blur,this.fbs.sklo_a,{img:0,dir:[0,1/this.h4],sig:sigQ},[[0,'sklo_b',false]],RQ);
+    }
+    // ROADMAP.md R4 — native film-stock shoulder. Only wanted when tonemapStyle==2 ('Film
+    // stock (native)') AND the active look is one of the 16 baked spektra_* keys; otherwise
+    // this whole path is inert (useShoulderNow stays 0) and falls back to whatever tonemapStyle
+    // the comp-pass branch already applies (BT.2390 default) — the sel-tonemap UI's own
+    // fallback-to-BT.2390 behaviour lives here, not as a shader branch, so the shader never has
+    // to guard against a missing/stale texture.
+    const shoulderRawKey=(P.lutKey||'').replace(/^p:/,'');
+    const shoulderWanted=P.tonemapStyle===2&&SPEKTRA_SHOULDER_KEYS.has(shoulderRawKey);
+    const useShoulderNow=shoulderWanted&&this._shoulderKey===shoulderRawKey;
+    if(shoulderWanted&&this._shoulderKey!==shoulderRawKey&&this._shoulderPending!==shoulderRawKey){
+      this._shoulderPending=shoulderRawKey;
+      stockShoulderBytes(shoulderRawKey).then(b=>{
+        if(this._shoulderPending!==shoulderRawKey)return; // superseded by a newer selection
+        this._shoulderPending=null;
+        if(b){this.setStockShoulderTex(b);this._shoulderKey=shoulderRawKey;
+          if(typeof renderPreview==='function')renderPreview();}
+      }).catch(()=>{if(this._shoulderPending===shoulderRawKey)this._shoulderPending=null;});
+    }
+    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
+      useHlg:P.hlg&&P.hlg.enabled?1:0,
+      hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
+      srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
+      vidWeave:(P.filmMotion&&P.filmMotion.weave)||[0,0],
+      vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
+      curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
+      hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
+      maskTex:4,maskTex2:7,
+      stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
+      mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,'mskO[0]':mO,'mskTopo[0]':mTopo,
+      'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,'mskL[0]':mL,'mskDep[0]':mDep,
+      mskAnyTex:MK.some(m=>m.tex)?1:0,
+      mskAnyClarity:MK.some(m=>m.clarity)?1:0,
+      mskAnySharp:MK.some(m=>m.sharp)?1:0,
+      mskAnySharpMask:MK.some(m=>m.sharp>0&&m.sharpMask)?1:0,
+      mskAnyNR:MK.some(m=>m.nr)?1:0,
+      skinLum:5,useSkinLum:skinLumOn?1:0,skinCol:6,useSkinCol:anyGate?1:0,
+      // ROADMAP R7 — depthTx bound whenever a real map has been uploaded for THIS photo (via
+      // FXR.setDepthTex); useDepthTx off means every mask's Depth Range gate is skipped, so a
+      // photo with no computed map yet (the common case until a user actually opens the mask
+      // panel — see fxEnsureDepthMap) is byte-identical to before this feature existed.
+      depthTx:9,useDepthTx:this.depthTx?1:0,
+       // Selection display is preview-only. The private token cannot be reconstructed from
+       // recipe/snapshot data, so ordinary and export/tile calls always bind the identity path.
+       mskShowSel:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSel!=null)?opts.showSel:-1,
+       mskShowSelOp:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelOpacity!=null)?opts.showSelOpacity:0.75,
+       mskShowSelOutline:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelOutline)?1:0,
+       mskShowSelMode:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelMode!=null)?opts.showSelMode:0,
+       mskShowSelColor:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSelColor)?opts.showSelColor:[1,.15,.15],
+       mskShowSharpMask:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showSharpMask!=null)?opts.showSharpMask:-1,
+      uvOffL,uvScaleL,
+      adjOn:A.enabled?1:0,adjExp:A.exposure||0,adjCon:A.contrast||0,adjHi:A.highlights||0,
+      adjSh:A.shadows||0,adjWh:A.whites||0,adjBl:A.blacks||0,adjTemp:A.temp||0,
+      // saturation/vibrance moved to the comp pass (applied AFTER the print stage, Dehancer
+      // grade-after-print order) — zero them here so they aren't applied twice.
+      adjTint:A.tint||0,adjVib:0,adjSat:0,
+      adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
+      adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
+      adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
+      fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
+      fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
+
+    // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
+    // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
+    // threshold smoothstep is nonlinear, so a 1–2px bright line averaged with its dark
+    // neighbours falls below thr and emits NOTHING — fine-line halation vanished on phones
+    // (gs=2). emit-then-downsample is linear in the emission, so thin-line energy survives.
+    // The downsample is the normalized blur prog with dir=[0,0]: every tap lands on the same
+    // uv, weights cancel → an exact bilinear-filtered copy (at gs=1 it's an EXACT copy, so
+    // desktop output is byte-identical to before).
+    const DS={img:0,dir:[0,0],sig:1};
+    const glowOn=hOn||bOn;
+    // BLOOM: emit (neutral, lum^power) FULL-res → hemitF (scratch) → downsample → blur (h,v)
+    // (mode=1 path ignores powL/kW/kC/aG/bP — pass harmless defaults)
+    if(glowOn){
+      this._pass(this.progs.src,this.fbs.hemitF,
+        {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
+      this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
+    }
+
+    // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
+    // Full-res into hemitF (kept for the composite's high-pass subtraction, which must be
+    // sharp so flat interiors null exactly), then downsampled into hsrc (the wide-blur input).
+    // NOTE: this overwrites the bloom emit in hemitF — bloom is done with it by here.
+    // No-remjet lowers the luminance curve (powL/powLg) and threshold so dim greys halate too.
+    const emPowL=(NR&&NR.powL!=null)?NR.powL:H.powL, emPowLg=(NR&&NR.powLg!=null)?NR.powLg:H.powLg;
+    const emitU={img:0,thr:(NR&&NR.thr!=null)?NR.thr:H.thr,knee:H.knee,power:H.power,bluesupp:H.bluesupp,mode:0.0,
+      powL:emPowL,kW:H.kW,kC:H.kC,aG:H.aG,bP:H.bP,powLg:emPowLg,gA:H.gA,gB:H.gB};
+    if(glowOn){
+      this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
+      this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
+      this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
+      this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
+    }
+
+    // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow
+    // buffers with LINEAR filtering → free bilinear upscale of the (smooth) glow.
+    const outFb=(opts&&opts.outFb!==undefined)?opts.outFb:null;
+    const ovp=(opts&&opts.outVp)||[w,h];
+    // ROADMAP R7 — depth blur / tilt-shift: OFF by default (P.depthBlur/P.tiltShift both undefined
+    // on every existing call site), in which case this is a no-op and comp writes straight to
+    // outFb exactly as before — the identity path that keeps every golden byte-exact. When ON,
+    // comp instead writes into the full-res `dofSrc` scratch buffer so the blur/composite passes
+    // below can run on its output before the FINAL result reaches outFb/ovp.
+    const DB=P.depthBlur,TS=P.tiltShift;
+    const dofOn=!!((DB&&DB.enabled)||(TS&&TS.enabled));
+    gl.bindFramebuffer(gl.FRAMEBUFFER,dofOn?this.fbs.dofSrc:outFb);
+    gl.viewport(0,0,dofOn?w:ovp[0],dofOn?h:ovp[1]);
+    gl.useProgram(this.progs.comp);
+    // hEmit = hsrc (pre-blur scalar emit) — needed for the high-pass glow subtraction.
+    [['base','lut'],['hGlow',glowOn?'hglow_v':'lut'],['bGlow',glowOn?'bglow_v':'lut'],['hEmit',glowOn?'hemitF':'lut']].forEach(([u,n],i)=>{
+      gl.activeTexture(gl.TEXTURE0+i);gl.bindTexture(gl.TEXTURE_2D,this.txs[n]);
+      gl.uniform1i(gl.getUniformLocation(this.progs.comp,u),i);
+    });
+    const cp=this.progs.comp,ul=k=>gl.getUniformLocation(cp,k);
+    // Print profile: bind the print 3D LUT on its own texture unit (after the 4 2D maps).
+    const prOn=!!(P.print&&this.printTx);
+    gl.activeTexture(gl.TEXTURE0+4);gl.bindTexture(gl.TEXTURE_3D,prOn?this.printTx:this.lutTx);
+    gl.uniform1i(ul('printLut'),4);gl.uniform1f(ul('usePrint'),prOn?1:0);
+    gl.uniform1f(ul('useTonemap'),tonemapOn?1:0); // ROADMAP.md R1 — see getFXParams' comment and render()'s tonemapOn
+    // ROADMAP.md R2/R4 — 0=BT.2390 (default), 1=AgX, 2=native film-stock shoulder. Was
+    // `P.tonemapStyle?1:0` (a boolean coercion) before R4 — harmless while only 0/1 existed, but
+    // it would have collapsed R4's 2 down to 1 (AgX) here even though the comp-shader branch
+    // above was separately fixed to treat 2 as BT.2390 — pass the numeric value through exactly.
+    gl.uniform1f(ul('tonemapStyle'),Number(P.tonemapStyle)||0);
+    // White mode: equal gains tuned to the Rec.709 luminance of the warm gain vector, so the
+    // neutral glow carries the same visual weight as the warm one at a given Amount.
+    const gW=0.2126*gainR+0.7152*gainG+0.0722*gainB; // luminance of the active gain vector
+    gl.uniform1f(ul('halR'),(halWhite?gW:gainR)*amtH);
+    gl.uniform1f(ul('halG'),(halWhite?gW:gainG)*amtH);
+    gl.uniform1f(ul('halB'),(halWhite?gW:gainB)*amtH);
+    gl.uniform1f(ul('halWhite'),halWhite?1:0);   // neutral glow: drive all 3 channels from rawH.r
+    gl.uniform1f(ul('halProt'),(P.halation.enabled&&P.halation.protect)?P.halation.protect:0);
+    gl.uniform1f(ul('halHP'),(NR&&NR.hp!=null)?NR.hp:1.0);   // high-pass strength (no-remjet floods → <1)
+    // saturation/vibrance applied here (post-print) instead of in the lut pass — see comp shader.
+    gl.uniform1f(ul('adjSat2'),(A.enabled?A.saturation:0)||0);
+    gl.uniform1f(ul('adjVib2'),(A.enabled?A.vibrance:0)||0);
+    gl.uniform1f(ul('blmA'),bGain);
+    // FILM GRAIN (value-noise, per-channel signal-dependent — see FXR.CAL.grain). Film format
+    // (8/16/35/65mm) sets clump cell size + strength; Amount = intensity (with headroom past
+    // Dehancer's max); Size = fine multiplier on the format's clump size.
+    {const G=C.grain,fmt=G.formats[P.grain.format]||G.formats['35mm'];
+     const amtNorm=(P.grain.enabled?P.grain.amount/100:0)*G.amountSpan;   // 0..~1.5 (headroom)
+     const amtScale=amtNorm>0?Math.pow(amtNorm,G.powA):0;
+     const grA=P.grain.enabled?amtScale*fmt.scale:0;
+     const sizeMul=(P.grain.size||5)/5;                                   // slider 5 = format-accurate
+     // Clump cell = a fixed PIXEL size in the OUTPUT (so it's visible in the preview AND matches
+     // Dehancer at export). grFreq = cells across the FULL image = fullOutputW / cellPx. Divide by
+     // uvScale so a tile/loupe (which renders a sub-region) keeps the SAME global cell grid.
+     const uvSx=(opts&&opts.uvScale)?opts.uvScale[0]:1;
+     const cellPx=fmt.cellPx*sizeMul;
+     const grFreq=(w/uvSx)/Math.max(cellPx,0.5);
+     gl.uniform1f(ul('grA'),grA);
+     gl.uniform1f(ul('grFreq'),grFreq);
+     gl.uniform3f(ul('grK'),G.kR,G.kG,G.kB);
+     gl.uniform1f(ul('grPowG'),G.powG);
+     gl.uniform2f(ul('grHi'),G.hiLo,G.hiHi);
+     gl.uniform1f(ul('grWi'),G.wi);gl.uniform1f(ul('grWs'),G.ws);}
+    // FILM ARTIFACTS (dust/scratches/light leak) — image-relative coords + a stable per-image
+    // seed (fxState.artSeed via P.artifacts.seed) so preview, loupe, tiles and export all match.
+    {const AR=P.artifacts||{},aOn=AR.enabled?1:0;
+     const uvSy=(opts&&opts.uvScale)?opts.uvScale[1]:1;
+     const uvSx2=(opts&&opts.uvScale)?opts.uvScale[0]:1;
+     gl.uniform1f(ul('dustA'),aOn?(AR.dust||0)/100:0);
+     gl.uniform1f(ul('scrA'),aOn?(AR.scratch||0)/100:0);
+     gl.uniform1f(ul('leakA'),aOn?(AR.leak||0)/100:0);
+     gl.uniform1f(ul('dustMode'),AR.dustMode||0);
+     gl.uniform1f(ul('fxSeed'),(AR.seed!=null)?AR.seed:7.7);
+     gl.uniform1f(ul('artAsp'),((w/uvSx2)/(h/uvSy))||1);}
+    const seedForFrame=(opts&&opts.seed!=null)?opts.seed:Math.random()*100;
+    gl.uniform1f(ul('seed'),seedForFrame);
+    gl.uniform1f(ul('debug'),P.debug||0);
+    gl.uniform1f(ul('vigAmt'),P.vignette||0);
+    gl.uniform1f(ul('gamutWarn'),(opts&&opts.gamutWarn)?(opts.gamutWarn===true?4:+opts.gamutWarn):0);
+    // TPDF dither at final quantization — masks 8-bit banding from a hard S-curve/LUT on
+    // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
+    // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
+    // so it changes frame to frame rather than fixing a static dither pattern to the screen.
+    gl.uniform1f(ul('useDither'),(opts&&opts.dither)?1:0);
+    gl.uniform1f(ul('ditherSeed'),seedForFrame);
+    const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
+    gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al=gl.getAttribLocation(cp,'a');gl.enableVertexAttribArray(al);gl.vertexAttribPointer(al,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+    // ROADMAP R7 — depth blur / tilt-shift: 3 progressively-blurred copies of the just-finished
+    // frame (dofSrc), each built with the SAME separable `blur` program the halation/bloom chains
+    // already use, then blended per-pixel by progs.dof. Radii scale with `sc` (=fullImageWidth/REF,
+    // opts.scOverride-aware) exactly like the halation sigmas above, so a tile/loupe/export blurs
+    // at the SAME pixel scale as the full image — not the tile's own smaller scale.
+    if(dofOn){
+      const eff=DB&&DB.enabled?DB:TS;             // whichever is active carries Amount/focus/etc.
+      const amt=(eff.amount!=null?eff.amount:60)/100;         // 0..1, UI default 60
+      const r3=Math.max(0.1,amt*24*sc);           // max blur radius in px at THIS render's scale
+      const r1=r3*0.15,r2=r3*0.45;
+      const mkBlur=(srcName,dstName,sig)=>{
+        this._pass(this.progs.blur,this.fbs.dofHtmp,{img:0,dir:[1/w,0],sig},[[0,srcName,false]]);
+        this._pass(this.progs.blur,this.fbs[dstName],{img:0,dir:[0,1/h],sig},[[0,'dofHtmp',false]]);
+      };
+      mkBlur('dofSrc','dofL1',r1);
+      mkBlur('dofSrc','dofL2',r2);
+      mkBlur('dofSrc','dofL3',r3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,outFb);gl.viewport(0,0,ovp[0],ovp[1]);gl.useProgram(this.progs.dof);
+      [['dofSrc','dofSrc'],['dofL1','dofL1'],['dofL2','dofL2'],['dofL3','dofL3'],['depthTx','depthTx']].forEach(([u,n],i)=>{
+        gl.activeTexture(gl.TEXTURE0+i);
+        gl.bindTexture(gl.TEXTURE_2D,n==='depthTx'?(this.depthTx||this.txs.dofSrc):this.txs[n]);
+        gl.uniform1i(gl.getUniformLocation(this.progs.dof,u),i);
+      });
+      const dp=this.progs.dof,dul=k=>gl.getUniformLocation(dp,k);
+      const tiltMode=!!(TS&&TS.enabled&&!(DB&&DB.enabled));
+      gl.uniform1f(dul('dofMode'),tiltMode?1:0);
+      if(tiltMode){
+        gl.uniform1f(dul('dofFocus'),eff.focus!=null?eff.focus:0.5);       // image-relative uv.y, 0.5 = centre band
+        gl.uniform1f(dul('dofBand'),Math.max(0,(eff.band!=null?eff.band:12)/100/2));
+        gl.uniform1f(dul('dofFalloff'),Math.max(0.02,(eff.falloff!=null?eff.falloff:35)/100));
+      }else{
+        gl.uniform1f(dul('dofFocus'),eff.focus!=null?eff.focus:0.7);       // depth 0..1, 1=nearest
+        gl.uniform1f(dul('dofBand'),Math.max(0,(eff.band!=null?eff.band:6)/100/2));
+        gl.uniform1f(dul('dofFalloff'),Math.max(0.02,(eff.falloff!=null?eff.falloff:30)/100));
+      }
+      gl.uniform1f(dul('dofR1'),r1);gl.uniform1f(dul('dofR2'),r2);gl.uniform1f(dul('dofR3'),r3);
+      gl.uniform2f(dul('uvOffL'),uvOff[0],uvOff[1]);gl.uniform2f(dul('uvScaleL'),uvScale[0],uvScale[1]);
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.qb);const al2=gl.getAttribLocation(dp,'a');gl.enableVertexAttribArray(al2);gl.vertexAttribPointer(al2,2,gl.FLOAT,false,0,0);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
+  }
+  getPixels(){const gl=this.gl,px=new Uint8Array(this.w*this.h*4);
+    gl.readPixels(0,0,this.w,this.h,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    const row=this.w*4,tmp=new Uint8Array(row);
+    for(let y=0;y<this.h>>1;y++){const y2=this.h-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
+    return{px,w:this.w,h:this.h};
+  }
+}
+function hexRGB(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]}

@@ -1,0 +1,74 @@
+// ── CANVAS matte (INS-style): put the (bordered) image on an aspect-ratio canvas with a
+// solid-color or blurred-image background, so e.g. a 2:3 photo + border posts to Instagram's
+// 4:5/3:4 without cropping. ORDER: photo → borders (belong to the image) → canvas around
+// everything. Shared by preview AND export so they match by construction.
+// CV={enabled,ar(w/h, 0=off),zoom(0.5..1.5, 1=fit),bg,'blur'}. zoom>1 crops into the frame.
+// ══ SLIDER ERGONOMICS ════════════════════════════════════════════════════════════════════════
+// Mobile already had value bubbles and double-tap-to-reset; desktop had neither, so an exact
+// value could only be reached by dragging and a loaded recipe was illegible without opening every
+// section. Three additions, all delegated from the document so they cover sliders that are built
+// later (mask rows, HSL bands, point colours) without any per-row wiring:
+//   • click the number to type an exact value
+//   • arrow keys nudge (Shift = x10), Home/End jump to the ends
+//   • a dot on any slider that differs from its factory default
+// Everything dispatches the row's own `oninput`, so each control's existing handler still runs and
+// nothing here needs to know what a given slider means.
+function _fxSliderOf(valEl){
+  const row=valEl.closest('.fx-row');if(!row)return null;
+  return row.querySelector('input[type=range]');
+}
+function _fxFireInput(sl){
+  sl.dispatchEvent(new Event('input',{bubbles:true}));
+}
+// Set a slider from a typed/nudged number, clamped and snapped to its own step.
+function _fxSliderSet(sl,v){
+  const min=parseFloat(sl.min),max=parseFloat(sl.max),step=parseFloat(sl.step)||1;
+  if(!isFinite(v))return false;
+  if(sl.id==='sl-straighten'&&typeof _stA2S==='function'){ // typed/nudged value is an ANGLE; the slider itself runs on a curved scale
+    const nv=_stA2S(Math.max(-45,Math.min(45,v)));if(String(nv)===sl.value)return false;sl.value=nv;return true;}
+  v=Math.min(max,Math.max(min,v));
+  v=Math.round((v-min)/step)*step+min;
+  if(String(v)===sl.value)return false;
+  sl.value=v;return true;
+}
+let _fxModTimer=null;
+// Compare every snapshot slider against the factory default and flag the ones that differ.
+// Debounced and driven off getUISnapshot so it cannot drift from what the snapshot considers a
+// slider — no second list to keep in sync.
+function fxMarkModifiedSliders(){
+  clearTimeout(_fxModTimer);
+  _fxModTimer=setTimeout(()=>{
+    if(!_fxPristineDefault)return;
+    const baseS=_fxPristineDefault.sliders||{};
+    for(const id in baseS){
+      // ⚠️ Snapshot slider keys are stored WITHOUT their "sl-" element prefix (getUISnapshot reads
+      // getElementById('sl-'+id)), so looking the id up directly finds nothing and every dot
+      // silently stays off — which is exactly how this first shipped.
+      const sl=document.getElementById('sl-'+id)||document.getElementById(id);if(!sl)continue;
+      const row=sl.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',String(sl.value)!==String(baseS[id]));
+    }
+    // T3 (editor_ux_spec.json): the header Reset button is gated on `:has(.fx-row.fx-mod)`
+    // (§21530), but until this only sliders ever set .fx-mod — a colour-only or toggle-only edit
+    // (e.g. Split Tone's colour swatches, a section's own on/off) never marked its row, so the
+    // header Reset silently stayed hidden even though there was something real to reset (R5).
+    // Colour and toggle keys are stored WITH their "cl-"/element-id prefix already (see
+    // _FX_SNAP_COLORS/_FX_SNAP_TOGGLES above), unlike sliders, so no prefix juggling is needed.
+    const baseC=_fxPristineDefault.colors||{};
+    for(const id in baseC){
+      const cl=document.getElementById(id);if(!cl)continue;
+      const row=cl.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',String(cl.value)!==String(baseC[id]));
+    }
+    const baseT=_fxPristineDefault.toggles||{};
+    for(const id in baseT){
+      // Toggle snapshot keys are ALSO stored without their "tg-" prefix (same shape as sliders,
+      // unlike colours which keep "cl-") — getUISnapshot reads getElementById('tg-'+id).
+      const tg=document.getElementById('tg-'+id);if(!tg)continue;
+      const row=tg.closest('.fx-row');if(!row)continue;
+      row.classList.toggle('fx-mod',tg.classList.contains('on')!==!!baseT[id]);
+    }
+    fxPaintAllSliders();   // fill colour follows .fx-mod, so repaint once the flags settle
+    if(typeof syncSectionEnabled==='function')syncSectionEnabled(); // rail's edited squares follow slider edits too
+  },120);
+}

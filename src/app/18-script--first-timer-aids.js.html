@@ -1,0 +1,57 @@
+// ── First-timer aids ─────────────────────────────────────────────────────────────────────
+// (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
+// they explicitly ask (welcome tour / Help). Export no longer unlocks them by surprise. Returning
+// users — anyone whose tour flag is already set — keep everything visible. Hidden with a class, not removed: switchTab indexes the
+// tab row by position, so the DOM order must not change.
+const _ADV_KEY='chromasmith-adv-tabs-v1';
+function csShowAdvancedTabs(on){
+  try{if(on)localStorage.setItem(_ADV_KEY,'1');}catch(e){}
+  document.body.classList.toggle('cs-adv-hidden',!on&&!_csAdvUnlocked());
+}
+// A returning user (tour flag set before this feature existed) keeps every tab; a new user (marked by tourMaybeShow) waits.
+function _csAdvUnlocked(){try{return !!localStorage.getItem(_ADV_KEY)||(!!localStorage.getItem(_TOUR_KEY)&&!localStorage.getItem('chromasmith-newuser-v2'));}catch(e){return true;}}
+window.csShowAdvancedTabs=csShowAdvancedTabs;
+(function(){
+  const init=()=>{document.body.classList.toggle('cs-adv-hidden',!_csAdvUnlocked());};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+// (2) Drop a photo ANYWHERE on the window. The drop zones only worked when the pointer was
+// exactly over one; anywhere else the drop silently did nothing (or the browser navigated to the
+// file). The overlay says what will happen; the fallback opens the photos in the editor.
+(function(){
+  let depth=0,ov=null;
+  const hasFiles=e=>e.dataTransfer&&Array.prototype.indexOf.call(e.dataTransfer.types||[],'Files')>=0;
+  const show=()=>{if(ov)return;ov=document.createElement('div');ov.id='cs-drop-ov';ov.setAttribute('aria-hidden','true');ov.innerHTML='<div><b>Drop photos to open them</b><span>Your originals are never changed</span></div>';document.body.appendChild(ov);};
+  const hide=()=>{depth=0;if(ov){ov.remove();ov=null;}};
+  window.csDropOverlay={show,hide};
+  document.addEventListener('dragenter',e=>{if(!hasFiles(e))return;depth++;show();});
+  document.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(!depth)hide();});
+  document.addEventListener('dragover',e=>{if(hasFiles(e))e.preventDefault();});
+  document.addEventListener('drop',e=>{
+    if(!hasFiles(e))return;
+    hide();
+    if(e.defaultPrevented)return; // a real drop zone already took it
+    e.preventDefault();
+    if(e.target&&e.target.closest&&e.target.closest('input,textarea'))return;
+    if(typeof loadFXImages==='function'&&e.dataTransfer.files.length){try{switchTab('fx');}catch(_){}loadFXImages(e.dataTransfer.files);}
+  });
+  window.addEventListener('blur',hide);
+})();
+// (3) Plain-language one-liners under the jargon-named cards.
+(function(){
+  const SUB={hal:'Warm red glow around bright highlights, like real film.',bloom:'Soft glow that spreads from bright areas.',
+    pointcolor:'Change one specific colour without touching the rest.',curves:'Fine control over brightness and contrast.',
+    hsl:'Shift, brighten or mute each colour separately.',wheels:'Tint shadows, midtones and highlights.',
+    grain:'Film-style texture over the whole photo.',nr:'Smooth out speckle from high ISO.',deconv:'Sharpen soft or blurry detail.',
+    art:'Film imperfections: dust, scratches, light leaks.',vig:'Darken the corners to draw the eye in.',
+    local:'Apply an edit to only part of the photo.',retouch:'Remove spots and blemishes.',lens:'Fix lens distortion and straighten the horizon.'};
+  window.CS_SUB=SUB;
+  const init=()=>{Object.keys(SUB).forEach(k=>{const c=document.querySelector('.fx-ctrl[data-fxsec="'+k+'"]');if(!c||c.querySelector('.cs-sub'))return;
+    const t=c.querySelector('.fx-ctrl-title');if(!t)return;const d=document.createElement('div');d.className='cs-sub';d.textContent=SUB[k];t.insertAdjacentElement('afterend',d);});};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+document.addEventListener('keydown',e=>{
+  if(e.key!=='?'&&!(e.key==='/'&&(e.metaKey||e.ctrlKey)))return;
+  const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
+  e.preventDefault();window.chromasmithShowShortcuts();
+});

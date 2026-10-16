@@ -1,0 +1,197 @@
+// ── interactive crop overlay ──
+// One button does both jobs: "Crop" enters crop mode, and the SAME button — now reading "Apply
+// crop" (see cropEnter/cropExit) — applies it. The floating toolbar's separate "Apply crop"
+// button was doing exactly this a second time; only "Cancel" still needs its own control.
+function cropToggle(){if(typeof hapt==='function')hapt();cropMode?cropApply():cropEnter();}
+function cropDefaultForAR(){
+  const b=cropBase;if(!b)return{x:0,y:0,w:1,h:1};
+  const W=b.naturalWidth||b.width,H=b.naturalHeight||b.height;
+  if(!cropAR)return{x:0,y:0,w:1,h:1};
+  let pw=W,ph=W/cropAR;if(ph>H){ph=H;pw=H*cropAR;}
+  return{x:(W-pw)/2/W,y:(H-ph)/2/H,w:pw/W,h:ph/H};
+}
+function cropEnter(){
+  const it=curItem();if(!it){log('Load an image first','warn');return;}
+  fxEnsureFullQuality('crop');
+  cropMode=true;cropGridOverlaySync();
+  const g=it.geom||(it.geom=defGeom()),saved=g.crop;
+  g.crop=null;cropBase=geomCanvas(it);g.crop=saved; // base = geometry WITHOUT user crop
+  const wrap=document.getElementById('fx-wrap'),ov=document.getElementById('fx-crop-overlay');
+  let cc=document.getElementById('fx-canvas-crop');
+  if(!cc){cc=document.createElement('canvas');cc.id='fx-canvas-crop';cc.style.cssText='display:block;max-width:100%;height:auto;max-height:70vh';wrap.insertBefore(cc,ov);}
+  cc.width=cropBase.naturalWidth||cropBase.width;cc.height=cropBase.naturalHeight||cropBase.height;
+  cc.getContext('2d').drawImage(cropBase,0,0);cc.style.display='block';
+  // Show the crop over the GRADED photo (look and adjustments applied), not the bare source:
+  // render the uncropped geometry through the same pipeline at a screen-sized resolution.
+  try{const bw=cc.width,bh=cc.height,k=Math.min(1,1600/Math.max(bw,bh)),rw=Math.max(1,Math.round(bw*k)),rh=Math.max(1,Math.round(bh*k));
+    const sm=document.createElement('canvas');sm.width=rw;sm.height=rh;sm.getContext('2d').drawImage(cropBase,0,0,rw,rh);
+    FX.setImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
+    cc.getContext('2d').drawImage(FX.cv,0,0,bw,bh);}catch(err){console.warn('graded crop view failed',err);}
+  finally{if(fxWork)FX.setImage(fxWork);}
+  FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+  cropN=saved?{...saved}:cropDefaultForAR();
+  ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
+  ov.classList.add('on');ov.onpointerdown=cropDown;
+  document.getElementById('fx-crop-tools').style.display='flex';
+  document.getElementById('fx-preview-tools').style.display='none';
+  {const b=document.getElementById('btn-crop');b.classList.add('bpri');b.textContent='Apply crop';}
+  document.getElementById('fx-info').textContent='Drag the corners to crop · pick an aspect ratio above';
+  positionCropRect();
+  // Keep the crop box and its grid glued to the photo when the sheet grows or shrinks.
+  if(!cc._ro&&typeof ResizeObserver!=='undefined'){cc._ro=new ResizeObserver(()=>positionCropRect());cc._ro.observe(cc);}
+}
+function cropImgBox(){
+  const ov=document.getElementById('fx-crop-overlay').getBoundingClientRect();
+  const cc=document.getElementById('fx-canvas-crop').getBoundingClientRect();
+  return{left:cc.left-ov.left,top:cc.top-ov.top,width:cc.width,height:cc.height};
+}
+function positionCropRect(){
+  if(!cropMode)return;const b=cropImgBox(),r=document.getElementById('crop-rect');if(!r)return;
+  r.style.left=(b.left+cropN.x*b.width)+'px';r.style.top=(b.top+cropN.y*b.height)+'px';
+  r.style.width=(cropN.w*b.width)+'px';r.style.height=(cropN.h*b.height)+'px';
+}
+function cropDown(e){
+  const t=e.target;if(!t.classList.contains('crop-rect')&&!t.classList.contains('crop-h'))return;
+  const b=cropImgBox(),ovr=document.getElementById('fx-crop-overlay').getBoundingClientRect();
+  const px=(e.clientX-ovr.left-b.left)/b.width,py=(e.clientY-ovr.top-b.top)/b.height;
+  _cropDrag={corner:t.dataset.c||null,move:!t.dataset.c,startX:px,startY:py,orig:{...cropN}};
+  e.preventDefault();
+  window.addEventListener('pointermove',cropMove);window.addEventListener('pointerup',cropUp);
+}
+function cropMove(e){
+  if(!_cropDrag)return;
+  const b=cropImgBox(),ovr=document.getElementById('fx-crop-overlay').getBoundingClientRect();
+  let px=Math.max(0,Math.min(1,(e.clientX-ovr.left-b.left)/b.width)),
+      py=Math.max(0,Math.min(1,(e.clientY-ovr.top-b.top)/b.height));
+  const o=_cropDrag.orig;
+  if(_cropDrag.move){
+    let nx=Math.max(0,Math.min(1-o.w,o.x+(px-_cropDrag.startX))),
+        ny=Math.max(0,Math.min(1-o.h,o.y+(py-_cropDrag.startY)));
+    cropN={x:nx,y:ny,w:o.w,h:o.h};
+  }else{
+    const c=_cropDrag.corner;
+    const fx=(c==='nw'||c==='sw')?o.x+o.w:o.x,fy=(c==='nw'||c==='ne')?o.y+o.h:o.y; // opposite (fixed) corner
+    let nw=Math.max(0.05,Math.abs(px-fx)),nh;
+    if(cropAR){nh=nw*b.width/(cropAR*b.height);}else{nh=Math.max(0.05,Math.abs(py-fy));}
+    let nx=(c==='nw'||c==='sw')?fx-nw:fx, ny=(c==='nw'||c==='ne')?fy-nh:fy;
+    if(nx<0){nw+=nx;if(cropAR)nh=nw*b.width/(cropAR*b.height);nx=0;ny=(c==='nw'||c==='ne')?fy-nh:fy;}
+    if(ny<0){nh+=ny;if(cropAR)nw=nh*cropAR*b.height/b.width;ny=0;nx=(c==='nw'||c==='sw')?fx-nw:fx;}
+    if(nx+nw>1){nw=1-nx;if(cropAR)nh=nw*b.width/(cropAR*b.height);}
+    if(ny+nh>1){nh=1-ny;if(cropAR)nw=nh*cropAR*b.height/b.width;}
+    cropN={x:Math.max(0,nx),y:Math.max(0,ny),w:Math.max(0.05,nw),h:Math.max(0.05,nh)};
+  }
+  positionCropRect();
+}
+function cropUp(){_cropDrag=null;window.removeEventListener('pointermove',cropMove);window.removeEventListener('pointerup',cropUp);}
+// "Load frame…" opens a file picker and keeps the plate as an object URL for the session. Not
+// persisted: the URL is meaningless in a later session, and silently restoring a dead reference
+// would render a frameless photo while the dropdown still claimed a frame.
+function filmFrameChanged(v){
+  if(v!=='custom'){fxUpdate();return;}
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/png,image/webp';
+  inp.onchange=()=>{
+    const f=inp.files&&inp.files[0];
+    if(!f){document.getElementById('sel-film-frame').value='none';fxUpdate();return;}
+    if(fxState.frameUrl)URL.revokeObjectURL(fxState.frameUrl);
+    fxState.frameUrl=URL.createObjectURL(f);
+    _framePlates.delete(fxState.frameUrl);
+    toast('Frame loaded — '+f.name,true);
+    fxUpdate();
+  };
+  inp.click();
+}
+// Swaps the current aspect ratio between portrait and landscape (1/AR). "As shot"/"Free" have no
+// meaningful orientation to swap (the source photo's own AR, or none at all), so those no-op —
+// swapping them would either fight the source image or do literally nothing, both confusing.
+// "Custom" swaps its own W:H number fields instead of touching cropAR, so the chip stays in sync.
+// Orientation is a two-way toggle (horizontal / vertical phone) over the same swap.
+function cropOrientSync(){const land=!cropAR||cropAR>=1;const h=document.getElementById('btn-crop-orient-h'),v=document.getElementById('btn-crop-orient-v');
+  if(h)h.setAttribute('aria-pressed',String(land));if(v)v.setAttribute('aria-pressed',String(!land));}
+function cropSetOrientation(land){if(cropAR&&(cropAR>=1)!==land)cropSwapOrientation();cropOrientSync();}
+function cropSwapOrientation(){
+  const sel=document.getElementById('sel-crop-ar');if(!sel)return;
+  if(sel.value==='custom'){
+    const wEl=document.getElementById('crop-custom-w'),hEl=document.getElementById('crop-custom-h');
+    if(wEl&&hEl){const w=wEl.value;wEl.value=hEl.value;hEl.value=w;cropCustomChanged();}
+    return;
+  }
+  if(sel.value==='shot'||sel.value==='0')return; // nothing meaningful to swap
+  const ar=parseFloat(sel.value);if(!ar)return;
+  cropAR=1/cropAR; // flips the ACTIVE ratio even if it started from a chip whose own value is the un-swapped number
+  if(cropMode){cropN=cropDefaultForAR();positionCropRect();}
+  if(typeof hapt==='function')hapt();
+}
+function cropSetAspect(v){
+  const customRow=document.getElementById('crop-custom-row');
+  if(customRow)customRow.style.display=(v==='custom')?'flex':'none';
+  if(v==='shot'){
+    const it=curItem(),img=it&&it.img;
+    const W=(img&&(img.naturalWidth||img.width))||1,H=(img&&(img.naturalHeight||img.height))||1;
+    cropAR=W/H;
+  }else if(v==='custom'){
+    cropAR=_cropCustomAR();
+  }else{
+    cropAR=parseFloat(v)||0;
+  }
+  if(cropMode){cropN=cropDefaultForAR();positionCropRect();}
+  if(typeof cropOrientSync==='function')cropOrientSync();
+}
+function _cropCustomAR(){
+  const w=parseFloat((document.getElementById('crop-custom-w')||{}).value)||1;
+  const h=parseFloat((document.getElementById('crop-custom-h')||{}).value)||1;
+  return w/Math.max(h,0.0001);
+}
+function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefaultForAR();positionCropRect();}}
+// Radial/linear mask coordinates are normalized (0..1) against the CURRENT working image
+// (fxWork). Cropping rebuilds fxWork to a smaller sub-region (updateWork→geomCanvas), so a
+// mask placed before the crop silently points at the wrong region afterward — this is the
+// concrete cause of "radial mask applied outside the circle": the mask's own coords never
+// moved to follow the new frame. Remap them by the same crop rect used to rebuild fxWork.
+// (Raster brush/sky/AI masks are tied to their own working-resolution buffer and aren't
+// remapped here — following a crop would need a full resample, left as a known follow-up.)
+// Rotate/flip move the photo under the analytic (radial/linear) masks, whose coords are in the
+// displayed frame like the crop — so carry them with the image. f maps a displayed point.
+// Radial: a 90° turn swaps the ellipse axes (rx is width-normalised, ry height-normalised); a
+// mirror negates its rotation. Brush/AI rasters are not remapped here.
+function mskRemapForGeom(kind){
+  const f=kind==='cw'?(x,y)=>[1-y,x]:kind==='ccw'?(x,y)=>[y,1-x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
+  (fxState.masks||[]).forEach(m=>{
+    if(m.type==='radial'){
+      [m.cx,m.cy]=f(m.cx,m.cy);
+      if(kind==='cw'||kind==='ccw'){const t=m.rx;m.rx=m.ry;m.ry=t;}else if(m.rot)m.rot=-m.rot;
+    }else if(m.type==='linear'){
+      [m.x0,m.y0]=f(m.x0,m.y0);[m.x1,m.y1]=f(m.x1,m.y1);
+    }
+  });
+}
+function mskRemapForCrop(crop){
+  if(!crop)return;
+  const{x,y,w,h}=crop;
+  if(!(w>0)||!(h>0))return;
+  (fxState.masks||[]).forEach(m=>{
+    if(m.type==='radial'){
+      m.cx=(m.cx-x)/w;m.cy=(m.cy-y)/h;m.rx=m.rx/w;m.ry=m.ry/h;
+    }else if(m.type==='linear'){
+      m.x0=(m.x0-x)/w;m.y0=(m.y0-y)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-y)/h;
+    }
+  });
+}
+function cropApply(){
+  const it=curItem();if(!it){cropExit();renderPreview();return;}
+  const g=it.geom||(it.geom=defGeom());
+  const full=cropN&&cropN.x<=0.001&&cropN.y<=0.001&&cropN.w>=0.999&&cropN.h>=0.999;
+  if(cropN)mskRemapForCrop(cropN);
+  g.crop=full?null:{...cropN};
+  broadcastGeom();
+  cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Crop applied','ok');
+}
+function cropCancel(){cropExit();renderPreview();}
+function cropExit(){
+  cropMode=false;cropGridOverlaySync();
+  const ov=document.getElementById('fx-crop-overlay');ov.classList.remove('on');ov.innerHTML='';ov.onpointerdown=null;
+  document.getElementById('fx-crop-tools').style.display='none';
+  document.getElementById('fx-preview-tools').style.display=curItem()?'flex':'none';
+  {const b=document.getElementById('btn-crop');b.classList.remove('bpri');b.textContent='Crop';}
+  const cc=document.getElementById('fx-canvas-crop');if(cc)cc.style.display='none';
+}

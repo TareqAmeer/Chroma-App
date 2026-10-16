@@ -1,0 +1,429 @@
+// ── Plain export choices + live file-size estimate ───────────────────────────────────────────
+const EXP_PLAIN=[['Full quality',0,99,'auto'],['Instagram',1080,92,'jpg'],['Messaging',2048,85,'jpg'],['Small',1600,80,'webp']];
+function _expDims(edge){const it=typeof curItem==='function'&&curItem(),im=it&&(it.img||it.fullImg);
+  let w=(it&&(it.w||it.width))||(im&&(im.naturalWidth||im.width))||0,h=(it&&(it.h||it.height))||(im&&(im.naturalHeight||im.height))||0;
+  if(!w||!h)return null;const k=edge&&Math.max(w,h)>edge?edge/Math.max(w,h):1;return[Math.round(w*k),Math.round(h*k)];}
+function _expBytes(d,q,fmt){if(!d)return 0;const px=d[0]*d[1];
+  const jpg=q>=99?0.95:q>=95?0.6:q>=90?0.42:q>=85?0.32:0.25;
+  return px*(fmt==='png'?2.6:fmt==='webp'?jpg*0.7:jpg);}
+const _mb=b=>b>=1048576?(b/1048576).toFixed(b>=10485760?0:1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+function expPlainRender(){
+  const host=document.getElementById('exp-plain');if(!host)return;
+  const curE=+((document.getElementById('sel-exp-size')||{}).value||0),curQ=+((document.getElementById('sl-exp-q')||{}).value||99),curF=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+  host.innerHTML='';
+  EXP_PLAIN.forEach(([lb,edge,q,fmt])=>{const d=_expDims(edge),b=document.createElement('button');b.type='button';
+    b.className='exp-plain-b'+(curE===edge&&curQ===q&&curF===fmt?' on':'');
+    b.innerHTML='<b>'+lb+'</b> <span>('+(d?d[0]+'×'+d[1]+' · ~'+_mb(_expBytes(d,q,fmt==='auto'?'jpg':fmt)):'size depends on photo')+')</span>';
+    b.onclick=()=>{const se=document.getElementById('sel-exp-size'),sq=document.getElementById('sl-exp-q'),sf=document.getElementById('sel-exp-fmt');
+      if(se){se.value=String(edge);se.dispatchEvent(new Event('change',{bubbles:true}));}
+      if(sq){sq.value=q;sq.dispatchEvent(new Event('input',{bubbles:true}));}
+      if(sf){sf.value=fmt;sf.dispatchEvent(new Event('change',{bubbles:true}));}
+      expPlainRender();};
+    host.appendChild(b);});
+  {const cs=document.getElementById('sel-exp-collide');if(cs){cs.value=expCollidePolicy();const ow=[...cs.options].find(o=>o.value==='overwrite');if(ow){ow.disabled=!tauriNative();if(ow.disabled&&cs.value==='overwrite'){cs.value='suffix';}}}}
+  const est=document.getElementById('exp-est'),d=_expDims(curE);
+  if(est){est.textContent='';(d?_expPreflight(curE,curQ,curF):[]).forEach(l=>{const r=document.createElement('div');r.textContent=l;est.appendChild(r);});}
+}
+// CHR-201: a plain preflight of what Export will actually write — photo count (scope), the
+// concrete format(s) "Auto" resolves to per source (same rule as _exportFXRun), size, quality,
+// and an example filename built with the same pattern logic.
+function _expPreflight(edge,q,fmt){
+  const all=typeof fxImages!=='undefined'?fxImages:[];if(!all.length)return[];
+  const items=(typeof fxExportScope!=='undefined'&&fxExportScope==='current')||all.length===1?[fxImages[fxCurIdx]||all[0]]:all;
+  const dimsOf=it=>{let w=(it&&(it.w||it.width))||(it&&it.img&&(it.img.naturalWidth||it.img.width))||(it&&it.fullImg&&(it.fullImg.naturalWidth||it.fullImg.width))||0,h=(it&&(it.h||it.height))||(it&&it.img&&(it.img.naturalHeight||it.img.height))||(it&&it.fullImg&&(it.fullImg.naturalHeight||it.fullImg.height))||0;if(!w||!h)return null;const k=edge&&Math.max(w,h)>edge?edge/Math.max(w,h):1;return[Math.round(w*k),Math.round(h*k)];};
+  const lossless=it=>it&&(it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||(typeof RAW_FILE_EXT_RE!=='undefined'&&RAW_FILE_EXT_RE.test('.'+it.ext))||(typeof RUST_ONLY_RE!=='undefined'&&RUST_ONLY_RE.test('.'+it.ext)));
+  const fmtOf=it=>fmt==='webp'?'WebP':fmt==='png'?'PNG':fmt==='jpg'?'JPG':(lossless(it)?'PNG':'JPG');
+  const counts={};items.forEach(it=>{const f=fmtOf(it);counts[f]=(counts[f]||0)+1;});
+  const fmts=Object.entries(counts).map(([f,n])=>items.length>1?`${n} ${f}`:f).join(', ');
+  const dimCounts=new Map();items.forEach(it=>{const d=dimsOf(it);if(d){const k=d[0]+'×'+d[1];dimCounts.set(k,(dimCounts.get(k)||0)+1);}});
+  const fld=((document.getElementById('fx-fname')||{}).value||'').trim(),noVer=fld.includes('{nover}'),pat=fld.replace('{nover}','').trim();
+  const single=items.length===1,it0=items[0]||{};
+  const ext=fmtOf(it0)==='WebP'?'webp':fmtOf(it0)==='PNG'?'png':'jpg';
+  let base=(pat&&pat!=='photo'&&(single||pat.includes('{')))?pat.replace(/\{name\}/g,it0.name||'photo').replace(/\{seq\}/g,'1').replace(/\{date\}/g,new Date().toISOString().slice(0,10))+(!single&&!pat.includes('{name}')&&!pat.includes('{seq}')?'_1':''):(single?(fld||it0.name):it0.name);
+  const ver=noVer||typeof fxVersion==='undefined'?'':'_v'+fxVersion.toFixed(1).replace('.','-');
+  const keepGps=document.getElementById('tg-exp-gps')?.checked!==false;
+  const recipe=window._expRecipe||((document.getElementById('sel-exp-preset')||{}).value||'');
+  const dimSummary=[...dimCounts].map(([d,n])=>n>1?`${n} × ${d}`:d).join(', ')||'dimensions unavailable';
+  const estimatedBytes=items.reduce((sum,it)=>{const d=dimsOf(it),f=fmtOf(it),e=f==='WebP'?'webp':f==='PNG'?'png':'jpg';return sum+_expBytes(d,q,e);},0);
+  const qualitySummary=items.some(it=>fmtOf(it)==='JPG'||fmtOf(it)==='WebP')?` · quality ${q}`:'';
+  const lines=[`${items.length} photo${items.length>1?'s':''} · ${fmts}${fmt==='auto'?' (Auto: lossless sources stay PNG)':''}`,
+    `${dimSummary} · about ${_mb(estimatedBytes)} total${qualitySummary}`,
+    `Saved as ${base}${ver}.${ext}${items.length>1?' …':''}`,
+    `Export recipe: ${recipe||'Custom export settings'}`,
+    `Saving to ${expDestLabel()} · if a file exists: ${expPolicyLabel()}`,
+    `Metadata: photo metadata ${keepGps?'preserved':'preserved except GPS location'}`,
+    `Offline sources: unavailable originals fail individually and stay listed for retry after reconnecting.`];
+  return lines;
+}
+document.addEventListener('change',e=>{if(e.target&&/^(sel-exp-size|sel-exp-fmt)$/.test(e.target.id))expPlainRender();},true);
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='sl-exp-q')expPlainRender();},true);
+window.addEventListener('load',()=>{const f=window.fxSection;if(typeof f==='function')window.fxSection=function(n){const r=f.apply(this,arguments);if(n==='export')expPlainRender();return r;};expPlainRender();});
+// ══ Phone editing comforts ══════════════════════════════════════════════════════════════════
+(function(){
+  const mob=()=>document.body.classList.contains('mobile-fx');
+  // (1) Press and hold a tool's on/off switch: see the photo without that tool while held.
+  let ht=null,held=null,swallow=null;
+  document.addEventListener('pointerdown',e=>{
+    if(!mob())return;const t=e.target.closest&&e.target.closest('.fx-ctrl-title .fx-toggle');if(!t)return;
+    clearTimeout(ht);ht=setTimeout(()=>{ht=null;held=t;t.click();if(typeof hapt==='function')hapt();},350);
+  },true);
+  const rel=()=>{clearTimeout(ht);ht=null;if(held){const t=held;held=null;t.click();swallow=t;setTimeout(()=>{swallow=null;},400);}};
+  ['pointerup','pointercancel'].forEach(n=>document.addEventListener(n,rel,true));
+  document.addEventListener('click',e=>{if(swallow&&e.isTrusted&&e.target.closest&&e.target.closest('.fx-toggle')===swallow){e.stopImmediatePropagation();e.preventDefault();swallow=null;}},true);
+
+  // (3) A light tick when a slider passes its default (zero/centre), so the middle can be felt.
+  document.addEventListener('input',e=>{
+    const sl=e.target;if(!mob()||!sl.matches||!sl.matches('input.fx-slider[type=range]'))return;
+    const d=parseFloat(sl.defaultValue),v=parseFloat(sl.value),pv=sl._lastV;sl._lastV=v;
+    if(pv!=null&&(pv-d)*(v-d)<=0&&pv!==v&&typeof hapt==='function')hapt('LIGHT');
+  },true);
+
+  // (2) Swipe on the photo to adjust (while a tool sheet is open): sideways changes the slider,
+  //     up/down picks the previous/next slider in that tool. A label shows what is changing.
+  let cur=null;
+  document.addEventListener('input',e=>{if(e.target.matches&&e.target.matches('.fx-panel input.fx-slider[type=range]')&&!e.target._swipe)cur=e.target;},true);
+  const list=()=>{const c=document.querySelector('.fx-ctrl.sec-active');return c?[...c.querySelectorAll('input.fx-slider[type=range]')].filter(x=>x.offsetParent!==null):[];};
+  const nameOf=sl=>{const lb=sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-label');return lb?lb.textContent.replace(/\s+/g,' ').trim():'';};
+  let hud=null;const show=sl=>{if(!hud){hud=document.createElement('div');hud.id='fx-swipe-hud';document.body.appendChild(hud);}
+    const vl=sl.closest('.fx-row')&&sl.closest('.fx-row').querySelector('.fx-val');hud.textContent=nameOf(sl)+'  '+(vl?vl.textContent:sl.value);hud.classList.add('on');};
+  const hide=()=>{if(hud)hud.classList.remove('on');};
+  const w=document.getElementById('fx-wrap');if(!w)return;
+  let sx=0,sy=0,mode=null,sl=null,v0=0,stepY=0;
+  w.addEventListener('touchstart',e=>{
+    mode=null;if(!window.csSwipeAdjust||!mob()||e.touches.length!==1||!document.body.classList.contains('sheet-open')||(typeof cropMode!=='undefined'&&cropMode))return;
+    const L=list();const pick=window.csSwipeSlider;if(!pick||!L.includes(pick))return;sl=pick; // only the slider the user selected (tap its name)
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;v0=parseFloat(sl.value);stepY=sy;mode='wait';
+  },{passive:true});
+  w.addEventListener('touchmove',e=>{
+    if(!mode)return;const t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(mode==='wait'){if(Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.5)mode='x';else if(Math.abs(dy)>24&&Math.abs(dy)>Math.abs(dx)*1.5)mode='y';else return;}
+    e.preventDefault();
+    if(mode==='x'){const mn=+sl.min,mx=+sl.max,st=parseFloat(sl.step)||1;
+      let v=v0+dx/w.clientWidth*(mx-mn);v=Math.round(v/st)*st;v=Math.max(mn,Math.min(mx,v));
+      if(String(v)!==sl.value){sl.value=v;sl._swipe=true;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._swipe=false;}show(sl);}
+    else{const L=list(),i=L.indexOf(sl);
+      if(t.clientY-stepY>36&&i<L.length-1){sl=L[i+1];stepY=t.clientY;v0=parseFloat(sl.value);sx=t.clientX;if(typeof hapt==='function')hapt('LIGHT');}
+      else if(stepY-t.clientY>36&&i>0){sl=L[i-1];stepY=t.clientY;v0=parseFloat(sl.value);sx=t.clientX;if(typeof hapt==='function')hapt('LIGHT');}
+      cur=sl;show(sl);if(e.touches.length===1&&Math.abs(t.clientX-sx)>16){mode='x';sx=t.clientX;v0=parseFloat(sl.value);}}
+  },{passive:false});
+  w.addEventListener('touchend',()=>{if(mode==='x'&&sl){sl.dispatchEvent(new Event('change',{bubbles:true}));if(typeof fxHistoryPush==='function')setTimeout(fxHistoryPush,0);}
+    if(mode&&mode!=='wait')setTimeout(hide,700);mode=null;},{passive:true});
+})();
+// (7) Edit history list + (5) split compare, reachable from the phone ⋯ menu.
+function fxShowHistoryList(){
+  if(!fxHistory.length){toast('No edits yet');return;}
+  const rows=fxHistory.map((h,i)=>`<button class="btn bgh fx-hist-row${i===fxHistIdx?' on':''}" data-i="${i}" style="display:block;width:100%;text-align:left;margin:0 0 4px">${i===0?'Opened':(h.label||'Edit')}<span style="float:right;color:var(--mut);font-size:11px">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></button>`).reverse().join('');
+  _csModal('History',`<div style="max-height:55vh;overflow-y:auto">${rows}</div>`);
+  document.querySelectorAll('#cs-modal-ov .fx-hist-row').forEach(b=>b.onclick=async()=>{const i=+b.dataset.i,from=fxHistIdx;document.getElementById('cs-modal-ov').remove();
+    fxHistIdx=i;await _fxHistoryTransition(from,i);if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled();});
+}
+// (4) Preset strength: after applying a saved Preset, blend every slider between the photo's
+// state before the preset and the preset itself.
+let _presetBlend=null;
+function _styleBlendTree(a,b,t){
+  if(typeof a==='number'&&typeof b==='number')return a+(b-a)*t;
+  if(Array.isArray(a)&&Array.isArray(b)&&a.length===b.length)return a.map((v,i)=>_styleBlendTree(v,b[i],t));
+  if(a&&b&&typeof a==='object'&&typeof b==='object'&&!Array.isArray(a)&&!Array.isArray(b)){
+    const ak=Object.keys(a),bk=Object.keys(b);if(ak.length!==bk.length||ak.some(k=>!Object.prototype.hasOwnProperty.call(b,k)))return _clone(b);
+    const out={};ak.forEach(k=>{out[k]=_styleBlendTree(a[k],b[k],t);});return out;
+  }
+  return _clone(b);
+}
+function _styleBlendSnapshot(pre,post,keys,percent){
+  const t=Math.max(0,Math.min(100,Number(percent)||0))/100,out=_clone(pre),chosen=new Set(keys||[]);
+  if(t===0)return out;
+  const has=(c,kind,id)=>chosen.has(c.key)||chosen.has(kind+':'+id);
+  for(const c of PASTE_CATEGORIES){
+    c.sliders.forEach(id=>{if(!has(c,'slider',id))return;const a=parseFloat(pre.sliders&&pre.sliders[id]),b=parseFloat(post.sliders&&post.sliders[id]);if(Number.isFinite(a)&&Number.isFinite(b)){out.sliders=out.sliders||{};out.sliders[id]=String(+(a+(b-a)*t).toFixed(4));}});
+    c.toggles.forEach(id=>{const key=id.replace(/^tg-/,'');if(has(c,'toggle',key)&&post.toggles&&post.toggles[key]!==undefined){out.toggles=out.toggles||{};out.toggles[key]=post.toggles[key];}});
+    (c.selects||[]).forEach(id=>{if(has(c,'select',id)&&post.selects&&post.selects[id]!==undefined){out.selects=out.selects||{};out.selects[id]=post.selects[id];}});
+    (c.colors||[]).forEach(id=>{if(has(c,'color',id)&&post.colors&&post.colors[id]!==undefined){out.colors=out.colors||{};out.colors[id]=post.colors[id];}});
+    (c.extra||[]).forEach(id=>{if(!has(c,'extra',id)||post[id]===undefined)return;
+      if(id==='rawNrHighStrength'&&Number.isFinite(Number(pre[id]))&&Number.isFinite(Number(post[id])))out[id]=Number((Number(pre[id])+(Number(post[id])-Number(pre[id]))*t).toFixed(3));
+      else out[id]=['curves','curveParam','hsl','wheels','canvas'].includes(id)&&pre[id]!==undefined?_styleBlendTree(pre[id],post[id],t):_clone(post[id]);});
+  }
+  return out;
+}
+function presetStrength(k){
+  if(!_presetBlend)return;
+  const snap=_styleBlendSnapshot(_presetBlend.pre,_presetBlend.post,_presetBlend.keys,k);
+  applyUISnapshot(snap);fxUpdate();
+  const v=document.getElementById('vl-preset-str');if(v)v.textContent=Math.round(k);
+}
+// Press-and-hold a tool in the phone quick bar or Tools grid, then drag, to change its place.
+// Order is per container, saved in localStorage by each button's key (data-sec, or its class
+// for All FX / Previous) and re-applied whenever the container is rebuilt.
+function _fxReKey(b){return b.dataset.sec||(b.classList.contains('js-allfx')?'allfx':b.classList.contains('js-prevfx')?'prevfx':'');}
+function fxReorderable(box){
+  if(!box)return;
+  const LS='cs-tool-order-'+box.id;
+  try{const saved=JSON.parse(localStorage.getItem(LS)||'[]');
+    const by={};[...box.children].forEach(b=>{const k=_fxReKey(b);if(k)by[k]=b;});
+    saved.forEach(k=>{if(by[k])box.appendChild(by[k]);});
+    [...box.children].forEach(b=>{if(!saved.includes(_fxReKey(b)))box.appendChild(b);}); // new tools keep their place at the end
+  }catch(e){}
+  if(box._reorderWired)return;box._reorderWired=true;
+  let timer=null,drag=null,sx=0,sy=0,swallow=false;
+  const save=()=>{try{localStorage.setItem(LS,JSON.stringify([...box.children].map(_fxReKey).filter(Boolean)));}catch(e){}};
+  box.addEventListener('pointerdown',e=>{
+    const b=e.target.closest('button');if(!b||b.parentElement!==box)return;
+    sx=e.clientX;sy=e.clientY;
+    timer=setTimeout(()=>{drag=b;b.classList.add('fx-dragging');box.classList.add('fx-reordering');if(typeof hapt==='function')hapt('MEDIUM');},450);
+  });
+  box.addEventListener('pointermove',e=>{
+    if(!drag){if(timer&&Math.hypot(e.clientX-sx,e.clientY-sy)>8){clearTimeout(timer);timer=null;}return;}
+    const t=document.elementFromPoint(e.clientX,e.clientY),o=t&&t.closest('button');
+    if(!o||o===drag||o.parentElement!==box)return;
+    const r=o.getBoundingClientRect(),grid=getComputedStyle(box).display==='grid';
+    const after=grid?(e.clientY>r.bottom-r.height/2&&e.clientX>r.left)||(e.clientX>r.left+r.width/2):e.clientX>r.left+r.width/2;
+    box.insertBefore(drag,after?o.nextSibling:o);
+  });
+  const end=()=>{clearTimeout(timer);timer=null;if(!drag)return;
+    drag.classList.remove('fx-dragging');box.classList.remove('fx-reordering');drag=null;swallow=true;save();};
+  box.addEventListener('pointerup',end);box.addEventListener('pointercancel',end);
+  box.addEventListener('click',e=>{if(swallow){e.stopPropagation();e.preventDefault();swallow=false;}},true);
+  box.addEventListener('touchmove',e=>{if(drag)e.preventDefault();},{passive:false}); // no scrolling while dragging
+  box.addEventListener('contextmenu',e=>e.preventDefault());
+}
+function fxMobileBack(){
+  if(document.body.classList.contains('tools-open')){fxToolsClose();return;}
+  if(document.body.classList.contains('sheet-open')){fxSheetClose();return;}
+  fxSection('image');
+}
+function fxMobileFilter(cat){
+  _fxMobileCat=cat;
+  document.querySelectorAll('#fx-tool-cats button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
+  document.querySelectorAll('#fx-tool-grid .fx-sec-btn').forEach(b=>{
+    b.hidden=!!FX_MOBILE_CATS[cat]&&!FX_MOBILE_CATS[cat].has(b.dataset.sec);
+  });
+}
+function buildSecNav(){          // mobile categorized tool grid
+  const nav=document.getElementById('fx-secnav');if(!nav)return;
+  nav.innerHTML='';
+  const cats=document.createElement('div');cats.id='fx-tool-cats';
+  [['all','All'],...Object.entries(FX_GROUPS).map(([g,d])=>[g,d.label])].forEach(([key,label])=>{
+    const b=document.createElement('button');b.type='button';b.dataset.cat=key;b.textContent=label;
+    b.onclick=()=>fxMobileFilter(key);cats.appendChild(b);
+  });
+  nav.appendChild(cats);
+  const grid=document.createElement('div');grid.id='fx-tool-grid';nav.appendChild(grid);
+  _eachSection((key,lb)=>{
+    if(key==='image'||key==='info'||key==='diag')return;
+    if(FX_MOBILE_HIDE.has(key))return; // desk-only on phones (Canvas stays)
+    const b=document.createElement('button');b.className='fx-sec-btn';b.dataset.sec=key;
+    b.innerHTML=`<span class="fx-sec-ic">${icon(key,18)}</span><span class="fx-sec-lb">${lb}</span><span class="fx-sec-ds"></span>`;
+    b.onclick=()=>fxSection(key);
+    grid.appendChild(b);
+  });
+  // Phone quick bar (All FX / Previous / Light / …): the rest of the tools follow, reached by
+  // scrolling the bar sideways — same list and order as the Tools grid.
+  const qn=document.getElementById('fx-quicknav');
+  if(qn)_eachSection((key,lb)=>{
+    if(key==='image'||key==='looks'||key==='info'||key==='diag'||FX_MOBILE_HIDE.has(key))return;
+    if(qn.querySelector('[data-sec="'+key+'"]'))return;
+    const q=document.createElement('button');q.dataset.sec=key;q.title=lb;
+    q.innerHTML=`<span>${icon(key,22)}</span>${lb}`;q.onclick=()=>fxSection(key);qn.appendChild(q);
+  });
+  fxReorderable(qn);fxReorderable(grid);
+  // No Close button: tapping Tools again or pulling the panel down closes it.
+  fxMobileFilter(_fxMobileCat);
+  fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
+}
+// Short uppercase codes shown under the rail icons (full name stays in the tooltip + a11y text).
+const RAIL_CODE={image:'IMG',looks:'LK',adjust:'ADJ',color:'COL',detail:'DET',retouch:'RET',crop:'CRP',local:'MSK',film:'FLM',frame:'FRM',exportgrp:'EXP',info:'INF',diag:'DIA'};
+function buildToolRail(){        // desktop vertical labelled rail
+  const rail=document.getElementById('fx-toolrail');if(!rail)return;
+  rail.innerHTML='';
+  const dx=document.body.classList.contains('deskx');
+  const grp=_fxGrouped();
+  document.body.classList.toggle('rail-flat',dx&&!grp);
+  const seenGroups=new Set();
+  _eachSection((key,lb)=>{
+    let bKey=key,bLb=lb,bIcon=key;
+    if(grp&&FX_GROUP_OF[key]){
+      const g=FX_GROUP_OF[key];
+      if(seenGroups.has(g))return; // this group's button was already emitted at its first member
+      seenGroups.add(g);
+      bKey=g;bLb=FX_GROUPS[g].label;bIcon=FX_GROUPS[g].icon;
+    }
+    // Hairline between groups, so the rail reads as sections rather than one 14-item list.
+    // Emitted BEFORE the button that opens a new group (never leading, never doubled).
+    if(dx&&rail.childElementCount){ // hairline between EVERY tool (was group breaks only — read as inconsistent)
+      const sep=document.createElement('i');sep.className='fx-rail-sep';rail.appendChild(sep);
+    }
+    const b=document.createElement('button');b.className='fx-rail-btn';b.dataset.sec=bKey;
+    b.title=bLb;
+    b.setAttribute('aria-label',bLb);
+    b.innerHTML=`<span class="fx-rail-ic">${icon(bIcon,22)}</span><span class="fx-rail-lb" data-ab="${RAIL_CODE[bKey]||bLb.slice(0,3).toUpperCase()}">${bLb}</span>`;
+    b.onclick=()=>fxSection(bKey);
+    rail.appendChild(b);
+  });
+  fxSection(_activeSec()||(window.__TAURI__?'looks':'image'),true);
+  syncSectionEnabled();
+}
+/* ── Tool-panel resize + tool-rail shrink (deskx) ─────────────────────────────────────────
+   Three states for the rail — 'labels' (72px), 'icons' (44px), 'hidden' — and a free width for
+   the panel. Both are driven by CLASSES and a single custom property each, never by writing
+   grid-template-columns from JS: the layout has exactly one column expression (see the
+   --dock-w comment in the CSS) and four previous "library covers the editor" regressions all
+   came from a second width computed in JS drifting out of sync with it.
+   ⚠️ The panel's user width goes into --panel-w-user, NOT --panel-w: body.panel-closed sets
+   --panel-w:0px through a class rule, and an inline --panel-w would outrank it forever, so
+   closing the panel would silently stop working after the first drag. */
+const RAIL_MODES=['labels','icons','hidden'];
+function railSyncFoot(){
+  const fb=document.querySelector('#fx-rail-foot .fx-rail-btn');if(!fb)return;
+  const ic=document.body.classList.contains('rail-icons');
+  fb.title=ic?'Show the tool bar labels':'Hide the tool bar labels';
+  const lb=fb.querySelector('.fx-rail-lb');if(lb)lb.textContent=ic?'Labels':'Narrow';
+}
+function railMode(m){
+  if(!RAIL_MODES.includes(m))m='labels';
+  document.body.classList.toggle('rail-icons',m==='icons');
+  document.body.classList.toggle('rail-hidden',m==='hidden');
+  railSyncFoot();
+  try{localStorage.setItem('cs_railmode',m);}catch(e){}
+  fxLayoutSettle();
+}
+// One redraw once the column transition has finished, matching what fxSection already does for
+// the panel toggle — the canvas's own max-width:100% covers the frames in between.
+function fxLayoutSettle(){
+  if(typeof renderPreview!=='function')return;
+  clearTimeout(fxLayoutSettle._t);
+  fxLayoutSettle._t=setTimeout(()=>{try{renderPreview();}catch(e){}},240);
+}
+function fxPanelWidth(w){
+  // ⚠️ Found via docs/ui-workflow/STATE.md S6c's width-assert capture pass (2026-09-11): this used
+  // to write --panel-w-user onto `.fx-layout` (a DIV, a descendant of <body>), but `--panel-w:
+  // var(--panel-w-user,320px)` is declared on `body.deskx` — custom properties only inherit
+  // parent->child, so body never saw a value set on its own descendant and --panel-w stayed at its
+  // 320px fallback forever. Net effect: the panel resizer (both this function and its drag handle)
+  // silently never resized anything, at any window width — caught only because the capture script
+  // now asserts the ELEMENT'S OWN measured width against the value just set, instead of trusting
+  // that setting the property means it worked. Dock/rail don't have this bug: --dock-w-user's real
+  // consumer (#lib-overlay's own `width:`) is a DIRECT child of .fx-layout, so parent->child
+  // inheritance already reaches it; --panel-w has no such shortcut, only the body-level indirection.
+  if(!document.body.classList.contains('deskx'))return;
+  w=Math.min(440,Math.max(220,Math.round(w)));
+  document.body.style.setProperty('--panel-w-user',w+'px');
+  try{localStorage.setItem('cs_panelw',w);}catch(e){}
+  return w;
+}
+function fxEdgeDrag(handle,onMove){
+  if(!handle)return;
+  handle.addEventListener('pointerdown',e=>{
+    const lay=document.querySelector('.fx-layout');if(!lay)return;
+    handle.setPointerCapture(e.pointerId);
+    lay.classList.add('fx-nodrag-anim');
+    handle._drag=true;e.preventDefault();
+  });
+  // E4-class fix (2026-09-10): dragging the panel/rail resizer changes #fx-wrap's width every
+  // pointermove, but the canvas was only ever rescaled once at drag-END via fxLayoutSettle's
+  // renderPreview() — so mid-drag the canvas stayed pinned to its pre-drag px size while the
+  // shrinking/growing wrap clipped/gapped it, i.e. the reported squeeze/stretch WHILE dragging
+  // the sidebar (not just after). fxLiveFit is the same cheap continuous CSS-rescale E4 already
+  // wired for window resize; reuse it here so the photo tracks the wrap on every frame of the drag.
+  handle.addEventListener('pointermove',e=>{if(handle._drag){onMove(e.clientX);fxLiveFit(200);}});
+  const end=()=>{
+    if(!handle._drag)return;handle._drag=false;
+    const lay=document.querySelector('.fx-layout');if(lay)lay.classList.remove('fx-nodrag-anim');
+    fxLayoutSettle();
+  };
+  handle.addEventListener('pointerup',end);
+  handle.addEventListener('pointercancel',end);
+}
+function fxInitEdges(){
+  const lay=document.querySelector('.fx-layout');if(!lay)return;
+  // Restore both persisted sizes before the first paint of the editor.
+  try{
+    const w=parseInt(localStorage.getItem('cs_panelw'),10);
+    if(w>=220&&w<=440)document.body.style.setProperty('--panel-w-user',w+'px'); // see fxPanelWidth's comment — must be on body, not .fx-layout
+    const m=localStorage.getItem('cs_railmode');
+    // A hidden rail is NOT restored: it leaves the editor with no visible tool affordance at all
+    // beyond one 28px button, which is a hostile thing to launch into. Hiding stays per-session.
+    if(m==='icons')railMode('icons');
+  }catch(e){}
+  const railBtn=document.getElementById('fx-rail-show');
+  if(railBtn&&!railBtn.childElementCount)railBtn.innerHTML=icon('railshow',16);
+  fxEdgeDrag(document.getElementById('fx-panel-resizer'),x=>{
+    const rail=document.getElementById('fx-toolrail');
+    const railW=document.body.classList.contains('rail-hidden')?0:rail.getBoundingClientRect().width;
+    const w=lay.getBoundingClientRect().right-railW-x;
+    // Same gesture closes the panel: dragging it below usable width is the user saying "gone",
+    // not "38px wide". Any rail click reopens it, so this needs no restore button of its own.
+    if(w<60){document.body.classList.add('panel-closed');
+      document.querySelectorAll('#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.remove('on'));return;}
+    document.body.classList.remove('panel-closed');
+    fxPanelWidth(w);
+  });
+  fxEdgeDrag(document.getElementById('fx-rail-resizer'),x=>{
+    const w=lay.getBoundingClientRect().right-x;
+    railMode(w<28?'hidden':(w<58?'icons':'labels'));
+  });
+}
+function fxSection(name,noSheet){
+  if(name==='info'&&typeof verRender==='function')setTimeout(verRender,0); // CHR-203: fresh list each time it's shown
+  if(document.body.classList.contains('tools-open'))fxToolsClose();
+  const dx=document.body.classList.contains('deskx');
+  // A member key (e.g. fxSection('local') from the command palette) opens its stage and scrolls to it.
+  let jumpTo=null;
+  const grp=dx&&!fxRailFlat();
+  if(grp&&!FX_GROUPS[name]&&FX_GROUP_OF[name]){jumpTo=name;name=FX_GROUP_OF[name];noSheet=true;}
+  if(dx&&!grp&&FX_GROUPS[name])name=FX_GROUPS[name].members[0];
+  const members=(grp&&FX_GROUPS[name])?FX_GROUPS[name].members:[name];
+  const cards=members.map(_fxSectionCard).filter(Boolean);
+  if(!cards.length)return;
+  if(members.includes('hsl'))setTimeout(hslBuildHist,60);
+  if(typeof mskOverlaySync==='function')setTimeout(mskOverlaySync,60);
+  const mob=document.body.classList.contains('mobile-fx');
+  if(mob){
+    document.getElementById('fx-nav-looks')?.classList.toggle('on',name==='looks');
+    document.getElementById('fx-nav-crop')?.classList.toggle('on',name==='crop');
+    document.getElementById('fx-nav-tools')?.classList.toggle('on',name!=='looks'&&name!=='crop');
+  }
+  const isActive=cards.some(c=>c.classList.contains('sec-active'));
+  // Mobile bottom-sheet behavior: tapping the ACTIVE tool's icon again closes the sheet.
+  if(mob&&!noSheet&&isActive&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}
+  // deskx (DRK-style): clicking the ACTIVE rail icon closes the whole tools panel —
+  // the grid column collapses and the photo reflows wider. noSheet (programmatic re-selects
+  // from applyFxLayout/buildToolRail) never toggles, so layout rebuilds can't flap the panel.
+  if(dx&&!noSheet&&isActive&&!document.body.classList.contains('panel-closed')){
+    document.body.classList.add('panel-closed');
+    document.querySelectorAll('#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.remove('on'));
+    // Was a single early renderPreview() that pinned #fx-canvas to a fixed inline px size —
+    // for the rest of the ~200ms grid-column transition the container kept animating while
+    // the canvas's frozen inline height didn't track it (only width, via max-width:100%),
+    // visibly squeezing/stretching the image. fxLiveFit continuously rescales width+height
+    // together every rAF (same mechanism the mobile sheet already uses); the .fx-layout
+    // transitionend listener below does the one crisp final renderPreview().
+    fxLiveFit(240);
+    requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));
+    return;
+  }
+  const wasClosed=dx&&document.body.classList.contains('panel-closed');
+  if(dx)document.body.classList.remove('panel-closed');
+  document.querySelectorAll('.fx-ctrl.sec-active').forEach(c=>c.classList.remove('sec-active'));
+  cards.forEach(c=>c.classList.add('sec-active'));
+  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn').forEach(b=>b.classList.toggle('on',b.dataset.sec===name));
+  const panel=document.querySelector('.fx-panel');if(panel)panel.scrollTop=0;
+  // Phones open straight to the controls: a tool picked from the bar should never land folded.
+  cards.forEach(c=>{if(c.classList.contains('fx-sec-collapsed')&&typeof fxSecToggle==='function')fxSecToggle(c);});
+  if(mob&&!noSheet){document.body.classList.add('sheet-open');fxLiveFit(360);hapt();}
+  if(mob){const ab=document.querySelector('#fx-secnav .fx-sec-btn.on');if(ab&&ab.scrollIntoView)try{ab.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});}catch(e){}}
+  if(wasClosed){fxLiveFit(240);requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));} // photo reflows narrower when the panel reopens — live-fit tracks the transition, see the panel-close branch above
+  if(members.includes('curves')&&typeof drawCurveEditor==='function')setTimeout(drawCurveEditor,0); // canvas sizes from clientWidth (0 while hidden)
+  // Same class of problem as drawCurveEditor's above, for the look thumbnails: the gallery is
+  // built lazily against layout, and its cells have no layout at all while this card is
+  // display:none. Re-seed once they do. (setTimeout 0, not immediate — sec-active was only just
+  // applied and the cells have not been laid out yet at this point in the frame.)
+  if(members.includes('looks')&&typeof buildLookGallery._reseed==='function')setTimeout(buildLookGallery._reseed,0);
+  if(dx&&typeof sk2SubTabs==='function')sk2SubTabs(name,jumpTo);
+  syncBatchScopeStatus();
+}
+function fxSheetClose(){
+  document.body.classList.remove('sheet-open','sheet-full','sheet-peek','lk-strength');
+  document.querySelectorAll('#fx-secnav .fx-sec-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('fx-nav-looks')?.classList.remove('on');
+  document.getElementById('fx-nav-tools')?.classList.add('on');
+  fxLiveFit(360);
+}

@@ -1,0 +1,51 @@
+// ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
+// Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
+// ResolutionUnit tags), NOT a JFIF APP0 segment — readDPI must check both,
+// and exportFX must splice the original metadata segments back in (canvas
+// toBlob() re-encodes from scratch and silently drops Exif/ICC/IPTC/XMP).
+function exifRes(b,i){ // i = index of the 0xFF marker byte of an Exif APP1 segment
+  try{
+    const base=i+4+6,le=b[base]===0x49; // 'Exif\0\0' then TIFF header ('II'=LE,'MM'=BE)
+    const r16=o=>le?(b[o]|b[o+1]<<8):((b[o]<<8)|b[o+1]);
+    const r32=o=>le?((b[o]|b[o+1]<<8|b[o+2]<<16|b[o+3]<<24)>>>0):(((b[o]<<24)|(b[o+1]<<16)|(b[o+2]<<8)|b[o+3])>>>0);
+    const ifd=base+r32(base+4),n=r16(ifd);
+    let x=null,u=2;
+    for(let e=0;e<n;e++){
+      const eo=ifd+2+e*12,t=r16(eo);
+      if(t===0x011A){const vo=base+r32(eo+8);x=r32(vo)/Math.max(1,r32(vo+4));} // XResolution (RATIONAL)
+      else if(t===0x0128)u=r16(eo+8); // ResolutionUnit: 1=none 2=inch 3=cm
+    }
+    return x==null?null:(u===3?Math.round(x*2.54):Math.round(x));
+  }catch(e){return null}
+}
+function readDPI(b,ext){
+  try{
+    if(ext==='png'){
+      let i=8;
+      while(i<b.length-12){
+        const len=((b[i]<<24)|(b[i+1]<<16)|(b[i+2]<<8)|b[i+3])>>>0;
+        const type=String.fromCharCode(b[i+4],b[i+5],b[i+6],b[i+7]);
+        if(type==='pHYs'){const ppu=((b[i+8]<<24)|(b[i+9]<<16)|(b[i+10]<<8)|b[i+11])>>>0;return b[i+16]===1?Math.round(ppu*0.0254):72;}
+        if(type==='IDAT'||type==='IEND')break;
+        i+=12+len;
+      }
+    }else{ // JPEG: prefer JFIF APP0 density, fall back to Exif IFD0 XResolution
+      let i=2,jfif=null,exif=null;
+      while(i<b.length-1){
+        if(b[i]!==0xFF){i++;continue;}
+        const m=b[i+1];
+        if(m===0xD8||m===0x01||(m>=0xD0&&m<=0xD7)){i+=2;continue;}
+        if(m===0xDA||m===0xD9)break;
+        const len=(b[i+2]<<8)|b[i+3];
+        if(m===0xE0&&b[i+4]===0x4A&&b[i+5]===0x46&&b[i+6]===0x49&&b[i+7]===0x46){ // 'JFIF'
+          const u=b[i+11],xd=(b[i+12]<<8)|b[i+13];jfif=u===1?xd:u===2?Math.round(xd*2.54):null;
+        }
+        if(m===0xE1&&b[i+4]===0x45&&b[i+5]===0x78&&b[i+6]===0x69&&b[i+7]===0x66)exif=exifRes(b,i); // 'Exif'
+        i+=2+len;
+      }
+      if(jfif)return jfif;
+      if(exif)return exif;
+    }
+  }catch(e){}
+  return 72;
+}

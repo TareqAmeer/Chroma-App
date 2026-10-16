@@ -1,0 +1,55 @@
+// ── Face-feature auto-exclusion (ROADMAP item 16) — desktop only, see
+// desktop/src-tauri/src/faceparse.rs for the model and desktop/src-tauri/vendor/faceparse/README.md
+// for why its class table needed independent verification. Runs the AI subject mask's own head
+// region through a face-parsing model and turns lips/eyes+brows/glasses/hair into ONE eraser mask
+// — the same "− Use as eraser" mechanism a hand-painted brush already uses, just auto-populated,
+// so those features come out of the Skin selection without a manual scribble.
+let _faceparseRunning=false;
+function _mskSubjectBBox(m){
+  // Bounding box of the AI mask's OWN raster, in its own tex-space pixels (m.mtW x m.mtH) — this
+  // is what tells us roughly where the person is in the frame, without a second segmentation call.
+  const w=m.mtW,h=m.mtH,px=m.px;
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if((px[y*w+x]||0)>32){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}
+  }
+  if(x1<x0||y1<y0)return null;
+  return{x0,y0,x1,y1};
+}
+// Shared by mskFaceAutoExclude (union of all 4 groups, into an eraser) and mskFaceSelectFeature
+// (ONE group, as a new plain selection) — both need the identical head-crop-and-run plumbing,
+// only what they DO with the 4 returned layers differs.
+async function _faceparseRunLayers(m){
+  const bbox=_mskSubjectBBox(m);
+  if(!bbox)throw new Error('No selection yet — scribble over the subject first');
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img)throw new Error('no photo loaded');
+  const{w:mtW,h:mtH}=mskTexDims();
+  // Head crop: a square anchored at the TOP of the subject's own bounding box, sized as a
+  // fraction of the subject's height (self-calibrating regardless of how tightly the person
+  // fills the frame) rather than guessing an absolute size.
+  const bboxH=bbox.y1-bbox.y0,bboxCX=(bbox.x0+bbox.x1)/2;
+  const cropSize=Math.max(40,Math.min(mtH,Math.round(bboxH*0.34)));
+  const cropX0=Math.max(0,Math.min(mtW-cropSize,Math.round(bboxCX-cropSize/2)));
+  const cropY0=Math.max(0,Math.min(mtH-cropSize,bbox.y0));
+  const sw=img.naturalWidth||img.width,sh=img.naturalHeight||img.height;
+  const cv=document.createElement('canvas');cv.width=cropSize;cv.height=cropSize;
+  const cx=cv.getContext('2d');
+  cx.drawImage(img,cropX0/mtW*sw,cropY0/mtH*sh,cropSize/mtW*sw,cropSize/mtH*sh,0,0,cropSize,cropSize);
+  const d=cx.getImageData(0,0,cropSize,cropSize).data;
+  const rgb=new Uint8Array(cropSize*cropSize*3);
+  for(let i=0,j=0;i<cropSize*cropSize;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  const buf=await _samFramedInvoke('faceparse_run',{width:cropSize,height:cropSize},rgb);
+  const dv=new DataView(buf);
+  const hlen=dv.getUint32(0,true);
+  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+  const groupLen=header.width*header.height;
+  const body=new Uint8Array(buf,4+hlen);
+  if(header.width!==cropSize||header.height!==cropSize||body.length!==groupLen*5){
+    throw new Error('face-parse: unexpected response size');
+  }
+  // Fixed order — see faceparse_run in main.rs / FaceMasks in faceparse.rs. Group 4 (skin) was
+  // added for mskFaceSelectSkin; groups 0-3 are unchanged and still only ever feed an eraser.
+  const layers=[0,1,2,3,4].map(g=>body.subarray(g*groupLen,(g+1)*groupLen));
+  return{mtW,mtH,cropX0,cropY0,cropSize,layers};
+}

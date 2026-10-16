@@ -1,0 +1,18 @@
+// ── Named subjects: "remember this dog", then find it again in another photo ──────────────────
+// Desktop only (needs the SAM embeddings — see desktop/src-tauri/src/subject.rs for the method
+// and, importantly, its measured limits). Three of those measurements shape this UI directly:
+//
+//  · ~77-80% recall, and NO usable "is the subject present" score. So Find always presents a
+//    RESULT TO CONFIRM on the current photo, never applies anything across a batch. A miss is
+//    one visible wrong selection the user re-scribbles, not forty silently wrong exports.
+//  · WHICH photos you teach from matters more than how many, so references are listed
+//    individually and can be removed one at a time — a bad reference is swapped, not buried
+//    under a fourth.
+//  · A haircut does NOT break a taught subject, so there is deliberately no "re-teach after
+//    grooming" prompt. That was the intuitive guess and the measurements say it is wrong.
+let _subjects=null,_subjBusy=false;
+async function subjRefresh(){
+  if(!window.__TAURI__)return;
+  try{_subjects=await window.__TAURI__.core.invoke('subject_list');}
+  catch(e){_subjects=[];log('subject_list: '+(e&&e.message||e),'err');}
+}

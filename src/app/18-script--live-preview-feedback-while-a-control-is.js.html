@@ -1,0 +1,133 @@
+// ── Live preview feedback while a control is moving ──────────────────────────────────────────
+// This used to be a bare `setTimeout(renderPreview,400)`, which meant that dragging a slider
+// produced NOTHING on screen until 400ms after you let go — measured: exactly ONE render for a
+// 30-event drag. You were grading blind and guessing.
+//
+// Two tiers now, the same shape the video playback path already uses:
+//   • while events keep arriving, render at most once per animation frame, with the halation /
+//     bloom blur buffers halved (fxPreviewGlowScale) and the opt-in full-res preview dropped
+//     back to the capped one, so the picture tracks the slider;
+//   • 180ms after the last event, one final full-quality render.
+// The settled frame is identical to a cold render — only the interim frames are cheap, and they
+// are all replaced by it. test/perf_bench.mjs asserts both halves.
+let _fxRenderRAF=0;
+function fxSharpMaskPreview(on,target=document.activeElement){
+  const next=!!on;
+  if(next){
+    const active=target||document.activeElement;
+    if(active&&active.dataset&&active.dataset.k==='sharpMask'&&mskSel>=0&&fxState.masks[mskSel])_mskSharpMaskPreview=true;
+    else _adjSharpMaskPreview=true;
+  }else{_adjSharpMaskPreview=false;_mskSharpMaskPreview=false;}
+  fxScheduleRender();
+}
+document.addEventListener('keydown',e=>{if(e.key==='Alt'&&!e.repeat){e.preventDefault();fxSharpMaskPreview(true,e.target);}},true);
+document.addEventListener('keyup',e=>{if(e.key==='Alt')fxSharpMaskPreview(false);},true);
+window.addEventListener('blur',()=>fxSharpMaskPreview(false));
+// A caller that has JUST rendered the final state (the deferred library open: recipe applied,
+// renderPreview() run) drops the debounced renders fxUpdate() queued — they would redraw the
+// identical frame 1-2 more times (~0.1-0.2s of main thread each).
+function fxCancelScheduledRender(){
+  if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+  clearTimeout(fxTimer);_fxPreviewInteracting=false;
+}
+function fxScheduleRender(){
+  if(!_fxRenderRAF){
+    _fxPreviewInteracting=true;
+    _fxRenderRAF=requestAnimationFrame(()=>{_fxRenderRAF=0;if(_fxPreviewInteracting)renderPreview();});
+  }
+  clearTimeout(fxTimer);
+  fxTimer=setTimeout(()=>{
+    if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+    _fxPreviewInteracting=false;
+    renderPreview();
+  },180);
+}
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin'];
+function resetAdjust(){
+  ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
+  fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
+  fxMarkModifiedSliders();
+  fxUpdate();log('Adjustments reset','info');
+}
+// Disabled once every Basic Adjustments slider is already at its default (0) — clicking Reset
+// on an already-default photo did nothing visible, which reads as broken rather than a no-op.
+// Checked every fxUpdate() (every slider tick, debounced by nothing here since it's cheap) so
+// the button's state never lags the sliders it controls.
+function syncAdjResetBtn(){
+  const btn=document.getElementById('btn-adj-reset');if(!btn)return;
+  const allDefault=ADJ_RESET_FIELDS.every(id=>{const sl=document.getElementById('sl-'+id);return !sl||parseFloat(sl.value)===parseFloat(sl.defaultValue||0);});
+  btn.disabled=allDefault;
+}
+// Basic Adjustments default to shared-across-the-batch (like every other FX section), but
+// sometimes only ONE photo needs a nudge (e.g. exposure) without dragging the rest of the batch
+// along — this is the explicit, opt-in per-photo escape hatch, same pattern as mskCopyToAll/
+// geomApplyToAll but inverted (there you opt IN to sharing; here you opt IN to independence).
+function adjToggleScope(){
+  const it=curItem();if(!it)return;
+  if(it.adjustOverride){
+    it.adjustOverride=null; // revert to following the shared batch value
+    applyAdjustVals(fxState.sharedAdjust||domAdjustVals());
+    toast('Adjustments now follow the shared batch value','info');
+  }else{
+    it.adjustOverride=domAdjustVals(); // snapshot the CURRENT (shared) values as this photo's own starting point
+    toast("This photo's Adjustments are now independent — changes here won't affect the rest of the batch",true);
+  }
+  adjSyncScopeUI();
+  fxUpdate();
+}
+// CHR-193: per-section "this photo / all photos" scope. With several photos open each section
+// header gets an icon: stacked photos = the section is shared by all open photos, single photo
+// (accent) = this photo has its own values. Light uses the existing adjustOverride; the film and
+// detail sections below read only their own inputs + on/off switch (getFXParams reads the DOM),
+// so a photo's own values are kept as a snapshot of those inputs and swapped into the DOM when
+// that photo is shown or rendered. Geometry, masks and retouch are always per photo (locked);
+// the rest (looks, curves, colour tools…) keep internal state outside their inputs and stay
+// shared for now (locked).
+const SEC_SCOPE_DOM=['filmneg','grain','art','hal','bloom','vig','nr','deconv'];
+// One photo vs a stack of photos — drawn here (no stock icon says "all open photos").
+const _SEC_ICON_ONE='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="6" width="14" height="12"/><path d="M5 15l4-4 4 4 2-2 4 4"/></svg>';
+const _SEC_ICON_ALL='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="9" width="12" height="10"/><path d="M7 9V6h11v9h-3"/><path d="M11 6V3h10v9h-3"/></svg>';
+const SEC_ALWAYS_ONE=['crop','rotate','straighten','local','retouch'];
+fxState.sharedSec=fxState.sharedSec||{};
+let _secSwap=false;
+function _secInputs(sec){const c=document.querySelector(`.fx-ctrl[data-fxsec="${sec}"]`);return c?[...c.querySelectorAll('input[id],select[id]')].filter(e=>e.type!=='file'):[];}
+function secVals(sec){const v={};_secInputs(sec).forEach(e=>{v[e.id]=e.type==='checkbox'?e.checked:e.value;});const tg=document.getElementById('tg-'+sec);if(tg)v.__on=tg.classList.contains('on');return v;}
+function secApply(sec,v){if(!v)return;_secInputs(sec).forEach(e=>{if(!(e.id in v))return;if(e.type==='checkbox')e.checked=v[e.id];else e.value=v[e.id];if(e.type==='range'&&typeof fxPaintSlider==='function')fxPaintSlider(e);});
+  const tg=document.getElementById('tg-'+sec);if(tg&&'__on' in v&&tg.classList.contains('on')!==v.__on){tg.classList.toggle('on',v.__on);const ff=document.getElementById('ff-'+sec);if(ff)ff.classList.toggle('ff-off',!v.__on);}}
+function _secScoped(){const set=new Set();(fxImages||[]).forEach(it=>Object.keys(it.secOverride||{}).forEach(k=>set.add(k)));return[...set];}
+// Called from fxUpdate and before switching photos: file the live inputs under the right owner.
+function secScopePersist(){if(_secSwap)return;const it=curItem();_secScoped().forEach(sec=>{
+  if(it&&it.secOverride&&it.secOverride[sec]){const extras=Object.fromEntries(Object.entries(it.secOverride[sec]).filter(([k])=>k.startsWith('__')));it.secOverride[sec]={...secVals(sec),...extras};}else fxState.sharedSec[sec]=secVals(sec);});}
+function secScopeShowItem(it){_secSwap=true;try{_secScoped().forEach(sec=>secApply(sec,(it.secOverride&&it.secOverride[sec])||fxState.sharedSec[sec]));}finally{_secSwap=false;}secScopeSyncUI();}
+// Export: temporarily put item's own values in the DOM; returns a restore function.
+function secScopeSwapIn(it){const secs=_secScoped();if(!secs.length)return null;const cur=curItem();
+  _secSwap=true;secs.forEach(sec=>secApply(sec,(it.secOverride&&it.secOverride[sec])||fxState.sharedSec[sec]));
+  return()=>{secs.forEach(sec=>secApply(sec,(cur&&cur.secOverride&&cur.secOverride[sec])||fxState.sharedSec[sec]));_secSwap=false;};}
+function secScopeToggle(sec){
+  const it=curItem();if(!it||fxImages.length<2)return;
+  if(sec==='adjust'){adjToggleScope();secScopeSyncUI();return;}
+  if(!SEC_SCOPE_DOM.includes(sec))return;
+  it.secOverride=it.secOverride||{};
+  if(it.secOverride[sec]){delete it.secOverride[sec];_secSwap=true;secApply(sec,fxState.sharedSec[sec]);_secSwap=false;
+    toast(`${CS_NAMES[sec]||sec} follows all ${fxImages.length} photos again`);}
+  else{const v=secVals(sec);if(!fxState.sharedSec[sec])fxState.sharedSec[sec]=v;it.secOverride[sec]=JSON.parse(JSON.stringify(v));
+    toast(`${CS_NAMES[sec]||sec}: changes now apply to this photo only`);}
+  secScopeSyncUI();fxUpdate();
+}
+function secScopeSyncUI(){
+  const multi=(fxImages||[]).length>1;document.body.classList.toggle('cs-multi',multi);if(!multi)return;
+  const it=curItem(),n=fxImages.length;
+  document.querySelectorAll('.fx-ctrl[data-fxsec]>.fx-ctrl-title').forEach(t=>{
+    const sec=t.parentElement.dataset.fxsec;let b=t.querySelector(':scope>.sec-scope');
+    if(!b){b=document.createElement('button');b.type='button';b.className='sec-scope';const tg=t.querySelector(':scope>.fx-toggle');t.insertBefore(b,tg||null);
+      b.addEventListener('click',e=>{e.stopPropagation();if(b.getAttribute('aria-disabled')!=='true')secScopeToggle(sec);});}
+    const always=SEC_ALWAYS_ONE.includes(sec),canToggle=sec==='adjust'||SEC_SCOPE_DOM.includes(sec);
+    const one=always||(sec==='adjust'?!!(it&&it.adjustOverride):!!(it&&it.secOverride&&it.secOverride[sec]));
+    b.classList.toggle('one',one&&!always);b.innerHTML=one?_SEC_ICON_ONE:_SEC_ICON_ALL;
+    b.setAttribute('aria-disabled',String(always||!canToggle));b.setAttribute('aria-pressed',String(one));
+    const nm=CS_NAMES[sec]||sec;
+    b.title=always?`${nm} always applies to this photo only`:!canToggle?`${nm} applies to all ${n} photos`:one?`${nm}: this photo only — click to apply to all ${n} photos`:`${nm}: applies to all ${n} photos — click for this photo only`;
+    b.setAttribute('aria-label',b.title);
+  });
+  syncBatchScopeStatus();
+}

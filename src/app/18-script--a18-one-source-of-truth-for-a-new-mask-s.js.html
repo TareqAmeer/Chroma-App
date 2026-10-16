@@ -1,0 +1,280 @@
+// ── A18: one source of truth for a new mask's adjustment fields ──────────────────────────────
+// This shared block was written out verbatim in all six branches of mskAdd. Adding a field meant
+// remembering six places, and forgetting one produced a mask that rendered subtly differently
+// from its siblings — the same class of miss that let `origin!=='ai'` survive in four call sites
+// (CLAUDE.md 5b). Shape/raster fields still belong to their own branch; only the shared
+// adjustment defaults live here.
+function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,
+  sat:0,vibrance:0,hue:0,hi:0,sh:0,wh:0,bl:0,dehaze:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
+function mskAdd(type,configure){
+  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
+  let m;
+  if(type==='skin'||type==='coat'){
+    // SEGMENTATION FIRST — desktop only, by design. Scribble over the subject, the on-device model
+    // (EdgeSAM/SAM2, desktop/src-tauri/src/sam.rs) returns them, and the colour samples then refine
+    // WITHIN that region.
+    //
+    // This ordering is the whole point, and getting it wrong cost real time. A colour gate cannot
+    // answer "which pixels are this person" — a pet, wet hair, sunlit limestone and a bystander all
+    // sit inside skin's own hue/saturation range. Trying to make it answer that produced a clean
+    // oscillation on __TM3390.jpg: tightening the gate enough to reject bright near-neutral rock
+    // also rejected dark near-neutral chest hair and beard, punching speckled holes through the
+    // chest, because saturation cannot separate those two. Geometry separates them trivially.
+    // With the subject segmented, the dog and the rocks are simply not in the mask, and the gate is
+    // left doing the one thing it is genuinely good at: skin vs lips/hair inside the subject.
+    //
+    // "Coat" is the SAME machinery under a different origin tag — colRangeWeight/skinUniformity
+    // don't know or care whether the gated pixels are skin or fur, "evening out an uneven tone" is
+    // the identical operation either way (see CLAUDE.md 5b's Named Subjects section: subject.rs
+    // was purpose-built and measured against a real dog, but nothing downstream of segmentation
+    // ever got a fur-appropriate tool of its own — this is that tool, at zero shader cost).
+    const{w,h}=samInputDims();
+    m={type:'brush',origin:type,ai:true,px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],
+      invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,
+      subtract:false,colHue:0,colAmt:0,colSat:0.65};
+  }
+  else if(type==='color'||type==='lum'||type==='depth'){
+    // Shapeless masks: no ellipse or gradient at all, the range gates do all the selecting. These
+    // existed only as modifiers on a shape mask before, which is not where anyone coming from
+    // Lightroom looks for them. Depth Range (ROADMAP R7) is the third — same idea, gated on a
+    // per-photo relative-depth map instead of colour or luminance.
+    m={type:'none',origin:type,..._mskAdjustDefaults()};
+  }
+  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,..._mskAdjustDefaults()};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,..._mskAdjustDefaults()};
+  else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
+  else if(type==='sky'){ // sky: brush-type raster mask, seeded from a colour/position heuristic,
+    // then handed to SAM (same segmentation the AI Select tool uses) for a real object-aware
+    // boundary — the heuristic alone (row-weight + blueness) is unreliable on anything but a
+    // clean flat horizon (buildings/trees breaking the skyline, overcast, sky mid-frame, etc).
+    m={type:'brush',origin:'sky',aiPoints:[],..._mskAdjustDefaults()};
+    mskGenerateSky(m); // instant heuristic raster — shown immediately, and doubles as the SAM seed source
+    if(window.__TAURI__){
+      m.aiPoints=_skySeedPoints(m);
+      if(m.aiPoints.length){samEnsureEncoded();samRunPoints(m);} // replaces m.px with the SAM result on success; on failure samRunPoints toasts and leaves the heuristic raster in place
+    }
+  }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
+    const{w,h}=samInputDims();
+    m={type:'brush',origin:'ai',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],..._mskAdjustDefaults()};
+  }
+  Object.assign(m,_mskSkinDefaults());
+  m.id=_mskNewId();
+  // Uniformity is a CONTRACTION, but each pixel moves by w*u*(target-x) — so if w varies across
+  // the skin, the weight difference can outweigh the distance difference and the spread stops
+  // closing, or even diverges. BOTH halves of w must therefore stay flat over the subject: the
+  // SHAPE via a low feather (see the + Skin branch above) and the GATE via enough colour samples.
+  // Measured on __TM3390.jpg (test/probe_tm3390.mjs) across 6 skin points from cheek to lower
+  // chest: ONE sample gave gate weights 0.04-1.00 and hue DIVERGED 10%; two samples gave
+  // 0.86-1.00 and closed hue 40% / sat 45%; three closed sat 49%. Hence a mid Range plus the
+  // shift-click-to-add-samples flow the panel pushes, rather than one pick and a huge Range.
+  // Blend defaults (uH/uS/uL/preserve/tanDepth/tanWarm/tanOneWay/tanOneWayAmt) come from
+  // _mskToneBlendDefaults so "Reset" (mskToneReset) can return to exactly this later without a
+  // second copy of the constants. Selection defaults (crOn/crRange/crRangeC) stay here — Reset
+  // deliberately leaves those alone, they aren't part of "the blend".
+  if(type==='skin'){Object.assign(m,_mskToneBlendDefaults('skin'));m.crOn=true;m.crRange=55;}  // a Skin mask is for tanning
+  // A Coat mask starts EVENING OUT, not darkening — sun-bleaching lightens a coat as often as
+  // shade darkens it, so defaulting to one-way (like Skin's tanning) would fight half the real
+  // cases. Range is wider than Skin's default: fur genuinely spans more hue/chroma per-strand
+  // (undercoat vs guard hairs, wet vs dry) than skin does, so the tighter skin default would
+  // under-select a coat's own natural variation and leave the gate looking "broken".
+  if(type==='coat'){
+    Object.assign(m,_mskToneBlendDefaults('coat'));m.crOn=true;m.crRange=65;m.crRangeC=65;
+    // "Red depth" defaults ON (not 0) — the whole point raised was that the effect should be
+    // visibly there right away, not just wired infrastructure waiting to be discovered. 35/100
+    // is the same non-zero starting strength the auto-added eye mask uses.
+    m.coatDepth=35;m.exp=-0.6*0.35;m.sat=0.55*0.35;m.lumHi=0.80;   // see mskCoatDepth's own comment on the highlight-protect ceiling
+  }
+  if(type==='color'){m.crOn=true;m.crRange=40;}
+  if(type==='lum'){m.lumLo=0.45;m.lumHi=1;}   // a visible starting selection: the brighter half
+  if(type==='depth'){m.depOn=true;m.depLo=0;m.depHi=0.5;}  // starting selection: the farther half
+  // A purpose-built workflow may configure its normal brush mask before the single history
+  // commit below. This keeps creation + starter settings together as one undoable action.
+  if(typeof configure==='function')configure(m);
+  fxState.masks.push(m);mskSel=fxState.masks.length-1;
+  const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+  if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
+  if(type==='skin'){
+    _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
+    log('Scribble over yourself on the photo to select you. The dog, the rocks and the background are then outside the mask entirely \u2014 the color samples below only have to tell skin from lips and hair INSIDE you.','info');
+  }
+  // \u26a0\ufe0f Coat used to fall through here with NO scribble prompt at all \u2014 Skin arms scribble mode
+  // and tells you to draw; Coat silently did neither, so clicking "+ Coat" appeared to do nothing
+  // until you separately found "Scribble to select" yourself. Now matches Skin's own behaviour.
+  if(type==='coat'){
+    _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
+    log('Scribble over the coat to select it. Once selected, an eye-brightness mask is added automatically \u2014 drag it onto the eye(s) and use the two Strength sliders below.','info');
+  }
+  if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
+  if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
+  if(type==='depth'){
+    mskSetPreviewMode('select');
+    log('Set the Depth floor/ceiling below to pick a near/far band — Selection view is on so you can see it','info');
+    // Compute (or reuse the cached) depth map for this photo, then re-render once it lands so the
+    // Selection preview reflects the real gate instead of a flat "no map yet" (useDepthTx=0) frame.
+    fxEnsureDepthMap().then(()=>{if(typeof renderPreview==='function')renderPreview();});
+  }
+  return m;
+}
+
+// Lightroom-style background selection reuses the saved subject prompt and complements its
+// successful soft mask. Until the first non-empty result arrives this remains an empty AI mask.
+function mskAddBackground(){
+  const m=mskAdd('ai',mask=>{mask.aiSelectionMode='background';mask.name='Background';});
+  if(m)log('Scribble or draw a rectangle over the subject. The background is selected after AI Select succeeds.','info');
+  return m;
+}
+
+// Teeth are not a face-parser class here: this is a manual Brush workflow with a restrained
+// enamel color starting point. Its selection is exactly what the user paints, so no mouth/lip
+// segmentation is presented as tooth detection. The temperature and saturation adjustments are
+// per-mask, editable, and small enough to preserve the tooth's natural shading and texture.
+function mskAddTeethWhitening(){
+  if(fxState.masks.length>=MSK_MAX){
+    if(typeof toast==='function')toast('Maximum '+MSK_MAX+' masks — delete one first',false);
+    return false;
+  }
+  const m=mskAdd('brush',mask=>{
+    mask.origin='manual-teeth';
+    mask.name='Teeth Whitening (manual)';
+    mask.temp=-0.12;
+    mask.sat=-0.12;
+  });
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  mskPaintTransientReset();
+  mskPaintErase=false;mskPaintErase_sync();
+  if(!mskPaintMode)mskPaintToggle();
+  mskRebuild();
+  if(typeof renderPreview==='function')renderPreview();
+  if(typeof toast==='function')toast('Paint tooth enamel only. Use Erase around lips and gums.',true);
+  return true;
+}
+
+// Use only an auxiliary matte embedded in the selected source photo. There is deliberately no
+// model fallback here: unsupported platforms and photos without the requested matte keep the
+// manual brush workflow, rather than implying that the editor inferred anatomy from the preview.
+async function mskAddEmbeddedPortraitMatte(kind){
+  const labels={hair:'hair',skin:'skin',teeth:'teeth',glasses:'glasses',sky:'sky'};
+  const label=labels[kind];
+  if(!label)return false;
+  if(!window.__TAURI__||!window.__TAURI__.core||typeof window.__TAURI__.core.invoke!=='function'){
+    if(typeof toast==='function')toast('Embedded '+label+' mattes are available in the macOS desktop app. Use Brush to paint this area manually.',false);
+    return false;
+  }
+  if(fxState.masks.length>=MSK_MAX){
+    if(typeof toast==='function')toast('Maximum '+MSK_MAX+' masks — delete one first',false);
+    return false;
+  }
+  const it=curItem(),path=it&&it.path;
+  if(!it||!path){if(typeof toast==='function')toast('Could not find this photo’s source file. Use Brush to paint manually.',false);return false;}
+  if(it._embeddedMatteImporting)return false;
+  it._embeddedMatteImporting=true;
+  try{
+    let maps;
+    try{
+      if(!it._embeddedAuxiliaryPromise)it._embeddedAuxiliaryPromise=window.__TAURI__.core.invoke('extract_embedded_auxiliary',{path});
+      maps=await it._embeddedAuxiliaryPromise;
+    }catch(e){
+      delete it._embeddedAuxiliaryPromise;
+      if(curItem()===it&&typeof toast==='function')toast('Could not read embedded '+label+' data on this platform. Use Brush to paint manually.',false);
+      return false;
+    }
+    if(curItem()!==it||curItem().path!==path)return false;
+    const matte=Array.isArray(maps)?maps.find(map=>map&&map.kind===kind&&map.png_b64):null;
+    if(!matte)return await mskEmbeddedMatteFallback(kind,label,it);
+    const image=new Image();
+    image.src='data:image/png;base64,'+matte.png_b64;
+    await image.decode();
+    if(curItem()!==it||curItem().path!==path)return false;
+    if(!matte.width||!matte.height||image.naturalWidth!==matte.width||image.naturalHeight!==matte.height)
+      throw new Error('embedded matte dimensions do not match its PNG');
+    const{w,h}=mskTexDims();
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    const cx=cv.getContext('2d',{willReadFrequently:true});
+    if(!cx)throw new Error('canvas unavailable');
+    const sourceAspect=(it.img.naturalWidth||it.img.width)/(it.img.naturalHeight||it.img.height);
+    const matteAspect=image.naturalWidth/image.naturalHeight;
+    if(!Number.isFinite(sourceAspect)||!Number.isFinite(matteAspect)||Math.abs(sourceAspect/matteAspect-1)>0.02)
+      throw new Error('matte dimensions do not match the displayed photo orientation');
+    cx.drawImage(image,0,0,w,h);
+    const rgba=cx.getImageData(0,0,w,h).data,px=new Uint8ClampedArray(w*h);
+    for(let i=0;i<px.length;i++)px[i]=rgba[i*4];
+    if(!px.some(value=>value>0)){
+      if(typeof toast==='function')toast('This photo’s embedded '+label+' matte contains no selected pixels. Use Brush to paint manually if needed.',false);
+      return false;
+    }
+    const m=mskAdd('brush',mask=>{
+      mask.origin='embedded-'+kind;
+      mask.name=kind==='teeth'?'Teeth Whitening (embedded matte)':label[0].toUpperCase()+label.slice(1)+' (embedded matte)';
+      if(kind==='teeth'){mask.temp=-0.12;mask.sat=-0.12;}
+      mask.px=px;mask.mtW=w;mask.mtH=h;
+      mask.sourcePath=path;mask.sourceKind=kind;mask.sourceWidth=matte.width;mask.sourceHeight=matte.height;
+    });
+    if(!m||fxState.masks[mskSel]!==m)return false;
+    mskRebuild();
+    if(typeof renderPreview==='function')renderPreview();
+    if(typeof toast==='function')toast(kind==='teeth'?'Embedded teeth matte added. Review its edges before whitening.':'Embedded '+label+' matte added. Review its edges before editing.',true);
+    return true;
+  }catch(e){
+    if(typeof toast==='function')toast('Could not align this photo’s embedded '+label+' matte. Use Brush to paint manually.',false);
+    return false;
+  }finally{it._embeddedMatteImporting=false;}
+}
+async function mskAddEmbeddedTeethWhitening(){return mskAddEmbeddedPortraitMatte('teeth');}
+async function mskAddEmbeddedHairMatte(){return mskAddEmbeddedPortraitMatte('hair');}
+
+// A missing embedded matte is an explicit fork, not a silent downgrade. Use only alternatives
+// the app can actually produce: its sky selection, or the face parser's documented face-crop
+// groups. Teeth have no model class, so that choice offers the guided manual enamel brush only.
+function mskEmbeddedMatteFallbackChoice(kind,label){
+  const faceGroup={hair:3,glasses:1,skin:4}[kind];
+  const modelLabel=kind==='sky'?'Use AI Sky selection':faceGroup!==undefined?'Use Face Parse':'';
+  const detail=faceGroup!==undefined?'Face Parse needs a rough scribble around one face; its skin result is face-crop-only.':'The app’s Sky selection starts with its built-in heuristic and refines with SAM on desktop.';
+  return new Promise(resolve=>{
+    const dlg=document.createElement('dialog');dlg.id='msk-embedded-fallback-dialog';
+    dlg.setAttribute('aria-labelledby','msk-embedded-fallback-title');
+    dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:440px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2);z-index:var(--z-system)';
+    const title=document.createElement('h2');title.id='msk-embedded-fallback-title';title.textContent='No embedded '+label+' matte';title.style.cssText='font-size:15px;margin:0 0 8px';
+    const body=document.createElement('p');body.textContent=kind==='teeth'?'This photo has no teeth matte. The app cannot detect tooth enamel automatically. Paint enamel manually and erase over lips and gums.':detail;body.style.cssText='font-size:12px;line-height:1.5;color:var(--mut);margin:0 0 14px';
+    const actions=document.createElement('div');actions.style.cssText='display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap';
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;if(dlg.open)dlg.close();dlg.remove();resolve(value);};
+    const button=(id,text,value,primary=false)=>{const b=document.createElement('button');b.type='button';b.id=id;b.dataset.choice=value;b.className='btn '+(primary?'bpri':'bgh');b.textContent=text;b.onclick=()=>finish(value);return b;};
+    actions.append(button('msk-embedded-fallback-cancel','Cancel','cancel'));
+    actions.append(button('msk-embedded-fallback-manual',kind==='teeth'?'Paint enamel manually':'Paint with Brush','manual'));
+    if(modelLabel)actions.append(button('msk-embedded-fallback-model',modelLabel,'model',true));
+    dlg.append(title,body,actions);dlg.addEventListener('cancel',e=>{e.preventDefault();finish('cancel');});
+    document.body.appendChild(dlg);dlg.showModal();
+    (dlg.querySelector('#msk-embedded-fallback-model')||dlg.querySelector('#msk-embedded-fallback-manual')).focus();
+  });
+}
+function mskEmbeddedMatteManual(kind,label){
+  if(kind==='teeth')return mskAddTeethWhitening();
+  const m=mskAdd('brush',mask=>{mask.origin='manual-'+kind;mask.name=label[0].toUpperCase()+label.slice(1)+' (manual)';});
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  mskPaintTransientReset();mskPaintErase=false;mskPaintErase_sync();if(!mskPaintMode)mskPaintToggle();
+  mskRebuild();if(typeof renderPreview==='function')renderPreview();
+  if(typeof toast==='function')toast('Paint the '+label+' selection manually. Review the mask before editing.',true);
+  return true;
+}
+async function mskEmbeddedMatteFallback(kind,label,item){
+  const choice=await mskEmbeddedMatteFallbackChoice(kind,label);
+  if(curItem()!==item)return false;
+  if(choice==='cancel')return false;
+  if(choice==='manual')return mskEmbeddedMatteManual(kind,label);
+  if(choice!=='model')return false;
+  if(kind==='sky'){
+    const m=mskAdd('sky');
+    if(!m)return false;
+    m.name='Sky (app selection)';mskRebuild();
+    if(typeof toast==='function')toast('App Sky selection added. Check its boundary before editing.',true);
+    return true;
+  }
+  const group={hair:3,glasses:1,skin:4}[kind];
+  if(group===undefined)return false;
+  const m=mskAdd('ai',mask=>{mask.name=label[0].toUpperCase()+label.slice(1)+' (Face Parse fallback)';mask.faceFallbackGroup=group;});
+  if(!m||fxState.masks[mskSel]!==m)return false;
+  if(typeof toast==='function')toast('Scribble around one person’s head. AI Select will run Face Parse for '+label+' when the selection is ready.',true);
+  return true;
+}

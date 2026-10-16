@@ -1,0 +1,511 @@
+// ── responsive layout switch: mobile pinned editor vs desktop tool-rail editor ──
+let _mqMobile=window.matchMedia('(max-width:700px), (max-height:500px) and (pointer:coarse)'); // phones turned sideways stay in the phone layout
+function applyFxLayout(){
+  const onFx=document.getElementById('panel-fx').classList.contains('active');
+  const mob=(_mqMobile.matches||capNative()||matchMedia('(pointer:coarse) and (max-width:1100px)').matches)&&onFx, desk=!mob&&onFx;
+  document.body.classList.toggle('mobile-fx',mob);
+  // Mirrored onto <html> too — html has no overflow-y constraint of its own otherwise, so it
+  // stays a second scrollable ancestor even once body is height-capped (see the CSS comment
+  // at html.mobile-fx/html.mobile-cl, top of file).
+  document.documentElement.classList.toggle('mobile-fx',mob);
+  document.body.classList.toggle('fx-deskb',desk);
+  document.body.classList.toggle('fx-single',mob||desk);
+  if(!mob)document.body.classList.remove('sheet-open'); // sheet state is mobile-only
+  if(!mob)document.body.classList.remove('tools-open');
+  if(mob){buildSecNav();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
+  else if(desk){buildToolRail();if(!_activeSec())fxSection(window.__TAURI__?'looks':'image',true);}
+  if(desk&&typeof sk2ExportWire==='function')sk2ExportWire();
+  // Idempotent: the handles are static markup, so this only ever (re)binds them once per element.
+  if(desk&&!fxInitEdges._done){fxInitEdges._done=true;fxInitEdges();}
+  relocatePreviewTools(mob,desk);
+}
+// On desktop the zoom + compare/split/histogram controls live in the top action bar;
+// on mobile they overlay the pinned image. Move the single instances accordingly.
+function relocatePreviewTools(mob,desk){
+  const bar=document.getElementById('fx-deskbar-tools'),wrap=document.getElementById('fx-wrap');
+  const zc=document.getElementById('fx-zoom-ctrl'),pt=document.getElementById('fx-preview-tools');
+  if(!bar||!wrap||!zc||!pt)return;
+  if(desk){bar.appendChild(pt);bar.appendChild(zc);}
+  else{wrap.appendChild(zc);wrap.appendChild(pt);}
+  // 2026-09-10: "Show original" and "Full resolution" move further under desktop mode, into the
+  // LEFT cluster next to undo/redo — matches Editor (Developer) View.dc.html's own left-cluster
+  // order (undo/redo, Show original, Full resolution). Same appendChild-move idiom as above: the
+  // SAME nodes, not clones, so btn-before's hold-to-compare wiring (gated on a one-time `_wired`
+  // flag, see the comment at that wiring code) travels with it instead of needing rewiring, and
+  // fxFullResPreviewToggle()'s existing getElementById('btn-fx-fullres') lookups keep working
+  // unchanged regardless of which parent currently holds the button.
+  const before=document.getElementById('btn-before'), fullres=document.getElementById('btn-fx-fullres');
+  const left=document.getElementById('fx-deskbar-left'), loupe=document.getElementById('btn-loupe');
+  if(before&&left){
+    if(desk)left.appendChild(before);
+    else if(pt)pt.insertBefore(before,pt.firstChild.nextSibling); // back after btn-editor-bg, its original spot
+  }
+  if(fullres&&left){
+    if(desk)left.appendChild(fullres);
+    else if(zc&&loupe)zc.insertBefore(fullres,loupe.nextSibling); // back right after btn-loupe
+  }
+}
+const applyMobileFx=applyFxLayout; // legacy alias
+_mqMobile.addEventListener('change',applyFxLayout);
+window.addEventListener('orientationchange',()=>setTimeout(applyFxLayout,100));
+
+// WebGL2 check with helpful diagnosis
+(function(){
+  const tc=document.createElement('canvas');
+  const gl2=tc.getContext('webgl2');
+  if(!gl2){
+    log('⚠ WebGL2 not available. In Safari: Settings → Advanced → enable WebGL. In Chrome: should work by default.','warn');
+  } else {
+    const ext=gl2.getExtension('EXT_color_buffer_float');
+    log('WebGL2 ready'+(ext?' + float buffers':''),'ok');
+  }
+})();
+if(!FX.ok)log('FX renderer failed to initialise — check console for details','warn');
+// Surface otherwise-silent runtime failures (esp. on iOS, where a thrown error or rejected
+// promise during export just looks like the page "reloading") into the on-page log.
+// quiet on both: these are catch-alls, so they fire for benign rejections too. The specific
+// call sites that know what actually failed raise the toast; a generic "Unhandled: …" cannot
+// tell the user what to do and would drown the ones that can.
+window.addEventListener('error',e=>{try{log('JS error: '+(e.message||e.type)+(e.filename?` @${(e.lineno||'?')}`:''),'err',true)}catch(_){}});
+window.addEventListener('unhandledrejection',e=>{try{log('Unhandled: '+errStr(e.reason||'promise rejection'),'err',true)}catch(_){}});
+(function(){ // device diagnostics — lets the user report what their iPhone actually does
+  try{
+    const gl=FX.ok&&FX.gl, maxTex=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):'?';
+    const mem=typeof navigator.deviceMemory==='number'?navigator.deviceMemory+'GB':'n/a';
+    const share=(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'t.jpg',{type:'image/jpeg'})]}))?'yes':'no';
+    const native=capNative()?' · NATIVE app shell':'';
+    const coi=self.crossOriginIsolated?'yes':rawSharedMemoryOk()?'shared-wasm':'no';
+    log(`Device: maxTexture ${maxTex}px · deviceMemory ${mem} · file-share ${share} · SAB/RAW ${coi}${native} · full-res export${isMemoryConstrained()?` (${fxGlowScale()}× reduced glow, tiled >40MP)`:''}`,'info');
+  }catch(e){}
+})();
+// Native (Rust) build tag — a plain in-app reload/Cmd+R picks up JS/CSS from desktop/dist/
+// (read off disk at runtime), but any src-tauri/src/*.rs change needs a real `cargo build` +
+// full app RESTART. This makes that distinction checkable instead of guessed: if a native-side
+// fix "isn't working," check this line FIRST — if it's not the tag you expect, the app is
+// running a stale Rust binary and no amount of in-app reloading will pick up the fix.
+if(window.__TAURI__){
+  window.__TAURI__.core.invoke('native_build_tag').then(tag=>{
+    log(`Native (Rust) build: ${tag} — if a native fix seems missing, fully quit and relaunch, not just reload`,'info');
+  }).catch(()=>{});
+}
+// tauri-plugin-log's attachConsole() (see main.rs's `.plugin(tauri_plugin_log::Builder...)`)
+// patches window.console.log/warn/error to also forward into the SAME log file the native
+// side writes to (~/Library/Logs/com.tareq.chromasmith/chromasmith.log) — every console.error
+// this app has ever emitted now lands somewhere `tail`/`cat` can read directly, permanently,
+// with no per-session setup. Available as window.__TAURI__.log because tauri.conf.json sets
+// app.withGlobalTauri:true. Complements, doesn't replace, the native diagnostics bridge below
+// — attachConsole only forwards explicit console.* calls, not uncaught errors/IPC timing/state.
+if(window.__TAURI__&&window.__TAURI__.log&&window.__TAURI__.log.attachConsole){
+  window.__TAURI__.log.attachConsole().catch(()=>{});
+}
+// Native diagnostics bridge — desktop/diagnostics/README.md's original design needed a
+// manual paste into Safari's Web Inspector every session to see JS errors/IPC timing at
+// all, which in practice meant real sessions ran with zero visibility until someone
+// remembered. This runs automatically for every native session instead: it buffers
+// errors/IPC calls/config state and periodically writes them (via the same
+// write_file_bytes command fxHdrProbe already uses, so no new file-write surface) to a
+// fixed path the diagnostics tool polls. Entirely inert in the browser/Pages build
+// (gated on window.__TAURI__) and costs nothing when nothing is watching the file.
+if(window.__TAURI__&&window.__TAURI__.core){
+  (()=>{
+    // Resolved once via the native diag_state_path command (env::temp_dir() on the Rust side,
+    // matched by tempfile.gettempdir() on the tools/diagnostics/ Python side) rather than a hardcoded
+    // "/tmp/..." literal — that literal silently broke write_file_bytes on Windows, where a
+    // leading "/" resolves to the current drive's root, not a real temp dir.
+    let diagPath=null;
+    let diagErrors=[],diagIpc=[],lastWrite=0;
+    const diagSnap=()=>{try{return window.getUISnapshot?window.getUISnapshot():null}catch(_){return null}};
+    // Library-only localStorage state (desktop/library-ui.js's own keys — same origin, so
+    // readable here regardless of which page is currently on screen). This is what makes a
+    // wiped `chromasmith_lib_root` (a real incident: clearing WebKit's data store loses it)
+    // diagnosable from a report instead of by hand from source.
+    const configSnap=()=>{
+      try{
+        return {
+          libRoot: localStorage.getItem('chromasmith_lib_root')||null,
+          libLastFolder: localStorage.getItem('chromasmith_lib_last_folder')||null,
+          libLastPath: localStorage.getItem('chromasmith_lib_last_path')||null,
+          bgPaused: localStorage.getItem('chromasmith_bg_paused')==='1',
+        };
+      }catch(_){return null}
+    };
+    window.addEventListener('error',e=>{
+      diagErrors.push({t:Date.now(),k:'error',msg:e.message,src:e.filename+':'+e.lineno,snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+    });
+    window.addEventListener('unhandledrejection',e=>{
+      diagErrors.push({t:Date.now(),k:'rejection',msg:String(e.reason),snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+    });
+    const oe=console.error;
+    console.error=(...a)=>{
+      diagErrors.push({t:Date.now(),k:'console.error',msg:a.map(String).join(' '),snap:diagSnap()});
+      if(diagErrors.length>50)diagErrors.shift();
+      writeDiag();
+      oe(...a);
+    };
+    if(window.__TAURI__.core.invoke){
+      const origInvoke=window.__TAURI__.core.invoke;
+      window.__TAURI__.core.invoke=function(cmd,args){
+        if(cmd==='write_file_bytes'||cmd==='diag_native_state')return origInvoke.call(this,cmd,args);
+        const t0=performance.now();
+        return origInvoke.call(this,cmd,args).then(
+          r=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0)});if(diagIpc.length>100)diagIpc.shift();return r;},
+          err=>{diagIpc.push({t:Date.now(),cmd,ms:Math.round(performance.now()-t0),err:String(err)});if(diagIpc.length>100)diagIpc.shift();throw err;}
+        );
+      };
+    }
+    async function writeDiag(){
+      const now=Date.now();
+      if(now-lastWrite<1000)return; // debounce an error burst; the 5s interval still catches it
+      lastWrite=now;
+      try{
+        if(diagPath===null){
+          try{diagPath=await window.__TAURI__.core.invoke('diag_state_path');}
+          catch(_){diagPath='/tmp/chromasmith_diag_state.json';} // pre-diag_state_path binary
+        }
+        let native=null;
+        try{native=await window.__TAURI__.core.invoke('diag_native_state');}catch(_){}
+        const payload={t:now,errors:diagErrors,ipc:diagIpc,state:diagSnap(),config:configSnap(),native};
+        const json=JSON.stringify(payload);
+        const b64=btoa(unescape(encodeURIComponent(json)));
+        await window.__TAURI__.core.invoke('write_file_bytes',{path:diagPath,dataB64:b64});
+        diagErrors=[];diagIpc=[];
+      }catch(_){}
+    }
+    setInterval(writeDiag,5000);
+  })();
+}
+if(window.__TAURI__&&window.__TAURI__.core){
+  (async()=>{
+    const invoke=window.__TAURI__.core.invoke; let base,token,lastId=null;
+    try{base=await invoke('diag_state_path');const p=base.replace('chromasmith_diag_state.json','chromasmith_automation_enable.json');const r=await invoke('read_file_bytes',{path:p});token=JSON.parse(new TextDecoder().decode(new Uint8Array(r))).token;}catch(_){return;}
+    if(!token)return;
+    const cp=base.replace('chromasmith_diag_state.json','chromasmith_automation_command.json'),rp=base.replace('chromasmith_diag_state.json','chromasmith_automation_result.json');
+    const decode=r=>JSON.parse(new TextDecoder().decode(new Uint8Array(r))), encode=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+    const resolve=p=>p.split('.').reduce((o,k)=>o==null?undefined:o[k],window), safe=v=>{try{return JSON.parse(JSON.stringify(v));}catch(_){return String(v)}};
+    const run=async c=>{if(c.token!==token)throw Error('automation token mismatch');if(c.action==='eval')return await(new Function('return (async()=>('+String(c.code)+'))()'))();if(c.action==='call'){const a=String(c.path||'').split('.'),n=a.pop(),o=resolve(a.join('.'));if(!o||typeof o[n]!=='function')throw Error('call target is not a function');return await o[n](...(c.args||[]));}if(c.action==='click'){const e=document.querySelector(c.selector);if(!e)throw Error('selector not found');e.click();return true;}if(c.action==='setValue'){const e=document.querySelector(c.selector);if(!e)throw Error('selector not found');e.value=c.value;e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return e.value;}if(c.action==='key'){(document.activeElement||document.body).dispatchEvent(new KeyboardEvent(c.event||'keydown',{key:c.key,code:c.code||c.key,bubbles:true}));return true;}if(c.action==='snapshot')return window.getUISnapshot?window.getUISnapshot():{title:document.title,ready:document.readyState};throw Error('unknown automation action');};
+    setInterval(async()=>{try{const c=decode(await invoke('read_file_bytes',{path:cp}));if(!c||c.id===lastId)return;lastId=c.id;const o={id:c.id,ok:false};try{o.result=safe(await run(c));o.ok=true;}catch(e){o.error=String(e&&e.stack||e);}await invoke('write_file_bytes',{path:rp,dataB64:encode(o)});}catch(_){}},100);
+  })();
+}
+// Tap-to-select chip row mirroring a plain <select> (kept in the DOM, hidden, as the
+// existing state store so session/snapshot code that reads/writes its .value is untouched).
+function selectToChips(selectId,chipsId){
+  const sel=document.getElementById(selectId),row=document.getElementById(chipsId);
+  if(!sel||!row)return;
+  const render=()=>{
+    row.innerHTML='';
+    Array.from(sel.options).forEach(o=>{
+      const b=document.createElement('button');b.className='btn bgh'+(o.value===sel.value?' on':'');
+      b.textContent=o.textContent;
+      // Mark the tapped chip in place (no rebuild under the finger: iOS left the old paint until a scroll).
+      b.onclick=()=>{sel.value=o.value;row.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));sel.dispatchEvent(new Event('change',{bubbles:true}));};
+      row.appendChild(b);
+    });
+  };
+  render();
+  sel._chipsRender=render; // re-synced after programmatic sel.value writes (session/snapshot restore)
+}
+// Same pattern as selectToChips (a real <select> stays the source of truth, still dispatches
+// its own onchange, still restorable from a session/snapshot — just visually replaced) but into
+// the app's existing equal-width .seg control instead of a row of .btn chips. For a small,
+// mutually-exclusive choice (2-4 options) where a ragged chip row would be the wrong shape —
+// panel redesign, feedback: "text in borders that are different sizes" applies to ROWS of them.
+function selectToSeg(selectId,segId){
+  const sel=document.getElementById(selectId),row=document.getElementById(segId);
+  if(!sel||!row)return;
+  const render=()=>{
+    row.innerHTML='';
+    Array.from(sel.options).forEach(o=>{
+      const b=document.createElement('button');b.className=o.value===sel.value?'on':'';
+      b.textContent=o.dataset.short||o.textContent;
+      b.onclick=()=>{sel.value=o.value;sel.dispatchEvent(new Event('change',{bubbles:true}));render();};
+      row.appendChild(b);
+    });
+  };
+  render();
+  sel._chipsRender=render;
+}
+refreshLUTSelect(); // populate built-in + saved LUTs
+initDcpSelect();    // populate RAW profile dropdown (persisted choice)
+initCompareButton(); // wire "hold to compare" before/after
+_crvInit();          // tone-curve editor (pointer handlers + initial bake/draw)
+hslSyncUI();     // HSL mixer band chips + slider values/gradient tracks
+mskRebuild();        // local-adjustment mask list
+cvBuildChips();      // canvas ratio chips + background swatches
+selectToSeg('sel-heal-mode','seg-heal-mode'); // Retouch Heal|Clone (panel redesign)
+selectToSeg('sel-raw-nr','seg-raw-nr'); // Detail panel redesign: RAW NR Off|Fast|High
+selectToChips('sel-input','chips-input'); // input-profile tap chips
+selectToChips('sel-tonemap','chips-tonemap'); // ROADMAP.md R2 — highlight-response tap chips
+// 3.4.6 fix: the rolloff itself is correct — AgX/Standard/Film-stock only diverge on pixels ABOVE
+// 1.0 (real headroom), so picking a style on an ordinary 8-bit photo is a genuine, by-design no-op
+// (see the shader comment at useTonemap's declaration and ROADMAP.md R1). That's invisible unless
+// FX.usingSceneLinear (set in setImage from real measured RAW headroom) is true, so users read it
+// as a dead control. Surface the reason once per change instead of silently doing nothing.
+(function(){
+  const sel=document.getElementById('sel-tonemap');if(!sel)return;
+  sel.addEventListener('change',()=>{
+    if(sel.value&&typeof FX!=='undefined'&&!FX.usingSceneLinear&&typeof toast==='function'){
+      toast('Highlight response only changes the image once real RAW highlight headroom is present — this photo has none to roll off',false);
+    }
+  });
+})();
+selectToChips('sel-print','chips-print'); // print-profile tap chips
+selectToChips('sel-crop-ar','crop-ar-chips'); // crop aspect-ratio tap chips
+function dustModeBuildChips(){
+  const row=document.getElementById('chips-dustmode');if(!row)return;row.innerHTML='';
+  [['Both',0],['Black',1],['White',2]].forEach(([lb,val])=>{
+    const b=document.createElement('button');b.className='btn bgh'+(fxState.dustMode===val?' on':'');b.textContent=lb;
+    b.onclick=()=>{fxState.dustMode=val;dustModeBuildChips();fxUpdate();};
+    row.appendChild(b);
+  });
+}
+dustModeBuildChips();
+_fxPristineDefault=getUISnapshot(); // factory-default UI state, captured before loadSession touches it
+// Exposed for the native-shell Library (desktop/library-ui.js's openInEditorInner): reopening an
+// already-cached photo (skipping loadFXImages, which is the only other place _fxPristineDefault
+// gets applied) after a sidecar "Reset edit" has no recipe to restore, so without an explicit
+// call here the live editor state simply keeps whatever the previous edit session left it at.
+window.chromasmithApplyPristineDefault=()=>{if(_fxPristineDefault)applyUISnapshot(_fxPristineDefault);};
+initSliderErgonomics(); // numeric entry, keyboard nudge, modified-from-default dots
+loadSession();       // restore saved slider state (silent — no image loaded yet)
+styleListRefresh();  // populate the Styles list from localStorage
+exportPresetListRefresh();  // populate the Export preset dropdown from localStorage
+try{
+  const gpsExport=document.getElementById('tg-exp-gps');
+  const savedGpsPolicy=localStorage.getItem('cs.export.keepGps');
+  if(gpsExport&&savedGpsPolicy!==null)gpsExport.checked=savedGpsPolicy!=='0';
+  gpsExport?.addEventListener('change',()=>{localStorage.setItem('cs.export.keepGps',gpsExport.checked?'1':'0');if(typeof expPlainRender==='function')expPlainRender();});
+}catch(_){/* privacy settings can be unavailable in restricted webviews */}
+setTimeout(tourMaybeShow,400); // first-run tour — after layout settles, only for a genuinely empty/new session
+initZoomPan();
+initEditableVals();
+initLookGalleryKeyNav();
+fxDesktopFoldImageIntoLooks(); // desktop app only: Image tab has no reason to exist there (see fn)
+_csWorkspaceApply(); // restore named tool/control order and visibility before drawing the tool nav
+applyFxLayout();    // set up the mobile pinned editor or the desktop tool-rail editor
+// Per-section reset (mobile bottom sheet only — see .fx-ctrl-title-reset CSS): resets just the
+// sliders/toggles inside ONE section back to their factory-default value (_fxPristineDefault,
+// captured above before loadSession touched anything), not the whole photo like fxResetAll().
+// Generic by design — walks whatever sl-*/tg-* ids happen to live inside the clicked section's
+// card, so it needs no per-section list to keep in sync as sliders are added/removed.
+// Reset writes slider .value directly (no input event), so the fill / knob / "modified" row state
+// has to be repainted by hand or a reset slider keeps its old red fill.
+function _fxRepaintCard(card){
+  if(!card)return;
+  if(typeof fxPaintAllSliders==='function')fxPaintAllSliders(card);
+  if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
+  if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+}
+function fxResetSection(cardOrName){
+  const card=typeof cardOrName==='string'?document.querySelector(`.fx-ctrl[data-fxsec="${cardOrName}"]`):cardOrName.closest('.fx-ctrl');
+  if(!card||!_fxPristineDefault)return;
+  card.querySelectorAll('input[type=range][id^="sl-"]').forEach(sl=>{
+    const id=sl.id.slice(3);
+    if(_fxPristineDefault.sliders&&_fxPristineDefault.sliders[id]!==undefined)sl.value=_fxPristineDefault.sliders[id];
+    else if(sl.defaultValue!==''&&sl.dataset.noReset===undefined)sl.value=sl.defaultValue; // not in the snapshot list (grain motion, brush, zoom, quality…): its own shipped default
+  });
+  card.querySelectorAll('[id^="tg-"]').forEach(tg=>{
+    const id=tg.id.slice(3);
+    if(_fxPristineDefault.toggles&&_fxPristineDefault.toggles[id]!==undefined){
+      const on=_fxPristineDefault.toggles[id];tg.classList.toggle('on',on);
+      const ff=document.getElementById('ff-'+id);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}
+    }
+  });
+  // Frame panel redesign (2026-09-10, F1): Borders is the first section whose header Reset had
+  // to cover a colour input too (cl-b1/cl-b2) — every earlier section this generic path served
+  // was slider/toggle-only. Without this, Reset would restore thickness but leave a changed
+  // border colour untouched.
+  card.querySelectorAll('input[type=color][id^="cl-"]').forEach(cl=>{
+    // ⚠️ Unlike sliders/toggles (_FX_SNAP_SLIDERS/_FX_SNAP_TOGGLES, bare ids without their
+    // "sl-"/"tg-" prefix), _FX_SNAP_COLORS stores FULL prefixed ids ('cl-b1', not 'b1') —
+    // getUISnapshot() keys s.colors by the literal id list entries. Look up by the full id.
+    const id=cl.id;
+    if(_fxPristineDefault.colors&&_fxPristineDefault.colors[id]!==undefined){
+      cl.value=_fxPristineDefault.colors[id];
+      if(typeof cvSetBg==='function'&&id==='cl-canvas-bg')cvSetBg(cl.value);
+    }
+  });
+  // Retouch's meaningful "edited" state is its spots, not its brush-size sliders (see
+  // healSyncUI's own comment on why those two are tracked separately) — reset the sliders
+  // above AND clear spots here, or the reset button would stay visible (fx-has-heal) after a
+  // click that visibly did nothing to the photo.
+  if(card.dataset.fxsec==='retouch'&&typeof healClear==='function')healClear();
+  if(typeof hapt==='function')hapt();
+  // Values were written straight to .value, which fires no input event: repaint the fill/knob and
+  // drop the phone "changed" marker, or reset sliders keep looking edited (CHR-117).
+  card.querySelectorAll('input[type=range]').forEach(sl=>{fxPaintSlider(sl);const row=sl.closest('.fx-row');if(row)row.classList.remove('phone-changed');});
+  fxUpdate();
+  log('Section reset','info');
+}
+// Several sections already had their OWN bespoke reset function (RAW-aware defaults, etc.) —
+// far older and more correct than the generic fxResetSection() above for those specific cases.
+// The header injector below prefers one of these when the section has one, rather than
+// silently replacing already-correct behaviour with the generic sliders-and-toggles walk.
+const _fxSectionResetOverride={nr:'resetNR',deconv:'resetDeconv',adjust:'resetAdjust',curves:'fxResetCurvesAll',hsl:'hslResetAll',wheels:'wheelResetAll',pointcolor:'pcResetAll'};
+// Sections whose header reset is two targets, "Reset | All" — the FIRST resets only the
+// currently-selected thing (a curve channel, a Color Mixer band), the SECOND (the generic
+// button above, mapped through _fxSectionResetOverride) resets the whole section. Approved
+// Color Mixer pilot, 2026-09-13 — replaces the ad-hoc "Reset | All" button rows each of these
+// sections used to draw below its own controls, so every section now shows this the same way.
+const _fxSectionScopedReset={curves:'curveResetCh',hsl:'hslResetBand'};
+// T18 (editor_ux_spec.json, 2026-09-10): a startup check, not a test — an override entry
+// pointing at a renamed/deleted function silently falls through to `typeof window[override]===
+// 'function'` being false and the header's own onclick just uses the generic fxResetSection()
+// walk instead, with no error anywhere. Concretely exploitable: rename resetNR without updating
+// this map, and Noise Reduction's header Reset silently starts using the generic slider/toggle
+// walk instead of the RAW-aware bespoke one — visually identical in a quick look, wrong in a way
+// only a careful diff of behaviour would catch. This catches it for free at load time instead.
+Object.entries(_fxSectionResetOverride).forEach(([fxsec,fnName])=>{
+  if(typeof window[fnName]!=='function')console.error(`[startup] _fxSectionResetOverride['${fxsec}'] names '${fnName}', which is not a function — that section's header Reset will silently fall back to the generic walk`);
+});
+// Panel redesign (docs/editor-redesign-plan.md, feedback COLOR 1): the desktop reset button
+// is no longer mobile-only (see .fx-ctrl-title-reset's CSS — it now shows on desktop too, but
+// only once .fx-mod marks something in the section as changed from default; visibility logic
+// lives entirely in CSS via :has(), no JS needed there). Crop's own hand-built "Reset" link
+// (.fx-toggle-lb) already does the same job and predates this, so it's left alone rather than
+// getting a second reset control glued on next to it.
+document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title=>{
+  if(title.querySelector(':scope > .fx-toggle-lb'))return;
+  const fxsec=title.parentElement.dataset.fxsec;
+  const scopedFn=_fxSectionScopedReset[fxsec];
+  const b=document.createElement('button');
+  b.type='button';b.className='fx-ctrl-title-reset';b.title='Reset this section';
+  b.innerHTML=icon('reset',14)+`<span class="fx-ctrl-title-reset-lb">${scopedFn?'All':'Reset'}</span>`;
+  b.onclick=(e)=>{
+    e.stopPropagation();
+    const override=_fxSectionResetOverride[fxsec];
+    if(override&&typeof window[override]==='function')window[override]();
+    else fxResetSection(title.parentElement);
+    _fxRepaintCard(title.parentElement);
+  };
+  // Reset and the on/off toggle (if any) are wrapped together so both sit flush at the title's
+  // right edge — appending reset as a bare third flex child would land it BETWEEN the title
+  // text and the toggle under the existing justify-content:space-between rule instead of next
+  // to the toggle, which is what was actually asked for.
+  const right=document.createElement('span');right.className='fx-title-right';
+  const toggle=title.querySelector(':scope > .fx-toggle');
+  title.appendChild(right);
+  if(scopedFn){
+    if(typeof window[scopedFn]!=='function')console.error(`[startup] _fxSectionScopedReset['${fxsec}'] names '${scopedFn}', which is not a function`);
+    const scoped=document.createElement('button');
+    scoped.type='button';scoped.className='fx-ctrl-title-reset-scoped';scoped.title='Reset the current selection';
+    scoped.textContent='Reset';
+    scoped.onclick=(e)=>{e.stopPropagation();if(typeof window[scopedFn]==='function')window[scopedFn]();};
+    const sep=document.createElement('span');sep.className='fx-ctrl-title-reset-sep';sep.setAttribute('aria-hidden','true');sep.textContent='|';
+    right.appendChild(scoped);right.appendChild(sep);
+  }
+  right.appendChild(b);
+  if(toggle)right.appendChild(toggle);
+});
+// Sidebar sections collapse independently of their on/off state (a section can be OFF and
+// expanded, or ON and collapsed) — clicking the header (anywhere but the toggle/reset controls)
+// folds its body away. Persisted per-section in localStorage, same pattern as _mskGroupOpen.
+// CHR-196: the section headers' own text follows CS_NAMES too.
+document.querySelectorAll('.fx-ctrl[data-fxsec]>.fx-ctrl-title').forEach(t=>{const k=t.parentElement.dataset.fxsec,n=CS_NAMES[k];if(!n)return;
+  const tn=[...t.childNodes].find(x=>x.nodeType===3&&x.textContent.trim());if(tn)tn.textContent=n+' ';});
+let _fxSecCollapsed={};
+try{const c=JSON.parse(localStorage.getItem('chromasmith_fx_sec_collapsed')||'null');if(c)_fxSecCollapsed=c;}catch(e){}
+function fxSecToggle(card){
+  const key=card.dataset.fxsec;if(!key)return;
+  const open=card.classList.toggle('fx-sec-collapsed');
+  _fxSecCollapsed[key]=open;
+  try{localStorage.setItem('chromasmith_fx_sec_collapsed',JSON.stringify(_fxSecCollapsed));}catch(e){}
+  // Phones: folding the open tool's header means "done with it" — drop back to the normal photo view.
+  if(open&&document.body.classList.contains('mobile-fx')&&document.body.classList.contains('sheet-open')&&card.classList.contains('sec-active')&&typeof fxSheetClose==='function')fxSheetClose();
+}
+document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
+  const title=card.querySelector(':scope > .fx-ctrl-title');
+  if(!title)return;
+  const chev=document.createElement('span');
+  chev.className='fx-ctrl-chev';chev.innerHTML=icon('chevron',14);
+  title.insertBefore(chev,title.firstChild);
+  // Film's own sections (grain/artifacts/halation/bloom/vignette) always start expanded on a
+  // fresh launch, ignoring a stale collapsed flag from a previous session — the persisted map is
+  // shared with every OTHER section's collapse state (including ones fine to stay tucked away),
+  // and Film's are core, frequently-tweaked controls that shouldn't require rediscovering a
+  // collapse toggle to even see. Still collapsible by hand within a session (fxSecToggle below
+  // still writes the same map — this only skips reading it back for these five keys).
+  // Every tool starts folded on launch, so a stage reads as a list of its tools first. Info is the
+  // exception: it opens on Metadata (its Keywords/Tags parts fold inside it).
+  // Versions (CHR-203) is a one-card stage like Info, so it opens unfolded too.
+  if(card.dataset.fxsec!=='info'&&card.dataset.fxsec!=='versions'){card.classList.add('fx-sec-collapsed');_fxSecCollapsed[card.dataset.fxsec]=true;}
+  title.addEventListener('click',(e)=>{
+    // The "|" separator between Reset and All (.fx-ctrl-title-reset-sep) sits between the two
+    // buttons with its own horizontal padding and isn't itself a button/toggle, so a click that
+    // lands on it (easy to do — the two controls sit close together) used to fall through this
+    // guard and collapse the section instead of doing nothing. .fx-title-right (the cluster
+    // wrapping both buttons + the separator) is the real hit-target for "clicked in the Reset/All
+    // area at all" rather than enumerating each control inside it.
+    if(e.target.closest('.fx-toggle,.fx-title-right,.fx-toggle-lb,button,input,select'))return;
+    fxSecToggle(card);
+  });
+  // Clickable for keyboard and screen-reader users too, not just the mouse.
+  // The chevron is the focusable control, not the whole title: titles also hold the on/off
+  // toggle and Reset, and a button can't contain other buttons (axe nested-interactive).
+  chev.setAttribute('role','button');chev.tabIndex=0;
+  chev.setAttribute('aria-label','Show or hide '+(title.textContent||'').replace(/Reset|\s+/g,' ').trim());
+  const syncExp=()=>chev.setAttribute('aria-expanded',String(!card.classList.contains('fx-sec-collapsed')));syncExp();
+  new MutationObserver(syncExp).observe(card,{attributes:true,attributeFilter:['class']});
+  chev.addEventListener('keydown',(e)=>{if(e.key!=='Enter'&&e.key!==' ')return;e.preventDefault();fxSecToggle(card);});
+});
+// 3.4.9: the Preset section's OWN collapse toggle, independent of the panel-level one above
+// (fxSecToggle collapses the whole "Presets & Looks" card, including RAW profile/Input/Print;
+// this collapses just the filter+grid inside #fx-looks-ctrl). Same persisted-boolean pattern.
+{
+  let _fxPresetCollapsed=false;
+  try{_fxPresetCollapsed=localStorage.getItem('chromasmith_fx_preset_collapsed')==='1';}catch(e){}
+  const head=document.getElementById('fx-preset-head'),ctrl=document.getElementById('fx-looks-ctrl'),chev=document.getElementById('fx-preset-chev');
+  if(head&&ctrl&&chev){
+    chev.innerHTML=icon('chevron',14);
+    if(_fxPresetCollapsed)ctrl.classList.add('fx-preset-collapsed');
+    head.addEventListener('click',()=>{
+      const open=ctrl.classList.toggle('fx-preset-collapsed');
+      try{localStorage.setItem('chromasmith_fx_preset_collapsed',open?'1':'0');}catch(e){}
+    });
+  }
+}
+// Mirror #btn-fx-export's disabled state onto the bottom-pinned #fx-fab-export duplicate — an
+// observer instead of touching every one of the several places that toggle the real button, so
+// the two can never drift out of sync.
+{const realBtn=document.getElementById('btn-fx-export'),fab=document.getElementById('fx-fab-export');
+ if(realBtn&&fab){
+   fab.disabled=realBtn.disabled;
+   new MutationObserver(()=>{fab.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
+ }}
+// Same mirror, onto the deskbar's own Export button (3.1.2) — see fxSyncTopbarDisabled()'s
+// comment for why undo/redo get their own direct sync instead of this observer pattern (their
+// disabled-ness isn't a DOM attribute anywhere else to mirror FROM).
+{const realBtn=document.getElementById('btn-fx-export'),db=document.getElementById('btn-export-db');
+ if(realBtn&&db){
+   db.disabled=realBtn.disabled;
+   new MutationObserver(()=>{db.disabled=realBtn.disabled;}).observe(realBtn,{attributes:true,attributeFilter:['disabled']});
+ }}
+if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // initial boot state, before any photo is loaded
+// The ff-off class in the markup is the DEFAULT (every section ships off). Reconcile it against
+// the actual toggle state at boot, so a section restored ON by a saved session/recipe is not left
+// looking disabled.
+document.querySelectorAll('.fx-fields[id^="ff-"]').forEach(ff=>{
+  const tg=document.getElementById('tg-'+ff.id.slice(3));
+  if(tg)ff.classList.toggle('ff-off',!tg.classList.contains('on'));
+});
+syncThemeBtns();    // reflect saved light/dark theme on the toggle icons
+{const set=(id,n)=>{const e=document.getElementById(id);if(e)e.innerHTML=icon(n,18);};
+ set('db-undo','undo');set('db-redo','redo');set('db-allfx','enableAll');set('db-export','export');set('db-export-lr','export');
+ set('hdr-info','info');
+ document.querySelectorAll('[data-mic]').forEach(e=>{e.innerHTML=icon(e.dataset.mic,22);}); // header About button (the old 'hdr-log' diagnostics button moved into it)
+ // Empty-state add button: ICONS.plus at 34px, replacing the U+FF0B FULLWIDTH PLUS glyph.
+ {const ab=document.getElementById('fx-add-btn');if(ab)ab.innerHTML=icon('plus',34);}
+ set('btn-flag-green','flagGreen');set('btn-flag-red','flagRed');set('btn-favorite','heart');set('db-history','history');
+ // Replacements for the emoji + unicode glyphs that used to sit in this bar (see ICONS).
+ set('db-lib-ic','library');set('db-settings','view');set('ic-before','showOriginal');set('ic-split','split');
+ set('ic-zoom-out','zoomOut');set('ic-zoom-in','zoomIn');
+ set('ic-splitmenu','chevron');set('ic-fxref','pin');set('ic-timeline','history');set('ic-scope','scope');set('ic-ah-clear','close');set('ic-fullres','fullres');
+ // Every element carrying a data-ic attribute — the drop-zone icons, the crop/rotate/flip row,
+ // the video transport row — gets its icon() populated the same way as the id-keyed set() calls
+ // above. One data-driven pass instead of one `set()` call per element because these sites are
+ // plain static markup (not JS-generated), so they have no natural boot-time hook of their own.
+ document.querySelectorAll('[data-ic]').forEach(el=>{el.innerHTML=icon(el.dataset.ic,el.classList.contains('dz-ic')?18:20);});}
+syncAllFxBtn();

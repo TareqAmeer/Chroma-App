@@ -1,0 +1,1002 @@
+// ── Google Photos OAuth callback (runs in the SIGN-IN POPUP, not the app) ─────
+// This page is cross-origin isolated (coi-serviceworker sets COOP same-origin for
+// SharedArrayBuffer), which DISOWNS every popup — window.opener/postMessage can never reach
+// back, so Google's GIS popup library is unusable here. Instead gpAuth() opens a manual
+// implicit-flow popup that redirects back to THIS page with the token in the hash
+// (state=gpcb); this handler stores it in localStorage (which crosses COOP boundaries fine —
+// the opener listens for the storage event), then halts app boot in the popup.
+const _GP_CB=(()=>{try{
+  if(!/[#&]state=gpcb(&|$)/.test(location.hash))return false;
+  const p=new URLSearchParams(location.hash.slice(1));
+  localStorage.setItem('gpTokRelay',JSON.stringify({at:p.get('access_token')||'',err:p.get('error')||'',
+    exp:Date.now()+(parseInt(p.get('expires_in')||'3600',10)||3600)*1000,t:Date.now()}));
+  history.replaceState(null,'',location.pathname+location.search);
+  document.documentElement.innerHTML='<body style="background:#141414;color:#ddd;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">Google Photos connected &#10003; — you can close this window.</body>';
+  setTimeout(()=>{try{window.close()}catch(e){}},150);
+  return true;
+}catch(e){return false}})();
+if(_GP_CB)throw new Error('gp-oauth-callback — not an error: halting app boot inside the sign-in popup');
+// ═══════════════════════════
+// COLOUR MATH
+// ═══════════════════════════
+const s2l=v=>{v=Math.max(0,Math.min(1,v));return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)};
+const l2s=v=>{v=Math.max(0,Math.min(1,v));return v<=.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-.055};
+function r2hsv(r,g,b){const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;const s=mx>0?d/mx:0,v=mx;if(d>0){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h/6+1)%1}return[h,s,v]}
+function hsv2r(h,s,v){const i=Math.floor(h*6)%6,f=h*6-Math.floor(h*6),p=v*(1-s),q=v*(1-f*s),t=v*(1-(1-f)*s);return[[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][Math.max(0,Math.min(5,i))]}
+const sat=(r,g,b)=>{const mx=Math.max(r,g,b);return mx>0?(mx-Math.min(r,g,b))/mx:0};
+const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
+function gm(v,c,w){return Math.exp(-Math.pow(v-c,2)/(2*w*w))}
+function contrast(v,c,p=.18){const e=1e-9;return v<=p?p*Math.pow(Math.max(v/p,e),1-c*.25):1-(1-p)*Math.pow(Math.max((1-v)/(1-p),e),1-c*.25)}
+function applyHSL(r,g,b,hA,sA,lA){
+  const[h,s,v]=r2hsv(r,g,b),C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  let dh=0,ds=0,dv=0;
+  // Band half-width .10 (36°) — wide enough that adjacent bands always overlap with margin, even
+  // across the widest 60° center-to-center gaps (Yellow-Green, Green-Aqua, Blue-Purple). At the
+  // old .075 (27°) half-width those gaps left ~6-18° dead zones with ZERO response from any band
+  // — exactly where common real-world hues sit (olive/dry-grass green ≈85-90°, sitting between
+  // Yellow's and Green's reach), which read as the mixer slider silently doing nothing.
+  for(let i=0;i<8;i++){let df=Math.abs(h-CE[i]);if(df>.5)df=1-df;const w=Math.max(0,1-Math.pow(df/.10,2))*Math.min(1,s*3);dh+=w*(hA[C[i]]||0)/360;ds+=w*((sA[C[i]]||0)/100)*.55;dv+=w*((lA[C[i]]||0)/100)*LS[i]}
+  return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
+}
+// POINT COLOR — unlike the 8 fixed Color Mixer bands above, each point is centered on an EXACT
+// hue/saturation picked from the photo (the eyedropper), with its own adjustable Range (how wide
+// a neighborhood of similar colors it grabs) instead of a fixed band width. Same weighted-kernel
+// shape as applyHSL for a consistent feel, just re-centered per point and range-driven per point.
+function pcWeight(h,s,pt){
+  let df=Math.abs(h-pt.h);if(df>.5)df=1-df;
+  const hHalf=0.03+(pt.range||0)/100*0.22;     // range 0-100 -> ±10.8°..90° hue half-width
+  const sHalf=0.15+(pt.range||0)/100*0.55;     // wider range also tolerates more saturation drift
+  // Smoothness reshapes the existing compact selection kernel without changing its footprint.
+  // 50 keeps the shipped quadratic falloff exactly; lower values tighten the transition and
+  // higher values soften it. Missing values on older point-color records retain the old result.
+  const smooth=Math.max(0,Math.min(100,pt.smoothness==null?50:pt.smoothness));
+  const edgePower=Math.pow(2,(50-smooth)/50);
+  const wh=Math.pow(Math.max(0,1-Math.pow(df/hHalf,2)),edgePower);
+  const ws=Math.pow(Math.max(0,1-Math.pow((s-pt.s)/sHalf,2)),edgePower);
+  return wh*ws*Math.min(1,s*3);
+}
+function applyPointColors(r,g,b,points){
+  if(!points||!points.length)return[r,g,b];
+  const[h,s,v]=r2hsv(r,g,b);
+  let dh=0,ds=0,dv=0;
+  for(const pt of points){
+    const w=pcWeight(h,s,pt);if(w<=0)continue;
+    dh+=w*(pt.hue||0)*0.45/360;ds+=w*((pt.sat||0)/100)*.55;dv+=w*((pt.lum||0)/100)*.11;
+  }
+  return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
+}
+// Color Grading (3-way) — equiluminant hue/sat rotation + independent luminance
+// offset. The chroma "tint" is a triad of cosines spaced 120° apart, which sums to
+// zero by construction (cos θ + cos(θ−120°) + cos(θ+120°) ≡ 0) — i.e. it is
+// PROVABLY luminance-neutral: rotating hue/raising sat can never shift overall
+// brightness, only the explicit `l` term can. This fully decouples (h,s) from l,
+// so deriveXMP's inverse is an exact closed-form projection (no joint nonlinear
+// solve, no cross-talk — contrast with the old hsv2r-based tint, whose mean shifts
+// with hue and silently leaked into the fitted Luminance values). Zones weighted by
+// CURRENT (post-tone, pre-CG) luminance lv0. cg={shadow,mid,high}{h,s,l},
+// h:0-360 s:0-100 l:-100..100. CG_ZONES centers/widths shared with the deriver.
+const CG_K=0.6,CG_ZONES=[['shadow',.20,.18],['mid',.50,.20],['high',.82,.16]];
+function cgTint(hueDeg,satPct){
+  const th=hueDeg*Math.PI/180,m=(satPct/100)*CG_K*.5;
+  return[m*Math.cos(th),m*Math.cos(th-2*Math.PI/3),m*Math.cos(th+2*Math.PI/3)];
+}
+function applyCG(R,G,B,lv0,cg){
+  if(!cg)return[R,G,B];
+  for(const[zn,zc,zw] of CG_ZONES){const z=cg[zn];if(!z)continue;const w=gm(lv0,zc,zw);
+    if(z.s){const[tr,tg,tb]=cgTint(z.h||0,z.s);R+=w*tr;G+=w*tg;B+=w*tb}
+    if(z.l){const lo=w*(z.l/100)*.5;R+=lo;G+=lo;B+=lo}}
+  return[Math.max(0,Math.min(1,R)),Math.max(0,Math.min(1,G)),Math.max(0,Math.min(1,B))];
+}
+// Tone-only stage (exposure/contrast/shadows/highlights/whites/blacks) — split out
+// of applyGrade so deriveXMP can replay EXACTLY this stage (with its own derived
+// Exposure/Highlights/Shadows numbers) to get the same `graded(src)` baseline that
+// HSL/CG actually receive as input — measuring color/lum deltas against raw src
+// would misattribute the global tonal shift as a per-band/per-zone color effect.
+function applyTone(r,g,b,s){
+  let R=s2l(r),G=s2l(g),B=s2l(b);const es=Math.pow(2,s.exposure*.75);
+  R=Math.min(1,R*es);G=Math.min(1,G*es);B=Math.min(1,B*es);
+  const c=s.contrast/100;R=contrast(R,c);G=contrast(G,c);B=contrast(B,c);
+  R=l2s(R);G=l2s(G);B=l2s(B);
+  const lv=lum(R,G,B),adj=(s.shadows/200)*.30*gm(lv,.22,.18)+(s.highlights/200)*.33*gm(lv,.82,.14)+(s.whites/200)*.18*gm(lv,.92,.10)+(s.blacks/200)*.20*gm(lv,.08,.10);
+  return[Math.max(0,Math.min(1,R+adj)),Math.max(0,Math.min(1,G+adj)),Math.max(0,Math.min(1,B+adj))];
+}
+function applyGrade(r,g,b,s){
+  let[R,G,B]=applyTone(r,g,b,s);
+  const lv0=lum(R,G,B);
+  [R,G,B]=applyHSL(R,G,B,s.hue,s.sat,s.lum);
+  return applyCG(R,G,B,lv0,s.cg);
+}
+
+// ═══════════════════════════
+// LUT OPS
+// ═══════════════════════════
+const SZ=33,S2=SZ*SZ;
+const li=(r,g,b)=>(r*S2+g*SZ+b)*3;
+function sampleLUT(lut,r,g,b){
+  const sc=SZ-1,ri=r*sc,gi=g*sc,bi=b*sc;
+  const r0=Math.min(ri|0,sc-1),g0=Math.min(gi|0,sc-1),b0=Math.min(bi|0,sc-1);
+  const rf=ri-r0,gf=gi-g0,bf=bi-b0;
+  let or=0,og=0,ob=0;
+  for(let dr=0;dr<2;dr++)for(let dg=0;dg<2;dg++)for(let db=0;db<2;db++){
+    const w=(dr?rf:1-rf)*(dg?gf:1-gf)*(db?bf:1-bf),i=li(r0+dr,g0+dg,b0+db);
+    or+=lut[i]*w;og+=lut[i+1]*w;ob+=lut[i+2]*w;
+  }return[or,og,ob];
+}
+function writeCube(lut,title){
+  const L=[`TITLE "${title}"`,`#LUMIXPHOTOSTYLE STD`,`LUT_3D_SIZE ${SZ}`,``];
+  for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);L.push(`${lut[i].toFixed(6)} ${lut[i+1].toFixed(6)} ${lut[i+2].toFixed(6)}`)}
+  return L.join('\n');
+}
+// Trilinear sample of an arbitrary-size N³ LUT stored R-fastest ((r*N+g)*N+b)*3.
+function sampleLUTn(src,N,r,g,b){
+  const sc=N-1,ri=r*sc,gi=g*sc,bi=b*sc;
+  const r0=Math.min(ri|0,sc-1),g0=Math.min(gi|0,sc-1),b0=Math.min(bi|0,sc-1);
+  const rf=ri-r0,gf=gi-g0,bf=bi-b0;let or=0,og=0,ob=0;
+  for(let dr=0;dr<2;dr++)for(let dg=0;dg<2;dg++)for(let db=0;db<2;db++){
+    const w=(dr?rf:1-rf)*(dg?gf:1-gf)*(db?bf:1-bf),i=(((r0+dr)*N+(g0+dg))*N+(b0+db))*3;
+    or+=src[i]*w;og+=src[i+1]*w;ob+=src[i+2]*w;
+  }return[or,og,ob];
+}
+// Parse a .cube into our 33³ li-layout LUT. Robust to: any LUT_3D_SIZE (resampled to 33³
+// via trilinear interp), DOMAIN_MIN/DOMAIN_MAX lines, leading/trailing whitespace, blank
+// lines, CRLF, and any non-numeric metadata line (e.g. a stray header). Previously this
+// assumed exactly 33³ and only stripped #/TITLE/LUT_* — so a 17³ or 65³ LUT mapped into the
+// wrong cells (silent corruption) and DOMAIN_MIN/MAX rows were parsed as data → NaN/shift.
+function parseCube(txt){
+  let size=0;const data=[];
+  for(const raw of txt.split(/\r?\n/)){
+    const l=raw.trim();
+    if(!l||l[0]==='#')continue;
+    const up=l.toUpperCase();
+    if(up.startsWith('LUT_3D_SIZE')){const v=parseInt(l.split(/\s+/)[1]);if(v>1)size=v;continue;}
+    if(up.startsWith('TITLE')||up.startsWith('DOMAIN_')||up.startsWith('LUT_'))continue;
+    const p=l.split(/\s+/);if(p.length<3)continue;
+    const r=parseFloat(p[0]),g=parseFloat(p[1]),b=parseFloat(p[2]);
+    if(!isFinite(r)||!isFinite(g)||!isFinite(b))continue; // skip any non-numeric line
+    data.push(r,g,b);
+  }
+  const N=size>0?size:Math.max(2,Math.round(Math.cbrt(data.length/3)));
+  if(data.length<N*N*N*3)return identLUT(); // truncated/garbage → safe passthrough
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  if(N===SZ){ // exact: cube file order is R-fastest, identical to li(r,g,b)
+    let n=0;for(let b=0;b<SZ;b++)for(let g=0;g<SZ;g++)for(let r=0;r<SZ;r++){const i=li(r,g,b);lut[i]=data[n++];lut[i+1]=data[n++];lut[i+2]=data[n++]}
+    return lut;
+  }
+  // other size: pack into an N³ source (R-fastest) then resample to 33³
+  const src=new Float32Array(N*N*N*3);
+  let n=0;for(let b=0;b<N;b++)for(let g=0;g<N;g++)for(let r=0;r<N;r++){const i=((r*N+g)*N+b)*3;src[i]=data[n++];src[i+1]=data[n++];src[i+2]=data[n++]}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[or,og,ob]=sampleLUTn(src,N,r/32,g/32,b/32),i=li(r,g,b);lut[i]=or;lut[i+1]=og;lut[i+2]=ob}
+  return lut;
+}
+function identLUT(){const l=new Float32Array(SZ*SZ*SZ*3);for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const i=li(r,g,b);l[i]=r/32;l[i+1]=g/32;l[i+2]=b/32}return l}
+function applyLUTtoPx(px,lut){
+  const o=new Uint8ClampedArray(px.length);
+  for(let i=0;i<px.length;i+=4){const[r2,g2,b2]=sampleLUT(lut,px[i]/255,px[i+1]/255,px[i+2]/255);o[i]=r2*255+.5|0;o[i+1]=g2*255+.5|0;o[i+2]=b2*255+.5|0;o[i+3]=px[i+3]}
+  return o;
+}
+
+// ═══════════════════════════
+// XMP PARSER
+// ═══════════════════════════
+function parseXMP(txt){
+  const g=(a,d=0)=>{const m=txt.match(new RegExp(`crs:${a}\\s*=\\s*"([^"]+)"`));return m?parseFloat(m[1]):d};
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],hue={},sat={},lum_={};
+  C.forEach(c=>{hue[c]=g(`HueAdjustment${c}`);sat[c]=g(`SaturationAdjustment${c}`);lum_[c]=g(`LuminanceAdjustment${c}`)});
+  const cg={shadow:{h:g('ColorGradeShadowHue'),s:g('ColorGradeShadowSat'),l:g('ColorGradeShadowLum')},mid:{h:g('ColorGradeMidtoneHue'),s:g('ColorGradeMidtoneSat'),l:g('ColorGradeMidtoneLum')},high:{h:g('ColorGradeHighlightHue'),s:g('ColorGradeHighlightSat'),l:g('ColorGradeHighlightLum')}};
+  return{exposure:g('Exposure2012'),contrast:g('Contrast2012'),highlights:g('Highlights2012'),shadows:g('Shadows2012'),whites:g('Whites2012'),blacks:g('Blacks2012'),vibrance:g('Vibrance'),saturation:g('Saturation'),hue,sat,lum:lum_,cg};
+}
+
+// ═══════════════════════════
+// IMG LOADING
+// ═══════════════════════════
+// Decode via <img> + object URL. Every modern browser auto-applies EXIF orientation when
+// decoding an <img> (CSS image-orientation:from-image is the default), and WebGL honors
+// UNPACK_FLIP_Y_WEBGL for <img> sources. A createImageBitmap version was tried and REVERTED:
+// browsers IGNORE UNPACK_FLIP_Y for ImageBitmap uploads (and Safari ignores
+// imageOrientation:'from-image'), so both the preview and the export came out rotated/flipped.
+// Object URL instead of FileReader dataURL avoids the ~33% base64 memory overhead on big photos.
+// HEIC/HEIF is decoded by the ENGINE, not by this app, and the engines disagree: WKWebView (the
+// desktop shell and iOS) hands it to ImageIO and it just works, while Chromium — i.e. the Pages
+// web build — cannot decode it at all and fails with a bare "could not be decoded".
+//
+// ⚠️ Verified rather than assumed, because a bare decode error is indistinguishable from a
+// corrupt file and would send someone hunting for a bad photo: Chromium's createImageBitmap AND
+// <img> both reject a real iPhone HEIC (test/probe_heic.mjs), and macOS ImageIO decodes the same
+// files fine. So the message has to name the FORMAT and the surface, not just say "failed".
+const HEIC_RE=/\.(heic|heif)$/i;
+function loadImg(file){return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file);const i=new Image();
+  i.onload=()=>{URL.revokeObjectURL(url);res(i)};
+  i.onerror=()=>{
+    URL.revokeObjectURL(url);
+    if(HEIC_RE.test(file.name||'')||/heic|heif/i.test(file.type||'')){
+      rej(new Error('HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and '
+        +'the iPhone app both open it — or convert to JPEG first.'));
+    }else rej(new Error('could not be decoded (unsupported or damaged image)'));
+  };
+  i.src=url;
+})}
+// A bare "could not be decoded" is indistinguishable from a corrupt file and sends people
+// hunting for a bad photo — same reasoning as loadImg's HEIC branch above, extended to every
+// format only the desktop app's Rust decoders (still_decode.rs, RUST_ONLY_RE) or LibRaw's
+// missing ARRIRAW support can't reach from a browser. Name the format AND the surface that opens
+// it, never just "unsupported".
+function unsupportedFormatMessage(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  if(RUST_ONLY_RE.test(name))
+    return `${name}: .${ext.toUpperCase()} opens in the CHRO-MA-SMITH desktop app — no browser can decode it.`;
+  if(!window.__TAURI__&&ext==='ari')
+    return `${name}: ARRIRAW (.ARI) opens in the CHRO-MA-SMITH desktop app — the web build's RAW decoder (LibRaw) doesn't support it.`;
+  if(HEIC_RE.test(name))
+    return `${name}: HEIC/HEIF is not supported by this browser. The CHRO-MA-SMITH desktop app and the iPhone app both open it — or convert to JPEG first.`;
+  return `${name}: not a photo or video format CHRO-MA-SMITH can open.`;
+}
+function getPx(img,mx=1800){const sc=Math.min(1,mx/img.width),w=img.width*sc|0,h=img.height*sc|0;const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return{px:c.getContext('2d').getImageData(0,0,w,h).data,w,h}}
+function resizePx(img,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return c.getContext('2d').getImageData(0,0,w,h).data}
+
+// ═══════════════════════════
+// EMPIRICAL MATCH
+// ═══════════════════════════
+async function buildCorrLUT(srcPx,dstPx,w,h,pfId,p0=10,p1=75){
+  const N=w*h,acc=new Float64Array(SZ*SZ*SZ*3),cnt=new Int32Array(SZ*SZ*SZ);
+  for(let i=0;i<N;i++){const p=i*4,sr=Math.min(srcPx[p]/255*32+.5|0,32),sg=Math.min(srcPx[p+1]/255*32+.5|0,32),sb=Math.min(srcPx[p+2]/255*32+.5|0,32);const idx=sr*S2+sg*SZ+sb;acc[idx*3]+=dstPx[p]/255;acc[idx*3+1]+=dstPx[p+1]/255;acc[idx*3+2]+=dstPx[p+2]/255;cnt[idx]++}
+  const lut=new Float32Array(SZ*SZ*SZ*3),pop=new Uint8Array(SZ*SZ*SZ);let pc=0;
+  for(let i=0;i<SZ*SZ*SZ;i++){if(cnt[i]>0){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i];pop[i]=1;pc++}}
+  log(`Populated ${pc}/${SZ*SZ*SZ} cells`);setP(pfId,(p0+p1)/2);await yd();
+  await propFill(lut,pop,pfId,(p0+p1)/2,p1);
+  for(let i=0;i<SZ*SZ*SZ;i++){if(pop[i]===1){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i]}}
+  return lut;
+}
+async function propFill(lut,pop,pfId,p0,p1){
+  const f=new Uint8Array(pop);let ch=true,it=0;
+  while(ch&&it<SZ*2){ch=false;it++;const tf=[];
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(f[idx])continue;let sr=0,sg=0,sb=0,c=0;
+      for(const[dr,dg,db] of[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]]){const nr=r+dr,ng=g+dg,nb=b+db;if(nr<0||nr>=SZ||ng<0||ng>=SZ||nb<0||nb>=SZ)continue;const ni=nr*S2+ng*SZ+nb;if(f[ni]){sr+=lut[ni*3];sg+=lut[ni*3+1];sb+=lut[ni*3+2];c++}}
+      if(c>0){tf.push(idx,sr/c,sg/c,sb/c);ch=true}}
+    for(let i=0;i<tf.length;i+=4){const idx=tf[i];lut[idx*3]=tf[i+1];lut[idx*3+1]=tf[i+2];lut[idx*3+2]=tf[i+3];f[idx]=1}
+    if(it%4===0){setP(pfId,p0+(p1-p0)*(it/(SZ*2)));await yd()}}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(!f[idx]){lut[idx*3]=r/32;lut[idx*3+1]=g/32;lut[idx*3+2]=b/32}}
+}
+async function composeLUTs(corr,base,pfId,p0=78,p1=100){
+  const fin=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[br,bg,bb]=sampleLUT(base,r/32,g/32,b/32),[cr,cg,cb]=sampleLUT(corr,br,bg,bb),i=li(r,g,b);fin[i]=Math.max(0,Math.min(1,cr));fin[i+1]=Math.max(0,Math.min(1,cg));fin[i+2]=Math.max(0,Math.min(1,cb))}
+  if(r%8===7){setP(pfId,p0+(p1-p0)*(r/32));await yd()}}
+  setP(pfId,p1);return fin;
+}
+
+// ═══════════════════════════
+// CHANGE ANALYSIS
+// ═══════════════════════════
+function analyzeChanges(oldLUT,newLUT){
+  const B=[];
+  const npts=[[.1,.1,.1],[.25,.25,.25],[.5,.5,.5],[.75,.75,.75]];
+  let dl=0;npts.forEach(([r,g,b])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);dl+=lum(nr,ng,nb)-lum(or,og,ob)});dl=dl/npts.length*255;
+  if(Math.abs(dl)>1.5)B.push(`Overall brightness ${dl>0?'increased':'decreased'} by ${Math.abs(dl).toFixed(0)} levels`);
+  const[or0,og0,ob0]=sampleLUT(oldLUT,0,0,0),[nr0,ng0,nb0]=sampleLUT(newLUT,0,0,0);const bl=(lum(nr0,ng0,nb0)-lum(or0,og0,ob0))*255;
+  if(Math.abs(bl)>2)B.push(`Black point ${bl>0?'lifted — shadows more faded':'deepened'} by ${Math.abs(bl).toFixed(0)} levels`);
+  const[or1,og1,ob1]=sampleLUT(oldLUT,1,1,1),[nr1,ng1,nb1]=sampleLUT(newLUT,1,1,1);const hl=(lum(nr1,ng1,nb1)-lum(or1,og1,ob1))*255;
+  if(Math.abs(hl)>2)B.push(`Highlights ${hl<0?'pulled down':'boosted'} by ${Math.abs(hl).toFixed(0)} levels`);
+  [[.15,.15,.15,'Shadows'],[.5,.5,.5,'Midtones']].forEach(([r,g,b,nm])=>{const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);const sw=((nr-nb)-(or-ob))*255;if(Math.abs(sw)>2)B.push(`${nm} ${sw>0?'warmed':'cooled'} by ${Math.abs(sw).toFixed(0)} levels`)});
+  // Per-color HSL (matching LR's 8 HSL band names)
+  [['Red',1,.30,.25],['Orange',1,.55,.20],['Yellow',.90,.90,.15],['Green',.20,.80,.20],
+   ['Aqua',.10,.75,.75],['Blue',.15,.35,.85],['Purple',.55,.20,.80],['Magenta',.85,.20,.85]
+  ].forEach(([nm,r,g,b])=>{
+    const[or,og,ob]=sampleLUT(oldLUT,r,g,b),[nr,ng,nb]=sampleLUT(newLUT,r,g,b);
+    const[oh,os,ov]=r2hsv(or,og,ob),[nh,ns,nv]=r2hsv(nr,ng,nb);
+    let dh=nh-oh;if(dh>.5)dh-=1;if(dh<-.5)dh+=1;
+    const dh_=Math.round(dh*360),ds_=Math.round((ns-os)*100),dl_=Math.round((lum(nr,ng,nb)-lum(or,og,ob))*100);
+    const p=[];
+    if(Math.abs(dh_)>=3)p.push(`H ${dh_>0?'+':''}${dh_}°`);
+    if(Math.abs(ds_)>=3)p.push(`S ${ds_>0?'+':''}${ds_}%`);
+    if(Math.abs(dl_)>=2)p.push(`L ${dl_>0?'+':''}${dl_}`);
+    if(p.length)B.push(`${nm}: ${p.join(' · ')}`);
+  });
+  return B.length>0?B:['Minimal changes across all test points'];
+}
+
+// ═══════════════════════════
+// XMP DERIVATION
+// ═══════════════════════════
+// Weighted-least-squares solve for small NxN systems (Gauss-Jordan, partial pivot,
+// multiple RHS at once). Needed because the HSL hue-bands / CG luminance-zones are
+// OVERLAPPING basis functions — naive per-band weighted averages are biased
+// estimators when bands overlap (cross-talk), and that bias gets amplified ~10-20x
+// by the small Luminance scale LS[k]. A proper regression removes the cross-talk.
+function solveLinSys(A,bs){
+  const n=A.length,k=bs.length;
+  const M=A.map((row,i)=>row.concat(bs.map(b=>b[i])));
+  for(let col=0;col<n;col++){
+    let piv=col;for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[piv][col]))piv=r;
+    if(piv!==col){const t=M[col];M[col]=M[piv];M[piv]=t}
+    const d=M[col][col]||1e-12;
+    for(let c=col;c<n+k;c++)M[col][c]/=d;
+    for(let r=0;r<n;r++){if(r===col)continue;const f=M[r][col];if(f===0)continue;for(let c=col;c<n+k;c++)M[r][c]-=f*M[col][c]}
+  }
+  const sols=[];for(let j=0;j<k;j++){const v=new Array(n);for(let i=0;i<n;i++)v[i]=M[i][n+j];sols.push(v)}
+  return sols;
+}
+async function deriveXMP(srcPx,dstPx,w,h,name,pfId){
+  const N=w*h,clm=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // ── A. LIGHT: single luminance tone curve (lum(src) -> lum(achieved)) ──
+  const NB=18,step=255/NB,acc=new Float64Array(NB),cnt=new Int32Array(NB);
+  for(let i=0;i<N;i++){const p=i*4;const sl=lum(srcPx[p],srcPx[p+1],srcPx[p+2]),dl=lum(dstPx[p],dstPx[p+1],dstPx[p+2]),bin=Math.min(NB-1,sl/step|0);acc[bin]+=dl;cnt[bin]++}
+  const xs=[],ys=[];for(let i=0;i<NB;i++){xs.push(Math.round(i*step+step/2));ys.push(cnt[i]>8?acc[i]/cnt[i]:xs[xs.length-1])}
+  for(let i=1;i<ys.length;i++)if(ys[i]<ys[i-1])ys[i]=ys[i-1];
+  const sm=ys.map((y,i)=>(ys[Math.max(0,i-1)]+2*y+ys[Math.min(NB-1,i+1)])/4);
+  const lc=[];for(let i=0;i<13;i++){const si=Math.min(NB-1,Math.round(i*(NB-1)/12));lc.push([Math.min(255,Math.round(xs[si])),Math.max(0,Math.min(255,Math.round(sm[si])))])}
+  lc[0][0]=0;lc[12][0]=255;for(let i=1;i<lc.length;i++)if(lc[i][0]<=lc[i-1][0])lc[i][0]=lc[i-1][0]+1;
+  const mi=lc[6][0],mo=lc[6][1],expE=Math.round((Math.log2(mo/Math.max(mi,1)))*4)/4;
+  const hiE=Math.round((lc[12][1]-lc[12][0])/255*-80),shE=Math.round((lc[1][1]-lc[1][0])/255*80);
+  setP(pfId,90);await yd();
+  // ── Precompute graded(src): replay the SAME tone-only stage (exposure/shadows/
+  // highlights, the numbers just derived above) that the emitted XMP's sliders will
+  // apply — and that parseXMP->applyGrade actually feeds into HSL/Color-Grading.
+  // Measuring deltas against raw src (instead of this) would misattribute the global
+  // tonal shift as a per-band/per-zone color or luminance effect — exactly the bug
+  // that produced a uniform positive bias across every fitted Luminance value.
+  const toneS={exposure:expE,contrast:0,shadows:clm(shE,-100,100),highlights:clm(hiE,-100,100),whites:0,blacks:0};
+  const gR=new Float32Array(N),gG=new Float32Array(N),gB=new Float32Array(N),gLv=new Float32Array(N);
+  for(let i=0;i<N;i++){const p=i*4,[tr,tg,tb]=applyTone(srcPx[p]/255,srcPx[p+1]/255,srcPx[p+2]/255,toneS);gR[i]=tr;gG[i]=tg;gB[i]=tb;gLv[i]=lum(tr,tg,tb)}
+  // ── B. NEUTRAL CAST: Color Grading 3-way — closed-form inverse of the equiluminant
+  // cosine-triad tint (see cgTint). The forward model is LINEAR in the per-zone RGB
+  // delta Dz=(Dr,Dg,Db): achieved = graded + Σ_z w_z(lv0)·Dz. Solve that 3x3 weighted
+  // least-squares system directly (3 RHS = ΔR,ΔG,ΔB; same normal-equations machinery
+  // as before removes cross-talk between overlapping zones), then decompose Dz EXACTLY
+  // — no fitting needed for the decomposition itself:
+  //   • l = mean(Dr,Dg,Db): the cosine triad is zero-mean by construction, so the
+  //     explicit `lo` term is the ONLY thing that can move the mean — no chroma/lum
+  //     coupling, unlike the old hsv2r tint whose mean drifted with hue.
+  //   • (h,s) from the now-zero-mean chroma vector (Dz − l·[1,1,1]) by projecting onto
+  //     the cosine basis: a = m·cos θ, b = m·cos(θ−120°) ⇒ closed-form θ, m via the
+  //     standard two-component projection (atan2/hypot), since cos(θ−120°) expands to
+  //     −½cos θ + (√3/2)sin θ.
+  const ZN=CG_ZONES.length,SQ3=Math.sqrt(3);
+  const Acg=Array.from({length:ZN},()=>new Array(ZN).fill(0));
+  const bR=new Array(ZN).fill(0),bG=new Array(ZN).fill(0),bB=new Array(ZN).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i];
+    if(sat(r,g,b)>=.08)continue;
+    const lv0=gLv[i],wz=CG_ZONES.map(z=>gm(lv0,z[1],z[2]));
+    const dR=dstPx[p]/255-r,dG=dstPx[p+1]/255-g,dB=dstPx[p+2]/255-b;
+    for(let zi=0;zi<ZN;zi++){for(let zj=0;zj<ZN;zj++)Acg[zi][zj]+=wz[zi]*wz[zj];
+      bR[zi]+=wz[zi]*dR;bG[zi]+=wz[zi]*dG;bB[zi]+=wz[zi]*dB}}
+  for(let zi=0;zi<ZN;zi++)Acg[zi][zi]+=1e-6;
+  const[Dr,Dg,Db]=solveLinSys(Acg,[bR,bG,bB]);
+  const cg={};
+  for(let zi=0;zi<ZN;zi++){const zn=CG_ZONES[zi][0],mean=(Dr[zi]+Dg[zi]+Db[zi])/3;
+    const a=Dr[zi]-mean,b=Dg[zi]-mean;                       // chroma comps; c=−(a+b) exactly
+    const sinPart=(2*b+a)/SQ3,m=Math.sqrt(a*a+sinPart*sinPart);
+    const hueDeg=(Math.atan2(sinPart,a)*180/Math.PI%360+360)%360;
+    cg[zn]={h:Math.round(hueDeg)%360,s:clm(Math.round(m/(CG_K*.5)*100),0,100),l:clm(Math.round(mean/.5*100),-100,100)};}
+  // ── C/D. RESIDUAL HSL: subtract castEffect (mirrors applyCG with the just-fit cg
+  // and graded-luminance zone weights), then weighted least-squares over 8 bands.
+  // Same cross-talk issue as CG (band kernels overlap by design — see applyHSL), and
+  // here too a biased per-band average would get amplified by the small LS[k] divisor.
+  const C=['Red','Orange','Yellow','Green','Aqua','Blue','Purple','Magenta'],CE=[0,30/360,60/360,120/360,180/360,220/360,280/360,320/360],LS=[.05,.05,.09,.11,.12,.12,.11,.09];
+  const NHB=C.length;
+  const Ahsl=Array.from({length:NHB},()=>new Array(NHB).fill(0));
+  const bH=new Array(NHB).fill(0),bS=new Array(NHB).fill(0),bV=new Array(NHB).fill(0);
+  for(let i=0;i<N;i++){const p=i*4,r=gR[i],g=gG[i],b=gB[i],ssat=sat(r,g,b);
+    if(ssat<.08)continue;
+    const lv0=gLv[i];let R=dstPx[p]/255,G=dstPx[p+1]/255,B=dstPx[p+2]/255;
+    for(const[zn,zc,zw] of CG_ZONES){const wz=gm(lv0,zc,zw),zz=cg[zn];
+      if(zz.s){const[tr,tg,tb]=cgTint(zz.h,zz.s);R-=wz*tr;G-=wz*tg;B-=wz*tb}
+      if(zz.l){const lo=wz*zz.l/100*.5;R-=lo;G-=lo;B-=lo}}
+    R=clm(R,0,1);G=clm(G,0,1);B=clm(B,0,1);
+    const[sh,ssv,sv]=r2hsv(r,g,b),[dh2,dsv,dvv]=r2hsv(R,G,B);
+    let dHue=dh2-sh;if(dHue>.5)dHue-=1;if(dHue<-.5)dHue+=1;const dSat=dsv-ssv,dVal=dvv-sv;
+    const wk=new Array(NHB);
+    for(let k=0;k<NHB;k++){let df=Math.abs(sh-CE[k]);if(df>.5)df=1-df;wk[k]=Math.max(0,1-Math.pow(df/.075,2))*Math.min(1,ssv*3)}
+    for(let ki=0;ki<NHB;ki++){for(let kj=0;kj<NHB;kj++)Ahsl[ki][kj]+=wk[ki]*wk[kj];
+      bH[ki]+=wk[ki]*dHue;bS[ki]+=wk[ki]*dSat;bV[ki]+=wk[ki]*dVal}}
+  for(let ki=0;ki<NHB;ki++)Ahsl[ki][ki]+=1e-6;
+  const[betaH,betaS,betaV]=solveLinSys(Ahsl,[bH,bS,bV]);
+  const hA=[],sA=[],lA=[];
+  for(let k=0;k<NHB;k++){hA.push(clm(Math.round(betaH[k]*360),-100,100));sA.push(clm(Math.round(betaS[k]/.55*100),-100,100));lA.push(clm(Math.round(betaV[k]/LS[k]*100),-100,100))}
+  setP(pfId,95);await yd();
+  // ── E. EMIT ──
+  const uid=Array.from({length:32},()=>'0123456789ABCDEF'[Math.random()*16|0]).join('');
+  const seq=pts=>pts.map(([x,y])=>`\n     <rdf:li>${x}, ${y}</rdf:li>`).join('');
+  const hslStr=C.map((c,i)=>`crs:HueAdjustment${c}="${hA[i]}" crs:SaturationAdjustment${c}="${sA[i]}" crs:LuminanceAdjustment${c}="${lA[i]}"`).join('\n    ');
+  const Z=cg.shadow,M=cg.mid,Hi=cg.high;
+  const cgStr=`crs:ColorGradeShadowHue="${Z.h}" crs:ColorGradeShadowSat="${Z.s}" crs:ColorGradeShadowLum="${Z.l}"\n    crs:ColorGradeMidtoneHue="${M.h}" crs:ColorGradeMidtoneSat="${M.s}" crs:ColorGradeMidtoneLum="${M.l}"\n    crs:ColorGradeHighlightHue="${Hi.h}" crs:ColorGradeHighlightSat="${Hi.s}" crs:ColorGradeHighlightLum="${Hi.l}"\n    crs:ColorGradeGlobalHue="0" crs:ColorGradeGlobalSat="0" crs:ColorGradeGlobalLum="0" crs:ColorGradeBlending="50"`;
+  const xmp=`<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    crs:PresetType="Normal" crs:UUID="${uid}" crs:SupportsAmount2="True" crs:SupportsColor="True"
+    crs:SupportsHighDynamicRange="True" crs:SupportsNormalDynamicRange="True"
+    crs:SupportsSceneReferred="True" crs:SupportsOutputReferred="True"
+    crs:Version="16.0" crs:ProcessVersion="11.0" crs:WhiteBalance="As Shot"
+    crs:Exposure2012="${expE>0?'+':''}${expE}"
+    crs:Contrast2012="0" crs:Highlights2012="${hiE>0?'+':''}${Math.min(100,Math.max(-100,hiE))}"
+    crs:Shadows2012="${shE>0?'+':''}${Math.min(100,Math.max(-100,shE))}"
+    crs:Whites2012="0" crs:Blacks2012="0" crs:Vibrance="0" crs:Saturation="0"
+    ${hslStr}
+    ${cgStr}
+    crs:ToneCurveName2012="Custom" crs:HasSettings="True">
+   <crs:Name><rdf:Alt><rdf:li xml:lang="x-default">${name}</rdf:li></rdf:Alt></crs:Name>
+   <crs:Group><rdf:Alt><rdf:li xml:lang="x-default">User Presets</rdf:li></rdf:Alt></crs:Group>
+   <crs:ToneCurvePV2012><rdf:Seq>${seq(lc)}\n    </rdf:Seq></crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012Blue>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>`;
+  setP(pfId,100);return xmp;
+}
+
+// ═══════════════════════════
+// COLOUR COPY (histogram match)
+// ═══════════════════════════
+function histMatch(srcPx,refPx,sN,rN){
+  const sH=[[],[],[]], rH=[[],[],[]], SZ3=SZ*SZ*SZ;
+  for(let c=0;c<3;c++){sH[c]=new Float64Array(256);rH[c]=new Float64Array(256)}
+  for(let i=0;i<sN;i++){const p=i*4;for(let c=0;c<3;c++)sH[c][srcPx[p+c]]++}
+  for(let i=0;i<rN;i++){const p=i*4;for(let c=0;c<3;c++)rH[c][refPx[p+c]]++}
+  const maps=sH.map((sh,ci)=>{
+    const rh=rH[ci];
+    const scdf=new Float64Array(256),rcdf=new Float64Array(256);
+    let ss=0,rs=0;for(let i=0;i<256;i++){ss+=sh[i];scdf[i]=ss/sN;rs+=rh[i];rcdf[i]=rs/rN}
+    const map=new Uint8Array(256);
+    for(let s=0;s<256;s++){let best=0,bd=2;for(let r=0;r<256;r++){const d=Math.abs(scdf[s]-rcdf[r]);if(d<bd){bd=d;best=r}}map[s]=best}
+    return map;
+  });
+  const lut=new Float32Array(SZ3*3);
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b);
+    lut[i]=maps[0][Math.min(255,Math.round(r/32*255))]/255;
+    lut[i+1]=maps[1][Math.min(255,Math.round(g/32*255))]/255;
+    lut[i+2]=maps[2][Math.min(255,Math.round(b/32*255))]/255;
+  }
+  return lut;
+}
+// CHR-220: blend the matched LUT back toward identity. Weight per lattice point =
+// strength × (shadow/mid/high amount, smoothly by the INPUT colour's luma) × (1 − skin weight).
+// Skin = warm hue, moderate saturation, mid lightness (the usual YCbCr-style box, softened).
+function cpAdjustLUT(lut,o){
+  if(o.str>=1&&o.sh>=1&&o.md>=1&&o.hl>=1&&!o.skin)return lut;
+  const out=new Float32Array(lut.length),ss=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+    const i=li(r,g,b),R=r/(SZ-1),G=g/(SZ-1),B=b/(SZ-1),Y=0.2126*R+0.7152*G+0.0722*B;
+    const wS=1-ss(0.15,0.45,Y),wH=ss(0.55,0.85,Y),wM=Math.max(0,1-wS-wH);
+    let w=o.str*(wS*o.sh+wM*o.md+wH*o.hl);
+    if(o.skin){const mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx>0?(mx-mn)/mx:0;
+      let hue=0;if(mx>mn){if(mx===R)hue=60*(((G-B)/(mx-mn))%6);else if(mx===G)hue=60*((B-R)/(mx-mn)+2);else hue=60*((R-G)/(mx-mn)+4);}if(hue<0)hue+=360;
+      const hw=hue<=50?1-ss(30,50,hue):(hue>=345?1:0);
+      const sk=hw*ss(0.08,0.2,sat)*(1-ss(0.6,0.8,sat))*ss(0.15,0.3,Y)*(1-ss(0.85,0.97,Y));
+      w*=1-0.9*sk;}
+    for(let c=0;c<3;c++){const id=c===0?R:c===1?G:B;out[i+c]=id+(lut[i+c]-id)*w;}
+  }
+  return out;
+}
+function cpOpts(){const v=id=>{const e=document.getElementById(id);return e?(+e.value)/100:1;};
+  return{str:v('cp-str'),sh:v('cp-sh'),md:v('cp-md'),hl:v('cp-hl'),skin:!!(document.getElementById('cp-skin')||{}).checked};}
+// CHR-223: small live preview of the match. The base histogram LUT is cached per photo pair;
+// slider moves only re-run cpAdjustLUT + the 640px apply, which is fast enough to track a drag.
+let _cpPrev=null,_cpSplit=0.5;
+// CHR-222 first slice: collect stable colour correspondences for the current image pair. The
+// automatic histogram LUT remains the exact default path; the paired control points are explicit
+// session data until a validated sparse-point LUT interpolation is selected for a later slice.
+let _cpPoints=[],_cpPending=null,_cpPairSrcFile=null,_cpPairRefFile=null;
+function cpPairPick(which,e){
+  if(!_cpPrev||!_cpPrev.s||!_cpPrev.r)return;
+  const cv=which==='source'?document.getElementById('cp-prev-before'):document.getElementById('cp-prev-ref');
+  const frame=which==='source'?_cpPrev.s:_cpPrev.r,rect=cv.getBoundingClientRect();
+  if(!rect.width||!rect.height)return;
+  const x=Math.max(0,Math.min(frame.w-1,Math.floor((e.clientX-rect.left)*frame.w/rect.width)));
+  const y=Math.max(0,Math.min(frame.h-1,Math.floor((e.clientY-rect.top)*frame.h/rect.height)));
+  const rgb=cpSampleAverage(frame,x,y),sample={x:(x+.5)/frame.w,y:(y+.5)/frame.h,rgb};
+  if(which==='source'){
+    _cpPending=sample;
+    document.getElementById('cp-pairs-hint').textContent='Source pinned. Now click the matching colour in the reference.';
+  }else if(!_cpPending){
+    document.getElementById('cp-pairs-hint').textContent='Choose a colour from the source photo first.';
+    return;
+  }else{
+    _cpPoints.push({source:_cpPending,reference:sample});_cpPending=null;
+    document.getElementById('cp-pairs-hint').textContent='Pair saved. Click another source colour to add one.';
+  }
+  cpPairsRender();
+  if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}
+}
+function cpSampleAverage(frame,x,y){
+  const {px,w,h}=frame;let r=0,g=0,b=0,n=0;
+  for(let yy=Math.max(0,y-2);yy<=Math.min(h-1,y+2);yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(w-1,x+2);xx++){
+    const i=(yy*w+xx)*4;r+=px[i];g+=px[i+1];b+=px[i+2];n++;
+  }
+  return[Math.round(r/n),Math.round(g/n),Math.round(b/n)];
+}
+function cpPairsRender(){
+  const box=document.getElementById('cp-pairs'),list=document.getElementById('cp-pairs-list');if(!box||!list)return;
+  box.style.display=(_cpPoints.length||_cpPending)?'block':'none';list.innerHTML='';
+  _cpPoints.forEach((p,i)=>{
+    const item=document.createElement('span');item.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:11px';
+    const swatch=(rgb)=>{const s=document.createElement('i');s.style.cssText=`width:15px;height:15px;border-radius:50%;background:rgb(${rgb.join(',')});border:1px solid rgba(128,128,128,.5)`;s.title=`RGB ${rgb.join(', ')}`;return s;};
+    item.append(`Pair ${i+1}`,swatch(p.source.rgb),document.createTextNode('→'),swatch(p.reference.rgb));
+    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}};item.appendChild(rm);list.appendChild(item);
+  });
+}
+// CHR-222: sparse pairs -> smooth LUT correction. The automatic LUT stays the default; with pairs
+// we add a Gaussian-weighted residual field (sigma 0.16 in RGB, ridge lambda so it fades to zero away
+// from the pins), iterated 3x so each pinned source colour lands close to its reference colour.
+function cpLutSample(lut,r,g,b){
+  const n=SZ-1,f=v=>Math.max(0,Math.min(n,v*n)),x=f(r),y=f(g),z=f(b),x0=Math.min(n-1,x|0),y0=Math.min(n-1,y|0),z0=Math.min(n-1,z|0),fx=x-x0,fy=y-y0,fz=z-z0,o=[0,0,0];
+  for(let dx=0;dx<2;dx++)for(let dy=0;dy<2;dy++)for(let dz=0;dz<2;dz++){
+    const w=(dx?fx:1-fx)*(dy?fy:1-fy)*(dz?fz:1-fz),i=li(x0+dx,y0+dy,z0+dz);
+    o[0]+=w*lut[i];o[1]+=w*lut[i+1];o[2]+=w*lut[i+2];}
+  return o;
+}
+function cpPairResidual(lut,pairs){
+  if(!pairs.length)return 0;let t=0;
+  for(const p of pairs){const a=cpLutSample(lut,p.source.rgb[0]/255,p.source.rgb[1]/255,p.source.rgb[2]/255);
+    for(let c=0;c<3;c++)t+=Math.abs(a[c]*255-p.reference.rgb[c]);}
+  return t/(pairs.length*3);
+}
+function cpPairCorrect(base,pairs){
+  if(!pairs||!pairs.length)return base;
+  const sig2=2*0.16*0.16,lam=0.1,S=pairs.map(p=>p.source.rgb.map(v=>v/255)),Rf=pairs.map(p=>p.reference.rgb.map(v=>v/255));
+  let lut=new Float32Array(base);
+  for(let it=0;it<3;it++){
+    const D=pairs.map((p,k)=>{const a=cpLutSample(lut,S[k][0],S[k][1],S[k][2]);return[Rf[k][0]-a[0],Rf[k][1]-a[1],Rf[k][2]-a[2]];});
+    const out=new Float32Array(lut);
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){
+      const i=li(r,g,b),x=r/(SZ-1),y=g/(SZ-1),z=b/(SZ-1);let ws=0,d0=0,d1=0,d2=0;
+      for(let k=0;k<S.length;k++){const dx=x-S[k][0],dy=y-S[k][1],dz=z-S[k][2],w=Math.exp(-(dx*dx+dy*dy+dz*dz)/sig2);ws+=w;d0+=w*D[k][0];d1+=w*D[k][1];d2+=w*D[k][2];}
+      const q=1/(lam+ws);out[i]=Math.max(0,Math.min(1,lut[i]+d0*q));out[i+1]=Math.max(0,Math.min(1,lut[i+1]+d1*q));out[i+2]=Math.max(0,Math.min(1,lut[i+2]+d2*q));
+    }
+    lut=out;
+  }
+  return lut;
+}
+function cpPairWarnings(base,pairs){
+  const w=[];
+  pairs.forEach((p,i)=>{
+    const a=cpLutSample(base,p.source.rgb[0]/255,p.source.rgb[1]/255,p.source.rgb[2]/255);
+    const e=Math.max(...[0,1,2].map(c=>Math.abs(a[c]*255-p.reference.rgb[c])));
+    if(e>110)w.push(`Pair ${i+1} asks for a very large shift (${Math.round(e)}/255) - check it is the same subject.`);
+    for(let j=i+1;j<pairs.length;j++){const q=pairs[j];
+      const ds=Math.max(...[0,1,2].map(c=>Math.abs(p.source.rgb[c]-q.source.rgb[c]))),dr=Math.max(...[0,1,2].map(c=>Math.abs(p.reference.rgb[c]-q.reference.rgb[c])));
+      if(ds<12&&dr>30)w.push(`Pairs ${i+1} and ${j+1} conflict: near-identical source colours map to different references.`);
+      else if(ds<12&&dr<=30)w.push(`Pairs ${i+1} and ${j+1} are near-duplicates.`);}
+  });
+  return w;
+}
+// Recompute the paired LUT + residual readout. Called whenever pairs or the automatic base change.
+function cpPairsApply(){
+  if(!_cpPrev)return;
+  _cpPrev.paired=_cpPoints.length?cpPairCorrect(_cpPrev.base,_cpPoints):null;
+  const el=document.getElementById('cp-pairs-stat');if(!el)return;
+  if(!_cpPoints.length){el.textContent='';return;}
+  const b=cpPairResidual(_cpPrev.base,_cpPoints),a=cpPairResidual(_cpPrev.paired,_cpPoints);
+  _cpPrev.pairStat={before:b,after:a};
+  el.textContent=`Pinned colours: mean error ${b.toFixed(1)} \u2192 ${a.toFixed(1)} (of 255). `+cpPairWarnings(_cpPrev.base,_cpPoints).join(' ');
+}
+function cpPairsClear(){_cpPoints=[];_cpPending=null;cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}const h=document.getElementById('cp-pairs-hint');if(h)h.textContent='Click a colour in your photo, then its match in the reference.';}
+// CHR-221: extra references. Pixels from every reference are pooled with equal weight (strided to
+// the smallest sample) so the histogram target is the average of their tone distributions.
+async function cpRefPool(maxDim,primary){
+  const list=[primary];
+  for(const f of ST.cpRefExtra){try{list.push(getPx(await loadImg(f),maxDim));}catch(e){}}
+  if(list.length===1)return{px:primary.px,w:primary.w,h:primary.h,n:primary.w*primary.h};
+  const n=Math.min(...list.map(o=>o.w*o.h)),px=new Uint8ClampedArray(n*4*list.length);
+  list.forEach((o,k)=>{const N=o.w*o.h,st=N/n;for(let i=0;i<n;i++){const j=Math.floor(i*st)*4;px.set(o.px.subarray(j,j+4),(k*n+i)*4);}});
+  return{px,w:n*list.length,h:1,n:n*list.length};
+}
+function cpRefExtraRender(){
+  const el=document.getElementById('cp-refx-list');if(!el)return;el.innerHTML='';
+  ST.cpRefExtra.forEach((f,i)=>{const c=document.createElement('span');c.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-size:11px';
+    c.append(f.name);const b=document.createElement('button');b.type='button';b.className='btn bgh';b.textContent='\u00d7';b.title='Remove reference '+f.name;b.setAttribute('aria-label','Remove reference '+f.name);b.style.cssText='padding:0 4px;min-width:0';
+    b.onclick=()=>{ST.cpRefExtra.splice(i,1);cpRefExtraRender();chkCP();};c.appendChild(b);el.appendChild(c);});
+}
+function cpRefExtraAdd(files){
+  const imgs=files.filter(f=>f&&(f.type.startsWith('image/')||/\.(jpe?g|png|webp|avif|gif|bmp)$/i.test(f.name)));
+  if(!imgs.length)return;ST.cpRefExtra.push(...imgs);cpRefExtraRender();chkCP();
+}
+async function cpRefFromVideo(file,pct){
+  if(!file)return;
+  try{
+    const url=URL.createObjectURL(file),v=document.createElement('video');v.muted=true;v.preload='auto';v.src=url;
+    await new Promise((res,rej)=>{v.onloadedmetadata=res;v.onerror=()=>rej(new Error('video not readable'));});
+    v.currentTime=Math.max(0,Math.min(1,(isFinite(pct)?pct:50)/100))*(v.duration||0);
+    await new Promise((res,rej)=>{v.onseeked=res;v.onerror=()=>rej(new Error('seek failed'));});
+    const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);URL.revokeObjectURL(url);
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    const f=new File([blob],file.name.replace(/\.[^.]+$/,'')+`_frame${Math.round(pct||50)}.png`,{type:'image/png'});
+    if(!ST.cpRefFile){ST.cpRefFile=f;setDZ('dz-cp-ref','fn-cp-ref',f.name);chkCP();}else cpRefExtraAdd([f]);
+    toast('Video frame added as a reference',true);
+  }catch(e){toast('Could not read a frame: '+e.message,false);}
+}
+// CHR-219: the match as ordinary Tone sliders. CPU model of the lut shader's basicAdjust
+// (exposure/temp/tint in linear light, contrast about mid-grey, saturation about luma), fitted
+// against the reference by minimising the per-channel quantile (1-D Wasserstein) distance.
+function cpSliderModel(px,n,P){
+  const out=new Float32Array(n*3),ex=Math.pow(2,P.exp/20),t=P.temp/100,ti=P.tint/100,cn=1+P.con/200,sa=1+P.sat/100;
+  const s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4),l2s=c=>c<=0.0031308?c*12.92:1.055*Math.pow(Math.max(c,0),1/2.4)-0.055,cl=x=>x<0?0:x>1?1:x;
+  for(let i=0;i<n;i++){
+    let r=s2l(px[i*4]/255)*ex,g=s2l(px[i*4+1]/255)*ex,b=s2l(px[i*4+2]/255)*ex;
+    r*=1+0.22*t;b*=1-0.22*t;g*=1-0.14*ti;r*=1+0.05*ti;b*=1+0.05*ti;
+    r=cl(l2s(r));g=cl(l2s(g));b=cl(l2s(b));
+    r=cl((r-.5)*cn+.5);g=cl((g-.5)*cn+.5);b=cl((b-.5)*cn+.5);
+    const l=0.2126*r+0.7152*g+0.0722*b;
+    out[i*3]=cl(l+(r-l)*sa)*255;out[i*3+1]=cl(l+(g-l)*sa)*255;out[i*3+2]=cl(l+(b-l)*sa)*255;
+  }
+  return out;
+}
+function cpQuantiles(vals,n,ch,Q){
+  const a=new Float32Array(n);for(let i=0;i<n;i++)a[i]=vals[i*3+ch];a.sort();
+  const q=new Float32Array(Q);for(let k=0;k<Q;k++)q[k]=a[Math.min(n-1,Math.floor((k+.5)/Q*n))];return q;
+}
+function cpStatDistance(refQ,vals,n){
+  let d=0;for(let c=0;c<3;c++){const q=cpQuantiles(vals,n,c,refQ[c].length);for(let k=0;k<q.length;k++)d+=Math.abs(q[k]-refQ[c][k]);}
+  return d/(3*refQ[0].length);
+}
+function cpFitSliders(sPx,sN,rPx,rN){
+  const cap=6000,sub=(px,N)=>{const n=Math.min(N,cap),o=new Uint8ClampedArray(n*4),st=N/n;for(let i=0;i<n;i++)o.set(px.subarray(Math.floor(i*st)*4,Math.floor(i*st)*4+4),i*4);return{px:o,n};};
+  const S=sub(sPx,sN),R=sub(rPx,rN),rv=new Float32Array(R.n*3);
+  for(let i=0;i<R.n;i++){rv[i*3]=R.px[i*4];rv[i*3+1]=R.px[i*4+1];rv[i*3+2]=R.px[i*4+2];}
+  const Q=64,refQ=[0,1,2].map(c=>cpQuantiles(rv,R.n,c,Q));
+  const lim={exp:[-60,60],con:[-60,60],temp:[-100,100],tint:[-100,100],sat:[-100,100]};
+  const ev=P=>cpStatDistance(refQ,cpSliderModel(S.px,S.n,P),S.n);
+  let P={exp:0,con:0,temp:0,tint:0,sat:0};const before=ev(P);let best=before;
+  for(let step=32;step>=1;step=step/2){
+    let moved=true,guard=0;
+    while(moved&&guard++<12){moved=false;
+      for(const k of Object.keys(P)){for(const sg of[1,-1]){
+        const v=Math.max(lim[k][0],Math.min(lim[k][1],P[k]+sg*step));if(v===P[k])continue;
+        const T={...P,[k]:v},d=ev(T);if(d<best-1e-4){best=d;P=T;moved=true;}}}}
+  }
+  for(const k of Object.keys(P))P[k]=Math.round(P[k]);
+  return{values:P,before,after:ev(P)};
+}
+async function cpUseSliders(){
+  if(!ST.cpSrcFile||!ST.cpRefFile)return;
+  const box=document.getElementById('cp-fit');
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const s=getPx(sImg,640),pool=await cpRefPool(640,getPx(rImg,640));
+    const fit=cpFitSliders(s.px,s.w*s.h,pool.px,pool.n);
+    // apply to the editor: make sure the matched photo is open, switch Tone on, set only these five
+    if(!fxImages.length&&typeof loadFXImages==='function')await loadFXImages([ST.cpSrcFile]);
+    const tg=document.getElementById('tg-adjust');if(tg&&!tg.classList.contains('on'))toggleFX('adjust');
+    for(const k of['exp','con','temp','tint','sat']){const sl=document.getElementById('sl-adj-'+k);if(sl)sl.value=fit.values[k];}
+    fxUpdate();
+    window._cpLastFit=fit;
+    const v=fit.values,pctDrop=fit.before>0?Math.round((1-fit.after/fit.before)*100):0;
+    box.style.display='block';
+    box.textContent=`Distance to reference (tone/colour, of 255): ${fit.before.toFixed(1)} \u2192 ${fit.after.toFixed(1)} (${pctDrop}% closer). Applied: Exposure ${v.exp}, Contrast ${v.con}, Temp ${v.temp}, Tint ${v.tint}, Saturation ${v.sat}. Edit them in the Tone section.`;
+    if(typeof switchTab==='function')switchTab('fx');
+    toast('Match applied as Tone sliders',true);
+  }catch(e){box.style.display='block';box.textContent='Could not fit sliders: '+e.message;console.error(e);}
+}
+async function cpPreviewBuild(){
+  const box=document.getElementById('cp-prev');if(!box)return;
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const s=getPx(sImg,640),r=getPx(rImg,640),rs=getPx(rImg,320),pool=await cpRefPool(640,r);
+    if(_cpPairSrcFile!==ST.cpSrcFile||_cpPairRefFile!==ST.cpRefFile){_cpPoints=[];_cpPending=null;_cpPairSrcFile=ST.cpSrcFile;_cpPairRefFile=ST.cpRefFile;}
+    _cpPrev={s,r,base:histMatch(s.px,pool.px,pool.n,pool.n)};cpPairsApply();
+    const put=(id,o)=>{const c=document.getElementById(id);c.width=o.w;c.height=o.h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(o.px),o.w,o.h),0,0);};
+    put('cp-prev-before',s);put('cp-prev-ref',rs);
+    box.style.display='flex';cpPreviewUpdate();cpPairsRender();
+    const source=document.getElementById('cp-prev-before'),ref=document.getElementById('cp-prev-ref');
+    if(!source._cpPairPick){source._cpPairPick=true;source.addEventListener('click',e=>cpPairPick('source',e));}
+    if(!ref._cpPairPick){ref._cpPairPick=true;ref.addEventListener('click',e=>cpPairPick('reference',e));}
+    const wrap=document.getElementById('cp-prev-wrap');
+    if(!wrap._wired){wrap._wired=true;const set=e=>{const b=wrap.getBoundingClientRect();_cpSplit=Math.max(0,Math.min(1,(e.clientX-b.left)/b.width));cpPreviewSplit();};
+      wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);set(e);});wrap.addEventListener('pointermove',e=>{if(e.buttons)set(e);});}
+  }catch(e){box.style.display='none';}
+}
+function cpPreviewUpdate(){
+  if(!_cpPrev)return;const{s,base}=_cpPrev;
+  const out=applyLUTtoPx(s.px,cpAdjustLUT(_cpPrev.paired||base,cpOpts()));
+  const c=document.getElementById('cp-prev-after');c.width=s.w;c.height=s.h;c.getContext('2d').putImageData(new ImageData(out,s.w,s.h),0,0);
+  cpPreviewSplit();
+}
+function cpPreviewSplit(){
+  const b=document.getElementById('cp-prev-before'),l=document.getElementById('cp-prev-line');if(!b||!l)return;
+  b.style.clipPath=`inset(0 ${(100-_cpSplit*100).toFixed(1)}% 0 0)`;l.style.left=`calc(${(_cpSplit*100).toFixed(1)}% - 1px)`;
+}
+async function runColourCopy(type){
+  if(!ST.cpSrcFile||!ST.cpRefFile)return;
+  const btnId={lut:'btn-cp',look:'btn-cp-look',batch:'btn-cp-batch',xmp:'btn-cp-xmp'}[type]||'btn-cp-xmp';
+  const btn=document.getElementById(btnId);if(!btn)return;btn.disabled=true;
+  showPB('pb-cp');log('Running color copy…','info');
+  try{
+    const[sImg,rImg]=await Promise.all([loadImg(ST.cpSrcFile),loadImg(ST.cpRefFile)]);
+    const{px:sPx,w:sw,h:sh}=getPx(sImg);const rPool=await cpRefPool(1800,getPx(rImg));const rPx=rPool.px,rw=rPool.w,rh=rPool.h;
+    log('Matching histograms per channel…');setP('pf-cp',30);await yd();
+    const opts=cpOpts();
+    const lut=cpAdjustLUT(cpPairCorrect(histMatch(sPx,rPx,sw*sh,rw*rh),_cpPoints),opts);
+    const adjusted=opts.str<1||opts.sh<1||opts.md<1||opts.hl<1||opts.skin||_cpPoints.length>0||ST.cpRefExtra.length>0;
+    setP('pf-cp',70);
+    const name=document.getElementById('cp-name').value||'colour_copy';
+    const ver=`v${ST.cpVer.toFixed(1)}`;
+    if(type==='look'||type==='batch'){
+      // The batch path stores a reusable local look, then merges only its LUT selector/strength
+      // into each selected Library recipe through the journalled recipe-batch API.
+      const lname=`${name} ${ver}`;
+      await lutLibPut(lname,lutToBytes(lut));await refreshLUTSelect('l:'+lname);
+      if(type==='batch'){
+        if(typeof window.chromasmithApplyColorCopyToSelection!=='function')throw new Error('Library batch apply is unavailable');
+        const targets=ST.cpTargetPaths.slice();if(!targets.length)throw new Error('Choose target photos from the Library first');
+        const result=await window.chromasmithApplyColorCopyToSelection({lookId:'l:'+lname,name:lname,lutMix:100,targetPaths:targets});
+        const applied=result&&Number.isFinite(result.submitted)?result.submitted:targets.length;
+        toast(`"${lname}" applied to ${applied} selected photo${applied===1?'':'s'}`,true);
+        log(`Color Copy batch queued for ${applied} selected photo${applied===1?'':'s'}`,'ok');
+      }else{
+        const sel=document.getElementById('sel-lut');if(sel)sel.value='l:'+lname;
+        await selectLUT('l:'+lname);
+        if(typeof switchTab==='function')switchTab('fx');
+        toast(`"${lname}" added to your looks`,true);
+      }
+    }else if(type==='lut'){
+      dl(writeCube(lut,`${name} ${ver}`),`${name}_${ver}.cube`);
+      log(`Downloaded ${name}_${ver}.cube`,'ok');
+    } else {
+      log('Deriving XMP…');
+      // With strength/range/skin controls in play the target is the source run through the
+      // adjusted LUT; untouched, keep the original reference-image target.
+      const tPx=adjusted?applyLUTtoPx(sPx,lut):resizePx(rImg,sw,sh);
+      const xmp=await deriveXMP(sPx,tPx,sw,sh,`${name} ${ver}`,'pf-cp');
+      dl(xmp,`${name}_${ver}.xmp`,'text/xml');
+      log(`Downloaded ${name}_${ver}.xmp`,'ok');
+    }
+    const summary=analyzeChanges(identLUT(),lut);
+    document.getElementById('cp-sum').style.display='block';
+    document.getElementById('cp-sum-list').innerHTML=summary.map(s=>`<li>${s}</li>`).join('');
+    ST.cpVer+=.1;document.getElementById('cp-ver').textContent=`v${ST.cpVer.toFixed(1)}`;
+    setP('pf-cp',100);
+  }catch(e){log('Error: '+e.message,'err');console.error(e)}
+  if(type==='batch')cpUpdateBatchTargets();else btn.disabled=false;setTimeout(()=>hidePB('pb-cp'),800);
+}
+
+// ═══════════════════════════
+// BLIND LUT
+// ═══════════════════════════
+async function genBlindLUT(settings,pfId){
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[or,og,ob]=applyGrade(r/32,g/32,b/32,settings),i=li(r,g,b);lut[i]=or;lut[i+1]=og;lut[i+2]=ob}
+  if(r%5===4){setP(pfId,r/32*100);await yd()}}
+  setP(pfId,100);return lut;
+}
+
+// ═══════════════════════════
+// WEBGL FX RENDERER
+// ═══════════════════════════
+// Lightroom-style GPU preference. WebGL is already the editor's display, image-processing,
+// and still-export pipeline, so these are deliberately ONE renderer preference rather than
+// three misleading independent toggles. `powerPreference` is a user-agent hint (not a promise
+// to select a particular adapter); Windows Graphics settings remains the authoritative place
+// to bind the app to a discrete GPU.
+const GPU_PREF_KEY='chromasmithGpuPreference';
+function gpuPreference(){
+  try{
+    const v=localStorage.getItem(GPU_PREF_KEY);
+    return v==='high-performance'||v==='low-power'?v:'default';
+  }catch(e){return'default';}
+}
+function gpuContextOptions(){
+  return{preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false,powerPreference:gpuPreference()};
+}
+class FXR{
+  constructor(canvas){
+    this.cv=canvas||document.getElementById('fx-canvas')||document.createElement('canvas');
+    const options=gpuContextOptions();
+    this.gl=this.cv.getContext('webgl2',options)||this.cv.getContext('experimental-webgl2',options);
+    this.ok=!!this.gl;if(!this.ok)return;
+    // A browser may later discard a high-performance context to conserve power. Persist Auto
+    // for the next renderer creation instead of repeatedly asking for a context that just lost.
+    this.cv.addEventListener('webglcontextlost',()=>{
+      if(gpuPreference()==='high-performance'){
+        try{localStorage.setItem(GPU_PREF_KEY,'default');}catch(e){}
+        if(typeof log==='function')log('GPU context was lost; reverting the next launch to Auto.','warn');
+      }
+    });
+    this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
+    // CPU shadows let a still export copy the exact active grade textures into its own FXR.
+    // These are private immutable snapshots, separate from UI state that can change mid-export.
+    this._lutSnapshot=null;this._printLutSnapshot=null;this._hslSnapshot=null;
+    this._curveSnapshot=null;this._depthSnapshot=null;this._stockShoulderSnapshot=null;
+    this._setupQuad();this._compileAll();
+  }
+  _setupQuad(){const gl=this.gl,b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);this.qb=b}
+  _sh(t,src){const gl=this.gl,s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){const e=gl.getShaderInfoLog(s);console.error('GLSL compile error:',e);log('Shader error: '+e.split('\n')[0],'err');}return s}
+  _prog(vs,fs){const gl=this.gl,p=gl.createProgram();gl.attachShader(p,this._sh(gl.VERTEX_SHADER,vs));gl.attachShader(p,this._sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS)){const e=gl.getProgramInfoLog(p);console.error('GLSL link error:',e);log('Link error: '+e,'err');}return p}
+  _compileAll(){
+    const VS=`#version 300 es\nin vec2 a;out vec2 uv;\nvoid main(){uv=a*.5+.5;gl_Position=vec4(a,0,1);}`;
+    // ── OKLAB (Björn Ottosson) — shared by the lut pass and lumdown, interpolated into both so the
+    // skin path and the low-frequency lightness it compares against live in the SAME space.
+    //
+    // Why the skin tool moved here from HSV: HSV is not a perceptual space, it is a cheap
+    // reprojection of RGB, and every boundary problem this tool hit lived where that shows.
+    // Its "saturation" is max-min over max, which is near-identical for bright limestone and for
+    // deep-shadow skin, so separating them needed two hand-tuned luminance-gated cuts. Oklab
+    // CHROMA separates them outright: measured on __TM3390.jpg, rock C=0.0046 and sunglasses
+    // C=0.0051, against C=0.0186 for the darkest real skin and 0.049-0.075 for lit skin — a single
+    // threshold with ~3.6x margin. Oklab L is also real lightness rather than max(r,g,b), which is
+    // what the frequency separation and Preserve modeling were always meant to act on.
+    //
+    // Constants verified before use: white/black/mid-grey give a=b=0 exactly, and a 20k-sample
+    // round trip over random sRGB has a max error of 4.2e-4 / 255. Input/output is DISPLAY sRGB;
+    // the linearisation is done inside, since Oklab is defined on linear light.
+    const GLSL_OKLAB=`
+float _ok_s2l(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
+float _ok_l2s(float c){c=max(c,0.0);return c<=0.0031308?c*12.92:1.055*pow(c,1.0/2.4)-0.055;}
+float _ok_cbrt(float x){return sign(x)*pow(abs(x),1.0/3.0);}
+vec3 rgb2oklab(vec3 c){
+  vec3 lin=vec3(_ok_s2l(c.r),_ok_s2l(c.g),_ok_s2l(c.b));
+  float l=0.4122214708*lin.r+0.5363325363*lin.g+0.0514459929*lin.b;
+  float m=0.2119034982*lin.r+0.6806995451*lin.g+0.1073969566*lin.b;
+  float s=0.0883024619*lin.r+0.2817188376*lin.g+0.6299787005*lin.b;
+  float l_=_ok_cbrt(l),m_=_ok_cbrt(m),s_=_ok_cbrt(s);
+  return vec3(0.2104542553*l_+0.7936177850*m_-0.0040720468*s_,
+              1.9779984951*l_-2.4285922050*m_+0.4505937099*s_,
+              0.0259040371*l_+0.7827717662*m_-0.8086757660*s_);
+}
+vec3 oklab2rgb(vec3 lab){
+  float l_=lab.x+0.3963377774*lab.y+0.2158037573*lab.z;
+  float m_=lab.x-0.1055613458*lab.y-0.0638541728*lab.z;
+  float s_=lab.x-0.0894841775*lab.y-1.2914855480*lab.z;
+  float l=l_*l_*l_,m=m_*m_*m_,s=s_*s_*s_;
+  return vec3(_ok_l2s( 4.0767416621*l-3.3077115913*m+0.2309699292*s),
+              _ok_l2s(-1.2684380046*l+2.6097574011*m-0.3413193965*s),
+              _ok_l2s(-0.0041960863*l-0.7034186147*m+1.7076147010*s));
+}
+// LCh: x = L, y = chroma, z = hue as a 0..1 turn (so the existing circular-distance code carries
+// over unchanged from the HSV version).
+vec3 rgb2oklch(vec3 c){
+  vec3 lab=rgb2oklab(c);
+  float C=length(lab.yz);
+  float h=fract(atan(lab.z,lab.y)/6.28318530718+1.0);
+  return vec3(lab.x,C,h);
+}
+vec3 oklch2rgb(vec3 lch){
+  float a=lch.y*cos(lch.z*6.28318530718),b=lch.y*sin(lch.z*6.28318530718);
+  return oklab2rgb(vec3(lch.x,a,b));
+}
+`;
+    this.progs.lut=this._prog(VS,`#version 300 es
+precision highp float;
+precision highp sampler3D;
+in vec2 uv;out vec4 o;
+uniform sampler2D img;uniform sampler3D lut3;uniform float useLut;uniform float lutMix;
+// ROADMAP.md R4 -- native film-stock highlight shoulder. Extends (does not replace) the
+// look LUT's own edge-clamp behaviour: texture(lut3,...) with CLAMP_TO_EDGE means any scene
+// value above white (c.rgb component > 1.0) samples the SAME white-node output regardless of
+// how far above white it is -- a flat clip that discards real RAW headroom (R1) before it ever
+// reaches the comp-pass tonemap. stockShoulderTex is a 256x1 RGB texture (one column per
+// channel), baked offline from the REAL spektrafilm density-curve model at synthetic exposures
+// up to +4 stops above white (see tools/calib/ R4 notes / ROADMAP.md); its u=0 texel is, by
+// construction, numerically continuous with this LUT's own white-node output (verified in the
+// bake script, not assumed) so there is no seam at the c.rgb==1.0 boundary. useStockShoulder is
+// 1 only when the active look is one of the 16 baked spektra_* keys AND the user picked 'Film
+// stock (native)' -- gated in JS (render()), never inferred here, so this branch is fully
+// unreachable (and stockShoulderTex is never sampled) at every existing recipe/golden.
+uniform sampler2D stockShoulderTex;uniform float useStockShoulder;
+// VIDEO source transform — the only two uniforms a video frame needs at the actual entry
+// point of the pipeline (everything downstream already treats img as just "the source pixel").
+// Both default to the identity so every still golden in test/golden/ stays byte-exact.
+// srcFlipY: video frames are NOT flipped with UNPACK_FLIP_Y_WEBGL (see setVideoFrame's comment
+// — flipping a VideoFrame can force a CPU readback), so this negates V on the SOURCE SAMPLE only.
+// srcXf: 2x2 rotation packed (a,b,c,d) -> [x',y']=[a*x+b*y, c*x+d*y], applied about the uv centre,
+// for the MP4 display-matrix rotation (0/90/180/270) WebCodecs does not apply for you.
+uniform float srcFlipY;uniform vec4 srcXf;
+// GATE WEAVE + FILM BREATH (video). A film projector's gate never holds a frame perfectly still,
+// and the lamp/shutter never delivers exactly the same exposure twice — a clip graded with
+// otherwise-perfect stability reads as digital no matter how good the grain is. Both default to
+// zero, so a still (which has no frame index) is byte-identical to before.
+// ⚠️ Both are driven by the SAME per-frame hash the grain uses (fxVideoFrameSeed), never a
+// linear ramp: CLAUDE.md §12 records that a linear step near-repeats and produces a visible
+// periodic pulse, which on a POSITIONAL offset would read as a rhythmic judder rather than weave.
+uniform vec2 vidWeave;   // sub-pixel source offset, in uv
+uniform float vidBreath; // per-frame exposure multiplier, 1.0 = none
+vec2 vidUV(vec2 u){
+  if(srcFlipY>0.5)u.y=1.0-u.y;
+  vec2 c=u-0.5;
+  return vec2(srcXf.x*c.x+srcXf.y*c.y,srcXf.z*c.x+srcXf.w*c.y)+0.5;
+}
+// Basic adjustments (applied AFTER the LUT, BEFORE film FX — so halation/bloom react to
+// the edited image, as real film would). adjOn gates the whole block (default 0 = bypass,
+// byte-identical to before). exposure in stops; contrast/temp/tint/tone/sat/vib in -1..1.
+uniform float adjOn,adjExp,adjCon,adjHi,adjSh,adjWh,adjBl,adjTemp,adjTint,adjVib,adjSat,adjSharp,adjSharpDetail,adjSharpRadius,adjSharpMask,adjSharpMaskPreview,adjClarity,adjSkin,adjDehaze,adjTexture;
+uniform float adjWavelet1,adjWavelet2,adjWavelet3,adjWaveletResidual;
+uniform float useVlog;   // input transform: 1 = source is Panasonic V-Log (convert to Rec.709 first)
+// CHR-262 film negative: out = fnOut * (in / base)^-p per channel, applied to every source tap (fnTex).
+// fnOn=0 (default) is an exact identity and never evaluates log/exp. fnBW=1 collapses the result to luma.
+uniform float fnOn,fnOut,fnBW;
+uniform vec3 fnRef,fnExp;
+// ROADMAP.md R1: lets basicAdjust's exposure/contrast/tonal-zone clamps pass real >1.0 values
+// through to the (now-float, when this is on — see FXR._initBufs) "lut" FBO instead of clipping
+// them here, so the comp shader's tonemapShoulder has genuine headroom to roll off. Deliberately
+// scoped to basicAdjust ONLY — curves/HSL/masks still clamp to [0,1] even under this flag (a
+// stated limit, not an oversight: extending it there is real additional work per stage, same
+// "small, scoped version" tradeoff this file already makes for the gamut-warning diagnostic).
+uniform float useTonemap;
+uniform float useHlg;    // 1 = source is unconverted HLG (see hlg2rec709; engine-dependent)
+uniform float hlgLw;     // HLG nominal peak luminance in nits (default 400; drives the BT.2408 system gamma)
+// Tone curves: 256x1 RGBA table baked on the CPU (master composed with per-channel point curves,
+// monotone cubic). Sampled at texel centers so an identity table is byte-identical passthrough.
+uniform sampler2D curveTex;uniform float useCurve;
+// HSL color mixer: a 33^3 LUT baked on the CPU from applyHSL (8 hue bands x hue/sat/lum),
+// applied right after the look LUT. Gated off (and never baked) when every band is zero.
+uniform sampler3D hslLut;uniform float useHsl;
+// LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
+// GLOBAL image uv (uvOffL/uvScaleL) so they are resolution-independent and land identically in
+// the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus
+// an optional luminance-range gate and invert. Applied after basicAdjust, before the curves.
+uniform float mskN;
+uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full effect at p0, none past p1)
+uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
+uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
+uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
+uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add)
+                        // (this mask's shape combined with the shape resolved by mskO), y: tint,
+                        // z: hue(deg), w: Amount 0..1 — one master scale on the whole
+                        // mask, so it can be dialled back without rescaling all eight sliders
+uniform vec4 mskF[8];  // x: Color-paint target hue, y: amount, z: radial rotation, w: colour saturation gate
+uniform vec4 mskO[8];  // x: resolved composition operand slot, y: graph-valid flag
+uniform float mskTopo[8]; // mask slots in dependency-first order, packed by the CPU for bounded evaluation
+// SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
+// mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
+uniform vec4 mskG[8];  // x: number of colour samples (0 = gate off), y: CHROMA gate range 0..1
+                        // (independent of hue — skin varies far more in hue/shade than in chroma,
+                        // so a shared slider either over-widens chroma or under-widens hue), z
+                        // unused, w: HUE gate range 0..1
+// Colour-gate SAMPLES, 8 per mask, two packed per vec4 as (h0,s0,h1,s1). Mask i reads mskCS[i*4..i*4+3].
+// Skin is not a ball in hue/sat space — sheen pushes lit skin toward magenta —
+// so one centre cannot cover a whole body without a range so wide it swallows everything else.
+// The gate is the UNION (max) of the per-sample kernels, i.e. a locus traced by several picks.
+uniform vec4 mskCS[32];   // 8 masks x 8 samples, 2 per vec4 => 4 vec4 per mask (mask i: i*4 .. i*4+3)
+uniform vec4 mskH[8];  // x,y,z: hue/sat/lum UNIFORMITY strength 0..1, w: "preserve modeling" 0..1 (lum only)
+uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: measured mean value of the gated pixels
+uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight in the preview display mode
+uniform float mskShowSelOp;      // Selection-view overlay opacity, 0.1..1.0 (UI-only, never exported)
+uniform float mskShowSelOutline; // Selection-view: >0.5 draws only the boundary of w (edge-detect), not a fill
+uniform float mskShowSelMode;    // 0 legacy grayscale/red, 1 graded-photo overlay, 2 white-on-black coverage
+uniform vec3 mskShowSelColor;    // UI-only overlay colour for modes 0 and 1
+uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
+uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
+uniform float mskAnySharp; // 1 when any mask has nonzero local Sharpen, so srcHP is computed
+uniform float mskAnySharpMask; // 1 when any locally sharpened mask protects smooth areas
+// Quarter-res blurred luminance of this render's own source (see progs.lumdown + two blur passes).
+// Sampled in LOCAL uv, not global: the buffer is built from the same tile that is being rendered,
+// and renderTiled's halo guarantees the neighbourhood the blur needed is present.
+uniform sampler2D skinLum;uniform float useSkinLum;
+// 4x4 box-averaged COLOUR of the source, used to evaluate the colour-range gate (see lumdown).
+uniform sampler2D skinCol;uniform float useSkinCol;
+uniform vec4 mskJ[8];     // x: Texture (-1..1, source high-pass gain; negative softens)
+                          // z: Tan one-way (0/1) — see skinUniformity
+                          // y: EXCLUDE flag — this mask applies nothing itself and is instead
+                          //    subtracted from every other mask. Unlike the older "subtract prev"
+                          //    (which reaches back exactly one slot, so only ONE region could ever
+                          //    be excluded) any number of masks can be erasers, and order stops
+                          //    mattering. z,w free.
+uniform float mskAnyNR;  // 1 when any mask has nonzero Noise Reduction, so the bilateral tap ring is computed
+uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see srcNR block in main()).
+                          // Unlike Texture/Clarity there is no "negative" reading: this operator only
+                          // smooths, so 0 is simply off. y: Whites (-1..1), z: Blacks (-1..1),
+                          // w: local Dehaze (-1..1).
+uniform vec4 mskL[8];     // x: local Sharpen amount (-1..1); y: smooth-area protection (0..1); zw reserved.
+uniform float mskShowSharpMask; // selected mask edge-protection preview index, -1 when inactive
+uniform vec2 uvOffL,uvScaleL;
+// ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
+// (0..1, same range-gate convention as mskD's lumLo/lumHi); w: signed local Vibrance (-1..1).
+// depthTx is the per-photo
+// relative-depth map (0=far,1=near — see vendor/depth/README.md), uploaded ONCE per photo
+// (FXR.setDepthTex), sampled here in the same photo-space "uv" skinCol already uses (NOT the
+// masked-space "gm", since depth is a property of the pixel itself, not the mask's own space).
+uniform vec4 mskDep[8];uniform sampler2D depthTx;uniform float useDepthTx;
+// Painted/sky masks: up to 8 raster masks packed one-per-channel into TWO RGBA textures (slots
+// 0-3 -> maskTex, slots 4-7 -> maskTex2), authored in JS (brush strokes or the sky heuristic) at a
+// fixed resolution independent of image size, sampled here in the SAME global uv as the analytic
+// masks so it lines up identically in preview/loupe/every export tile.
+uniform sampler2D maskTex;
+uniform sampler2D maskTex2;
+uniform vec2 texSize;
+float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
+float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
+// V-Log (Lumix/Panasonic) -> Rec.709 input transform. Inverse V-Log EOTF constants b/c/d from
+// the Panasonic V-Log/V-Gamut whitepaper (cut2 = 0.181 = 5.6*0.01+0.125); then the exact
+// V-Gamut -> Rec.709 primaries matrix (both D65, derived from the published chromaticities),
+// clamp, and sRGB-encode (the app's working space). 18% grey: V-Log 0.423 -> linear 0.18.
+float vlogInv(float v){return v<0.181?(v-0.125)/5.6:pow(10.0,(v-0.598206)/0.241514)-0.00873;}

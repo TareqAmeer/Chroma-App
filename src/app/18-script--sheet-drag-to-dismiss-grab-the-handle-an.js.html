@@ -1,0 +1,147 @@
+// ── Sheet drag-to-dismiss: grab the handle and the sheet follows the finger; a downward
+// flick or dragging past ~38% closes it, anything else springs back. The CSS height
+// transition is suspended while the finger is down (inline height wins) and restored for
+// the release animation. A short, still press still counts as the old tap-to-close.
+(function(){
+  const h=document.getElementById('fx-sheet-handle');if(!h)return;
+  h.style.touchAction='none';
+  let p=null,startY=0,startH=0,lastY=0,lastT=0,vel=0,moved=false,wasOpening=false;
+  h.addEventListener('pointerdown',e=>{
+    const opening=wasOpening=!document.body.classList.contains('sheet-open');
+    if(opening&&!document.body.classList.contains('mobile-fx'))return;
+    p=document.querySelector('.fx-panel');if(!p)return;
+    p.style.transition='none';
+    // Dragging the handle up from the closed state opens the sheet under the finger, live.
+    if(opening){p.style.height='0px';fxSection((typeof _activeSec==='function'&&_activeSec())||'adjust');p.style.height='0px';}
+    startY=lastY=e.clientY;lastT=performance.now();vel=0;moved=false;
+    startH=opening?0:p.getBoundingClientRect().height;
+    // A remembered free height is forced with !important, which beats the inline height this drag sets — so a second resize
+    // did nothing and the sheet only ever opened or closed. Drop it for the gesture; end() re-applies the new height.
+    if(!opening&&document.body.classList.contains('sheet-user')){document.body.classList.remove('sheet-user');p.style.height=startH+'px';}
+    try{h.setPointerCapture(e.pointerId);}catch(_){}
+    e.preventDefault();
+  });
+  h.addEventListener('pointermove',e=>{
+    if(!p)return;
+    const now=performance.now(),dy=e.clientY-lastY;
+    if(now>lastT)vel=0.8*vel+0.2*(dy/(now-lastT)); // px/ms, +ve = downward
+    lastY=e.clientY;lastT=now;
+    if(Math.abs(e.clientY-startY)>6)moved=true;
+    const maxH=(window.innerHeight||800)*0.8; // drag UP grows the sheet to full height
+    p.style.height=Math.max(0,Math.min(maxH,startH-(e.clientY-startY)))+'px';
+    fxLiveFit(90); // photo tracks the finger
+  });
+  const end=()=>{
+    if(!p)return;const pn=p;p=null;
+    const cur=pn.getBoundingClientRect().height;
+    // tap, downward flick, or dragged past ~38%. A flick only counts if the finger was
+    // still moving just before lift-off — pausing >120ms decays the intent to zero.
+    const recent=(performance.now()-lastT)<120;
+    const flickDown=vel>0.5&&recent,flickUp=vel<-0.5&&recent;
+    const vh=window.innerHeight||800,hs=[150,Math.min(vh*0.34,360,vh*0.45),vh*0.78];
+    const bd=document.body,st0=bd.classList.contains('sheet-full')?2:bd.classList.contains('sheet-peek')?0:1;
+    let idx;
+    // Closes ONLY when dragged all the way down (or by tapping the open tool again) — a tap on the
+    // handle or a downward flick mid-way used to close it by accident while resizing.
+    if(!moved)idx=wasOpening?1:3;                       // tap: opens a closed sheet, leaves an open one alone
+    else if(cur<90||lastY>vh-70)idx=-1;                 // dragged to the bottom: close
+    else if(flickUp)idx=2;                              // quick swipe up expands fully
+    else idx=3;                                         // otherwise the sheet stays wherever you let go
+    const close=idx<0;
+    // Synchronous release (NO rAF — it never fires in a hidden/backgrounded tab, which
+    // would leave the inline height stuck): restore the stylesheet transition, force a
+    // reflow so it registers the dragged height as the starting value, then flip state —
+    // clearing the inline height animates from the finger position to the CSS target.
+    pn.style.transition='';
+    void pn.offsetHeight;
+    if(close)fxSheetClose();
+    else{bd.classList.toggle('sheet-peek',idx===0);bd.classList.toggle('sheet-full',idx===2);
+      // free height: remembered, and used every time the sheet opens until a flick snaps it again
+      const userH=idx===3?Math.round(Math.min(cur,vh*0.85)):0;
+      bd.classList.toggle('sheet-user',!!userH);
+      if(userH)document.documentElement.style.setProperty('--sheet-user-h',userH+'px');
+      try{userH?localStorage.setItem('cs-sheet-h',String(userH)):localStorage.removeItem('cs-sheet-h');}catch(_){}}
+    pn.style.height='';
+    fxLiveFit(360);
+    if(close)hapt();
+  };
+  h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
+  try{const sh=+localStorage.getItem('cs-sheet-h');if(sh>0){document.documentElement.style.setProperty('--sheet-user-h',sh+'px');document.body.classList.add('sheet-user');}}catch(_){}
+})();
+// Phones: pulling the sheet content (or the Tools list) down while it is already scrolled to the top
+// closes it, same as dragging the handle — back to the normal photo view.
+(function(){
+  // The pull only counts from the top of whatever list the finger is actually in, needs a firm
+  // pull (CLOSE_PX), and the sheet follows the finger with a "Release to close" cue past it, so an
+  // ordinary scroll-up no longer closes it by accident.
+  var CLOSE_PX=150,sy=0,el=null,dy=0,ok=false,armed=false;
+  function scroller(t,root){for(var n=t;n&&n!==root.parentElement;n=n.parentElement){if(n.scrollHeight>n.clientHeight+1&&/(auto|scroll)/.test(getComputedStyle(n).overflowY))return n;}return root;}
+  function cue(e,on){var c=document.getElementById('fx-pull-cue');if(!c){c=document.createElement('div');c.id='fx-pull-cue';document.body.appendChild(c);}
+    c.classList.remove('on');}  /* no on-screen cue while pulling the sheet down */
+  function reset(e){e.style.transform='';e.style.transition='transform .18s';setTimeout(function(){e.style.transition='';},200);var c=document.getElementById('fx-pull-cue');if(c)c.classList.remove('on');}
+  function bind(id,closeFn,isOpen){
+    var e=document.getElementById(id);if(!e)return;
+    e.addEventListener('touchstart',function(ev){
+      if(!document.body.classList.contains('mobile-fx')||!isOpen())return;
+      var t=ev.target;ok=!(t.closest&&t.closest('input,select,textarea,canvas,[contenteditable="true"],.fx-slider'))&&scroller(t,e).scrollTop<=0&&e.scrollTop<=0;
+      sy=ev.touches[0].clientY;el=e;dy=0;armed=false;
+    },{passive:true});
+    e.addEventListener('touchmove',function(ev){if(el!==e)return;dy=ev.touches[0].clientY-sy;
+      if(!ok)return;if(dy<=0){e.style.transform='';return;}
+      e.style.transform='translateY('+Math.round(Math.min(dy,CLOSE_PX*1.6)*0.45)+'px)';
+      var a=dy>CLOSE_PX;if(a!==armed){armed=a;cue(e,a);if(a)try{if(typeof hapt==='function')hapt();}catch(_){}}
+    },{passive:true});
+    e.addEventListener('touchend',function(){
+      if(el!==e)return;el=null;var go=ok&&armed;reset(e);
+      if(go){closeFn();try{if(typeof hapt==='function')hapt();}catch(_){}}
+    },{passive:true});
+    e.addEventListener('touchcancel',function(){if(el===e){el=null;reset(e);}},{passive:true});
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    // Tool sheet: no pull-down-to-close from the content any more — only the handle dragged to the
+    // bottom, or tapping the open tool again, closes it.
+    bind('fx-secnav',function(){fxToolsClose();},function(){return document.body.classList.contains('tools-open');});
+  });
+})();
+// Mark a section's rail/strip button when it's "in use":
+//  - toggle-able FX (grain/hal/bloom/vig/borders/adjust) → its toggle is on
+//  - looks → a preset/LUT other than None/Original is selected
+//  - crop  → any rotate/flip/straighten/crop has been applied
+const _SEC_TOGGLE={adjust:'tg-adjust',curves:'tg-curves',hsl:'tg-hsl',wheels:'tg-wheels',pointcolor:'tg-pointcolor',local:'tg-local',nr:'tg-nr',deconv:'tg-deconv',grain:'tg-grain',art:'tg-art',hal:'tg-hal',bloom:'tg-bloom',vig:'tg-vig',borders:'tg-borders',canvas:'tg-canvas'};
+function _secInPrintSet(){return ['sel-input','sel-tonemap','sel-print'].some(id=>{const e=document.getElementById(id);return !!(e&&e.value);});}
+function _secIsEnabled(key){
+  if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEnabled); // deskx Color/Film rail buttons
+  const tg=_SEC_TOGGLE[key];
+  if(tg){const e=document.getElementById(tg);return !!(e&&e.classList.contains('on'));}
+  if(key==='looks'){const s=document.getElementById('sel-lut');if(s&&s.value)return true;
+    // Phones keep Input / Highlight response / Print inside the Looks card; desktop has its own "Input & Prints" card.
+    return !document.querySelector('.fx-ctrl[data-fxsec="inprint"]')&&_secInPrintSet();}
+  if(key==='inprint')return _secInPrintSet();
+  if(key==='crop'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&g.crop);}
+  if(key==='rotate'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&(g.rot||g.flipH||g.flipV));}
+  if(key==='straighten'){const g=(typeof curGeom==='function')&&curGeom();return !!(g&&g.angle);}
+  return false;
+}
+// "Edited" (the rail's square) means changed from this photo's defaults — not merely switched on:
+// Noise and Sharpen ship switched on, so "on" alone marked Texture as edited on every fresh photo.
+const _SEC_DEFAULT_ON=new Set(['nr','deconv']);
+function _secIsEdited(key){
+  if(typeof FX_GROUPS!=='undefined'&&FX_GROUPS[key])return FX_GROUPS[key].members.some(_secIsEdited);
+  const tg=_SEC_TOGGLE[key];
+  if(tg){const e=document.getElementById(tg);const on=!!(e&&e.classList.contains('on'));
+    if(on!==_SEC_DEFAULT_ON.has(key))return true;
+    if(!on)return false;
+    const card=document.querySelector(`.fx-ctrl[data-fxsec="${key}"]`);
+    return !!(card&&[...card.querySelectorAll('input.fx-slider[type=range]')].some(sl=>Math.abs(parseFloat(sl.value)-parseFloat(sl.defaultValue))>1e-6));}
+  return _secIsEnabled(key);
+}
+function syncSectionEnabled(){
+  if(typeof geomSyncResetVisibility==='function')geomSyncResetVisibility();
+  document.querySelectorAll('#fx-secnav .fx-sec-btn,#fx-toolrail .fx-rail-btn,#fx-quicknav [data-sec],#fx-sheet-strip [data-sec]').forEach(b=>{
+    b.classList.toggle('enabled',_secIsEnabled(b.dataset.sec));
+    b.classList.toggle('edited',_secIsEdited(b.dataset.sec));
+  });
+}
+{let _secEdT=0;const q=()=>{clearTimeout(_secEdT);_secEdT=setTimeout(syncSectionEnabled,150);};
+  document.addEventListener('input',e=>{if(e.target&&e.target.closest&&e.target.closest('.fx-ctrl'))q();},true);
+  document.addEventListener('change',e=>{if(e.target&&e.target.closest&&e.target.closest('.fx-ctrl'))q();},true);}

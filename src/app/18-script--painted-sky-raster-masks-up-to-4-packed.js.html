@@ -1,0 +1,52 @@
+// ── Painted/sky raster masks: up to 4 packed one-per-channel into a single RGBA texture,
+// authored at a fixed resolution independent of image size (see FXR.setMaskTex, lut-pass
+// shader). Stored as a plain JSON-safe number array (m.px) so it round-trips through the
+// existing generic mask save/undo/session code with no extra plumbing.
+let _mskTexDirty=true;
+// Solo: temporarily zero every OTHER non-eraser mask's Amount, same mechanism mute already rides
+// (mskE[i].w=0) — see the render() packing loop. Deliberately NOT persisted (not read by
+// _mskMigrate, not written into saved sessions): a loaded session with one mask soloed would look
+// like the others were lost. Cleared whenever the selected mask changes (see mskRebuild's list
+// button onclick) so it can't silently linger onto an unrelated mask.
+let mskSolo=null;
+function mskToggleSolo(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  mskSolo=(mskSolo===mskSel)?null:mskSel;
+  if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();
+}
+// Small live preview swatch for the mask-list row: raster masks downsample m.px; analytic shapes
+// draw the ellipse/gradient; shapeless (Colour/Luminance Range) masks get a flat identifying tint.
+// Cached on the mask object under a non-serialized key so JSON.stringify (session save/undo/copy)
+// never carries it — it's cheap to rebuild and would only go stale silently otherwise.
+function _mskThumb(m){
+  const W=28,H=18;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.style.cssText='width:'+W+'px;height:'+H+'px;border-radius:3px;flex:none;background:#222';
+  const x=cv.getContext('2d');
+  x.fillStyle='#222';x.fillRect(0,0,W,H);
+  if(m.type==='brush'&&m.px&&m.mtW&&m.mtH){
+    const id=x.createImageData(W,H);
+    for(let ty=0;ty<H;ty++)for(let tx=0;tx<W;tx++){
+      const sx=Math.min(m.mtW-1,(tx/W*m.mtW)|0),sy=Math.min(m.mtH-1,(ty/H*m.mtH)|0);
+      const v=m.px[sy*m.mtW+sx]||0,j=(ty*W+tx)*4;
+      id.data[j]=255;id.data[j+1]=60;id.data[j+2]=60;id.data[j+3]=Math.round(v*0.9);
+    }
+    x.putImageData(id,0,0);
+  }else if(m.type==='none'){
+    x.fillStyle='rgba(255,60,60,0.55)';x.fillRect(0,0,W,H);
+  }else if(m.type==='linear'){
+    const g=x.createLinearGradient(m.x0*W,(1-m.y0)*H,m.x1*W,(1-m.y1)*H);
+    g.addColorStop(0,'rgba(255,60,60,0.85)');g.addColorStop(1,'rgba(255,60,60,0)');
+    x.fillStyle=g;x.fillRect(0,0,W,H);
+  }else{ // radial
+    const cx=(m.cx!=null?m.cx:0.5)*W,cy=(1-(m.cy!=null?m.cy:0.5))*H;
+    const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*W),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*H);
+    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
+    x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.8)';x.fill();x.restore();
+  }
+  if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=1;x.strokeRect(0.5,0.5,W-1,H-1);}
+  return cv;
+}
+// MAXD is the STORED raster-mask resolution (brush/sky/AI edges get finer as this rises). It is
+// deliberately higher than EdgeSAM/SAM2's own 1024 internal working resolution (samInputDims) —
+// the model's input size is a separate concern from how crisp the saved mask looks at export.

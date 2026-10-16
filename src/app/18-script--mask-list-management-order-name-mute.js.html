@@ -1,0 +1,59 @@
+// ── Mask list management: order, name, mute ──────────────────────────────────────────────────
+// Composition operands are stored by stable mask ID. Reordering changes their evaluated slot,
+// while preserving the identity of the referenced mask.
+function mskMove(dir){
+  const i=mskSel,j=i+dir;
+  if(i<0||j<0||j>=fxState.masks.length)return;
+  const A=_mskEnsureIds(fxState.masks);
+  [A[i],A[j]]=[A[j],A[i]];
+  mskSel=j;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Drag-and-drop reorder (mskRebuild's row ondrop): moves the mask at `from` to land at `to`,
+// splice-out-then-splice-in rather than mskMove's single swap so a drag across several rows in
+// one gesture doesn't need N adjacent swaps. Stable operand IDs keep references intact.
+function mskReorder(from,to){
+  const A=_mskEnsureIds(fxState.masks);
+  if(from===to||from<0||to<0||from>=A.length||to>=A.length)return;
+  const[m]=A.splice(from,1);
+  A.splice(to,0,m);
+  mskSel=to;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();fxHistoryPush();
+}
+async function mskRename(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  // askTextModal, never window.prompt — see saveLUTToLibrary. Empty string is meaningful here
+  // (it clears back to the auto label) and is distinct from null/cancel, which askTextModal
+  // preserves exactly as prompt() did.
+  const v=await askTextModal('Name this mask','',m.name||mskAutoLabel(m,mskSel));
+  if(v===null)return;
+  m.name=v.trim().slice(0,24);
+  mskRebuild();
+}
+function mskToggleMute(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.muted=!m.muted;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Turn a mask into an ERASER: it applies nothing of its own and is subtracted from every other
+// mask. Paint one over the lips, another over a pet, and both come out of the skin selection —
+// which "subtract prev" cannot do, since it only ever reaches back a single slot.
+function mskToggleExclude(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.isExclude=!m.isExclude;
+  if(m.isExclude&&m.subtract)m.subtract=false;   // the two mechanisms would fight; exclude wins
+  if(m.isExclude&&m.intersect)m.intersect=false;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// The label shown on the list chip when the user hasn't named the mask themselves.
+function mskAutoLabel(m,i){
+  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='coat'?(mskIsAI(m)?'Coat AI':'Coat')
+    :m.origin==='color'?'Color':m.origin==='lum'?'Lum'
+    :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
+    :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Color':'Radial'):'Brush';
+  return t+' '+(i+1);
+}

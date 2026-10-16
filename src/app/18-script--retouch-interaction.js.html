@@ -1,0 +1,404 @@
+// ── retouch interaction ───────────────────────────────────────────────────────────────────
+let healMode=false,healEraseMode=false,healEraseHeld=false,_healShiftFrom=null;
+function healEraseActive(){return healMode&&(healEraseMode||healEraseHeld);}
+function healEraseSync(){const b=document.getElementById('btn-heal-erase');if(b){b.classList.toggle('on',healEraseActive());b.setAttribute('aria-pressed',String(healEraseActive()));}if(healMode&&FX.cv)FX.cv.style.cursor=healEraseActive()?'cell':'crosshair';}
+function healEraseToggle(){healEraseMode=!healEraseMode;healEraseSync();}
+function healEraseSetHeld(on){healEraseHeld=!!on;healEraseSync();}
+let healSel=null,_healDrag=null,_healDraw=null,healDust=false,_healCtlRaf=0,_healCtlDirty=false;
+function healOps(){const it=curItem();if(!it)return null;const ops=it.heal||(it.heal=[]);for(const o of ops)if(!o.id)o.id=healNewId();return ops;}
+function healNewId(){return 'h'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function healSelIdx(){const it=curItem(),ops=it&&it.heal;if(!ops||healSel==null)return-1;return ops.findIndex(o=>o.id===healSel);}
+// Forward geometry map: source-normalised point -> displayed (geometry-applied) normalised point.
+// The exact inverse of _healPointToSource (flip, quarter-turn, straighten, crop applied in that order).
+function _healFwd(nx,ny){
+  const it=curItem(),g=it&&it.geom;if(!g)return{nx,ny};
+  if(g.flipV)ny=1-ny;
+  if(g.flipH)nx=1-nx;
+  const rot=(((g.rot||0)%360)+360)%360;
+  if(rot===90){const t=nx;nx=1-ny;ny=t;}
+  else if(rot===180){nx=1-nx;ny=1-ny;}
+  else if(rot===270){const t=nx;nx=ny;ny=1-t;}
+  if(g.angle&&it.img){
+    let W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height;
+    if(rot===90||rot===270){const t=W;W=H;H=t;}
+    const a=g.angle*Math.PI/180,ins=inscribedSameAspect(W,H,a),c=Math.cos(a),s=Math.sin(a);
+    const px=(nx-.5)*W,py=(ny-.5)*H;
+    nx=(c*px-s*py)/ins.w+.5;ny=(s*px+c*py)/ins.h+.5;
+  }
+  if(g.crop){nx=(nx-g.crop.x)/g.crop.w;ny=(ny-g.crop.y)/g.crop.h;}
+  return{nx,ny};
+}
+function healSelect(id){
+  healSel=id;const i=healSelIdx(),ops=healOps();
+  if(i>=0){
+    const o=ops[i],set=(k,v)=>{const e=document.getElementById(k);if(e)e.value=v;};
+    set('sl-heal-size',+(o.r*100).toFixed(1));set('sl-heal-feather',Math.round((o.feather!=null?o.feather:.5)*100));set('sl-heal-opacity',Math.round((o.opacity!=null?o.opacity:1)*100));
+    const m=document.getElementById('sel-heal-mode');if(m){m.value=o.mode==='clone'?'clone':'heal';if(m._chipsRender)m._chipsRender();}
+    ['sl-heal-size','sl-heal-feather','sl-heal-opacity'].forEach(k=>{const e=document.getElementById(k);if(e&&typeof fxPaintSlider==='function')fxPaintSlider(e);});
+  }
+  healSyncUI();
+}
+// Slider/mode edits apply to the selected spot (re-rendered on the next frame); with no selection they
+// just set the defaults for the next spot. The undo entry is pushed once, on release (healControlCommit).
+function healControlInput(){
+  healSyncUI();
+  const i=healSelIdx();if(i<0)return;
+  const o=healOps()[i],v=id=>{const e=document.getElementById(id);return e?parseFloat(e.value):NaN;};
+  const r=v('sl-heal-size')/100,f=v('sl-heal-feather')/100,op=v('sl-heal-opacity')/100,m=(document.getElementById('sel-heal-mode')||{}).value;
+  if(r>0)o.r=r;if(Number.isFinite(f))o.feather=f;if(op>0)o.opacity=op;if(m)o.mode=m;
+  _healCtlDirty=true;
+  if(!_healCtlRaf)_healCtlRaf=requestAnimationFrame(()=>{_healCtlRaf=0;updateWork();renderPreview();healSyncUI();});
+}
+function healControlCommit(){if(!_healCtlDirty)return;_healCtlDirty=false;if(_healCtlRaf){cancelAnimationFrame(_healCtlRaf);_healCtlRaf=0;updateWork();renderPreview();}fxHistoryPush();healSyncUI();}
+function healDelete(id){
+  const it=curItem(),ops=it&&it.heal;if(!ops)return;const i=ops.findIndex(o=>o.id===id);if(i<0)return;
+  ops.splice(i,1);if(healSel===id)healSel=null;
+  updateWork();renderPreview();healSyncUI();fxHistoryPush();
+}
+function healDeleteSel(){const i=healSelIdx();if(i>=0)healDelete(healOps()[i].id);}
+function healListRender(){
+  const box=document.getElementById('heal-list');if(!box)return;
+  const ops=(curItem()&&curItem().heal)||[];
+  box.innerHTML='';
+  ops.forEach((o,i)=>{
+    const row=document.createElement('div'),on=o.id===healSel;
+    row.style.cssText='display:flex;align-items:center;gap:4px';
+    const b=document.createElement('button');b.type='button';b.className='btn bgh'+(on?' on':'');b.dataset.healId=o.id;b.setAttribute('role','option');b.setAttribute('aria-selected',on?'true':'false');
+    b.style.cssText='flex:1;text-align:left;justify-content:flex-start';
+    b.textContent=`${i+1}. ${o.mode==='clone'?'Clone':'Heal'}${o.pts&&o.pts.length>1?' stroke':' spot'} · ${+(o.r*100).toFixed(1)}%`;
+    b.onclick=()=>healSelect(o.id);
+    const x=document.createElement('button');x.type='button';x.className='btn bgh';x.dataset.healDel=o.id;x.textContent='×';x.title='Delete this spot';x.setAttribute('aria-label',`Delete spot ${i+1}`);
+    x.onclick=()=>healDelete(o.id);
+    row.appendChild(b);row.appendChild(x);box.appendChild(row);
+  });
+}
+function healSyncUI(){
+  const g=(id,f)=>{const e=document.getElementById(id);return e?(f?parseFloat(e.value):e.value):0;};
+  const sv=(id,t)=>{const e=document.getElementById(id);if(e)e.textContent=t;};
+  sv('vl-heal-size',g('sl-heal-size',1)+'%');
+  sv('vl-heal-feather',g('sl-heal-feather',1));
+  sv('vl-heal-opacity',g('sl-heal-opacity',1));
+  const ops=healOps(),n=ops?ops.length:0;
+  if(healSel!=null&&healSelIdx()<0)healSel=null;
+  const lbl=document.getElementById('heal-count');
+  if(lbl)lbl.textContent=n?`${n} spot${n===1?'':'s'}${healSel!=null?' · 1 selected':''}${healMode?' · click to add another':''}`
+    :'No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.';
+  healListRender();
+  const del=document.getElementById('btn-heal-del');if(del)del.disabled=healSel==null;
+  if(typeof healOverlaySync==='function')healOverlaySync();
+  // Drives the desktop "Reset" visibility (panel redesign, feedback COLOR 1) for this section.
+  // Size/Feather/Opacity are brush TOOL settings, not tracked in _FX_SNAP_SLIDERS (they aren't
+  // part of the saved/undo photo state the way Basic Adjustments sliders are — see getUISnapshot's
+  // own comment on why spots, not brush size, are what actually needs to survive undo/session
+  // save), so the shared .fx-mod mechanism the rest of this feature relies on never fires for
+  // them. Spot count is the real "is there anything here to reset" signal for this panel.
+  const card=document.querySelector('.fx-ctrl[data-fxsec="retouch"]');
+  if(card)card.classList.toggle('fx-has-heal',n>0);
+}
+function healToggle(){
+  healMode=!healMode;
+  const b=document.getElementById('btn-heal-paint');if(b)b.classList.toggle('on',healMode);
+  if(!healMode)healEraseHeld=false;
+  if(FX.cv)FX.cv.style.cursor=healMode?'crosshair':'';
+  healEraseSync();
+  // Retouch and mask painting both want the pointer; arming one disarms the other rather than
+  // letting a click do two things at once.
+  if(healMode&&typeof mskPaintStop==='function')mskPaintStop();
+  healSyncUI();
+  toast(healMode?'Retouch on — click a spot to remove it':'Retouch off',true);
+}
+// Remove stored repair operations, never subtract repaired image pixels. Distances
+// are measured in source pixels so crop/rotation and non-square photos stay correct.
+function healEraseIntersected(a,b){
+  const item=curItem(),ops=healOps();if(!item||!ops)return [];
+  const W=item.img.naturalWidth||item.img.width,H=item.img.naturalHeight||item.img.height,M=Math.max(W,H);
+  const point=p=>[p.nx*W,p.ny*H],A=point(a),B=point(b);
+  const distance=(p,u,v)=>{const dx=v[0]-u[0],dy=v[1]-u[1],d=dx*dx+dy*dy,t=d?Math.max(0,Math.min(1,((p[0]-u[0])*dx+(p[1]-u[1])*dy)/d)):0;return Math.hypot(p[0]-u[0]-t*dx,p[1]-u[1]-t*dy);};
+  const near=(c,d,r)=>{
+    const cross=(x,y)=>x[0]*y[1]-x[1]*y[0],ab=[B[0]-A[0],B[1]-A[1]],cd=[d[0]-c[0],d[1]-c[1]],ac=[c[0]-A[0],c[1]-A[1]],den=cross(ab,cd);
+    if(Math.abs(den)>1e-9){const t=cross(ac,cd)/den,u=cross(ac,ab)/den;if(t>=0&&t<=1&&u>=0&&u<=1)return true;}
+    return Math.min(distance(A,c,d),distance(B,c,d),distance(c,A,B),distance(d,A,B))<=r;
+  };
+  const brush=Math.max(.001,(parseFloat(document.getElementById('sl-heal-size')?.value)||2)/100)*M;
+  return ops.filter(o=>{const pts=o.pts&&o.pts.length?o.pts:[[o.x,o.y]],radius=brush+o.r*M;
+    for(let i=0;i<pts.length;i++){const q=pts[i],r=pts[Math.min(i+1,pts.length-1)];if(near([q[0]*W,q[1]*H],[r[0]*W,r[1]*H],radius))return true;}return false;
+  }).map(o=>o.id);
+}
+function healAdd(nx,ny,src,pts){
+  const ops=healOps();if(!ops)return;
+  const feather=parseFloat((document.getElementById('sl-heal-feather')||{}).value);
+  const nid=healNewId();healSel=nid;
+  ops.push({
+    id:nid,
+    x:nx,y:ny,
+    ...(pts&&pts.length>1?{pts:pts.map(q=>[q.nx,q.ny])}:{}),
+    sx:src?src.nx:null,sy:src?src.ny:null,
+    r:(parseFloat((document.getElementById('sl-heal-size')||{}).value)||4)/100,
+    feather:Number.isFinite(feather)?feather/100:0.5,
+    opacity:(parseFloat((document.getElementById('sl-heal-opacity')||{}).value)||100)/100,
+    mode:(document.getElementById('sel-heal-mode')||{}).value||'heal',
+  });
+  updateWork();renderPreview();healSyncUI();fxHistoryPush();
+  if(typeof hapt==='function')hapt();
+}
+function healUndoLast(){
+  const ops=healOps();if(!ops||!ops.length){toast('No spots to undo');return;}
+  ops.pop();updateWork();renderPreview();healSyncUI();fxHistoryPush();
+}
+function healClear(){
+  const ops=healOps();if(!ops||!ops.length)return;
+  const it=curItem();it.heal=[];healSel=null;updateWork();renderPreview();healSyncUI();fxHistoryPush();
+  toast('Retouching cleared',true);
+}
+// Lightroom-style manual eye-area drag; values are normalized to the geometry-applied photo,
+// following the coordinate convention already used by Chroma's drawn radial masks.
+let redeyeMode=false,_redeyeDrag=null,redeyeSelected=-1;
+function redeyeOps(){const it=curItem();return it?(it.redeye||(it.redeye=[])):null;}
+function redeyeSelectedOp(ops){if(!ops||!ops.length)return null;if(redeyeSelected<0||redeyeSelected>=ops.length)redeyeSelected=ops.length-1;return ops[redeyeSelected];}
+function redeyeToggle(){redeyeMode=!redeyeMode;if(redeyeMode&&healMode)healToggle();if(FX.cv)FX.cv.style.cursor=redeyeMode?'crosshair':'';const b=document.getElementById('btn-redeye-add');if(b){b.classList.toggle('on',redeyeMode);b.textContent=redeyeMode?'Drag over an eye…':'Add eye correction';}redeyeOverlaySync();}
+function redeyeModeChanged(){const sel=document.getElementById('sel-redeye-mode'),mode=sel?sel.value:'human',op=redeyeSelectedOp(redeyeOps());redeyeSyncUI();if(op){op.mode=mode;fxHistoryPush();renderPreview();}}
+function redeyeSyncUI(){
+  const size=document.getElementById('sl-redeye-size'),dark=document.getElementById('sl-redeye-dark');
+  const sv=document.getElementById('vl-redeye-size'),dv=document.getElementById('vl-redeye-dark');
+  const ops=redeyeOps()||[],last=redeyeSelectedOp(ops),sel=document.getElementById('sel-redeye-mode');
+  if(last&&size&&document.activeElement!==size)size.value=last.pupilSize==null?60:last.pupilSize;
+  if(last&&dark&&document.activeElement!==dark)dark.value=last.darken==null?75:last.darken;
+  if(last&&sel&&document.activeElement!==sel)sel.value=last.mode||'human';
+  if(sv&&size)sv.textContent=size.value+'%';if(dv&&dark)dv.textContent=dark.value+'%';
+  const lbl=document.getElementById('redeye-count');if(lbl)lbl.textContent=ops.length?`${ops.length} eye correction${ops.length===1?'':'s'} · drag over another eye to add`:'No eye corrections — drag a circle over the eye.';
+  const card=document.querySelector('.fx-ctrl[data-fxsec="redeye"]');if(card)card.classList.toggle('fx-has-redeye',ops.length>0);
+  redeyeOverlaySync();
+}
+function redeyeControlChanged(){redeyeSyncUI();const op=redeyeSelectedOp(redeyeOps());if(!op)return;op.pupilSize=+document.getElementById('sl-redeye-size').value;op.darken=+document.getElementById('sl-redeye-dark').value;const sel=document.getElementById('sel-redeye-mode');op.mode=sel?sel.value:'human';clearTimeout(redeyeControlChanged._t);redeyeControlChanged._t=setTimeout(()=>{fxHistoryPush();renderPreview();},250);}
+async function redeyeFixAll(){
+  if(!window.__TAURI__||!fxWork){toast('Automatic eye detection requires the desktop face detector',false);return;}
+  const target=curItem(),btn=document.getElementById('btn-redeye-auto');if(btn)btn.disabled=true;
+  try{
+    const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(fxWork,0,0,w,h);
+    const rgba=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);for(let i=0,j=0;i<rgba.length;i+=4){rgb[j++]=rgba[i];rgb[j++]=rgba[i+1];rgb[j++]=rgba[i+2];}
+    const faces=await _samFramedInvoke('scrfd_detect',{width:w,height:h},rgb);if(curItem()!==target)return;const ops=redeyeOps()||[],known=new Set(ops.map(o=>`${Math.round(o.x*10000)}:${Math.round(o.y*10000)}`));let added=0;
+    for(const f of faces||[])for(const kp of (f.kps||[]).slice(0,2)){
+      const ex=kp[0]/w,ey=kp[1]/h,key=`${Math.round(ex*10000)}:${Math.round(ey*10000)}`;if(known.has(key))continue;
+      // Reuse SCRFD eye landmarks and the GEGL color gate during rendering; do not add a second,
+      // hand-tuned RGB classifier here. Lightroom's Fix All similarly proposes eye regions for
+      // review, while GEGL's tested red-eye operator decides which pixels actually change.
+      const rad=Math.max(2,Math.round(Math.min(f.x1-f.x0,f.y1-f.y0)*0.045));
+      ops.push({x:ex,y:ey,rx:rad/w,ry:rad/h,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:'human',enabled:true,source:'face-landmark'});known.add(key);added++;
+    }
+    const it=curItem();if(it)it.redeye=ops;if(added)redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();toast(added?`Found ${added} red-eye candidate${added===1?'':'s'} — review the highlighted pupils`:'No red-eye candidates found',true);
+  }catch(e){console.warn('[red-eye detection]',e);toast('Automatic red-eye detection failed',false);}
+  finally{if(btn)btn.disabled=false;}
+}
+function redeyeOverlaySync(){
+  const svg=document.getElementById('fx-redeye-overlay');if(!svg)return;
+  const ops=redeyeOps(),active=!!(ops&&ops.length),box=mskOverlayBox();
+  if(!box||!fxWork||cropMode||fxLoupe||!active&&!_redeyeDrag){svg.style.display='none';svg.innerHTML='';return;}
+  svg.style.display='block';svg.style.left='0';svg.style.top='0';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+  const shapes=(ops||[]).map((op,i)=>`<ellipse data-redeye-i="${i}" cx="${op.x}" cy="${op.y}" rx="${op.rx}" ry="${op.ry}" fill="rgba(232,74,65,.08)" stroke="${op.enabled===false?'#aaa':'#f06456'}" stroke-width=".003" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:move" onclick="redeyeToggleOne(${i})"/><circle data-redeye-resize="${i}" cx="${op.x+op.rx}" cy="${op.y+op.ry}" r=".008" fill="#f06456" stroke="#fff" stroke-width=".002" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:nwse-resize"/>`).join('');
+  const drag=_redeyeDrag?`<ellipse cx="${_redeyeDrag.cx}" cy="${_redeyeDrag.cy}" rx="${_redeyeDrag.rx}" ry="${_redeyeDrag.ry}" fill="rgba(232,74,65,.08)" stroke="#f06456" stroke-width=".003" vector-effect="non-scaling-stroke"/>`:'';
+  svg.setAttribute('viewBox','0 0 1 1');svg.innerHTML=shapes+drag;
+}
+function redeyeToggleOne(i){const ops=redeyeOps();if(!ops||!ops[i])return;ops[i].enabled=ops[i].enabled===false;fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeUndoLast(){const ops=redeyeOps();if(!ops||!ops.length)return;ops.pop();redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeClear(){const ops=redeyeOps();if(!ops||!ops.length)return;const it=curItem();it.redeye=[];redeyeSelected=-1;fxHistoryPush();redeyeSyncUI();renderPreview();}
+(function initRedEye(){
+  const wrap=document.getElementById('fx-zoom-wrap');if(!wrap)return;
+  const svg=document.getElementById('fx-redeye-overlay');
+  if(svg){
+    svg.addEventListener('pointerdown',e=>{const move=e.target.closest('[data-redeye-i]'),resize=e.target.closest('[data-redeye-resize]');if(!move&&!resize)return;e.preventDefault();e.stopPropagation();const n=resize?+(resize.dataset.redeyeResize):+(move.dataset.redeyeI);redeyeSelected=n;const ops=redeyeOps(),op=ops&&ops[n],size=document.getElementById('sl-redeye-size'),dark=document.getElementById('sl-redeye-dark'),sel=document.getElementById('sel-redeye-mode');if(op){if(size)size.value=op.pupilSize==null?60:op.pupilSize;if(dark)dark.value=op.darken==null?75:op.darken;if(sel)sel.value=op.mode||'human';redeyeSyncUI();}_redeyeDrag={mode:resize?'resize':'move',i:n,last:_mskPointToUV(e)};if(!_redeyeDrag.last){_redeyeDrag=null;return;}_fxHistLocked=true;svg.setPointerCapture(e.pointerId);},true);
+    svg.addEventListener('pointermove',e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;const p=_mskPointToUV(e),op=redeyeOps()[_redeyeDrag.i];if(!p||!op)return;const dx=p.nx-_redeyeDrag.last.nx,dy=p.ny-_redeyeDrag.last.ny;if(_redeyeDrag.mode==='move'){op.x=Math.max(op.rx,Math.min(1-op.rx,op.x+dx));op.y=Math.max(op.ry,Math.min(1-op.ry,op.y+dy));}else{op.rx=Math.max(.002,Math.min(Math.min(op.x,1-op.x),op.rx+dx));op.ry=Math.max(.002,Math.min(Math.min(op.y,1-op.y),op.ry+dy));}_redeyeDrag.last=p;redeyeOverlaySync();renderPreview();},true);
+    const finish=e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;_redeyeDrag=null;_fxHistLocked=false;fxHistoryPush();redeyeSyncUI();};
+    svg.addEventListener('pointerup',finish,true);svg.addEventListener('pointercancel',finish,true);
+  }
+  wrap.addEventListener('pointerdown',e=>{if(!redeyeMode||!fxWork||cropMode||fxLoupe||!['fx-canvas','fx-canvas-bd'].includes(e.target.id))return;e.preventDefault();e.stopPropagation();const p=_mskPointToUV(e);if(!p)return;_redeyeDrag={sx:p.nx,sy:p.ny,cx:p.nx,cy:p.ny,rx:0.001,ry:0.001};try{e.target.setPointerCapture(e.pointerId);}catch(_){}redeyeOverlaySync();},true);
+  wrap.addEventListener('pointermove',e=>{if(!_redeyeDrag||_redeyeDrag.mode)return;const p=_mskPointToUV(e);if(!p)return;_redeyeDrag.cx=(_redeyeDrag.sx+p.nx)/2;_redeyeDrag.cy=(_redeyeDrag.sy+p.ny)/2;_redeyeDrag.rx=Math.max(.002,Math.abs(p.nx-_redeyeDrag.sx)/2);_redeyeDrag.ry=Math.max(.002,Math.abs(p.ny-_redeyeDrag.sy)/2);redeyeOverlaySync();},true);
+  const end=e=>{if(!_redeyeDrag||_redeyeDrag.mode)return;const d=_redeyeDrag;_redeyeDrag=null;if(d.rx>=.002&&d.ry>=.002){const sel=document.getElementById('sel-redeye-mode'),ops=redeyeOps();ops.push({x:d.cx,y:d.cy,rx:d.rx,ry:d.ry,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:sel?sel.value:'human',enabled:true});redeyeSelected=ops.length-1;fxHistoryPush();redeyeSyncUI();renderPreview();}else redeyeOverlaySync();};
+  wrap.addEventListener('pointerup',end,true);wrap.addEventListener('pointercancel',end,true);
+})();
+// Pointer coordinates arrive in the DISPLAYED canvas's space, but heal ops are normalised
+// against the ORIGINAL image (see healApply) — and geometry sits between the two. So a click is
+// mapped back through the crop/rotate the photo is currently showing, or every spot would land
+// somewhere else the moment the photo was cropped.
+function _healPointToSource(e){
+  const uv=(typeof _mskPointToUV==='function')?_mskPointToUV(e):null;
+  if(!uv)return null;
+  const it=curItem(),g=it&&it.geom;
+  let{nx,ny}=uv;
+  if(g){
+    if(g.crop){nx=g.crop.x+nx*g.crop.w;ny=g.crop.y+ny*g.crop.h;}
+    const rot=(((g.rot||0)%360)+360)%360;
+    if(g.angle&&it.img){
+      // Undo straightenCanvas: it drew the (rotated/flipped) source rotated by +a into an inscribed
+      // canvas of size w×h, so a displayed point maps back through a -a rotation about the centre.
+      let W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height;
+      if(rot===90||rot===270){const t=W;W=H;H=t;}
+      const a=g.angle*Math.PI/180,ins=inscribedSameAspect(W,H,a);
+      const ux=(nx-.5)*ins.w,uy=(ny-.5)*ins.h,c=Math.cos(a),s=Math.sin(a);
+      nx=(c*ux+s*uy)/W+.5;ny=(-s*ux+c*uy)/H+.5;
+    }
+    if(rot===90){const t=nx;nx=ny;ny=1-t;}
+    else if(rot===180){nx=1-nx;ny=1-ny;}
+    else if(rot===270){const t=nx;nx=1-ny;ny=t;}
+    if(g.flipH)nx=1-nx;
+    if(g.flipV)ny=1-ny;
+  }
+  return{nx:Math.min(1,Math.max(0,nx)),ny:Math.min(1,Math.max(0,ny))};
+}
+// Selection overlay: every spot's outline, plus for the selected one a linked SOURCE handle and DESTINATION
+// handle (both draggable). The SVG is in displayed-photo space, so source-space data goes through _healFwd.
+function healOverlaySync(){
+  const svg=document.getElementById('fx-heal-overlay');if(!svg)return;
+  const it=curItem(),ops=(it&&it.heal)||[],box=mskOverlayBox();
+  const ffR=document.getElementById('ff-retouch'),panelOn=!!(ffR&&ffR.offsetParent!==null);
+  const active=panelOn&&(healMode||healSel!=null||_healDraw);
+  if(typeof healDustSync==='function')healDustSync(box);
+  if(!box||!fxWork||!it||!it.img||cropMode||fxLoupe||!active||(!ops.length&&!_healDraw)){svg.style.display='none';svg.innerHTML='';return;}
+  svg.style.display='block';svg.style.left=(box.left||0)+'px';svg.style.top=(box.top||0)+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  svg.style.pointerEvents='none';
+  const W=it.img.naturalWidth||it.img.width,H=it.img.naturalHeight||it.img.height,dw=fxWork.naturalWidth||fxWork.width,dh=fxWork.naturalHeight||fxWork.height;
+  // displayed px per source px, measured through the geometry (rotation preserves length)
+  const a=_healFwd(.5,.5),b=_healFwd(.5+1/W,.5);const k=Math.hypot((b.nx-a.nx)*dw,(b.ny-a.ny)*dh)||1;
+  const z=(typeof fxZoom==='number'&&fxZoom>0)?fxZoom:1,hx=7/(box.width*z),hy=7/(box.height*z);
+  const f=n=>(+n).toFixed(5);
+  let out='';
+  ops.forEach(o=>{
+    const sel=o.id===healSel,c=_healFwd(o.x,o.y),rp=Math.max(2,o.r*Math.max(W,H))*k,rx=rp/dw,ry=rp/dh;
+    const col=sel?'#ffd24a':'#ffffff';
+    if(o.pts&&o.pts.length>1){
+      const pl=o.pts.map(q=>{const d=_healFwd(q[0],q[1]);return f(d.nx)+','+f(d.ny);}).join(' ');
+      out+=`<polyline data-heal-i="${o.id}" points="${pl}" fill="none" stroke="${col}" stroke-width="${sel?2:1.2}" vector-effect="non-scaling-stroke" style="pointer-events:stroke;stroke-opacity:.9" stroke-linecap="round"/>`;
+    }
+    out+=`<ellipse data-heal-i="${o.id}" cx="${f(c.nx)}" cy="${f(c.ny)}" rx="${f(rx)}" ry="${f(ry)}" fill="rgba(255,255,255,.02)" stroke="${col}" stroke-width="${sel?2:1.2}" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:move"/>`;
+    if(sel&&o.sx!=null&&o.sy!=null){
+      let sx=o.sx,sy=o.sy;const s=_healFwd(sx,sy);
+      out+=`<ellipse cx="${f(s.nx)}" cy="${f(s.ny)}" rx="${f(rx)}" ry="${f(ry)}" fill="none" stroke="#6fd3ff" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`;
+      out+=`<line x1="${f(c.nx)}" y1="${f(c.ny)}" x2="${f(s.nx)}" y2="${f(s.ny)}" stroke="#ffd24a" stroke-width="1.2" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`;
+      out+=`<ellipse data-heal-src="${o.id}" cx="${f(s.nx)}" cy="${f(s.ny)}" rx="${f(hx)}" ry="${f(hy)}" fill="#6fd3ff" stroke="#0b2530" stroke-width="1.5" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:grab"/>`;
+      out+=`<ellipse data-heal-dst="${o.id}" cx="${f(c.nx)}" cy="${f(c.ny)}" rx="${f(hx)}" ry="${f(hy)}" fill="#ffd24a" stroke="#3a2a00" stroke-width="1.5" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:grab"/>`;
+    }
+  });
+  if(_healDraw&&_healDraw.pts.length>1){
+    out+=`<polyline points="${_healDraw.pts.map(q=>{const d=_healFwd(q.nx,q.ny);return f(d.nx)+','+f(d.ny);}).join(' ')}" fill="none" stroke="#ffd24a" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round"/>`;
+  }
+  svg.setAttribute('viewBox','0 0 1 1');svg.innerHTML=out;
+}
+// Visualise spots: a preview-only edge map (LR-style: white page, dark where fine local contrast is high)
+// drawn on its OWN canvas above the photo. It is never read by export/render paths.
+let _healDustKey='';
+function healDustToggle(){
+  healDust=!healDust;_healDustKey='';
+  const b=document.getElementById('btn-heal-dust');if(b){b.classList.toggle('on',healDust);b.setAttribute('aria-pressed',healDust?'true':'false');}
+  const r=document.getElementById('row-heal-dust');if(r)r.style.display=healDust?'':'none';
+  healOverlaySync();
+}
+function healDustRender(){_healDustKey='';const v=document.getElementById('vl-heal-dust'),s=document.getElementById('sl-heal-dust');if(v&&s)v.textContent=s.value;healOverlaySync();}
+function healDustSync(box){
+  const cv=document.getElementById('fx-canvas-dust');if(!cv)return;
+  const ffR=document.getElementById('ff-retouch');
+  if(!healDust||!box||!fxWork||cropMode||fxLoupe||!(ffR&&ffR.offsetParent!==null)){cv.style.display='none';return;}
+  cv.style.display='block';cv.style.left=(box.left||0)+'px';cv.style.top=(box.top||0)+'px';cv.style.width=box.width+'px';cv.style.height=box.height+'px';
+  const sens=parseFloat((document.getElementById('sl-heal-dust')||{}).value)||40;
+  const sw=fxWork.naturalWidth||fxWork.width,sh=fxWork.naturalHeight||fxWork.height;
+  const key=sw+'x'+sh+':'+sens+':'+(fxWork._dustId||(fxWork._dustId=++_healDustSeq));
+  if(key===_healDustKey)return;_healDustKey=key;
+  const sc=Math.min(1,1400/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*sc)),h=Math.max(1,Math.round(sh*sc));
+  const t=document.createElement('canvas');t.width=w;t.height=h;const tx=t.getContext('2d',{willReadFrequently:true});tx.drawImage(fxWork,0,0,w,h);
+  const px=tx.getImageData(0,0,w,h).data,g=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++)g[i]=px[i*4]*.2126+px[i*4+1]*.7152+px[i*4+2]*.0722;
+  const W1=w+1,I=new Float64Array(W1*(h+1));
+  for(let y=0;y<h;y++){let row=0;for(let x=0;x<w;x++){row+=g[y*w+x];I[(y+1)*W1+x+1]=I[y*W1+x+1]+row;}}
+  const R=Math.max(3,Math.round(Math.max(w,h)/300)),gain=1+sens*.3;
+  cv.width=w;cv.height=h;const cx=cv.getContext('2d'),im=cx.createImageData(w,h),o=im.data;
+  for(let y=0;y<h;y++){const y0=Math.max(0,y-R),y1=Math.min(h,y+R+1);
+    for(let x=0;x<w;x++){const x0=Math.max(0,x-R),x1=Math.min(w,x+R+1);
+      const m=(I[y1*W1+x1]-I[y0*W1+x1]-I[y1*W1+x0]+I[y0*W1+x0])/((x1-x0)*(y1-y0));
+      const v=255-Math.min(255,Math.abs(g[y*w+x]-m)*gain),i=(y*w+x)*4;o[i]=o[i+1]=o[i+2]=v;o[i+3]=255;}}
+  cx.putImageData(im,0,0);
+}
+let _healDustSeq=0;
+(function initHeal(){
+  const cv=document.getElementById('fx-canvas');if(!cv)return;
+  const svg=document.getElementById('fx-heal-overlay');
+  const isEditable=t=>t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  let eraseGesture=false;
+  const startErase=e=>{
+    if(eraseGesture)return;
+    const first=_healPointToSource(e);if(!first)return;
+    const item=curItem(),hits=new Set(healEraseIntersected(first,first));let last=first;
+    eraseGesture=true;e.preventDefault();e.stopPropagation();
+    const move=ev=>{if(ev.pointerId!==e.pointerId||!healEraseActive()||curItem()!==item)return;const p=_healPointToSource(ev);if(!p)return;for(const id of healEraseIntersected(last,p))hits.add(id);last=p;};
+    const cancel=()=>up({type:'pointercancel'});
+    const visibility=()=>{if(document.visibilityState==='hidden')cancel();};
+    const up=ev=>{
+      if(ev.type!=='pointercancel'&&ev.pointerId!==e.pointerId)return;
+      if(ev.type==='pointerup')move(ev);
+      eraseGesture=false;
+      window.removeEventListener('pointermove',move,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);window.removeEventListener('blur',cancel);document.removeEventListener('visibilitychange',visibility);
+      if(ev.type==='pointercancel'||!healMode||curItem()!==item||!hits.size)return;
+      item.heal=item.heal.filter(o=>!hits.has(o.id));if(hits.has(healSel))healSel=null;
+      updateWork();renderPreview();healSyncUI();fxHistoryPush();
+    };
+    window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);window.addEventListener('blur',cancel);document.addEventListener('visibilitychange',visibility);
+  };
+  // Draw: click = spot, drag = brush stroke; Shift-click picks the source for the next spot.
+  fxCanvasOn('pointerdown',e=>{
+    if(!healMode)return;
+    e.preventDefault();e.stopPropagation();
+    const p=_healPointToSource(e);if(!p)return;
+    if(healEraseActive()){startErase(e);return;}
+    if(e.shiftKey){_healShiftFrom=p;toast('Source set — now click the spot to repair',true);return;}
+    _healDraw={pts:[p],x0:e.clientX,y0:e.clientY,moved:false,id:e.pointerId};
+    const mv=ev=>{
+      if(!_healDraw)return;
+      if(!_healDraw.moved&&Math.hypot(ev.clientX-_healDraw.x0,ev.clientY-_healDraw.y0)<6)return;
+      _healDraw.moved=true;
+      const q=_healPointToSource(ev),l=_healDraw.pts[_healDraw.pts.length-1];
+      if(q&&Math.hypot(q.nx-l.nx,q.ny-l.ny)>0.002){_healDraw.pts.push(q);healOverlaySync();}
+    };
+    const up=ev=>{
+      window.removeEventListener('pointermove',mv,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);
+      const d=_healDraw;_healDraw=null;if(!d)return;
+      if(ev.type==='pointercancel'){healOverlaySync();return;}
+      if(d.moved&&d.pts.length>1)healAdd(d.pts[0].nx,d.pts[0].ny,_healShiftFrom,d.pts);
+      else healAdd(d.pts[0].nx,d.pts[0].ny,_healShiftFrom);
+      _healShiftFrom=null;
+    };
+    window.addEventListener('pointermove',mv,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);
+  },true);
+  // Select / drag: a spot's outline selects it and drags the destination; the blue handle drags the source.
+  if(svg)svg.addEventListener('pointerdown',e=>{
+    if(healEraseActive()){startErase(e);return;}
+    const el=e.target.closest&&e.target.closest('[data-heal-i],[data-heal-src],[data-heal-dst]');if(!el)return;
+    e.preventDefault();e.stopPropagation();
+    const id=el.dataset.healI||el.dataset.healSrc||el.dataset.healDst,mode=el.dataset.healSrc?'src':'dst';
+    const ops=healOps(),o=ops.find(q=>q.id===id);if(!o)return;
+    const p0=_healPointToSource(e);if(!p0)return;
+    if(healSel!==id)healSelect(id);
+    const orig={x:o.x,y:o.y,sx:o.sx,sy:o.sy,pts:o.pts?o.pts.map(q=>q.slice()):null};
+    _healDrag={id,mode,moved:false,x0:e.clientX,y0:e.clientY};
+    const mv=ev=>{
+      if(!_healDrag)return;
+      if(!_healDrag.moved&&Math.hypot(ev.clientX-_healDrag.x0,ev.clientY-_healDrag.y0)<3)return;
+      const p=_healPointToSource(ev);if(!p)return;_healDrag.moved=true;
+      const dx=p.nx-p0.nx,dy=p.ny-p0.ny,cl=v=>Math.min(1,Math.max(0,v));
+      if(mode==='src'&&orig.sx!=null){o.sx=cl(orig.sx+dx);o.sy=cl(orig.sy+dy);}
+      else{o.x=cl(orig.x+dx);o.y=cl(orig.y+dy);if(orig.pts)o.pts=orig.pts.map(q=>[cl(q[0]+dx),cl(q[1]+dy)]);}
+      healOverlaySync();
+    };
+    const up=()=>{
+      window.removeEventListener('pointermove',mv,true);window.removeEventListener('pointerup',up,true);window.removeEventListener('pointercancel',up,true);
+      const d=_healDrag;_healDrag=null;
+      if(d&&d.moved){updateWork();renderPreview();healSyncUI();fxHistoryPush();}
+    };
+    window.addEventListener('pointermove',mv,true);window.addEventListener('pointerup',up,true);window.addEventListener('pointercancel',up,true);
+  },true);
+  // Delete/Backspace removes the selected spot while its overlay is on screen.
+  document.addEventListener('keydown',e=>{
+    if((e.key!=='Delete'&&e.key!=='Backspace')||e.metaKey||e.ctrlKey||e.altKey||isEditable(e.target))return;
+    const sv=document.getElementById('fx-heal-overlay');
+    if(healSelIdx()<0||!sv||sv.style.display==='none')return;
+    e.preventDefault();e.stopPropagation();healDeleteSel();
+  },true);
+})();

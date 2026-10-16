@@ -1,0 +1,35 @@
+// ── Auto-enhance ───────────────────────────────────────────────────────────────
+let _autoEnh=null; // values the last Auto-enhance applied; a second click while they still hold resets Light
+const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint'];
+function autoEnhance(){
+  const src=fxWork||fxImg;if(!src){log('Load an image first','warn');return;}
+  const aeBtn=document.querySelector('[onclick="autoEnhance()"]');
+  if(_autoEnh&&_AE_IDS.every((id,i)=>+document.getElementById(id)?.value===_autoEnh[i])){_autoEnh=null;aeBtn?.classList.remove('on');fxResetSection('adjust');return;}
+  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
+  const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh/sw)|0);
+  const tc=document.createElement('canvas');tc.width=mw;tc.height=mh;
+  tc.getContext('2d').drawImage(src,0,0,mw,mh);
+  const data=tc.getContext('2d').getImageData(0,0,mw,mh).data;
+  const lums=[],rs=[],gs=[],bs=[];
+  for(let i=0;i<data.length;i+=4){
+    const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
+    lums.push(0.2126*r+0.7152*g+0.0722*b);rs.push(r);gs.push(g);bs.push(b);
+  }
+  lums.sort((a,b)=>a-b);
+  const n=lums.length;
+  const p1=lums[Math.floor(n*0.01)],p99=lums[Math.floor(n*0.99)],med=lums[n>>1];
+  const avg=arr=>arr.reduce((s,v)=>s+v,0)/arr.length;
+  const avgR=avg(rs),avgG=avg(gs),avgB=avg(bs);
+  const blacksAdj=Math.max(-100,Math.min(100,Math.round(-p1*100)));
+  const whitesAdj=Math.max(-100,Math.min(100,Math.round((1-p99)*100)));
+  const expAdj=Math.max(-100,Math.min(100,Math.round((0.38-med)/0.38*20))); // *20: matches the exposure slider's /20 (±5 stop) mapping
+  const tempAdj=Math.max(-100,Math.min(100,Math.round((avgB-avgR)/(avgR+avgB+1e-9)*100/0.22)));
+  const tintAdj=Math.max(-100,Math.min(100,Math.round((1-(avgR+avgB)/(2*avgG+1e-9))/0.14*100)));
+  const setSlider=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  setSlider('sl-adj-exp',expAdj);setSlider('sl-adj-bl',blacksAdj);setSlider('sl-adj-wh',whitesAdj);
+  setSlider('sl-adj-temp',tempAdj);setSlider('sl-adj-tint',tintAdj);
+  const tg=document.getElementById('tg-adjust');if(!tg.classList.contains('on'))toggleFX('adjust');
+  _autoEnh=[expAdj,blacksAdj,whitesAdj,tempAdj,tintAdj];aeBtn?.classList.add('on');
+  fxUpdate();
+  log(`Auto-enhance: exp ${expAdj}, blacks ${blacksAdj}, whites ${whitesAdj}, temp ${tempAdj}, tint ${tintAdj}`,'ok');
+}

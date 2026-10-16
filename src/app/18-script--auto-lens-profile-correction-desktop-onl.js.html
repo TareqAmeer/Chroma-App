@@ -1,0 +1,72 @@
+// ── Auto lens-profile correction (desktop only) — see desktop/src-tauri/src/lens_correct.rs.
+// The actual correction runs server-side in Rust during RAW decode (a geometric per-pixel
+// remap, not a shader term), so toggling it can't take effect live like the manual sliders —
+// it needs a fresh decode of the current RAW. window.chromasmithAutoLens is read by
+// desktop-native.js's decode_raw_v2 invoke; this file just owns the toggle UI + persistence.
+try{window.chromasmithAutoLens=localStorage.getItem('chromasmithAutoLens')==='1';}catch(e){window.chromasmithAutoLens=false;}
+// Ground-truth indicator: desktop-native.js sets window.chromasmithLensApplied from the
+// decode's OWN report of whether it actually ran the correction (raw_decode.rs's
+// lens_applied — a real outcome, not a separate guess) and calls this after every decode, so
+// the status line always reflects the photo currently on screen, not a stale toggle-time check.
+function fxLensStatusRefresh(){
+  const status=document.getElementById('lens-auto-status');
+  if(!status)return;
+  if(!window.__TAURI__){status.textContent='Desktop app only — no effect in the browser/iOS build.';return;}
+  if(!window.chromasmithAutoLens){status.textContent='';return;}
+  const exif=(fxImages[fxCurIdx]&&fxImages[fxCurIdx].exif)||{};
+  if(!fxImages.length){status.textContent='No photo loaded.';return;}
+  if(exif.lensStatusUnknown){status.textContent='Correction status is unavailable for this cached RAW photo.';status.style.color='';return;}
+  if(window.chromasmithLensApplied===true){
+    status.textContent='✓ Applied on this photo'+(exif.lens?' ('+exif.lens+')':'')+'.';
+    status.style.color='var(--ok, #4caf50)';
+    return;
+  }
+  status.style.color='';
+  if(window.chromasmithLensOverride){
+    status.textContent='Not applied — no distortion calibration for "'+window.chromasmithLensOverride+'" in the bundled database (it may still be listed for vignette/CA-only data). Using the manual sliders below.';
+    return;
+  }
+  if(!exif.model&&!exif.lens){
+    status.textContent='This photo hasn’t finished loading its metadata yet — status will update automatically.';
+    return;
+  }
+  if(!exif.lens){
+    status.textContent='This photo’s RAW metadata has no lens model recorded — try the Manual lens picker above if you\'re using an adapted/manual lens.';
+    return;
+  }
+  status.textContent='Not applied — no bundled profile for "'+(exif.model||'this camera')+' · '+exif.lens+'" yet. Using the manual sliders below, or try the Manual lens picker above.';
+}
+window.chromasmithLensStatusRefresh=fxLensStatusRefresh;
+function fxLensAutoToggled(){
+  const on=document.getElementById('tg-lens-auto').classList.contains('on');
+  window.chromasmithAutoLens=on;
+  try{localStorage.setItem('chromasmithAutoLens',on?'1':'0');}catch(e){}
+  if(!window.__TAURI__){fxLensStatusRefresh();return;}
+  if(!on){
+    fxLensStatusRefresh();
+    if(typeof window.chromasmithReloadCurrentPhoto==='function')window.chromasmithReloadCurrentPhoto();
+    return;
+  }
+  const status=document.getElementById('lens-auto-status');
+  if(status)status.textContent='Reloading this photo to apply…';
+  const reloaded=(typeof window.chromasmithReloadCurrentPhoto==='function')&&window.chromasmithReloadCurrentPhoto();
+  if(!reloaded)fxLensStatusRefresh(); // no open photo to reload — show why nothing happened
+}
+if(typeof window!=='undefined')(()=>{
+  // Windows has no OS-level overlay scrollbars, so `.fx-scrolling` (CSS above) fakes one:
+  // scroll events don't bubble, so this listens in the capture phase on the document.
+  const fxScrollTimers=new WeakMap();
+  document.addEventListener('scroll',e=>{
+    const el=e.target===document?document.documentElement:e.target;
+    if(!el||!el.classList)return;
+    el.classList.add('fx-scrolling');
+    clearTimeout(fxScrollTimers.get(el));
+    fxScrollTimers.set(el,setTimeout(()=>el.classList.remove('fx-scrolling'),800));
+  },{capture:true,passive:true});
+})();
+if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
+  const tg=document.getElementById('tg-lens-auto');
+  if(tg&&window.chromasmithAutoLens)tg.classList.add('on');
+  fxLensStatusRefresh();
+  fxLensManualInit();
+});
