@@ -2788,6 +2788,7 @@ body.sk2 .look-cell{border:0;padding:0}
 body.sk2 .look-nm{font-size:12px;text-transform:none;letter-spacing:0;padding:6px 0 0;background:none!important;color:var(--k-color-muted)}
 body.sk2 .look-cell.sel .look-nm{color:var(--k-color-ink)}
 body.sk2 .look-cell.sk2-peek{outline:1px solid var(--k-color-ink);outline-offset:2px}
+body.sk2.mobile-fx .look-cell.sk2-peek{outline:none}
 /* Secondary actions folded into one quiet "More" line. */
 body.sk2 details.sk2-more{margin-top:12px;border-top:1px solid var(--bdr);padding-top:8px}
 body.sk2 details.sk2-more>summary{cursor:pointer;color:var(--k-color-muted);font-size:12px;list-style:none;display:flex;justify-content:space-between}
@@ -3368,7 +3369,7 @@ ready(function(){
     peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;if(lut)FX.setLUT(lut);renderPreview();}catch(e){}}
   window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
   window.sk2PeekEnd=end;
-  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
+  host.addEventListener('pointerover',function(e){if(e.pointerType==='touch'||document.body.classList.contains('mobile-fx'))return; /* touch scrolling is not hovering */var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
     clearTimeout(timer);timer=setTimeout(function(){if(c.matches(':hover'))show(c)},200);});
   host.addEventListener('pointerleave',function(){end()});
   host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
@@ -7270,7 +7271,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016R';
+const BUILD='1.1016S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

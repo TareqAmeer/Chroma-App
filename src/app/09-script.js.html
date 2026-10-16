@@ -43,7 +43,7 @@ ready(function(){
     peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;if(lut)FX.setLUT(lut);renderPreview();}catch(e){}}
   window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
   window.sk2PeekEnd=end;
-  host.addEventListener('pointerover',function(e){var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
+  host.addEventListener('pointerover',function(e){if(e.pointerType==='touch'||document.body.classList.contains('mobile-fx'))return; /* touch scrolling is not hovering */var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
     clearTimeout(timer);timer=setTimeout(function(){if(c.matches(':hover'))show(c)},200);});
   host.addEventListener('pointerleave',function(){end()});
   host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
