@@ -2551,7 +2551,7 @@ body.sk2 #fx-looks-search{background:transparent;border:0;border-bottom:1px soli
 body.sk2 #fx-looks-search::-webkit-search-decoration,body.sk2 #fx-looks-search::-webkit-search-cancel-button,body.sk2 #fx-looks-search::-webkit-search-results-button,body.sk2 #fx-looks-search::-webkit-search-results-decoration{-webkit-appearance:none;display:none}
 body.sk2 #fx-looks-search:focus{border-bottom-color:var(--k-color-ink);outline:none}
 body.sk2 .look-cell canvas{display:block;width:100%;height:auto}
-body.sk2 .look-cell.kbd-focus{outline:1px solid var(--k-color-muted);outline-offset:2px}
+body.sk2 .look-cell.kbd-focus{outline:none;box-shadow:none} /* arrow-key scrubbing previews the look; no frame around the tile */
 body.sk2 .look-cat-hdr{grid-column:1/-1;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--k-color-muted);padding:14px 0 0;border:0;background:none}
 body.sk2 #row-lut-mix{position:sticky;bottom:-8px;z-index:7;background:var(--k-color-bg);margin:14px 0 0!important;padding:12px 0 22px;box-shadow:0 -1px 0 var(--bdr)}
 /* The card header ("Presets") already collapses the section; a second "Preset" collapse row inside it was a duplicate. */
@@ -7270,7 +7270,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1016Q';
+const BUILD='1.1016R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
