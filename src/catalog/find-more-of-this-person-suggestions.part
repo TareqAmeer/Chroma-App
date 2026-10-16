@@ -11,6 +11,10 @@
 /// Cosine similarity at/above which an unconfirmed face is offered as "is this X?". ArcFace
 /// same-identity pairs typically score above ~0.4; different people rarely exceed ~0.3.
 const FACE_SUGGEST_SIM: f32 = 0.42;
+/// Query-time quality gate for human faces (pets, species NOT NULL, pass): stored detections
+/// below SCRFD score 0.6, or narrower than 3% of the frame are shoes /
+/// windows / blank crops. Filtering here means no rescan is needed to hide existing bad rows.
+const FACE_QUALITY_SQL: &str = "(f.species IS NOT NULL OR (f.score >= 0.6 AND (f.x1 - f.x0) >= 0.03))";
 /// Cluster-centroid bar for "Person N looks like X" in review mode — centroids are less noisy
 /// than single faces, so a slightly higher bar keeps the pre-fill trustworthy.
 const CLUSTER_SUGGEST_SIM: f32 = 0.5;

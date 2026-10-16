@@ -5731,6 +5731,10 @@ fn catalog_unnamed_clusters_run(conn: &Connection) -> Result<Vec<UnnamedCluster>
 /// Cosine similarity at/above which an unconfirmed face is offered as "is this X?". ArcFace
 /// same-identity pairs typically score above ~0.4; different people rarely exceed ~0.3.
 const FACE_SUGGEST_SIM: f32 = 0.42;
+/// Query-time quality gate for human faces (pets, species NOT NULL, pass): stored detections
+/// below SCRFD score 0.6, or narrower than 3% of the frame are shoes /
+/// windows / blank crops. Filtering here means no rescan is needed to hide existing bad rows.
+const FACE_QUALITY_SQL: &str = "(f.species IS NOT NULL OR (f.score >= 0.6 AND (f.x1 - f.x0) >= 0.03))";
 /// Cluster-centroid bar for "Person N looks like X" in review mode — centroids are less noisy
 /// than single faces, so a slightly higher bar keeps the pre-fill trustworthy.
 const CLUSTER_SUGGEST_SIM: f32 = 0.5;
@@ -6248,10 +6252,10 @@ fn face_embeddings(conn: &Connection, ids: &[i64]) -> Result<Vec<(i64, Vec<f32>)
 fn person_profiles(conn: &Connection, kind: &str) -> Result<Vec<PersonProfile>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
+            &format!("SELECT p.id, p.name, f.embedding, f.confirmed FROM people p
              JOIN photo_faces f ON f.person_id = p.id
-             WHERE p.auto = 0 AND p.ignored = 0 AND length(f.embedding) > 0
-               AND ((?1 = 'pet') = (f.species IS NOT NULL)) AND ((?1 = 'pet') = (p.kind = 'pet'))",
+             WHERE p.auto = 0 AND p.ignored = 0 AND length(f.embedding) > 0 AND {FACE_QUALITY_SQL}
+               AND ((?1 = 'pet') = (f.species IS NOT NULL)) AND ((?1 = 'pet') = (p.kind = 'pet'))"),
         )
         .map_err(|e| e.to_string())?;
     let rows: Vec<(i64, String, Vec<u8>, i64)> = stmt
@@ -6352,13 +6356,13 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
     // unclustered pile are exactly what this is meant to reach.
     let mut stmt = conn
         .prepare(
-            "SELECT f.id, f.photo_id, f.embedding, ph.cap_y, ph.cap_m, ph.cap_d FROM photo_faces f
+            &format!("SELECT f.id, f.photo_id, f.embedding, ph.cap_y, ph.cap_m, ph.cap_d FROM photo_faces f
              JOIN photos ph ON ph.id = f.photo_id
              LEFT JOIN people o ON o.id = f.person_id
-             WHERE length(f.embedding) > 0 AND f.confirmed = 0
+             WHERE length(f.embedding) > 0 AND f.confirmed = 0 AND {FACE_QUALITY_SQL}
                AND ((?2 = 1) = (f.species IS NOT NULL))
                AND (f.person_id IS NULL OR (f.person_id != ?1 AND o.ignored = 0))
-               AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)",
+               AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)"),
         )
         .map_err(|e| e.to_string())?;
     type Row = (i64, i64, Vec<u8>, Option<i64>, Option<i64>, Option<i64>);
@@ -6379,7 +6383,7 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
     // Unassigned pending faces too: the person's OWN unconfirmed faces (from a cluster that
     // majority-voted into them) are also worth a yes/no, ranked in with the rest.
     let mut own = conn
-        .prepare("SELECT id, photo_id FROM photo_faces WHERE person_id = ?1 AND confirmed = 0 AND length(embedding) > 0 AND ((?2 = 1) = (species IS NOT NULL))")
+        .prepare(&format!("SELECT f.id, f.photo_id FROM photo_faces f WHERE f.person_id = ?1 AND f.confirmed = 0 AND length(f.embedding) > 0 AND {FACE_QUALITY_SQL} AND ((?2 = 1) = (f.species IS NOT NULL)) AND NOT EXISTS (SELECT 1 FROM face_rejections r WHERE r.face_id = f.id AND r.person_id = ?1)"))
         .map_err(|e| e.to_string())?;
     let own_rows: Vec<(i64, i64)> = own
         .query_map(params![person_id, pet as i64], |r| Ok((r.get(0)?, r.get(1)?)))
@@ -6389,7 +6393,12 @@ fn person_suggestions_run(conn: &Connection, person_id: i64, min_sim: Option<f32
     let target = profiles.iter().find(|p| p.id == person_id).unwrap();
     for (fid, pid) in own_rows {
         if let Some((_, e)) = face_embeddings(conn, &[fid])?.into_iter().next() {
-            out.push(FaceSuggestion { face_id: fid, photo_id: pid, similarity: profile_sim(&e, target), also: Vec::new() });
+            // Same similarity floor as outsiders: an auto-clustered face that doesn't look like
+            // the person (a mis-clustered shoe/stranger) is not worth a yes/no.
+            let sim = profile_sim(&e, target);
+            if sim >= min_sim {
+                out.push(FaceSuggestion { face_id: fid, photo_id: pid, similarity: sim, also: Vec::new() });
+            }
         }
     }
     }

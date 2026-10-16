@@ -113,81 +113,81 @@
   {
    "file": "find-more-of-this-person-suggestions.part",
    "firstLine": 5721,
-   "lines": 271
+   "lines": 275
   },
   {
    "file": "google-photos-import-takeout.part",
-   "firstLine": 5992,
-   "lines": 467
+   "firstLine": 5996,
+   "lines": 472
   },
   {
    "file": "portable-people-pets-sidecar-people-pets.part",
-   "firstLine": 6459,
+   "firstLine": 6468,
    "lines": 315
   },
   {
    "file": "natural-language-search-ai-stack-phase-d.part",
-   "firstLine": 6774,
+   "firstLine": 6783,
    "lines": 743
   },
   {
    "file": "query.part",
-   "firstLine": 7517,
+   "firstLine": 7526,
    "lines": 594
   },
   {
    "file": "date-browser.part",
-   "firstLine": 8111,
+   "firstLine": 8120,
    "lines": 65
   },
   {
    "file": "scan-phase-d-offline-thumbnails.part",
-   "firstLine": 8176,
+   "firstLine": 8185,
    "lines": 30
   },
   {
    "file": "cache-budget.part",
-   "firstLine": 8206,
+   "firstLine": 8215,
    "lines": 155
   },
   {
    "file": "per-root-cache-usage-clearing.part",
-   "firstLine": 8361,
+   "firstLine": 8370,
    "lines": 301
   },
   {
    "file": "guaranteed-offline-tier-hq-offline.part",
-   "firstLine": 8662,
+   "firstLine": 8671,
    "lines": 407
   },
   {
    "file": "focus-sharpness-out-of-focus-review.part",
-   "firstLine": 9069,
+   "firstLine": 9078,
    "lines": 232
   },
   {
    "file": "offline-edit-queue-n1a.part",
-   "firstLine": 9301,
+   "firstLine": 9310,
    "lines": 172
   },
   {
    "file": "rebuild.part",
-   "firstLine": 9473,
+   "firstLine": 9482,
    "lines": 61
   },
   {
    "file": "delete.part",
-   "firstLine": 9534,
+   "firstLine": 9543,
    "lines": 13
   },
   {
    "file": "stacking.part",
-   "firstLine": 9547,
+   "firstLine": 9556,
    "lines": 642
   },
   {
    "file": "keyword-tree.part",
-   "firstLine": 10189,
+   "firstLine": 10198,
    "lines": 4238
   }
  ]

@@ -31,7 +31,7 @@ const STRIDES: [u32; 3] = [8, 16, 32];
 const NUM_ANCHORS: usize = 2;
 const MEAN: f32 = 127.5;
 const STD: f32 = 128.0;
-const SCORE_THRESH: f32 = 0.5;
+const SCORE_THRESH: f32 = 0.6;
 const NMS_THRESH: f32 = 0.4;
 
 // ⚠️ `faces_run` (catalog.rs) drives this from a `par_iter` batch over already-rayon-capped
@@ -186,6 +186,11 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<Face>, String> {
         }
     }
 
+    // Sanity: a real face box is roughly square and never degenerate (shoes, windows, blank crops).
+    candidates.retain(|f| {
+        let (bw, bh) = (f.x1 - f.x0, f.y1 - f.y0);
+        bw >= 8.0 && bh >= 8.0 && (0.6..=1.7).contains(&(bh / bw))
+    });
     Ok(nms(candidates, NMS_THRESH))
 }
 
