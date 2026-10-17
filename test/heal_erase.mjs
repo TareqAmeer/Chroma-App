@@ -7,7 +7,7 @@ const root=path.resolve(import.meta.dirname,'..');
 const server=createServer(async(req,res)=>{try{const p=path.join(root,decodeURIComponent(req.url.split('?')[0]));res.setHeader('Content-Type',p.endsWith('.html')?'text/html':p.endsWith('.js')?'text/javascript':'application/octet-stream');res.end(await readFile(p));}catch{res.writeHead(404);res.end();}}).listen(0,'127.0.0.1');
 await new Promise(r=>server.on('listening',r));
 const native=process.env.NATIVE_CDP;
-const browser=native?await chromium.connectOverCDP(native):await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
+const browser=native?await chromium.connectOverCDP(native):await chromium.launch({executablePath:(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined),args:['--use-gl=swiftshader','--enable-unsafe-swiftshader']});
 const page=native?browser.contexts()[0].pages()[0]:await browser.newPage({viewport:{width:1440,height:960}});
 let failures=0;
 const check=(name,ok)=>{console.log(`${ok?'PASS':'FAIL'} ${name}`);if(!ok)failures++;};

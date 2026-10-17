@@ -22,7 +22,7 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  executablePath: process.env.CHROME_PATH || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined),
   // In the Windows app sandbox, Playwright's default temp download directory can be denied to
   // the browser child process. Keep test downloads in the task checkout, which is writable.
   downloadsPath: downloadRoot,

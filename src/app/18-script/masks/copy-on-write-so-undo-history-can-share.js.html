@@ -33,7 +33,7 @@ function _mskMigrate(m){
   if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
-  if(m.aiProvenance!==undefined||m.origin==='ai'||m.origin==='sky'||m.ai)m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
+  if(m.aiProvenance!==undefined||mskIsAI(m)||m.origin==='sky')m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
   //   pxb64          — current serialized form
   //   plain Array    — every mask saved before the typed-array change (sessions, sidecars, XMP)

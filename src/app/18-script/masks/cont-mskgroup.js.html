@@ -93,8 +93,8 @@ function mskMoreMenu(ev){
     +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
     +(m.composeOp?item('Stop '+m.composeOp+' composition','scissors','mskClearComposition()'): '')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]
-      ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('warn',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
-    +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('layers',15)+'<span>Compose with…</span></button>':'')
+      ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('alertTriangle',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
+    +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('copy',15)+'<span>Compose with…</span></button>':'')
     +item('Save as Mask Preset…','star','styleSaveCurrent(true)')
     +(mskSel>0&&m.composeOp!=='add'?item('Add previous mask','local','mskToggleAdd()'):'')
     +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')

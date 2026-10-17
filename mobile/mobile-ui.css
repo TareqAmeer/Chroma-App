@@ -366,3 +366,5 @@ body.sk2.mobile-fx #fx-quicknav{overflow-y:hidden;touch-action:pan-x}
 /* Thin (text-only) strip: every button, including All FX and Previous, is the same plain label. */
 body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button{display:flex!important;visibility:visible!important;opacity:1!important;align-items:center;justify-content:center;flex:0 0 auto;min-width:64px;color:var(--k-color-muted)}
 body.sk2.mobile-fx.phone-qn-thin #fx-quicknav button>span{display:none!important}
+/* Web desktop (no mobile-fx): the looks magnifier is unstyled; keep it a usable tap target. */
+body:not(.mobile-fx) #phone-looks-find{min-width:28px;min-height:28px}

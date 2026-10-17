@@ -120,7 +120,7 @@
     "app:build": "node tools/scripts/app-build.mjs",
     "app:roundtrip": "node tools/scripts/app-split.mjs && node tools/scripts/app-build.mjs --check",
     "lint:src": "node test/lint_src_layout.mjs",
-    "unit:test": "node --test test/unit/",
+    "unit:test": "node --test 'test/unit/**/*.test.mjs'",
     "app:uses": "node tools/scripts/app-uses.mjs"
   },
   "dependencies": {

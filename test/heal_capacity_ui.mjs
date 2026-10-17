@@ -19,7 +19,7 @@ const server = createServer(async (req, res) => {
 }).listen(0, '127.0.0.1');
 await new Promise(resolve => server.on('listening', resolve));
 const browser = await chromium.launch({
-  executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  executablePath: process.env.CHROME_PATH || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined),
   args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox', '--enable-unsafe-swiftshader'],
 });
 try {

@@ -22,6 +22,7 @@ const src = await readFile(path.join(ROOT, FILE), 'utf8');
 // deliberately distinguishes a plain AI mask from a Skin AI one.
 const ALLOW = [
   /function mskIsAI\(/,
+  /function mskIsPromptedSAM\(/,        // deliberately excludes Skin: it has no prompts to replay
   /^\s*\/\//,                        // comment lines
   /\?'AI'/,                          // the auto-label branch
 ];

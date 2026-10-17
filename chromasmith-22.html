@@ -4550,7 +4550,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-del" style="flex:1" onclick="healDeleteSel()" disabled>Delete spot</button><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-dust" style="flex:1" onclick="healDustToggle()" aria-pressed="false" title="Preview-only overlay that highlights dust and small blemishes. Never exported.">Visualise spots</button></div>
         <div class="fx-row" id="row-heal-dust" style="display:none"><div class="fx-label">Sensitivity</div><input class="fx-slider" type="range" min="1" max="100" step="1" value="40" id="sl-heal-dust" oninput="healDustRender()"><div class="fx-val" id="vl-heal-dust">40</div></div>
-        <div style="margin-top:12px"><div class="fx-label">Local AI erase</div><p style="font-size:11px;line-height:1.5">Desktop · optional 28 MB model · photos stay local. Review candidates before keeping a repair.</p><div class="fx-row"><label class="fx-label" for="sl-inpaint-size">Brush size</label><input class="fx-slider" id="sl-inpaint-size" type="range" min="0.2" max="8" step="0.2" value="1"></div><div class="btn-row"><button class="btn bgh" id="btn-inpaint-draw" onclick="window.chromasmithInpaintDraw?chromasmithInpaintDraw():toast('Local AI erase requires the desktop app')">Brush object to erase</button><button class="btn bgh" id="btn-inpaint-generate" onclick="window.chromasmithInpaintGenerate&&chromasmithInpaintGenerate()" disabled>Generate candidates</button></div><div id="inpaint-accepted" aria-label="Accepted erase repairs"></div></div>
+        <div style="margin-top:12px"><div class="fx-label">Local AI erase</div><p style="font-size:11px;line-height:1.5">Desktop · optional 28 MB model · photos stay local. Review candidates before keeping a repair.</p><div class="fx-row"><label class="fx-label" for="sl-inpaint-size">Brush size</label><input class="fx-slider" id="sl-inpaint-size" type="range" min="0.2" max="8" step="0.2" value="1"></div><div class="btn-row"><button class="btn bgh" id="btn-inpaint-draw" onclick="window.chromasmithInpaintDraw?chromasmithInpaintDraw():toast('Local AI erase requires the desktop app')">Brush object to erase</button><button class="btn bgh" id="btn-inpaint-generate" onclick="window.chromasmithInpaintGenerate&&chromasmithInpaintGenerate()" disabled>Generate candidates</button></div><div id="inpaint-accepted" role="group" aria-label="Accepted erase repairs"></div></div>
         </div>
       </div>
       <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
@@ -7276,7 +7276,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1017C';
+const BUILD='1.1017D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15824,7 +15824,7 @@ function _mskMigrate(m){
   if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
-  if(m.aiProvenance!==undefined||m.origin==='ai'||m.origin==='sky'||m.ai)m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
+  if(m.aiProvenance!==undefined||mskIsAI(m)||m.origin==='sky')m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
   //   pxb64          — current serialized form
   //   plain Array    — every mask saved before the typed-array change (sessions, sidecars, XMP)
@@ -17673,11 +17673,13 @@ async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=
   if(typeof window.chromasmithSaveMaskSetForCurrentPhoto==='function')return await window.chromasmithSaveMaskSetForCurrentPhoto(masksToWrite,expectedMasks,targetItem);
   throw new Error('Per-photo mask persistence is unavailable for this target');
 }
+// A plain point/box-prompted segmentation mask (not Skin, which is AI but has no prompts to replay).
+function mskIsPromptedSAM(m){return !!m&&m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||!!_samNormalizeBox(m.aiBox));}
 function _mskPortableIsUnsupported(m){
   if(m.origin==='sky')return false;
-  return mskIsAI(m)&&!(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));
+  return mskIsAI(m)&&!mskIsPromptedSAM(m);
 }
-function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
   const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';
@@ -18528,8 +18530,8 @@ function mskMoreMenu(ev){
     +item(m.isExclude?'Stop using as eraser':'Use as eraser','eraser','mskToggleExclude()',m.isExclude)
     +(m.composeOp?item('Stop '+m.composeOp+' composition','scissors','mskClearComposition()'): '')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]
-      ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('warn',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
-    +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('layers',15)+'<span>Compose with…</span></button>':'')
+      ?'<button class="msk-more-it" disabled title="This operation has a missing or cyclic operand and selects no pixels" aria-label="Selection disabled; choose a replacement operand">'+icon('alertTriangle',15)+'<span>Selection disabled — choose a replacement</span></button>':'')
+    +(fxState.masks.length>1?'<button type="button" class="msk-more-it" aria-haspopup="dialog" onclick="mskCompositionMenu(event)">'+icon('copy',15)+'<span>Compose with…</span></button>':'')
     +item('Save as Mask Preset…','star','styleSaveCurrent(true)')
     +(mskSel>0&&m.composeOp!=='add'?item('Add previous mask','local','mskToggleAdd()'):'')
     +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')

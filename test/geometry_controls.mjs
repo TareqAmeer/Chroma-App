@@ -31,7 +31,7 @@ await listen;
 const browser = await chromium.launch({ args: [
   '--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
   '--disable-dev-shm-usage', '--enable-unsafe-swiftshader',
-], executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+], executablePath: process.env.CHROME_PATH || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined) });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.on('pageerror', e => console.error('[pageerror]', e.message));

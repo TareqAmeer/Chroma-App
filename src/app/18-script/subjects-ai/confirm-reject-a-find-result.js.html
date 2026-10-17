@@ -160,11 +160,13 @@ async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=
   if(typeof window.chromasmithSaveMaskSetForCurrentPhoto==='function')return await window.chromasmithSaveMaskSetForCurrentPhoto(masksToWrite,expectedMasks,targetItem);
   throw new Error('Per-photo mask persistence is unavailable for this target');
 }
+// A plain point/box-prompted segmentation mask (not Skin, which is AI but has no prompts to replay).
+function mskIsPromptedSAM(m){return !!m&&m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||!!_samNormalizeBox(m.aiBox));}
 function _mskPortableIsUnsupported(m){
   if(m.origin==='sky')return false;
-  return mskIsAI(m)&&!(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));
+  return mskIsAI(m)&&!mskIsPromptedSAM(m);
 }
-function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||(m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||_samNormalizeBox(m.aiBox)));}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
   const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';

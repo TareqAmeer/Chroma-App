@@ -47,7 +47,7 @@ async function main() {
   const server = await startServer(ROOT);
   const { port } = server.address();
   const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: process.env.CHROME_PATH || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined),
     args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });

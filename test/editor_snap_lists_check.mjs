@@ -45,6 +45,7 @@ const KNOWN_EXCLUSIONS = {
     'canvas-z': 'canvas zoom is UI framing, not a graded value — intentionally not part of the undo/redo history',
     'canvas-blur': 'tracked via s.canvas.blurAmt (fxState.canvas object), not the flat sliders map',
     'preset-str': 'temporary strength control for the most recently applied style; the resulting photo settings are tracked by their own recipe fields',
+    'inpaint-size': 'AI-erase brush-tool setting, not persisted photo state (see heal-size)',
     'heal-size': 'Retouch brush-tool setting, not persisted photo state — see healSyncUI\'s own comment on why brush settings are tracked separately from spots',
     'heal-feather': 'see heal-size',
     'heal-opacity': 'see heal-size',
@@ -84,6 +85,7 @@ const KNOWN_EXCLUSIONS = {
     'hal-noremjet': 'see hal-white',
     'hal-extreme': 'see hal-white',
     'retouch': 'Retouch has no off state to speak of — its "edited" signal is spot count (fx-has-heal), not a graded on/off; see healSyncUI\'s own comment',
+    'exp-gps': 'Export-tab Lightroom GPS preference, not per-photo graded state',
     'exp-hdr': 'Export-tab setting, not per-photo graded state', 'exp-wm': 'see exp-hdr', 'gp-save': 'app-level Google Photos preference, not per-photo state',
   },
 };

@@ -57,7 +57,7 @@ async function main() {
   const { port } = server.address();
   const nativeCdp=process.env.NATIVE_CDP;
   const browser = nativeCdp?await chromium.connectOverCDP(nativeCdp):await chromium.launch({
-    executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: process.env.CHROME_PATH || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined),
     args: [process.platform === 'win32' ? '--use-gl=angle' : '--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox',
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });
