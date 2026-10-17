@@ -4234,4 +4234,43 @@ mod tests {
         assert_eq!(left, 0);
         std::fs::remove_dir_all(&dir).ok();
     }
+    /// CHR-175: a batch rename moves the photo AND its XMP sidecar, updates the catalog row in
+    /// place (same id), and the plan refuses a target that already exists.
+    #[test]
+    fn batch_rename_moves_sidecar_and_keeps_catalog_identity() {
+        let mut conn = temp_db();
+        let dir = scratch_photos_dir("batch_rename");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        std::fs::write(dir.join("a.xmp"), b"<xmp/>").unwrap();
+        std::fs::write(dir.join("b.jpg"), b"b").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        let cancel = AtomicBool::new(false);
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &cancel).unwrap();
+        let id_a: i64 = conn.query_row("SELECT id FROM photos WHERE name='a.jpg'", [], |r| r.get(0)).unwrap();
+        // Lookups are keyed by the volume mount (macOS temp lives under the Data volume), so
+        // derive absolute paths from the stored rows instead of the temp path.
+        let abs_of = |name: &str| -> String {
+            let (last, rel): (String, String) = conn.query_row(
+                "SELECT v.last_path,p.rel_path FROM photos p JOIN volumes v ON v.id=p.volume_id WHERE p.name=?1",
+                params![name], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+            abs_path(&last, false, &rel)
+        };
+        let a_path = abs_of("a.jpg");
+        let b_path = abs_of("b.jpg");
+
+        // Collision: renaming a.jpg to the existing b.jpg's name must be flagged.
+        let (rows, _) = rename_plan(&conn, &[a_path.clone()], "b", 1).unwrap();
+        assert!(rows.iter().any(|r| r.collision), "target that already exists must be a collision");
+
+        let (rows, photos) = rename_plan(&conn, &[a_path.clone(), b_path.clone()], "shot_{seq}", 1).unwrap();
+        assert!(rows.iter().all(|r| !r.collision));
+        rename_apply_run(&mut conn, &photos, rows).unwrap();
+
+        assert!(dir.join("shot_0001.jpg").is_file() && dir.join("shot_0001.xmp").is_file(), "sidecar must follow its photo");
+        assert!(dir.join("shot_0002.jpg").is_file());
+        assert!(!dir.join("a.jpg").exists() && !dir.join("a.xmp").exists() && !dir.join("b.jpg").exists());
+        let name: String = conn.query_row("SELECT name FROM photos WHERE id=?1", params![id_a], |r| r.get(0)).unwrap();
+        assert_eq!(name, "shot_0001.jpg", "catalog row keeps its id and gets the new name");
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
