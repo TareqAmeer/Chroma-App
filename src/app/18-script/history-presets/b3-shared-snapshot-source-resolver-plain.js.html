@@ -170,11 +170,14 @@ function renderPreview(){
     FX.cv.style.clipPath='';
   }else if(fxSplit){
     const origCv=document.getElementById('fx-canvas-orig');
-    renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
+    const _splitBase=resolveSplitSnapshot(fxSplitSrc);
+    renderSnapshotTo(origCv,_splitBase,pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
     FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
     _applySplitPos();
+    fxBaselineValuesSync(_splitBase);
   } else {
+    if(document.querySelector('.fx-base-val'))fxBaselineValuesSync();
     const orig=document.getElementById('fx-canvas-orig');
     if(orig){orig.style.display='none';orig.style.clipPath='';}
     if(FX&&FX.cv)FX.cv.style.clipPath='';

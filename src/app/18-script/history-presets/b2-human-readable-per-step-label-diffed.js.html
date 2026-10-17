@@ -247,6 +247,29 @@ async function fxResetAll(){
 }
 
 // ══ SPLIT BEFORE/AFTER ════════════════════════════════════════════════════════
+// CHR-270: while a split compare is on, show the before-side's slider values read-only next to
+// the live ones (only where they differ). Pure DOM annotation — never touches slider values,
+// history, autosave or the recipe. 'orig' compares against each slider's default.
+function fxBaselineValuesSync(resolved){
+  document.querySelectorAll('.fx-base-val').forEach(n=>n.remove());
+  if(!fxSplit)return;
+  const base=resolved!==undefined?resolved:resolveSplitSnapshot(fxSplitSrc);
+  const vals={};
+  if(base==='orig'){_FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el)vals[id]=el.defaultValue;});}
+  else if(base&&base.sliders){
+    Object.assign(vals,base.sliders);
+    if(vals['adj-exp']!==undefined&&base.ver!==2)vals['adj-exp']=Math.max(-100,Math.min(100,parseFloat(vals['adj-exp'])*(20/50)));
+  }
+  for(const id in vals){
+    const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
+    if(!sl||!vl)continue;
+    const b=parseFloat(vals[id]),c=parseFloat(sl.value);
+    if(!isFinite(b)||b===c)continue;
+    let txt=b.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt+='%';
+    const n=document.createElement('div');n.className='fx-base-val';n.textContent=txt;n.setAttribute('aria-label','Before value '+txt);n.dataset.for=id;
+    vl.parentNode.insertBefore(n,vl);
+  }
+}
 function toggleSplit(){
   fxSplit=!fxSplit;
   const btn=document.getElementById('btn-split');

@@ -12,6 +12,7 @@ try {
   page.on('pageerror', error => { throw error; });
   await page.goto(pathToFileURL(path.join(ROOT, 'chromasmith-22.html')).href, { waitUntil: 'load', timeout: 60000 });
   await page.waitForFunction(() => typeof window.loadFXImages === 'function');
+  await page.addStyleTag({ content: '#cs-modal-ov{display:none!important}' }); // first-run guide modal otherwise intercepts pointer events
   const image = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
   await page.evaluate(async b64 => {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -55,11 +56,27 @@ try {
   await page.mouse.up();
   const horizontalDragPos = await page.evaluate(() => fxSplitPos);
   assert.ok(horizontalDragPos > .52, 'pointer drag moves the horizontal divider with the photo');
+  await page.waitForFunction(() => document.getElementById('fx-canvas-orig')?.style.display !== 'none', null, { timeout: 15000 }).catch(() => {});
+  await page.evaluate(() => _applySplitPos());
   const clips = await page.evaluate(() => ({ pos: fxSplitPos, before: document.getElementById('fx-canvas-orig').style.clipPath, after: FX.cv.style.clipPath }));
   assert.match(clips.before, new RegExp(`${(100 - clips.pos * 100).toFixed(1)}%`), 'before canvas clipping follows the dragged divider');
   assert.match(clips.after, new RegExp(`${(clips.pos * 100).toFixed(1)}%`), 'after canvas clipping follows the dragged divider');
   const recipe = await page.evaluate(() => JSON.stringify(getUISnapshot()));
   assert.doesNotMatch(recipe, /fxSplitAxis|fxSplitPos/, 'divider presentation state is not serialized in recipe');
+  // Baseline slider values: original baseline shows the default next to a changed slider,
+  // matching sliders show nothing, and the annotation never enters the recipe.
+  await page.evaluate(() => { const s = document.getElementById('sl-adj-exp'); s.value = '40'; fxUpdate(); fxSplitSrc = 'orig'; renderPreview(); });
+  await page.waitForSelector('.fx-base-val[data-for="adj-exp"]', { state: 'attached', timeout: 15000 });
+  const base = await page.evaluate(() => ({
+    exp: document.querySelector('.fx-base-val[data-for="adj-exp"]')?.textContent,
+    con: !!document.querySelector('.fx-base-val[data-for="adj-con"]'),
+    recipe: JSON.stringify(getUISnapshot()),
+  }));
+  assert.equal(base.exp, '0', 'before value for the changed slider is shown');
+  assert.equal(base.con, false, 'unchanged sliders show no before value');
+  assert.ok(!base.recipe.includes('fx-base-val'), 'before annotation is not serialized into the recipe');
+  await page.evaluate(() => { toggleSplit(); });
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.fx-base-val').length), 0, 'before values removed when split is off');
   console.log(`CHR-270 divider regression: PASS (vertical drag .500→${verticalDragPos.toFixed(3)}, horizontal drag .510→${horizontalDragPos.toFixed(3)}, keyboard, limits, recenter, split clipping, recipe isolation)`);
 } finally {
   await browser.close();

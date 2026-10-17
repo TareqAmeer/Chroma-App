@@ -468,6 +468,8 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 /* Let a vertical gesture over a slider scroll the mobile tool sheet. Horizontal gestures
    remain available for adjusting the range control. */
 body.mobile-fx .fx-slider{touch-action:pan-y}
+.fx-base-val{order:2;font-family:var(--sans);font-size:var(--fs-2);font-variant-numeric:tabular-nums;color:var(--mut);opacity:.75;text-align:right;flex-shrink:0;margin-right:6px}
+.fx-base-val::before{content:'was ';opacity:.7}
 .fx-val{order:2;font-family:var(--sans);font-size:var(--fs-2);font-variant-numeric:tabular-nums;color:var(--mut);text-align:right;flex-shrink:0}
 /* Accent is now an INFORMATION channel, not decoration: a value goes amber only when it differs
    from its factory default (see .fx-row.fx-mod), so a panel of 14 sliders at rest reads calm
@@ -7276,7 +7278,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1017E';
+const BUILD='1.1017F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20691,6 +20693,29 @@ async function fxResetAll(){
 }
 
 // ══ SPLIT BEFORE/AFTER ════════════════════════════════════════════════════════
+// CHR-270: while a split compare is on, show the before-side's slider values read-only next to
+// the live ones (only where they differ). Pure DOM annotation — never touches slider values,
+// history, autosave or the recipe. 'orig' compares against each slider's default.
+function fxBaselineValuesSync(resolved){
+  document.querySelectorAll('.fx-base-val').forEach(n=>n.remove());
+  if(!fxSplit)return;
+  const base=resolved!==undefined?resolved:resolveSplitSnapshot(fxSplitSrc);
+  const vals={};
+  if(base==='orig'){_FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el)vals[id]=el.defaultValue;});}
+  else if(base&&base.sliders){
+    Object.assign(vals,base.sliders);
+    if(vals['adj-exp']!==undefined&&base.ver!==2)vals['adj-exp']=Math.max(-100,Math.min(100,parseFloat(vals['adj-exp'])*(20/50)));
+  }
+  for(const id in vals){
+    const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
+    if(!sl||!vl)continue;
+    const b=parseFloat(vals[id]),c=parseFloat(sl.value);
+    if(!isFinite(b)||b===c)continue;
+    let txt=b.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt+='%';
+    const n=document.createElement('div');n.className='fx-base-val';n.textContent=txt;n.setAttribute('aria-label','Before value '+txt);n.dataset.for=id;
+    vl.parentNode.insertBefore(n,vl);
+  }
+}
 function toggleSplit(){
   fxSplit=!fxSplit;
   const btn=document.getElementById('btn-split');
@@ -23485,11 +23510,14 @@ function renderPreview(){
     FX.cv.style.clipPath='';
   }else if(fxSplit){
     const origCv=document.getElementById('fx-canvas-orig');
-    renderSnapshotTo(origCv,resolveSplitSnapshot(fxSplitSrc),pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
+    const _splitBase=resolveSplitSnapshot(fxSplitSrc);
+    renderSnapshotTo(origCv,_splitBase,pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
     FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
     _applySplitPos();
+    fxBaselineValuesSync(_splitBase);
   } else {
+    if(document.querySelector('.fx-base-val'))fxBaselineValuesSync();
     const orig=document.getElementById('fx-canvas-orig');
     if(orig){orig.style.display='none';orig.style.clipPath='';}
     if(FX&&FX.cv)FX.cv.style.clipPath='';
