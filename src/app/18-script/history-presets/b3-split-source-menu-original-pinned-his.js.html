@@ -2,6 +2,7 @@
 function _fxSplitSrcLabel(src){
   if(!src||src==='orig')return 'Original';
   if(src==='pin')return 'Pinned';
+  if(src==='prev')return 'Previous step';
   if(src.hist!==undefined)return (fxHistory[src.hist]&&fxHistory[src.hist].label)||`Step ${src.hist}`;
   if(src.style!==undefined)return `Style: ${src.style}`;
   if(src.export!==undefined)return `Export v${src.export}`;
@@ -42,6 +43,7 @@ async function _fxSplitListInto(container,closeFn){
   container.appendChild(_fxSplitHead('Compare against'));
   container.appendChild(_fxSplitRow('Original',()=>pick('orig'),fxSplitSrc==='orig'));
   container.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)pick('pin');},fxSplitSrc==='pin'));
+  container.appendChild(_fxSplitRow(fxHistIdx>0?'Previous step':'Previous step (no history yet)',()=>{if(fxHistIdx>0)pick('prev');},fxSplitSrc==='prev'));
   container.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();pick('pin');}));
   const hist=fxHistory;
   if(hist.length>1){

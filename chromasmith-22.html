@@ -7276,7 +7276,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1017B';
+const BUILD='1.1017C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20724,6 +20724,7 @@ function initSplitDrag(){
 function _fxSplitSrcLabel(src){
   if(!src||src==='orig')return 'Original';
   if(src==='pin')return 'Pinned';
+  if(src==='prev')return 'Previous step';
   if(src.hist!==undefined)return (fxHistory[src.hist]&&fxHistory[src.hist].label)||`Step ${src.hist}`;
   if(src.style!==undefined)return `Style: ${src.style}`;
   if(src.export!==undefined)return `Export v${src.export}`;
@@ -20764,6 +20765,7 @@ async function _fxSplitListInto(container,closeFn){
   container.appendChild(_fxSplitHead('Compare against'));
   container.appendChild(_fxSplitRow('Original',()=>pick('orig'),fxSplitSrc==='orig'));
   container.appendChild(_fxSplitRow(fxPinned?'Pinned':'Pinned (none yet)',()=>{if(fxPinned)pick('pin');},fxSplitSrc==='pin'));
+  container.appendChild(_fxSplitRow(fxHistIdx>0?'Previous step':'Previous step (no history yet)',()=>{if(fxHistIdx>0)pick('prev');},fxSplitSrc==='prev'));
   container.appendChild(_fxSplitRow('Pin current state',()=>{fxPinned=getUISnapshot();pick('pin');}));
   const hist=fxHistory;
   if(hist.length>1){
@@ -23315,6 +23317,7 @@ function renderSnapshotTo(dstCanvas,snap,pw,ph,opts){
 function resolveSplitSnapshot(src){
   if(!src||src==='orig')return 'orig';
   if(src==='pin')return fxPinned||'orig'; // nothing pinned yet → fall back to original, never throw
+  if(src==='prev')return fxHistIdx>0?resolveSplitSnapshot({hist:fxHistIdx-1}):'orig'; // tracks the live history cursor, so it follows each new edit
   if(src.hist!==undefined){
     const e=fxHistory[src.hist];
     if(!e)return 'orig';

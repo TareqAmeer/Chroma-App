@@ -4,6 +4,7 @@
 function resolveSplitSnapshot(src){
   if(!src||src==='orig')return 'orig';
   if(src==='pin')return fxPinned||'orig'; // nothing pinned yet → fall back to original, never throw
+  if(src==='prev')return fxHistIdx>0?resolveSplitSnapshot({hist:fxHistIdx-1}):'orig'; // tracks the live history cursor, so it follows each new edit
   if(src.hist!==undefined){
     const e=fxHistory[src.hist];
     if(!e)return 'orig';
