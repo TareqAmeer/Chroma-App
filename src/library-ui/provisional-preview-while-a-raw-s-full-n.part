@@ -103,7 +103,6 @@
       if (token && token === instantThumbToken && token === provisionalToken && provisionalImg) {
         provisionalImg.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
-        provisionalImg.style.cssText = '';
       }
     };
   }
@@ -171,7 +170,7 @@
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
       }
-      if (embeddedUrl && myToken === provisionalToken) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; el.style.cssText = ''; }
+      if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); } // after the fade-out
     };
   }
   async function loadAssetImage(assetPath) {

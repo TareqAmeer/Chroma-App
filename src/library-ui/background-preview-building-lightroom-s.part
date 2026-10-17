@@ -9,12 +9,20 @@
   let _autoPrevLastInput = performance.now(), _autoPrevRunning = false;
   const _autoPrevDone = new Set(), _autoPrevFailed = new Set();
   const _autoPrevTouch = () => { _autoPrevLastInput = performance.now(); };
-  ['keydown', 'mousedown', 'wheel', 'touchstart', 'mousemove'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  // Real input pauses the builder; merely moving the mouse over the editor no longer does —
+  // it kept previews from ever building while someone was looking at photos, so more opens hit
+  // the camera JPEG (and its colour jump) instead of a prepared proxy. A held pointer (slider
+  // drag, brush, pan) still pauses it for as long as it is down. The build itself runs on the
+  // utility-QoS pool, so it yields to the editor's own decodes.
+  let _autoPrevPointerHeld = false;
+  ['keydown', 'mousedown', 'wheel', 'touchstart'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  document.addEventListener('pointerdown', () => { _autoPrevPointerHeld = true; _autoPrevTouch(); }, { capture: true, passive: true });
+  ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, () => { _autoPrevPointerHeld = false; _autoPrevTouch(); }, { capture: true, passive: true }));
   function autoPreviewsEnabled() {
     try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
   }
   function autoPreviewUserBusy() {
-    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive)
+    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
       || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
   }
   function autoPreviewCandidates() {

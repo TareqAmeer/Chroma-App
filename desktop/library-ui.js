@@ -2361,8 +2361,12 @@
     /* The provisional preview fully replaces the previous photo while the native decode runs.
        Its opaque backing prevents differently-shaped old canvas pixels showing through. */
     #lib-provisional{position:absolute;inset:0;width:100%;height:100%;background:#000;
-      object-fit:contain;pointer-events:none;z-index:50;display:none}
-    #lib-provisional.on{display:block}
+      object-fit:contain;pointer-events:none;z-index:50;opacity:0;visibility:hidden;
+      transition:opacity var(--duration-press,120ms) ease,visibility 0s linear var(--duration-press,120ms)}
+    /* Shown instantly; when the real render lands it fades out over the now-visible canvas, so
+       the stand-in -> final colour change reads as a dissolve rather than a jump. */
+    #lib-provisional.on{opacity:1;visibility:visible;transition:none}
+    @media (prefers-reduced-motion:reduce){#lib-provisional{transition:none}}
     body.lib-provisional-on #fx-canvas,body.lib-provisional-on #fx-canvas-orig{visibility:hidden}
     /* Preview -> full-resolution swap in progress: a soft pulsing accent border on the photo so
        the user can see the sharper version is still loading. Removed the moment it lands. */
@@ -3285,7 +3289,6 @@
       if (token && token === instantThumbToken && token === provisionalToken && provisionalImg) {
         provisionalImg.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
-        provisionalImg.style.cssText = '';
       }
     };
   }
@@ -3353,7 +3356,7 @@
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
       }
-      if (embeddedUrl && myToken === provisionalToken) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; el.style.cssText = ''; }
+      if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); } // after the fade-out
     };
   }
   async function loadAssetImage(assetPath) {
@@ -7722,12 +7725,20 @@
   let _autoPrevLastInput = performance.now(), _autoPrevRunning = false;
   const _autoPrevDone = new Set(), _autoPrevFailed = new Set();
   const _autoPrevTouch = () => { _autoPrevLastInput = performance.now(); };
-  ['keydown', 'mousedown', 'wheel', 'touchstart', 'mousemove'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  // Real input pauses the builder; merely moving the mouse over the editor no longer does —
+  // it kept previews from ever building while someone was looking at photos, so more opens hit
+  // the camera JPEG (and its colour jump) instead of a prepared proxy. A held pointer (slider
+  // drag, brush, pan) still pauses it for as long as it is down. The build itself runs on the
+  // utility-QoS pool, so it yields to the editor's own decodes.
+  let _autoPrevPointerHeld = false;
+  ['keydown', 'mousedown', 'wheel', 'touchstart'].forEach((t) => document.addEventListener(t, _autoPrevTouch, { capture: true, passive: true }));
+  document.addEventListener('pointerdown', () => { _autoPrevPointerHeld = true; _autoPrevTouch(); }, { capture: true, passive: true });
+  ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, () => { _autoPrevPointerHeld = false; _autoPrevTouch(); }, { capture: true, passive: true }));
   function autoPreviewsEnabled() {
     try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
   }
   function autoPreviewUserBusy() {
-    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive)
+    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
       || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
   }
   function autoPreviewCandidates() {
