@@ -5200,6 +5200,7 @@
     if (state.open && state.expanded_view && !state.unified_view) rememberGalleryScrollPosition();
     const openT0 = performance.now();
     rawPerf('open-start', path);
+    if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old

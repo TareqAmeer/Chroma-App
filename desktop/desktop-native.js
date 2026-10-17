@@ -221,6 +221,18 @@
     return lutKey ? { mode: 'lut', lutKey, kind: 'dng' } : { mode: 'linear16', lutKey: '' };
   }
   window.chromasmithResolveRawLut = resolveRawLut;
+  // Library open starts the (whole-file read + EXIF parse) peek the moment the click lands, so it
+  // overlaps the JS-side save flush / snapshot instead of running after them. One-shot per path;
+  // a failed prefetch rejects here and falls to the same catch as a direct call.
+  const _peekPrefetch = new Map();
+  window.chromasmithPrefetchRawPeek = function (path) {
+    if (_peekPrefetch.has(path)) return;
+    if (_peekPrefetch.size > 4) _peekPrefetch.clear();
+    const p = invoke('peek_raw_camera_path', { path });
+    p.catch(() => {});
+    _peekPrefetch.set(path, p);
+    setTimeout(() => { if (_peekPrefetch.get(path) === p) _peekPrefetch.delete(path); }, 15000);
+  };
   class NativeLibRawShim {
     async open(bytes, settings) {
       // Clear the PREVIOUS photo's ground-truth lens-applied flag immediately. Deliberately NOT
@@ -259,7 +271,11 @@
       // peek and the decode, so the RAW never crosses IPC. Everything else sends its bytes.
       const sourcePath = (settings && settings.sourcePath) || null;
       this._sourcePath = sourcePath;
-      try { this._ident = sourcePath ? await invoke('peek_raw_camera_path', { path: sourcePath }) : await invoke('peek_raw_camera', bytes); } catch (e) { console.error('peek_raw_camera', e); }
+      try {
+        const pre = sourcePath && _peekPrefetch.get(sourcePath);
+        if (pre) _peekPrefetch.delete(sourcePath);
+        this._ident = sourcePath ? await (pre || invoke('peek_raw_camera_path', { path: sourcePath })) : await invoke('peek_raw_camera', bytes);
+      } catch (e) { console.error('peek_raw_camera', e); }
       _lap('peek_raw_camera done at');
       if (settings && settings.outputBps === 16) {
         // docs/ROADMAP.md's F1: bundled (Panasonic DC-S9 / Sony DSC-RX100M5) always wins when it
