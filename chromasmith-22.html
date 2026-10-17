@@ -9808,6 +9808,9 @@ void main(){
     this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;this._resourceKey=resourceKey;
   }
   setImage(img){const gl=this.gl;
+    // A real image change while a working texture is parked (pushTempImage whose render threw
+    // before popTempImage): the parked frame is stale now — free it rather than restore it later.
+    if(this._parkedImg&&!this._pushingTemp){const pt=this._parkedImg.tx;if(pt&&pt!==this.vidTx&&pt!==this.imgTx)gl.deleteTexture(pt);this._parkedImg=null;}
     // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
     // delete it here, only the one-shot photo texture. Without this guard, loading a photo
     // right after grading a video would delete the still-live video texture out from under it.
@@ -9845,6 +9848,22 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this._ensureLutTx();
+  }
+  // Loupe / full-res crop / crop-mode renders upload a small crop for one render and used to
+  // restore with setImage(fxWork) — deleting and re-uploading the whole working frame (a 24MP
+  // canvas upload is 400-600ms in WebKit) on every loupe pan settle. Park the working texture
+  // instead and put it back untouched.
+  pushTempImage(img){
+    if(!this._parkedImg)this._parkedImg={tx:this.imgTx,w:this.imgW,h:this.imgH,sl:this.usingSceneLinear};
+    else if(this.imgTx&&this.imgTx!==this.vidTx&&this.imgTx!==this._parkedImg.tx)this.gl.deleteTexture(this.imgTx);
+    this.imgTx=null; // setImage must not delete the parked texture
+    this._pushingTemp=true;try{this.setImage(img);}finally{this._pushingTemp=false;}
+  }
+  popTempImage(){
+    const p=this._parkedImg;if(!p)return false;this._parkedImg=null;
+    if(this.imgTx&&this.imgTx!==this.vidTx&&this.imgTx!==p.tx)this.gl.deleteTexture(this.imgTx);
+    this.imgTx=p.tx;this.imgW=p.w;this.imgH=p.h;this.usingSceneLinear=p.sl;
+    return !!p.tx;
   }
   // Lazy neutral-passthrough 3D LUT init, shared by setImage and setVideoFrame — was originally
   // inlined at the end of setImage only; hoisted out so both source paths initialize it exactly
@@ -13426,6 +13445,7 @@ function installFXImages(entries,loadKey,opts){
   fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
   fxCurIdx=0;fxExportScope='all';
   fxImg=fxImages[0].img;updateWork();
+  window.__pm&&window.__pm('ifx-work');
   resetGeomUI();
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
@@ -13471,6 +13491,7 @@ function installFXImages(entries,loadKey,opts){
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
   _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  window.__pm&&window.__pm('ifx-zoom');
   fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
@@ -13486,9 +13507,11 @@ function installFXImages(entries,loadKey,opts){
   fxImages[0].masks=fxState.masks;
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
+  window.__pm&&window.__pm('ifx-masks');
   if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
-  if(!opts.deferRender){renderPreview();buildLookGallery();buildFilmstrip();}
+  window.__pm&&window.__pm('ifx-bw');
+  if(!opts.deferRender){renderPreview();window.__pm&&window.__pm('ifx-render');buildLookGallery();buildFilmstrip();}
   else {
     const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,500));
     idle(()=>{buildLookGallery();buildFilmstrip();},{timeout:1000});
@@ -14241,14 +14264,26 @@ function pointColorsIdentity(){return!(fxState.pointColors&&fxState.pointColors.
 function bakeHsl(){
   const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
   const pcOn=!!(document.getElementById('tg-pointcolor')||{}).classList?.contains('on');
-  const H=fxState.hsl,S=33,S2=S*S,d=new Uint8Array(S*S*S*3),hA={},sA={},lA={};
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
   if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
   const pts=(pcOn&&fxState.pointColors)?fxState.pointColors:null;
-  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
-    let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
-    if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
-    const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
-  if(FX.ok)FX.setHslLUT(d);
+  // The cube is a pure function of these inputs. Every photo open re-applies the pristine
+  // default snapshot and then the photo's recipe, each re-baking an unchanged (usually identity)
+  // cube — ~36k applyHSL evals, the biggest single cost of applyUISnapshot (~60ms Chromium,
+  // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
+  const key=JSON.stringify([hA,sA,lA,pts]);
+  const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
+  let hit=memo.get(key);
+  if(!hit){
+    const d=new Uint8Array(S*S*S*3);
+    for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+      let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+      if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
+      const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
+    hit=d;memo.set(key,hit);
+    if(memo.size>4)memo.delete(memo.keys().next().value);
+  }
+  if(FX.ok)FX.setHslLUT(hit);
 }
 // DRK-style before/after split swatch: left half is the band's canonical hue, right half
 // is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews
@@ -23173,10 +23208,10 @@ function renderLoupe(){
   crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.setImage(crop);
+  FX.pushTempImage(crop);
   FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
-  FX.setImage(fxWork);                                              // restore working texture for later renders
+  if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   // Unscaled (fxZoom=1) footprint — the wrapper's own transform:scale(fxZoom) (see _applyZoom)
   // brings this to outW/outH's actual device-pixel size on screen, matching what was just
@@ -23291,10 +23326,10 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
-  FX.setImage(crop);
+  FX.pushTempImage(crop);
   FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
-  FX.setImage(fxWork);
+  if(!FX.popTempImage())FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
   // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
   // where that part of the full image belongs. Cleared by the normal render path.
@@ -23449,7 +23484,9 @@ function renderPreview(){
   // least half of the source detail for usable editing. This is a resolution change, not a
   // layout change: the preview remains responsive while faces, texture and masks stop being
   // judged from a tiny ~500px proxy.
-  if(cw>0&&ch>0){
+  // Slider drags render a screen-resolution draft (Lightroom/darktable compute at reduced
+  // resolution while editing); the 180ms settle frame restores the half-source detail.
+  if(cw>0&&ch>0&&!_fxPreviewInteracting){
     const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
     dpr=Math.max(dpr,halfSourceDpr);
   }
@@ -25310,9 +25347,9 @@ function cropEnter(){
   // render the uncropped geometry through the same pipeline at a screen-sized resolution.
   try{const bw=cc.width,bh=cc.height,k=Math.min(1,1600/Math.max(bw,bh)),rw=Math.max(1,Math.round(bw*k)),rh=Math.max(1,Math.round(bh*k));
     const sm=document.createElement('canvas');sm.width=rw;sm.height=rh;sm.getContext('2d').drawImage(cropBase,0,0,rw,rh);
-    FX.setImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
+    FX.pushTempImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
     cc.getContext('2d').drawImage(FX.cv,0,0,bw,bh);}catch(err){console.warn('graded crop view failed',err);}
-  finally{if(fxWork)FX.setImage(fxWork);}
+  finally{if(!FX.popTempImage()&&fxWork)FX.setImage(fxWork);}
   FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   cropN=saved?{...saved}:cropDefaultForAR();
   ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';

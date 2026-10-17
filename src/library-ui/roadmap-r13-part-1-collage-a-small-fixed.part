@@ -309,10 +309,10 @@
     return settings;
   }
   // Review stores only a bounded developed display proxy; full caching remains explicit.
-  async function cacheOneRaw(path, tier, resolvedSettings = null) {
+  async function cacheOneRaw(path, tier, resolvedSettings = null, { background = false } = {}) {
     const settings = resolvedSettings || await rawCacheSettings(path, tier);
     const params = await rawNativeDecodeSettings(path, settings);
-    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { ...params, displayOnly: tier === 'review' });
+    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { ...params, displayOnly: tier === 'review', background });
     rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
     return result;
   }

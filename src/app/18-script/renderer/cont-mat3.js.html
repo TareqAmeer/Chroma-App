@@ -316,6 +316,9 @@ void main(){
     this.w=w;this.h=h;this.w2=w2;this.h2=h2;this.w4=w4;this.h4=h4;this.gs=gs;this.hdrIntermediate=hdrIntermediate;this._resourceKey=resourceKey;
   }
   setImage(img){const gl=this.gl;
+    // A real image change while a working texture is parked (pushTempImage whose render threw
+    // before popTempImage): the parked frame is stale now — free it rather than restore it later.
+    if(this._parkedImg&&!this._pushingTemp){const pt=this._parkedImg.tx;if(pt&&pt!==this.vidTx&&pt!==this.imgTx)gl.deleteTexture(pt);this._parkedImg=null;}
     // vidTx is a PERSISTENT texture reused across video frames (see setVideoFrame) — never
     // delete it here, only the one-shot photo texture. Without this guard, loading a photo
     // right after grading a video would delete the still-live video texture out from under it.
@@ -353,6 +356,22 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this._ensureLutTx();
+  }
+  // Loupe / full-res crop / crop-mode renders upload a small crop for one render and used to
+  // restore with setImage(fxWork) — deleting and re-uploading the whole working frame (a 24MP
+  // canvas upload is 400-600ms in WebKit) on every loupe pan settle. Park the working texture
+  // instead and put it back untouched.
+  pushTempImage(img){
+    if(!this._parkedImg)this._parkedImg={tx:this.imgTx,w:this.imgW,h:this.imgH,sl:this.usingSceneLinear};
+    else if(this.imgTx&&this.imgTx!==this.vidTx&&this.imgTx!==this._parkedImg.tx)this.gl.deleteTexture(this.imgTx);
+    this.imgTx=null; // setImage must not delete the parked texture
+    this._pushingTemp=true;try{this.setImage(img);}finally{this._pushingTemp=false;}
+  }
+  popTempImage(){
+    const p=this._parkedImg;if(!p)return false;this._parkedImg=null;
+    if(this.imgTx&&this.imgTx!==this.vidTx&&this.imgTx!==p.tx)this.gl.deleteTexture(this.imgTx);
+    this.imgTx=p.tx;this.imgW=p.w;this.imgH=p.h;this.usingSceneLinear=p.sl;
+    return !!p.tx;
   }
   // Lazy neutral-passthrough 3D LUT init, shared by setImage and setVideoFrame — was originally
   // inlined at the end of setImage only; hoisted out so both source paths initialize it exactly

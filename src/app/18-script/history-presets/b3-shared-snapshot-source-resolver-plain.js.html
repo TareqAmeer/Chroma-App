@@ -109,7 +109,9 @@ function renderPreview(){
   // least half of the source detail for usable editing. This is a resolution change, not a
   // layout change: the preview remains responsive while faces, texture and masks stop being
   // judged from a tiny ~500px proxy.
-  if(cw>0&&ch>0){
+  // Slider drags render a screen-resolution draft (Lightroom/darktable compute at reduced
+  // resolution while editing); the 180ms settle frame restores the half-source detail.
+  if(cw>0&&ch>0&&!_fxPreviewInteracting){
     const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
     dpr=Math.max(dpr,halfSourceDpr);
   }

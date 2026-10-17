@@ -221,10 +221,10 @@ function renderLoupe(){
   crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.setImage(crop);
+  FX.pushTempImage(crop);
   FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
-  FX.setImage(fxWork);                                              // restore working texture for later renders
+  if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   // Unscaled (fxZoom=1) footprint — the wrapper's own transform:scale(fxZoom) (see _applyZoom)
   // brings this to outW/outH's actual device-pixel size on screen, matching what was just

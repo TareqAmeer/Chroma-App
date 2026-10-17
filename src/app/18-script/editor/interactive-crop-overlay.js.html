@@ -25,9 +25,9 @@ function cropEnter(){
   // render the uncropped geometry through the same pipeline at a screen-sized resolution.
   try{const bw=cc.width,bh=cc.height,k=Math.min(1,1600/Math.max(bw,bh)),rw=Math.max(1,Math.round(bw*k)),rh=Math.max(1,Math.round(bh*k));
     const sm=document.createElement('canvas');sm.width=rw;sm.height=rh;sm.getContext('2d').drawImage(cropBase,0,0,rw,rh);
-    FX.setImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
+    FX.pushTempImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
     cc.getContext('2d').drawImage(FX.cv,0,0,bw,bh);}catch(err){console.warn('graded crop view failed',err);}
-  finally{if(fxWork)FX.setImage(fxWork);}
+  finally{if(!FX.popTempImage()&&fxWork)FX.setImage(fxWork);}
   FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   cropN=saved?{...saved}:cropDefaultForAR();
   ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';

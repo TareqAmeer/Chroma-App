@@ -1262,8 +1262,14 @@ fn cache_raw_decode(
     lens_override: String,
     lens_override_focal: f64,
     display_only: Option<bool>,
+    background: Option<bool>,
 ) -> Result<String, String> {
     let display_only = display_only.unwrap_or(false);
+    // Idle background preview building (Library auto-prep) is NOT user-waiting: on the
+    // user-initiated interactive pool it took every core at the same QoS as the editor open the
+    // user clicks next, so a click landing mid-build had its own decode slowed. Keep it on the
+    // global utility pool; explicit Review/Quick Look prep still gets the interactive pool.
+    let foreground = display_only && !background.unwrap_or(false);
     let file_name = Path::new(&path)
         .file_name()
         .and_then(|v| v.to_str())
@@ -1387,7 +1393,7 @@ fn cache_raw_decode(
     };
     // Batch/full-cache work keeps its existing global-pool behavior. Only the explicitly
     // user-waiting display-only review decode and its full-frame color conversion are promoted.
-    let (decoded, rgba, hdr_clear, hdr_blob) = run_raw_cache_development(display_only, develop)?;
+    let (decoded, rgba, hdr_clear, hdr_blob) = run_raw_cache_development(foreground, develop)?;
     let img = image::RgbaImage::from_raw(decoded.width, decoded.height, rgba)
         .ok_or("decoded RGBA dimensions do not match")?;
     let rgba = img.into_raw();
@@ -4009,7 +4015,7 @@ mod raw_display_only_cache_tests {
 
     fn cache_display_only(path: &Path, recipe_key: &str) -> String {
         cache_raw_decode(path.to_string_lossy().into_owned(), recipe_key.to_string(), "srgb".into(),
-            String::new(), "off".into(), false, "ahd".into(), String::new(), 0.0, Some(true)).unwrap()
+            String::new(), "off".into(), false, "ahd".into(), String::new(), 0.0, Some(true), None).unwrap()
     }
 
     #[test]

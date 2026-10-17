@@ -88,10 +88,10 @@ function renderFullResCrop(P,iw,ih,cw,ch){
   const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
   crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
   const REF=FXR.CAL.refWidth;
-  FX.setImage(crop);
+  FX.pushTempImage(crop);
   FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
-  FX.setImage(fxWork);
+  if(!FX.popTempImage())FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
   // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
   // where that part of the full image belongs. Cleared by the normal render path.

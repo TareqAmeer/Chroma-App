@@ -107,7 +107,7 @@ pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<ima
     let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
     let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
     let fmt = if file.extension().and_then(|e| e.to_str()) == Some("qoi") { image::ImageFormat::Qoi } else { image::ImageFormat::Png };
-    Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.to_rgba8())
+    Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.into_rgba8())
 }
 
 /// Encodes and writes the full-resolution cache (QOI). Written to a temp name and renamed so a

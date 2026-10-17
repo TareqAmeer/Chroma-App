@@ -374,14 +374,26 @@ function pointColorsIdentity(){return!(fxState.pointColors&&fxState.pointColors.
 function bakeHsl(){
   const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
   const pcOn=!!(document.getElementById('tg-pointcolor')||{}).classList?.contains('on');
-  const H=fxState.hsl,S=33,S2=S*S,d=new Uint8Array(S*S*S*3),hA={},sA={},lA={};
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
   if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
   const pts=(pcOn&&fxState.pointColors)?fxState.pointColors:null;
-  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
-    let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
-    if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
-    const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
-  if(FX.ok)FX.setHslLUT(d);
+  // The cube is a pure function of these inputs. Every photo open re-applies the pristine
+  // default snapshot and then the photo's recipe, each re-baking an unchanged (usually identity)
+  // cube — ~36k applyHSL evals, the biggest single cost of applyUISnapshot (~60ms Chromium,
+  // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
+  const key=JSON.stringify([hA,sA,lA,pts]);
+  const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
+  let hit=memo.get(key);
+  if(!hit){
+    const d=new Uint8Array(S*S*S*3);
+    for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+      let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+      if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
+      const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
+    hit=d;memo.set(key,hit);
+    if(memo.size>4)memo.delete(memo.keys().next().value);
+  }
+  if(FX.ok)FX.setHslLUT(hit);
 }
 // DRK-style before/after split swatch: left half is the band's canonical hue, right half
 // is that same hue after the band's current hue/sat/lum shifts — so the chip itself previews

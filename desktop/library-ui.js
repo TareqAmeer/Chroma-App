@@ -3248,6 +3248,57 @@
       (forceFull || opts.fullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
       + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
+  // Size a stand-in to the preview column before the first render of a session, when
+  // #fx-zoom-wrap is still the default 300x150 (or the previous photo's box).
+  function fitProvisionalToColumn(el) {
+    try {
+      const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
+      if (zw && col) {
+        const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
+        const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
+        if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
+          el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
+        }
+      }
+    } catch (_) {}
+  }
+  let instantThumbToken = 0;
+  function showInstantThumb(path) {
+    const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`)
+      || document.querySelector(`[data-path="${CSS.escape(path)}"] img`);
+    const src = thumb && thumb.naturalWidth ? (thumb.currentSrc || thumb.src) : '';
+    if (!src) return;
+    const el = ensureProvisionalEl(); if (!el) return;
+    instantThumbToken = ++provisionalToken;
+    if (embeddedUrl) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; }
+    el.style.cssText = '';
+    el.src = src;
+    fitProvisionalToColumn(el);
+    el.classList.add('on');
+    document.body.classList.add('lib-provisional-on');
+    rawPerf('open-thumb-overlay', path, { width: thumb.naturalWidth, height: thumb.naturalHeight });
+  }
+  // Default hider for opens that never call showDisplayProvisional: clears the instant thumbnail
+  // unless a newer stand-in (or a newer open's thumbnail) has taken over since.
+  function hideInstantThumb(token) {
+    return () => {
+      if (token && token === instantThumbToken && token === provisionalToken && provisionalImg) {
+        provisionalImg.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+        provisionalImg.style.cssText = '';
+      }
+    };
+  }
+  // The camera's embedded JPEG, requested at open start (alongside the probe/sidecar) so the
+  // sharp stand-in is ready by the time showDisplayProvisional knows it needs it.
+  let embeddedPrefetch = null;
+  function prefetchEmbedded(path) {
+    let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+    if (off || !RAW_EXT_RE.test(path)) { embeddedPrefetch = null; return; }
+    const promise = invoke('get_quicklook_preview', { path });
+    promise.catch(() => {});
+    embeddedPrefetch = { path, promise };
+  }
   let embeddedUrl = '';
   async function showDisplayProvisional(path, recipeKey, embeddedOnly = false) {
     const myToken = ++provisionalToken;
@@ -3275,24 +3326,13 @@
       let shown = false;
       if (!off && myToken === provisionalToken && RAW_EXT_RE.test(path)) {
         try {
-          const bytes = await invoke('get_quicklook_preview', { path });
+          const bytes = await ((embeddedPrefetch && embeddedPrefetch.path === path) ? embeddedPrefetch.promise : invoke('get_quicklook_preview', { path }));
           if (myToken === provisionalToken) {
             if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
             embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
             el.src = embeddedUrl;
-            // Before the first render of a session #fx-zoom-wrap is still the default 300x150 (or
-            // the previous photo's box): fill the preview column instead so the stand-in is
-            // actually legible (object-fit:contain keeps the aspect).
-            try {
-              const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
-              if (zw && col) {
-                const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
-                const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
-                if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
-                  el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
-                }
-              }
-            } catch (_) {}
+            el.style.cssText = '';
+            fitProvisionalToColumn(el); // object-fit:contain keeps the aspect
             el.classList.add('on');
             document.body.classList.add('lib-provisional-on');
             rawPerf('open-embedded-overlay', path);
@@ -3305,6 +3345,7 @@
       if (!shown && myToken === provisionalToken) {
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
+        el.style.cssText = '';
       }
     }
     return () => {
@@ -5147,6 +5188,10 @@
         { skip: flipping || imgCache.has(path) });
     }
     _lastRevealAt = performance.now();
+    // Lightroom-style instant picture: the grid thumbnail (for a RAW it IS the camera's embedded
+    // preview, so no new colour jump) goes up at the click, before any save flush, probe or
+    // cache lookup. Sharper stand-ins and the real render replace it as they land.
+    if (path !== state.openedPath && !imgCache.has(path)) showInstantThumb(path);
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
@@ -5202,6 +5247,7 @@
     const openT0 = performance.now();
     rawPerf('open-start', path);
     if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
+    if (!imgCache.has(path)) prefetchEmbedded(path); else embeddedPrefetch = null;
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
@@ -5212,6 +5258,13 @@
     if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.
+    // The zero-byte availability probe below is a cold stat on the photo's volume (~200ms on an
+    // external exFAT drive) — start it now so it overlaps the save flush and the sidecar read
+    // instead of running serially between them. It only reads, so ordering against the flush of
+    // the PREVIOUS photo doesn't matter.
+    const probeT0 = performance.now();
+    const sourceProbe = invoke('read_file_head', { path, len: 0 }).then(() => true, () => false)
+      .then((ok) => { rawPerf('open-source-probe', path, { ms: performance.now() - probeT0, ok }); return ok; });
     const flushT0 = performance.now(); await flushPendingSave(); rawPerf('open-flush-save', path, { ms: performance.now() - flushT0 }); if (window.chromasmithSaveState) window.chromasmithSaveState('');
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
@@ -5233,16 +5286,18 @@
     let photoSourceMode = 'original';
     // A warm display cache can outlive the source drive. Probe availability on every open using
     // the native zero-byte header/stat path; keep render readiness tied to the pixels below.
-    try {
-      await invoke('read_file_head', { path, len: 0 });
+    // Sidecar read starts here (after the flush, so a same-photo reopen never reads a stale
+    // recipe) and overlaps the availability probe.
+    const sidecarT0 = performance.now(); const sidecarPromise = getSidecar(path);
+    if (await sourceProbe) {
       state.originalUnavailableEditPaths.delete(path);
       state.photoSourceModes.set(path, 'original');
-    } catch (_) {
+    } else {
       state.originalUnavailableEditPaths.add(path);
       photoSourceMode = 'missing';
       state.photoSourceModes.set(path, photoSourceMode);
     }
-    let displayOverlayPromise = Promise.resolve(() => {});
+    let displayOverlayPromise = Promise.resolve(hideInstantThumb(instantThumbToken));
     // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT, so
     // they are never the editor's real pixels: those always come from our batch-produced display
     // proxy (or our full native decode). Exception (user decision, instant over colour accuracy
@@ -5265,7 +5320,7 @@
     // automatically). Falls back to the app-wide default (Fast) for a photo with no saved
     // recipe yet. ⚠️ Deliberately NEVER defaults to High here, sidecar or no — High must only
     // ever be reached by an explicit user action (the Denoise-now button) or at export.
-    const sidecarT0 = performance.now(); const sc = await getSidecar(path); rawPerf('open-sidecar', path, { ms: performance.now() - sidecarT0 });
+    const sc = await sidecarPromise; rawPerf('open-sidecar', path, { ms: performance.now() - sidecarT0 });
     let rawNrForThisPhoto;
     try { rawNrForThisPhoto = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast'); } catch (e) { rawNrForThisPhoto = 'fast'; }
     // Same decode-time-baked, per-photo reasoning as nativeNr above — the RAW demosaic
@@ -7585,10 +7640,10 @@
     return settings;
   }
   // Review stores only a bounded developed display proxy; full caching remains explicit.
-  async function cacheOneRaw(path, tier, resolvedSettings = null) {
+  async function cacheOneRaw(path, tier, resolvedSettings = null, { background = false } = {}) {
     const settings = resolvedSettings || await rawCacheSettings(path, tier);
     const params = await rawNativeDecodeSettings(path, settings);
-    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { ...params, displayOnly: tier === 'review' });
+    const decodeT0 = performance.now(); const result = await invoke('cache_raw_decode', { ...params, displayOnly: tier === 'review', background });
     rawPerf('cache-decode-write', path, { ms: performance.now() - decodeT0, result });
     return result;
   }
@@ -7615,32 +7670,45 @@
     const token = ++_warmToken;
     let off = false; try { off = localStorage.getItem('chromasmithNeighbourWarm') === '0'; } catch (_) {}
     if (off) return;
-    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
-    const idx = sorted.indexOf(path);
+    // The same ordered list the arrow keys step through — a privately rebuilt sort/filter here
+    // could disagree with it and miss the photo entirely ("not-in-view").
+    const nav = libraryNavigationOrder();
+    const sorted = nav.entries.map((e) => e.path);
+    const idx = nav.index.has(path) ? nav.index.get(path) : -1;
     if (idx < 0) { rawPerf('neighbour-warm-skip', path, { reason: 'not-in-view', entries: state.entries.length }); return; }
     if (_lastOpenIdx >= 0 && idx !== _lastOpenIdx) _warmDir = idx > _lastOpenIdx ? 1 : -1;
     _lastOpenIdx = idx;
-    // The next RAW in the direction of travel: RAW+JPEG pairs put a JPG (or other non-RAW) next to
-    // every RAW in the grid, which used to end the warm-up before it started (neighbour = JPG).
+    // The next RAW in the direction of travel, then the one behind (Lightroom warms both sides):
+    // RAW+JPEG pairs put a JPG (or other non-RAW) next to every RAW in the grid, which used to
+    // end the warm-up before it started (neighbour = JPG).
     const stemOf = (q) => q.replace(/\.[^./]+$/, '');
-    let target = null;
-    for (let step = 1; step <= 4; step++) {
-      const q = sorted[idx + _warmDir * step];
-      if (!q) break;
-      if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) { target = q; break; }
-    }
-    if (!target) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
-    setTimeout(async () => {
-      if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
-      for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
-        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); return; } catch (_) {}
+    const pick = (dir) => {
+      for (let step = 1; step <= 4; step++) {
+        const q = sorted[idx + dir * step];
+        if (!q) break;
+        if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) return q;
       }
-      const t0 = performance.now();
-      const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
-      _warmInflight = { path: target, promise };
-      try { await promise; } finally { _warmInflight = null; }
-      rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
-    }, +window.chromasmithWarmDelayMs || 1500);
+      return null;
+    };
+    const targets = [pick(_warmDir), pick(-_warmDir)].filter(Boolean);
+    if (!targets.length) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
+    setTimeout(async () => {
+      for (const target of targets) {
+        if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
+        if (imgCache.has(target)) continue;
+        let cachedAlready = false;
+        for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
+          try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); cachedAlready = true; break; } catch (_) {}
+        }
+        if (cachedAlready) { rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); continue; }
+        if (token !== _warmToken || state.openedPath !== path) return;
+        const t0 = performance.now();
+        const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
+        _warmInflight = { path: target, promise };
+        try { await promise; } finally { _warmInflight = null; }
+        rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
+      }
+    }, +window.chromasmithWarmDelayMs || 400); // was 1500: on a 3s cull dwell the warm-up never finished in time
   }
 
   // ── Background preview building (Lightroom's "Build Previews"): once you have settled on a
@@ -7680,7 +7748,7 @@
       for (const next of autoPreviewCandidates()) {
         if (autoPreviewUserBusy() || !state.open) break;
         try {
-          await queueRawReview(next, () => cacheOneRaw(next, 'review'), 'auto-prep');
+          await queueRawReview(next, () => cacheOneRaw(next, 'review', null, { background: true }), 'auto-prep');
           _autoPrevDone.add(next); built++;
         } catch (_) { _autoPrevFailed.add(next); }
         // Let the review lane release (its finally runs after our resolution) before re-checking

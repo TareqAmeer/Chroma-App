@@ -60,26 +60,26 @@
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
    "firstLine": 860,
-   "lines": 1240
+   "lines": 1246
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2100,
+   "firstLine": 2106,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2630,
+   "firstLine": 2636,
    "lines": 107
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 2737,
+   "firstLine": 2743,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 2844,
+   "firstLine": 2850,
    "lines": 1392
   }
  ]

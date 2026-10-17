@@ -66,6 +66,57 @@
       (forceFull || opts.fullCleanup) ? 'full' : 'chroma2'].join('|') // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
       + (/\.dng$/i.test(path || '') ? '|dngp1' : ''); // CHR-162: DNGs now develop with their embedded profile — never serve a pre-fix cached decode // chroma2: interactive tier now runs the chroma NR at half resolution (CHR-121) — old 'chroma' cache entries are full-res
   }
+  // Size a stand-in to the preview column before the first render of a session, when
+  // #fx-zoom-wrap is still the default 300x150 (or the previous photo's box).
+  function fitProvisionalToColumn(el) {
+    try {
+      const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
+      if (zw && col) {
+        const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
+        const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
+        if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
+          el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
+        }
+      }
+    } catch (_) {}
+  }
+  let instantThumbToken = 0;
+  function showInstantThumb(path) {
+    const thumb = document.querySelector(`.lib-card[data-path="${CSS.escape(path)}"] img`)
+      || document.querySelector(`[data-path="${CSS.escape(path)}"] img`);
+    const src = thumb && thumb.naturalWidth ? (thumb.currentSrc || thumb.src) : '';
+    if (!src) return;
+    const el = ensureProvisionalEl(); if (!el) return;
+    instantThumbToken = ++provisionalToken;
+    if (embeddedUrl) { URL.revokeObjectURL(embeddedUrl); embeddedUrl = ''; }
+    el.style.cssText = '';
+    el.src = src;
+    fitProvisionalToColumn(el);
+    el.classList.add('on');
+    document.body.classList.add('lib-provisional-on');
+    rawPerf('open-thumb-overlay', path, { width: thumb.naturalWidth, height: thumb.naturalHeight });
+  }
+  // Default hider for opens that never call showDisplayProvisional: clears the instant thumbnail
+  // unless a newer stand-in (or a newer open's thumbnail) has taken over since.
+  function hideInstantThumb(token) {
+    return () => {
+      if (token && token === instantThumbToken && token === provisionalToken && provisionalImg) {
+        provisionalImg.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+        provisionalImg.style.cssText = '';
+      }
+    };
+  }
+  // The camera's embedded JPEG, requested at open start (alongside the probe/sidecar) so the
+  // sharp stand-in is ready by the time showDisplayProvisional knows it needs it.
+  let embeddedPrefetch = null;
+  function prefetchEmbedded(path) {
+    let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+    if (off || !RAW_EXT_RE.test(path)) { embeddedPrefetch = null; return; }
+    const promise = invoke('get_quicklook_preview', { path });
+    promise.catch(() => {});
+    embeddedPrefetch = { path, promise };
+  }
   let embeddedUrl = '';
   async function showDisplayProvisional(path, recipeKey, embeddedOnly = false) {
     const myToken = ++provisionalToken;
@@ -93,24 +144,13 @@
       let shown = false;
       if (!off && myToken === provisionalToken && RAW_EXT_RE.test(path)) {
         try {
-          const bytes = await invoke('get_quicklook_preview', { path });
+          const bytes = await ((embeddedPrefetch && embeddedPrefetch.path === path) ? embeddedPrefetch.promise : invoke('get_quicklook_preview', { path }));
           if (myToken === provisionalToken) {
             if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
             embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
             el.src = embeddedUrl;
-            // Before the first render of a session #fx-zoom-wrap is still the default 300x150 (or
-            // the previous photo's box): fill the preview column instead so the stand-in is
-            // actually legible (object-fit:contain keeps the aspect).
-            try {
-              const zw = document.getElementById('fx-zoom-wrap'), col = document.getElementById('fx-wrap');
-              if (zw && col) {
-                const a = zw.getBoundingClientRect(), b = col.getBoundingClientRect();
-                const sx = zw.offsetWidth ? a.width / zw.offsetWidth : 1;
-                if (b.width > 0 && (a.width < b.width * 0.5 || a.height < b.height * 0.5) && Math.abs(sx - 1) < 0.01) {
-                  el.style.cssText = `max-width:none;max-height:none;inset:auto;left:${b.left - a.left - zw.clientLeft}px;top:${b.top - a.top - zw.clientTop}px;width:${b.width}px;height:${b.height}px`;
-                }
-              }
-            } catch (_) {}
+            el.style.cssText = '';
+            fitProvisionalToColumn(el); // object-fit:contain keeps the aspect
             el.classList.add('on');
             document.body.classList.add('lib-provisional-on');
             rawPerf('open-embedded-overlay', path);
@@ -123,6 +163,7 @@
       if (!shown && myToken === provisionalToken) {
         el.classList.remove('on');
         document.body.classList.remove('lib-provisional-on');
+        el.style.cssText = '';
       }
     }
     return () => {

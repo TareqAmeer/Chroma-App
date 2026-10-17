@@ -8,30 +8,43 @@
     const token = ++_warmToken;
     let off = false; try { off = localStorage.getItem('chromasmithNeighbourWarm') === '0'; } catch (_) {}
     if (off) return;
-    const sorted = sortEntries(state.entries.filter(passesFilters)).map((e) => e.path);
-    const idx = sorted.indexOf(path);
+    // The same ordered list the arrow keys step through — a privately rebuilt sort/filter here
+    // could disagree with it and miss the photo entirely ("not-in-view").
+    const nav = libraryNavigationOrder();
+    const sorted = nav.entries.map((e) => e.path);
+    const idx = nav.index.has(path) ? nav.index.get(path) : -1;
     if (idx < 0) { rawPerf('neighbour-warm-skip', path, { reason: 'not-in-view', entries: state.entries.length }); return; }
     if (_lastOpenIdx >= 0 && idx !== _lastOpenIdx) _warmDir = idx > _lastOpenIdx ? 1 : -1;
     _lastOpenIdx = idx;
-    // The next RAW in the direction of travel: RAW+JPEG pairs put a JPG (or other non-RAW) next to
-    // every RAW in the grid, which used to end the warm-up before it started (neighbour = JPG).
+    // The next RAW in the direction of travel, then the one behind (Lightroom warms both sides):
+    // RAW+JPEG pairs put a JPG (or other non-RAW) next to every RAW in the grid, which used to
+    // end the warm-up before it started (neighbour = JPG).
     const stemOf = (q) => q.replace(/\.[^./]+$/, '');
-    let target = null;
-    for (let step = 1; step <= 4; step++) {
-      const q = sorted[idx + _warmDir * step];
-      if (!q) break;
-      if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) { target = q; break; }
-    }
-    if (!target) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
-    setTimeout(async () => {
-      if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
-      for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
-        try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); return; } catch (_) {}
+    const pick = (dir) => {
+      for (let step = 1; step <= 4; step++) {
+        const q = sorted[idx + dir * step];
+        if (!q) break;
+        if (RAW_EXT_RE.test(q) && stemOf(q) !== stemOf(path)) return q;
       }
-      const t0 = performance.now();
-      const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
-      _warmInflight = { path: target, promise };
-      try { await promise; } finally { _warmInflight = null; }
-      rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
-    }, +window.chromasmithWarmDelayMs || 1500);
+      return null;
+    };
+    const targets = [pick(_warmDir), pick(-_warmDir)].filter(Boolean);
+    if (!targets.length) { rawPerf('neighbour-warm-skip', path, { reason: 'no-raw-neighbour' }); return; }
+    setTimeout(async () => {
+      for (const target of targets) {
+        if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
+        if (imgCache.has(target)) continue;
+        let cachedAlready = false;
+        for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
+          try { await invoke('get_decode_cache_path', { path: target, recipeKey: k }); cachedAlready = true; break; } catch (_) {}
+        }
+        if (cachedAlready) { rawPerf('neighbour-warm-skip', target, { reason: 'already-cached' }); continue; }
+        if (token !== _warmToken || state.openedPath !== path) return;
+        const t0 = performance.now();
+        const promise = cacheOneRaw(target, 'interactive').catch((e) => { rawPerf('neighbour-warm-failed', target, { error: String(e) }); });
+        _warmInflight = { path: target, promise };
+        try { await promise; } finally { _warmInflight = null; }
+        rawPerf('neighbour-warmed', target, { ms: performance.now() - t0 });
+      }
+    }, +window.chromasmithWarmDelayMs || 400); // was 1500: on a 3s cull dwell the warm-up never finished in time
   }

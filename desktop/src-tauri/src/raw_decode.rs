@@ -501,7 +501,11 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
         }
     }
 
-    let mut pixels: Vec<f32> = raw_image.data.as_f32().into_owned();
+    // apply_scaling() left the data as f32: take the buffer instead of cloning ~97MB of it.
+    let mut pixels: Vec<f32> = match std::mem::replace(&mut raw_image.data, rawler::rawimage::RawImageData::Float(Vec::new())) {
+        rawler::rawimage::RawImageData::Float(v) => v,
+        other => other.as_f32().into_owned(),
+    };
     let cfa = cfa_config.cfa.clone();
     pixels
         .par_chunks_mut(w)

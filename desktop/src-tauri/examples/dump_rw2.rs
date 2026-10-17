@@ -18,6 +18,9 @@ mod rawdenoise;
 mod raw_decode;
 #[path = "../src/platform/mod.rs"]
 mod platform;
+#[path = "../src/trash_undo.rs"]
+#[allow(dead_code)]
+mod trash_undo;
 #[path = "../src/diag.rs"]
 mod diag;
 

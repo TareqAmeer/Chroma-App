@@ -19,6 +19,7 @@ function installFXImages(entries,loadKey,opts){
   fxState.sharedAdjust=null; // fresh batch/photo → Adjust panel starts from whatever's on the sliders (RAW defaults etc.)
   fxCurIdx=0;fxExportScope='all';
   fxImg=fxImages[0].img;updateWork();
+  window.__pm&&window.__pm('ifx-work');
   resetGeomUI();
   const n=fxImages.length;
   setDZ('dz-fx-img','fn-fx-img',n>1?`${n} images — previewing 1/${n}: ${fxImages[0].name}`:fxImages[0].name);
@@ -64,6 +65,7 @@ function installFXImages(entries,loadKey,opts){
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
   _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  window.__pm&&window.__pm('ifx-zoom');
   fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
   // Masks are PER-PHOTO (unlike the rest of fxState, which is intentionally batch-shared —
@@ -79,9 +81,11 @@ function installFXImages(entries,loadKey,opts){
   fxImages[0].masks=fxState.masks;
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
+  window.__pm&&window.__pm('ifx-masks');
   if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
-  if(!opts.deferRender){renderPreview();buildLookGallery();buildFilmstrip();}
+  window.__pm&&window.__pm('ifx-bw');
+  if(!opts.deferRender){renderPreview();window.__pm&&window.__pm('ifx-render');buildLookGallery();buildFilmstrip();}
   else {
     const idle=window.requestIdleCallback||((cb)=>setTimeout(cb,500));
     idle(()=>{buildLookGallery();buildFilmstrip();},{timeout:1000});

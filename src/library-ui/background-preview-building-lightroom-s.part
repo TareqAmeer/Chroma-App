@@ -35,7 +35,7 @@
       for (const next of autoPreviewCandidates()) {
         if (autoPreviewUserBusy() || !state.open) break;
         try {
-          await queueRawReview(next, () => cacheOneRaw(next, 'review'), 'auto-prep');
+          await queueRawReview(next, () => cacheOneRaw(next, 'review', null, { background: true }), 'auto-prep');
           _autoPrevDone.add(next); built++;
         } catch (_) { _autoPrevFailed.add(next); }
         // Let the review lane release (its finally runs after our resolution) before re-checking

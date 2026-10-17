@@ -71,6 +71,10 @@
         { skip: flipping || imgCache.has(path) });
     }
     _lastRevealAt = performance.now();
+    // Lightroom-style instant picture: the grid thumbnail (for a RAW it IS the camera's embedded
+    // preview, so no new colour jump) goes up at the click, before any save flush, probe or
+    // cache lookup. Sharper stand-ins and the real render replace it as they land.
+    if (path !== state.openedPath && !imgCache.has(path)) showInstantThumb(path);
     if (openBusy) { openPendingPath = path; return; }
     openBusy = true;
     window.chromasmithLibraryBusy = true;
@@ -126,6 +130,7 @@
     const openT0 = performance.now();
     rawPerf('open-start', path);
     if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
+    if (!imgCache.has(path)) prefetchEmbedded(path); else embeddedPrefetch = null;
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
@@ -136,6 +141,13 @@
     if (saveLrBtn) saveLrBtn.style.display = 'none';
     // A pending disk write for the PREVIOUS photo must land before we move state.openedPath
     // off it — otherwise a quick edit right before switching photos could be dropped.
+    // The zero-byte availability probe below is a cold stat on the photo's volume (~200ms on an
+    // external exFAT drive) — start it now so it overlaps the save flush and the sidecar read
+    // instead of running serially between them. It only reads, so ordering against the flush of
+    // the PREVIOUS photo doesn't matter.
+    const probeT0 = performance.now();
+    const sourceProbe = invoke('read_file_head', { path, len: 0 }).then(() => true, () => false)
+      .then((ok) => { rawPerf('open-source-probe', path, { ms: performance.now() - probeT0, ok }); return ok; });
     const flushT0 = performance.now(); await flushPendingSave(); rawPerf('open-flush-save', path, { ms: performance.now() - flushT0 }); if (window.chromasmithSaveState) window.chromasmithSaveState('');
     // Selecting a photo from the full-window home screen transitions into the editor — the
     // library collapses to the docked filmstrip (stays open, just narrow), it doesn't close.
@@ -157,16 +169,18 @@
     let photoSourceMode = 'original';
     // A warm display cache can outlive the source drive. Probe availability on every open using
     // the native zero-byte header/stat path; keep render readiness tied to the pixels below.
-    try {
-      await invoke('read_file_head', { path, len: 0 });
+    // Sidecar read starts here (after the flush, so a same-photo reopen never reads a stale
+    // recipe) and overlaps the availability probe.
+    const sidecarT0 = performance.now(); const sidecarPromise = getSidecar(path);
+    if (await sourceProbe) {
       state.originalUnavailableEditPaths.delete(path);
       state.photoSourceModes.set(path, 'original');
-    } catch (_) {
+    } else {
       state.originalUnavailableEditPaths.add(path);
       photoSourceMode = 'missing';
       state.photoSourceModes.set(path, photoSourceMode);
     }
-    let displayOverlayPromise = Promise.resolve(() => {});
+    let displayOverlayPromise = Promise.resolve(hideInstantThumb(instantThumbToken));
     // RAW camera-embedded previews and the Library thumbnail can carry the camera's own LUT, so
     // they are never the editor's real pixels: those always come from our batch-produced display
     // proxy (or our full native decode). Exception (user decision, instant over colour accuracy
@@ -189,7 +203,7 @@
     // automatically). Falls back to the app-wide default (Fast) for a photo with no saved
     // recipe yet. ⚠️ Deliberately NEVER defaults to High here, sidecar or no — High must only
     // ever be reached by an explicit user action (the Denoise-now button) or at export.
-    const sidecarT0 = performance.now(); const sc = await getSidecar(path); rawPerf('open-sidecar', path, { ms: performance.now() - sidecarT0 });
+    const sc = await sidecarPromise; rawPerf('open-sidecar', path, { ms: performance.now() - sidecarT0 });
     let rawNrForThisPhoto;
     try { rawNrForThisPhoto = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast'); } catch (e) { rawNrForThisPhoto = 'fast'; }
     // Same decode-time-baked, per-photo reasoning as nativeNr above — the RAW demosaic
