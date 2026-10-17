@@ -3337,6 +3337,7 @@
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
     canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), width, height), 0, 0);
+    canvas._rgbaSrc = { data: new Uint8Array(nativeBuf, 8, width * height * 4), w: width, h: height }; // FX.setImage uploads this once instead of the canvas (much faster)
     return canvas;
   }
   // A 2560px lossless proxy is large enough to make an unbounded path->Promise map
@@ -5422,7 +5423,7 @@
           active.img = fullImg; fxImg = fullImg;
           try { autoDetectBW(fullImg); } catch (_) {}
           const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
-          const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
+          const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 }); fullImg._rgbaSrc = null;
           window.chromasmithFullQualityReady = true;
           window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
           const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;

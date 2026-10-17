@@ -347,7 +347,7 @@
           active.img = fullImg; fxImg = fullImg;
           try { autoDetectBW(fullImg); } catch (_) {}
           const workT0 = performance.now(); updateWork(); rawPerf('open-full-quality-work', path, { ms: performance.now() - workT0 });
-          const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 });
+          const renderT0 = performance.now(); renderPreview(); rawPerf('open-full-quality-render', path, { ms: performance.now() - renderT0 }); fullImg._rgbaSrc = null;
           window.chromasmithFullQualityReady = true;
           window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
           const exportBtn = document.getElementById('btn-fx-export'); if (exportBtn) exportBtn.disabled = false;

@@ -26,7 +26,8 @@
   const refresh=()=>{window.chromasmithInpaintSync?.();if(typeof updateWork==='function'){updateWork();renderPreview();}};
   window.chromasmithInpaintRestore=it=>{
     const promise=window.chromasmithInpaintHydrate(it);it._inpaintPromise=promise;
-    promise.then(()=>{if(curItem()===it)refresh();}).catch(e=>{log('Accepted erase repair cannot be restored: '+String(e.message||e),'err');toast('Accepted repair unavailable: '+String(e.message||e));}).finally(()=>{if(it._inpaintPromise===promise)it._inpaintPromise=null;});return promise;
+    const idle=!(it.inpaint||[]).some(p=>p.enabled!==false)&&!(it._inpaintImages&&it._inpaintImages.size);
+    promise.then(()=>{if(curItem()===it)idle?window.chromasmithInpaintSync?.():refresh();}).catch(e=>{log('Accepted erase repair cannot be restored: '+String(e.message||e),'err');toast('Accepted repair unavailable: '+String(e.message||e));}).finally(()=>{if(it._inpaintPromise===promise)it._inpaintPromise=null;});return promise;
   };
   const overlay=()=>{
     let svg=document.getElementById('fx-inpaint-overlay');if(!svg){svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='fx-inpaint-overlay';svg.setAttribute('viewBox','0 0 1 1');svg.setAttribute('preserveAspectRatio','none');svg.style.cssText='position:absolute;pointer-events:none;z-index:5;overflow:visible';document.getElementById('fx-zoom-wrap')?.append(svg);}

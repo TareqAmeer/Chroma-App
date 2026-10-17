@@ -1786,36 +1786,39 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
     let sc = nm as f32 / 65535.0;
     let px_count = rgb16.len() / 3;
     let mut rgba = vec![0u8; px_count * 4];
-    rgba.par_chunks_mut(4)
-        .zip(rgb16.par_chunks(3))
-        .for_each(|(dst, src)| {
-            let fr = src[0] as f32 * sc;
-            let fg = src[1] as f32 * sc;
-            let fb = src[2] as f32 * sc;
-            let r0 = (fr as usize).min(nm - 1);
-            let g0 = (fg as usize).min(nm - 1);
-            let b0 = (fb as usize).min(nm - 1);
-            let rf = fr - r0 as f32;
-            let gf = fg - g0 as f32;
-            let bf = fb - b0 as f32;
-            let idx = |r: usize, g: usize, b: usize| 3 * ((b * n + g) * n + r);
-            for c in 0..3 {
-                let c000 = lut[idx(r0, g0, b0) + c];
-                let c100 = lut[idx(r0 + 1, g0, b0) + c];
-                let c010 = lut[idx(r0, g0 + 1, b0) + c];
-                let c110 = lut[idx(r0 + 1, g0 + 1, b0) + c];
-                let c001 = lut[idx(r0, g0, b0 + 1) + c];
-                let c101 = lut[idx(r0 + 1, g0, b0 + 1) + c];
-                let c011 = lut[idx(r0, g0 + 1, b0 + 1) + c];
-                let c111 = lut[idx(r0 + 1, g0 + 1, b0 + 1) + c];
-                let c00 = c000 * (1.0 - rf) + c100 * rf;
-                let c10 = c010 * (1.0 - rf) + c110 * rf;
-                let c01 = c001 * (1.0 - rf) + c101 * rf;
-                let c11 = c011 * (1.0 - rf) + c111 * rf;
-                let v = (c00 * (1.0 - gf) + c10 * gf) * (1.0 - bf) + (c01 * (1.0 - gf) + c11 * gf) * bf;
-                dst[c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    // Whole-row-sized work units (not one rayon item per pixel) and one 3-float slice per LUT
+    // corner (8 bounds checks per pixel, not 24). Same per-channel operation order as before, so
+    // the output is bit-identical (examples/lut_bench.rs checks that against the old loop).
+    const PX_PER_TASK: usize = 4096;
+    rgba.par_chunks_mut(4 * PX_PER_TASK)
+        .zip(rgb16.par_chunks(3 * PX_PER_TASK))
+        .for_each(|(dst_blk, src_blk)| {
+            for (dst, src) in dst_blk.chunks_exact_mut(4).zip(src_blk.chunks_exact(3)) {
+                let fr = src[0] as f32 * sc;
+                let fg = src[1] as f32 * sc;
+                let fb = src[2] as f32 * sc;
+                let r0 = (fr as usize).min(nm - 1);
+                let g0 = (fg as usize).min(nm - 1);
+                let b0 = (fb as usize).min(nm - 1);
+                let rf = fr - r0 as f32;
+                let gf = fg - g0 as f32;
+                let bf = fb - b0 as f32;
+                let at = |r: usize, g: usize, b: usize| {
+                    let i = 3 * ((b * n + g) * n + r);
+                    &lut[i..i + 3]
+                };
+                let (p000, p100, p010, p110) = (at(r0, g0, b0), at(r0 + 1, g0, b0), at(r0, g0 + 1, b0), at(r0 + 1, g0 + 1, b0));
+                let (p001, p101, p011, p111) = (at(r0, g0, b0 + 1), at(r0 + 1, g0, b0 + 1), at(r0, g0 + 1, b0 + 1), at(r0 + 1, g0 + 1, b0 + 1));
+                for c in 0..3 {
+                    let c00 = p000[c] * (1.0 - rf) + p100[c] * rf;
+                    let c10 = p010[c] * (1.0 - rf) + p110[c] * rf;
+                    let c01 = p001[c] * (1.0 - rf) + p101[c] * rf;
+                    let c11 = p011[c] * (1.0 - rf) + p111[c] * rf;
+                    let v = (c00 * (1.0 - gf) + c10 * gf) * (1.0 - bf) + (c01 * (1.0 - gf) + c11 * gf) * bf;
+                    dst[c] = (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                }
+                dst[3] = 255;
             }
-            dst[3] = 255;
         });
     Ok(rgba)
 }

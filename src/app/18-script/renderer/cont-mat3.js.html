@@ -337,8 +337,17 @@ void main(){
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.FLOAT,rgba);
       this.imgW=w;this.imgH=h;
     }else{
-      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
-      this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+      // Full-frame native-cache canvases carry their source RGBA (img._rgbaSrc): uploading that typed array
+      // takes ~70ms where a 24MP canvas upload costs 400-600ms (WebKit read-back + flip), same bytes (alpha is 255).
+      const src=img&&img._rgbaSrc;
+      if(src&&src.data.length===src.w*src.h*4){
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,src.w,src.h,0,gl.RGBA,gl.UNSIGNED_BYTE,src.data);
+        img._rgbaSrc=null; // one-shot: don't pin ~96MB beside the canvas' own copy
+        this.imgW=src.w;this.imgH=src.h;
+      }else{
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+        this.imgW=img.naturalWidth||img.width;this.imgH=img.naturalHeight||img.height;
+      }
     }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);

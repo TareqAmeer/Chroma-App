@@ -155,6 +155,7 @@
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
     canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(nativeBuf, 8), width, height), 0, 0);
+    canvas._rgbaSrc = { data: new Uint8Array(nativeBuf, 8, width * height * 4), w: width, h: height }; // FX.setImage uploads this once instead of the canvas (much faster)
     return canvas;
   }
   // A 2560px lossless proxy is large enough to make an unbounded path->Promise map
