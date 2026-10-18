@@ -54,6 +54,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod superres;
 mod inpaint_alpha;
 mod inpaint;
 mod auxiliary;
@@ -835,6 +836,36 @@ fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, Strin
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
     out.extend_from_slice(&map);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+// ── Super Resolution (CHR-249) — see superres.rs. Framed request: JSON {width,height,scale} + RGB8;
+// framed response: JSON {width,height} + RGB8 at scale x. Progress arrives as "superres-progress".
+#[tauri::command(async)]
+fn superres_available() -> bool { superres::model_available() }
+
+#[tauri::command(async)]
+fn superres_cancel() { superres::request_cancel(); }
+
+#[tauri::command(async)]
+fn superres_run(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = u32::try_from(json["width"].as_u64().ok_or("missing width")?).map_err(|_| "invalid width")?;
+    let h = u32::try_from(json["height"].as_u64().ok_or("missing height")?).map_err(|_| "invalid height")?;
+    let scale = u32::try_from(json["scale"].as_u64().unwrap_or(2)).map_err(|_| "invalid scale")?;
+    let mut last = 0usize;
+    let mut progress = |done: usize, total: usize| {
+        if done != last { last = done; let _ = app.emit("superres-progress", &serde_json::json!({"done": done, "total": total})); }
+        true
+    };
+    let (rgb, ow, oh) = superres::upscale(payload, w, h, scale, &mut progress)?;
+    #[derive(serde::Serialize)]
+    struct Header { width: u32, height: u32 }
+    let header_bytes = serde_json::to_vec(&Header { width: ow, height: oh }).map_err(|e| format!("superres_run header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + rgb.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&rgb);
     Ok(tauri::ipc::Response::new(out))
 }
 
@@ -3364,6 +3395,9 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
+            superres_available,
+            superres_cancel,
+            superres_run,
             inpaint_start,
             inpaint_export_bundle,
             inpaint::inpaint_model_status,
@@ -3835,6 +3869,7 @@ fn main() {
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            superres::set_model_path(resolve_vendor("vendor/superres/realesr-general-x4v3.onnx"));
             inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-

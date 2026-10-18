@@ -883,6 +883,14 @@
             <option value="webp">WebP</option>
           </select>
         </div>
+        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
+          <div class="fx-label">Super Resolution</div>
+          <select class="fx-select" id="sel-exp-sr">
+            <option value="0">Off</option>
+            <option value="2">2x (4x the pixels)</option>
+            <option value="4">4x (16x the pixels)</option>
+          </select>
+        </div>
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
              detail the sharpening was judged on, so resampling without re-sharpening always
              looks soft. Full size + Off is the default and leaves the export byte-identical. -->

@@ -41,6 +41,7 @@
       "vendor/clip/tokenizer.json": "vendor/clip/tokenizer.json",
       "vendor/dinov2/model.onnx": "vendor/dinov2/model.onnx",
       "vendor/arcface/w600k_r50.onnx": "vendor/arcface/w600k_r50.onnx",
+      "vendor/superres/realesr-general-x4v3.onnx": "vendor/superres/realesr-general-x4v3.onnx",
       "../dist": "dist"
     },
     "fileAssociations": [

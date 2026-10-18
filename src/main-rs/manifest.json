@@ -10,6 +10,7 @@
   "face-detection-ai-stack-phase-a-see-scrf.part",
   "face-feature-auto-exclusion-skin-selecto.part",
   "depth-estimation-roadmap-r7-see-depth-rs.part",
+  "super-resolution-chr-249-see-superres-rs.part",
   "hdr-merge-focus-stacking-roadmap-r12.part",
   "gain-map-hdr-export-iso-21496-1.part",
   "normal-photo-export.part",
@@ -20,67 +21,72 @@
   {
    "file": "head.part",
    "firstLine": 1,
-   "lines": 141
+   "lines": 142
   },
   {
    "file": "native-rw2-decode-develop-no-base64-anyw.part",
-   "firstLine": 142,
+   "firstLine": 143,
    "lines": 291
   },
   {
    "file": "ai-tap-to-select-masks-panel-see-sam-rs.part",
-   "firstLine": 433,
+   "firstLine": 434,
    "lines": 97
   },
   {
    "file": "sam-2-1-phase-3-background-quality-upgra.part",
-   "firstLine": 530,
+   "firstLine": 531,
    "lines": 48
   },
   {
    "file": "named-subjects-remember-this-dog-see-sub.part",
-   "firstLine": 578,
+   "firstLine": 579,
    "lines": 170
   },
   {
    "file": "face-detection-ai-stack-phase-a-see-scrf.part",
-   "firstLine": 748,
+   "firstLine": 749,
    "lines": 22
   },
   {
    "file": "face-feature-auto-exclusion-skin-selecto.part",
-   "firstLine": 770,
+   "firstLine": 771,
    "lines": 38
   },
   {
    "file": "depth-estimation-roadmap-r7-see-depth-rs.part",
-   "firstLine": 808,
-   "lines": 52
+   "firstLine": 809,
+   "lines": 33
+  },
+  {
+   "file": "super-resolution-chr-249-see-superres-rs.part",
+   "firstLine": 842,
+   "lines": 49
   },
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
-   "firstLine": 860,
+   "firstLine": 891,
    "lines": 1246
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2106,
+   "firstLine": 2137,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2636,
+   "firstLine": 2667,
    "lines": 107
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 2743,
+   "firstLine": 2774,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 2850,
-   "lines": 1392
+   "firstLine": 2881,
+   "lines": 1396
   }
  ]
 }

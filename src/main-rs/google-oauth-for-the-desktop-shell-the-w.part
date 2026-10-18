@@ -515,6 +515,9 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
+            superres_available,
+            superres_cancel,
+            superres_run,
             inpaint_start,
             inpaint_export_bundle,
             inpaint::inpaint_model_status,
@@ -986,6 +989,7 @@ fn main() {
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            superres::set_model_path(resolve_vendor("vendor/superres/realesr-general-x4v3.onnx"));
             inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
 
             // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-

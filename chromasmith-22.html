@@ -4634,6 +4634,14 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="webp">WebP</option>
           </select>
         </div>
+        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
+          <div class="fx-label">Super Resolution</div>
+          <select class="fx-select" id="sel-exp-sr">
+            <option value="0">Off</option>
+            <option value="2">2x (4x the pixels)</option>
+            <option value="4">4x (16x the pixels)</option>
+          </select>
+        </div>
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
              detail the sharpening was judged on, so resampling without re-sharpening always
              looks soft. Full size + Off is the default and leaves the export byte-identical. -->
@@ -7278,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018A';
+const BUILD='1.1018B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25809,6 +25817,38 @@ function fxSetCapturedExportDepth(renderer,P){
   if(d&&d.data){const source=fxDepthForGeom(d,P.geom);if(source)renderer.setDepthTex(source.data,source.w,source.h,source);else renderer.clearDepthTex();}
   else renderer.clearDepthTex();
 }
+// ── Super Resolution (CHR-249): desktop-only Real-ESRGAN enlargement of a finished render ──────
+// Native side: superres.rs (tiled, cancellable, progress events). Returns a NEW canvas at scale x;
+// on any failure the caller keeps the original canvas and says why instead of exporting silently
+// un-enlarged files.
+async function fxSuperResInitUI(){
+  const row=document.getElementById('exp-sr-row');
+  if(row&&await fxSuperResAvailable())row.style.display='';
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{fxSuperResInitUI();});else setTimeout(fxSuperResInitUI,0);
+async function fxSuperResAvailable(){
+  if(!window.__TAURI__)return false;
+  try{return !!(await window.__TAURI__.core.invoke('superres_available'));}catch(e){return false;}
+}
+async function fxSuperResCanvas(cv,scale,onProgress){
+  const w=cv.width,h=cv.height,d=cv.getContext('2d').getImageData(0,0,w,h).data;
+  const rgb=new Uint8Array(w*h*3);
+  for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  let un=null;
+  if(onProgress&&window.__TAURI__.event)un=await window.__TAURI__.event.listen('superres-progress',e=>onProgress(e.payload.done,e.payload.total));
+  try{
+    const buf=await _samFramedInvoke('superres_run',{width:w,height:h,scale},rgb);
+    const dv=new DataView(buf),hlen=dv.getUint32(0,true);
+    const hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(body.length!==hd.width*hd.height*3)throw new Error('unexpected result size');
+    const out=document.createElement('canvas');out.width=hd.width;out.height=hd.height;
+    const octx=out.getContext('2d'),img=octx.createImageData(hd.width,hd.height),o=img.data;
+    for(let i=0,j=0;i<hd.width*hd.height;i++){o[i*4]=body[j++];o[i*4+1]=body[j++];o[i*4+2]=body[j++];o[i*4+3]=255;}
+    octx.putImageData(img,0,0);
+    return out;
+  }finally{if(un)un();}
+}
 async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
   const previousMaskSize=renderer._maskReferenceSize;
   renderer._maskReferenceSize={w:iw,h:ih};
@@ -26374,6 +26414,16 @@ async function _exportFXRun(){
         try{proc=await processToCanvas(P,src,iw,ih,
           (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);}
         finally{if(decodedJpeg){if(decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}}
+        const _srScale=parseInt((document.getElementById('sel-exp-sr')||{}).value||'0',10);
+        if(_srScale&&window.__TAURI__){
+          setProg(idx,`Super Resolution ${_srScale}x ${idx+1}/${N}: ${it.name}…`);
+          try{
+            const up=await fxSuperResCanvas(proc,_srScale,(t,tot)=>setProg(idx+t/tot,`Super Resolution ${idx+1}/${N}: ${it.name} — block ${t}/${tot}…`));
+            proc.width=proc.height=0;proc=up;
+          }catch(e){
+            log(`Super Resolution skipped for ${it.name}: ${e&&e.message||e} — exporting at normal size`,'warn');
+          }
+        }
         const w=proc.width,h=proc.height;
         const{b1t,b2t}=borderLayerSizes(P,w);
         await filmEdgeReady(P);   // never export before the film strips have decoded
