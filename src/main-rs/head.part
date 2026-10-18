@@ -46,6 +46,7 @@ mod formats;
 mod still_decode;
 mod canon;
 mod library;
+mod strip_cache;
 mod trash_undo;
 mod raw_decode;
 mod arcface;

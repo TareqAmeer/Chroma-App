@@ -913,14 +913,35 @@ pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, h
         crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
         return Ok(out_path.to_string_lossy().into_owned());
     }
-    let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(rgba, width, height, edge)?);
+    let scaled = resize_rgba_lanczos(rgba, width, height, edge)?;
     crate::diag::stage("display_proxy", file_name, "resize_lanczos", stage_t);
+    write_display_proxy_jpeg(&out_path, scaled, file_name, stage_t)
+}
+
+/// `write_display_cache_from_rgba` for a caller that already holds the `long_edge`-sized frame
+/// (decode_raw_v2 builds exactly this 2560px Lanczos frame for the editor's working copy, so the
+/// proxy is encoded from it instead of re-resizing the 96MB original). Same JPEG, same file.
+pub fn write_display_cache_from_scaled(path: &str, recipe_key: &str, scaled: image::RgbaImage, long_edge: u32,
+                                        file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(path, mtime, meta.len(), recipe_key, edge);
+    if out_path.is_file() {
+        crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
+        return Ok(out_path.to_string_lossy().into_owned());
+    }
+    write_display_proxy_jpeg(&out_path, scaled, file_name, stage_t)
+}
+
+fn write_display_proxy_jpeg(out_path: &Path, scaled: image::RgbaImage, file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let scaled = image::DynamicImage::ImageRgba8(scaled);
     let mut encoded = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
         .encode_image(&scaled)
         .map_err(|e| format!("encode display preview: {e}"))?;
     crate::diag::stage("display_proxy", file_name, "jpeg_encode", stage_t);
-    std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    std::fs::write(out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
     request_decode_cache_prune();
     crate::diag::stage("display_proxy", file_name, "jpeg_write", stage_t);
     Ok(out_path.to_string_lossy().into_owned())
@@ -939,20 +960,27 @@ pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge
     Ok(out_path.to_string_lossy().into_owned())
 }
 
-/// The full-resolution decode cache is written as lossless QOI (same pixels as the PNG it
-/// replaces, same key stem): PNG's inflate + unfilter cost 3-4s per 24MP frame on the Intel dev
-/// Mac every time a relaunched session first needed full resolution; QOI decodes the same frame
-/// in a fraction of that, at roughly 1.5-2x the disk size. Entries written before this as `.png`
-/// are still read (same hash, so no re-decode is forced) until the LRU prune retires them.
+/// The full-resolution decode cache is a strip-parallel lossless container (strip_cache.rs, `.cqs`):
+/// every band is its own QOI stream or raw RGBA8, so it is written and read on all cores. Before
+/// that it was one single-stream QOI (`.qoi`, ~0.4-1.5s to decode on the Intel dev Mac) and before
+/// that a PNG (3-4s). Old `.qoi`/`.png` entries are still READ (same stem, so no re-decode is
+/// forced) until the LRU prune retires them; a fresh write supersedes and removes them.
 fn decode_cache_qoi_name(png_key: &str) -> String {
     format!("{}.qoi", png_key.trim_end_matches(".png"))
 }
 
-/// The existing full-resolution cache file for this photo+recipe, QOI preferred over legacy PNG.
+fn decode_cache_strip_name(png_key: &str) -> String {
+    format!("{}.cqs", png_key.trim_end_matches(".png"))
+}
+
+/// The existing full-resolution cache file for this photo+recipe: strip container preferred, then
+/// the legacy single-stream QOI, then the legacy PNG.
 pub(crate) fn decode_cache_file(path: &str, recipe_key: &str) -> Result<Option<PathBuf>, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let cqs = decode_cache_dir().join(decode_cache_strip_name(&png_key));
+    if cqs.is_file() { return Ok(Some(cqs)); }
     let qoi = decode_cache_dir().join(decode_cache_qoi_name(&png_key));
     if qoi.is_file() { return Ok(Some(qoi)); }
     let png = decode_cache_dir().join(png_key);
@@ -1058,10 +1086,11 @@ fn validate_hdr_ext_blob(blob: &[u8], stem: u64, w: u32, h: u32) -> Result<usize
     Ok(count)
 }
 
-fn qoi_dims(file: &Path) -> Option<(u32, u32)> {
+fn frame_dims(file: &Path) -> Option<(u32, u32)> {
     use std::io::Read;
     let mut hdr = [0u8; 14];
     std::fs::File::open(file).ok()?.read_exact(&mut hdr).ok()?;
+    if &hdr[0..4] == crate::strip_cache::MAGIC { return crate::strip_cache::dims(&hdr); }
     if &hdr[0..4] != b"qoif" { return None; }
     Some((u32::from_be_bytes(hdr[4..8].try_into().unwrap()), u32::from_be_bytes(hdr[8..12].try_into().unwrap())))
 }
@@ -1073,7 +1102,7 @@ fn qoi_dims(file: &Path) -> Option<(u32, u32)> {
 pub fn get_hdr_companion(path: String, recipe_key: String) -> Result<tauri::ipc::Response, String> {
     let (p, stem) = hdr_ext_stem(&path, &recipe_key)?;
     let frame = decode_cache_file(&path, &recipe_key)?.ok_or("no cached decode")?;
-    let (w, h) = qoi_dims(&frame).ok_or("frame is not QOI")?;
+    let (w, h) = frame_dims(&frame).ok_or("frame is not a QOI/strip cache")?;
     let blob = std::fs::read(&p).map_err(|_| "no hdr companion".to_string())?;
     validate_hdr_ext_blob(&blob, stem, w, h)?;
     Ok(tauri::ipc::Response::new(blob))
@@ -1086,20 +1115,41 @@ pub fn hdr_headroom_clear(path: String, recipe_key: String) -> Result<bool, Stri
     Ok(marker.is_file() && decode_cache_exists(&path, &recipe_key)?)
 }
 
-/// Decodes the full-resolution cache (either format) to RGBA8.
+fn is_strip_cache(file: &Path) -> bool {
+    file.extension().and_then(|e| e.to_str()) == Some("cqs")
+}
+
+/// Strip container -> `prefix` zero bytes + RGBA8, decoded on the interactive pool (all cores).
+fn read_strip_cache(file: &Path, prefix: usize) -> Result<(Vec<u8>, u32, u32), String> {
+    let src = crate::strip_cache::FileSource::open(file)?;
+    crate::on_interactive_pool(|| crate::strip_cache::decode_with_prefix(&src, prefix))
+}
+
+/// Decodes the full-resolution cache (any format) to RGBA8.
 pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<image::RgbaImage, String> {
     let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
+    if is_strip_cache(&file) {
+        let (px, w, h) = read_strip_cache(&file, 0)?;
+        return image::RgbaImage::from_raw(w, h, px).ok_or_else(|| "decode cache: dimensions".to_string());
+    }
     let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
     let fmt = if file.extension().and_then(|e| e.to_str()) == Some("qoi") { image::ImageFormat::Qoi } else { image::ImageFormat::Png };
     Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.into_rgba8())
 }
 
 /// `read_decode_cache_rgba` framed for IPC as [u32 w][u32 h][RGBA8], the pixels decoded straight
-/// into the output buffer (no intermediate 96MB image + copy). A QOI written as RGBA (every cache
-/// this app writes) takes the direct path; anything else falls back to the generic decode.
+/// into the output buffer (no intermediate 96MB image + copy). A strip container (every cache
+/// this app now writes) is read with parallel preads straight into place; a legacy QOI written as
+/// RGBA takes the single-stream direct path; anything else falls back to the generic decode.
 pub(crate) fn read_decode_cache_rgba_framed(path: &str, recipe_key: &str) -> Result<Vec<u8>, String> {
     use image::ImageDecoder;
     let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
+    if is_strip_cache(&file) {
+        let (mut out, w, h) = read_strip_cache(&file, 8)?;
+        out[0..4].copy_from_slice(&w.to_le_bytes());
+        out[4..8].copy_from_slice(&h.to_le_bytes());
+        return Ok(out);
+    }
     let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
     if file.extension().and_then(|e| e.to_str()) == Some("qoi") {
         let dec = image::codecs::qoi::QoiDecoder::new(Cursor::new(&bytes)).map_err(|e| format!("decode cache: {e}"))?;
@@ -1121,23 +1171,27 @@ pub(crate) fn read_decode_cache_rgba_framed(path: &str, recipe_key: &str) -> Res
     Ok(out)
 }
 
-/// Encodes and writes the full-resolution cache (QOI). Written to a temp name and renamed so a
-/// reader never sees a half-written frame.
+/// Writes the full-resolution cache (strip container; bands encoded/written in parallel on the
+/// interactive pool). Written to a temp name and renamed so a reader never sees a half-written frame.
 pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
-    use image::ImageEncoder;
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
-    let mut out = Vec::with_capacity(rgba.len() / 2);
-    image::codecs::qoi::QoiEncoder::new(&mut out)
-        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
-        .map_err(|e| format!("encode decode cache: {e}"))?;
     let dir = decode_cache_dir();
-    let name = decode_cache_qoi_name(&png_key);
+    let name = decode_cache_strip_name(&png_key);
     let tmp = dir.join(format!("{name}.tmp.{}", std::process::id()));
-    std::fs::write(&tmp, &out).map_err(|e| format!("write decode cache: {e}"))?;
-    std::fs::rename(&tmp, dir.join(&name)).map_err(|e| format!("write decode cache: {e}"))?;
-    // The legacy PNG under the same stem is now dead weight.
+    let written = std::fs::File::create(&tmp).map_err(|e| format!("{e}"))
+        .and_then(|f| crate::on_interactive_pool(|| crate::strip_cache::write_file(&f, rgba, width, height)));
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write decode cache: {e}"));
+    }
+    if let Err(e) = std::fs::rename(&tmp, dir.join(&name)) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write decode cache: {e}"));
+    }
+    // The legacy single-stream QOI / PNG under the same stem are now dead weight.
+    let _ = std::fs::remove_file(dir.join(decode_cache_qoi_name(&png_key)));
     let _ = std::fs::remove_file(dir.join(&png_key));
     request_decode_cache_prune();
     Ok(())
@@ -3422,14 +3476,14 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
         || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
 }
 
-/// The decode cache's own shapes: `<16 hex>.{qoi,png}` (full developed frame) and
+/// The decode cache's own shapes: `<16 hex>.{cqs,qoi,png}` (full developed frame) and
 /// `<16 hex>.display-<edge>.{jpg,png,webp}` (display proxies, incl. retired formats), plus the
 /// generic temp/sidecar shapes. The shared thumbnail predicate above only knew ".jpg", so full
 /// decode PNGs were never evicted and the directory grew past its 14GB cap without bound.
 pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     if is_evictable_cache_file(name) { return true; }
     let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
-    if !matches!(ext, "png" | "qoi" | "jpg" | "webp" | "hdrclear" | "hdrext") { return false; }
+    if !matches!(ext, "png" | "qoi" | "cqs" | "jpg" | "webp" | "hdrclear" | "hdrext") { return false; }
     let hex = match stem.split_once(".display-") {
         Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
         Some(_) => return false,

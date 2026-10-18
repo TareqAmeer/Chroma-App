@@ -195,16 +195,10 @@ static PERSIST_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::Atom
 /// Marks the optional fit-view working-copy trailer decode_raw_v2 appends (see its response build).
 const WORK_TRAILER_MAGIC: &[u8; 4] = b"WRK1";
 
-/// What the persist worker writes: the developed RGBA8 itself, or the shared decode + the DCP LUT
-/// to re-apply there (decode_raw_v2's plain-DCP case — the response buffer already moved into the
-/// IPC reply, and a 96MB clone just to persist it was measurable swap on an 8GB Mac). Re-applying
-/// the same LUT to the same rgb16 is deterministic, so the persisted bytes are identical.
-enum PersistFrame {
-    Rgba(std::sync::Arc<Vec<u8>>),
-    Lut { decoded: std::sync::Arc<raw_decode::DecodedRaw>, lut: std::sync::Arc<Vec<f32>>, n: usize },
-}
-
-fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, frame: PersistFrame, hdr_clear: bool, hdr_ext: Option<Vec<u8>>) {
+/// Background half of an interactive open's persist: encodes the 2560px display proxy from the
+/// working copy decode_raw_v2 already resized (~17MB held, instead of a 96MB frame + a LUT re-run
+/// that cost ~1s of a core per photo). The full-frame cache itself is already on disk by now.
+fn persist_proxy_in_background(path: String, recipe_key: String, scaled: image::RgbaImage) {
     use std::sync::atomic::Ordering;
     if PERSIST_PENDING.fetch_add(1, Ordering::SeqCst) >= 2 {
         PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
@@ -218,19 +212,10 @@ fn persist_in_background(path: String, recipe_key: String, width: u32, height: u
     let job = move || {
         let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
         let mut stage_t = std::time::Instant::now();
-        let rgba = match frame {
-            PersistFrame::Rgba(rgba) => Ok(rgba),
-            PersistFrame::Lut { decoded, lut, n } => raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n).map(std::sync::Arc::new),
-        };
-        diag::stage("cache", &file_name, "persist_lut_apply", &mut stage_t);
-        if let Err(e) = rgba.and_then(|rgba| persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t)) {
-            eprintln!("persist decode cache for {file_name}: {e}");
-        } else if hdr_clear {
-            library::write_hdr_clear_marker(&path, &recipe_key);
-        } else if let Some(blob) = hdr_ext.as_ref() {
-            library::write_hdr_ext_blob(&path, &recipe_key, blob);
+        if let Err(e) = library::write_display_cache_from_scaled(&path, &recipe_key, scaled, 2560, &file_name, &mut stage_t) {
+            eprintln!("persist display proxy for {file_name}: {e}");
         }
-        PERSIST_PENDING.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
     };
     match pool { Some(p) => p.spawn(job), None => { PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst); } }
 }

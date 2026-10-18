@@ -398,14 +398,14 @@ pub(crate) fn is_evictable_cache_file(name: &str) -> bool {
         || name.ends_with(".meta.json") || name.ends_with(".phash.json") || name.ends_with(".meta4.json")
 }
 
-/// The decode cache's own shapes: `<16 hex>.{qoi,png}` (full developed frame) and
+/// The decode cache's own shapes: `<16 hex>.{cqs,qoi,png}` (full developed frame) and
 /// `<16 hex>.display-<edge>.{jpg,png,webp}` (display proxies, incl. retired formats), plus the
 /// generic temp/sidecar shapes. The shared thumbnail predicate above only knew ".jpg", so full
 /// decode PNGs were never evicted and the directory grew past its 14GB cap without bound.
 pub(crate) fn is_evictable_decode_file(name: &str) -> bool {
     if is_evictable_cache_file(name) { return true; }
     let (stem, ext) = match name.rsplit_once('.') { Some(v) => v, None => return false };
-    if !matches!(ext, "png" | "qoi" | "jpg" | "webp" | "hdrclear" | "hdrext") { return false; }
+    if !matches!(ext, "png" | "qoi" | "cqs" | "jpg" | "webp" | "hdrclear" | "hdrext") { return false; }
     let hex = match stem.split_once(".display-") {
         Some((h, edge)) if !edge.is_empty() && edge.bytes().all(|b| b.is_ascii_digit()) => h,
         Some(_) => return false,

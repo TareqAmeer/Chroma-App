@@ -646,14 +646,35 @@ pub fn write_display_cache_from_rgba(path: &str, recipe_key: &str, width: u32, h
         crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
         return Ok(out_path.to_string_lossy().into_owned());
     }
-    let scaled = image::DynamicImage::ImageRgba8(resize_rgba_lanczos(rgba, width, height, edge)?);
+    let scaled = resize_rgba_lanczos(rgba, width, height, edge)?;
     crate::diag::stage("display_proxy", file_name, "resize_lanczos", stage_t);
+    write_display_proxy_jpeg(&out_path, scaled, file_name, stage_t)
+}
+
+/// `write_display_cache_from_rgba` for a caller that already holds the `long_edge`-sized frame
+/// (decode_raw_v2 builds exactly this 2560px Lanczos frame for the editor's working copy, so the
+/// proxy is encoded from it instead of re-resizing the 96MB original). Same JPEG, same file.
+pub fn write_display_cache_from_scaled(path: &str, recipe_key: &str, scaled: image::RgbaImage, long_edge: u32,
+                                        file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let edge = long_edge.clamp(512, 4096);
+    let out_path = display_cache_path(path, mtime, meta.len(), recipe_key, edge);
+    if out_path.is_file() {
+        crate::diag::stage("display_proxy", file_name, "already_exists_check", stage_t);
+        return Ok(out_path.to_string_lossy().into_owned());
+    }
+    write_display_proxy_jpeg(&out_path, scaled, file_name, stage_t)
+}
+
+fn write_display_proxy_jpeg(out_path: &Path, scaled: image::RgbaImage, file_name: &str, stage_t: &mut std::time::Instant) -> Result<String, String> {
+    let scaled = image::DynamicImage::ImageRgba8(scaled);
     let mut encoded = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut encoded), 92)
         .encode_image(&scaled)
         .map_err(|e| format!("encode display preview: {e}"))?;
     crate::diag::stage("display_proxy", file_name, "jpeg_encode", stage_t);
-    std::fs::write(&out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
+    std::fs::write(out_path, encoded).map_err(|e| format!("write display preview: {e}"))?;
     request_decode_cache_prune();
     crate::diag::stage("display_proxy", file_name, "jpeg_write", stage_t);
     Ok(out_path.to_string_lossy().into_owned())
@@ -672,20 +693,27 @@ pub fn get_display_decode_cache_path(path: String, recipe_key: String, long_edge
     Ok(out_path.to_string_lossy().into_owned())
 }
 
-/// The full-resolution decode cache is written as lossless QOI (same pixels as the PNG it
-/// replaces, same key stem): PNG's inflate + unfilter cost 3-4s per 24MP frame on the Intel dev
-/// Mac every time a relaunched session first needed full resolution; QOI decodes the same frame
-/// in a fraction of that, at roughly 1.5-2x the disk size. Entries written before this as `.png`
-/// are still read (same hash, so no re-decode is forced) until the LRU prune retires them.
+/// The full-resolution decode cache is a strip-parallel lossless container (strip_cache.rs, `.cqs`):
+/// every band is its own QOI stream or raw RGBA8, so it is written and read on all cores. Before
+/// that it was one single-stream QOI (`.qoi`, ~0.4-1.5s to decode on the Intel dev Mac) and before
+/// that a PNG (3-4s). Old `.qoi`/`.png` entries are still READ (same stem, so no re-decode is
+/// forced) until the LRU prune retires them; a fresh write supersedes and removes them.
 fn decode_cache_qoi_name(png_key: &str) -> String {
     format!("{}.qoi", png_key.trim_end_matches(".png"))
 }
 
-/// The existing full-resolution cache file for this photo+recipe, QOI preferred over legacy PNG.
+fn decode_cache_strip_name(png_key: &str) -> String {
+    format!("{}.cqs", png_key.trim_end_matches(".png"))
+}
+
+/// The existing full-resolution cache file for this photo+recipe: strip container preferred, then
+/// the legacy single-stream QOI, then the legacy PNG.
 pub(crate) fn decode_cache_file(path: &str, recipe_key: &str) -> Result<Option<PathBuf>, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("stat {path}: {e}"))?;
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let png_key = decode_cache_key(path, mtime, meta.len(), recipe_key);
+    let cqs = decode_cache_dir().join(decode_cache_strip_name(&png_key));
+    if cqs.is_file() { return Ok(Some(cqs)); }
     let qoi = decode_cache_dir().join(decode_cache_qoi_name(&png_key));
     if qoi.is_file() { return Ok(Some(qoi)); }
     let png = decode_cache_dir().join(png_key);

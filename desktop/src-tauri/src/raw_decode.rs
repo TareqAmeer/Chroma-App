@@ -730,6 +730,48 @@ fn pack_rgb16<F: Fn(usize) -> [f32; 3] + Sync>(sw: usize, sh: usize, crop: Optio
     (rgb16, ow, oh)
 }
 
+/// PPG demosaic + u16 pack (+ crop) in horizontal bands instead of one full frame. PPG expands the
+/// whole sensor to f32 RGB (~290MB at 24MP) before anything is packed to u16; running it per band
+/// of rows (each with BAND_OVERLAP extra rows above and below, then trimmed) caps that transient
+/// at one band and keeps the working set cache-sized. A pixel's PPG value depends only on sensor
+/// samples within 4 rows/columns (green: 2, red/blue at green: +1, red/blue at non-green: +1, plus
+/// the 3-row border bilinear pass, which only the real top/bottom image edge triggers: bands that
+/// touch it start/end exactly there), so with 8 rows of overlap every kept pixel sees the same
+/// inputs through the same arithmetic as in the full-frame run: output is byte-identical (checked
+/// by hashing dump_rw2 output, and by the unit test below).
+fn demosaic_ppg_banded(pix: &PixF32, cfa_config: &rawler::rawimage::CFAConfig, crop: Option<rawler::imgop::Rect>) -> (Vec<u16>, usize, usize) {
+    use rawler::imgop::{Dim2, Point, Rect};
+    const BAND_ROWS: usize = 256;
+    const BAND_OVERLAP: usize = 8;
+    let (sw, sh) = (pix.width, pix.height);
+    let (x0, y0, ow, oh) = match crop {
+        Some(r) if r.d.w < sw || r.d.h < sh => (r.p.x, r.p.y, r.d.w, r.d.h),
+        _ => (0, 0, sw, sh),
+    };
+    let mut rgb16 = vec![0u16; ow * oh * 3];
+    let mut row = 0;
+    while row < oh {
+        let n = BAND_ROWS.min(oh - row);
+        let (ya, yb) = (y0 + row, y0 + row + n);
+        let lo = ya.saturating_sub(BAND_OVERLAP);
+        let hi = (yb + BAND_OVERLAP).min(sh);
+        let roi = Rect::new(Point::new(0, lo), Dim2::new(sw, hi - lo));
+        let band = PPGDemosaic::new().demosaic(pix, &cfa_config.cfa, &cfa_config.colors, roi);
+        let px = band.pixels();
+        rgb16[row * ow * 3..(row + n) * ow * 3].par_chunks_mut(ow * 3).enumerate().for_each(|(r, dst)| {
+            let base = (ya + r - lo) * sw + x0;
+            for (col, d) in dst.chunks_exact_mut(3).enumerate() {
+                let p = px[base + col];
+                d[0] = (p[0].clamp(0.0, 1.0) * 65535.0).round() as u16;
+                d[1] = (p[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
+                d[2] = (p[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            }
+        });
+        row += n;
+    }
+    (rgb16, ow, oh)
+}
+
 /// Second half of a decode: demosaic (CFA) / pack (LinearRaw) the prepared frame to u16.
 fn demosaic_prepared(p: Prepared, demosaic_algo: &str) -> Result<DemosaicOut, String> {
     let mut st = std::time::Instant::now();
@@ -754,15 +796,10 @@ fn demosaic_prepared(p: Prepared, demosaic_algo: &str) -> Result<DemosaicOut, St
     let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
     if demosaic_choice.is_empty() {
         let pix = PixF32::new_with(pixels, w, h);
-        let roi = pix.rect();
-        let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
+        let out = demosaic_ppg_banded(&pix, &cfa_config, crop_rect);
         drop(pix);
         sub_stage("demosaic_ppg", &mut st);
-        // Interleave + u16 pack (+ crop) in ONE pass straight from PPG's [f32; 3] output — this
-        // used to materialise a full f32 interleaved copy first (~290MB at 24MP) and pack it in a
-        // second pass. Same per-channel expression on the same f32, so byte-identical.
-        let px = rgb.pixels();
-        pack_rgb16(rgb.width, rgb.height, crop_rect, |i| px[i])
+        out
     } else {
         use demosaic::demosaic as demosaic_fn;
         // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc",
@@ -1093,6 +1130,15 @@ pub fn decode_rw2_input(
 /// Returns Ok(None) when this frame can't be superpixelled (X-Trans/non-2x2 CFA, LinearRaw DNG):
 /// the caller then runs the full decode straight away (it still reuses the prepared data).
 pub fn decode_rw2_half(input: &RawInput, nr: NrTier, film_source: bool) -> Result<Option<DecodedRaw>, String> {
+    decode_rw2_half_then(input, nr, film_source, &|| {})
+}
+
+/// `decode_rw2_half`, calling `on_prepared` the moment the prepared Bayer data is parked in
+/// PREPARED_CACHE (before the half picture's own orientation/NR work) — only when a half picture
+/// is actually being produced. decode_raw_v2 uses it to start the full decode right then, so the
+/// full demosaic overlaps the half picture's remaining work and its IPC/install instead of
+/// waiting for the JS round trip.
+pub fn decode_rw2_half_then(input: &RawInput, nr: NrTier, film_source: bool, on_prepared: &(dyn Fn() + Sync)) -> Result<Option<DecodedRaw>, String> {
     let mut st = std::time::Instant::now();
     let nr = NrTier::resolve(nr);
     let pkey = prepared_cache_key(input.hash, film_source);
@@ -1107,6 +1153,7 @@ pub fn decode_rw2_half(input: &RawInput, nr: NrTier, film_source: bool) -> Resul
     if let Ok(mut g) = PREPARED_CACHE.lock() { *g = Some((pkey, p)); }
     let Some((rgb, hw, hh)) = half else { return Ok(None) };
     sub_stage("half_superpixel", &mut st);
+    on_prepared();
     let (mut rgb, w, h) = apply_orientation(rgb, hw, hh, orientation);
     sub_stage("half_orientation", &mut st);
     if nr != NrTier::Off && std::env::var_os("CS_HALF_NO_NR").is_none() {
