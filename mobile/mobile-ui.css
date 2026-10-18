@@ -250,6 +250,9 @@ body.sk2.mobile-fx::before{content:'';position:fixed;top:0;left:0;right:0;height
    into the first content row's right edge instead, so every tool starts 36-44px higher. */
 body.sk2.mobile-fx .fx-ctrl.sec-active{position:relative}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){position:absolute;top:2px;right:6px;margin:0!important;padding:0!important;min-height:0!important;height:48px;z-index:3;width:48px;min-width:48px;justify-content:center!important}
+/* The 48px corner chip carries only the Reset control. In a multi-card group (.sk2-dup-title) the desktop rule that prints the card name via ::before still applied, pushing the Reset cluster ~30px past the chip and giving .fx-panel a horizontal overflow (ui_audit FRAGMENT at 700px). */
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields))::before{display:none}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){overflow:hidden}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row),body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.fx-fields:not(:has(>#cv-ar-chips))>:first-child{padding-right:56px;min-height:48px;box-sizing:border-box}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.cs-sub{display:flex;align-items:center;margin:0}
 body.sk2.mobile-fx #fx-pull-cue{display:none!important}
@@ -284,7 +287,8 @@ body.sk2.mobile-fx #fx-mobile-nav .fx-nav-ic svg{width:18px;height:18px;display:
 #mlib .vtog button{min-height:36px;min-width:0;border:0;background:transparent;color:var(--k-color-muted);font:700 17px/1 var(--sans);letter-spacing:-.03em;text-transform:none;padding:0 8px;position:relative}
 #mlib .vtog button+button{margin-left:9px}
 #mlib .vtog button+button::before{content:'';position:absolute;left:-6px;top:10px;bottom:10px;width:2px;background:var(--k-color-muted)}
-#mlib .vtog button.on{color:#fff;background:var(--k-color-accent-a)}
+/* #111 not #fff: white on the #ff3b1f accent is 3.56:1 (fails 4.5:1); ink is 5.3:1 */
+#mlib .vtog button.on{color:#111;background:var(--k-color-accent-a)}
 #mlib .vtog button.on+button::before,#mlib .vtog button:has(+button.on)::before{display:none}
 #mlib .top button[data-a=settings]{flex:none;margin-left:0}
 #mlib .mh{justify-content:flex-end}
@@ -320,7 +324,7 @@ body.sk2.mobile-fx #fx-actionbar .vtog{display:flex;align-items:center;flex:0 0 
 body.sk2.mobile-fx #fx-actionbar .vtog button{min-height:36px!important;min-width:0!important;border:0;background:transparent;color:var(--k-color-muted);font:700 15px/1 var(--sans);letter-spacing:-.03em;padding:0 7px;position:relative;cursor:pointer}
 body.sk2.mobile-fx #fx-actionbar .vtog button+button{margin-left:8px}
 body.sk2.mobile-fx #fx-actionbar .vtog button+button::before{content:'';position:absolute;left:-5px;top:9px;bottom:9px;width:2px;background:var(--k-color-muted)}
-body.sk2.mobile-fx #fx-actionbar .vtog button.on{color:#fff;background:var(--k-color-accent-a)}
+body.sk2.mobile-fx #fx-actionbar .vtog button.on{color:#111;background:var(--k-color-accent-a)}
 body.sk2.mobile-fx #fx-actionbar .vtog button.on::before{display:none}
 body.sk2.mobile-fx #fx-actionbar .fx-act{min-width:40px}
 .vtog{display:none}
@@ -337,7 +341,7 @@ body.sk2.mobile-fx #fx-actionbar .vtog,#mlib .vtog{display:flex}
 #mlib .top .wm{color:var(--mink)}
 #mlib .vtog button{color:color-mix(in srgb,var(--mink) 55%,transparent)}
 #mlib .vtog button+button::before{background:color-mix(in srgb,var(--mink) 55%,transparent)}
-#mlib .vtog button.on{color:#fff}
+#mlib .vtog button.on{color:#111}
 #mlib .top button[data-a=settings]{color:var(--mink)}
 #mlib .mh{background:var(--mbg);border-top-color:color-mix(in srgb,var(--mink) 18%,transparent)}
 #mlib .mh button:not(.pri){color:var(--mink);background:transparent}

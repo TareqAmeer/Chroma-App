@@ -71,7 +71,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
      --red-oxide UNCHANGED for light mode; dark mode keeps its brighter values on purpose — DS's
      literals are near-invisible on this near-black --bg (contrast ~1.3:1), so darkroom
      readability wins there (see body.light's override for the light-mode DS values). */
-  --acc:var(--k-color-accent-a);--acc2:var(--acc);--txt:var(--k-color-ink);--mut:var(--k-color-muted);--ok:#214e1d;--err:#870f13;--r:0px;
+  --acc:var(--k-color-accent-a);--acc2:var(--acc);--txt:var(--k-color-ink);--mut:var(--k-color-muted);--ok:#214e1d;--err:#870f13;--warn:#d9a21b;--r:0px;
   /* Slider-thumb dark values, made explicit — previously only the CSS var()'s inline fallback
      (chromasmith-22.html:302/304) supplied these, so --sl-thumb was never a real custom property
      in dark mode even though body.light declared one. No visual change, just removes the hidden
@@ -1831,7 +1831,7 @@ body.light{
      copying it.
      Only text/icon color changes; --acc still paints .bpri's button gradient and .fx-toggle.on's
      track, both of which read FINE darker (only helps their contrast against black/white). */
-  --acc:var(--k-color-accent-a);--acc2:var(--acc);--ok:#214e1d;--err:#870f13;
+  --acc:var(--k-color-accent-a);--acc2:var(--acc);--ok:#214e1d;--err:#870f13;--warn:#8a5a00;
   /* Popover/menu row hover — was undefined in light mode entirely (fell through to the dark
      rgba(255,255,255,…) value, invisible against a near-white row), matched to
      desktop/library-ui.js's own light-mode --hover-tint for the same role. */
@@ -7286,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018H';
+const BUILD='1.1018I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

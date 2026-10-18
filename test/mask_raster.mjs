@@ -131,6 +131,10 @@ async function main() {
         const tiledHash=async()=>{const c=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
           return digest(c.getContext('2d').getImageData(0,0,128,96).data);};
         const tileSub=await tiledHash();
+        // renderTiled uploads its 128x96 export canvas into the SHARED FX renderer as the source image
+        // (the app's export path does the same and re-renders the preview afterwards). Restore the preview
+        // source here, or the reorder comparison below measures that source swap instead of mask order.
+        updateWork();
         mskSel=1;mskClearComposition();const plain=renderHash(1);
         ck('CHR-247 clear action removes operation and legacy flags',!composed.composeOp&&!composed.operandId&&!composed.subtract&&!composed.intersect);
         ck('CHR-247 subtract changes the rendered selection',subtract!==plain);
@@ -493,6 +497,7 @@ async function main() {
       const exportHash=async()=>{const outCanvas=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
         const px=outCanvas.getContext('2d').getImageData(0,0,128,96).data;return digest(px);};
       const tiledSubtractHash=await exportHash();
+      updateWork(); // restore the preview source clobbered by the tiled export above (see the note in the isolated block)
       mskSel = 1; mskClearComposition();
       const uncomposedHash = renderHash(1);
       ck('CHR-247 clear action removes the operation and legacy flags',

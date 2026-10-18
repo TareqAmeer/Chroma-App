@@ -248,9 +248,25 @@ function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minCon
   const panel = document.querySelector('.fx-panel');
   if (panel) {
     if (panel.scrollWidth > panel.clientWidth + 2) {
+      // Name the descendants that actually stick out, so a 1-3px overflow is diagnosable from
+      // the report instead of needing a bespoke probe script.
+      const pr = panel.getBoundingClientRect();
+      const wide = [...panel.querySelectorAll('*')].filter((c) => { const r = c.getBoundingClientRect(); return r.right > pr.right + 0.5; })
+        .slice(0, 4).map((c) => `${c.tagName.toLowerCase()}${c.id ? '#' + c.id : ''}.${String(c.className).slice(0, 30)} right=${Math.round(c.getBoundingClientRect().right)} sw=${c.scrollWidth}/${c.clientWidth}`);
+      // Bisect: which single descendant, when hidden, removes the overflow (catches pseudo-elements,
+      // shadows and transforms that no bounding rect shows). Failure path only; restores display.
+      const culprits = [];
+      for (const c of panel.querySelectorAll('*')) {
+        const prev = c.style.display; c.style.display = 'none';
+        const n = panel.scrollWidth; c.style.display = prev;
+        if (n <= panel.clientWidth + 2) { culprits.push(`${c.tagName.toLowerCase()}${c.id ? '#' + c.id : ''}.${String(c.className).slice(0, 40)}`); if (culprits.length >= 3) break; }
+      }
+      if (culprits.length) wide.push('hiding fixes: ' + culprits.join(' | '));
+      {const t = [...panel.querySelectorAll('.fx-ctrl-title')].find((x) => x.getBoundingClientRect().width > 0); if (t) wide.push(`title sw=${t.scrollWidth}/${t.clientWidth} left=${Math.round(t.getBoundingClientRect().left)} right=${Math.round(t.getBoundingClientRect().right)} kids=` + [...t.children].map((k) => `${k.className.toString().slice(0,18)}[${Math.round(k.getBoundingClientRect().left)}-${Math.round(k.getBoundingClientRect().right)}]`).join(',') + ` text="${t.textContent.trim().slice(0,40)}" chain=` + (() => { const o = []; for (let e = t; e && e !== panel.parentElement; e = e.parentElement) { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); o.push(`${e.tagName.toLowerCase()}.${String(e.className).slice(0,25)}[${Math.round(r.left)}+${Math.round(r.width)} ${cs.display} ${cs.position} pl=${cs.paddingLeft} ml=${cs.marginLeft}]`); } return o.join(' < '); })());}
       out.push({ kind: 'FRAGMENT', el: '.fx-panel',
         detail: `scrollWidth ${panel.scrollWidth} > clientWidth ${panel.clientWidth}`
-          + ` (~${Math.round(panel.scrollWidth / Math.max(1, panel.clientWidth))} columns)` });
+          + ` (~${Math.round(panel.scrollWidth / Math.max(1, panel.clientWidth))} columns)`
+          + (wide.length ? ` — overflowing: ${wide.join('; ')}` : '') });
     }
     // Content taller than the panel MUST be reachable by vertical scrolling.
     const card = document.querySelector('.fx-ctrl.sec-active');

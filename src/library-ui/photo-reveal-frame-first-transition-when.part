@@ -224,8 +224,11 @@
       // aspect: the incoming photo's width/height (from its grid thumbnail — dimensions only,
       // never its pixels). opts.fromRect is the Reveal lab's stand-in "previous photo" shape.
       begin(path, aspect, opts = {}) {
-        if (!enabled() || opts.skip) { if (phase !== 'idle') reset(); perf('instant', path, { skip: !!opts.skip }); return; }
+        // Same-path guard FIRST: a second begin() for the photo already revealing (a double-click's
+        // second open, a queued re-open) lands within the 1.5s "flip" window, so with the skip check
+        // ahead of it that call reset() the very transition it was meant to leave alone.
         if (token === path && phase !== 'idle') return; // the queued open of a path already revealing
+        if (!enabled() || opts.skip) { if (phase !== 'idle') reset(); perf('instant', path, { skip: !!opts.skip }); return; }
         if (!ensure()) return;
         const cfg = revealCfg();
         // Anything still animating ends where it is. The pixels on screen right now are the

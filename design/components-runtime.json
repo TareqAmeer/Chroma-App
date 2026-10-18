@@ -5008,20 +5008,20 @@
       "label": "All",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2903:button",
-        "desktop/library-ui.js:2903:chip",
-        "desktop/library-ui.js:2904:button",
-        "desktop/library-ui.js:2904:chip",
-        "desktop/library-ui.js:2905:button",
-        "desktop/library-ui.js:2905:chip",
-        "desktop/library-ui.js:2906:button",
-        "desktop/library-ui.js:2906:chip",
+        "desktop/library-ui.js:2907:button",
+        "desktop/library-ui.js:2907:chip",
         "desktop/library-ui.js:2908:button",
         "desktop/library-ui.js:2908:chip",
         "desktop/library-ui.js:2909:button",
         "desktop/library-ui.js:2909:chip",
         "desktop/library-ui.js:2910:button",
-        "desktop/library-ui.js:2910:chip"
+        "desktop/library-ui.js:2910:chip",
+        "desktop/library-ui.js:2912:button",
+        "desktop/library-ui.js:2912:chip",
+        "desktop/library-ui.js:2913:button",
+        "desktop/library-ui.js:2913:chip",
+        "desktop/library-ui.js:2914:button",
+        "desktop/library-ui.js:2914:chip"
       ],
       "unresolved": false
     },
@@ -5202,20 +5202,20 @@
       "label": "All",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2903:button",
-        "desktop/library-ui.js:2903:chip",
-        "desktop/library-ui.js:2904:button",
-        "desktop/library-ui.js:2904:chip",
-        "desktop/library-ui.js:2905:button",
-        "desktop/library-ui.js:2905:chip",
-        "desktop/library-ui.js:2906:button",
-        "desktop/library-ui.js:2906:chip",
+        "desktop/library-ui.js:2907:button",
+        "desktop/library-ui.js:2907:chip",
         "desktop/library-ui.js:2908:button",
         "desktop/library-ui.js:2908:chip",
         "desktop/library-ui.js:2909:button",
         "desktop/library-ui.js:2909:chip",
         "desktop/library-ui.js:2910:button",
-        "desktop/library-ui.js:2910:chip"
+        "desktop/library-ui.js:2910:chip",
+        "desktop/library-ui.js:2912:button",
+        "desktop/library-ui.js:2912:chip",
+        "desktop/library-ui.js:2913:button",
+        "desktop/library-ui.js:2913:chip",
+        "desktop/library-ui.js:2914:button",
+        "desktop/library-ui.js:2914:chip"
       ],
       "unresolved": false
     },
@@ -5352,7 +5352,7 @@
       "label": "Retouch ResetRemove spots and blemishes. Mode i Heal (blend color)Clone (copy exactly) HealCloneHeal",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4528:section-card"
+        "chromasmith-22.html:4530:section-card"
       ],
       "unresolved": false
     },
@@ -5588,7 +5588,7 @@
       "label": "Drag a rectangle around the object for a fast EdgeSAM selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19514:button"
+        "chromasmith-22.html:19713:button"
       ],
       "unresolved": false
     },
@@ -5605,7 +5605,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19513:button"
+        "chromasmith-22.html:19712:button"
       ],
       "unresolved": false
     },
@@ -5622,8 +5622,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -5640,7 +5640,7 @@
       "label": "Erase instead of add; hold Alt/Option while painting for temporary erase",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19538:button"
+        "chromasmith-22.html:19737:button"
       ],
       "unresolved": false
     },
@@ -5657,7 +5657,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19537:button"
+        "chromasmith-22.html:19736:button"
       ],
       "unresolved": false
     },
@@ -5671,7 +5671,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -5687,7 +5687,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -5701,7 +5701,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -5717,7 +5717,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -5733,7 +5733,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -5750,7 +5750,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -5767,7 +5767,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -5784,7 +5784,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -5802,8 +5802,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -5821,8 +5821,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -5840,8 +5840,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -5858,7 +5858,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -5875,8 +5875,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -5892,7 +5892,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -5908,7 +5908,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -6645,8 +6645,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -6664,8 +6664,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -6683,8 +6683,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -6701,8 +6701,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -6733,7 +6733,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -6764,7 +6764,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -6781,7 +6781,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -6812,7 +6812,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -6989,8 +6989,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -7007,7 +7007,7 @@
       "label": "Erase instead of add; hold Alt/Option while painting for temporary erase",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19538:button"
+        "chromasmith-22.html:19737:button"
       ],
       "unresolved": false
     },
@@ -7024,7 +7024,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19537:button"
+        "chromasmith-22.html:19736:button"
       ],
       "unresolved": false
     },
@@ -7038,7 +7038,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -7054,7 +7054,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -7068,7 +7068,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -7084,7 +7084,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -7100,7 +7100,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -7117,7 +7117,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -7134,7 +7134,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -7151,7 +7151,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -7169,8 +7169,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -7188,8 +7188,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -7207,8 +7207,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -7225,7 +7225,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -7242,8 +7242,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -7259,7 +7259,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -7275,7 +7275,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -7910,8 +7910,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -7929,8 +7929,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -7948,8 +7948,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -7966,8 +7966,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -7998,7 +7998,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -8029,7 +8029,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -8046,7 +8046,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -8077,7 +8077,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -8254,7 +8254,7 @@
       "label": "Drag a rectangle around the object for a fast EdgeSAM selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19514:button"
+        "chromasmith-22.html:19713:button"
       ],
       "unresolved": false
     },
@@ -8271,7 +8271,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19513:button"
+        "chromasmith-22.html:19712:button"
       ],
       "unresolved": false
     },
@@ -8288,7 +8288,7 @@
       "label": "Erase instead of add; hold Alt/Option while painting for temporary erase",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19538:button"
+        "chromasmith-22.html:19737:button"
       ],
       "unresolved": false
     },
@@ -8305,7 +8305,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19537:button"
+        "chromasmith-22.html:19736:button"
       ],
       "unresolved": false
     },
@@ -8319,7 +8319,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -8335,7 +8335,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -8349,7 +8349,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -8365,7 +8365,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -8381,7 +8381,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -8398,7 +8398,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -8415,7 +8415,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -8432,7 +8432,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -8450,8 +8450,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -8469,8 +8469,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -8488,8 +8488,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -8506,7 +8506,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -8523,8 +8523,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -8540,7 +8540,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -8556,7 +8556,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -9293,8 +9293,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -9312,8 +9312,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -9331,8 +9331,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -9349,8 +9349,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -9381,7 +9381,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -9412,7 +9412,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -9429,7 +9429,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -9460,7 +9460,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -9638,8 +9638,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -9653,7 +9653,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -9669,7 +9669,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -9683,7 +9683,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -9699,7 +9699,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -9715,7 +9715,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -9732,7 +9732,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -9749,7 +9749,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -9766,7 +9766,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -9784,8 +9784,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -9803,8 +9803,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -9822,8 +9822,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -9840,7 +9840,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -9857,8 +9857,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -9874,7 +9874,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -9890,7 +9890,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -10467,8 +10467,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -10486,8 +10486,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -10505,8 +10505,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -10523,8 +10523,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -10555,7 +10555,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -10586,7 +10586,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -10603,7 +10603,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -10634,7 +10634,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -10811,8 +10811,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -10830,7 +10830,7 @@
       "label": "No valid depth estimate is available for this photo.",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:17301:button"
+        "chromasmith-22.html:17500:button"
       ],
       "unresolved": false
     },
@@ -10844,7 +10844,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -10860,7 +10860,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -10874,7 +10874,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -10890,7 +10890,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -10906,7 +10906,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -10923,7 +10923,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -10940,7 +10940,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -10957,7 +10957,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -10975,8 +10975,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -10994,8 +10994,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -11013,8 +11013,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -11031,7 +11031,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -11048,8 +11048,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -11065,7 +11065,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -11081,7 +11081,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -11264,7 +11264,7 @@
       "label": "Always show selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4303:control-row"
+        "chromasmith-22.html:4305:control-row"
       ],
       "unresolved": false
     },
@@ -11280,7 +11280,7 @@
       "label": "Overlay colour",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4299:control-row"
+        "chromasmith-22.html:4301:control-row"
       ],
       "unresolved": false
     },
@@ -11296,7 +11296,7 @@
       "label": "Overlay opacity 75%",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4284:control-row"
+        "chromasmith-22.html:4286:control-row"
       ],
       "unresolved": false
     },
@@ -11312,7 +11312,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4289:control-row"
+        "chromasmith-22.html:4291:control-row"
       ],
       "unresolved": false
     },
@@ -11328,7 +11328,7 @@
       "label": "Selection display Colour overlayOn imageWhite on black",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4293:control-row"
+        "chromasmith-22.html:4295:control-row"
       ],
       "unresolved": false
     },
@@ -11710,8 +11710,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -11729,8 +11729,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -11748,8 +11748,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -11766,8 +11766,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -11798,7 +11798,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -11831,7 +11831,7 @@
       "label": "Selection display mode",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4295:select"
+        "chromasmith-22.html:4297:select"
       ],
       "unresolved": false
     },
@@ -11845,7 +11845,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -11862,7 +11862,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -11878,7 +11878,7 @@
       "label": "Overlay opacity (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4286:slider"
+        "chromasmith-22.html:4288:slider"
       ],
       "unresolved": false
     },
@@ -11909,7 +11909,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -12086,8 +12086,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -12101,7 +12101,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -12117,7 +12117,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -12131,7 +12131,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -12147,7 +12147,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -12163,7 +12163,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -12180,7 +12180,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -12197,7 +12197,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -12214,7 +12214,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -12232,8 +12232,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -12251,8 +12251,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -12270,8 +12270,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -12288,7 +12288,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -12305,8 +12305,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -12322,7 +12322,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -12338,7 +12338,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -12957,8 +12957,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -12976,8 +12976,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -12995,8 +12995,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -13013,8 +13013,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -13045,7 +13045,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -13076,7 +13076,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -13093,7 +13093,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -13124,7 +13124,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -13301,8 +13301,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -13316,7 +13316,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -13332,7 +13332,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -13346,7 +13346,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -13362,7 +13362,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -13378,7 +13378,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -13395,7 +13395,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -13412,7 +13412,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -13429,7 +13429,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -13447,8 +13447,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -13466,8 +13466,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -13485,8 +13485,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -13503,7 +13503,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -13520,8 +13520,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -13537,7 +13537,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -13553,7 +13553,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -13736,7 +13736,7 @@
       "label": "Always show selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4303:control-row"
+        "chromasmith-22.html:4305:control-row"
       ],
       "unresolved": false
     },
@@ -13752,7 +13752,7 @@
       "label": "Overlay colour",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4299:control-row"
+        "chromasmith-22.html:4301:control-row"
       ],
       "unresolved": false
     },
@@ -13768,7 +13768,7 @@
       "label": "Overlay opacity 75%",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4284:control-row"
+        "chromasmith-22.html:4286:control-row"
       ],
       "unresolved": false
     },
@@ -13784,7 +13784,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4289:control-row"
+        "chromasmith-22.html:4291:control-row"
       ],
       "unresolved": false
     },
@@ -13800,7 +13800,7 @@
       "label": "Selection display Colour overlayOn imageWhite on black",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4293:control-row"
+        "chromasmith-22.html:4295:control-row"
       ],
       "unresolved": false
     },
@@ -14182,8 +14182,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -14201,8 +14201,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -14220,8 +14220,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -14238,8 +14238,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -14270,7 +14270,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -14303,7 +14303,7 @@
       "label": "Selection display mode",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4295:select"
+        "chromasmith-22.html:4297:select"
       ],
       "unresolved": false
     },
@@ -14317,7 +14317,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -14334,7 +14334,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -14350,7 +14350,7 @@
       "label": "Overlay opacity (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4286:slider"
+        "chromasmith-22.html:4288:slider"
       ],
       "unresolved": false
     },
@@ -14381,7 +14381,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -14558,8 +14558,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -14573,7 +14573,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -14589,7 +14589,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -14603,7 +14603,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -14619,7 +14619,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -14635,7 +14635,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -14652,7 +14652,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -14669,7 +14669,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -14686,7 +14686,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -14704,8 +14704,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -14723,8 +14723,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -14742,8 +14742,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -14760,7 +14760,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -14777,8 +14777,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -14794,7 +14794,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -14810,7 +14810,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -15429,8 +15429,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -15448,8 +15448,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -15467,8 +15467,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -15485,8 +15485,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -15517,7 +15517,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -15548,7 +15548,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -15565,7 +15565,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -15596,7 +15596,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -15773,7 +15773,7 @@
       "label": "Drag a rectangle around the object for a fast EdgeSAM selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19514:button"
+        "chromasmith-22.html:19713:button"
       ],
       "unresolved": false
     },
@@ -15790,7 +15790,7 @@
       "label": "Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19513:button"
+        "chromasmith-22.html:19712:button"
       ],
       "unresolved": false
     },
@@ -15807,8 +15807,8 @@
       "label": "Pick manually",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -15825,7 +15825,7 @@
       "label": "Erase instead of add; hold Alt/Option while painting for temporary erase",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19538:button"
+        "chromasmith-22.html:19737:button"
       ],
       "unresolved": false
     },
@@ -15842,7 +15842,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19537:button"
+        "chromasmith-22.html:19736:button"
       ],
       "unresolved": false
     },
@@ -15856,7 +15856,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -15872,7 +15872,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -15886,7 +15886,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -15902,7 +15902,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -15918,7 +15918,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -15935,7 +15935,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -15952,7 +15952,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -15969,7 +15969,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -15987,8 +15987,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -16006,8 +16006,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -16025,8 +16025,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -16043,7 +16043,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -16060,8 +16060,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -16077,7 +16077,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -16093,7 +16093,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -17120,8 +17120,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -17139,8 +17139,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -17158,8 +17158,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -17176,8 +17176,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -17208,7 +17208,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -17254,7 +17254,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -17271,7 +17271,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -17302,7 +17302,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -17479,8 +17479,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -17497,7 +17497,7 @@
       "label": "Erase instead of add; hold Alt/Option while painting for temporary erase",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19538:button"
+        "chromasmith-22.html:19737:button"
       ],
       "unresolved": false
     },
@@ -17514,7 +17514,7 @@
       "label": "Paint into this mask on the preview",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19537:button"
+        "chromasmith-22.html:19736:button"
       ],
       "unresolved": false
     },
@@ -17528,7 +17528,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -17544,7 +17544,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -17558,7 +17558,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -17574,7 +17574,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -17590,7 +17590,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -17607,7 +17607,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -17624,7 +17624,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -17641,7 +17641,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -17659,8 +17659,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -17678,8 +17678,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -17697,8 +17697,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -17715,7 +17715,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -17732,8 +17732,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -17749,7 +17749,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -17765,7 +17765,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -18458,8 +18458,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -18477,8 +18477,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -18496,8 +18496,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -18514,8 +18514,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -18546,7 +18546,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -18577,7 +18577,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -18594,7 +18594,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -18625,7 +18625,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -18802,8 +18802,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -18821,7 +18821,7 @@
       "label": "No valid depth estimate is available for this photo.",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:17301:button"
+        "chromasmith-22.html:17500:button"
       ],
       "unresolved": false
     },
@@ -18835,7 +18835,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -18851,7 +18851,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -18865,7 +18865,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -18881,7 +18881,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -18897,7 +18897,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -18914,7 +18914,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -18931,7 +18931,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -18948,7 +18948,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -18966,8 +18966,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -18985,8 +18985,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -19004,8 +19004,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -19022,7 +19022,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -19039,8 +19039,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -19056,7 +19056,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -19072,7 +19072,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -19255,7 +19255,7 @@
       "label": "Always show selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4303:control-row"
+        "chromasmith-22.html:4305:control-row"
       ],
       "unresolved": false
     },
@@ -19271,7 +19271,7 @@
       "label": "Overlay colour",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4299:control-row"
+        "chromasmith-22.html:4301:control-row"
       ],
       "unresolved": false
     },
@@ -19287,7 +19287,7 @@
       "label": "Overlay opacity 75%",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4284:control-row"
+        "chromasmith-22.html:4286:control-row"
       ],
       "unresolved": false
     },
@@ -19303,7 +19303,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4289:control-row"
+        "chromasmith-22.html:4291:control-row"
       ],
       "unresolved": false
     },
@@ -19319,7 +19319,7 @@
       "label": "Selection display Colour overlayOn imageWhite on black",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4293:control-row"
+        "chromasmith-22.html:4295:control-row"
       ],
       "unresolved": false
     },
@@ -19701,8 +19701,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -19720,8 +19720,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -19739,8 +19739,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -19757,8 +19757,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -19789,7 +19789,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintErase Masks ResetApply an edit to only part of t",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -19822,7 +19822,7 @@
       "label": "Selection display mode",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4295:select"
+        "chromasmith-22.html:4297:select"
       ],
       "unresolved": false
     },
@@ -19836,7 +19836,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -19853,7 +19853,7 @@
       "label": "",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -19869,7 +19869,7 @@
       "label": "Overlay opacity (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4286:slider"
+        "chromasmith-22.html:4288:slider"
       ],
       "unresolved": false
     },
@@ -19900,7 +19900,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -19961,7 +19961,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5011:button"
+        "chromasmith-22.html:5021:button"
       ],
       "unresolved": false
     },
@@ -20050,7 +20050,7 @@
       "label": "Redo",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5014:button"
+        "chromasmith-22.html:5024:button"
       ],
       "unresolved": false
     },
@@ -20066,7 +20066,7 @@
       "label": "Settings",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5015:button"
+        "chromasmith-22.html:5025:button"
       ],
       "unresolved": false
     },
@@ -20082,7 +20082,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5011:button"
+        "chromasmith-22.html:5021:button"
       ],
       "unresolved": false
     },
@@ -20113,7 +20113,7 @@
       "label": "Undo",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5013:button"
+        "chromasmith-22.html:5023:button"
       ],
       "unresolved": false
     },
@@ -20129,7 +20129,7 @@
       "label": "Press and hold to see the original",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:4888:button"
+        "chromasmith-22.html:4898:button"
       ],
       "unresolved": false
     },
@@ -20146,8 +20146,8 @@
       "label": "Pick",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19576:button",
-        "chromasmith-22.html:19694:button"
+        "chromasmith-22.html:19775:button",
+        "chromasmith-22.html:19893:button"
       ],
       "unresolved": false
     },
@@ -20165,7 +20165,7 @@
       "label": "No valid depth estimate is available for this photo.",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:17301:button"
+        "chromasmith-22.html:17500:button"
       ],
       "unresolved": false
     },
@@ -20179,7 +20179,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -20193,7 +20193,7 @@
       "label": "Crop",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5042:button"
+        "chromasmith-22.html:5052:button"
       ],
       "unresolved": false
     },
@@ -20207,7 +20207,7 @@
       "label": "Export",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5043:button"
+        "chromasmith-22.html:5053:button"
       ],
       "unresolved": false
     },
@@ -20221,7 +20221,7 @@
       "label": "Looks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5040:button"
+        "chromasmith-22.html:5050:button"
       ],
       "unresolved": false
     },
@@ -20237,7 +20237,7 @@
       "label": "Tools",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5041:button"
+        "chromasmith-22.html:5051:button"
       ],
       "unresolved": false
     },
@@ -20253,7 +20253,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -20269,7 +20269,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -20610,7 +20610,7 @@
       "label": "Always show selection",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4303:control-row"
+        "chromasmith-22.html:4305:control-row"
       ],
       "unresolved": false
     },
@@ -20626,7 +20626,7 @@
       "label": "Overlay colour",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4299:control-row"
+        "chromasmith-22.html:4301:control-row"
       ],
       "unresolved": false
     },
@@ -20642,7 +20642,7 @@
       "label": "Overlay opacity 75% Reset",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4284:control-row"
+        "chromasmith-22.html:4286:control-row"
       ],
       "unresolved": false
     },
@@ -20658,7 +20658,7 @@
       "label": "Edge only",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4289:control-row"
+        "chromasmith-22.html:4291:control-row"
       ],
       "unresolved": false
     },
@@ -20674,7 +20674,7 @@
       "label": "Selection display Colour overlayOn imageWhite on black",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4293:control-row"
+        "chromasmith-22.html:4295:control-row"
       ],
       "unresolved": false
     },
@@ -21055,7 +21055,7 @@
       "label": "1. Choose an area · 2. Adjust itChoose areaAdd paintEraseMask 1 of 1 · Adjusting Masks ResetApply an",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4261:section-card"
+        "chromasmith-22.html:4263:section-card"
       ],
       "unresolved": false
     },
@@ -21088,7 +21088,7 @@
       "label": "Selection display mode",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4295:select"
+        "chromasmith-22.html:4297:select"
       ],
       "unresolved": false
     },
@@ -21399,7 +21399,7 @@
       "label": "Hue (fine-tune)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:19814:slider"
+        "chromasmith-22.html:20013:slider"
       ],
       "unresolved": false
     },
@@ -21415,7 +21415,7 @@
       "label": "Overlay opacity (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4286:slider"
+        "chromasmith-22.html:4288:slider"
       ],
       "unresolved": false
     },
@@ -21432,7 +21432,7 @@
       "label": "Masks",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4262:toggle"
+        "chromasmith-22.html:4264:toggle"
       ],
       "unresolved": false
     },
@@ -21449,7 +21449,7 @@
       "label": "Build book pages",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5343:button"
+        "chromasmith-22.html:5353:button"
       ],
       "unresolved": false
     },
@@ -21466,7 +21466,7 @@
       "label": "Export collage",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5335:button"
+        "chromasmith-22.html:5345:button"
       ],
       "unresolved": false
     },
@@ -21483,7 +21483,7 @@
       "label": "Scrapbook",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5260:button"
+        "chromasmith-22.html:5270:button"
       ],
       "unresolved": false
     },
@@ -21500,7 +21500,7 @@
       "label": "Grid",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5260:button"
+        "chromasmith-22.html:5270:button"
       ],
       "unresolved": false
     },
@@ -21517,7 +21517,7 @@
       "label": "Add the photos open in Effects, shown with their look and adjustments",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5243:button"
+        "chromasmith-22.html:5253:button"
       ],
       "unresolved": false
     },
@@ -21531,7 +21531,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -21547,7 +21547,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -21561,7 +21561,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -21778,7 +21778,7 @@
       "label": "Long side 1600 px 2400 px 3200 px 4000 px (large)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5323:control-row"
+        "chromasmith-22.html:5333:control-row"
       ],
       "unresolved": false
     },
@@ -22228,7 +22228,7 @@
       "label": "Aspect",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5255:select"
+        "chromasmith-22.html:5265:select"
       ],
       "unresolved": false
     },
@@ -22244,7 +22244,7 @@
       "label": "Photos per page",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5342:select"
+        "chromasmith-22.html:5352:select"
       ],
       "unresolved": false
     },
@@ -22260,7 +22260,7 @@
       "label": "Format",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5331:select"
+        "chromasmith-22.html:5341:select"
       ],
       "unresolved": false
     },
@@ -22276,7 +22276,7 @@
       "label": "Font",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5286:select"
+        "chromasmith-22.html:5296:select"
       ],
       "unresolved": false
     },
@@ -22292,7 +22292,7 @@
       "label": "Photo frame",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5277:select"
+        "chromasmith-22.html:5287:select"
       ],
       "unresolved": false
     },
@@ -22308,7 +22308,7 @@
       "label": "Size preset",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5315:select"
+        "chromasmith-22.html:5325:select"
       ],
       "unresolved": false
     },
@@ -22324,7 +22324,7 @@
       "label": "Long side",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5324:select"
+        "chromasmith-22.html:5334:select"
       ],
       "unresolved": false
     },
@@ -22340,7 +22340,7 @@
       "label": "Position",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5283:select"
+        "chromasmith-22.html:5293:select"
       ],
       "unresolved": false
     },
@@ -22356,7 +22356,7 @@
       "label": "Caption size (px)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5285:slider"
+        "chromasmith-22.html:5295:slider"
       ],
       "unresolved": false
     },
@@ -22372,7 +22372,7 @@
       "label": "Spacing (px)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5275:slider"
+        "chromasmith-22.html:5285:slider"
       ],
       "unresolved": false
     },
@@ -22388,7 +22388,7 @@
       "label": "Outer margin (px)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5276:slider"
+        "chromasmith-22.html:5286:slider"
       ],
       "unresolved": false
     },
@@ -22404,7 +22404,7 @@
       "label": "JPEG quality (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5332:slider"
+        "chromasmith-22.html:5342:slider"
       ],
       "unresolved": false
     },
@@ -22420,7 +22420,7 @@
       "label": "Corner round (px)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5278:slider"
+        "chromasmith-22.html:5288:slider"
       ],
       "unresolved": false
     },
@@ -22436,7 +22436,7 @@
       "label": "Title size (px)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:5284:slider"
+        "chromasmith-22.html:5294:slider"
       ],
       "unresolved": false
     },
@@ -22453,7 +22453,7 @@
       "label": "Download .cube LUT",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3853:button"
+        "chromasmith-22.html:3855:button"
       ],
       "unresolved": false
     },
@@ -22470,7 +22470,7 @@
       "label": "Apply match to selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3857:button"
+        "chromasmith-22.html:3859:button"
       ],
       "unresolved": false
     },
@@ -22487,7 +22487,7 @@
       "label": "Save the match as a look in the editor's LUT library and apply it — then fine-tune with the look's S",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3856:button"
+        "chromasmith-22.html:3858:button"
       ],
       "unresolved": false
     },
@@ -22504,7 +22504,7 @@
       "label": "Express the match as ordinary Tone sliders (exposure, contrast, temperature, tint, saturation) and a",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3855:button"
+        "chromasmith-22.html:3857:button"
       ],
       "unresolved": false
     },
@@ -22521,7 +22521,7 @@
       "label": "Download .xmp Preset",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3854:button"
+        "chromasmith-22.html:3856:button"
       ],
       "unresolved": false
     },
@@ -22535,7 +22535,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -22551,7 +22551,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -22565,7 +22565,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -22641,7 +22641,7 @@
       "label": "Highlights (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3850:slider"
+        "chromasmith-22.html:3852:slider"
       ],
       "unresolved": false
     },
@@ -22657,7 +22657,7 @@
       "label": "Midtones (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3849:slider"
+        "chromasmith-22.html:3851:slider"
       ],
       "unresolved": false
     },
@@ -22673,7 +22673,7 @@
       "label": "Shadows (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3848:slider"
+        "chromasmith-22.html:3850:slider"
       ],
       "unresolved": false
     },
@@ -22689,7 +22689,7 @@
       "label": "Strength (%)",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3847:slider"
+        "chromasmith-22.html:3849:slider"
       ],
       "unresolved": false
     },
@@ -24707,7 +24707,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -24723,7 +24723,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -24737,7 +24737,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -24753,7 +24753,7 @@
       "label": "Resize tool panel",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3948:button"
+        "chromasmith-22.html:3950:button"
       ],
       "unresolved": false
     },
@@ -24769,7 +24769,7 @@
       "label": "Resize tool bar",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3949:button"
+        "chromasmith-22.html:3951:button"
       ],
       "unresolved": false
     },
@@ -24786,7 +24786,7 @@
       "label": "Apply your All FX effects to every selected photo (right-click to choose what it applies)",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2823:button"
+        "desktop/library-ui.js:2827:button"
       ],
       "unresolved": false
     },
@@ -24803,7 +24803,7 @@
       "label": "Export selected photos — ⌘E",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2824:button"
+        "desktop/library-ui.js:2828:button"
       ],
       "unresolved": false
     },
@@ -24820,7 +24820,7 @@
       "label": "Subfolders, type/camera/lens/ISO/duplicates/sync/rating/tag filters",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2769:button"
+        "desktop/library-ui.js:2773:button"
       ],
       "unresolved": false
     },
@@ -24838,8 +24838,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -24857,8 +24857,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -24876,8 +24876,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -24894,7 +24894,7 @@
       "label": "Sort by",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2736:button"
+        "desktop/library-ui.js:2740:button"
       ],
       "unresolved": false
     },
@@ -24911,8 +24911,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -24928,7 +24928,7 @@
       "label": "Larger thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2809:button"
+        "desktop/library-ui.js:2813:button"
       ],
       "unresolved": false
     },
@@ -24944,7 +24944,7 @@
       "label": "Smaller thumbnails",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2807:button"
+        "desktop/library-ui.js:2811:button"
       ],
       "unresolved": false
     },
@@ -25195,8 +25195,8 @@
       "label": "Favorite selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2820:button",
-        "desktop/library-ui.js:2820:icon-button"
+        "desktop/library-ui.js:2824:button",
+        "desktop/library-ui.js:2824:icon-button"
       ],
       "unresolved": false
     },
@@ -25214,8 +25214,8 @@
       "label": "Pick selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2819:button",
-        "desktop/library-ui.js:2819:icon-button"
+        "desktop/library-ui.js:2823:button",
+        "desktop/library-ui.js:2823:icon-button"
       ],
       "unresolved": false
     },
@@ -25233,8 +25233,8 @@
       "label": "Reject selected photos",
       "disabled": true,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2818:button",
-        "desktop/library-ui.js:2818:icon-button"
+        "desktop/library-ui.js:2822:button",
+        "desktop/library-ui.js:2822:icon-button"
       ],
       "unresolved": false
     },
@@ -25251,8 +25251,8 @@
       "label": "View settings",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2829:button",
-        "desktop/library-ui.js:2829:icon-button"
+        "desktop/library-ui.js:2833:button",
+        "desktop/library-ui.js:2833:icon-button"
       ],
       "unresolved": false
     },
@@ -25285,7 +25285,7 @@
       "label": "Film Negative Reset i How this worksInverts a negative using the RawTherapee method: each channel is",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4047:section-card"
+        "chromasmith-22.html:4049:section-card"
       ],
       "unresolved": false
     },
@@ -25320,7 +25320,7 @@
       "label": "LooksReset Open a photo to pick a look. Preset AllUser LooksC41 StillCinemaReversalInstantNicheB&WFi",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4006:section-card"
+        "chromasmith-22.html:4008:section-card"
       ],
       "unresolved": false
     },
@@ -25334,7 +25334,7 @@
       "label": "Thumbnail size",
       "disabled": false,
       "sourceDeclarations": [
-        "desktop/library-ui.js:2808:slider"
+        "desktop/library-ui.js:2812:slider"
       ],
       "unresolved": false
     },
@@ -25350,7 +25350,7 @@
       "label": "Film Negative",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:4048:toggle"
+        "chromasmith-22.html:4050:toggle"
       ],
       "unresolved": false
     },
@@ -25364,7 +25364,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -25380,7 +25380,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -25394,7 +25394,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -25441,7 +25441,7 @@
       "label": "Generate LUT & XMP",
       "disabled": true,
       "sourceDeclarations": [
-        "chromasmith-22.html:3791:button"
+        "chromasmith-22.html:3793:button"
       ],
       "unresolved": false
     },
@@ -25455,7 +25455,7 @@
       "label": "Close",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:14781:button"
+        "chromasmith-22.html:14980:button"
       ],
       "unresolved": false
     },
@@ -25471,7 +25471,7 @@
       "label": "Gallery",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },
@@ -25485,7 +25485,7 @@
       "label": "Studio",
       "disabled": false,
       "sourceDeclarations": [
-        "chromasmith-22.html:3084:button"
+        "chromasmith-22.html:3086:button"
       ],
       "unresolved": false
     },

@@ -35,7 +35,7 @@ const LAB = { exit: 1200, morph: 1200, fill: 1200, settle: 800, speedup: 1, ease
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  await page.addInitScript((lab) => { try { localStorage.setItem('chromasmithRevealLab', JSON.stringify(lab)); localStorage.setItem('chromasmithPhotoTransitions', '1'); } catch (_) {} }, LAB);
+  await page.addInitScript((lab) => { try { localStorage.setItem('chromasmithRevealLab', JSON.stringify(lab)); localStorage.setItem('chromasmithPhotoTransitions', '1'); localStorage.setItem('chromasmith-tour-seen-v1', '1'); localStorage.setItem('chromasmithNeighbourWarm', '0'); /* neighbour warm-up puts the next photo in imgCache, and an in-memory open deliberately skips the transition this test measures */ localStorage.setItem('chromasmith-first-edit-stage-v1', 'done'); } catch (_) {} }, LAB);
   await page.goto(`http://127.0.0.1:${server.address().port}/desktop/dist/index.html?libtest=1&libn=7&deskx=1&libshapes=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chromasmithReveal && document.querySelectorAll('#lib-grid .lib-card').length > 4, null, { timeout: 20000 });
   await page.waitForTimeout(1500);
@@ -84,6 +84,7 @@ try {
   const seek = (frac) => page.evaluate((f) => document.getAnimations().forEach((a) => { if (a.playState === 'paused' && a.effect?.target?.closest && (a.effect.target.closest('#fx-reveal') || a.effect.target.id === 'fx-zoom-wrap')) a.currentTime = a.effect.getComputedTiming().duration * f; }), frac);
   const finishPaused = () => page.evaluate(() => document.getAnimations().forEach((a) => { if (a.playState === 'paused' && a.effect?.target?.closest && (a.effect.target.closest('#fx-reveal') || a.effect.target.id === 'fx-zoom-wrap')) a.finish(); }));
   const logHas = (ev) => page.evaluate((e) => (window.__rawPerfLog || []).some((x) => x.event === e), ev);
+  await page.waitForTimeout(1600); // library-ui.js treats an open within 1.5s of the previous one as a "flip" and skips the transition on purpose
   await card(2).dblclick();
   await waitPhase('exiting', 5000);
   let names = await paused();
@@ -140,6 +141,7 @@ try {
 
   const neverHidden = async (label, n) => {
     await page.evaluate(() => { window.__revealWatch = { hold: false, host: false }; const tick = () => { if (!window.__revealWatch) return; if (document.body.classList.contains('lib-reveal-hold')) window.__revealWatch.hold = true; if (document.querySelector('#fx-reveal.on')) window.__revealWatch.host = true; requestAnimationFrame(tick); }; tick(); });
+    await page.waitForTimeout(1600); // see the flip note above
     await card(n).dblclick();
     await page.waitForTimeout(1500);
     const w = await page.evaluate(() => { const r = window.__revealWatch; window.__revealWatch = null; return r; });

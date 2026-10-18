@@ -24,6 +24,8 @@ const server = await new Promise(r => {
 const base = `http://127.0.0.1:${server.address().port}`;
 const br = await chromium.launch();
 const pg = await br.newPage({ viewport: { width: 1400, height: 1000 } });
+// Suppress the welcome tour and the first-edit guide modal (#cs-modal-ov), which otherwise intercepts the double-click.
+await pg.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); localStorage.setItem('chromasmith-first-edit-stage-v1', 'done'); } catch (_) {} });
 const errors = [];
 pg.on('pageerror', e => errors.push(e.message));
 

@@ -51,6 +51,11 @@
       "hadSemi": true
     },
     {
+      "var": "--warn",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
       "var": "--r",
       "pre": "",
       "hadSemi": true
@@ -677,6 +682,11 @@
     },
     {
       "var": "--err",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--warn",
       "pre": "",
       "hadSemi": true
     },

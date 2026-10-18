@@ -237,3 +237,36 @@ node test/editor_wireframe_diff.mjs --panel masks --json --write-baseline-candid
 Do not move a candidate to `test/baselines/panel-diff-reviewed/` until the user has reviewed every
 entry and supplied its acceptance reason. Missing controls/selectors are findings, not acceptable
 empty observations. Reviewed files require `status: "reviewed"` and a non-empty reason per entry.
+
+## Gate triage 2026-10-18 (test-health pass)
+
+Fixed as real bugs: `--warn` token was read in three places and defined nowhere (now in `design/tokens.json`
++ `tools/scripts/token-layout.json`); phone view-toggle `button.on` was white on `#ff3b1f` (3.56:1, now `#111`);
+the 48px mobile corner title chip in multi-card groups printed the card name and pushed `.fx-panel` 3px wide
+(`mobile/mobile-ui.css`); `reveal.begin()` in `desktop/library-ui.js` ran its "flip/skip" check before the
+same-path guard, so a double-click's second open reset the transition it should have left alone.
+
+Stale tests/baselines updated: `mask_raster` CHR-247 compared a preview rendered BEFORE `renderTiled` against
+one rendered AFTER it; `renderTiled` uploads its 128x96 export canvas into the shared `FX` as the source image,
+so the diff measured a source swap, not operand order (fixed by `updateWork()` between them; not a renderer
+bug). `reveal_timing` / `probe_open_wrong_image` were blocked by the first-edit guide modal (`#cs-modal-ov`;
+suppress with `chromasmith-tour-seen-v1` + `chromasmith-first-edit-stage-v1`), and `reveal_timing` also needs
+`chromasmithNeighbourWarm=0` (an in-memory open intentionally skips the transition). `catalog_visual` `fx-row-*`
+darwin baselines regenerated (the row is now a stacked label/track layout, 35px -> 54px); the `win32`
+baselines are NOT regenerated and will fail on Windows until someone does.
+
+Environment traps (not bugs):
+- `npm run ui:test` does NOT stage `desktop/dist/`; with no/stale dist the Library page is missing and the audit
+  reports `PARITY-MISSING` (selector missing). Run `node tools/scripts/build-desktop.mjs` first.
+- Under heavy machine load (load avg > 100, several agents) `page.waitForFunction` boot timeouts and
+  `editor:catalog-visual`'s "no console errors" 30s timeout appear; rerun when idle. `editor:webkit-smoke`
+  can sit for 30+ minutes under load and starves the gate pool; standalone it passes.
+
+Still failing, deliberately not touched (design-backlog, not regressions):
+- `test/library_navigation.mjs` "Studio exposes one shared Jobs host": `#sk2-act-jobs{display:none!important}`
+  (top-bar declutter) hides the Jobs button on desktop, so the keyboard/click Jobs assertions cannot pass. Needs a
+  product decision (re-expose Jobs, or retire those assertions) - job history currently has no desktop entry point.
+- `editor:inventory` (885 findings), `editor:wireframe-diff` (138+8), `editor:responsive` (700x700 `#phone-compare`
+  clip + untested `#lib-side-resizer`), `editor:surface-coverage` (39 regions without surfaces.json entries),
+  and the advisory-but-failing `editor:token-check`, `icon-check`, `motion-token-check`, `hover-focus-matrix`:
+  the Swiss redesign diverges from the wireframes/token lists by design backlog; each needs its own pass.
