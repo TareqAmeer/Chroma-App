@@ -7278,7 +7278,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1017G';
+const BUILD='1.1018A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21844,38 +21844,69 @@ function wbEyedropperClick(e){
 
 // ── Auto-enhance ───────────────────────────────────────────────────────────────
 let _autoEnh=null; // values the last Auto-enhance applied; a second click while they still hold resets Light
-const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint'];
+const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint','sl-adj-hi','sl-adj-sh','sl-adj-con','sl-adj-vib'];
+// Pure analysis of an RGBA thumbnail -> Basic slider values. Works in linear light (so "exposure" is
+// real stops, not a gamma-space nudge), protects highlights before brightening, lifts shadows and
+// trims highlights by how much of the frame is actually crushed/blown, sets contrast from tonal
+// spread, and only touches white balance when enough near-neutral pixels make a gray-world estimate
+// trustworthy. Every move is damped and clamped: a good photo should barely change.
+function autoEnhanceParams(data){
+  const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v)),n=data.length>>2;
+  const s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);
+  const lin=new Float32Array(n),sl=new Float32Array(n);
+  let logSum=0,sumR=0,sumG=0,sumB=0,neutral=0,chromaSum=0;
+  for(let i=0;i<n;i++){
+    const r=data[i*4]/255,g=data[i*4+1]/255,b=data[i*4+2]/255;
+    const y=0.2126*s2l(r)+0.7152*s2l(g)+0.0722*s2l(b);
+    lin[i]=y;sl[i]=0.2126*r+0.7152*g+0.0722*b;logSum+=Math.log(y+1e-4);
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),ch=mx-mn;chromaSum+=ch;
+    if(sl[i]>0.12&&sl[i]<0.88&&ch<0.22){neutral++;sumR+=r;sumG+=g;sumB+=b;}
+  }
+  const sortedL=Float32Array.from(lin).sort(),sortedS=Float32Array.from(sl).sort();
+  const q=(a,p)=>a[Math.min(n-1,Math.floor(n*p))];
+  const geo=Math.exp(logSum/n),med=q(sortedL,0.5),p995=q(sortedL,0.995);
+  // Key: blend of geometric mean and median, so a bright sky or dark void doesn't set exposure alone.
+  const key=Math.max(1e-3,0.5*geo+0.5*med);
+  let stops=Math.log2(0.16/key)*0.8; // 0.16 linear ~ sRGB 0.44, a typical well-exposed key
+  stops=cl(stops,-1.5,2);
+  // Never brighten into clipping: keep p99.5 under ~0.98 linear; the Highlights slider recovers the rest.
+  if(stops>0&&p995>1e-3)stops=Math.min(stops,Math.max(0,Math.log2(0.98/p995)+0.5));
+  const gain=Math.pow(2,stops);
+  let clipN=0,darkN=0;
+  for(let i=0;i<n;i++){const v=Math.min(1,lin[i]*gain);if(v>0.8||lin[i]>0.9)clipN++;if(v<0.004)darkN++;}
+  const p1s=q(sortedS,0.01),p99s=q(sortedS,0.99),p5s=q(sortedS,0.05),p95s=q(sortedS,0.95);
+  const exp=Math.round(cl(stops*20,-100,100));
+  const hi=Math.round(cl(-(clipN/n)*250,-60,0));     // 24% near-white pixels -> -60
+  const sh=Math.round(cl((darkN/n)*250,0,50));      // lift only when real shadow area exists
+  const bl=Math.round(cl(-p1s*60,-15,0));            // gentle: sets black point, never crushes
+  const wh=Math.round(cl((1-p99s)*60,0,15));
+  const con=Math.round(cl((0.62-(p95s-p5s))*70,-20,25));
+  const vib=Math.round(cl((0.14-chromaSum/n)*180,0,22));
+  let temp=0,tint=0;
+  if(neutral/n>0.06){
+    const r=sumR/neutral,g=sumG/neutral,b=sumB/neutral;
+    temp=Math.round(cl((b-r)/(r+b+1e-9)*100/0.22*0.6,-40,40));
+    tint=Math.round(cl((1-(r+b)/(2*g+1e-9))/0.14*100*0.6,-30,30));
+  }
+  return{exp,bl,wh,temp,tint,hi,sh,con,vib};
+}
 function autoEnhance(){
   const src=fxWork||fxImg;if(!src){log('Load an image first','warn');return;}
   const aeBtn=document.querySelector('[onclick="autoEnhance()"]');
   if(_autoEnh&&_AE_IDS.every((id,i)=>+document.getElementById(id)?.value===_autoEnh[i])){_autoEnh=null;aeBtn?.classList.remove('on');fxResetSection('adjust');return;}
-  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
-  const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh/sw)|0);
+  const sw=src.naturalWidth||src.width,sh0=src.naturalHeight||src.height;
+  const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh0/sw)|0);
   const tc=document.createElement('canvas');tc.width=mw;tc.height=mh;
   tc.getContext('2d').drawImage(src,0,0,mw,mh);
-  const data=tc.getContext('2d').getImageData(0,0,mw,mh).data;
-  const lums=[],rs=[],gs=[],bs=[];
-  for(let i=0;i<data.length;i+=4){
-    const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255;
-    lums.push(0.2126*r+0.7152*g+0.0722*b);rs.push(r);gs.push(g);bs.push(b);
-  }
-  lums.sort((a,b)=>a-b);
-  const n=lums.length;
-  const p1=lums[Math.floor(n*0.01)],p99=lums[Math.floor(n*0.99)],med=lums[n>>1];
-  const avg=arr=>arr.reduce((s,v)=>s+v,0)/arr.length;
-  const avgR=avg(rs),avgG=avg(gs),avgB=avg(bs);
-  const blacksAdj=Math.max(-100,Math.min(100,Math.round(-p1*100)));
-  const whitesAdj=Math.max(-100,Math.min(100,Math.round((1-p99)*100)));
-  const expAdj=Math.max(-100,Math.min(100,Math.round((0.38-med)/0.38*20))); // *20: matches the exposure slider's /20 (±5 stop) mapping
-  const tempAdj=Math.max(-100,Math.min(100,Math.round((avgB-avgR)/(avgR+avgB+1e-9)*100/0.22)));
-  const tintAdj=Math.max(-100,Math.min(100,Math.round((1-(avgR+avgB)/(2*avgG+1e-9))/0.14*100)));
+  const P=autoEnhanceParams(tc.getContext('2d').getImageData(0,0,mw,mh).data);
   const setSlider=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
-  setSlider('sl-adj-exp',expAdj);setSlider('sl-adj-bl',blacksAdj);setSlider('sl-adj-wh',whitesAdj);
-  setSlider('sl-adj-temp',tempAdj);setSlider('sl-adj-tint',tintAdj);
+  setSlider('sl-adj-exp',P.exp);setSlider('sl-adj-bl',P.bl);setSlider('sl-adj-wh',P.wh);
+  setSlider('sl-adj-temp',P.temp);setSlider('sl-adj-tint',P.tint);
+  setSlider('sl-adj-hi',P.hi);setSlider('sl-adj-sh',P.sh);setSlider('sl-adj-con',P.con);setSlider('sl-adj-vib',P.vib);
   const tg=document.getElementById('tg-adjust');if(!tg.classList.contains('on'))toggleFX('adjust');
-  _autoEnh=[expAdj,blacksAdj,whitesAdj,tempAdj,tintAdj];aeBtn?.classList.add('on');
+  _autoEnh=[P.exp,P.bl,P.wh,P.temp,P.tint,P.hi,P.sh,P.con,P.vib];aeBtn?.classList.add('on');
   fxUpdate();
-  log(`Auto-enhance: exp ${expAdj}, blacks ${blacksAdj}, whites ${whitesAdj}, temp ${tempAdj}, tint ${tintAdj}`,'ok');
+  log(`Auto-enhance: exp ${P.exp}, highlights ${P.hi}, shadows ${P.sh}, contrast ${P.con}, blacks ${P.bl}, whites ${P.wh}, vibrance ${P.vib}, temp ${P.temp}, tint ${P.tint}`,'ok');
 }
 
 // ── Styles: named, reusable, re-editable recipes (darktable-style "styles") ──────
