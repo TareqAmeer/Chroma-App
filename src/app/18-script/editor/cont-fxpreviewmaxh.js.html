@@ -29,74 +29,70 @@ function fxPreviewMaxH(){
 // WHOLE frame through the FX chain ONCE at a moderate resolution into a 2D underlay canvas that
 // lives inside the zoom wrapper (so it rides the same scale·translate). During a pan the
 // underlay always shows content (soft but present, GPU-FX-free); the crisp native crop lands on
-// top the moment motion settles. Rebuilt only when the image/params/geometry change (dirty flag).
-let _fxFullBase={canvas:null,dirty:true,w:0,h:0};
-function fxInvalidateFullBase(){_fxFullBase.dirty=true;}
-function _fxEnsureFullResBase(iw,ih){
-  if(!_fxFullBase.dirty&&_fxFullBase.canvas&&_fxFullBase.w===iw&&_fxFullBase.h===ih)return _fxFullBase.canvas;
+// top the moment motion settles. Keyed by recipe (see _fxRecipeKey) and rebuilt only on idle
+// after a settle — never inside a slider tick or before the crisp crop: a stale underlay of the
+// SAME photo is still the right picture to pan over for the moment it takes to rebuild.
+let _fxFullBase={canvas:null,key:'',sameImage:false,w:0,h:0,ver:0,timer:0};
+// Any non-view-only renderPreview (recipe/photo changed) bumps this; tiles and the underlay are
+// keyed on it plus a fingerprint of the params, so a stale tile can never be shown.
+let _fxTileGen=0,_fxViewOnlyRender=false,_fxCropShown=false;
+function fxInvalidateTiles(){_fxTileGen++;}
+// The image or its geometry changed: neither the underlay nor any cached tile shows it any more.
+function fxInvalidateFullBase(){_fxFullBase.sameImage=false;_fxTileGen++;}
+// Zoom/pan settles call renderPreview through this: same recipe, only the view moved.
+function fxRenderPreviewViewOnly(){_fxViewOnlyRender=true;try{renderPreview();}finally{_fxViewOnlyRender=false;}}
+const _fxFpIds=new WeakMap();let _fxFpNext=1;
+function _fxRecipeKey(P){
+  const id=o=>{let v=_fxFpIds.get(o);if(!v){v=_fxFpNext++;_fxFpIds.set(o,v);}return v;};
+  // Grade textures uploaded beside P (look/print/HSL/curve/shoulder/depth) are new arrays on
+  // every change, so their identity is enough; typed arrays inside P likewise.
+  const tex=[FX._lutSnapshot,FX._printLutSnapshot,FX._hslSnapshot,FX._curveSnapshot,FX._stockShoulderSnapshot,FX._depthSnapshot].map(o=>o?id(o):0).join(',');
+  try{return _fxTileGen+'|'+tex+'|'+JSON.stringify(P,(k,v)=>ArrayBuffer.isView(v)?'#'+id(v)+':'+v.length:v);}
+  catch(e){return 'nocache'+(_fxFpNext++);}
+}
+function _fxScheduleFullBase(ms){
+  if(_fxFullBase.timer)return;
+  const run=()=>{_fxFullBase.timer=0;_fxRebuildFullBase();};
+  _fxFullBase.timer=setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(run,{timeout:400});else run();},ms);
+}
+function _fxRebuildFullBase(){
+  if(!_fxCropShown||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  if(_fxPreviewInteracting){_fxScheduleFullBase(250);return;}
+  const work=fxWork;if(!work||!FX.ok)return;
+  const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
+  const P=fxCompare?fxCompareParams():getFXParams(),key=_fxRecipeKey(P)+'|'+iw+'x'+ih;
+  if(_fxFullBase.sameImage&&_fxFullBase.key===key&&_fxFullBase.canvas)return;
   // Moderate cap: 2560px long edge is enough to look reasonable while dragging, cheap to render
-  // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path.
+  // once and to 2D-scale per frame. Uses the SAME grading params as the crisp path. Rendered
+  // OFFSCREEN so the crisp frame already on the canvas stays put.
   const cap=2560,sc=Math.min(1,cap/Math.max(iw,ih));
   const bw=Math.max(1,Math.round(iw*sc)),bh=Math.max(1,Math.round(ih*sc));
-  const P=fxCompare?fxCompareParams():getFXParams();
-  FX.render(P,bw,bh,{glowScale:fxGlowScale()}); // whole frame, moderate res, one time
-  let c=_fxFullBase.canvas;
-  if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
-  c.width=bw;c.height=bh;
-  c.getContext('2d').drawImage(FX.cv,0,0,FX.cv.width,FX.cv.height,0,0,bw,bh);
-  _fxFullBase.dirty=false;_fxFullBase.w=iw;_fxFullBase.h=ih;
-  return c;
+  const gl=FX.gl,tgt=FX.newTarget(bw,bh);
+  try{
+    FX.render(P,bw,bh,{glowScale:fxGlowScale(),outFb:tgt.f});
+    const px=new Uint8ClampedArray(bw*bh*4),row=bw*4,tmp=new Uint8ClampedArray(row);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,tgt.f);gl.readPixels(0,0,bw,bh,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    for(let y=0;y<bh>>1;y++){const y2=bh-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row);}
+    let c=_fxFullBase.canvas;if(!c){c=document.createElement('canvas');_fxFullBase.canvas=c;}
+    c.width=bw;c.height=bh;c.getContext('2d').putImageData(new ImageData(px,bw,bh),0,0);
+  }finally{gl.bindFramebuffer(gl.FRAMEBUFFER,null);FX.freeTarget(tgt);}
+  Object.assign(_fxFullBase,{key,sameImage:true,w:iw,h:ih,ver:_fxFullBase.ver+1});
+  const{w:cw,h:ch}=_fxZoomFootprint();
+  if(_fxCropShown)_fxShowFullBase(iw,ih,cw,ch);
 }
 // Show the coarse underlay at the full-frame footprint (cw×ch) so any pan keeps content on
-// screen. Sits behind FX.cv inside the zoom wrapper, inheriting its transform.
+// screen. Sits behind FX.cv inside the zoom wrapper, inheriting its transform. Never renders:
+// a missing/stale underlay is (re)built on idle by _fxRebuildFullBase.
 function _fxShowFullBase(iw,ih,cw,ch){
-  const base=_fxEnsureFullResBase(iw,ih);
   const el=document.getElementById('fx-canvas-fullbase');
+  const b=_fxFullBase,ok=b.canvas&&b.sameImage&&b.w===iw&&b.h===ih;
+  if(!ok||b.key!==_fxRecipeKey(fxCompare?fxCompareParams():getFXParams())+'|'+iw+'x'+ih)_fxScheduleFullBase(ok?120:30);
   if(!el)return;
-  if(el.width!==base.width||el.height!==base.height){el.width=base.width;el.height=base.height;}
-  el.getContext('2d').drawImage(base,0,0);
+  if(!ok){el.style.display='none';return;}
+  if(el._baseVer!==b.ver){
+    if(el.width!==b.canvas.width||el.height!==b.canvas.height){el.width=b.canvas.width;el.height=b.canvas.height;}
+    el.getContext('2d').drawImage(b.canvas,0,0);el._baseVer=b.ver;
+  }
   el.style.width=cw+'px';el.style.height=ch+'px';el.style.display='block';
 }
 function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase');if(el)el.style.display='none';}
-function renderFullResCrop(P,iw,ih,cw,ch){
-  const src=fxWork;
-  const wrap=document.getElementById('fx-wrap');
-  const zw=document.getElementById('fx-zoom-wrap');
-  // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
-  // translated inside it, but its layout box must not become the pan/clamp reference.
-  {const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
-  const z=fxZoom;
-  // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
-  const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
-  const padX=visW*0.18,padY=visH*0.18;
-  const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
-  const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
-  const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
-  if(x1-x0<2||y1-y0<2)return false;
-  const cropX=Math.max(0,Math.round(x0/cw*iw)),cropY=Math.max(0,Math.round(y0/ch*ih));
-  const cropW=Math.min(iw-cropX,Math.round((x1-x0)/cw*iw)),cropH=Math.min(ih-cropY,Math.round((y1-y0)/ch*ih));
-  if(cropW<2||cropH<2)return false;
-  // Output at displayed device resolution, capped at 2× the crop's native pixels (beyond-native
-  // zoom magnifies real detail like the loupe, no point rendering further) and a GPU-safe 8192.
-  const sysdpr=Math.min(window.devicePixelRatio||1,2);
-  let outW=(x1-x0)*z*sysdpr,outH=(y1-y0)*z*sysdpr;
-  // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
-  // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
-  // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
-  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
-  outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
-  const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
-  crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
-  const REF=FXR.CAL.refWidth;
-  FX.pushTempImage(crop);
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
-    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
-  if(!FX.popTempImage())FX.setImage(fxWork);
-  // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
-  // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
-  // where that part of the full image belongs. Cleared by the normal render path.
-  FX.cv.style.display='block';FX.cv.style.clipPath='';
-  FX.cv.style.width=(x1-x0)+'px';FX.cv.style.height=(y1-y0)+'px';
-  FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
-  return true;
-}

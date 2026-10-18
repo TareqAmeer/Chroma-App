@@ -50,3 +50,19 @@ Everything is in one file. Key pieces:
 - **Preview** renders at `devicePixelRatio` (capped 2×) into a ~1800px backing store, then
   CSS-fits it. The **1:1 loupe** instead renders a native-resolution crop with
   `scOverride=fullWidth/REF` so grain & halation appear at *true export* scale.
+- **Buffer pool** (`_initBufs` / `_allocTex`) — scratch buffers are pooled by name + size +
+  format; a size, glow-scale or resource change parks the current set instead of deleting it, so
+  drag draft ↔ settled frame ↔ 1:1 crop stop reallocating. Idle bytes are LRU-capped
+  (`_bufPoolBudget`: 256MB desktop, 48MB memory-constrained); a single buffer over 1/6 of that
+  (export-size) is never parked, and an export-size frame (>8MP) or `processToCanvas` empties
+  the pool first. `FX._bufStats()` reports live/idle bytes.
+- **Full-res zoom = cached 1:1 tiles** (`_fxRenderTiles`) — the crisp view at Full res & zoom>1 is
+  ~512px tiles on a fixed grid (origins on multiples of 8 source px, scale quantised to 1/8, so
+  every tile sits on one global output grid), rendered offscreen (`render(...,{outFb})`) a
+  region at a time with renderTiled's halo, cut out with `copyTarget` (blit) and presented with
+  `presentTiles`. Keyed by `_fxRecipeKey` (a generation bumped by every non-view-only
+  `renderPreview` + a params fingerprint) and the output scale; pan/zoom settles go through
+  `fxRenderPreviewViewOnly` so they reuse tiles. A pan settle renders only newly exposed tiles
+  (`fxPanTilesTick` fills them during the drag too). Lens/NR/deconv/depth/tilt-shift/tonemap
+  fall back to the single-crop render. The coarse 2560px underlay behind it is rebuilt offscreen
+  on idle after the crisp frame (`_fxRebuildFullBase`), never synchronously.

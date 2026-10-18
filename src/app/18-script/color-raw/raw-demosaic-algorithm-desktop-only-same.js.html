@@ -49,7 +49,7 @@ function fxFullResPreviewToggle(){
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
   if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
-  renderPreview();
+  fxRenderPreviewViewOnly();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
 // backing-store change), so crossing the fxZoom>1 threshold needs an explicit re-render to
@@ -58,7 +58,7 @@ let _fxZoomRenderTimer=null, _fxZoomInteractTimer=null;
 function _fxZoomRenderDebounced(){
   if(!fxFullResPreview)return;
   clearTimeout(_fxZoomRenderTimer);
-  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)renderPreview();},90);
+  _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)fxRenderPreviewViewOnly();},90);
 }
 if(typeof window!=='undefined')window.addEventListener('DOMContentLoaded',()=>{
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);

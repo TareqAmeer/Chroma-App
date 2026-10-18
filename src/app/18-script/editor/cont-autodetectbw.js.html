@@ -69,7 +69,9 @@ function fxUpdate(){
   // cadence as the render debounce below — fires once, ~400ms after the user stops moving
   // the slider, not on every tick.
   clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);
-  if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // grading changed → coarse full-res underlay is stale
+  // Grading changed: cached 1:1 tiles and the coarse underlay are stale. A counter bump only —
+  // the underlay is rebuilt on idle after the settle frame, never per slider tick.
+  if(typeof fxInvalidateTiles==='function')fxInvalidateTiles();
   fxScheduleRender();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
 }

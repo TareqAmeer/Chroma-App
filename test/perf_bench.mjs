@@ -49,6 +49,11 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(__dirname, 'baselines');
 const BASELINE = path.join(OUT_DIR, 'perf_baseline.json');
 const WRITE_BASELINE = process.argv.includes('--baseline');
+// --large-only: just section 7 (development loop for the zoom/pan budgets). PERF_HTML=<file>
+// points the bench at another copy of the app (e.g. the previous commit, for before/after).
+const LARGE_ONLY = process.argv.includes('--large-only');
+const APP_HTML = process.env.PERF_HTML || 'chromasmith-22.html';
+const LARGE_KEYS = ['drag_frame_ms', 'drag_buf_allocs', 'first_1to1_ms', 'pan_settle_ms', 'proxy_zoom_ms', 'tile_max_err'];
 
 // name -> { budget, unit, cmp } — cmp 'lt' means lower is better, 'gt' means higher is better.
 const BUDGETS = {
@@ -70,6 +75,28 @@ const BUDGETS = {
   // set between those two so a revert fails outright, while leaving ~5x headroom over frame
   // jitter so a loaded machine can't flake it.
   dcp_bake_stall_ms: { budget: 100, unit: 'ms', cmp: 'lt', label: 'worst frame gap during a 65³ DCP bake' },
+  // ── Large-image zoom/pan (section 7, a 6000x4000 synthetic photo with grain + halation + bloom,
+  // on the real GPU — see largeImageBench). Timings include the GPU (each measured render ends in
+  // a 1px readPixels sync). Before/after on this machine's Intel Iris Plus 645 (2026-10-18):
+  //  drag_frame_ms      median interim frame while a slider moves at Fit.       22 -> 18ms
+  //  drag_buf_allocs    GPU buffers allocated over two drags (start/frames/settle/restart).
+  //                     Every size or glow-scale change used to delete+realloc them all. 44 -> 0
+  //  first_1to1_ms      zoom past Fit with Full res on -> first crisp crop on screen (incl. the
+  //                     90ms zoom debounce). Was coarse-underlay render + canvas crop upload
+  //                     + crop render; now GPU-copied crop + tiles, underlay on idle. 2523 -> ~310ms
+  //  pan_settle_ms      release after a pan at Full res -> crisp frame (median of 3): only
+  //                     newly exposed 1:1 tiles render now.                    199 -> ~10ms
+  //  proxy_zoom_ms      zoom on a 2560px proxy whose full frame is still loading -> first zoomed
+  //                     frame (12-tick wheel gesture + 150ms settle, must not wait). 710 -> ~470ms
+  //  tile_max_err       tile-composited crisp view vs one direct render of the same region —
+  //                     a cache that leaves seams or stale tiles fails this.
+  // Without a hardware GPU (SwiftShader) the ms budgets are reported only.
+  drag_frame_ms: { budget: 60, unit: 'ms', cmp: 'lt', label: '6000x4000: median frame during slider drag' },
+  drag_buf_allocs: { budget: 10, unit: 'bufs', cmp: 'lt', label: '6000x4000: GPU buffer allocations over 2 drags' },
+  first_1to1_ms: { budget: 1200, unit: 'ms', cmp: 'lt', label: '6000x4000: zoom -> first crisp 1:1 frame' },
+  pan_settle_ms: { budget: 80, unit: 'ms', cmp: 'lt', label: '6000x4000: pan release -> crisp frame (median of 3)' },
+  proxy_zoom_ms: { budget: 1200, unit: 'ms', cmp: 'lt', label: '2560 proxy, full frame pending: zoom -> first frame' },
+  tile_max_err: { budget: 3, unit: 'lvl', cmp: 'lt', label: 'crisp view vs direct render, p99.9 8-bit error' },
 };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -102,13 +129,14 @@ async function main() {
       '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'],
   });
 
-  let m;
+  let m = {};
   try {
+    if (!LARGE_ONLY) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
     page.on('console', (msg) => { if (msg.type() === 'error') console.error('  [console.error]', msg.text()); });
 
-    await page.goto(`http://127.0.0.1:${port}/chromasmith-22.html?deskx=1`, { waitUntil: 'load' });
+    await page.goto(`http://127.0.0.1:${port}/${APP_HTML}?deskx=1`, { waitUntil: 'load' });
     await page.waitForFunction(() => typeof window.loadFXImages === 'function'
       && typeof window.getUISnapshot === 'function', null, { timeout: 30000 });
 
@@ -287,6 +315,9 @@ async function main() {
 
       return res;
     });
+    }
+
+    Object.assign(m, await largeImageBench(port));
   } finally {
     await browser.close();
     server.close();
@@ -306,8 +337,10 @@ async function main() {
   console.log('---------------------------------------------------------------------');
   let fail = false;
   for (const [k, b] of Object.entries(BUDGETS)) {
+    if (LARGE_ONLY && !LARGE_KEYS.includes(k)) continue;
     const v = m[k];
-    const ok = b.cmp === 'lt' ? v <= b.budget : v >= b.budget;
+    const infoOnly = LARGE_KEYS.includes(k) && b.unit === 'ms' && !m.large_hw_gpu;
+    const ok = infoOnly || (b.cmp === 'lt' ? v <= b.budget : v >= b.budget);
     if (!ok) fail = true;
     console.log(`${k.padEnd(21)} ${(b.cmp === 'lt' ? '<=' : '>=') + fmt(k, b.budget)}`.padEnd(35)
       + `${fmt(k, v)}`.padEnd(12)
@@ -318,6 +351,14 @@ async function main() {
 
   // Correctness guard travels with the perf gate: a faster box filter that returns different
   // numbers would silently change every Refine-edges result.
+  if (LARGE_ONLY) {
+    console.log(`large image ${m.large_dims}: ${m.drag_frames} drag frames, settle ${m.drag_settle_ms}ms, pans ${m.pan_settle_all}ms, `
+      + `GPU buffers ${m.gpu_buf_mb}MB fit / ${m.gpu_buf_mb_zoomed}MB zoomed, tile cache ${m.tile_cache_mb}MB, tile mean err ${m.tile_mean_err}, `
+      + `full-res requests per zoom gesture ${m.proxy_zoom_full_req}, promoted ${m.proxy_promoted}, underlay ready ${m.underlay_ready_ms}ms after zoom`
+      + `\nGPU: ${m.large_gpu}${m.large_hw_gpu ? '' : ' (software — ms budgets not enforced)'}; tile abs max err ${m.tile_abs_max_err}`);
+    console.log(`\nRESULT: ${fail ? 'FAIL' : 'PASS'}`);
+    return fail ? 1 : 0;
+  }
   const errOk = m.boxfilter_max_err <= 1e-3;
   if (!errOk) fail = true;
   console.log(`_boxFilterJS vs reference implementation: max|Δ| = ${m.boxfilter_max_err.toExponential(2)}  ${errOk ? 'PASS' : 'FAIL (<=1e-3)'}`);
@@ -333,9 +374,207 @@ async function main() {
   if (!dcpOk) fail = true;
   console.log(`DCP bake in worker vs main thread: max|Δ| = ${m.dcp_worker_max_err} over ${m.dcp_lut_len} entries`
     + `, main-thread stall was ${m.dcp_bake_stall_main_ms}ms  ${dcpOk ? 'PASS' : (m.dcp_worker_used ? 'FAIL (worker disagrees)' : 'FAIL (no worker — ran inline)')}`);
+  console.log(`large image ${m.large_dims}: ${m.drag_frames} drag frames, settle ${m.drag_settle_ms}ms, pans ${m.pan_settle_all}ms, `
+    + `GPU buffers ${m.gpu_buf_mb}MB fit / ${m.gpu_buf_mb_zoomed}MB zoomed, tile cache ${m.tile_cache_mb}MB, tile mean err ${m.tile_mean_err}, `
+    + `full-res requests per zoom gesture ${m.proxy_zoom_full_req}, promoted ${m.proxy_promoted}, underlay ready ${m.underlay_ready_ms}ms after zoom, tile abs max err ${m.tile_abs_max_err}`
+    + `\nGPU: ${m.large_gpu}${m.large_hw_gpu ? '' : ' (software — ms budgets not enforced)'}`);
+  const fqOk = m.proxy_zoom_full_req === 1 && m.proxy_promoted;
+  if (!fqOk) fail = true;
+  console.log(`proxy zoom: one full-quality request per gesture, full frame swapped in  ${fqOk ? 'PASS' : 'FAIL'}`);
   console.log(`context: mask ${m.mask_dims} (${m.mask_px} px), ${m.history_entries} history entries`);
   console.log(`\nRESULT: ${fail ? 'FAIL' : 'PASS'}`);
   return fail ? 1 : 0;
+}
+
+// ── 7. Large-image zoom/pan. Own page so the 24MP frame and its GPU buffers cannot skew the
+// small-image budgets above.
+// Runs on the machine's REAL GPU when headless Chromium can get one (ANGLE/Metal on macOS) — a
+// 24MP frame through SwiftShader takes minutes per render and its timings swing 5x with machine
+// load, which says nothing about zoom/pan feel. Without a hardware GPU the millisecond budgets
+// below are reported but not enforced (counts and the tile error still are).
+async function largeImageBench(port) {
+  const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--disable-dev-shm-usage'] });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on('pageerror', (e) => console.error('  [pageerror]', e.message));
+  page.on('console', (msg) => { if (msg.type() === 'error') console.error('  [console.error]', msg.text()); });
+  try {
+    await page.goto(`http://127.0.0.1:${port}/${APP_HTML}?deskx=1`, { waitUntil: 'load' });
+    await page.waitForFunction(() => typeof window.loadFXImages === 'function', null, { timeout: 30000 });
+    const [LW, LH] = (process.env.PERF_LARGE || '6000x4000').split('x').map(Number);
+    return await page.evaluate(async ([W, H]) => {
+      const res = {};
+      { const gl = document.createElement('canvas').getContext('webgl2'); const e = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        res.large_gpu = gl ? String(e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : 'none';
+        res.large_hw_gpu = !/swiftshader|llvmpipe|software/i.test(res.large_gpu); }
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      // Smooth synthetic frame: gradients + soft bright discs (so halation/bloom have work) —
+      // low-frequency on purpose, so the view-vs-direct comparison below is not dominated by
+      // resampling differences on hard edges.
+      const synth = (W, H) => {
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const x = c.getContext('2d');
+        const g = x.createLinearGradient(0, 0, W, H);
+        g.addColorStop(0, '#203050'); g.addColorStop(0.5, '#a08060'); g.addColorStop(1, '#304020');
+        x.fillStyle = g; x.fillRect(0, 0, W, H);
+        for (let i = 0; i < 40; i++) {
+          const cx = ((i * 7919) % 97) / 97 * W, cy = ((i * 104729) % 89) / 89 * H, r = W * (0.01 + (i % 5) * 0.006);
+          const rg = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+          rg.addColorStop(0, 'rgba(255,250,235,1)'); rg.addColorStop(1, 'rgba(255,250,235,0)');
+          x.fillStyle = rg; x.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+        }
+        return c;
+      };
+      const toFile = (c, name) => new Promise(r => c.toBlob(b => r(new File([b], name, { type: 'image/png' })), 'image/png'));
+      const sync = () => { const gl = FX.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); };
+      // Time every renderPreview INCLUDING the GPU work it queued.
+      const rec = [];
+      const origRP = window.renderPreview;
+      window.renderPreview = function (...a) {
+        const inter = _fxPreviewInteracting, t = performance.now();
+        const r = origRP.apply(this, a); sync();
+        rec.push({ t0: t, t1: performance.now(), ms: performance.now() - t, inter });
+        return r;
+      };
+      let allocs = 0;
+      const origAlloc = FX._allocTex.bind(FX);
+      FX._allocTex = function (...a) { allocs++; return origAlloc(...a); };
+      const median = (a) => { const s = [...a].sort((p, q) => p - q); return s.length ? s[s.length >> 1] : NaN; };
+      const full = synth(W, H);
+      await window.loadFXImages([await toFile(full, 'large.png')]);
+      await sleep(300);
+      ['tg-grain', 'tg-hal', 'tg-bloom'].forEach(id => document.getElementById(id).classList.add('on'));
+      fxUpdate(); await sleep(600);
+      res.large_dims = `${fxWork.width}x${fxWork.height}`;
+
+      // drag at Fit: two separate drags, so drag start/settle/restart all count.
+      const sl = document.getElementById('sl-adj-exp');
+      // Real allocations: the pooled renderer counts them itself (_allocTex is also called for
+      // pool hits); the pre-pool renderer allocated on every _allocTex call.
+      const realAllocs = () => (FX._bufStats ? FX._bufStats().allocs : allocs);
+      allocs = 0; rec.length = 0; const a0 = realAllocs();
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < 8; i++) {
+          sl.value = String(-20 + i * 3 + pass); sl.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(40);
+        }
+        await sleep(500);
+      }
+      const dragFrames = rec.filter(r => r.inter).map(r => r.ms), settles = rec.filter(r => !r.inter).map(r => r.ms);
+      res.drag_frame_ms = Math.round(median(dragFrames));
+      res.drag_frames = dragFrames.length;
+      res.drag_settle_ms = Math.round(median(settles));
+      res.drag_buf_allocs = realAllocs() - a0;
+      res.gpu_buf_mb = FX._bufStats ? +(FX._bufStats().totalBytes / 1048576).toFixed(1) : null;
+
+      // first crisp 1:1 at Full res.
+      // Switch Full res on WITHOUT a Fit render (at Fit, Full res renders the whole 24MP frame).
+      fxFullResPreview = true;
+      const crisp = () => /translate/.test(FX.cv.style.transform || '');
+      rec.length = 0;
+      let t0 = performance.now();
+      zoomSet(2.2);
+      for (let i = 0; i < 200 && !(crisp() && rec.some(r => !r.inter)); i++) await sleep(20);
+      await sleep(50);
+      const firstCrisp = rec.find(r => !r.inter);
+      res.first_1to1_ms = firstCrisp ? Math.round(firstCrisp.t1 - t0) : null;
+      // The coarse underlay is built on idle after the crisp frame (it used to be rendered
+      // synchronously BEFORE it). Wait for it so it doesn't land inside a pan measurement.
+      const tb = performance.now();
+      for (let i = 0; i < 1500 && document.getElementById('fx-canvas-fullbase').style.display !== 'block'; i++) await sleep(20);
+      res.underlay_ready_ms = Math.round(performance.now() - t0);
+      void tb; await sleep(300);
+
+      // pan settle: drag the zoom wrapper, release, time the release -> crisp frame.
+      const zw = document.getElementById('fx-zoom-wrap');
+      const pans = [];
+      for (let p = 0; p < 3; p++) {
+        const r0 = zw.getBoundingClientRect();
+        const x0 = 700, y0 = 450;
+        const ev = (type, x, y) => zw.dispatchEvent(new PointerEvent(type, { pointerId: 7, bubbles: true, clientX: x, clientY: y, isPrimary: true }));
+        zw.setPointerCapture = () => {};
+        ev('pointerdown', x0, y0);
+        for (let k = 1; k <= 6; k++) { ev('pointermove', x0 - k * 40, y0 - k * 15); await sleep(16); }
+        rec.length = 0; t0 = performance.now();
+        ev('pointerup', x0 - 240, y0 - 90);
+        await sleep(60);
+        const f = rec.find(r => !r.inter);
+        pans.push(f ? f.t1 - t0 : NaN);
+        await sleep(600);
+        void r0;
+      }
+      res.pan_settle_ms = Math.round(median(pans));
+      res.pan_settle_all = pans.map(Math.round).join('/');
+      res.gpu_buf_mb_zoomed = FX._bufStats ? +(FX._bufStats().totalBytes / 1048576).toFixed(1) : null;
+      res.tile_cache_mb = typeof _fxTileCacheStats === 'function' ? +(_fxTileCacheStats().bytes / 1048576).toFixed(1) : null;
+
+      // crisp view vs one direct render of the same region (needs the view's geometry, which
+      // the tile compositor publishes; absent before it existed).
+      const v = window.__fxCrispView;
+      if (v) {
+        const P = getFXParams(), gl = FX.gl;
+        const shown = new Uint8Array(v.outW * v.outH * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(0, 0, v.outW, v.outH, gl.RGBA, gl.UNSIGNED_BYTE, shown);
+        const pad = v.refPad;    // source px, keeps pad*s integral
+        const sx = Math.max(0, v.sx - pad), sy = Math.max(0, v.sy - pad);
+        const ex = Math.min(v.iw, v.sx + v.sw + pad), ey = Math.min(v.ih, v.sy + v.sh + pad);
+        const crop = document.createElement('canvas'); crop.width = ex - sx; crop.height = ey - sy;
+        crop.getContext('2d').drawImage(fxWork, sx, sy, ex - sx, ey - sy, 0, 0, ex - sx, ey - sy);
+        const rw = Math.round((ex - sx) * v.s), rh = Math.round((ey - sy) * v.s);
+        FX.pushTempImage(crop);
+        FX.render(P, rw, rh, mskPreviewRenderOptions({ glowScale: 1, scOverride: v.iw / FXR.CAL.refWidth, seed: v.seed, gamutWarn: fxClipCode(),
+          uvOff: [sx / v.iw, (v.ih - ey) / v.ih], uvScale: [(ex - sx) / v.iw, (ey - sy) / v.ih] }));
+        FX.popTempImage();
+        const ref = new Uint8Array(rw * rh * 4);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.readPixels(0, 0, rw, rh, gl.RGBA, gl.UNSIGNED_BYTE, ref);
+        // Both buffers are bottom-up. Shown pixel (x, y-from-bottom) == ref pixel offset by the pad.
+        const ox = Math.round((v.sx - sx) * v.s), oyTop = Math.round((v.sy - sy) * v.s);
+        const oyBot = rh - oyTop - v.outH;
+        // Grain is a per-pixel hash of global uv: a region rendered at a different size computes
+        // that uv with different float rounding, so a few isolated pixels legitimately differ
+        // (renderTiled's export tiles behave the same). Seams or stale tiles move whole areas, so
+        // the gate is the 99.9th-percentile error, with the max reported for context.
+        const hist = new Uint32Array(256); let sum = 0, n = 0, maxErr = 0;
+        for (let y = 0; y < v.outH; y += 3) for (let x = 0; x < v.outW; x += 3) {
+          const a = (y * v.outW + x) * 4, b = ((y + oyBot) * rw + x + ox) * 4;
+          for (let c = 0; c < 3; c++) { const d = Math.abs(shown[a + c] - ref[b + c]); hist[d]++; sum += d; n++; if (d > maxErr) maxErr = d; }
+        }
+        let acc = 0, p999 = 0; for (let d = 0; d < 256; d++) { acc += hist[d]; if (acc >= n * 0.999) { p999 = d; break; } }
+        res.tile_max_err = p999; res.tile_abs_max_err = maxErr; res.tile_mean_err = +(sum / n).toFixed(3);
+        renderPreview(); sync();
+      }
+
+      // proxy zoom: open a 2560px proxy whose "full frame" lands 1.5s after it is requested.
+      zoomFit(); fxFullResPreview = false;
+      await window.loadFXImages([await toFile(synth(2560, 1707), 'proxy.png')]);
+      await sleep(300);
+      ['tg-grain', 'tg-hal', 'tg-bloom'].forEach(id => document.getElementById(id).classList.add('on'));
+      fxUpdate(); await sleep(600);
+      let requested = 0, promoted = 0;
+      window.chromasmithEnsureFullQuality = () => {
+        requested++;
+        if (!window.__promo) window.__promo = sleep(1500).then(() => {
+          const it = curItem(); it.img = full; fxImg = full; updateWork(); renderPreview(); promoted = performance.now();
+        });
+        return window.__promo;
+      };
+      fxFullResPreview = true;
+      rec.length = 0; t0 = performance.now();
+      // A wheel gesture (12 ticks) instead of zoomSet, so "once per gesture" is exercised.
+      const wrap = document.getElementById('fx-wrap');
+      for (let i = 0; i < 12; i++) { wrap.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 700, clientY: 450, bubbles: true, cancelable: true })); await sleep(16); }
+      for (let i = 0; i < 200 && !rec.some(r => !r.inter && r.t1 > t0); i++) await sleep(20);
+      const pf = rec.find(r => !r.inter);
+      res.proxy_zoom_ms = pf ? Math.round(pf.t1 - t0) : null;
+      res.proxy_zoom_full_req = requested;
+      for (let i = 0; i < 200 && !promoted; i++) await sleep(20);
+      await sleep(400);
+      res.proxy_promoted = !!promoted && fxWork.width === W;
+      window.renderPreview = origRP; FX._allocTex = origAlloc;
+      return res;
+    }, [LW, LH]);
+  } finally { await browser.close(); }
 }
 
 main().then(c => process.exit(c)).catch((e) => { console.error('FATAL:', e); process.exit(1); });

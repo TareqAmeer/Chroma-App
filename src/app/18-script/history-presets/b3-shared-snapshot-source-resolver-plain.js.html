@@ -46,6 +46,9 @@ document.addEventListener('keyup',e=>{
   if(fxComparePreviousSnapshot!==null&&(e.code||'')===fxComparePreviousCode){e.preventDefault();fxComparePreviousEnd();}
 },true);
 function renderPreview(){
+  // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
+  // retire the cached 1:1 tiles and underlay (they are also keyed by a params fingerprint).
+  if(!_fxViewOnlyRender)fxInvalidateTiles();
   const nativeItem=typeof curItem==='function'?curItem():null;
   if(window.__TAURI__&&nativeItem&&fnNativeNeedsDevelop(nativeItem)){fnEnsureNative(nativeItem).catch(e=>fnSetStatus(errStr(e),true));return;}
   if(typeof fxCompare!=='undefined'&&fxCompare&&typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
@@ -57,7 +60,7 @@ function renderPreview(){
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
   if(cropMode)return;            // crop overlay owns the canvas while active
-  if(fxLoupe){renderLoupe();return;}
+  if(fxLoupe){_fxCropShown=false;_fxHideFullBase();renderLoupe();return;}
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
   const wrap=document.getElementById('fx-wrap');
   const deskx=document.body.classList.contains('deskx');
@@ -77,8 +80,10 @@ function renderPreview(){
   // image rather than be rebuilt from only the visible source tile.
   if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
     const Pc=fxCompare?fxCompareParams():getFXParams();
-    _fxShowFullBase(iw,ih,cw,ch);                       // coarse underlay behind the crisp crop (smooth panning)
+    // Crisp crop FIRST; the coarse underlay behind it (smooth panning) is only shown here — a
+    // missing or stale one is rebuilt on idle afterwards, never ahead of the crisp frame.
     if(renderFullResCrop(Pc,iw,ih,cw,ch)){
+      _fxCropShown=true;_fxShowFullBase(iw,ih,cw,ch);
       const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
       const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
       document.getElementById('fx-no-img').style.display='none';
@@ -89,7 +94,7 @@ function renderPreview(){
       return;
     }
   }
-  _fxHideFullBase();fxInvalidateFullBase();             // leaving crop mode — underlay stale, hide it
+  _fxCropShown=false;_fxHideFullBase();window.__fxCrispView=null; // leaving crop mode — hide the underlay (kept, keyed by recipe)
   const zw=document.getElementById('fx-zoom-wrap');
   if(zw){zw.style.width='';zw.style.height='';}
   FX.cv.style.transform='';                            // clear any full-res-crop offset

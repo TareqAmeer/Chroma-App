@@ -217,11 +217,13 @@ function renderLoupe(){
   const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z),fh));
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
-  const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
-  crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
+  if(!FX.pushTempCrop(src,ox,oy,cropW,cropH)){
+    const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
+    crop.getContext('2d').drawImage(src,ox,oy,cropW,cropH,0,0,cropW,cropH);
+    FX.pushTempImage(crop);
+  }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.pushTempImage(crop);
   FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders

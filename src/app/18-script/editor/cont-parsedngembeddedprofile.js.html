@@ -358,7 +358,11 @@ async function loadRw2(file,opts){
   }
   if(privateEntry&&typeof raw.releaseDecodeBuffers==='function')raw.releaseDecodeBuffers();
   if(!privateEntry)window.__pm&&window.__pm('loadRw2-return');
-  return{canvas:c,dpi:240,ms:dt,meta:m}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
+  // rgbaSrc: the canvas' own pixels as a typed array, for a caller that uploads this frame to the
+  // GPU right away (fxPromoteWebRaw) — FX.setImage takes it instead of a 24MP canvas read-back.
+  // Never offered while a native refine may still repaint the canvas.
+  const rgbaSrc=!window.__TAURI__&&rgba&&rgba.length===w*h*4?{data:rgba,w,h}:null;
+  return{canvas:c,dpi:240,ms:dt,meta:m,rgbaSrc}; // RW2 carries no resolution tags; 240 = Lightroom's export default. meta carries make/model/lens/iso (native shell) for the panel on every open path.
 }
 // Installs already-decoded entries as the active fxImages and renders — the second half of
 // loadFXImages, split out so a caller with an ALREADY-DECODED entry (the desktop Library's

@@ -1,0 +1,182 @@
+// ── Full-res 1:1 tile cache ──────────────────────────────────────────────────────────────────
+// Lightroom-style panning: the crisp view is assembled from ~512px rendered tiles on a fixed
+// grid, cached on the GPU, keyed by recipe + output scale. A pan settle (or a pan tick) renders
+// only the tiles that just came into view; the rest are blitted from the cache. Each batch of
+// missing tiles is rendered as one region with a halo of >= 3 sigma (the renderTiled rule) and
+// only the tiles' own pixels are kept, so tiles rendered at different times meet seamlessly.
+// Grid origins sit on multiples of 8 source px and the scale is quantised to 1/8, so every
+// tile lands on whole output pixels of ONE global grid (grain/artifacts are global-uv).
+// Spatial passes whose reach is not covered by that halo (lens warp, NR, deconvolution, depth
+// blur/tilt-shift, the float tonemap chain) fall back to the single-crop render.
+const FX_TILE_OUT=512;
+let _fxTiles={key:'',map:new Map(),bytes:0};
+function _fxTileBudget(){return(typeof isMemoryConstrained==='function'&&isMemoryConstrained())?32e6:128e6;}
+function _fxTilesClear(){_fxTiles.map.forEach(e=>FX.freeTarget(e.tile));_fxTiles.map.clear();_fxTiles.bytes=0;}
+function _fxTileCacheStats(){return{tiles:_fxTiles.map.size,bytes:_fxTiles.bytes};}
+function _fxTileModeOK(P,src){
+  if(!FX.gl||typeof FX.gl.blitFramebuffer!=='function'||(src&&src._sceneLinearPresent))return false;
+  const lns=P.lens||{},nr=P.nr||{},dc=P.deconv||{};
+  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
+    ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
+}
+// Halo in OUTPUT px — renderTiled's rule (the render blurs in output px at scOverride=iw/REF).
+function _fxTileHaloOut(P,iw){
+  const REF=FXR.CAL.refWidth,sc=iw/REF,H=FXR.CAL.halation,B=FXR.CAL.bloom;
+  let m=Math.max((P.halation&&P.halation.radius||H.sigmaR)*sc,(P.bloom&&P.bloom.radius||B.sigma)*sc);
+  if((P.masks||[]).some(mk=>mk.crOn&&mk.uL&&mk.crSamples&&mk.crSamples.length))m=Math.max(m,FXR.CAL.skinBlurFrac*REF*sc);
+  return Math.ceil(m*3)+16;
+}
+// Renders the tiles covering source rect [sx0,sx1)×[sy0,sy1) at sOut output px per source px,
+// presents them on FX.cv and returns its placement (source px), or null if tiling can't apply.
+// maxRegions caps how many missing-tile regions are rendered (a pan tick renders one; the
+// rest show the underlay until a later tick/settle).
+function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
+  const gl=FX.gl,sq=Math.max(0.125,Math.round(sOut*8)/8);
+  const T=Math.max(64,Math.round(FX_TILE_OUT/sq/8)*8);
+  const hs=Math.ceil(_fxTileHaloOut(P,iw)/sq/8)*8;           // source-px halo, multiple of 8
+  const nI=Math.ceil(iw/T),nJ=Math.ceil(ih/T);
+  const i0=Math.max(0,Math.floor(sx0/T)),j0=Math.max(0,Math.floor(sy0/T));
+  const i1=Math.min(nI-1,Math.ceil(sx1/T)-1),j1=Math.min(nJ-1,Math.ceil(sy1/T)-1);
+  if(i1<i0||j1<j0)return null;
+  const X=i=>Math.round(Math.min(iw,i*T)*sq),Y=j=>Math.round(Math.min(ih,j*T)*sq);
+  const maxDim=Math.min(4096,gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
+  if(X(i1+1)-X(i0)>maxDim||Y(j1+1)-Y(j0)>maxDim)return null;
+  const REF=FXR.CAL.refWidth;
+  const opt=mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode()});
+  const key=[_fxRecipeKey(P),iw,ih,sq,T,fxLoupeSeed,fxCompare?1:0,JSON.stringify(opt)].join('|');
+  if(key!==_fxTiles.key){_fxTilesClear();_fxTiles.key=key;}
+  const map=_fxTiles.map,tk=(i,j)=>i+','+j;
+  // Missing tiles → per-row runs → runs stacked into rectangles when rows repeat the same span.
+  const rects=[];
+  for(let j=j0;j<=j1;j++){
+    for(let i=i0;i<=i1;i++){
+      if(map.has(tk(i,j)))continue;
+      let b=i;while(b+1<=i1&&!map.has(tk(b+1,j)))b++;
+      const r=rects.find(q=>q.a===i&&q.b===b&&q.d===j-1);
+      if(r)r.d=j;else rects.push({a:i,b,c:j,d:j});
+      i=b;
+    }
+  }
+  // Keep each region (tiles + halo) inside the GPU limits.
+  const maxT=Math.max(1,Math.floor((maxDim-2*hs*sq)/(T*sq)));
+  const regions=[];
+  rects.forEach(r=>{for(let c=r.c;c<=r.d;c+=maxT)for(let a=r.a;a<=r.b;a+=maxT)regions.push({a,b:Math.min(r.b,a+maxT-1),c,d:Math.min(r.d,c+maxT-1)});});
+  let rendered=0;
+  if(regions.length){
+    const crop=document.createElement('canvas'),cctx=crop.getContext('2d');
+    for(const r of regions){
+      if(rendered>=maxRegions)break;
+      const rx0=Math.max(0,r.a*T-hs),ry0=Math.max(0,r.c*T-hs),rx1=Math.min(iw,(r.b+1)*T+hs),ry1=Math.min(ih,(r.d+1)*T+hs);
+      const OX0=Math.round(rx0*sq),OY1=Math.round(ry1*sq),ow=Math.round(rx1*sq)-OX0,oh=OY1-Math.round(ry0*sq);
+      const tgt=FX.newTarget(ow,oh);
+      if(!FX.pushTempCrop(src,rx0,ry0,rx1-rx0,ry1-ry0)){
+        crop.width=rx1-rx0;crop.height=ry1-ry0;
+        cctx.drawImage(src,rx0,ry0,rx1-rx0,ry1-ry0,0,0,rx1-rx0,ry1-ry0);
+        FX.pushTempImage(crop);
+      }
+      try{
+        FX.render(P,ow,oh,{...opt,outFb:tgt.f,uvOff:[rx0/iw,(ih-ry1)/ih],uvScale:[(rx1-rx0)/iw,(ry1-ry0)/ih]});
+      }finally{if(!FX.popTempImage())FX.setImage(fxWork);gl.bindFramebuffer(gl.FRAMEBUFFER,null);}
+      for(let j=r.c;j<=r.d;j++)for(let i=r.a;i<=r.b;i++){
+        const tw=X(i+1)-X(i),th=Y(j+1)-Y(j),tile=FX.newTarget(tw,th);
+        FX.copyTarget(tgt,X(i)-OX0,OY1-Y(j+1),tw,th,tile,0,0);
+        map.set(tk(i,j),{tile});_fxTiles.bytes+=tile.bytes;
+      }
+      FX.freeTarget(tgt);crop.width=crop.height=0;
+      rendered++;
+    }
+  }
+  // Present: every cached tile of the visible block (holes show the underlay). Touch them so the
+  // LRU trim below keeps what is on screen.
+  const W=X(i1+1)-X(i0),H=Y(j1+1)-Y(j0),list=[];
+  for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){
+    const e=map.get(tk(i,j));if(!e)continue;
+    map.delete(tk(i,j));map.set(tk(i,j),e);
+    list.push({tile:e.tile,x:X(i)-X(i0),y:Y(j1+1)-Y(j+1)});
+  }
+  FX.presentTiles(W,H,list);
+  const budget=Math.max(_fxTileBudget(),W*H*4*1.5);
+  for(const[k,e]of map){if(_fxTiles.bytes<=budget||map.size<=list.length)break;FX.freeTarget(e.tile);_fxTiles.bytes-=e.tile.bytes;map.delete(k);}
+  const sxA=Math.min(iw,i0*T),syA=Math.min(ih,j0*T),sw=Math.min(iw,(i1+1)*T)-sxA,sh=Math.min(ih,(j1+1)*T)-syA;
+  const view={sx:sxA,sy:syA,sw,sh,s:sq,outW:W,outH:H,iw,ih,seed:fxLoupeSeed,refPad:hs,complete:list.length===(i1-i0+1)*(j1-j0+1),rendered};
+  window.__fxCrispView=view;
+  return view;
+}
+// Place the canvas holding a crisp crop of source rect (sx,sy,sw,sh) inside the cw×ch footprint.
+function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
+  const x0=sx/iw*cw,y0=sy/ih*ch;
+  FX.cv.style.display='block';FX.cv.style.clipPath='';
+  FX.cv.style.width=(sw/iw*cw)+'px';FX.cv.style.height=(sh/ih*ch)+'px';
+  FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
+}
+// Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
+function _fxCropGeom(iw,ih,cw,ch){
+  const wrap=document.getElementById('fx-wrap');
+  const z=fxZoom;
+  // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
+  const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
+  const padX=visW*0.18,padY=visH*0.18;
+  const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
+  const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
+  const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
+  if(x1-x0<2||y1-y0<2)return null;
+  const cropX=Math.max(0,Math.round(x0/cw*iw)),cropY=Math.max(0,Math.round(y0/ch*ih));
+  const cropW=Math.min(iw-cropX,Math.round((x1-x0)/cw*iw)),cropH=Math.min(ih-cropY,Math.round((y1-y0)/ch*ih));
+  if(cropW<2||cropH<2)return null;
+  // Output at displayed device resolution, capped at 2× the crop's native pixels (beyond-native
+  // zoom magnifies real detail like the loupe, no point rendering further) and a GPU-safe 8192.
+  const sysdpr=Math.min(window.devicePixelRatio||1,2);
+  let outW=(x1-x0)*z*sysdpr,outH=(y1-y0)*z*sysdpr;
+  // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
+  // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
+  // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
+  outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
+  return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
+}
+function renderFullResCrop(P,iw,ih,cw,ch,maxRegions){
+  const src=fxWork;
+  const zw=document.getElementById('fx-zoom-wrap');
+  // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
+  // translated inside it, but its layout box must not become the pan/clamp reference.
+  {const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
+  const g=_fxCropGeom(iw,ih,cw,ch);if(!g)return false;
+  if(_fxTileModeOK(P,src)){
+    const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions);
+    if(v){_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh);return true;}
+  }
+  window.__fxCrispView=null;
+  const{cropX,cropY,cropW,cropH,outW,outH}=g;
+  if(!FX.pushTempCrop(src,cropX,cropY,cropW,cropH)){
+    const crop=document.createElement('canvas');crop.width=cropW;crop.height=cropH;
+    crop.getContext('2d').drawImage(src,cropX,cropY,cropW,cropH,0,0,cropW,cropH);
+    FX.pushTempImage(crop);
+  }
+  const REF=FXR.CAL.refWidth;
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+    uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
+  if(!FX.popTempImage())FX.setImage(fxWork);
+  // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
+  // and translate it there — the zoom wrapper's own scale/translate then lands it exactly
+  // where that part of the full image belongs. Cleared by the normal render path.
+  FX.cv.style.display='block';FX.cv.style.clipPath='';
+  FX.cv.style.width=(g.x1-g.x0)+'px';FX.cv.style.height=(g.y1-g.y0)+'px';
+  FX.cv.style.transform=`translate(${g.x0}px,${g.y0}px)`;
+  return true;
+}
+// While a pan is in progress at Full res, fill in newly exposed tiles a region at a time
+// (throttled), instead of only after release. No-op unless the tiled crisp view is showing.
+let _fxPanTileT=0;
+function fxPanTilesTick(){
+  if(_fxPanTileT||!_fxCropShown||!window.__fxCrispView||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  _fxPanTileT=setTimeout(()=>{
+    _fxPanTileT=0;
+    if(!_fxCropShown||!window.__fxCrispView||!fxWork||fxLoupe||fxZoom<=1)return;
+    const work=fxWork,iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
+    const{w:cw,h:ch}=_fxZoomFootprint();if(!cw||!ch)return;
+    const P=fxCompare?fxCompareParams():getFXParams();
+    const g=_fxCropGeom(iw,ih,cw,ch);if(!g||!_fxTileModeOK(P,work))return;
+    const v=_fxRenderTiles(P,work,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,1);
+    if(v)_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh);
+  },100);
+}
