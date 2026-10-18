@@ -24,7 +24,7 @@ const walk = d => readdirSync(d).flatMap(n => { const p = path.join(d, n); retur
 function xmpFor(file) {
   const side = file.replace(/\.[^.]+$/, '.xmp');
   if (existsSync(side)) return readFileSync(side, 'utf8');
-  if (/\.(jpe?g|tiff?|dng)$/i.test(file)) { // embedded packet
+  if (/\.(jpe?g|tiff?|dng|heic)$/i.test(file)) { // embedded packet
     const s = readFileSync(file).toString('latin1'), i = s.indexOf('<x:xmpmeta'), j = s.indexOf('</x:xmpmeta>');
     if (i >= 0 && j > i) return s.slice(i, j + 12);
   }
@@ -32,7 +32,7 @@ function xmpFor(file) {
 }
 
 const rows = []; const skipped = { noXmp: 0, noTone: 0, unreadable: 0 };
-for (const file of walk(root).filter(f => IMG.test(f) && !path.basename(f).startsWith('.'))) {
+for (const file of walk(root).filter(f => IMG.test(f) && !path.basename(f).startsWith('.') && !/_edited\.[^.]+$/i.test(f))) {
   const xml = xmpFor(file);
   if (!xml) { skipped.noXmp++; continue; }
   const y = parseXmpLabels(xml);

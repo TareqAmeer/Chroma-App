@@ -57,7 +57,7 @@ try {
       const render = async (v) => {
         for (const [key, id] of SL.map(s => [s[0], s[1]])) document.getElementById(id).value = String(Math.round(v[key]));
         fxUpdate();
-        const cv = await processToCanvas(getFXParams(), src, w, h);
+        const cv = await processToCanvas(getFXParams(), src, w, h, undefined, fxPrepareExportRenderer());
         const d = cv.getContext('2d').getImageData(0, 0, w, h).data; let e = 0;
         for (let i = 0; i < w * h; i++) e += Math.abs(d[i * 4] - tgt[i * 4]) + Math.abs(d[i * 4 + 1] - tgt[i * 4 + 1]) + Math.abs(d[i * 4 + 2] - tgt[i * 4 + 2]);
         return e / (w * h * 3);
