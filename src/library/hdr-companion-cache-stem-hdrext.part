@@ -169,7 +169,7 @@ pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, 
     let name = decode_cache_strip_name(&png_key);
     let tmp = dir.join(format!("{name}.tmp.{}", std::process::id()));
     let written = std::fs::File::create(&tmp).map_err(|e| format!("{e}"))
-        .and_then(|f| crate::on_interactive_pool(|| crate::strip_cache::write_file(&f, rgba, width, height)));
+        .and_then(|f| crate::strip_cache::write_file(&f, rgba, width, height)); // current rayon pool: interactive from decode_raw_v2, utility from batch caching
     if let Err(e) = written {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("write decode cache: {e}"));

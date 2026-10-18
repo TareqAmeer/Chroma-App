@@ -1663,6 +1663,7 @@ struct RawFaceDetailHeader {
     crops: Vec<RawFaceCropHeader>,
 }
 
+// ── RAW face-detail crops (one-shot develop for face review) ─────────────────────────────
 /// Develop one full RAW once with the caller's explicit recipe settings, then return only bounded
 /// face JPEGs. Unlike cache_raw_decode, this path never writes a full-frame cache or editor frame.
 #[tauri::command(async)]

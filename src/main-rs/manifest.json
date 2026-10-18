@@ -12,6 +12,7 @@
   "depth-estimation-roadmap-r7-see-depth-rs.part",
   "super-resolution-chr-249-see-superres-rs.part",
   "hdr-merge-focus-stacking-roadmap-r12.part",
+  "raw-face-detail-crops-one-shot-develop-f.part",
   "gain-map-hdr-export-iso-21496-1.part",
   "normal-photo-export.part",
   "streaming-save-for-large-video-exports-v.part",
@@ -66,26 +67,31 @@
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
    "firstLine": 894,
-   "lines": 1411
+   "lines": 772
+  },
+  {
+   "file": "raw-face-detail-crops-one-shot-develop-f.part",
+   "firstLine": 1666,
+   "lines": 640
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2305,
+   "firstLine": 2306,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2835,
+   "firstLine": 2836,
    "lines": 107
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 2942,
+   "firstLine": 2943,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 3049,
+   "firstLine": 3050,
    "lines": 1396
   }
  ]
