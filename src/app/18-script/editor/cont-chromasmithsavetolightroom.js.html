@@ -1,3 +1,11 @@
+async function chromasmithSaveToLightroom(){
+  if(!window.chromasmithEditInPath){log('Not a Lightroom Edit-In session','warn');return;}
+  window.chromasmithSaveToLightroomPending=true;
+  fxExportScope=Array.isArray(window.chromasmithEditInPath)?'all':'current';
+  await exportFX();
+}
+// Export button icon spins for the whole export (body.fx-exporting), counted so overlapping calls
+// don't stop it early; finally guarantees it stops on errors and early returns too.
 let _fxExportRuns=0;
 window.addEventListener('beforeunload',e=>{if(document.body.classList.contains('fx-exporting')){e.preventDefault();e.returnValue='';}});
 // CHR-214: render the photo currently loaded in the editor (fxImages[0], with whatever recipe

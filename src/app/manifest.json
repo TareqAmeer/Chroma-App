@@ -117,7 +117,7 @@
   "18-script/editor/one-tap-looks-gallery-live-thumbnails-of.js.html",
   "18-script/shell-ui/hold-to-compare-before-after.js.html",
   "18-script/color-raw/super-resolution-chr-249-desktop-only-re.js.html",
-  "18-script/export-io/cont-fxexportruns.js.html",
+  "18-script/editor/cont-chromasmithsavetolightroom.js.html",
   "18-script/editor/cont-videocomposebordermatte.js.html",
   "18-script/history-presets/cont-allfx.js.html",
   "18-script/history-presets/all-fx-recipe-the-user-chooses-which-par.js.html",
@@ -841,210 +841,210 @@
    "file": "18-script/color-raw/super-resolution-chr-249-desktop-only-re.js.html",
    "kind": "script",
    "firstLine": 26228,
-   "lines": 250
+   "lines": 256
   },
   {
-   "file": "18-script/export-io/cont-fxexportruns.js.html",
+   "file": "18-script/editor/cont-chromasmithsavetolightroom.js.html",
    "kind": "script",
-   "firstLine": 26478,
-   "lines": 656
+   "firstLine": 26484,
+   "lines": 664
   },
   {
    "file": "18-script/editor/cont-videocomposebordermatte.js.html",
    "kind": "script",
-   "firstLine": 27134,
+   "firstLine": 27148,
    "lines": 281
   },
   {
    "file": "18-script/history-presets/cont-allfx.js.html",
    "kind": "script",
-   "firstLine": 27415,
+   "firstLine": 27429,
    "lines": 1
   },
   {
    "file": "18-script/history-presets/all-fx-recipe-the-user-chooses-which-par.js.html",
    "kind": "script",
-   "firstLine": 27416,
+   "firstLine": 27430,
    "lines": 349
   },
   {
    "file": "18-script/export-io/capacitor-native-save-path-the-ios-app-s.js.html",
    "kind": "script",
-   "firstLine": 27765,
+   "firstLine": 27779,
    "lines": 95
   },
   {
    "file": "18-script/export-io/tauri-native-save-path-the-desktop-shell.js.html",
    "kind": "script",
-   "firstLine": 27860,
+   "firstLine": 27874,
    "lines": 400
   },
   {
    "file": "18-script/google-photos/pkce-helpers-rfc-7636-the-desktop-loopba.js.html",
    "kind": "script",
-   "firstLine": 28260,
+   "firstLine": 28274,
    "lines": 119
   },
   {
    "file": "18-script/google-photos/import-picker-api-session-flow.js.html",
    "kind": "script",
-   "firstLine": 28379,
+   "firstLine": 28393,
    "lines": 206
   },
   {
    "file": "18-script/google-photos/export-upload-into-the-app-created-chrom.js.html",
    "kind": "script",
-   "firstLine": 28585,
+   "firstLine": 28599,
    "lines": 257
   },
   {
    "file": "18-script/editor/cont-lrmasterblob.js.html",
    "kind": "script",
-   "firstLine": 28842,
+   "firstLine": 28856,
    "lines": 228
   },
   {
    "file": "18-script/shell-ui/fx-editor-section-model-mobile-strip-des.js.html",
    "kind": "script",
-   "firstLine": 29070,
+   "firstLine": 29084,
    "lines": 2
   },
   {
    "file": "18-script/shell-ui/deskx-overflow-menu-with-the-web-header.js.html",
    "kind": "script",
-   "firstLine": 29072,
+   "firstLine": 29086,
    "lines": 281
   },
   {
    "file": "18-script/shell-ui/cont-csworkspacerevealsection.js.html",
    "kind": "script",
-   "firstLine": 29353,
+   "firstLine": 29367,
    "lines": 330
   },
   {
    "file": "18-script/editor/cont-icon.js.html",
    "kind": "script",
-   "firstLine": 29683,
+   "firstLine": 29697,
    "lines": 175
   },
   {
    "file": "18-script/export-io/plain-export-choices-live-file-size-esti.js.html",
    "kind": "script",
-   "firstLine": 29858,
+   "firstLine": 29872,
    "lines": 423
   },
   {
    "file": "18-script/shell-ui/live-fit-while-the-bottom-sheet-animates.js.html",
    "kind": "script",
-   "firstLine": 30281,
+   "firstLine": 30295,
    "lines": 112
   },
   {
    "file": "18-script/shell-ui/sheet-drag-to-dismiss-grab-the-handle-an.js.html",
    "kind": "script",
-   "firstLine": 30393,
+   "firstLine": 30407,
    "lines": 147
   },
   {
    "file": "18-script/shell-ui/light-dark-theme.js.html",
    "kind": "script",
-   "firstLine": 30540,
+   "firstLine": 30554,
    "lines": 131
   },
   {
    "file": "18-script/shell-ui/responsive-layout-switch-mobile-pinned-e.js.html",
    "kind": "script",
-   "firstLine": 30671,
+   "firstLine": 30685,
    "lines": 256
   },
   {
    "file": "18-script/editor/cont-dustmodebuildchips.js.html",
    "kind": "script",
-   "firstLine": 30927,
+   "firstLine": 30941,
    "lines": 255
   },
   {
    "file": "18-script/shell-ui/accessibility-make-every-custom-clickabl.js.html",
    "kind": "script",
-   "firstLine": 31182,
+   "firstLine": 31196,
    "lines": 274
   },
   {
    "file": "18-script/collage/cont-cl-aspects.js.html",
    "kind": "script",
-   "firstLine": 31456,
+   "firstLine": 31470,
    "lines": 256
   },
   {
    "file": "18-script/collage/cont-clfontfam.js.html",
    "kind": "script",
-   "firstLine": 31712,
+   "firstLine": 31726,
    "lines": 271
   },
   {
    "file": "18-script/collage/cont-clexport.js.html",
    "kind": "script",
-   "firstLine": 31983,
+   "firstLine": 31997,
    "lines": 253
   },
   {
    "file": "18-script/collage/cont-catitem.js.html",
    "kind": "script",
-   "firstLine": 32236,
+   "firstLine": 32250,
    "lines": 180
   },
   {
    "file": "19-script.js.html",
    "kind": "script",
-   "firstLine": 32416,
+   "firstLine": 32430,
    "lines": 145
   },
   {
    "file": "20-html.html",
    "kind": "html",
-   "firstLine": 32561,
+   "firstLine": 32575,
    "lines": 1
   },
   {
    "file": "21-script.js.html",
    "kind": "script",
-   "firstLine": 32562,
+   "firstLine": 32576,
    "lines": 25
   },
   {
    "file": "22-script.js.html",
    "kind": "script",
-   "firstLine": 32587,
+   "firstLine": 32601,
    "lines": 29
   },
   {
    "file": "23-script.js.html",
    "kind": "script",
-   "firstLine": 32616,
+   "firstLine": 32630,
    "lines": 145
   },
   {
    "file": "24-script.js.html",
    "kind": "script",
-   "firstLine": 32761,
+   "firstLine": 32775,
    "lines": 1
   },
   {
    "file": "25-script.js.html",
    "kind": "script",
-   "firstLine": 32762,
+   "firstLine": 32776,
    "lines": 1
   },
   {
    "file": "26-script.js.html",
    "kind": "script",
-   "firstLine": 32763,
+   "firstLine": 32777,
    "lines": 1
   },
   {
    "file": "27-html.html",
    "kind": "html",
-   "firstLine": 32764,
+   "firstLine": 32778,
    "lines": 3
   }
  ]

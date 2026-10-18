@@ -14091,7 +14091,13 @@
         window.__libActivityTotal = r.remaining; // read by test/library_perf.mjs's honest-progress assertion
         activityUpdate('catalog', { stage: 'thumb', done: _thumbDoneThisSession, total });
       }
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Was a fixed 200ms sleep. Rust now keeps the next batch decoding during this gap, so the gap
+      // only needs to let the UI breathe: continue as soon as the main thread is idle, never later
+      // than the old 200ms (also the fallback where requestIdleCallback is missing).
+      await new Promise((resolve) => {
+        if (window.requestIdleCallback) requestIdleCallback(() => resolve(), { timeout: 200 });
+        else setTimeout(resolve, 0);
+      });
     }
   }
   let _catalogBgRunning = false;

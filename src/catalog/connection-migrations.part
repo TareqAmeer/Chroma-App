@@ -111,6 +111,13 @@ pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Per-connection read/sort performance (none of these change what is stored or its durability):
+    // 64 MiB page cache (negative = KiB; the default is ~2 MiB, far below a 57k-photo catalog's
+    // hot pages), 256 MiB memory-mapped reads, and temp tables/sorter spill kept in memory.
+    // Best-effort: a pragma the build rejects must never stop the catalog opening.
+    let _ = conn.pragma_update(None, "cache_size", -65536);
+    let _ = conn.pragma_update(None, "mmap_size", 268_435_456i64);
+    let _ = conn.pragma_update(None, "temp_store", "MEMORY");
     // Belt-and-suspenders, not a fix for a live bug: the writer connection is already the only
     // one ever used for writes, single-threaded via CatalogState's own Mutex<Connection>, so two
     // writer-side transactions can never race each other for the write lock in the first place —

@@ -272,6 +272,13 @@ pub(crate) fn open_and_migrate(path: &Path) -> rusqlite::Result<Connection> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // Per-connection read/sort performance (none of these change what is stored or its durability):
+    // 64 MiB page cache (negative = KiB; the default is ~2 MiB, far below a 57k-photo catalog's
+    // hot pages), 256 MiB memory-mapped reads, and temp tables/sorter spill kept in memory.
+    // Best-effort: a pragma the build rejects must never stop the catalog opening.
+    let _ = conn.pragma_update(None, "cache_size", -65536);
+    let _ = conn.pragma_update(None, "mmap_size", 268_435_456i64);
+    let _ = conn.pragma_update(None, "temp_store", "MEMORY");
     // Belt-and-suspenders, not a fix for a live bug: the writer connection is already the only
     // one ever used for writes, single-threaded via CatalogState's own Mutex<Connection>, so two
     // writer-side transactions can never race each other for the write lock in the first place —
@@ -8564,17 +8571,23 @@ const THUMB_CANDIDATE_WHERE: &str =
 
 /// Phase A — pick the next batch. Pure SQL, no decoding: safe to run under a SHORT read lock.
 fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, String> {
+    thumbnail_select_batch_after(conn, 0)
+}
+
+/// Same selection, but only candidates with `id > after_id` — lets the pipeline pick batch N+1
+/// before batch N is committed without re-selecting N's own (still-uncommitted) photos.
+fn thumbnail_select_batch_after(conn: &Connection, after_id: i64) -> Result<Vec<(i64, String, i64)>, String> {
     let sql = format!(
         "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
          FROM photos p JOIN volumes v ON v.id = p.volume_id
-         WHERE {THUMB_CANDIDATE_WHERE}
+         WHERE {THUMB_CANDIDATE_WHERE} AND p.id > ?1
          ORDER BY p.id
          LIMIT 32"
     );
     let rows: Vec<(i64, Option<String>, i64)> = conn
         .prepare(&sql)
         .map_err(|e| e.to_string())?
-        .query_map([], |r| {
+        .query_map([after_id], |r| {
             let id: i64 = r.get(0)?;
             let rel_path: String = r.get(1)?;
             let last_path: String = r.get(2)?;
@@ -9020,6 +9033,24 @@ pub fn catalog_hq_offline_set_active(active: bool, state: tauri::State<CatalogSt
     state.hq_offline_active.store(active, Ordering::Relaxed);
 }
 
+type ThumbDecoded = Vec<(i64, Result<Vec<u8>, String>, i64)>;
+
+/// Batch N+1, already selected and (being) decoded on `decode_batch_pool` while the JS pacer
+/// waits and batch N's commit/UI work happens. One slot, one in-flight batch: the pipeline can
+/// never run more than one batch ahead, and it runs on the existing bounded pool, not a new thread.
+struct ThumbPrefetch {
+    rx: std::sync::mpsc::Receiver<ThumbDecoded>,
+    batch_len: usize,
+    started: std::time::Instant,
+}
+static THUMB_PREFETCH: Mutex<Option<ThumbPrefetch>> = Mutex::new(None);
+/// A prefetched batch older than this is discarded and reselected (catalog/volumes may have changed).
+const THUMB_PREFETCH_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn thumb_prefetch_take() -> Option<ThumbPrefetch> {
+    THUMB_PREFETCH.lock().ok().and_then(|mut g| g.take())
+}
+
 #[tauri::command]
 pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -9037,6 +9068,7 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         // Pause is checked with the same weight as cancel: a paused user must not have a new
         // batch started behind their back.
         if state.cancel.load(Ordering::Relaxed) || bg_is_paused() {
+            drop(thumb_prefetch_take()); // a stopped/paused pipeline must not resume from stale work
             return Ok(result);
         }
         // ⚠️ THREE separate short-lived locks, never one held across the decode. The decode is
@@ -9044,21 +9076,43 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         // blocked every UI database read and every other phase for the whole batch — a large
         // part of why the app was unusable for an hour. `thumbnail_decode_batch` takes no
         // connection at all, so the lock cannot be held across it by construction.
-        let (batch, remaining) = {
-            let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
-            (thumbnail_select_batch(&conn)?, thumbnail_remaining(&conn))
+        // PIPELINE: the previous call left batch N+1 decoding on decode_batch_pool (see the end
+        // of this function), so in steady state this call only waits for the tail of that
+        // decode instead of doing select -> decode serially after the JS pacer's gap.
+        let prefetched = thumb_prefetch_take().filter(|p| p.started.elapsed() < THUMB_PREFETCH_MAX_AGE);
+        let (batch_len, generated, remaining) = 'got: {
+            if let Some(pf) = prefetched {
+                let remaining = {
+                    let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+                    thumbnail_remaining(&conn)
+                };
+                loop {
+                    if state.cancel.load(Ordering::Relaxed) || bg_is_paused() {
+                        return Ok(result); // in-flight decode finishes on the pool and is dropped
+                    }
+                    match pf.rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                        Ok(g) => break 'got (pf.batch_len, g, remaining),
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(_) => break, // decode task vanished: fall back to the serial path
+                    }
+                }
+            }
+            let (batch, remaining) = {
+                let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+                (thumbnail_select_batch(&conn)?, thumbnail_remaining(&conn))
+            };
+            if batch.is_empty() {
+                crate::diag::record_thumb_progress(0, remaining);
+                crate::diag::log("info", format!("[bg] catalog_thumbnails: no candidates (remaining={remaining}) -> done"));
+                let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
+                return Ok(result);
+            }
+            let batch_len = batch.len();
+            let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: 0, total: remaining as usize, current: String::new() });
+            (batch_len, thumbnail_decode_batch(&batch) /* NO lock held here */, remaining)
         };
-        if batch.is_empty() {
-            crate::diag::record_thumb_progress(0, remaining);
-            crate::diag::log("info", format!("[bg] catalog_thumbnails: no candidates (remaining={remaining}) -> done"));
-            let _ = app.emit("catalog-scan", ScanProgress { phase: "done".into(), done: 0, total: 0, current: String::new() });
-            return Ok(result);
-        }
-        let batch_len = batch.len();
-        let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: 0, total: remaining as usize, current: String::new() });
 
-        let generated = thumbnail_decode_batch(&batch); // NO lock held here
-
+        let last_id = generated.iter().map(|g| g.0).max().unwrap_or(0);
         {
             let conn = state.conn.lock().map_err(|e| e.to_string())?;
             result.generated = thumbnail_commit_batch(&conn, &generated)?;
@@ -9068,6 +9122,27 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         crate::diag::record_thumb_progress(result.generated as u64, result.remaining);
         crate::diag::log("info", format!("[bg] catalog_thumbnails: batch={batch_len} generated={} remaining={} has_more={}", result.generated, result.remaining, result.has_more));
         let _ = app.emit("catalog-scan", ScanProgress { phase: "thumb".into(), done: result.generated, total: remaining as usize, current: String::new() });
+        // Start batch N+1 now (only when this one was full, i.e. the same condition has_more
+        // reports): select under a short read lock, decode on the bounded pool, hand the result
+        // to the next call through the single prefetch slot.
+        if result.has_more && !state.cancel.load(Ordering::Relaxed) && !bg_is_paused() {
+            let next = {
+                let conn = state.read_conn.lock().map_err(|e| e.to_string())?;
+                thumbnail_select_batch_after(&conn, last_id)
+            };
+            if let Ok(next) = next {
+                if !next.is_empty() {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    let next_len = next.len();
+                    decode_batch_pool().spawn(move || {
+                        let _ = tx.send(thumbnail_decode_batch(&next));
+                    });
+                    if let Ok(mut slot) = THUMB_PREFETCH.lock() {
+                        *slot = Some(ThumbPrefetch { rx, batch_len: next_len, started: std::time::Instant::now() });
+                    }
+                }
+            }
+        }
         Ok(result)
     })
     .await

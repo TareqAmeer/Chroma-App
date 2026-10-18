@@ -48,146 +48,146 @@
   {
    "file": "connection-migrations.part",
    "firstLine": 162,
-   "lines": 785
+   "lines": 792
   },
   {
    "file": "volume-identity.part",
-   "firstLine": 947,
+   "firstLine": 954,
    "lines": 220
   },
   {
    "file": "roots.part",
-   "firstLine": 1167,
+   "firstLine": 1174,
    "lines": 252
   },
   {
    "file": "scan-phase-a-walk-stat-upsert-deletion-t.part",
-   "firstLine": 1419,
+   "firstLine": 1426,
    "lines": 484
   },
   {
    "file": "sidecar-sweep-notice-in-place-xmp-rewrit.part",
-   "firstLine": 1903,
+   "firstLine": 1910,
    "lines": 182
   },
   {
    "file": "scan-phase-b-exif-metadata.part",
-   "firstLine": 2085,
+   "firstLine": 2092,
    "lines": 92
   },
   {
    "file": "video-capture-date.part",
-   "firstLine": 2177,
+   "firstLine": 2184,
    "lines": 442
   },
   {
    "file": "scan-phase-c-sidecar-contents.part",
-   "firstLine": 2619,
+   "firstLine": 2626,
    "lines": 365
   },
   {
    "file": "scan-phase-e-content-hash-integrity.part",
-   "firstLine": 2984,
+   "firstLine": 2991,
    "lines": 173
   },
   {
    "file": "face-detection-ai-stack-phase-a-see-scrf.part",
-   "firstLine": 3157,
+   "firstLine": 3164,
    "lines": 511
   },
   {
    "file": "pet-detection-people-pets-wireframes-scr.part",
-   "firstLine": 3668,
+   "firstLine": 3675,
    "lines": 1311
   },
   {
    "file": "face-embedding-ai-stack-phase-b-part-1-a.part",
-   "firstLine": 4979,
+   "firstLine": 4986,
    "lines": 193
   },
   {
    "file": "clustering-ai-stack-phase-b-part-2-phase.part",
-   "firstLine": 5172,
+   "firstLine": 5179,
    "lines": 549
   },
   {
    "file": "find-more-of-this-person-suggestions.part",
-   "firstLine": 5721,
+   "firstLine": 5728,
    "lines": 275
   },
   {
    "file": "google-photos-import-takeout.part",
-   "firstLine": 5996,
+   "firstLine": 6003,
    "lines": 472
   },
   {
    "file": "portable-people-pets-sidecar-people-pets.part",
-   "firstLine": 6468,
+   "firstLine": 6475,
    "lines": 315
   },
   {
    "file": "natural-language-search-ai-stack-phase-d.part",
-   "firstLine": 6783,
+   "firstLine": 6790,
    "lines": 743
   },
   {
    "file": "query.part",
-   "firstLine": 7526,
+   "firstLine": 7533,
    "lines": 594
   },
   {
    "file": "date-browser.part",
-   "firstLine": 8120,
+   "firstLine": 8127,
    "lines": 65
   },
   {
    "file": "scan-phase-d-offline-thumbnails.part",
-   "firstLine": 8185,
+   "firstLine": 8192,
    "lines": 30
   },
   {
    "file": "cache-budget.part",
-   "firstLine": 8215,
+   "firstLine": 8222,
    "lines": 155
   },
   {
    "file": "per-root-cache-usage-clearing.part",
-   "firstLine": 8370,
-   "lines": 301
+   "firstLine": 8377,
+   "lines": 307
   },
   {
    "file": "guaranteed-offline-tier-hq-offline.part",
-   "firstLine": 8671,
-   "lines": 407
+   "firstLine": 8684,
+   "lines": 469
   },
   {
    "file": "focus-sharpness-out-of-focus-review.part",
-   "firstLine": 9078,
+   "firstLine": 9153,
    "lines": 232
   },
   {
    "file": "offline-edit-queue-n1a.part",
-   "firstLine": 9310,
+   "firstLine": 9385,
    "lines": 172
   },
   {
    "file": "rebuild.part",
-   "firstLine": 9482,
+   "firstLine": 9557,
    "lines": 61
   },
   {
    "file": "delete.part",
-   "firstLine": 9543,
+   "firstLine": 9618,
    "lines": 13
   },
   {
    "file": "stacking.part",
-   "firstLine": 9556,
+   "firstLine": 9631,
    "lines": 642
   },
   {
    "file": "keyword-tree.part",
-   "firstLine": 10198,
+   "firstLine": 10273,
    "lines": 4277
   }
  ]

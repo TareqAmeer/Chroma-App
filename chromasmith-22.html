@@ -7286,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018I';
+const BUILD='1.1018J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -26356,7 +26356,21 @@ function fxExportTileSize(P,src,halo,renderer){
 // Read only a tile's useful center; keep the existing shader/halo/global coordinates.
 // This removes the intermediate 2D canvas/upload and discarded halo readback on Android.
 function fxCanReadExportTile(renderer){
-  return /Android/i.test(navigator.userAgent)&&typeof renderer.gl?.readPixels==='function';
+  return typeof renderer.gl?.readPixels==='function';
+}
+// Between export tiles: hand the main thread back cheaply (setTimeout 0, so Cancel clicks and input
+// stay responsive) instead of waiting a full ~16ms animation frame per tile. A real frame is still
+// awaited about every 100ms so the progress bar repaints, and that wait is raced against a timer so
+// a hidden/occluded window (rAF paused) cannot stall the export.
+let _fxTileYieldAt=0;
+async function fxTileYield(){
+  const now=performance.now();
+  if(now-_fxTileYieldAt>=100){
+    _fxTileYieldAt=now;
+    await new Promise(r=>{let done=false;const fin=()=>{if(!done){done=true;r();}};requestAnimationFrame(fin);setTimeout(fin,50);});
+    return;
+  }
+  await new Promise(r=>setTimeout(r,0));
 }
 function fxReadExportTile(renderer,x,y,w,h){
   const gl=renderer.gl,px=new Uint8Array(w*h*4),row=w*4,tmp=new Uint8Array(row);
@@ -26415,7 +26429,7 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     // through processToCanvas into exportFX's per-photo try/catch, which logs and moves on
     // (and its own between-images cancel check then stops the batch).
     if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
-    await new Promise(r=>requestAnimationFrame(r));
+    await fxTileYield();
   }
   const result=applyRedEyeCorrections(out,P.redEyeOps);complete=true;return result;
   }finally{

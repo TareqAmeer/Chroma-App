@@ -10,7 +10,7 @@ for(const [w,h]of [[1,1],[3,5],[5,4]]){const out=unit.fxReadExportTile({gl:fakeG
 const server=createServer((req,res)=>{try{const p=path.resolve(root,'.'+req.url.split('?')[0]);if(!p.startsWith(root+path.sep))throw Error();res.setHeader('Content-Type',p.endsWith('.html')?'text/html':p.endsWith('.js')?'application/javascript':'application/octet-stream');res.end(fs.readFileSync(p));}catch{res.writeHead(404);res.end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
 try{
- browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-gpu-sandbox']});const page=await browser.newPage({userAgent:'Android'});
+ browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--disable-gpu-sandbox']});const page=await browser.newPage({userAgent:process.env.CR_UA||'Android'});
  await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html`);await page.waitForFunction(()=>typeof fxReadExportTile==='function');
  const skin=JSON.parse(fs.readFileSync(path.join(root,'test/recipes/skin_uniformity.json'),'utf8')).masks;
  const result=await page.evaluate(async({legacy,skin})=>{
@@ -33,6 +33,6 @@ try{
   const unavailable=fxCanReadExportTile({gl:{}});return {rows,ios,unavailable};
   }finally{renderTiled=current;shouldTile=tile;Math.random=random;}
  },{legacy,skin});
- assert(result.rows.every(r=>r.max===0),JSON.stringify(result));assert.equal(result.ios,false);assert.equal(result.unavailable,false);
+ assert(result.rows.every(r=>r.max===0),JSON.stringify(result));assert.equal(result.ios,true);assert.equal(result.unavailable,false);
  fs.mkdirSync(path.join(root,'test/android/out'),{recursive:true});fs.writeFileSync(path.join(root,'test/android/out/center-pixel-checks.json'),JSON.stringify(result,null,2));console.log('PASS: exact RGBA, odd edges, transparency, effects, constrained/unknown memory, platform/API fallback',JSON.stringify(result));
 }finally{await browser?.close();await new Promise(r=>server.close(r));}

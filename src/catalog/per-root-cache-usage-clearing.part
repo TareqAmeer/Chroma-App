@@ -195,17 +195,23 @@ const THUMB_CANDIDATE_WHERE: &str =
 
 /// Phase A — pick the next batch. Pure SQL, no decoding: safe to run under a SHORT read lock.
 fn thumbnail_select_batch(conn: &Connection) -> Result<Vec<(i64, String, i64)>, String> {
+    thumbnail_select_batch_after(conn, 0)
+}
+
+/// Same selection, but only candidates with `id > after_id` — lets the pipeline pick batch N+1
+/// before batch N is committed without re-selecting N's own (still-uncommitted) photos.
+fn thumbnail_select_batch_after(conn: &Connection, after_id: i64) -> Result<Vec<(i64, String, i64)>, String> {
     let sql = format!(
         "SELECT p.id, p.rel_path, v.last_path, v.is_local, p.mtime
          FROM photos p JOIN volumes v ON v.id = p.volume_id
-         WHERE {THUMB_CANDIDATE_WHERE}
+         WHERE {THUMB_CANDIDATE_WHERE} AND p.id > ?1
          ORDER BY p.id
          LIMIT 32"
     );
     let rows: Vec<(i64, Option<String>, i64)> = conn
         .prepare(&sql)
         .map_err(|e| e.to_string())?
-        .query_map([], |r| {
+        .query_map([after_id], |r| {
             let id: i64 = r.get(0)?;
             let rel_path: String = r.get(1)?;
             let last_path: String = r.get(2)?;
