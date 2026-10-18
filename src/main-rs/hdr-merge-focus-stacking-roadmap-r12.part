@@ -426,7 +426,10 @@ fn decode_raw_v2_vec(json: &serde_json::Value, payload: &[u8], pre_shared: Optio
                 out.extend_from_slice(&[0u8; HDR]);
                 out.extend_from_slice(&rgba);
             } else {
-                out = vec![0u8; HDR + px_count * 4];
+                // Capacity for the 2560px working-copy trailer up front: appending it later would
+                // otherwise realloc (copy) the whole ~96MB response body.
+                out = Vec::with_capacity(HDR + px_count * 4 + if json["wantWork"].as_bool().unwrap_or(false) { 2560 * 2560 * 4 + 16 } else { 0 });
+                out.resize(HDR + px_count * 4, 0);
                 on_interactive_pool(|| raw_decode::apply_lut_rgba_into(&src, &lut, n, &mut out[HDR..]))?;
                 let _ = plain;
             }

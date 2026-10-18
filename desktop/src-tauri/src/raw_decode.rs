@@ -1596,16 +1596,18 @@ fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32
     // original planes — a ~2.2GB peak that pushed an 8GB machine into swap during a real open
     // (measured: free memory ~18MB, ~1.8GB swapped out, CPU only ~200-250% of 600%). The
     // arithmetic and its order are unchanged, so the output is bit-identical.
-    struct PlaneState { cur: Vec<f32>, smooth: Vec<f32>, rebuilt: Vec<f32>, tmp: Vec<f32> }
+    struct PlaneState { cur: Vec<f32>, smooth: Vec<f32>, rebuilt: Vec<f32> }
     let mut lcur = yv;
     let mut lsm = vec![0f32; npx];
     let mut keep = vec![0f32; npx];
+    // ONE horizontal-pass scratch plane serves the luma and both chroma planes (they run one
+    // after another; each atrous call fully rewrites it), instead of three 96MB planes.
     let mut ltmp: Vec<f32> = Vec::new();
-    let mut cbs = PlaneState { cur: cb, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx], tmp: Vec::new() };
-    let mut crs = PlaneState { cur: cr, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx], tmp: Vec::new() };
-    fn chroma_level(st: &mut PlaneState, w: usize, h: usize, lvl: usize, keep: &[f32]) {
+    let mut cbs = PlaneState { cur: cb, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx] };
+    let mut crs = PlaneState { cur: cr, smooth: vec![0f32; npx], rebuilt: vec![0f32; npx] };
+    fn chroma_level(st: &mut PlaneState, tmp: &mut Vec<f32>, w: usize, h: usize, lvl: usize, keep: &[f32]) {
         let cur = &st.cur;
-        atrous_smooth_into(cur, w, h, 1usize << lvl, &mut st.tmp, &mut st.smooth, &mut st.rebuilt, |y, sm_row, rb_row| {
+        atrous_smooth_into(cur, w, h, 1usize << lvl, tmp, &mut st.smooth, &mut st.rebuilt, |y, sm_row, rb_row| {
             let base = y * w;
             for x in 0..w {
                 rb_row[x] += (cur[base + x] - sm_row[x]) * keep[base + x];
@@ -1630,7 +1632,8 @@ fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32
         }
         std::mem::swap(&mut lcur, &mut lsm);
         let kp = &keep;
-        rayon::join(|| chroma_level(&mut cbs, w, h, lvl, kp), || chroma_level(&mut crs, w, h, lvl, kp));
+        chroma_level(&mut cbs, &mut ltmp, w, h, lvl, kp);
+        chroma_level(&mut crs, &mut ltmp, w, h, lvl, kp);
     }
     drop((lcur, lsm, keep, ltmp));
     // residual low-pass carries the true (broad) colours, untouched
@@ -1664,14 +1667,13 @@ fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32
     });
 }
 
-/// Exact 5x5 luma range using separable horizontal/vertical min/max passes. The previous
-/// implementation inspected 25 samples for every output pixel; this computes the same range
-/// with 5 horizontal + 5 vertical comparisons. `yv` is scratch after this call and contains the
-/// horizontal maxima; callers recompute the original luma from their untouched RGB input when
-/// reconstructing the output.
-fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
-    let mut contrast = vec![0f32; yv.len()];
-    contrast.par_chunks_mut(w).zip(yv.par_chunks_mut(w)).for_each(|(mins, row)| {
+/// Exact 5x5 luma range using separable horizontal/vertical min/max passes (5 + 5 comparisons
+/// per pixel instead of 25), returned as the gate `range > thresh` in one byte per pixel: the
+/// callers only ever compare the range against a threshold, and a u8 mask is a quarter of the
+/// f32 range plane (24MB vs 96MB on a 24MP frame). `yv` is scratch after this call.
+fn local_contrast_mask(yv: &mut [f32], w: usize, h: usize, thresh: f32) -> Vec<u8> {
+    let mut mins = vec![0f32; yv.len()];
+    mins.par_chunks_mut(w).zip(yv.par_chunks_mut(w)).for_each(|(mins, row)| {
         let src = row.to_vec();
         for x in 0..w {
             let mut lo = f32::MAX;
@@ -1685,13 +1687,12 @@ fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
             row[x] = hi;
         }
     });
-    // Vertical pass reads the horizontal min/max planes (`contrast` = row minima, `yv` = row
-    // maxima) and writes the finished range into a SEPARATE buffer. Writing it back into
-    // `contrast` while other rows' workers still read their neighbours' minima was a data race
-    // (rows y-2..y+2 could already be overwritten), making the gate non-deterministic run to run.
-    let mins: &[f32] = &contrast;
+    // Vertical pass reads the horizontal min/max planes and writes into a SEPARATE buffer
+    // (writing back in place while other rows' workers still read their neighbours was a data
+    // race that made the gate non-deterministic).
+    let mins: &[f32] = &mins;
     let maxs: &[f32] = yv;
-    let mut out = vec![0f32; mins.len()];
+    let mut out = vec![0u8; mins.len()];
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for x in 0..w {
             let mut lo = f32::MAX;
@@ -1701,7 +1702,7 @@ fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
                 lo = lo.min(mins[sy * w + x]);
                 hi = hi.max(maxs[sy * w + x]);
             }
-            row[x] = hi - lo;
+            row[x] = ((hi - lo) > thresh) as u8;
         }
     });
     out
@@ -1714,22 +1715,28 @@ fn local_contrast_5x5(yv: &mut [f32], w: usize, h: usize) -> Vec<f32> {
 /// swept there carry over directly); `steps` is the number of gated-median passes.
 fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32, dev_thresh: f32, steps: usize) {
     let npx = w * h;
+    // Luma first, gate mask, then free the luma BEFORE the chroma planes exist: peak is
+    // luma + horizontal min plane + mask, not luma + chroma x2 + range plane + both scratch.
     let mut yv = vec![0f32; npx];
-    let mut cb = vec![0f32; npx];
-    let mut cr = vec![0f32; npx];
-    yv.par_iter_mut().zip(cb.par_iter_mut()).zip(cr.par_iter_mut()).enumerate().for_each(|(i, ((py, pcb), pcr))| {
+    yv.par_iter_mut().enumerate().for_each(|(i, py)| {
         let r = rgb[i * 3] as f32 / 65535.0;
         let g = rgb[i * 3 + 1] as f32 / 65535.0;
         let b = rgb[i * 3 + 2] as f32 / 65535.0;
         *py = 0.299 * r + 0.587 * g + 0.114 * b;
+    });
+    // Local luma contrast is the max-min over a 5x5 window (separable, identical to the direct
+    // 25-sample scan); only "range > contrast_thresh" is ever used.
+    let edge = local_contrast_mask(&mut yv, w, h, contrast_thresh);
+    drop(yv);
+    let mut cb = vec![0f32; npx];
+    let mut cr = vec![0f32; npx];
+    cb.par_iter_mut().zip(cr.par_iter_mut()).enumerate().for_each(|(i, (pcb, pcr))| {
+        let r = rgb[i * 3] as f32 / 65535.0;
+        let g = rgb[i * 3 + 1] as f32 / 65535.0;
+        let b = rgb[i * 3 + 2] as f32 / 65535.0;
         *pcb = -0.168_736 * r - 0.331_264 * g + 0.5 * b;
         *pcr = 0.5 * r - 0.418_688 * g - 0.081_312 * b;
     });
-
-    // Local luma contrast is the max-min over a 5x5 window. The separable implementation is
-    // mathematically identical to the direct 25-sample scan, but does only 10 comparisons per
-    // output pixel.
-    let contrast = local_contrast_5x5(&mut yv, w, h);
 
     // The hot path below evaluates this median once per eligible pixel, per channel, per pass.
     // A general-purpose sort spends most of that time in comparator/call overhead. This fixed
@@ -1756,8 +1763,9 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
     // once outside the steps loop and reused via copy_from_slice + swap, avoid the repeat
     // alloc/free churn `plane.clone()` did on every iteration (a full-frame Vec<f32> alloc per
     // pass, `steps * 2` times, on a 24MP+ image).
-    let mut next_cb = cb.clone();
-    let mut next_cr = cr.clone();
+    // One scratch plane serves both chroma planes: it is fully overwritten by copy_from_slice
+    // before each use, and the swap just trades buffers with the plane.
+    let mut next = vec![0f32; npx];
     let x_neighbors: Vec<[usize; 3]> = (0..w).map(|x| [
         x.saturating_sub(1), x, (x + 1).min(w.saturating_sub(1)),
     ]).collect();
@@ -1765,8 +1773,9 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
         y.saturating_sub(1), y, (y + 1).min(h.saturating_sub(1)),
     ]).collect();
     for _ in 0..steps {
-        for (plane, next) in [(&mut cb, &mut next_cb), (&mut cr, &mut next_cr)] {
+        for plane in [&mut cb, &mut cr] {
             next.copy_from_slice(plane);
+            let next = &mut next;
             next.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
                 let [y0, y1, y2] = y_neighbors[y];
                 let r0 = &plane[y0 * w..(y0 + 1) * w];
@@ -1774,7 +1783,7 @@ fn suppress_false_color(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f3
                 let r2 = &plane[y2 * w..(y2 + 1) * w];
                 for (x, o) in row.iter_mut().enumerate() {
                     let i = y * w + x;
-                    if contrast[i] <= contrast_thresh {
+                    if edge[i] == 0 {
                         continue; // not near a hard edge — never a candidate, regardless of deviation
                     }
                     let [x0, x1, x2] = x_neighbors[x];
@@ -1822,10 +1831,11 @@ fn hue_defringe_gated(rgb: &mut [u16], w: usize, h: usize, contrast_thresh: f32)
         *py = 0.299 * r + 0.587 * g + 0.114 * b;
     });
 
-    let contrast = local_contrast_5x5(&mut yv, w, h);
+    let edge = local_contrast_mask(&mut yv, w, h, contrast_thresh);
+    drop(yv);
 
     rgb.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
-        if contrast[i] <= contrast_thresh {
+        if edge[i] == 0 {
             return;
         }
         let r = px[0] as f32 / 65535.0;
