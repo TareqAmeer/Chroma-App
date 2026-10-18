@@ -6,7 +6,7 @@ const UI=()=>window.MobileUI,$=s=>document.querySelector(s),esc=s=>UI().esc(s);
 const DBN='chromasmith-mlib',LAST='cs-mlib-last',JOURNAL='cs-mlib-pending-v2';
 const b64=s=>btoa(unescape(encodeURIComponent(JSON.stringify(s)))),unb64=s=>MobileProject.validateRecipe(s);
 const id=()=>('p'+Date.now().toString(36)+Math.random().toString(36).slice(2,9));
-let database,root,grid,openedId=null,queue=[],restoring=false,opening=false,selecting=false,filter='all',search='',collection='',urls=[];
+let database,root,grid,openedId=null,queue=[],restoring=false,opening=false,selecting=false,filter='all',search='',collection='',urls=new Map(),thumbObs=null,gridKey='',thumbBlobs=new Map();
 const selected=new Set(),pending=new Map(),known=new Map();let saveTimer,inputTimer,writing=Promise.resolve(),renderKey=0,saveFailed=false;
 const origLoad=window.loadFXImages;
 function db(){return database||(database=new Promise((res,rej)=>{
@@ -71,7 +71,9 @@ async function rawEmbeddedThumb(file){
       try{const bm=await createImageBitmap(new Blob([u.subarray(g.a,e)],{type:'image/jpeg'})),t=await thumb(bm,bm.width,bm.height);bm.close();if(t)return t;}catch(_){}}
   }catch(_){}
   return null;}
-async function fileThumb(file){try{const bm=await createImageBitmap(file),t=await thumb(bm,bm.width,bm.height);bm.close();return t;}catch(_){return rawEmbeddedThumb(file);}}
+// Decode a thumbnail at reduced size (the browser downsamples while decoding) instead of a full-size bitmap.
+async function thumbBitmap(file){try{return await createImageBitmap(file,{resizeWidth:360,resizeQuality:'medium'});}catch(_){return createImageBitmap(file);}}
+async function fileThumb(file){try{const bm=await thumbBitmap(file),t=await thumb(bm,bm.width,bm.height);bm.close();return t;}catch(_){return rawEmbeddedThumb(file);}}
 async function editorThumb(){renderPreview();const bd=$('#fx-canvas-bd'),c=bd&&bd.style.display!=='none'?bd:$('#fx-canvas');return c?.width?thumb(c,c.width,c.height):null;}
 async function refreshThumb(){if(!openedId||restoring)return;const i=openedId,t=await editorThumb();if(!t)return;await flush();const p=await getPhoto(i);if(!p)return;if(p.recipe)await patchPhoto(i,{thumbEdited:t});else if(!p.thumb)await patchPhoto(i,{thumb:t});}
 async function fingerprint(f){const bytes=await f.arrayBuffer();if(window.crypto?.subtle){const digest=await crypto.subtle.digest('SHA-256',bytes);return Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');}let hash=2166136261;for(const b of new Uint8Array(bytes))hash=Math.imul(hash^b,16777619);return 'fnv:'+bytes.byteLength+':'+(hash>>>0).toString(16);}
@@ -145,12 +147,15 @@ async function openPhoto(i,{recipe,original=false}={}){
   if(opening||document.body.classList.contains('fx-exporting'))return false;
   const previous={id:openedId,images:[...fxImages],snap:getUISnapshot(),history:fxHistory,index:fxHistIdx,loadKey:_fxLoadKey,version:fxVersion};
   if(openedId)capture(previous.snap);opening=true;restoring=true;status('Opening photo…');
+  // Navigation cancels any in-flight neighbour pre-decode; a finished one for THIS photo is consumed below.
+  const pre=nb.id===i?nb.work:null;nb.token++;nb.id=null;nb.work=null;
   try{
+    const photoP=getPhoto(i);photoP.then(p=>p&&showStandIn(p)).catch(()=>{});
     await flush(false);
-    const p=await getPhoto(i),blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
+    const p=await photoP,blob=await getBlob(i);if(!p||!blob||p.trashed)throw new Error('Photo is unavailable. Restore it from Trash first.');
     window.__mlibOpening=true;window.__csLibOpen=true;
     let entry;
-    try{const dev=await getDev(i);entry=await origLoad([dev?new File([dev],p.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:p.added}):new File([blob],p.name,{type:p.type,lastModified:p.added})]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
+    try{const dev=await getDev(i),file=dev?new File([dev],p.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg',lastModified:p.added}):new File([blob],p.name,{type:p.type,lastModified:p.added});if(pre)file.__csWork=pre;entry=await origLoad([file]);}finally{window.__mlibOpening=false;window.__csLibOpen=false;}
     if(!entry)throw new Error('Could not decode '+p.name+'. Try another format or retry importing.');
     openedId=i;if(!queue.includes(i))queue=[i];
     let r=recipe??(!original&&p.recipe);
@@ -167,18 +172,47 @@ async function openPhoto(i,{recipe,original=false}={}){
     if(recipe!==undefined||original){await patchPhoto(i,{recipe:b64(snap),edited:Date.now(),thumbEdited:null});}
     fxHistory=[{j:JSON.stringify(snap),snap,rasters:fxState.masks.map(m=>m.px||null),label:'Opened',ts:Date.now()}];fxHistIdx=0;fxSyncTopbarDisabled();
     if(p.importError){await patchPhoto(i,{importError:undefined});}
-    localStorage.setItem(LAST,JSON.stringify({id:i,inEditor:true}));close();status('');saveStatus('Saved');syncQueue();return true;
+    localStorage.setItem(LAST,JSON.stringify({id:i,inEditor:true}));close();status('');saveStatus('Saved');syncQueue();endStandIn(true);prefetchNeighbour();return true;
   }catch(e){
     // The shared decoder resets controls before attempting a new image. Roll back both
     // pixels and recipe on failure, so a later autosave cannot persist those reset controls
     // over the outgoing photo. Keep its undo history and pending writes available too.
-    openedId=previous.id;
+    openedId=previous.id;endStandIn(false);
     if(previous.images.length){if(fxImages[0]!==previous.images[0])installFXImages(previous.images,previous.loadKey);await applyUISnapshot(previous.snap);fxVersion=previous.version;fxUpdate();}
     else{fxImages=[];fxImg=null;fxWork=null;applyUISnapshot(previous.snap);}
     clearTimeout(_fxHistPushTimer);fxHistory=previous.history;fxHistIdx=previous.index;fxSyncTopbarDisabled();
     await open(false);status(e.message,true);UI().sheet('Photo could not open','<p>'+esc(e.message)+'</p><button data-retry>Retry</button>',(el,close)=>el.querySelector('[data-retry]').onclick=()=>{close();safe(()=>openPhoto(i));});
   }
-  finally{opening=false;restoring=false;}
+  finally{opening=false;restoring=false;endStandIn(false);}
+}
+// Instant stand-in: the stored (edited) thumbnail is painted over everything the moment a photo is tapped, then
+// faded out once the real image is installed. Hidden from assistive tech; skipped fade under reduced motion.
+let standIn=null;
+function showStandIn(p){
+  const t=p.thumbEdited||p.thumb;if(!t||standIn||!opening)return;
+  const el=document.createElement('div'),img=document.createElement('img'),u=URL.createObjectURL(t);
+  el.id='phone-standin';el.setAttribute('aria-hidden','true');img.alt='';img.src=u;el.appendChild(img);document.body.appendChild(el);standIn={el,u};
+}
+function endStandIn(fade){
+  const s=standIn;if(!s)return;standIn=null;
+  const done=()=>{s.el.remove();URL.revokeObjectURL(s.u);};
+  if(!fade||(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches)){done();return;}
+  requestAnimationFrame(()=>{s.el.classList.add('out');setTimeout(done,160);});
+}
+// One-neighbour pre-decode: after a photo opens, build the NEXT queued photo's ~2560px working copy while idle so
+// opening it skips the decode. Bounded to a single canvas; any navigation bumps the token and discards it.
+const nb={id:null,work:null,token:0};
+async function prefetchNeighbour(){
+  const next=queue[queue.indexOf(openedId)+1],tok=++nb.token;nb.id=null;nb.work=null;
+  if(!next||typeof window.chromasmithWorkCopyFor!=='function')return;
+  await new Promise(r=>window.requestIdleCallback?requestIdleCallback(()=>r(),{timeout:2000}):setTimeout(r,400));
+  if(tok!==nb.token||opening)return;
+  try{const p=await getPhoto(next);if(!p||p.trashed||tok!==nb.token)return;
+    const dev=await getDev(next);if(!dev&&typeof RAW_FILE_EXT_RE!=='undefined'&&RAW_FILE_EXT_RE.test(p.name))return;
+    const src=dev||await getBlob(next);if(!src||tok!==nb.token)return;
+    const work=await window.chromasmithWorkCopyFor(dev?new File([dev],p.name,{type:'image/jpeg'}):new File([src],p.name,{type:p.type}));
+    if(work&&tok===nb.token){nb.id=next;nb.work=work;}
+  }catch(_){}
 }
 async function setFlag(ids,flag){await flush();for(const i of ids){const p=await getPhoto(i);if(p){await patchPhoto(i,{flag});}}await render();hapt();}
 const CK='cs-mlib-copied',copied=()=>localStorage.getItem(CK);
@@ -285,15 +319,29 @@ async function backfillThumbs(ps){
 async function render(){
   build();const generation=++renderKey,ps=await allPhotos();if(generation!==renderKey)return;
   setTimeout(()=>backfillThumbs(ps),0);
-  urls.forEach(u=>URL.revokeObjectURL(u));urls=[];
   const collections=[...new Set(ps.filter(p=>!p.trashed).map(p=>p.collection).filter(Boolean))].sort();const select=root.querySelector('.collections');select.innerHTML='<option value="">All collections</option>'+collections.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');select.value=collection;
   root.querySelectorAll('[data-f]').forEach(b=>{const on=b.dataset.f===filter;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));if(on)window.phoneCentreTab?.(b.parentElement,b);});
   let list=ps.filter(p=>(filter==='trash'?!!p.trashed:!p.trashed)&&(!collection||p.collection===collection)&&p.name.toLowerCase().includes(search.toLowerCase()));
   if(filter==='edited')list=list.filter(p=>p.recipe);if(filter==='exported')list=list.filter(p=>p.exports?.some(e=>e.status!=='shared'));if(filter==='fav'||filter==='rej')list=list.filter(p=>p.flag===filter);
   const pr=prefs();list.sort(pr.sort==='name'?(a,b)=>a.name.localeCompare(b.name):pr.sort==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.edited||b.added)-(a.edited||a.added));
+  // Skip the DOM rebuild (and every thumbnail decode) when nothing the grid shows has changed.
+  const key=JSON.stringify([filter,pr.dates,pr.aspect,search,collection,list.map(p=>[p.id,p.name,p.flag||'',!!p.recipe,!!p.trashed,p.edited||0,p.thumb?.size||0,p.thumbEdited?.size||0,selected.has(p.id)])]);
+  if(key===gridKey&&grid.firstElementChild)return;
+  gridKey=key;releaseThumbs();thumbBlobs=new Map(list.map(p=>[p.id,p.thumbEdited||p.thumb]));
   if(!list.length){grid.innerHTML='<div class="empty">'+(search?'No matching photos.':filter==='trash'?'Trash is empty. Removed photos stay here until you delete them.':filter==='all'?'Import photos to start. Originals stay untouched and edits save automatically.':'No photos in this view.')+'</div>';return;}
-  grid.innerHTML=list.map(p=>{const t=p.thumbEdited||p.thumb,u=t?URL.createObjectURL(t):'';if(u)urls.push(u);const label=p.name+(p.recipe?', edited':'')+(p.flag==='fav'?', favourite':'')+(p.trashed?', in Trash':'');
-    return '<div class="photo-tile"><button class="cell'+(selected.has(p.id)?' sel':'')+(p.flag==='rej'?' rej':'')+'" data-id="'+p.id+'" aria-label="'+esc(label)+'" aria-pressed="'+selected.has(p.id)+'">'+(u?'<img loading="lazy" src="'+u+'" alt="">':'')+'<span class="nm"><span class="fn">'+esc(p.name)+'</span>'+(pr.dates?'<span class="dt">'+esc(new Date(p.edited||p.added).toLocaleDateString())+'</span>':'')+'</span>'+(p.flag==='fav'?'<span class="fav" aria-hidden="true">♥</span>':'')+(p.recipe?'<span class="badge" aria-hidden="true">Edited</span>':'')+'</button><button class="photo-menu" data-id="'+p.id+'" aria-label="Actions for '+esc(p.name)+'">⋯</button></div>';}).join('');
+  grid.innerHTML=list.map(p=>{const t=p.thumbEdited||p.thumb,u=!!t;const label=p.name+(p.recipe?', edited':'')+(p.flag==='fav'?', favourite':'')+(p.trashed?', in Trash':'');
+    return '<div class="photo-tile"><button class="cell'+(selected.has(p.id)?' sel':'')+(p.flag==='rej'?' rej':'')+'" data-id="'+p.id+'" aria-label="'+esc(label)+'" aria-pressed="'+selected.has(p.id)+'">'+(u?'<img data-pid="'+p.id+'" alt="">':'')+'<span class="nm"><span class="fn">'+esc(p.name)+'</span>'+(pr.dates?'<span class="dt">'+esc(new Date(p.edited||p.added).toLocaleDateString())+'</span>':'')+'</span>'+(p.flag==='fav'?'<span class="fav" aria-hidden="true">♥</span>':'')+(p.recipe?'<span class="badge" aria-hidden="true">Edited</span>':'')+'</button><button class="photo-menu" data-id="'+p.id+'" aria-label="Actions for '+esc(p.name)+'">⋯</button></div>';}).join('');
+  observeThumbs();
+}
+// Thumbnail object URLs are created only when a tile nears the viewport and revoked once it leaves it.
+function releaseThumbs(){thumbObs?.disconnect();thumbObs=null;urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();}
+function loadThumb(img){const id=img.dataset.pid,b=thumbBlobs.get(id);if(!b||urls.has(id))return;const u=URL.createObjectURL(b);urls.set(id,u);img.onload=()=>{img.style.height='';};img.src=u;}
+function dropThumb(img){const id=img.dataset.pid,u=urls.get(id);if(!u)return;if(root.classList.contains('orig'))img.style.height=img.offsetHeight+'px';img.removeAttribute('src');URL.revokeObjectURL(u);urls.delete(id);}
+function observeThumbs(){
+  const imgs=grid.querySelectorAll('img[data-pid]');
+  if(!('IntersectionObserver' in window)){imgs.forEach(loadThumb);return;}
+  thumbObs=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting?loadThumb(e.target):dropThumb(e.target)),{root:grid,rootMargin:'600px 0px'});
+  imgs.forEach(i=>thumbObs.observe(i));
 }
 async function selectionActions(){const ids=[...selected];if(filter==='trash'){await trashActions(ids);return;}
   UI().sheet(ids.length+' selected','<button data-k="paste">Paste selected settings</button><button data-k="fav">Favourite</button><button data-k="collection">Move to collection</button><button data-k="export">Export each photo with its own edits</button><button data-k="backup">Back up selected photos</button>',(el,close)=>el.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{close();safe(async()=>{switch(b.dataset.k){case 'paste':await pasteTo(ids);break;case 'fav':await setFlag(ids,'fav');break;case 'collection':await moveCollection(ids);break;case 'export':queue=ids;setSelecting(false);await openPhoto(ids[0]);await exportQueue();break;case 'backup':await backup(ids);break;}});}));}

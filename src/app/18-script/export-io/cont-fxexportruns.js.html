@@ -287,6 +287,7 @@ async function _exportFXRun(){
       if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
       try{
+        if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
           setProg(idx,`Decoding RAW ${idx+1}/${N}: ${it.name}…`);

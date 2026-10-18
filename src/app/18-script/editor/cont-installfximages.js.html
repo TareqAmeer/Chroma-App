@@ -108,6 +108,41 @@ function fxDisplayTierCanvas(full){
   c._csFullW=fw;
   return c;
 }
+// Phones/tablets: a non-RAW photo (JPEG/HEIC/PNG) opens on a ~2560px working copy decoded by the browser at
+// reduced size (createImageBitmap resize hints let the decoder downscale while decoding), instead of a
+// 48MP RGBA texture (~190MB vs ~26MB). The original File is kept as srcFile: fxPromoteSrcTier swaps the
+// full decode back in for export / true 1:1 (same pattern as the browser RAW proxy, _rawHalf).
+// Returns null (caller falls back to the full-size loadImg) when not applicable or anything looks off.
+function fxProbeDims(file){return new Promise(res=>{
+  const url=URL.createObjectURL(file),i=new Image();
+  const done=v=>{i.onload=i.onerror=null;i.src='';URL.revokeObjectURL(url);res(v);};
+  i.onload=()=>done(i.naturalWidth&&i.naturalHeight?{w:i.naturalWidth,h:i.naturalHeight}:null);
+  i.onerror=()=>done(null);i.src=url;
+});}
+async function fxWorkCopyFor(file){
+  try{
+    if(window.__TAURI__||typeof createImageBitmap!=='function'||typeof isMemoryConstrained!=='function'||!isMemoryConstrained())return null;
+    if(file.type&&!/^image\/(jpeg|png|webp|avif|heic|heif)$/i.test(file.type))return null;
+    const d=await fxProbeDims(file);
+    if(!d||Math.max(d.w,d.h)<=3000)return null;
+    const k=2560/Math.max(d.w,d.h),w=Math.max(1,Math.round(d.w*k)),h=Math.max(1,Math.round(d.h*k));
+    const bm=await createImageBitmap(file,{resizeWidth:w,resizeHeight:h,resizeQuality:'high',imageOrientation:'from-image'});
+    if(bm.width!==w||bm.height!==h){bm.close();return null;} // orientation/size disagreement between the probe and the bitmap: use the exact path
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(bm,0,0);bm.close();
+    Object.defineProperty(c,'naturalWidth',{value:w});Object.defineProperty(c,'naturalHeight',{value:h});
+    return c;
+  }catch(_){return null;}
+}
+window.chromasmithWorkCopyFor=fxWorkCopyFor;
+function fxPromoteSrcTier(it){
+  if(!it||!it._srcTier||!it.srcFile)return Promise.resolve();
+  if(it._srcFullP)return it._srcFullP;
+  return it._srcFullP=loadImg(it.srcFile).then(img=>{
+    it.img=img;delete it._srcTier;
+    if(it===curItem()){fxImg=img;updateWork();renderPreview();}
+  }).finally(()=>{delete it._srcFullP;});
+}
 // The same working copy built natively (decode_raw_v2's wantWork trailer: {width,height,data RGBA8}).
 function fxWorkCanvasFromRGBA(work,fullW){
   const c=document.createElement('canvas');c.width=work.width;c.height=work.height;
@@ -241,10 +276,11 @@ async function loadFXImages(fileList,opts){
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
       const exif=['jpg','jpeg','heic','heif','png','webp','tif','tiff'].includes(ext)?readExifTags(bytes):{};
-      const img=await loadImg(file);
+      const srcWork=file.__csWork||await fxWorkCopyFor(file);delete file.__csWork;
+      const img=srcWork||await loadImg(file);
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
-      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0,...(srcWork?{_srcTier:true,srcFile:file}:{})});
     }catch(e){if(privateEntries)throw e;log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
   }
   if(privateEntries)return entries;

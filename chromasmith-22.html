@@ -7286,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018G';
+const BUILD='1.1018H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13686,6 +13686,41 @@ function fxDisplayTierCanvas(full){
   c._csFullW=fw;
   return c;
 }
+// Phones/tablets: a non-RAW photo (JPEG/HEIC/PNG) opens on a ~2560px working copy decoded by the browser at
+// reduced size (createImageBitmap resize hints let the decoder downscale while decoding), instead of a
+// 48MP RGBA texture (~190MB vs ~26MB). The original File is kept as srcFile: fxPromoteSrcTier swaps the
+// full decode back in for export / true 1:1 (same pattern as the browser RAW proxy, _rawHalf).
+// Returns null (caller falls back to the full-size loadImg) when not applicable or anything looks off.
+function fxProbeDims(file){return new Promise(res=>{
+  const url=URL.createObjectURL(file),i=new Image();
+  const done=v=>{i.onload=i.onerror=null;i.src='';URL.revokeObjectURL(url);res(v);};
+  i.onload=()=>done(i.naturalWidth&&i.naturalHeight?{w:i.naturalWidth,h:i.naturalHeight}:null);
+  i.onerror=()=>done(null);i.src=url;
+});}
+async function fxWorkCopyFor(file){
+  try{
+    if(window.__TAURI__||typeof createImageBitmap!=='function'||typeof isMemoryConstrained!=='function'||!isMemoryConstrained())return null;
+    if(file.type&&!/^image\/(jpeg|png|webp|avif|heic|heif)$/i.test(file.type))return null;
+    const d=await fxProbeDims(file);
+    if(!d||Math.max(d.w,d.h)<=3000)return null;
+    const k=2560/Math.max(d.w,d.h),w=Math.max(1,Math.round(d.w*k)),h=Math.max(1,Math.round(d.h*k));
+    const bm=await createImageBitmap(file,{resizeWidth:w,resizeHeight:h,resizeQuality:'high',imageOrientation:'from-image'});
+    if(bm.width!==w||bm.height!==h){bm.close();return null;} // orientation/size disagreement between the probe and the bitmap: use the exact path
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    c.getContext('2d').drawImage(bm,0,0);bm.close();
+    Object.defineProperty(c,'naturalWidth',{value:w});Object.defineProperty(c,'naturalHeight',{value:h});
+    return c;
+  }catch(_){return null;}
+}
+window.chromasmithWorkCopyFor=fxWorkCopyFor;
+function fxPromoteSrcTier(it){
+  if(!it||!it._srcTier||!it.srcFile)return Promise.resolve();
+  if(it._srcFullP)return it._srcFullP;
+  return it._srcFullP=loadImg(it.srcFile).then(img=>{
+    it.img=img;delete it._srcTier;
+    if(it===curItem()){fxImg=img;updateWork();renderPreview();}
+  }).finally(()=>{delete it._srcFullP;});
+}
 // The same working copy built natively (decode_raw_v2's wantWork trailer: {width,height,data RGBA8}).
 function fxWorkCanvasFromRGBA(work,fullW){
   const c=document.createElement('canvas');c.width=work.width;c.height=work.height;
@@ -13819,10 +13854,11 @@ async function loadFXImages(fileList,opts){
       }
       const dpi=readDPI(bytes,ext==='png'?'png':'jpg');
       const exif=['jpg','jpeg','heic','heif','png','webp','tif','tiff'].includes(ext)?readExifTags(bytes):{};
-      const img=await loadImg(file);
+      const srcWork=file.__csWork||await fxWorkCopyFor(file);delete file.__csWork;
+      const img=srcWork||await loadImg(file);
       // fileSize: without this, non-library JPEGs (drag-drop / Google Photos) showed no "Size"
       // row in the metadata panel at all — only photos opened via the desktop Library set it.
-      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0});
+      entries.push({img,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes,exif,fileSize:bytes.byteLength,mtime:file.lastModified||0,...(srcWork?{_srcTier:true,srcFile:file}:{})});
     }catch(e){if(privateEntries)throw e;log(`Failed to load ${file.name}: ${errStr(e)}`,'err');_loadFailCount++;const cur=curItem();if(cur)fxDeskbarTitle(cur.name,fxDimsFmt(cur.name,cur.img,cur.ext),false)} // keep loading the rest of the batch
   }
   if(privateEntries)return entries;
@@ -21461,6 +21497,11 @@ function fxEnsureFullQuality(why){
   // export still decodes the full frame on its own path.
   if(it&&it._rawHalf&&why==='zoom'&&typeof isMemoryConstrained==='function'&&isMemoryConstrained())return Promise.resolve();
   if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
+  // Non-RAW working copy (phones): same rule as the RAW proxy; zoom keeps it, loupe/export promote.
+  if(it&&it._srcTier){
+    if(why==='zoom'||why==='edit'||why==='crop')return Promise.resolve();
+    return fxPromoteSrcTier(it).catch(()=>{});
+  }
   return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
 }
 // Replaces a browser RAW entry's half-size proxy with the full-resolution decode. One in-flight
@@ -21604,7 +21645,7 @@ function initZoomPan(){
   // drag, and debounce the real recompute (which actually moves the source crop) to fire once
   // the drag pauses, same "cheap during interaction, real render once it settles" pattern
   // _fxZoomRenderDebounced already uses for the normal full-res preview.
-  let _loupeDragT=null;
+  let _loupeDragT=null,_panRaf=0;
   zw.addEventListener('pointermove',e=>{
     if(!pd||pd.id!==e.pointerId||_pinching)return;
     if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return;
@@ -21622,11 +21663,17 @@ function initZoomPan(){
     } else {
       fxPanX=pd.px+(e.clientX-pd.x)/fxZoom;
       fxPanY=pd.py+(e.clientY-pd.y)/fxZoom;
+      // Phones deliver pointermove faster than they paint (120Hz + coalesced events): apply the latest pan once per frame.
+      if(document.body.classList.contains('mobile-fx')){
+        if(!_panRaf)_panRaf=requestAnimationFrame(()=>{_panRaf=0;_applyZoom();fxPanTilesTick();});
+        return;
+      }
       _applyZoom();
       fxPanTilesTick(); // Full res: fill newly exposed 1:1 tiles while still dragging
     }
   });
   const pup=()=>{
+    if(_panRaf){cancelAnimationFrame(_panRaf);_panRaf=0;if(!fxLoupe&&pd){_applyZoom();}} // flush the last coalesced pan
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
@@ -23811,6 +23858,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 document.addEventListener('keyup',e=>{
   if(fxComparePreviousSnapshot!==null&&(e.code||'')===fxComparePreviousCode){e.preventDefault();fxComparePreviousEnd();}
 },true);
+function _curIsVideoDraft(){const c=typeof curItem==='function'?curItem():null;return !!(c&&c.kind==='video');}
 function renderPreview(){
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
   // retire the cached 1:1 tiles and underlay (they are also keyed by a params fingerprint).
@@ -23887,6 +23935,9 @@ function renderPreview(){
     dpr=Math.max(dpr,halfSourceDpr);
   }
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
+  // Phones: a mid-drag draft only needs ~1.5x (2.25 vs 9 Mpx at dpr 3 on a 900px preview); the settle frame
+  // (_fxPreviewInteracting false) restores the full dpr above. Desktop / non-constrained devices untouched.
+  if(_fxPreviewInteracting&&!deskx&&!_curIsVideoDraft()&&isMemoryConstrained())dpr=Math.min(dpr,1.5);
   // Full-res preview: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT preview;
   // when the user explicitly opts into Full res, honor it at every zoom level (still clamped to
   // the source's own resolution). Framed/matted previews stay on this whole-frame path so their
@@ -26713,6 +26764,7 @@ async function _exportFXRun(){
       if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
       try{
+        if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
           setProg(idx,`Decoding RAW ${idx+1}/${N}: ${it.name}…`);
