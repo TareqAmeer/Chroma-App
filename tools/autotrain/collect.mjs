@@ -32,7 +32,7 @@ function xmpFor(file) {
 }
 
 const rows = []; const skipped = { noXmp: 0, noTone: 0, unreadable: 0 };
-for (const file of walk(root).filter(f => IMG.test(f))) {
+for (const file of walk(root).filter(f => IMG.test(f) && !path.basename(f).startsWith('.'))) {
   const xml = xmpFor(file);
   if (!xml) { skipped.noXmp++; continue; }
   const y = parseXmpLabels(xml);
