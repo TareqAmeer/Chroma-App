@@ -7286,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018E';
+const BUILD='1.1018G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13453,7 +13453,7 @@ async function loadRw2(file,opts){
     dt=Math.round(performance.now()-t0);
     c=document.createElement('canvas');c.width=w;c.height=h;
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
-    if(!privateEntry&&img.work)c._csWork=fxWorkCanvasFromRGBA(img.work); // Rust-built ~2560px working copy (loadFXImages installs it)
+    if(!privateEntry&&img.work)c._csWork=fxWorkCanvasFromRGBA(img.work,w); // Rust-built ~2560px working copy (loadFXImages installs it)
     if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
     // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
     // `img:c`, and this way the headroom data survives that indirection with zero extra
@@ -13492,7 +13492,7 @@ async function loadRw2(file,opts){
   // superpixel develop. The full-quality decode starts now and resolves c._csFullPending with
   // {work, makeFull} (working-copy canvas + lazy full-resolution canvas); library-ui.js swaps them into the entry (and gates zoom/export on it).
   if(window.__TAURI__&&!privateEntry&&raw._halfFirst&&typeof raw.refine==='function'){
-    c._csHalfPreview=true;
+    c._csHalfPreview=true;c._csFullW=c.width*2; // superpixel half-resolution develop: the full frame is 2x (exact size lands with refine)
     c._csFullPending=raw.refine().then(refined=>{
       if(!refined)throw new Error('full-quality decode returned no frame');
       // The fit view only needs the ~2560px working copy, so that is what lands first; the 24MP
@@ -13512,7 +13512,7 @@ async function loadRw2(file,opts){
         src=null;
         return full;
       };
-      const work=refined.rgba&&refined.work?fxWorkCanvasFromRGBA(refined.work):fxDisplayTierCanvas(makeFull());
+      const work=refined.rgba&&refined.work?fxWorkCanvasFromRGBA(refined.work,refined.width):fxDisplayTierCanvas(makeFull());
       window.__pm&&window.__pm('half-full-ready');
       log(`RAW full quality ready (${refined.width}×${refined.height})`,'info');
       return{work,makeFull};
@@ -13547,7 +13547,7 @@ async function loadRw2(file,opts){
       }else{
         delete c._sceneLinear;delete c._sceneLinearPresent;
       }
-      if(!privateEntry&&owner.img!==c){const w=refined.work?fxWorkCanvasFromRGBA(refined.work):fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
+      if(!privateEntry&&owner.img!==c){const w=refined.work?fxWorkCanvasFromRGBA(refined.work,refined.width):fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
       if(!privateEntry&&typeof updateWork==='function')updateWork();
       if(!privateEntry&&typeof renderPreview==='function')renderPreview();
       // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).
@@ -13683,13 +13683,15 @@ function fxDisplayTierCanvas(full){
   c.width=Math.round(fw*k);c.height=Math.round(fh*k);
   const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(full,0,0,c.width,c.height);
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  c._csFullW=fw;
   return c;
 }
 // The same working copy built natively (decode_raw_v2's wantWork trailer: {width,height,data RGBA8}).
-function fxWorkCanvasFromRGBA(work){
+function fxWorkCanvasFromRGBA(work,fullW){
   const c=document.createElement('canvas');c.width=work.width;c.height=work.height;
   c.getContext('2d').putImageData(new ImageData(work.data,work.width,work.height),0,0);
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  if(fullW>c.width)c._csFullW=fullW; // full-frame width from the decode, for the loupe (fxFullScale)
   return c;
 }
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
@@ -13787,7 +13789,7 @@ async function loadFXImages(fileList,opts){
         const work=!privateEntries&&file.__csSourcePath?(canvas._csWork||fxDisplayTierCanvas(canvas)):null;
         delete canvas._csWork;
         // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
-        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
+        if(webHalf){const proxy=fxDisplayTierCanvas(canvas)||canvas;proxy._csFullW=canvas.width*2; /* LibRaw half-size: full frame is 2x */ entries.push({img:proxy,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
@@ -23379,9 +23381,20 @@ function _borderLayerParams(k){
 // as export — unlike the normal preview, which CSS-upscales a ~1800px buffer and shows grain/
 // glow at the wrong size. Grain is exact (per-pixel); halation within ~3σ of the crop edge is
 // slightly under-fed (no out-of-crop neighbours) — centre the detail you're inspecting.
+// Full-frame / working-copy size ratio (>=1) of the current photo, known from the decode before the
+// full frame lands: the full canvas when present, else a _csFullW stamp (display-tier copy, native
+// work copy, half-size proxy). Lets the 1:1 loupe size its crop in FULL-frame pixels so the visible
+// area does not jump when the full frame replaces the ~2560px proxy.
+function fxFullScale(it){
+  it=it||curItem();const im=it&&it.img;if(!im)return 1;
+  const iw=im.naturalWidth||im.width;if(!iw)return 1;
+  const f=it.fullImg,fw=(f&&(f.naturalWidth||f.width))||im._csFullW||iw;
+  return Math.max(1,fw/iw);
+}
 function renderLoupe(){
   const src=fxWork;if(!src||!FX.ok)return;
   const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
+  const kF=fxFullScale(),FW=fw*kF,FH=fh*kF; // full-frame size of the (geometry-applied) working image
   const wrap=document.getElementById('fx-wrap');
   const zw=document.getElementById('fx-zoom-wrap');
   if(zw){zw.style.width='';zw.style.height='';}
@@ -23389,7 +23402,7 @@ function renderLoupe(){
   // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
   const deskx=document.body.classList.contains('deskx');
   const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900); // content box, same as renderPreview
-  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
+  const fit=Math.min(1,maxW/FW,fxPreviewMaxH()/FH),cw=FW*fit|0,ch=FH*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
   // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
   // was ALWAYS captured/rendered at this same fixed cw×ch×dpr resolution — so zooming the loupe
@@ -23399,7 +23412,7 @@ function renderLoupe(){
   // zoom means more magnification of real source detail, not a stretched fixed buffer.
   const z=Math.max(0.25,Math.min(8,fxZoom||1));
   const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
-  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z),fh));
+  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z/kF),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z/kF),fh)); // work px; cw*dpr/z is the crop in full-frame px
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
   if(!FX.pushTempCrop(src,ox,oy,cropW,cropH)){
@@ -23409,7 +23422,7 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:FW/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -23422,7 +23435,7 @@ function renderLoupe(){
   const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
   const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   document.getElementById('fx-no-img').style.display='none';
-  document.getElementById('fx-info').textContent=`1:1 — native ${cropW}×${cropH}px crop · grain & halation at true export scale · drag to move`;
+  document.getElementById('fx-info').textContent=`1:1 — native ${Math.round(cropW*kF)}×${Math.round(cropH*kF)}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
   if(fxPeakOn)fxPeakUpdate();

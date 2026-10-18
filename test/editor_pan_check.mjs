@@ -35,7 +35,7 @@ try {
   if (result.negative.x !== -9999 || result.negative.y !== -9999) {
     throw new Error(`negative zoom pan was constrained: ${JSON.stringify(result.negative)}`);
   }
-  if (!/scale\(0\.75\).*translate\([^0]/.test(result.transform)) {
+  if (!/scale\(0\.75\).*translate(?:3d)?\([^0]/.test(result.transform)) {
     throw new Error(`sub-100% centering was lost: ${result.transform}`);
   }
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join('; ')}`);

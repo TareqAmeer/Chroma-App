@@ -194,9 +194,20 @@ function _borderLayerParams(k){
 // as export — unlike the normal preview, which CSS-upscales a ~1800px buffer and shows grain/
 // glow at the wrong size. Grain is exact (per-pixel); halation within ~3σ of the crop edge is
 // slightly under-fed (no out-of-crop neighbours) — centre the detail you're inspecting.
+// Full-frame / working-copy size ratio (>=1) of the current photo, known from the decode before the
+// full frame lands: the full canvas when present, else a _csFullW stamp (display-tier copy, native
+// work copy, half-size proxy). Lets the 1:1 loupe size its crop in FULL-frame pixels so the visible
+// area does not jump when the full frame replaces the ~2560px proxy.
+function fxFullScale(it){
+  it=it||curItem();const im=it&&it.img;if(!im)return 1;
+  const iw=im.naturalWidth||im.width;if(!iw)return 1;
+  const f=it.fullImg,fw=(f&&(f.naturalWidth||f.width))||im._csFullW||iw;
+  return Math.max(1,fw/iw);
+}
 function renderLoupe(){
   const src=fxWork;if(!src||!FX.ok)return;
   const fw=src.naturalWidth||src.width,fh=src.naturalHeight||src.height;
+  const kF=fxFullScale(),FW=fw*kF,FH=fh*kF; // full-frame size of the (geometry-applied) working image
   const wrap=document.getElementById('fx-wrap');
   const zw=document.getElementById('fx-zoom-wrap');
   if(zw){zw.style.width='';zw.style.height='';}
@@ -204,7 +215,7 @@ function renderLoupe(){
   // has far more than 900px to show real detail in); web/mobile keep the 900 cap.
   const deskx=document.body.classList.contains('deskx');
   const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900); // content box, same as renderPreview
-  const fit=Math.min(1,maxW/fw,fxPreviewMaxH()/fh),cw=fw*fit|0,ch=fh*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
+  const fit=Math.min(1,maxW/FW,fxPreviewMaxH()/FH),cw=FW*fit|0,ch=FH*fit|0; // on-screen footprint at fxZoom=1 (matches normal preview)
   const dpr=Math.min(window.devicePixelRatio||1,2);
   // fxZoom used to be pure CSS (transform:scale on the wrapper) applied ON TOP of a crop that
   // was ALWAYS captured/rendered at this same fixed cw×ch×dpr resolution — so zooming the loupe
@@ -214,7 +225,7 @@ function renderLoupe(){
   // zoom means more magnification of real source detail, not a stretched fixed buffer.
   const z=Math.max(0.25,Math.min(8,fxZoom||1));
   const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
-  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z),fh));
+  const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z/kF),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z/kF),fh)); // work px; cw*dpr/z is the crop in full-frame px
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
   if(!FX.pushTempCrop(src,ox,oy,cropW,cropH)){
@@ -224,7 +235,7 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:fw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:FW/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -237,7 +248,7 @@ function renderLoupe(){
   const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
   const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   document.getElementById('fx-no-img').style.display='none';
-  document.getElementById('fx-info').textContent=`1:1 — native ${cropW}×${cropH}px crop · grain & halation at true export scale · drag to move`;
+  document.getElementById('fx-info').textContent=`1:1 — native ${Math.round(cropW*kF)}×${Math.round(cropH*kF)}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;
   if(fxHistOn)drawHistogram();
   if(fxPeakOn)fxPeakUpdate();
@@ -246,8 +257,3 @@ function renderLoupe(){
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
 // Mobile: measure the LIVE preview area (flex-allocated — full height when the tool sheet is
 // closed, reduced while it's open) so the render always fits what's actually on screen.
-function fxWrapInner(){ // content box of #fx-wrap (clientWidth/Height include the fixed canvas inset padding)
-  const w=document.getElementById('fx-wrap');if(!w)return{w:0,h:0};
-  const cs=getComputedStyle(w);
-  return{w:w.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0),h:w.clientHeight-(parseFloat(cs.paddingTop)||0)-(parseFloat(cs.paddingBottom)||0)};
-}

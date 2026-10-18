@@ -53,7 +53,7 @@ const WRITE_BASELINE = process.argv.includes('--baseline');
 // points the bench at another copy of the app (e.g. the previous commit, for before/after).
 const LARGE_ONLY = process.argv.includes('--large-only');
 const APP_HTML = process.env.PERF_HTML || 'chromasmith-22.html';
-const LARGE_KEYS = ['drag_frame_ms', 'drag_buf_allocs', 'first_1to1_ms', 'pan_settle_ms', 'proxy_zoom_ms', 'tile_max_err'];
+const LARGE_KEYS = ['drag_frame_ms', 'drag_buf_allocs', 'first_1to1_ms', 'pan_settle_ms', 'proxy_zoom_ms', 'tile_max_err', 'loupe_swap_jump_px'];
 
 // name -> { budget, unit, cmp } — cmp 'lt' means lower is better, 'gt' means higher is better.
 const BUDGETS = {
@@ -96,6 +96,10 @@ const BUDGETS = {
   first_1to1_ms: { budget: 1200, unit: 'ms', cmp: 'lt', label: '6000x4000: zoom -> first crisp 1:1 frame' },
   pan_settle_ms: { budget: 80, unit: 'ms', cmp: 'lt', label: '6000x4000: pan release -> crisp frame (median of 3)' },
   proxy_zoom_ms: { budget: 1200, unit: 'ms', cmp: 'lt', label: '2560 proxy, full frame pending: zoom -> first frame' },
+  // 1:1 loupe on a 2560px proxy whose full frame lands later: the loupe's on-screen footprint and the
+  // source area it shows (both in FULL-frame px, from the decode's known size) must not change when
+  // the full frame replaces the proxy. Was ~60% of the visible width lost on the swap.
+  loupe_swap_jump_px: { budget: 2, unit: 'px', cmp: 'lt', label: 'loupe: footprint/crop change when full frame replaces the proxy' },
   tile_max_err: { budget: 3, unit: 'lvl', cmp: 'lt', label: 'crisp view vs direct render, p99.9 8-bit error' },
 };
 
@@ -355,7 +359,7 @@ async function main() {
     console.log(`large image ${m.large_dims}: ${m.drag_frames} drag frames, settle ${m.drag_settle_ms}ms, pans ${m.pan_settle_all}ms, `
       + `GPU buffers ${m.gpu_buf_mb}MB fit / ${m.gpu_buf_mb_zoomed}MB zoomed, tile cache ${m.tile_cache_mb}MB, tile mean err ${m.tile_mean_err}, `
       + `full-res requests per zoom gesture ${m.proxy_zoom_full_req}, promoted ${m.proxy_promoted}, underlay ready ${m.underlay_ready_ms}ms after zoom`
-      + `\nGPU: ${m.large_gpu}${m.large_hw_gpu ? '' : ' (software — ms budgets not enforced)'}; tile abs max err ${m.tile_abs_max_err}`);
+      + `\nGPU: ${m.large_gpu}${m.large_hw_gpu ? '' : ' (software — ms budgets not enforced)'}; tile abs max err ${m.tile_abs_max_err}; loupe ${m.loupe_before} -> ${m.loupe_after}`);
     console.log(`\nRESULT: ${fail ? 'FAIL' : 'PASS'}`);
     return fail ? 1 : 0;
   }
@@ -571,6 +575,33 @@ async function largeImageBench(port) {
       for (let i = 0; i < 200 && !promoted; i++) await sleep(20);
       await sleep(400);
       res.proxy_promoted = !!promoted && fxWork.width === W;
+      // loupe across the proxy -> full swap. The decode knows the full width (here stamped the way
+      // loadRw2 / fxDisplayTierCanvas do); nothing may jump when the full frame lands.
+      zoomFit(); fxFullResPreview = false;
+      await window.loadFXImages([await toFile(synth(2560, 1707), 'proxy2.png')]);
+      await sleep(300);
+      curItem().img._csFullW = W;
+      window.__promo = null; promoted = 0;
+      window.chromasmithEnsureFullQuality = () => {
+        if (!window.__promo) window.__promo = sleep(800).then(() => {
+          const it = curItem(); it.img = full; fxImg = full; updateWork(); renderPreview(); promoted = performance.now();
+        });
+        return window.__promo;
+      };
+      // The source area the loupe shows, as a fraction of the whole frame (what the user sees), taken
+      // from the crop the loupe actually asks the renderer for.
+      let lastCrop = null; const origCrop = FX.pushTempCrop.bind(FX);
+      FX.pushTempCrop = (src, ox, oy, cw, ch) => { lastCrop = { fx: cw / (src.naturalWidth || src.width), fy: ch / (src.naturalHeight || src.height) }; return origCrop(src, ox, oy, cw, ch); };
+      const loupeState = () => ({ cw: parseFloat(FX.cv.style.width), ch: parseFloat(FX.cv.style.height),
+        nw: lastCrop ? Math.round(lastCrop.fx * W) : 0, nh: lastCrop ? Math.round(lastCrop.fy * H) : 0 }); // crop extent in FULL-frame px
+      toggleLoupe(); await sleep(300);
+      const L0 = loupeState();
+      for (let i = 0; i < 200 && !promoted; i++) await sleep(20);
+      await sleep(500);
+      const L1 = loupeState();
+      res.loupe_before = JSON.stringify(L0); res.loupe_after = JSON.stringify(L1);
+      res.loupe_swap_jump_px = (L0.nw && L1.nw) ? Math.round(Math.max(Math.abs(L0.cw - L1.cw), Math.abs(L0.ch - L1.ch), Math.abs(L0.nw - L1.nw), Math.abs(L0.nh - L1.nh))) : 9999;
+      toggleLoupe(); await sleep(100); FX.pushTempCrop = origCrop;
       window.renderPreview = origRP; FX._allocTex = origAlloc;
       return res;
     }, [LW, LH]);

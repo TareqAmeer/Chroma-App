@@ -105,13 +105,15 @@ function fxDisplayTierCanvas(full){
   c.width=Math.round(fw*k);c.height=Math.round(fh*k);
   const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(full,0,0,c.width,c.height);
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  c._csFullW=fw;
   return c;
 }
 // The same working copy built natively (decode_raw_v2's wantWork trailer: {width,height,data RGBA8}).
-function fxWorkCanvasFromRGBA(work){
+function fxWorkCanvasFromRGBA(work,fullW){
   const c=document.createElement('canvas');c.width=work.width;c.height=work.height;
   c.getContext('2d').putImageData(new ImageData(work.data,work.width,work.height),0,0);
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  if(fullW>c.width)c._csFullW=fullW; // full-frame width from the decode, for the loupe (fxFullScale)
   return c;
 }
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
@@ -209,7 +211,7 @@ async function loadFXImages(fileList,opts){
         const work=!privateEntries&&file.__csSourcePath?(canvas._csWork||fxDisplayTierCanvas(canvas)):null;
         delete canvas._csWork;
         // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
-        if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
+        if(webHalf){const proxy=fxDisplayTierCanvas(canvas)||canvas;proxy._csFullW=canvas.width*2; /* LibRaw half-size: full frame is 2x */ entries.push({img:proxy,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode
         continue;
       }
