@@ -112,3 +112,9 @@ decision and research notes for CHR-263 are in [`docs/ai-inpainting-model-decisi
 The model-specific statements there are sourced summaries, not legal conclusions or an approval
 to use or redistribute an artifact. In particular, an ONNX conversion's stated license does not
 by itself settle the provenance or terms of upstream pretrained weights.
+
+## Prospective auto-enhance models (not bundled)
+
+No learned auto-enhance model is bundled: IAT, Image-Adaptive-3DLUT, AdaInt and CSRNet are trained on
+MIT-Adobe FiveK (research-only, non-commercial), and Zero-DCE has no licence. See
+[`docs/auto-enhance-model-decision.md`](docs/auto-enhance-model-decision.md).
