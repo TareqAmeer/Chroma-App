@@ -614,7 +614,7 @@ pub fn get_display_decode_cache(path: String, recipe_key: String, long_edge: u32
 /// The image crate's single-threaded Lanczos3 took 3.5-5s per 24MP frame on the Intel dev Mac,
 /// running in the background exactly while the user's NEXT photo decoded — measured doubling
 /// that decode. Returns RGBA8 (alpha is always opaque here, so no premultiply step is needed).
-fn resize_rgba_lanczos(rgba: &[u8], w: u32, h: u32, long_edge: u32) -> Result<image::RgbaImage, String> {
+pub(crate) fn resize_rgba_lanczos(rgba: &[u8], w: u32, h: u32, long_edge: u32) -> Result<image::RgbaImage, String> {
     use fast_image_resize as fr;
     let k = long_edge as f64 / w.max(h) as f64;
     if k >= 1.0 {

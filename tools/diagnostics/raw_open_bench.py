@@ -50,9 +50,15 @@ OPEN_JS = """
     const p0 = performance.now(); await window.chromasmithEnsureFullQuality(); promoteMs = performance.now() - p0;
   }}
   while (needsPromo && promoteMs === null && !done() && performance.now() < deadline) await new Promise(r => setTimeout(r, 50));
-  const fullMs = performance.now() - t0;
+  // Cold open with a half-resolution first picture: openMs is time-to-editable; "full" is when the
+  // full-quality frame has been swapped in (what the fit view shows from then on).
+  const halfDone = () => log0().some(e => e.event === 'open-half-full-swapped' || e.event === 'open-half-full-failed');
+  const isHalf = !!(typeof fxImages !== 'undefined' && fxImages[0] && fxImages[0]._halfPending) || halfDone();
+  while (isHalf && !halfDone() && performance.now() < deadline) await new Promise(r => setTimeout(r, 25));
+  const swapEv = log0().find(e => e.event === 'open-half-full-swapped');
+  const fullMs = isHalf ? (swapEv ? swapEv.t - t0 : performance.now() - t0) : performance.now() - t0;
   const ev = log0().filter(e => !e.path || e.path === p).map(e => ({{event: e.event, at: Math.round(e.t - t0), ms: e.ms != null ? Math.round(e.ms) : undefined, source: e.source}}));
-  return JSON.stringify({{ok:true, openMs, fullMs: needsPromo ? fullMs : openMs, promoteMs, zoom: window.fxZoom, source: fl && fl.source, key: window.chromasmithDecodeRecipeKey || '', events: ev}});
+  return JSON.stringify({{ok:true, openMs, fullMs: (needsPromo || isHalf) ? fullMs : openMs, halfFirst: isHalf, promoteMs, zoom: window.fxZoom, source: fl && fl.source, key: window.chromasmithDecodeRecipeKey || '', events: ev}});
 }})()
 """
 
@@ -149,6 +155,7 @@ def main():
     ap.add_argument('--ext', default='RW2')
     ap.add_argument('--n', type=int, default=3)
     ap.add_argument('--label', default='run')
+    ap.add_argument('--skip', type=int, default=0, help='start the never-cached probe this many files into the folder')
     args = ap.parse_args()
 
     for w in rb.preflight():
@@ -165,7 +172,7 @@ def main():
         open_photo(token, cands[-1])  # warm-up: boot-time lazy init shouldn't land on a timed open
         key = rb.app_eval(token, 'window.chromasmithRawRecipeKey()')
         full_key = rb.app_eval(token, 'window.chromasmithRawRecipeKey(true)')
-        pool = cands[:max(12, 4 * (args.n + 1))]  # a bounded probe: ~2 IPCs per file on a slow external drive
+        pool = cands[args.skip:args.skip + max(12, 4 * (args.n + 1))]  # a bounded probe: ~2 IPCs per file on a slow external drive
         probe = json.loads(rb.app_eval(token, PROBE_JS.format(paths=json.dumps(pool), keys=json.dumps([key, full_key])), timeout=120))
         fresh = [p for p in pool if not probe.get(p)]
         if len(fresh) < args.n + 1:

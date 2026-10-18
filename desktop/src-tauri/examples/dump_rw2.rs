@@ -62,7 +62,23 @@ fn main() {
     // blend-toward-original amount without going through the app's UI slider.
     let high_strength: f32 = std::env::var("CS_HIGH_STRENGTH").ok().and_then(|v| v.parse::<f32>().ok()).map(|v| v / 100.0).unwrap_or(1.0);
     let t0 = std::time::Instant::now();
-    let d = raw_decode::decode_rw2_bytes_ex(&bytes, std::env::var_os("CS_AUTO_LENS").is_some(), requested, "", false, None, high_strength, None, None).expect("decode");
+    // CS_DUMP_HALF=<out.bin>: first run the half-resolution first picture (decode_rw2_half, as a
+    // cold Library open does) and dump it there, then run the full decode below through the SAME
+    // RawInput — exactly the app's half-then-full hand-off, so the main dump proves the full frame
+    // is unchanged by it.
+    let input = raw_decode::RawInput::new(&bytes);
+    if let Some(half_out) = std::env::var_os("CS_DUMP_HALF") {
+        let th = std::time::Instant::now();
+        let hd = raw_decode::decode_rw2_half(&input, requested, false).expect("half decode").expect("half unsupported for this file");
+        eprintln!("half {}x{} in {:.2}s", hd.width, hd.height, th.elapsed().as_secs_f32());
+        let mut f = std::io::BufWriter::new(std::fs::File::create(half_out).expect("create half"));
+        f.write_all(&hd.width.to_le_bytes()).unwrap();
+        f.write_all(&hd.height.to_le_bytes()).unwrap();
+        f.write_all(&hd.iso.to_le_bytes()).unwrap();
+        for v in &hd.rgb16 { f.write_all(&v.to_le_bytes()).unwrap(); }
+    }
+    let t0 = if std::env::var_os("CS_DUMP_HALF").is_some() { std::time::Instant::now() } else { t0 };
+    let d = raw_decode::decode_rw2_input(&input, std::env::var_os("CS_AUTO_LENS").is_some(), requested, "", false, None, high_strength, None, None, false).expect("decode");
     eprintln!(
         "{}x{} iso {} decoded in {:.2}s",
         d.width,

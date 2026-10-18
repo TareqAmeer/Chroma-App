@@ -192,7 +192,19 @@ fn persist_decoded_rgba(path: &str, recipe_key: &str, width: u32, height: u32, r
 /// fast culling would be exactly the memory growth an 8GB Mac can't afford.
 static PERSIST_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
 static PERSIST_PENDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, rgba: std::sync::Arc<Vec<u8>>, hdr_clear: bool, hdr_ext: Option<Vec<u8>>) {
+/// Marks the optional fit-view working-copy trailer decode_raw_v2 appends (see its response build).
+const WORK_TRAILER_MAGIC: &[u8; 4] = b"WRK1";
+
+/// What the persist worker writes: the developed RGBA8 itself, or the shared decode + the DCP LUT
+/// to re-apply there (decode_raw_v2's plain-DCP case — the response buffer already moved into the
+/// IPC reply, and a 96MB clone just to persist it was measurable swap on an 8GB Mac). Re-applying
+/// the same LUT to the same rgb16 is deterministic, so the persisted bytes are identical.
+enum PersistFrame {
+    Rgba(std::sync::Arc<Vec<u8>>),
+    Lut { decoded: std::sync::Arc<raw_decode::DecodedRaw>, lut: std::sync::Arc<Vec<f32>>, n: usize },
+}
+
+fn persist_in_background(path: String, recipe_key: String, width: u32, height: u32, frame: PersistFrame, hdr_clear: bool, hdr_ext: Option<Vec<u8>>) {
     use std::sync::atomic::Ordering;
     if PERSIST_PENDING.fetch_add(1, Ordering::SeqCst) >= 2 {
         PERSIST_PENDING.fetch_sub(1, Ordering::SeqCst);
@@ -206,7 +218,12 @@ fn persist_in_background(path: String, recipe_key: String, width: u32, height: u
     let job = move || {
         let file_name = Path::new(&path).file_name().and_then(|v| v.to_str()).unwrap_or("?").to_string();
         let mut stage_t = std::time::Instant::now();
-        if let Err(e) = persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t) {
+        let rgba = match frame {
+            PersistFrame::Rgba(rgba) => Ok(rgba),
+            PersistFrame::Lut { decoded, lut, n } => raw_decode::apply_lut_rgba(&decoded.rgb16, &lut, n).map(std::sync::Arc::new),
+        };
+        diag::stage("cache", &file_name, "persist_lut_apply", &mut stage_t);
+        if let Err(e) = rgba.and_then(|rgba| persist_decoded_rgba(&path, &recipe_key, width, height, &rgba, &file_name, &mut stage_t)) {
             eprintln!("persist decode cache for {file_name}: {e}");
         } else if hdr_clear {
             library::write_hdr_clear_marker(&path, &recipe_key);

@@ -283,6 +283,7 @@ async function loadRw2(file,opts){
     dt=Math.round(performance.now()-t0);
     c=document.createElement('canvas');c.width=w;c.height=h;
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
+    if(!privateEntry&&img.work)c._csWork=fxWorkCanvasFromRGBA(img.work); // Rust-built ~2560px working copy (loadFXImages installs it)
     if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
     // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
     // `img:c`, and this way the headroom data survives that indirection with zero extra
@@ -317,7 +318,41 @@ async function loadRw2(file,opts){
   // silently re-decode the SAME bytes at full quality in the background and swap the pixels
   // into THIS canvas once it lands — fire-and-forget, matched back by object identity (`c`) so
   // a since-closed/replaced photo is a safe no-op instead of corrupting the wrong image.
-  if(window.__TAURI__&&typeof raw.refine==='function'){
+  // Half-resolution first picture (desktop Library cold open, raw._halfFirst): `c` is the small
+  // superpixel develop. The full-quality decode starts now and resolves c._csFullPending with
+  // {work, makeFull} (working-copy canvas + lazy full-resolution canvas); library-ui.js swaps them into the entry (and gates zoom/export on it).
+  if(window.__TAURI__&&!privateEntry&&raw._halfFirst&&typeof raw.refine==='function'){
+    c._csHalfPreview=true;
+    c._csFullPending=raw.refine().then(refined=>{
+      if(!refined)throw new Error('full-quality decode returned no frame');
+      // The fit view only needs the ~2560px working copy, so that is what lands first; the 24MP
+      // canvas (a ~300ms main-thread putImageData) is built lazily by makeFull() — on idle, or at
+      // once when zoom/loupe/edit/export asks for full resolution.
+      let full=null,src=refined;
+      const makeFull=()=>{
+        if(full)return full;
+        let rgba2=src.data;
+        if(!src.rgba){const rgb2=src.data,ch2=src.colors||3,n=src.width*src.height;rgba2=new Uint8ClampedArray(n*4);
+          for(let i=0,j=0;i<n;i++){const s=i*ch2;rgba2[j++]=rgb2[s]>>8;rgba2[j++]=ch2>1?rgb2[s+1]>>8:rgb2[s]>>8;rgba2[j++]=ch2>2?rgb2[s+2]>>8:rgb2[s]>>8;rgba2[j++]=255;}}
+        full=document.createElement('canvas');full.width=src.width;full.height=src.height;
+        full.getContext('2d').putImageData(new ImageData(rgba2,src.width,src.height),0,0);
+        if(typeof raw.filmBase==='function'){full._filmRaw=raw;full._filmApplied=false;}
+        if(src.sceneLinear){let any=false;for(let i=0;i<src.sceneLinear.length;i++){if(src.sceneLinear[i]>1.05){any=true;break;}}
+          full._sceneLinear={data:src.sceneLinear,w:src.width,h:src.height};full._sceneLinearPresent=any;}
+        src=null;
+        return full;
+      };
+      const work=refined.rgba&&refined.work?fxWorkCanvasFromRGBA(refined.work):fxDisplayTierCanvas(makeFull());
+      window.__pm&&window.__pm('half-full-ready');
+      log(`RAW full quality ready (${refined.width}×${refined.height})`,'info');
+      return{work,makeFull};
+    });
+    c._csFullPending.catch(e=>{
+      console.error('RAW full-quality decode failed',e);
+      log(`RAW full-quality decode failed for ${file.name}: ${errStr(e)}`,'warn');
+      if(typeof toast==='function')toast(`Full-quality decode failed for ${file.name} — ${typeof friendlyRawError==='function'?friendlyRawError(e):errStr(e)}`,false);
+    });
+  }else if(window.__TAURI__&&typeof raw.refine==='function'){
     const applyRefinement=(refined)=>{
       if(!refined)return; // this decode didn't need refining (NR was off)
       const owner=privateEntry?null:fxImages.find(it=>it.img===c||it.fullImg===c);
@@ -342,7 +377,7 @@ async function loadRw2(file,opts){
       }else{
         delete c._sceneLinear;delete c._sceneLinearPresent;
       }
-      if(!privateEntry&&owner.img!==c){const w=fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
+      if(!privateEntry&&owner.img!==c){const w=refined.work?fxWorkCanvasFromRGBA(refined.work):fxDisplayTierCanvas(c);if(w)owner.img=w;if(fxImages[fxCurIdx]===owner)fxImg=owner.img;} // working copy of the refined frame
       if(!privateEntry&&typeof updateWork==='function')updateWork();
       if(!privateEntry&&typeof renderPreview==='function')renderPreview();
       // The persistent decode cache for these refined pixels is written natively by decode_raw_v2 (desktop-native.js passes cachePath/recipeKey).

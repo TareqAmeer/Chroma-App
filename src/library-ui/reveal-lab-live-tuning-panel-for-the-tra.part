@@ -616,7 +616,9 @@
         // Persistent decode cache target (desktop-native.js consumes it one-shot): Rust writes
         // the cache from the final decoded pixels, keyed by this path + recipe. Never for an
         // offline preview or an hq-offline copy — those bytes aren't the real file's.
-        window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: byteLen } : null;
+        // halfFirst: a by-path cold RAW open shows a half-resolution develop first and swaps the
+        // full frame in below (desktop-native.js NativeLibRawShim.open / loadRw2's _csFullPending).
+        window.__chromasmithPersistTarget = (isRaw && !offlinePreview && !hqOfflineCacheExt) ? { path, recipeKey, size: byteLen, halfFirst: !!pathSource && !hdrPreview } : null;
         const decodeT0 = performance.now(); let installed = null; try { installed = await libLoadFX([file]); } finally { window.__chromasmithPersistTarget = null; }
         // loadFXImages swallows decode failures (log + toast, no throw) and leaves the PREVIOUS photo in fxImages[0]; without this check that stale photo was stamped with this path, cached under it and got this photo's recipe ("opened one image, got a different one").
         if (!installed || fxImages[0] !== installed) throw new Error('decode failed or was superseded');
@@ -639,11 +641,74 @@
           const loadKey = fxFileLoadKey(file); // shared with loadFXImages, including native source identity
           // Never cache a low-res offline stand-in under the real path's key — a later ONLINE
           // open must not be served this reduced preview from imgCache.
-          if (!offlinePreview) imgCacheStore(path, isRaw && !hdrPreview ? displayTierEntry(fxImages[0]) : fxImages[0], loadKey);
+          // A half-resolution first picture is never cached as this photo: the entry is stored once
+          // the full-quality frame has been swapped in (below).
+          const halfPendingOpen = [fxImages[0].img, fxImages[0].fullImg].some((c) => c && c._csFullPending);
+          if (!offlinePreview && !halfPendingOpen) imgCacheStore(path, isRaw && !hdrPreview ? displayTierEntry(fxImages[0]) : fxImages[0], loadKey);
           // First-ever open of a by-path RAW installs a working copy (loadFXImages); the full
           // decoded frame is right there in memory — promote to it only when it's needed.
           const opened = fxImages[0];
-          if (opened.fullImg && opened.img !== opened.fullImg) {
+          const halfCanvas = [opened.img, opened.fullImg].find((c) => c && c._csFullPending);
+          if (halfCanvas) {
+            // Half-resolution first picture: editable now; the full-quality decode is already
+            // running. When it lands, the entry becomes the normal decoded-frame shape (Rust's
+            // ~2560px working copy as img, the full canvas as fullImg) — whether or not this photo
+            // is still on screen, since the same entry object is the in-memory reopen cache.
+            // Zoom / loupe / first edit / crop / export wait for it via chromasmithEnsureFullQuality.
+            window.chromasmithFullQualityReady = false;
+            window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
+            const halfImg = opened.img;
+            opened._halfPending = true;
+            let makeFull = null;
+            const attachFull = () => { // the lazily built 24MP canvas becomes fullImg (on idle or on demand)
+              if (!makeFull || opened.img === halfImg) return;
+              const full = makeFull(); makeFull = null;
+              if (opened.img === full || opened.fullImg) return;
+              opened.fullImg = full;
+              const ce = imgCache.get(path);
+              if (ce && ce.entry === opened) imgCacheStore(path, opened, ce.loadKey); // re-account the full frame
+            };
+            const swapped = halfCanvas._csFullPending.then(({ work, makeFull: mk }) => {
+              if (opened.img !== halfImg) return false; // replaced meanwhile (another develop of this entry)
+              opened._halfPending = false;
+              if (work) { opened.img = work; opened.fullImg = undefined; makeFull = mk; } else { opened.img = mk(); opened.fullImg = undefined; }
+              imgCacheStore(path, opened, loadKey); // the in-memory reopen entry, now full quality
+              if (fxImages[0] === opened && state.openedPath === path) {
+                fxImg = opened.img;
+                try { autoDetectBW(opened.img); } catch (_) {}
+                updateWork(); renderPreview();
+                if (!makeFull && !opened.fullImg) { window.chromasmithFullQualityReady = true; window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' }); }
+              }
+              rawPerf('open-half-full-swapped', path, { ms: performance.now() - openT0, width: opened.img.width, height: opened.img.height });
+              if (makeFull) { if (window.requestIdleCallback) requestIdleCallback(attachFull, { timeout: 3000 }); else setTimeout(attachFull, 500); }
+              return true;
+            });
+            swapped.catch((e) => rawPerf('open-half-full-failed', path, { error: String(e) }));
+            let done = null;
+            window.chromasmithEnsureFullQuality = () => {
+              if (state.openedPath !== path || fxImages[0] !== opened) return Promise.resolve();
+              if (!done) {
+                window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'loading' });
+                const t0 = performance.now();
+                done = swapped.then(() => new Promise((resolve) => requestAnimationFrame(() => {
+                  attachFull();
+                  if (fxImages[0] === opened && opened.fullImg && opened.img !== opened.fullImg) {
+                    opened.img = opened.fullImg; fxImg = opened.img;
+                    try { autoDetectBW(opened.img); } catch (_) {}
+                    updateWork(); renderPreview();
+                  }
+                  window.chromasmithFullQualityReady = true;
+                  window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'full' });
+                  rawPerf('open-full-quality-promoted', path, { ms: performance.now() - t0, source: 'half-first' });
+                  resolve();
+                }))).catch(() => {
+                  window.chromasmithFullQualityReady = false; // export refuses the half-resolution stand-in
+                  window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'unavailable' });
+                });
+              }
+              return done;
+            };
+          } else if (opened.fullImg && opened.img !== opened.fullImg) {
             window.chromasmithFullQualityReady = false;
             window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
             let done = null;
@@ -767,7 +832,7 @@
       } else if (fullAssetPath || fullCachedEntry || fullPendingDecode) {
         window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
         startFullPromotion();
-      } else if (fxImages[0] && fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg) {
+      } else if (fxImages[0] && ((fxImages[0].fullImg && fxImages[0].img !== fxImages[0].fullImg) || fxImages[0]._halfPending)) {
         window.chromasmithSourceRenderUpdate?.({ source: photoSourceMode, render: 'preview' });
       } else {
         window.chromasmithFullQualityReady = true;

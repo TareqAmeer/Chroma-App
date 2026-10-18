@@ -177,14 +177,13 @@ fn check_film_source(payload: &[u8], json: &serde_json::Value) -> Result<(), Str
     Ok(())
 }
 
-fn film_negative_bw(mut body: Vec<u8>, mode: &str, json: &serde_json::Value) -> Vec<u8> {
+fn film_negative_bw(body: &mut [u8], mode: &str, json: &serde_json::Value) {
     if matches!(mode, "lut" | "srgb") && json["filmNegative"]["bw"].as_bool() == Some(true) {
         for pixel in body.chunks_exact_mut(4) {
             let gray = (0.2126 * pixel[0] as f64 + 0.7152 * pixel[1] as f64 + 0.0722 * pixel[2] as f64).round() as u8;
             pixel[0] = gray; pixel[1] = gray; pixel[2] = gray;
         }
     }
-    body
 }
 
 #[tauri::command(async)]
@@ -196,13 +195,15 @@ fn decode_raw_v2(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, S
 fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tauri::ipc::Response, String> {
     // sourcePath + empty payload: read the RAW natively (Library opens) instead of receiving the
     // whole file over IPC. Same bytes either way, so the decode (and its memo key) is identical.
-    let path_bytes;
+    let path_bytes: Option<std::sync::Arc<Vec<u8>>>;
     let payload: &[u8] = match (payload.is_empty(), json["sourcePath"].as_str()) {
         (true, Some(p)) if !p.is_empty() => {
-            path_bytes = std::fs::read(p).map_err(|e| format!("read {p}: {e}"))?;
-            &path_bytes
+            // Owned once and SHARED with rawler (RawSource::new_from_shared_vec) — the slice form
+            // copied the whole ~30MB file again inside the decoder.
+            path_bytes = Some(std::sync::Arc::new(std::fs::read(p).map_err(|e| format!("read {p}: {e}"))?));
+            path_bytes.as_ref().map(|b| b.as_slice()).unwrap_or_default()
         }
-        _ => payload,
+        _ => { path_bytes = None; payload }
     };
     let mode = json["mode"].as_str().unwrap_or("linear16");
     check_film_source(payload, &json)?;
@@ -263,8 +264,16 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
         (Some(l), Some(f)) if !l.is_empty() && f > 0.0 => Some((l, f as f32)),
         _ => None,
     };
+    // The RAW bytes are hashed ONCE per request; raw_decode's own demosaic/prepared caches key on
+    // this same value (RawInput.hash) instead of re-hashing the 30MB file.
+    let raw_input = raw_decode::RawInput { bytes: payload, shared: path_bytes.as_ref(), hash: raw_decode::raw_bytes_hash(payload) };
+    // Half-resolution first picture (cold Library open, see raw_decode::decode_rw2_half): only for
+    // a final RGBA body (lut/srgb), never film work or the HDR companion. The full-quality decode
+    // JS requests right after it is a normal fast=false call and takes the prepared Bayer data.
+    let want_half = json["half"].as_bool().unwrap_or(false) && matches!(mode, "lut" | "srgb") && !film_source
+        && !json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"].is_null();
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    payload.hash(&mut hasher); // &[u8]'s Hash impl is a single bulk write, not per-byte — cheap even at 40MB+
+    raw_input.hash.hash(&mut hasher);
     format!("{nr:?}").hash(&mut hasher);
     demosaic_algo.hash(&mut hasher);
     fast.hash(&mut hasher);
@@ -273,7 +282,16 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     lens_override.map(|(l, f)| (l, f.to_bits())).hash(&mut hasher);
     let decode_key = hasher.finish();
     let mut _st = std::time::Instant::now(); // per-stage RAW_DIAG op=v2 lines (CS_DIAG_RAW_STAGES=1)
-    let decoded: std::sync::Arc<raw_decode::DecodedRaw> = {
+    let interactive = json["lutKey"].as_str().is_some();
+    // Never cached in RAW_DECODE_CACHE (single slot): it would evict the full frame that matters.
+    // A full decode of exactly this request already in memory beats any half picture.
+    let full_in_memory = want_half && RAW_DECODE_CACHE.lock().ok().is_some_and(|g| g.as_ref().is_some_and(|e| e.key == decode_key));
+    let half: Option<raw_decode::DecodedRaw> = if want_half && !full_in_memory {
+        let run = || raw_decode::decode_rw2_half(&raw_input, nr, film_source);
+        if interactive { on_interactive_pool(run)? } else { run()? }
+    } else { None };
+    let is_half = half.is_some();
+    let decoded: std::sync::Arc<raw_decode::DecodedRaw> = if let Some(h) = half { std::sync::Arc::new(h) } else {
         let cached = RAW_DECODE_CACHE
             .lock()
             .ok()
@@ -281,8 +299,7 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
         match cached {
             Some(d) => d,
             None => {
-                let interactive = json["lutKey"].as_str().is_some();
-                let run = || raw_decode::decode_rw2_bytes_film(payload, auto_lens, nr, demosaic_algo, fast, lens_override, 1.0, None, None, film_source);
+                let run = || raw_decode::decode_rw2_input(&raw_input, auto_lens, nr, demosaic_algo, fast, lens_override, 1.0, None, None, film_source);
                 let d = std::sync::Arc::new(if interactive { on_interactive_pool(run)? } else { run()? });
                 if let Ok(mut guard) = RAW_DECODE_CACHE.lock() {
                     *guard = Some(RawDecodeCacheEntry { key: decode_key, decoded: d.clone() });
@@ -310,7 +327,17 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     // is untouched when absent — `ext` is None unless want_ext AND the lut branch is taken.
     let want_ext = json["wantExt"].as_bool().unwrap_or(false) && json["filmNegative"]["bw"].as_bool() != Some(true);
     let mut ext: Option<Vec<f32>> = None;
-    let body: Vec<u8> = match effective_mode {
+    // Response: [u32 w][u32 h][u32 iso][u32 usedLut][u32 lensApplied][u32 flags][body][ext]
+    // [optional working-copy trailer]. flags bit0 = ext follows, bit1 = half-resolution first
+    // picture. The plain DCP case writes the LUT result STRAIGHT into the response buffer (it used
+    // to land in its own Vec, get copied into `out`, and get cloned a third time for the persist).
+    const HDR: usize = 24;
+    let px_count = decoded.width as usize * decoded.height as usize;
+    let mut out: Vec<u8>;
+    // Persist a plain LUT frame by re-running the LUT from the shared decode in the persist worker
+    // instead of holding a 96MB clone of the body.
+    let mut persist_lut: Option<(std::sync::Arc<Vec<f32>>, usize)> = None;
+    match effective_mode {
         "lut" => {
             let key = lut_key.ok_or("missing lutKey")?;
             let lut = {
@@ -323,19 +350,34 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
             let n = (lut.len() / 3) as f64;
             let n = n.cbrt().round() as usize;
             let src = on_interactive_pool(|| lut_input_rgb16(key, payload, &decoded));
+            let plain = matches!(src, std::borrow::Cow::Borrowed(_)) && json["filmNegative"].is_null();
             let src = film_negative_input(&src, &json)?;
             if want_ext {
                 let (rgba, e) = on_interactive_pool(|| raw_decode::apply_lut_rgba_ext(&src, &lut, n))?;
                 ext = Some(e);
-                rgba
+                out = Vec::with_capacity(HDR + rgba.len());
+                out.extend_from_slice(&[0u8; HDR]);
+                out.extend_from_slice(&rgba);
             } else {
-                on_interactive_pool(|| raw_decode::apply_lut_rgba(&src, &lut, n))?
+                out = vec![0u8; HDR + px_count * 4];
+                on_interactive_pool(|| raw_decode::apply_lut_rgba_into(&src, &lut, n, &mut out[HDR..]))?;
+                if plain { persist_lut = Some((lut.clone(), n)); }
             }
         }
-        "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
-        _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect(),
+        "srgb" => {
+            let body = raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam);
+            out = Vec::with_capacity(HDR + body.len());
+            out.extend_from_slice(&[0u8; HDR]);
+            out.extend_from_slice(&body);
+        }
+        _ => {
+            let src = film_negative_input(&decoded.rgb16, &json)?;
+            out = Vec::with_capacity(HDR + src.len() * 2);
+            out.extend_from_slice(&[0u8; HDR]);
+            for v in src.iter() { out.extend_from_slice(&v.to_le_bytes()); }
+        }
     };
-    let body = film_negative_bw(body, effective_mode, &json);
+    film_negative_bw(&mut out[HDR..], effective_mode, &json);
     diag::stage("v2", "-", "lut_apply", &mut _st);
     // HDR preview asked for the unquantized companion, but JS only uses it when some value is
     // measurably above white (chromasmith-22.html: any > 1.05). When none is, the RGBA8 body is
@@ -354,7 +396,8 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     // Only the RGBA8 display-referred body is cacheable — same shape cache_raw_decode writes; a
     // linear16 or HDR-companion decode keeps today's uncached behaviour. The size check refuses
     // a request whose bytes aren't that file's (e.g. a stale path from another open path).
-    if let (Some(cache_path), Some(recipe_key)) = (json["cachePath"].as_str(), json["recipeKey"].as_str()) {
+    // A half-resolution first picture is NEVER persisted: the cache only ever holds full frames.
+    if let (Some(cache_path), Some(recipe_key), false) = (json["cachePath"].as_str(), json["recipeKey"].as_str(), is_half) {
         // The RGBA8 body is the frame whether or not the unquantized companion rode along; the
         // companion (real headroom only) is persisted sparsely beside it (library.rs hdrext).
         let rgba_body = matches!(effective_mode, "lut" | "srgb");
@@ -363,8 +406,11 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
                 if meta.len() == payload.len() as u64 {
                     // Not also inserted into RAW_EDITOR_CACHE: the WebView already holds this frame
                     // for promotion (imgCache fullImg), and a second 96MB-per-photo copy here was
-                    // measurable extra swap on an 8GB Mac. The Arc is dropped once persisted.
-                    let frame = std::sync::Arc::new(body.clone());
+                    // measurable extra swap on an 8GB Mac.
+                    let frame = match persist_lut.take() {
+                        Some((lut, n)) => PersistFrame::Lut { decoded: decoded.clone(), lut, n },
+                        None => PersistFrame::Rgba(std::sync::Arc::new(out[HDR..HDR + px_count * 4].to_vec())),
+                    };
                     let hdr_ext = ext.as_ref().and_then(|e| library::build_hdr_ext_blob(cache_path, recipe_key, decoded.width, decoded.height, e));
                     persist_in_background(cache_path.to_string(), recipe_key.to_string(), decoded.width, decoded.height, frame, hdr_clear, hdr_ext);
                 }
@@ -373,17 +419,40 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     }
     diag::stage("v2", "-", "persist_prep", &mut _st);
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
-    let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
-    let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();
-    let mut out = Vec::with_capacity(24 + body.len() + ext_bytes.len());
-    out.extend_from_slice(&decoded.width.to_le_bytes());
-    out.extend_from_slice(&decoded.height.to_le_bytes());
-    out.extend_from_slice(&decoded.iso.to_le_bytes());
-    out.extend_from_slice(&used_lut.to_le_bytes());
-    out.extend_from_slice(&lens_applied.to_le_bytes());
-    out.extend_from_slice(&has_ext.to_le_bytes());
-    out.extend_from_slice(&body);
-    out.extend_from_slice(&ext_bytes);
+    let flags: u32 = (if ext.is_some() { 1 } else { 0 }) | (if is_half { 2 } else { 0 });
+    out[0..4].copy_from_slice(&decoded.width.to_le_bytes());
+    out[4..8].copy_from_slice(&decoded.height.to_le_bytes());
+    out[8..12].copy_from_slice(&decoded.iso.to_le_bytes());
+    out[12..16].copy_from_slice(&used_lut.to_le_bytes());
+    out[16..20].copy_from_slice(&lens_applied.to_le_bytes());
+    out[20..24].copy_from_slice(&flags.to_le_bytes());
+    if let Some(e) = ext {
+        out.reserve(e.len() * 4);
+        for v in e { out.extend_from_slice(&v.to_le_bytes()); }
+    }
+    // Working copy for fit-view editing (chromasmith-22.html's fxDisplayTierCanvas: ~2560px long
+    // edge for frames over 3000px), built here with the same SIMD Lanczos3 the display proxy uses
+    // instead of a ~340ms main-thread canvas downscale. Appended as a trailer
+    // [RGBA8][u32 w][u32 h][4 bytes WRK1] so readers that don't know it are unaffected.
+    // A half-resolution first picture (~3000px) gets one too: the editor installs the 2560px copy, not the 6MP frame.
+    let work_min_edge: u32 = if is_half { 2560 } else { 3000 };
+    if json["wantWork"].as_bool().unwrap_or(false) && matches!(effective_mode, "lut" | "srgb")
+        && decoded.width.max(decoded.height) > work_min_edge {
+        let body = &out[HDR..HDR + px_count * 4];
+        match on_interactive_pool(|| library::resize_rgba_lanczos(body, decoded.width, decoded.height, 2560)) {
+            Ok(work) => {
+                let (ww, wh) = (work.width(), work.height());
+                let raw = work.into_raw();
+                out.reserve(raw.len() + 12);
+                out.extend_from_slice(&raw);
+                out.extend_from_slice(&ww.to_le_bytes());
+                out.extend_from_slice(&wh.to_le_bytes());
+                out.extend_from_slice(WORK_TRAILER_MAGIC);
+            }
+            Err(e) => eprintln!("decode_raw_v2: working copy skipped: {e}"),
+        }
+        diag::stage("v2", "-", "work_copy", &mut _st);
+    }
     diag::stage("v2", "-", "response_build", &mut _st);
     Ok(tauri::ipc::Response::new(out))
 }
@@ -760,10 +829,11 @@ fn get_cached_raw_decode(path: String, recipe_key: String) -> Result<tauri::ipc:
     // Not inserted into RAW_EDITOR_CACHE — the WebView keeps its own copy of this frame.
     let (width, height, rgba) = match hit {
         Some(v) => v,
-        None => {
-            let img = library::read_decode_cache_rgba(&path, &recipe_key).map_err(|_| "no cached decode".to_string())?;
-            (img.width(), img.height(), std::sync::Arc::new(img.into_raw()))
-        }
+        // Decoded straight into the response buffer behind its 8-byte header (it used to decode
+        // into its own 96MB image and then get copied into the response).
+        None => return library::read_decode_cache_rgba_framed(&path, &recipe_key)
+            .map(tauri::ipc::Response::new)
+            .map_err(|_| "no cached decode".to_string()),
     };
     let mut out = Vec::with_capacity(8 + rgba.len());
     out.extend_from_slice(&width.to_le_bytes());
@@ -935,7 +1005,8 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
         "srgb" => raw_decode::srgb_rgba(&film_negative_input(&decoded.rgb16, &json)?, decoded.xyz_to_cam),
         _ => film_negative_input(&decoded.rgb16, &json)?.iter().flat_map(|v| v.to_le_bytes()).collect()
     };
-    let body = film_negative_bw(body, effective_mode, &json);
+    let mut body = body;
+    film_negative_bw(&mut body, effective_mode, &json);
     let lens_applied: u32 = if decoded.lens_applied { 1 } else { 0 };
     let has_ext: u32 = if ext.is_some() { 1 } else { 0 };
     let ext_bytes = ext.map(|e| e.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()).unwrap_or_default();

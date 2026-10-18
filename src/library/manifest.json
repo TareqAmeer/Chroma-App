@@ -27,41 +27,41 @@
   {
    "file": "hdr-companion-cache-stem-hdrext.part",
    "firstLine": 985,
-   "lines": 422
+   "lines": 449
   },
   {
    "file": "photo-metadata-camera-lens-date-iso-for.part",
-   "firstLine": 1407,
+   "firstLine": 1434,
    "lines": 206
   },
   {
    "file": "xmp-sidecar-rating-label-edited-flag-edi.part",
-   "firstLine": 1613,
+   "firstLine": 1640,
    "lines": 85
   },
   {
    "file": "keywords-hierarchical-lightroom-compatib.part",
-   "firstLine": 1698,
+   "firstLine": 1725,
    "lines": 974
   },
   {
    "file": "cross-folder-smart-collections-edited-fa.part",
-   "firstLine": 2672,
+   "firstLine": 2699,
    "lines": 127
   },
   {
    "file": "export-version-history.part",
-   "firstLine": 2799,
+   "firstLine": 2826,
    "lines": 199
   },
   {
    "file": "perceptual-hash-duplicate-detection-dhas.part",
-   "firstLine": 2998,
+   "firstLine": 3025,
    "lines": 781
   },
   {
    "file": "albums-user-made-collections-that-link-t.part",
-   "firstLine": 3779,
+   "firstLine": 3806,
    "lines": 1153
   }
  ]

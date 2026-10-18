@@ -136,6 +136,18 @@
     if (!width || !height || !Number.isSafeInteger(pixelBytes) || pixelBytes !== bytes.byteLength - 8) return null;
     return { width, height, pixels: new Uint8ClampedArray(bytes.buffer, bytes.byteOffset + 8, pixelBytes) };
   }
+  // decode_raw_v2's optional fit-view working copy: [RGBA8][u32 w][u32 h]["WRK1"] after the body
+  // (and extended-range companion) that ends at `end`. null when absent or malformed.
+  function parseWorkTrailer(buf, end) {
+    const n = buf.byteLength;
+    if (n < end + 12) return null;
+    const t = new Uint8Array(buf, n - 4, 4);
+    if (t[0] !== 87 || t[1] !== 82 || t[2] !== 75 || t[3] !== 49) return null;
+    const dv = new DataView(buf, n - 12, 8);
+    const width = dv.getUint32(0, true), height = dv.getUint32(4, true);
+    if (!width || !height || end + width * height * 4 + 12 !== n) return null;
+    return { width, height, data: new Uint8ClampedArray(buf, end, width * height * 4) };
+  }
   async function readCachedRawFrame(sourcePath, settings) {
     if (!sourcePath || !Array.isArray(settings && settings.cacheTargets) || settings.filmSource || settings.filmNegative) return null;
     for (const target of settings.cacheTargets) {
@@ -357,6 +369,19 @@
         && !(settings && (settings.filmSource || settings.filmNegative)))
         ? { cachePath: pt.path, recipeKey: pt.recipeKey } : null;
       const src = sourcePath ? { sourcePath } : {};
+      // Half-resolution first picture (cold Library open only — library-ui.js arms it on the
+      // one-shot persist target): Rust returns a ~3000x2000 2x2-superpixel develop in well under a
+      // second so the editor is usable at once, and refine() runs today's unchanged full-quality
+      // decode right behind it (taking the half pass's parsed sensor data); library-ui swaps the
+      // full frame in when it lands. Rust never persists a half frame — the cache is written by
+      // the full call. window.chromasmithHalfFirst = false turns it off.
+      const halfFirst = !privateEntry && !!sourcePath && !!(pt && pt.halfFirst) && !!this._persist && rawNr !== 'off'
+        && (mode === 'lut' || mode === 'srgb') && !wantHdrPreview && !settings.filmSource && !settings.filmNegative
+        && window.chromasmithHalfFirst !== false;
+      // Library opens also take Rust's ~2560px working copy (fxDisplayTierCanvas's job, ~340ms on the main thread).
+      const wantWork = !privateEntry && !!sourcePath;
+      if (halfFirst) { this._single = false; this._needsRefine = true; }
+      this._wantWork = wantWork;
       const persistNow = (this._persist && !this._needsRefine) ? this._persist : {};
       const cached = await readCachedRawFrame(sourcePath, settings);
       if (cached) {
@@ -370,7 +395,10 @@
         return;
       }
       if (!privateEntry) window.__pm('native-fast-invoke');
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persistNow, ...src, fast: !single } : { mode, ...extra, ...persistNow, ...src, fast: !single }, bytes);
+      // halfFirst: fast:false + half:true (and the persist target, which Rust honours only if it
+      // had to fall back to a full frame — e.g. an X-Trans sensor that can't be superpixelled).
+      const firstReq = halfFirst ? { half: true, fast: false, wantWork, ...this._persist } : { fast: !single, wantWork, ...persistNow };
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...src, ...firstReq } : { mode, ...extra, ...src, ...firstReq }, bytes);
       _lap('decode_raw_v2 FAST (native decode+demosaic+LUT, no NR yet) done at');
       // 4th header word: whether Rust actually applied the requested LUT. Rust re-checks the
       // camera make independently (main.rs's KNOWN_DCP_MAKES) as a backstop in case this
@@ -385,7 +413,11 @@
       this._w = head[0]; this._h = head[1]; this._iso = head[2];
       const usedLut = head[3] === 1;
       if (!privateEntry) window.chromasmithLensApplied = head[4] === 1; // only an installed Editor photo owns the shared status
-      this._hasExt = head[5] === 1;
+      // 6th word is a flag set: bit0 = extended-range companion follows, bit1 = half-resolution first picture.
+      this._hasExt = (head[5] & 1) === 1;
+      this._halfFirst = (head[5] & 2) === 2;
+      if (halfFirst && !this._halfFirst) { this._needsRefine = false; this._single = true; } // Rust fell back to (and persisted) a full frame
+      if (this._halfFirst) _lap('half-resolution first picture done at');
       this._mode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       this._buf = buf;
       if (!privateEntry && mode === 'lut' && !usedLut && typeof log === 'function') {
@@ -414,7 +446,8 @@
       // (has_ext=0), which loadRw2 treats as "no real headroom to preserve", same as today.
       const bodyLen = this._w * this._h * 4;
       const sceneLinear = this._hasExt ? new Float32Array(this._buf, 24 + bodyLen, this._w * this._h * 3) : undefined;
-      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, bodyLen), sceneLinear };
+      const work = parseWorkTrailer(this._buf, 24 + bodyLen + (this._hasExt ? this._w * this._h * 12 : 0));
+      return { width: this._w, height: this._h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, bodyLen), sceneLinear, work };
     }
     // Compare/Scrub entries keep the developed canvas, not a second full native response
     // buffer. filmBase/filmDevelop need only sourcePath + decode recipe after initial decode.
@@ -449,19 +482,21 @@
       if (!this._privateEntry) window.__pm('native-refine-invoke');
       const persist = this._persist || {};
       const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
-      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, ...src, fast: false } : { mode, ...extra, ...persist, ...src, fast: false }, bytes);
+      const wantWork = !!this._wantWork;
+      const buf = await framedInvoke('decode_raw_v2', mode === 'lut' ? { mode, lutKey, wantExt: wantHdrPreview, ...extra, ...persist, ...src, fast: false, wantWork } : { mode, ...extra, ...persist, ...src, fast: false, wantWork }, bytes);
       if (!this._privateEntry) window.__pm('native-refine-returned');
       const head = new Uint32Array(buf, 0, 6);
       const w = head[0], h = head[1];
       const usedLut = head[3] === 1;
-      const hasExt = head[5] === 1;
+      const hasExt = (head[5] & 1) === 1;
       const effMode = (mode === 'lut' && !usedLut) ? 'linear16' : mode;
       if (effMode === 'linear16') {
-        return { width: w, height: h, colors: 3, bits: 16, data: new Uint16Array(buf, 24) };
+        return { width: w, height: h, colors: 3, bits: 16, data: new Uint16Array(buf, 24, w * h * 3) };
       }
       const bodyLen = w * h * 4;
       const sceneLinear = hasExt ? new Float32Array(buf, 24 + bodyLen, w * h * 3) : undefined;
-      return { width: w, height: h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(buf, 24, bodyLen), sceneLinear };
+      const work = parseWorkTrailer(buf, 24 + bodyLen + (hasExt ? w * h * 12 : 0));
+      return { width: w, height: h, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(buf, 24, bodyLen), sceneLinear, work };
     }
   }
   window.getLibRaw = async function () { return NativeLibRawShim; };

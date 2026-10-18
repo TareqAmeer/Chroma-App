@@ -26,66 +26,66 @@
   {
    "file": "native-rw2-decode-develop-no-base64-anyw.part",
    "firstLine": 143,
-   "lines": 291
+   "lines": 308
   },
   {
    "file": "ai-tap-to-select-masks-panel-see-sam-rs.part",
-   "firstLine": 434,
+   "firstLine": 451,
    "lines": 97
   },
   {
    "file": "sam-2-1-phase-3-background-quality-upgra.part",
-   "firstLine": 531,
+   "firstLine": 548,
    "lines": 48
   },
   {
    "file": "named-subjects-remember-this-dog-see-sub.part",
-   "firstLine": 579,
+   "firstLine": 596,
    "lines": 170
   },
   {
    "file": "face-detection-ai-stack-phase-a-see-scrf.part",
-   "firstLine": 749,
+   "firstLine": 766,
    "lines": 22
   },
   {
    "file": "face-feature-auto-exclusion-skin-selecto.part",
-   "firstLine": 771,
+   "firstLine": 788,
    "lines": 38
   },
   {
    "file": "depth-estimation-roadmap-r7-see-depth-rs.part",
-   "firstLine": 809,
+   "firstLine": 826,
    "lines": 33
   },
   {
    "file": "super-resolution-chr-249-see-superres-rs.part",
-   "firstLine": 842,
+   "firstLine": 859,
    "lines": 49
   },
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
-   "firstLine": 891,
-   "lines": 1246
+   "firstLine": 908,
+   "lines": 1317
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2137,
+   "firstLine": 2225,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2667,
+   "firstLine": 2755,
    "lines": 107
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 2774,
+   "firstLine": 2862,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 2881,
+   "firstLine": 2969,
    "lines": 1396
   }
  ]

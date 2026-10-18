@@ -107,6 +107,13 @@ function fxDisplayTierCanvas(full){
   Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
   return c;
 }
+// The same working copy built natively (decode_raw_v2's wantWork trailer: {width,height,data RGBA8}).
+function fxWorkCanvasFromRGBA(work){
+  const c=document.createElement('canvas');c.width=work.width;c.height=work.height;
+  c.getContext('2d').putImageData(new ImageData(work.data,work.width,work.height),0,0);
+  Object.defineProperty(c,'naturalWidth',{value:c.width});Object.defineProperty(c,'naturalHeight',{value:c.height});
+  return c;
+}
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
 async function loadFXImages(fileList,opts){
   opts=opts||{};
@@ -199,7 +206,8 @@ async function loadFXImages(fileList,opts){
         // Desktop Library RAW (by-path): install a ~2560px working copy — uploading/analysing/
         // rendering the 24MP canvas cost ~1.2-1.6s per open — and keep the full frame as
         // `fullImg` for on-demand promotion (library-ui.js's chromasmithEnsureFullQuality).
-        const work=!privateEntries&&file.__csSourcePath?fxDisplayTierCanvas(canvas):null;
+        const work=!privateEntries&&file.__csSourcePath?(canvas._csWork||fxDisplayTierCanvas(canvas)):null;
+        delete canvas._csWork;
         // Browser: `canvas` is already the half-size proxy. _rawHalf marks it for fxPromoteWebRaw before zoom/loupe/export.
         if(webHalf){entries.push({img:fxDisplayTierCanvas(canvas)||canvas,_rawHalf:true,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif:meta?{model:meta.model||'',make:meta.make||'',lens:meta.lens||'',iso:meta.iso_speed?('ISO '+meta.iso_speed):'',lensStatusUnknown:!!meta.lensStatusUnknown}:undefined,fileSize:file.size});continue;}
         entries.push({img:work||canvas,fullImg:work?canvas:undefined,name:file.name.replace(/\.[^.]+$/,''),ext,dpi,bytes:null,rawFile:file,exif,fileSize:file.size}); // lossless source → PNG out; rawFile kept for the Diagnostics DCP-option re-decode

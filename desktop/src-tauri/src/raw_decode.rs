@@ -125,14 +125,77 @@ impl NrTier {
 /// (no second full-frame copy), so a cache entry serves exactly one refine.
 static DEMOSAIC_CACHE: std::sync::Mutex<Option<(u64, DemosaicOut)>> = std::sync::Mutex::new(None);
 
-fn demosaic_cache_key(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> u64 {
+/// Full-bytes hash of a RAW file (tens of ms on a 30MB RW2). Computed ONCE per request: main.rs's
+/// decode_raw_v2 needs it for its own decode-memo key too, and hands it down via `RawInput`
+/// instead of letting every cache layer re-hash the same 30MB.
+pub fn raw_bytes_hash(bytes: &[u8]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut h); // full-bytes hash: tens of ms on a 30MB RW2, vs the seconds a demosaic costs
+    bytes.hash(&mut h);
+    h.finish()
+}
+
+fn demosaic_cache_key(bytes_hash: u64, demosaic_algo: &str, film_source: bool) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes_hash.hash(&mut h);
     demosaic_algo.hash(&mut h);
     film_source.hash(&mut h);
     h.finish()
 }
+
+fn prepared_cache_key(bytes_hash: u64, film_source: bool) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    "prepared".hash(&mut h);
+    bytes_hash.hash(&mut h);
+    film_source.hash(&mut h);
+    h.finish()
+}
+
+/// The RAW bytes of one request plus what the caller already knows about them: `hash` is
+/// `raw_bytes_hash(bytes)` (computed once by the caller), `shared` lets rawler read an
+/// already-owned buffer (a Library open's `std::fs::read`) instead of copying the whole file
+/// again inside `RawSource::new_from_slice`.
+pub struct RawInput<'a> {
+    pub bytes: &'a [u8],
+    pub shared: Option<&'a std::sync::Arc<Vec<u8>>>,
+    pub hash: u64,
+}
+
+impl<'a> RawInput<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, shared: None, hash: raw_bytes_hash(bytes) }
+    }
+}
+
+/// Parameter-independent first half of a decode (rawler parse, black/white scaling, WB,
+/// clip-to-white) — everything both the half-resolution first picture and the full demosaic
+/// start from. Bayer data stays un-demosaiced here.
+enum PreparedPixels {
+    Cfa { pixels: Vec<f32>, cfa_config: rawler::rawimage::CFAConfig },
+    /// Already full RGB per pixel (LinearRaw DNG): interleaved, WB applied.
+    Linear { pixels: Vec<f32> },
+}
+
+struct Prepared {
+    px: PreparedPixels,
+    w: usize,
+    h: usize,
+    crop_rect: Option<rawler::imgop::Rect>,
+    iso: u32,
+    make: String,
+    model: String,
+    orientation: u16,
+    lens_model_meta: Option<String>,
+    focal_meta: Option<f32>,
+    xyz_to_cam: rawdenoise::Mat3,
+}
+
+/// Single-slot hand-off from a half-resolution first picture (`decode_rw2_half`) to the full
+/// decode JS requests right after it: the full pass TAKES the prepared Bayer data instead of
+/// re-running rawler's parse + scaling + WB. Moved, never cloned.
+static PREPARED_CACHE: std::sync::Mutex<Option<(u64, Prepared)>> = std::sync::Mutex::new(None);
 
 /// Translate the explicit alternate-method selection into the algorithms supported by the
 /// pinned `demosaic` crate. PPG stays on rawler's existing default path; this deliberately does
@@ -363,8 +426,26 @@ mod alternate_demosaic_backend_tests {
     }
 }
 
-fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> Result<DemosaicOut, String> {
-    let source = RawSource::new_from_slice(bytes);
+fn decode_and_demosaic(input: &RawInput, demosaic_algo: &str, film_source: bool) -> Result<DemosaicOut, String> {
+    demosaic_prepared(prepare_raw(input, film_source)?, demosaic_algo)
+}
+
+/// Sub-stage timing for the decode internals (CS_DIAG_RAW_STAGES, same switch as the outer
+/// stage lines in decode_rw2_bytes_film).
+fn sub_stage(name: &str, started: &mut std::time::Instant) {
+    if std::env::var_os("CS_DIAG_RAW_STAGES").is_some() {
+        crate::diag::log("info", format!("RAW_DIAG stage={} duration_ms={}", name, started.elapsed().as_millis()));
+    }
+    *started = std::time::Instant::now();
+}
+
+fn prepare_raw(input: &RawInput, film_source: bool) -> Result<Prepared, String> {
+    let mut st = std::time::Instant::now();
+    // An already-owned buffer is shared with rawler as-is; only a borrowed slice is copied.
+    let source = match input.shared {
+        Some(arc) => RawSource::new_from_shared_vec(arc.clone()),
+        None => RawSource::new_from_slice(input.bytes),
+    };
     // Widening formats.rs::RAW_EXTS made this reachable in practice (bay/k25/ptx/some
     // srf-sr2 variants aren't in rawler's decoder table at all — supported_extensions() is
     // advertising, not a guarantee, see formats.rs's covers_rawler_supported test). Named and
@@ -383,6 +464,8 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
     let mut raw_image = decoder
         .raw_image(&source, &params, false)
         .map_err(|e| format!("decode: {e}"))?;
+    drop(source);
+    sub_stage("prep_rawler_decode", &mut st);
 
     // Captured before apply_scaling()/demosaic touch the pixels — this is per-file metadata
     // (rawler resolves it from the RAW's embedded calibration tags), not derived from the pixel
@@ -442,6 +525,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
     raw_image
         .apply_scaling()
         .map_err(|e| format!("black/white scaling: {e}"))?;
+    sub_stage("prep_scaling", &mut st);
 
     let w = raw_image.width;
     let h = raw_image.height;
@@ -472,7 +556,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
     // directly instead of running PPG/CS_DEMOSAIC, and skips the Bayer-cell clip-to-white
     // heuristic below (that trick is specifically about a 2x2 CFA cell; it has no meaning once
     // channels are already separated per pixel).
-    let (out_w, out_h, rgb16_f32): (usize, usize, Vec<f32>) = match &raw_image.photometric {
+    let px: PreparedPixels = match &raw_image.photometric {
         RawPhotometricInterpretation::Cfa(config) => {
     let cfa_config = config.clone();
     if !cfa_config.cfa.is_rgb() {
@@ -554,67 +638,8 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
         });
     }
 
-    // 3) Demosaic. Default: PPG (rawler's own; internally SIMD/rayon-assisted). `demosaic_algo`
-    // ("" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3") is the real per-photo control — the desktop UI's "RAW
-    // Processing: Standard / Sparkle-optimized" toggle passes "ahd" here for photos with dense
-    // false-color speckle PPG can't fully avoid (measured 2026-07-13: AHD's homogeneity-
-    // directed adaptive interpolation cuts __TM8159's sparkle speckle much further than PPG,
-    // but increases chroma noise on OTHER photos — see raw_decode.rs's Cargo.toml comment and
-    // the project's noise-model plan file — hence a per-photo opt-in, never a global default).
-    // CS_DEMOSAIC env var overrides the parameter for calibration/diagnostics only.
-    // Deliberately NOT a half-size/box-average demosaic here even on the fast pass: the
-    // background refine() still has to redo the full pipeline at full resolution a moment
-    // later regardless (NR/false-color/hue-defringe/lens all still run then), so shrinking the
-    // FIRST paint doesn't shorten the total wait to a finished photo — it only adds a visible
-    // low-res→full-res pop partway through. If the full decode is going to take a while anyway,
-    // showing the real full-resolution image throughout (once demosaiced) beats showing a
-    // shrunk one first. `fast` still buys real time by skipping the expensive PER-PIXEL cleanup
-    // passes below (false-color suppression, hue defringe, native NR, lens correction) — those
-    // are the actual slow stages, not this interpolation step.
-    let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
-    if demosaic_choice.is_empty() {
-        let pix = PixF32::new_with(pixels, w, h);
-        let roi = pix.rect();
-        let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
-        let mut interleaved = vec![0f32; rgb.width * rgb.height * 3];
-        interleaved
-            .par_chunks_mut(3)
-            .zip(rgb.pixels().par_iter())
-            .for_each(|(dst, px)| {
-                dst[0] = px[0];
-                dst[1] = px[1];
-                dst[2] = px[2];
-            });
-        (rgb.width, rgb.height, interleaved)
-    } else {
-        use demosaic::demosaic as demosaic_fn;
-        // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc",
-        // "markesteijn1", or "markesteijn3" — main.rs validates
-        // and defaults the UI-supplied demosaicAlgo before it reaches this function (see
-        // decode_rw2 in main.rs). CS_DEMOSAIC is a diagnostics-only env var override, so an
-        // unknown value here still shouldn't crash the whole process — return an Err instead.
-        let algo = alternate_demosaic_algorithm(&demosaic_choice).ok_or_else(|| {
-            format!("unknown demosaic choice {demosaic_choice:?} (expected ahd|vng|mhc|markesteijn1|markesteijn3)")
-        })?;
-        validate_demosaic_cfa(&demosaic_choice, &cfa_config.cfa)?;
-        // Was hardcoded to bayer_rggb() ("confirmed RGGB via dump_cfa on this camera") — safe
-        // while this app only handled Panasonic Bayer sensors, but with formats.rs::RAW_EXTS
-        // now covering ~30 makes that's silently wrong colour for any non-RGGB layout (most
-        // Fuji is GRBG/X-Trans, and BGGR/GBRG both exist). Derive from the file's OWN CFA rather
-        // than assuming. The pinned crate supports Markesteijn 1/3-pass for X-Trans; Bayer
-        // algorithms remain Bayer-only and return a clear unsupported-algorithm error there.
-        let cfa_pattern = alternate_demosaic_cfa(&cfa_config.cfa, &demosaic_choice)?;
-        let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
-        demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
-            .map_err(|e| format!("demosaic crate failed: {e}"))?;
-        let mut interleaved = vec![0f32; w * h * 3];
-        interleaved.par_chunks_mut(3).enumerate().for_each(|(i, dst)| {
-            dst[0] = planar[i];
-            dst[1] = planar[w * h + i];
-            dst[2] = planar[2 * w * h + i];
-        });
-        (w, h, interleaved)
-    }
+    sub_stage("prep_scale_wb_clip", &mut st);
+    PreparedPixels::Cfa { pixels, cfa_config }
         }
         RawPhotometricInterpretation::LinearRaw => {
             // Already full-resolution RGB per DNG's own definition of this photometric
@@ -646,7 +671,7 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
                 px[1] = (px[1] * wb[1]).max(0.0);
                 px[2] = (px[2] * wb[2]).max(0.0);
             });
-            (w, h, pixels)
+            PreparedPixels::Linear { pixels }
         }
         other => {
             return Err(format!(
@@ -656,40 +681,12 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
         }
     };
 
-    // 4) Pack to interleaved u16. Floor already applied; ceiling (1.0) only here — the one
-    //    hard clip, mirroring libraw's CLIP at 65535 after scale_colors.
-    let mut rgb16 = vec![0u16; out_w * out_h * 3];
-    rgb16
-        .par_chunks_mut(3)
-        .zip(rgb16_f32.par_chunks(3))
-        .for_each(|(dst, px)| {
-            dst[0] = (px[0].clamp(0.0, 1.0) * 65535.0).round() as u16;
-            dst[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
-            dst[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
-        });
-
-    // Drop the masked optical-black border now that it's plain RGB (see the crop_rect comment
-    // above `w`/`h`'s capture for why this happens here, post-demosaic, and not on the raw
-    // Bayer buffer). `crop_rect` is in the pre-demosaic sensor's coordinate space, which is
-    // exactly (out_w, out_h) here — PPG and the CS_DEMOSAIC alt path both preserve dimensions.
-    let (rgb16, out_w, out_h) = match crop_rect {
-        Some(r) if r.d.w < out_w || r.d.h < out_h => {
-            let mut cropped = vec![0u16; r.d.w * r.d.h * 3];
-            cropped.par_chunks_mut(r.d.w * 3).enumerate().for_each(|(row, dst)| {
-                let src_row = r.p.y + row;
-                let src_off = (src_row * out_w + r.p.x) * 3;
-                dst.copy_from_slice(&rgb16[src_off..src_off + r.d.w * 3]);
-            });
-            (cropped, r.d.w, r.d.h)
-        }
-        _ => (rgb16, out_w, out_h),
-    };
-
     let ratio = |r: &rawler::formats::tiff::Rational| if r.d != 0 { r.n as f32 / r.d as f32 } else { 0.0 };
-    Ok(DemosaicOut {
-        rgb16,
-        w: out_w,
-        h: out_h,
+    Ok(Prepared {
+        px,
+        w,
+        h,
+        crop_rect,
         iso,
         make: metadata.make.clone(),
         model: metadata.model.clone(),
@@ -703,6 +700,98 @@ fn decode_and_demosaic(bytes: &[u8], demosaic_algo: &str, film_source: bool) -> 
         focal_meta: metadata.exif.focal_length.as_ref().map(ratio).filter(|f| *f > 0.0),
         xyz_to_cam,
     })
+}
+
+/// Pack demosaiced f32 RGB (any layout, read through `get(i)` for source pixel i of a `sw`x`sh`
+/// frame) into interleaved linear u16, dropping the masked optical-black border (`crop`) in the
+/// same pass. Floor already applied upstream; the ceiling (1.0) is only here — the one hard
+/// clip, mirroring libraw's CLIP at 65535 after scale_colors.
+///
+/// The crop happens post-demosaic, never on the raw Bayer buffer: cropping first would change
+/// PPG's edge interpolation and would need to re-derive the CFA pattern for the new origin (real
+/// bodies do shift phase: rawler's own `sony/a500.toml` ships `crop_area = [8, 7, 8, 3]`). `crop`
+/// is in the pre-demosaic sensor's coordinate space, which is exactly (sw, sh) here — PPG and
+/// the CS_DEMOSAIC alt path both preserve dimensions.
+fn pack_rgb16<F: Fn(usize) -> [f32; 3] + Sync>(sw: usize, sh: usize, crop: Option<rawler::imgop::Rect>, get: F) -> (Vec<u16>, usize, usize) {
+    let (x0, y0, ow, oh) = match crop {
+        Some(r) if r.d.w < sw || r.d.h < sh => (r.p.x, r.p.y, r.d.w, r.d.h),
+        _ => (0, 0, sw, sh),
+    };
+    let mut rgb16 = vec![0u16; ow * oh * 3];
+    rgb16.par_chunks_mut(ow * 3).enumerate().for_each(|(row, dst)| {
+        let base = (y0 + row) * sw + x0;
+        for (col, d) in dst.chunks_exact_mut(3).enumerate() {
+            let px = get(base + col);
+            d[0] = (px[0].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            d[1] = (px[1].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            d[2] = (px[2].clamp(0.0, 1.0) * 65535.0).round() as u16;
+        }
+    });
+    (rgb16, ow, oh)
+}
+
+/// Second half of a decode: demosaic (CFA) / pack (LinearRaw) the prepared frame to u16.
+fn demosaic_prepared(p: Prepared, demosaic_algo: &str) -> Result<DemosaicOut, String> {
+    let mut st = std::time::Instant::now();
+    let Prepared { px, w, h, crop_rect, iso, make, model, orientation, lens_model_meta, focal_meta, xyz_to_cam } = p;
+    let (rgb16, out_w, out_h) = match px {
+        PreparedPixels::Linear { pixels } => pack_rgb16(w, h, crop_rect, |i| [pixels[3 * i], pixels[3 * i + 1], pixels[3 * i + 2]]),
+        PreparedPixels::Cfa { pixels, cfa_config } => {
+    // 3) Demosaic. Default: PPG (rawler's own; internally SIMD/rayon-assisted). `demosaic_algo`
+    // ("" | "ahd" | "vng" | "mhc" | "markesteijn1" | "markesteijn3") is the real per-photo control — the desktop UI's "RAW
+    // Processing: Standard / Sparkle-optimized" toggle passes "ahd" here for photos with dense
+    // false-color speckle PPG can't fully avoid (measured 2026-07-13: AHD's homogeneity-
+    // directed adaptive interpolation cuts __TM8159's sparkle speckle much further than PPG,
+    // but increases chroma noise on OTHER photos — see raw_decode.rs's Cargo.toml comment and
+    // the project's noise-model plan file — hence a per-photo opt-in, never a global default).
+    // CS_DEMOSAIC env var overrides the parameter for calibration/diagnostics only.
+    // This is always the full-resolution demosaic. The half-resolution FIRST PICTURE of a cold
+    // Library open is a separate 2x2 superpixel pass (decode_rw2_half — user-approved
+    // 2026-10-18, reversing the earlier "never shrink the first paint" rule here); it shares the
+    // prepared sensor data with this pass instead of replacing it, so the full frame that follows
+    // is byte-identical either way. `fast` still skips the expensive PER-PIXEL cleanup passes
+    // (false-color suppression, hue defringe, native NR, lens correction).
+    let demosaic_choice = std::env::var("CS_DEMOSAIC").unwrap_or_else(|_| demosaic_algo.to_string());
+    if demosaic_choice.is_empty() {
+        let pix = PixF32::new_with(pixels, w, h);
+        let roi = pix.rect();
+        let rgb = PPGDemosaic::new().demosaic(&pix, &cfa_config.cfa, &cfa_config.colors, roi);
+        drop(pix);
+        sub_stage("demosaic_ppg", &mut st);
+        // Interleave + u16 pack (+ crop) in ONE pass straight from PPG's [f32; 3] output — this
+        // used to materialise a full f32 interleaved copy first (~290MB at 24MP) and pack it in a
+        // second pass. Same per-channel expression on the same f32, so byte-identical.
+        let px = rgb.pixels();
+        pack_rgb16(rgb.width, rgb.height, crop_rect, |i| px[i])
+    } else {
+        use demosaic::demosaic as demosaic_fn;
+        // demosaic_choice normally only ever contains "", "ahd", "vng", "mhc",
+        // "markesteijn1", or "markesteijn3" — main.rs validates
+        // and defaults the UI-supplied demosaicAlgo before it reaches this function (see
+        // decode_rw2 in main.rs). CS_DEMOSAIC is a diagnostics-only env var override, so an
+        // unknown value here still shouldn't crash the whole process — return an Err instead.
+        let algo = alternate_demosaic_algorithm(&demosaic_choice).ok_or_else(|| {
+            format!("unknown demosaic choice {demosaic_choice:?} (expected ahd|vng|mhc|markesteijn1|markesteijn3)")
+        })?;
+        validate_demosaic_cfa(&demosaic_choice, &cfa_config.cfa)?;
+        // Was hardcoded to bayer_rggb() ("confirmed RGGB via dump_cfa on this camera") — safe
+        // while this app only handled Panasonic Bayer sensors, but with formats.rs::RAW_EXTS
+        // now covering ~30 makes that's silently wrong colour for any non-RGGB layout (most
+        // Fuji is GRBG/X-Trans, and BGGR/GBRG both exist). Derive from the file's OWN CFA rather
+        // than assuming. The pinned crate supports Markesteijn 1/3-pass for X-Trans; Bayer
+        // algorithms remain Bayer-only and return a clear unsupported-algorithm error there.
+        let cfa_pattern = alternate_demosaic_cfa(&cfa_config.cfa, &demosaic_choice)?;
+        let mut planar = vec![0f32; 3 * w * h]; // crate output is planar CHW (R,G,B planes)
+        demosaic_fn(&pixels, w, h, &cfa_pattern, algo, &mut planar)
+            .map_err(|e| format!("demosaic crate failed: {e}"))?;
+        sub_stage("demosaic_alt", &mut st);
+        let n = w * h;
+        pack_rgb16(w, h, crop_rect, |i| [planar[i], planar[n + i], planar[2 * n + i]])
+    }
+        }
+    };
+    sub_stage("pack_u16", &mut st);
+    Ok(DemosaicOut { rgb16, w: out_w, h: out_h, iso, make, model, orientation, lens_model_meta, focal_meta, xyz_to_cam })
 }
 
 /// Unchanged public signature/behavior for every existing caller (decode_raw_v2, dump_rw2.rs) —
@@ -752,6 +841,22 @@ pub fn decode_rw2_bytes_film(
     progress: Option<&(dyn Fn(usize, usize) + Sync)>,
     cancel: Option<&std::sync::atomic::AtomicBool>, film_source: bool,
 ) -> Result<DecodedRaw, String> {
+    decode_rw2_input(&RawInput::new(bytes), auto_lens, nr, demosaic_algo, fast, lens_override, high_strength, progress, cancel, film_source)
+}
+
+/// `decode_rw2_bytes_film` for a caller that already hashed (and possibly owns) the RAW bytes —
+/// main.rs's decode_raw_v2 — so the 30MB file is hashed once per request and never re-copied
+/// for rawler. Also takes a half-resolution first picture's prepared Bayer data
+/// (`decode_rw2_half`) when one is waiting for exactly these bytes, skipping the rawler parse +
+/// scaling + WB the half pass already paid. Output is identical either way.
+#[allow(clippy::too_many_arguments)]
+pub fn decode_rw2_input(
+    input: &RawInput, auto_lens: bool, nr: NrTier, demosaic_algo: &str, fast: bool,
+    lens_override: Option<(&str, f32)>, high_strength: f32,
+    progress: Option<&(dyn Fn(usize, usize) + Sync)>,
+    cancel: Option<&std::sync::atomic::AtomicBool>, film_source: bool,
+) -> Result<DecodedRaw, String> {
+    let bytes = input.bytes;
     let stage_timing = std::env::var_os("CS_DIAG_RAW_STAGES").is_some();
     let stage = |name: &str, started: &mut std::time::Instant| {
         if stage_timing {
@@ -761,7 +866,7 @@ pub fn decode_rw2_bytes_film(
     };
     let mut stage_started = std::time::Instant::now();
     let nr = NrTier::resolve(nr); // CS_NR_TIER escape hatch, resolved once for the whole call
-    let key = demosaic_cache_key(bytes, demosaic_algo, film_source);
+    let key = demosaic_cache_key(input.hash, demosaic_algo, film_source);
     // refine (fast=false) first tries to TAKE the fast pass's cached demosaic; anything else
     // (cold open with fast=false, cache holding a different photo) falls through to a full run.
     let dem = if !fast {
@@ -780,7 +885,17 @@ pub fn decode_rw2_bytes_film(
     };
     let dem = match dem {
         Some(d) => d,
-        None => decode_and_demosaic(bytes, demosaic_algo, film_source)?,
+        None => {
+            let pkey = prepared_cache_key(input.hash, film_source);
+            let prepared = PREPARED_CACHE.lock().ok().and_then(|mut g| match g.take() {
+                Some((k, p)) if k == pkey => Some(p),
+                other => { *g = other; None }
+            });
+            match prepared {
+                Some(p) => demosaic_prepared(p, demosaic_algo)?,
+                None => decode_and_demosaic(input, demosaic_algo, film_source)?,
+            }
+        }
     };
     stage("demosaic_or_cache", &mut stage_started);
     if fast {
@@ -965,6 +1080,91 @@ pub fn decode_rw2_bytes_film(
     })
 }
 
+/// Half-resolution FIRST PICTURE for a cold RAW open (user-approved 2026-10-18, superseding the
+/// old "never half-size the first paint" rule in demosaic_prepared's comment): one RGB pixel per
+/// 2x2 Bayer cell — R, mean of the two greens, B — straight from the WB'd, clip-whitened sensor
+/// data, no demosaic. ~3000x2000 from a 24MP frame in tens of ms, so the editor is usable while
+/// the unchanged full pipeline (`decode_rw2_input`) runs in the background and is swapped in
+/// when done. Lens correction is skipped (sub-pixel geometry at this size); chroma NR runs on the
+/// small frame with the same reduced level count the interactive tier's half-res NR uses.
+///
+/// The prepared Bayer data is left in PREPARED_CACHE for the full pass that follows, which takes
+/// it instead of re-parsing the file — the full result is byte-identical to a cold full decode.
+/// Returns Ok(None) when this frame can't be superpixelled (X-Trans/non-2x2 CFA, LinearRaw DNG):
+/// the caller then runs the full decode straight away (it still reuses the prepared data).
+pub fn decode_rw2_half(input: &RawInput, nr: NrTier, film_source: bool) -> Result<Option<DecodedRaw>, String> {
+    let mut st = std::time::Instant::now();
+    let nr = NrTier::resolve(nr);
+    let pkey = prepared_cache_key(input.hash, film_source);
+    let taken = PREPARED_CACHE.lock().ok().and_then(|mut g| match g.take() {
+        Some((k, p)) if k == pkey => Some(p),
+        other => { *g = other; None }
+    });
+    let p = match taken { Some(p) => p, None => prepare_raw(input, film_source)? };
+    sub_stage("half_prepare", &mut st);
+    let half = half_superpixel(&p);
+    let (iso, make, orientation, xyz_to_cam) = (p.iso, p.make.clone(), p.orientation, p.xyz_to_cam);
+    if let Ok(mut g) = PREPARED_CACHE.lock() { *g = Some((pkey, p)); }
+    let Some((rgb, hw, hh)) = half else { return Ok(None) };
+    sub_stage("half_superpixel", &mut st);
+    let (mut rgb, w, h) = apply_orientation(rgb, hw, hh, orientation);
+    sub_stage("half_orientation", &mut st);
+    if nr != NrTier::Off && std::env::var_os("CS_HALF_NO_NR").is_none() {
+        denoise_chroma_half_ex(&mut rgb, w, h, iso, -2);
+    }
+    sub_stage("half_chroma_nr", &mut st);
+    Ok(Some(DecodedRaw { width: w as u32, height: h as u32, iso, make, lens_applied: false, rgb16: rgb, xyz_to_cam }))
+}
+
+/// 2x2 superpixel of the prepared CFA frame (see decode_rw2_half). Cells start at the crop
+/// origin, so a cropped body's optical-black border is dropped the same way the full decode
+/// drops it; any 2x2 window of a Bayer mosaic holds one R, one B and two G sites.
+fn half_superpixel(p: &Prepared) -> Option<(Vec<u16>, usize, usize)> {
+    let PreparedPixels::Cfa { pixels, cfa_config } = &p.px else { return None };
+    let cfa = &cfa_config.cfa;
+    if (cfa.width, cfa.height) != (2, 2) {
+        return None;
+    }
+    let (x0, y0, cw, ch) = match p.crop_rect {
+        Some(r) if r.d.w < p.w || r.d.h < p.h => (r.p.x, r.p.y, r.d.w, r.d.h),
+        _ => (0, 0, p.w, p.h),
+    };
+    let (hw, hh) = (cw / 2, ch / 2);
+    if hw == 0 || hh == 0 {
+        return None;
+    }
+    // Colour of each cell site (row-major), normalised so the second green (index 3) counts as G.
+    let sites: [usize; 4] = std::array::from_fn(|k| match cfa.color_at(y0 + k / 2, x0 + k % 2) { 3 => 1, c => c });
+    let mut counts = [0usize; 3];
+    for &c in &sites {
+        if c > 2 {
+            return None;
+        }
+        counts[c] += 1;
+    }
+    if counts != [1, 2, 1] {
+        return None;
+    }
+    let w = p.w;
+    let mut out = vec![0u16; hw * hh * 3];
+    out.par_chunks_mut(hw * 3).enumerate().for_each(|(y, row)| {
+        let r0 = (y0 + 2 * y) * w + x0;
+        let r1 = r0 + w;
+        for (x, d) in row.chunks_exact_mut(3).enumerate() {
+            let v = [pixels[r0 + 2 * x], pixels[r0 + 2 * x + 1], pixels[r1 + 2 * x], pixels[r1 + 2 * x + 1]];
+            let mut rgb = [0f32; 3];
+            for k in 0..4 {
+                rgb[sites[k]] += v[k];
+            }
+            rgb[1] *= 0.5;
+            for c in 0..3 {
+                d[c] = (rgb[c].clamp(0.0, 1.0) * 65535.0).round() as u16;
+            }
+        }
+    });
+    Some((out, hw, hh))
+}
+
 /// Shadow-only denoise on LINEAR 16-bit camera RGB, run BEFORE the DCP tone curve is ever
 /// applied. Fixed strength, not user-adjustable — this is a pipeline-level fix, not a slider.
 ///
@@ -1079,34 +1279,63 @@ fn denoise_chroma_wavelet_rgb16(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
 /// dE76 mean ~2 / p99 ~7 vs full-res chroma. Run the chroma wavelet on a 2x box-downsampled copy, upsample the
 /// denoised chroma bilinearly and recombine it with the FULL-resolution luma.
 fn denoise_chroma_half(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
+    denoise_chroma_half_ex(rgb, w, h, iso, -1)
+}
+
+/// `denoise_chroma_half` with an explicit wavelet level offset (the interactive tier uses -1; the
+/// half-resolution first picture, already half size, uses -2 for the same physical reach).
+fn denoise_chroma_half_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32, level_delta: i32) {
+    let mut st = std::time::Instant::now();
     let (hw, hh) = (w / 2, h / 2);
+    // 2x2 box average of the (still untouched) full-res input. Same integer arithmetic is reused
+    // below to rebuild each ORIGINAL half-res pixel, so no copy of `lo` has to outlive the wavelet.
+    let box_avg = |y: usize, x: usize, c: usize| -> u16 {
+        let a = rgb[((2 * y) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y) * w + 2 * x + 1) * 3 + c] as u32
+            + rgb[((2 * y + 1) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y + 1) * w + 2 * x + 1) * 3 + c] as u32;
+        ((a + 2) / 4) as u16
+    };
     let mut lo = vec![0u16; hw * hh * 3];
     lo.par_chunks_mut(hw * 3).enumerate().for_each(|(y, row)| {
-        for x in 0..hw { for c in 0..3 {
-            let a = rgb[((2 * y) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y) * w + 2 * x + 1) * 3 + c] as u32
-                + rgb[((2 * y + 1) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y + 1) * w + 2 * x + 1) * 3 + c] as u32;
-            row[x * 3 + c] = ((a + 2) / 4) as u16;
-        } }
+        for x in 0..hw { for c in 0..3 { row[x * 3 + c] = box_avg(y, x, c); } }
     });
-    let orig_lo = lo.clone();
-    denoise_chroma_wavelet_rgb16_ex(&mut lo, hw, hh, iso, -1);
-    // per-half-res-pixel chroma DELTA (denoised - original), upsampled and added to the full-res RGB
-    // as a pure chroma shift (equal R/G/B luma-preserving via BT.601 inverse of a (0,dCb,dCr) delta).
-    let cbcr = |p: &[u16], i: usize| -> (f32, f32) {
-        let (r, g, b) = (p[i * 3] as f32, p[i * 3 + 1] as f32, p[i * 3 + 2] as f32);
+    sub_stage("chroma_half_downsample", &mut st);
+    denoise_chroma_wavelet_rgb16_ex(&mut lo, hw, hh, iso, level_delta);
+    sub_stage("chroma_half_wavelet", &mut st);
+    // per-half-res-pixel chroma DELTA (denoised - original), computed ONCE per half-res pixel
+    // (it used to be recomputed for each of the 4 bilinear taps of every full-res pixel — 16
+    // colour conversions per output pixel), then upsampled and added to the full-res RGB as a pure
+    // chroma shift (equal R/G/B luma-preserving via BT.601 inverse of a (0,dCb,dCr) delta). Same
+    // expressions and the same accumulation order as before, so the output is bit-identical.
+    let cbcr = |r: f32, g: f32, b: f32| -> (f32, f32) {
         (-0.168_736 * r - 0.331_264 * g + 0.5 * b, 0.5 * r - 0.418_688 * g - 0.081_312 * b)
     };
+    let mut dplane = vec![0f32; hw * hh * 2]; // interleaved (dCb, dCr)
+    dplane.par_chunks_mut(hw * 2).enumerate().for_each(|(y, row)| {
+        for x in 0..hw {
+            let i = (y * hw + x) * 3;
+            let (cb1, cr1) = cbcr(lo[i] as f32, lo[i + 1] as f32, lo[i + 2] as f32);
+            let (cb0, cr0) = cbcr(box_avg(y, x, 0) as f32, box_avg(y, x, 1) as f32, box_avg(y, x, 2) as f32);
+            row[x * 2] = cb1 - cb0;
+            row[x * 2 + 1] = cr1 - cr0;
+        }
+    });
+    drop(lo);
+    sub_stage("chroma_half_delta", &mut st);
+    // Horizontal tap table, shared by every row.
+    let xtaps: Vec<(usize, usize, f32)> = (0..w).map(|x| {
+        let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hw - 1) as f32);
+        let x0 = fx.floor() as usize;
+        (x0, (x0 + 1).min(hw - 1), fx - x0 as f32)
+    }).collect();
     rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
         let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hh - 1) as f32);
         let y0 = fy.floor() as usize; let y1 = (y0 + 1).min(hh - 1); let ty = fy - y0 as f32;
+        let (d0, d1) = (&dplane[y0 * hw * 2..(y0 + 1) * hw * 2], &dplane[y1 * hw * 2..(y1 + 1) * hw * 2]);
         for x in 0..w {
-            let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hw - 1) as f32);
-            let x0 = fx.floor() as usize; let x1 = (x0 + 1).min(hw - 1); let tx = fx - x0 as f32;
+            let (x0, x1, tx) = xtaps[x];
             let mut dcb = 0.0f32; let mut dcr = 0.0f32;
-            for &(yy, wy) in &[(y0, 1.0 - ty), (y1, ty)] { for &(xx, wx) in &[(x0, 1.0 - tx), (x1, tx)] {
-                let i = yy * hw + xx;
-                let (cb1, cr1) = cbcr(&lo, i); let (cb0, cr0) = cbcr(&orig_lo, i);
-                dcb += (cb1 - cb0) * wx * wy; dcr += (cr1 - cr0) * wx * wy;
+            for &(drow, wy) in &[(d0, 1.0 - ty), (d1, ty)] { for &(xx, wx) in &[(x0, 1.0 - tx), (x1, tx)] {
+                dcb += drow[xx * 2] * wx * wy; dcr += drow[xx * 2 + 1] * wx * wy;
             } }
             // inverse BT.601 of (dY=0, dCb, dCr)
             let dr = 1.402 * dcr; let dg = -0.344_136 * dcb - 0.714_136 * dcr; let db = 1.772 * dcb;
@@ -1115,6 +1344,7 @@ fn denoise_chroma_half(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
             }
         }
     });
+    sub_stage("chroma_half_upsample", &mut st);
 }
 
 fn denoise_chroma_wavelet_rgb16_ex(rgb: &mut [u16], w: usize, h: usize, iso: u32, level_delta: i32) {
@@ -1775,6 +2005,17 @@ pub fn apply_dng_gain_map(rgb16: &[u16], w: usize, h: usize, gm: &DngGainMap, m:
 /// moved here because 24M pixels × 24 LUT reads was multi-second, UI-blocking work on the JS
 /// main thread; with rayon it's tens of milliseconds.
 pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, String> {
+    let mut rgba = vec![0u8; rgb16.len() / 3 * 4];
+    apply_lut_rgba_into(rgb16, lut, n, &mut rgba)?;
+    Ok(rgba)
+}
+
+/// `apply_lut_rgba` writing into a caller-owned buffer (`rgba.len()` must be pixels*4) — lets
+/// decode_raw_v2 develop straight into its IPC response instead of copying a 96MB body into it.
+pub fn apply_lut_rgba_into(rgb16: &[u16], lut: &[f32], n: usize, rgba: &mut [u8]) -> Result<(), String> {
+    if rgba.len() != rgb16.len() / 3 * 4 {
+        return Err(format!("apply_lut_rgba: output is {} bytes, expected {}", rgba.len(), rgb16.len() / 3 * 4));
+    }
     // n is derived by the caller as (lut.len()/3).cbrt().round() — a corrupt/truncated/mismatched
     // LUT payload can round to an n that doesn't actually satisfy n*n*n*3==lut.len(), which
     // would otherwise silently read out-of-bounds-adjacent garbage (wrong colors) or panic once
@@ -1788,8 +2029,6 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
     }
     let nm = n - 1;
     let sc = nm as f32 / 65535.0;
-    let px_count = rgb16.len() / 3;
-    let mut rgba = vec![0u8; px_count * 4];
     // Whole-row-sized work units (not one rayon item per pixel) and one 3-float slice per LUT
     // corner (8 bounds checks per pixel, not 24). Same per-channel operation order as before, so
     // the output is bit-identical (examples/lut_bench.rs checks that against the old loop).
@@ -1824,7 +2063,7 @@ pub fn apply_lut_rgba(rgb16: &[u16], lut: &[f32], n: usize) -> Result<Vec<u8>, S
                 dst[3] = 255;
             }
         });
-    Ok(rgba)
+    Ok(())
 }
 
 /// docs/ROADMAP.md R1 (scene-referred), desktop path — mirrors `apply_lut_rgba` exactly (same
@@ -2124,5 +2363,134 @@ mod dng_gain_map_tests {
         assert!((out[0] as i32 - 1970).abs() < 40, "dark pixel should be ~doubled, got {}", out[0]);
         assert_eq!(out[4], 65535);
         assert!(parse_dng_gain_map(b"MM\0\x2a\0\0\0\x08\0\0\0\0\0\0").is_none(), "no tag -> None");
+    }
+}
+
+#[cfg(test)]
+mod open_speed_tests {
+    use super::*;
+
+    /// Deterministic pseudo-random u16 RGB frame (xorshift) over a smooth base, so the chroma
+    /// wavelet has real structure and real noise to work on.
+    fn frame(w: usize, h: usize, seed: u32) -> Vec<u16> {
+        let mut s = seed | 1;
+        let mut next = || { s ^= s << 13; s ^= s >> 17; s ^= s << 5; s };
+        (0..w * h * 3).map(|i| {
+            let px = i / 3;
+            let base = ((px % w) * 40 + (px / w) * 25) as u32 % 30000 + 4000;
+            (base + next() % 6000) as u16
+        }).collect()
+    }
+
+    /// The pre-optimisation denoise_chroma_half, verbatim, as the reference for bit-identity.
+    fn denoise_chroma_half_reference(rgb: &mut [u16], w: usize, h: usize, iso: u32) {
+        let (hw, hh) = (w / 2, h / 2);
+        let mut lo = vec![0u16; hw * hh * 3];
+        lo.par_chunks_mut(hw * 3).enumerate().for_each(|(y, row)| {
+            for x in 0..hw { for c in 0..3 {
+                let a = rgb[((2 * y) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y) * w + 2 * x + 1) * 3 + c] as u32
+                    + rgb[((2 * y + 1) * w + 2 * x) * 3 + c] as u32 + rgb[((2 * y + 1) * w + 2 * x + 1) * 3 + c] as u32;
+                row[x * 3 + c] = ((a + 2) / 4) as u16;
+            } }
+        });
+        let orig_lo = lo.clone();
+        denoise_chroma_wavelet_rgb16_ex(&mut lo, hw, hh, iso, -1);
+        let cbcr = |p: &[u16], i: usize| -> (f32, f32) {
+            let (r, g, b) = (p[i * 3] as f32, p[i * 3 + 1] as f32, p[i * 3 + 2] as f32);
+            (-0.168_736 * r - 0.331_264 * g + 0.5 * b, 0.5 * r - 0.418_688 * g - 0.081_312 * b)
+        };
+        rgb.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+            let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hh - 1) as f32);
+            let y0 = fy.floor() as usize; let y1 = (y0 + 1).min(hh - 1); let ty = fy - y0 as f32;
+            for x in 0..w {
+                let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (hw - 1) as f32);
+                let x0 = fx.floor() as usize; let x1 = (x0 + 1).min(hw - 1); let tx = fx - x0 as f32;
+                let mut dcb = 0.0f32; let mut dcr = 0.0f32;
+                for &(yy, wy) in &[(y0, 1.0 - ty), (y1, ty)] { for &(xx, wx) in &[(x0, 1.0 - tx), (x1, tx)] {
+                    let i = yy * hw + xx;
+                    let (cb1, cr1) = cbcr(&lo, i); let (cb0, cr0) = cbcr(&orig_lo, i);
+                    dcb += (cb1 - cb0) * wx * wy; dcr += (cr1 - cr0) * wx * wy;
+                } }
+                let dr = 1.402 * dcr; let dg = -0.344_136 * dcb - 0.714_136 * dcr; let db = 1.772 * dcb;
+                for (c, d) in [dr, dg, db].iter().enumerate() {
+                    row[x * 3 + c] = (row[x * 3 + c] as f32 + d).round().clamp(0.0, 65535.0) as u16;
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn chroma_half_is_bit_identical_to_the_reference() {
+        for &(w, h, iso) in &[(257usize, 193usize, 12800u32), (300, 200, 3200), (65, 41, 25600)] {
+            let src = frame(w, h, (w * h) as u32);
+            let mut a = src.clone();
+            let mut b = src.clone();
+            denoise_chroma_half(&mut a, w, h, iso);
+            denoise_chroma_half_reference(&mut b, w, h, iso);
+            assert!(a != src, "NR must actually change the frame at ISO {iso}");
+            assert!(a == b, "{w}x{h} ISO {iso}: optimised chroma NR differs from the reference");
+        }
+    }
+
+    #[test]
+    fn lut_into_matches_allocating_form() {
+        let n = 5;
+        let lut: Vec<f32> = (0..n * n * n * 3).map(|i| ((i * 37) % 101) as f32 / 100.0).collect();
+        let src = frame(31, 17, 7);
+        let a = apply_lut_rgba(&src, &lut, n).unwrap();
+        let mut b = vec![1u8; src.len() / 3 * 4];
+        apply_lut_rgba_into(&src, &lut, n, &mut b).unwrap();
+        assert_eq!(a, b);
+        assert!(apply_lut_rgba_into(&src, &lut, n, &mut [0u8; 3]).is_err());
+    }
+
+    #[test]
+    fn pack_rgb16_with_crop_matches_pack_then_crop() {
+        let (w, h) = (13usize, 9usize);
+        let f: Vec<[f32; 3]> = (0..w * h).map(|i| [i as f32 / 120.0 - 0.1, (i % 7) as f32 / 6.0, 1.2 - i as f32 / 100.0]).collect();
+        let (full, fw, fh) = pack_rgb16(w, h, None, |i| f[i]);
+        assert_eq!((fw, fh), (w, h));
+        for (i, px) in f.iter().enumerate() {
+            for c in 0..3 { assert_eq!(full[i * 3 + c], (px[c].clamp(0.0, 1.0) * 65535.0).round() as u16); }
+        }
+        let rect = rawler::imgop::Rect::new(rawler::imgop::Point::new(3, 1), rawler::imgop::Dim2::new(7, 5));
+        let (cropped, cw, ch) = pack_rgb16(w, h, Some(rect), |i| f[i]);
+        assert_eq!((cw, ch), (7, 5));
+        for y in 0..ch { for x in 0..cw { for c in 0..3 {
+            assert_eq!(cropped[(y * cw + x) * 3 + c], full[((y + 1) * w + x + 3) * 3 + c]);
+        } } }
+    }
+
+    fn prepared_bayer(pattern: &str, w: usize, h: usize, crop: Option<rawler::imgop::Rect>) -> Prepared {
+        let cfa = rawler::CFA::new(pattern);
+        // Each site's value encodes its colour so the superpixel's channel routing is checkable;
+        // the two greens differ so the mean is checked too.
+        let pixels: Vec<f32> = (0..w * h).map(|i| {
+            let (r, c) = (i / w, i % w);
+            match cfa.color_at(r, c) { 0 => 0.25, 2 => 0.75, _ => if r % 2 == 0 { 0.4 } else { 0.6 } }
+        }).collect();
+        Prepared {
+            px: PreparedPixels::Cfa { pixels, cfa_config: rawler::rawimage::CFAConfig { cfa, colors: Default::default() } },
+            w, h, crop_rect: crop, iso: 100, make: String::new(), model: String::new(), orientation: 1,
+            lens_model_meta: None, focal_meta: None, xyz_to_cam: [[0.0; 3]; 3],
+        }
+    }
+
+    #[test]
+    fn half_superpixel_routes_channels_for_every_bayer_phase_and_crop() {
+        let q = |v: f32| (v.clamp(0.0, 1.0) * 65535.0).round() as u16;
+        for pat in ["RGGB", "BGGR", "GRBG", "GBRG"] {
+            for crop in [None, Some(rawler::imgop::Rect::new(rawler::imgop::Point::new(1, 1), rawler::imgop::Dim2::new(6, 4)))] {
+                let p = prepared_bayer(pat, 8, 6, crop);
+                let (out, hw, hh) = half_superpixel(&p).expect("2x2 Bayer superpixels");
+                assert_eq!((hw, hh), if crop.is_some() { (3, 2) } else { (4, 3) });
+                for px in out.chunks_exact(3) {
+                    assert_eq!(px, &[q(0.25), q((0.4 + 0.6) * 0.5), q(0.75)], "{pat} crop={}", crop.is_some());
+                }
+            }
+        }
+        let mut x = prepared_bayer("RGGB", 8, 6, None);
+        x.px = PreparedPixels::Linear { pixels: vec![0.0; 8 * 6 * 3] };
+        assert!(half_superpixel(&x).is_none(), "LinearRaw has no mosaic to superpixel");
     }
 }

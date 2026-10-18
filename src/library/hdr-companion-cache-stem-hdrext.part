@@ -110,6 +110,33 @@ pub(crate) fn read_decode_cache_rgba(path: &str, recipe_key: &str) -> Result<ima
     Ok(image::load_from_memory_with_format(&bytes, fmt).map_err(|e| format!("decode cache: {e}"))?.into_rgba8())
 }
 
+/// `read_decode_cache_rgba` framed for IPC as [u32 w][u32 h][RGBA8], the pixels decoded straight
+/// into the output buffer (no intermediate 96MB image + copy). A QOI written as RGBA (every cache
+/// this app writes) takes the direct path; anything else falls back to the generic decode.
+pub(crate) fn read_decode_cache_rgba_framed(path: &str, recipe_key: &str) -> Result<Vec<u8>, String> {
+    use image::ImageDecoder;
+    let file = decode_cache_file(path, recipe_key)?.ok_or("no cached decode")?;
+    let bytes = std::fs::read(&file).map_err(|e| format!("read decode cache: {e}"))?;
+    if file.extension().and_then(|e| e.to_str()) == Some("qoi") {
+        let dec = image::codecs::qoi::QoiDecoder::new(Cursor::new(&bytes)).map_err(|e| format!("decode cache: {e}"))?;
+        if dec.color_type() == image::ColorType::Rgba8 {
+            let (w, h) = dec.dimensions();
+            let mut out = vec![0u8; 8 + dec.total_bytes() as usize];
+            out[0..4].copy_from_slice(&w.to_le_bytes());
+            out[4..8].copy_from_slice(&h.to_le_bytes());
+            dec.read_image(&mut out[8..]).map_err(|e| format!("decode cache: {e}"))?;
+            return Ok(out);
+        }
+    }
+    drop(bytes);
+    let img = read_decode_cache_rgba(path, recipe_key)?;
+    let mut out = Vec::with_capacity(8 + img.as_raw().len());
+    out.extend_from_slice(&img.width().to_le_bytes());
+    out.extend_from_slice(&img.height().to_le_bytes());
+    out.extend_from_slice(img.as_raw());
+    Ok(out)
+}
+
 /// Encodes and writes the full-resolution cache (QOI). Written to a temp name and renamed so a
 /// reader never sees a half-written frame.
 pub(crate) fn write_decode_cache_rgba(path: &str, recipe_key: &str, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
