@@ -138,3 +138,6 @@ _local/
 # Promo video work stays local until the video is final
 promo/
 
+
+# autotrain output (datasets hold thumbnails of personal photos)
+tools/autotrain/data/
