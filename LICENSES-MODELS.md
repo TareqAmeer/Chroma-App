@@ -8,7 +8,7 @@ are not in git (they are ~1.1 GB); the desktop build fetches them from the sourc
 | Model | What it does | Licence |
 |---|---|---|
 | **SAM 2.1 Hiera-Tiny** (`vendor/sam2`) | Tap-to-select subject masks | Apache-2.0 |
-| **EdgeSAM / MobileSAM** (`vendor/sam`) | Faster fallback for the same job | **Non-commercial / research** |
+| **EdgeSAM** (`vendor/sam`) | Faster fallback for the same job | **NTU S-Lab 1.0 — non-commercial / research** (MobileSAM, Apache-2.0, is the commercially clean alternative; see docs/masking-model-bench.md) |
 | **face-parsing (SegFormer, `nvidia/mit-b5`)** (`vendor/faceparse`) | Excludes eyes, lips and hair from a skin mask | **NVIDIA SegFormer terms — non-commercial / research**; the fine-tune declares no separate licence |
 | **SCRFD-500M** (`vendor/scrfd`) | Finds faces in a photo | InsightFace, research/OSS terms |
 | **ArcFace `w600k_r50`** (`vendor/arcface`) | Groups photos of the same person | InsightFace, research/OSS terms |
