@@ -87,3 +87,21 @@ and all panel widths. A fresh-context gap review signs off each phase.
 - CHR-297: procedural fixture harness + baseline (`test/mask_quality_synth.mjs`, `test/mask_quality_baseline.json`); real-photo labels still open.
 - CHR-298: licence/size table in [masking-model-bench.md](masking-model-bench.md); measurements pending model downloads.
 - CHR-299/300: quick fix-ups bar and mask-list chips + inline mute/solo shipped in the editor.
+
+## Phase 2 experiment: classical edge refinement (2026-10-19) — negative result
+Prototype: `tools/scripts/mask_matting_eval.py`, scored with the CHR-297 harness on the 22 reviewed real photos, starting from the current EdgeSAM single-point mask.
+
+| Method (band around mask edge) | hair a/b MAE | backlit a/b MAE | all categories |
+|---|---|---|---|
+| none (current) | 0.128 / 0.353 | 0.114 / 0.309 | baseline |
+| guided filter (r=8) | 0.128 / 0.353 | 0.114 / 0.310 | within 0.01 of baseline |
+| large-kernel matting, 14 px | 0.125 / 0.345 | 0.119 / 0.335 | within 0.02 of baseline |
+| large-kernel matting, 30 px | 0.129 / 0.353 | 0.122 / 0.355 | no gain |
+| large-kernel matting, 60 px | 0.139 / 0.367 | 0.139 / 0.499 | worse |
+
+**Conclusion:** edge refinement of a coarse SAM mask does not move hair/backlit error; the wider the unknown band, the worse. The error is dominated by structure the coarse mask never contained (strands, branches, whole people), not by edge placement. Do not port classical matting into the app.
+
+**Consequences for the plan**
+- A matting model (BiRefNet) on the subject region is the only candidate that can recover strands, but it costs 30-70 s on this CPU, so it can only be an opt-in background pass.
+- It cannot be scored fairly on the current labels (BiRefNet produced the drafts). Needs hand-corrected hair truth on a few photos first.
+- Selection failures on groups/foliage (people 0.70 boundary MAE, foliage 0.31 alpha MAE) are prompt/coverage problems: per-person instance selection (Track B1) and non-sky/foliage classes (B2) are the levers there, not edge refinement.
