@@ -44,7 +44,7 @@ Whole-image models, run once per photo, scored against the reviewed labels. Alph
 | people (4) | 0.228 / 0.701 | 0.160 / 0.507 | 0.086 / 0.205 | 0.063 / 0.221 |
 | foliage (4) | 0.305 / 0.343 | 0.291 / 0.514 | 0.266 / 0.395 | 0.283 / 0.499 |
 | sky-branches (2) | 0.110 / 0.347 | 0.102 / 0.313 | 0.110 / 0.303 | 0.116 / 0.309 |
-| time / photo | 0.3 s (+0.04) | see below | 1.6 s | 0.6 s |
+| time / photo | 0.3 s (+0.04) | 2.7 s | 1.6 s | 0.6 s |
 | size, licence | 22 MB, non-commercial | 192 MB, MIT | 176 MB, MIT | 26 MB, Apache-2.0 |
 
 \* BiRefNet-lite made the draft labels, so its column is biased upward and is shown only as a ceiling.

@@ -52,6 +52,7 @@ function mskAddMenu(ev,composeOp){
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')
       +item('Select Subject','wand','ai')
+      +item('Auto Subject (matte)','wand','', 'mskAddSubjectMatte()')
       +item('Select Background','wand','', 'mskAddBackground()'):'')
     +'<div class="msk-more-sep"></div>'+hd('Range')
     +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum')

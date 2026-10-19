@@ -403,6 +403,8 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
+            matte_run,
+            matte::matte_models,
             superres_available,
             superres_cancel,
             superres_run,
@@ -890,6 +892,7 @@ fn main() {
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            matte::set_model_paths(resolve_vendor("vendor/matte/modnet.onnx"), resolve_vendor("vendor/matte/isnet.onnx"));
             superres::set_model_path(resolve_vendor("vendor/superres/realesr-general-x4v3.onnx"));
             inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
 

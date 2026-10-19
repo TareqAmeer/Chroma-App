@@ -83,7 +83,7 @@ function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
-    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':null,
+    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
     modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
     skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
 }

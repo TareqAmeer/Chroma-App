@@ -15,6 +15,8 @@ are not in git (they are ~1.1 GB); the desktop build fetches them from the sourc
 | **CLIP ViT-B/32** (`vendor/clip`) | Natural-language photo search | MIT (OpenAI) |
 | **RawNIND UtNet2** (`vendor/rawdenoise`) | High-quality RAW noise reduction | **GPL-3.0** |
 | **Depth Anything V2 Small** (`vendor/depth`) | Depth Range mask + depth blur/tilt-shift | Apache-2.0 |
+| **MODNet** (`vendor/matte/modnet.onnx`) | Auto Subject mask (hair-accurate subject matte) | Apache-2.0 |
+| **ISNet general-use** (`vendor/matte/isnet.onnx`, optional download) | Higher-quality Auto Subject tier | MIT |
 | **RT-DETR r18vd** (`vendor/rtdetr`) | Finds cats/dogs/birds/horses in a photo (pet detection) | Apache-2.0 |
 | **ONNX Runtime** (`vendor/onnxruntime`) | Runs all of the above | MIT |
 | **Real-ESRGAN `realesr-general-x4v3`** (`vendor/superres`) | Export-time 2x/4x Super Resolution | **BSD-3-Clause** (code; no separate weights terms stated upstream — see its README) |

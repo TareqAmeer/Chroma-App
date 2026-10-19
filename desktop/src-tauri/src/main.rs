@@ -55,6 +55,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod matte;
 mod superres;
 mod inpaint_alpha;
 mod inpaint;
@@ -835,6 +836,26 @@ fn depth_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, Strin
     struct Header { width: u32, height: u32 }
     let header = Header { width: w, height: h };
     let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("depth_run header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + map.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&map);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Subject matte (matte.rs). Framed request: JSON {width,height,model} + RGB8; framed response:
+/// JSON {width,height,model} + one width*height alpha byte per pixel (0=background, 255=subject).
+#[tauri::command(async)]
+fn matte_run(request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    let model = matte::Model::parse(json["model"].as_str().unwrap_or("modnet"))?;
+    if payload.len() != (w as usize) * (h as usize) * 3 {
+        return Err(format!("matte_run: payload {} bytes, expected {}x{}x3", payload.len(), w, h));
+    }
+    let map = matte::estimate(model, payload, w, h)?;
+    let header_bytes = serde_json::to_vec(&serde_json::json!({"width": w, "height": h, "model": model.name()})).map_err(|e| format!("matte_run header: {e}"))?;
     let mut out = Vec::with_capacity(4 + header_bytes.len() + map.len());
     out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
     out.extend_from_slice(&header_bytes);
@@ -3568,6 +3589,8 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
+            matte_run,
+            matte::matte_models,
             superres_available,
             superres_cancel,
             superres_run,
@@ -4055,6 +4078,7 @@ fn main() {
             petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
             dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
             depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            matte::set_model_paths(resolve_vendor("vendor/matte/modnet.onnx"), resolve_vendor("vendor/matte/isnet.onnx"));
             superres::set_model_path(resolve_vendor("vendor/superres/realesr-general-x4v3.onnx"));
             inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
 

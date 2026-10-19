@@ -103,7 +103,7 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const T=[['Subject','wand',"mskAdd('ai')",desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
     ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
   g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');

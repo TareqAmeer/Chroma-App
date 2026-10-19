@@ -141,3 +141,4 @@ promo/
 
 # autotrain output (datasets hold thumbnails of personal photos)
 tools/autotrain/data/
+desktop/src-tauri/vendor/matte/isnet.onnx
