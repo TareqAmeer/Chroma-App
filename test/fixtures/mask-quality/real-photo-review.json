@@ -1,7 +1,7 @@
 {
  "reviewed": "2026-10-19",
  "reviewer": "owner",
- "note": "Reviews of BiRefNet_lite DRAFT truth. good/usable are scored (usable has the stated flaw, so scores on it are slightly pessimistic for models that do better); bad are excluded. Photos stay local (not in repo).",
+ "note": "Reviews of DRAFT truth (BiRefNet_lite; photos marked relabelled use tools/scripts/mask_fixture_fix.py prompts). good/usable are scored; bad are excluded. Photos stay local, not in repo.",
  "photos": {
   "backlit": {
    "verdict": "usable",
@@ -28,8 +28,9 @@
    "note": "part of tree in shadow not included"
   },
   "foliage-3": {
-   "verdict": "bad",
-   "note": "most foliage not selected"
+   "verdict": "good",
+   "note": "re-labelled as non-sky (luminance/blue threshold)",
+   "relabelled": true
   },
   "foliage-4": {
    "verdict": "usable",
@@ -68,24 +69,28 @@
    "note": ""
   },
   "people": {
-   "verdict": "bad",
-   "note": "missing right person head; left person includes pole"
+   "verdict": "usable",
+   "note": "re-labelled with per-person prompts; better, not perfect",
+   "relabelled": true
   },
   "people-2": {
-   "verdict": "bad",
-   "note": "left person excluded; chair and umbrella included"
+   "verdict": "usable",
+   "note": "re-labelled with per-person prompts and chair/umbrella negatives; better, not perfect",
+   "relabelled": true
   },
   "people-3": {
    "verdict": "good",
    "note": ""
   },
   "people-4": {
-   "verdict": "bad",
-   "note": "two right people and middle arms missing"
+   "verdict": "usable",
+   "note": "re-labelled with per-person prompts; still missing an arm and a head",
+   "relabelled": true
   },
   "sky-branches": {
    "verdict": "bad",
-   "note": "branches without sky behind them missed"
+   "note": "re-label was worse than draft; excluded",
+   "relabelled": false
   },
   "sky-branches-2": {
    "verdict": "good",
@@ -93,11 +98,13 @@
   },
   "sky-branches-3": {
    "verdict": "bad",
-   "note": "missing much foliage; includes stars"
+   "note": "lots of foliage still missing after re-label; excluded",
+   "relabelled": false
   },
   "sky-branches-4": {
-   "verdict": "bad",
-   "note": "window selected instead of tree"
+   "verdict": "good",
+   "note": "re-labelled: SAM region + non-sky detail",
+   "relabelled": true
   }
  }
 }
