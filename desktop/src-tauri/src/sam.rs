@@ -238,6 +238,15 @@ fn encoder() -> Result<&'static Mutex<SamSession>, String> {
         .map_err(|e| e.clone())
 }
 
+/// Builds the EdgeSAM sessions (ORT dylib load + two model parses) ahead of the first mask click.
+/// Called once, a few seconds after launch, from a single utility-QoS thread (main.rs setup), so
+/// the cold start that used to land inside the user's first AI Select happens while the grid is
+/// idle. Same OnceLocks the real calls use: a click that races the warm-up just waits for it.
+pub fn warm() {
+    let _ = encoder();
+    let _ = decoder();
+}
+
 fn decoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
     S.get_or_init(|| create_session(DECODER_BYTES).map(Mutex::new))

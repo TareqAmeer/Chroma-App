@@ -983,6 +983,19 @@ fn main() {
             };
             sam::set_sam2_model_paths(resolve_vendor("vendor/sam2/encoder.onnx"), resolve_vendor("vendor/sam2/decoder.onnx"));
 
+            // Warm the EdgeSAM sessions shortly after launch so the first AI mask click skips the
+            // cold start. ONE one-shot thread at background QoS (not per-item work), delayed so it
+            // never competes with boot/grid; one model at a time. CoreML stays off (sam.rs).
+            if std::env::var_os("CS_NO_AI_WARM").is_none() {
+                let _ = std::thread::Builder::new().name("cs-ai-warm".into()).spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    bgwork::mark_current_thread_background();
+                    let t = std::time::Instant::now();
+                    sam::warm();
+                    diag::log("info", format!("ai_warm edgesam ready in {}ms", t.elapsed().as_millis()));
+                });
+            }
+
             // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
             // dev-fallback pattern as the SAM2 models above.
             faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
