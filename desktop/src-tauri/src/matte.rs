@@ -184,4 +184,35 @@ mod tests {
         println!("matte fg={fg:.3} bg={bg:.3}");
         assert!(fg > 0.02 && bg > 0.02, "degenerate matte: fg={fg} bg={bg}");
     }
+
+    /// Manual probe, not run by default: MATTE_PHOTOS=<dir of jpg/png> MATTE_OUT=<dir> cargo test --bin chromasmith
+    /// matte_probe_photos -- --ignored --nocapture. Runs every installed model through the app's own
+    /// ORT path on each photo (long side capped at 1024, like samInputDims) and writes <name>__<model>.png.
+    #[test]
+    #[ignore]
+    fn matte_probe_photos() {
+        let (Ok(dir), Ok(out)) = (std::env::var("MATTE_PHOTOS"), std::env::var("MATTE_OUT")) else { return };
+        let v = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("vendor/matte");
+        crate::sam::set_dylib_path(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path()));
+        set_model_paths(v.join("modnet.onnx"), v.join("isnet.onnx"));
+        std::fs::create_dir_all(&out).unwrap();
+        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path())
+            .filter(|p| p.file_name().and_then(|n| n.to_str()).map(|n| !n.starts_with('.') && (n.ends_with(".jpg") || n.ends_with(".png"))).unwrap_or(false)).collect();
+        files.sort();
+        for f in files {
+            let img = image::open(&f).expect("open").to_rgb8();
+            let (iw, ih) = img.dimensions();
+            let sc = (1024.0 / iw.max(ih) as f32).min(1.0);
+            let (w, h) = (((iw as f32 * sc) as u32).max(2), ((ih as f32 * sc) as u32).max(2));
+            let small = image::imageops::resize(&img, w, h, image::imageops::FilterType::Triangle);
+            for m in available() {
+                let model = Model::parse(m).unwrap();
+                let t = std::time::Instant::now();
+                let a = estimate(model, small.as_raw(), w, h).expect("estimate");
+                let stem = f.file_stem().unwrap().to_string_lossy().replace(' ', "-");
+                image::GrayImage::from_raw(w, h, a).unwrap().save(format!("{out}/{stem}__{m}.png")).unwrap();
+                println!("{stem} {m} {:.2}s", t.elapsed().as_secs_f32());
+            }
+        }
+    }
 }
