@@ -98,9 +98,19 @@ function fxUpdateClipInfoUI(){
   el.style.display='';
   el.innerHTML=parts.join(' · ')+(notes.length?'<br>'+notes.map(n=>`<span style="color:var(--mut)">${n}</span>`).join('<br>'):'');
 }
+// Lightroom-style "Create new mask" tile grid: the same actions as the + Mask menu, one click each,
+// gated identically (AI/Depth tiles only where the on-device models exist).
+function mskCreateGridSync(){
+  const g=document.getElementById('msk-create-grid');if(!g)return;
+  const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
+  const T=[['Subject','wand',"mskAdd('ai')",desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+    ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
+    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
+  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
+}
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
@@ -176,6 +186,13 @@ function mskRebuild(){
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]?
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
+  // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
+  // of any type already composed with this one. Existing ⋯ → Compose stays for composing two masks that exist.
+  h+='<div class="btn-row msk-compose-row" role="group" aria-label="Combine with another mask">'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'add\')" title="Add another mask to this selection">+ Add</button>'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'subtract\')" title="Subtract another mask from this selection">\u2212 Subtract</button>'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button>'
+    +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
   const caps=mskCaps(m);

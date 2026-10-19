@@ -48,6 +48,23 @@ try{
   assert.deepEqual(r.afterMute,{muted:true,sel:0,pressed:'true'});
   assert.deepEqual(r.afterSolo,{solo:2,sel:0});
   assert.equal(r.barForRadial,'');
+  const g=await page.evaluate(()=>{
+    fxState.masks=[{id:'a',name:'A',type:'radial',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,compositionMigrated:true,crSamples:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0}];mskSel=0;mskRebuild();
+    const tiles=[...document.querySelectorAll('#msk-create-grid .msk-tile')].map(b=>b.dataset.kind);
+    const rowBtns=[...document.querySelectorAll('.msk-compose-row button')].map(b=>b.textContent.trim());
+    mskComposeMenu({stopPropagation(){},currentTarget:document.querySelector('.msk-compose-row button')},'subtract');
+    const hdr=document.querySelector('.msk-more-menu .msk-more-hd')?.textContent;
+    mskAdd('radial');
+    const n=fxState.masks[1];
+    const plain=(mskAdd('radial'),fxState.masks[2]);
+    const before=document.querySelector('.msk-more-menu');
+    return {tiles,rowBtns,hdr,n:{op:n.composeOp,operand:n.operandId,sub:n.subtract},plainOp:plain.composeOp||'',pending:_mskPendingCompose};
+  });
+  assert.deepEqual(g.tiles,['sky','brush','linear','radial','color','luminance']);
+  assert.deepEqual(g.rowBtns,['+ Add','\u2212 Subtract','\u2229 Intersect','Invert']);
+  assert.match(g.hdr,/Subtract from/);
+  assert.deepEqual(g.n,{op:'subtract',operand:'a',sub:true});
+  assert.equal(g.plainOp,'');assert.equal(g.pending,null);
   assert.deepEqual(errors,[]);
-  done=true;console.log('PASS mask list chips, inline mute/solo, fix-up bar gating');
+  done=true;console.log('PASS mask list chips, inline mute/solo, fix-up gating, create grid, compose-on-create');
 }finally{await browser.close();server.close();if(!done)process.exitCode=1;}

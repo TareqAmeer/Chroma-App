@@ -721,6 +721,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
 .msk-dragging{opacity:var(--op-2)}
+.msk-create-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:var(--sp-1);margin:var(--sp-2) 0}
+.msk-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:var(--sp-2) var(--sp-1);background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-size:var(--fs-1);cursor:pointer;min-height:44px}
+.msk-tile:hover:not([disabled]),.msk-tile:focus-visible{border-color:var(--acc);color:var(--acc)}
+.msk-tile[disabled]{opacity:.4;cursor:not-allowed}
+.msk-compose-row{margin:0 0 var(--sp-2)}
 .msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
 .msk-li-ctl:hover,.msk-li-ctl:focus-visible{color:var(--txt);border-color:var(--acc)}
 .msk-li-ctl.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}

@@ -90,7 +90,9 @@ function mskAdd(type,configure){
   // A purpose-built workflow may configure its normal brush mask before the single history
   // commit below. This keeps creation + starter settings together as one undoable action.
   if(typeof configure==='function')configure(m);
+  const pc=_mskPendingCompose;_mskPendingCompose=null;
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
+  if(pc&&fxState.masks.some(x=>x.id===pc.operandId)){m.composeOp=pc.op;m.operandId=pc.operandId;m.compositionMigrated=true;m.subtract=pc.op==='subtract';m.intersect=pc.op==='intersect';}
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();

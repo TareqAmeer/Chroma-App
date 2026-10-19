@@ -760,6 +760,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
 .msk-dragging{opacity:var(--op-2)}
+.msk-create-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:var(--sp-1);margin:var(--sp-2) 0}
+.msk-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:var(--sp-2) var(--sp-1);background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-size:var(--fs-1);cursor:pointer;min-height:44px}
+.msk-tile:hover:not([disabled]),.msk-tile:focus-visible{border-color:var(--acc);color:var(--acc)}
+.msk-tile[disabled]{opacity:.4;cursor:not-allowed}
+.msk-compose-row{margin:0 0 var(--sp-2)}
 .msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
 .msk-li-ctl:hover,.msk-li-ctl:focus-visible{color:var(--txt);border-color:var(--acc)}
 .msk-li-ctl.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
@@ -4279,6 +4284,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
+          <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
           <div class="fx-row"><div class="fx-label">Show on photo</div>
             <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')">Overlay</button><button data-v="isolate" onclick="mskSetPreviewMode('isolate')">Isolate</button><button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off" onclick="mskSetPreviewMode('off')">Off</button></div>
           </div>
@@ -7289,7 +7295,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1019D';
+const BUILD='1.1019E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16264,7 +16270,9 @@ function mskAdd(type,configure){
   // A purpose-built workflow may configure its normal brush mask before the single history
   // commit below. This keeps creation + starter settings together as one undoable action.
   if(typeof configure==='function')configure(m);
+  const pc=_mskPendingCompose;_mskPendingCompose=null;
   fxState.masks.push(m);mskSel=fxState.masks.length-1;
+  if(pc&&fxState.masks.some(x=>x.id===pc.operandId)){m.composeOp=pc.op;m.operandId=pc.operandId;m.compositionMigrated=true;m.subtract=pc.op==='subtract';m.intersect=pc.op==='intersect';}
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();
@@ -18705,8 +18713,17 @@ function _mskGroup(key,label,body,note){
 // `+`-prefixed buttons in a single mask row"). Same popover component as mskMoreMenu below
 // (.msk-more-menu/.msk-more-it), grouped into the 4 kinds a mask actually is: a SHAPE, something
 // you PAINT, an AI-segmented one (desktop only), or a shapeless RANGE gate.
-function mskAddMenu(ev){
+// Lightroom's "+ Add / − Subtract" on a selected mask: pick any mask type and the NEW mask is composed
+// with the currently selected one (same composeOp/operandId graph the ⋯ → Compose menu writes).
+// Consumed by mskAdd at the moment the mask is pushed, so async AI creators work too.
+let _mskPendingCompose=null;
+function mskComposeMenu(ev,op){
+  const masks=_mskEnsureIds(fxState.masks),m=masks[mskSel];if(!m)return;
+  _mskPendingCompose={op,operandId:m.id};mskAddMenu(ev,op);
+}
+function mskAddMenu(ev,composeOp){
   ev.stopPropagation();
+  if(!composeOp)_mskPendingCompose=null;
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
   const item=(label,ic,type,action)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
@@ -18721,7 +18738,8 @@ function mskAddMenu(ev){
   // already gates on window.__TAURI__ — the actual "can this run" check — so this now matches.
   const desktop=!!window.__TAURI__;
   if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
-  const html='<div class="msk-more-hd">'+fxState.masks.length+' / '+MSK_MAX+' masks</div>'
+  const cmpTxt={add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[composeOp];
+  const html='<div class="msk-more-hd">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
     +hd('Shape')
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
@@ -18745,7 +18763,7 @@ function mskAddMenu(ev){
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
   _mskPlaceMenu(d,r);
-  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();_mskPendingCompose=null;document.removeEventListener('click',c);},{once:true}),0);
 }
 // Places a mask dropdown beside its trigger and keeps it on screen: it opens below the trigger when
 // that fits, otherwise on whichever side has more room, and gets its own scroll (max-height) when even
@@ -19667,9 +19685,19 @@ function fxUpdateClipInfoUI(){
   el.style.display='';
   el.innerHTML=parts.join(' · ')+(notes.length?'<br>'+notes.map(n=>`<span style="color:var(--mut)">${n}</span>`).join('<br>'):'');
 }
+// Lightroom-style "Create new mask" tile grid: the same actions as the + Mask menu, one click each,
+// gated identically (AI/Depth tiles only where the on-device models exist).
+function mskCreateGridSync(){
+  const g=document.getElementById('msk-create-grid');if(!g)return;
+  const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
+  const T=[['Subject','wand',"mskAdd('ai')",desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+    ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
+    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
+  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
+}
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
@@ -19745,6 +19773,13 @@ function mskRebuild(){
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]?
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
+  // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
+  // of any type already composed with this one. Existing ⋯ → Compose stays for composing two masks that exist.
+  h+='<div class="btn-row msk-compose-row" role="group" aria-label="Combine with another mask">'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'add\')" title="Add another mask to this selection">+ Add</button>'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'subtract\')" title="Subtract another mask from this selection">\u2212 Subtract</button>'
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button>'
+    +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
   const caps=mskCaps(m);

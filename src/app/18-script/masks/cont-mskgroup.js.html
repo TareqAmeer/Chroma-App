@@ -12,8 +12,17 @@ function _mskGroup(key,label,body,note){
 // `+`-prefixed buttons in a single mask row"). Same popover component as mskMoreMenu below
 // (.msk-more-menu/.msk-more-it), grouped into the 4 kinds a mask actually is: a SHAPE, something
 // you PAINT, an AI-segmented one (desktop only), or a shapeless RANGE gate.
-function mskAddMenu(ev){
+// Lightroom's "+ Add / − Subtract" on a selected mask: pick any mask type and the NEW mask is composed
+// with the currently selected one (same composeOp/operandId graph the ⋯ → Compose menu writes).
+// Consumed by mskAdd at the moment the mask is pushed, so async AI creators work too.
+let _mskPendingCompose=null;
+function mskComposeMenu(ev,op){
+  const masks=_mskEnsureIds(fxState.masks),m=masks[mskSel];if(!m)return;
+  _mskPendingCompose={op,operandId:m.id};mskAddMenu(ev,op);
+}
+function mskAddMenu(ev,composeOp){
   ev.stopPropagation();
+  if(!composeOp)_mskPendingCompose=null;
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
   const item=(label,ic,type,action)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
@@ -28,7 +37,8 @@ function mskAddMenu(ev){
   // already gates on window.__TAURI__ — the actual "can this run" check — so this now matches.
   const desktop=!!window.__TAURI__;
   if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
-  const html='<div class="msk-more-hd">'+fxState.masks.length+' / '+MSK_MAX+' masks</div>'
+  const cmpTxt={add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[composeOp];
+  const html='<div class="msk-more-hd">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
     +hd('Shape')
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
@@ -52,7 +62,7 @@ function mskAddMenu(ev){
   document.body.appendChild(d);
   const r=ev.currentTarget.getBoundingClientRect();
   _mskPlaceMenu(d,r);
-  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+  setTimeout(()=>document.addEventListener('click',function c(){d.remove();_mskPendingCompose=null;document.removeEventListener('click',c);},{once:true}),0);
 }
 // Places a mask dropdown beside its trigger and keeps it on screen: it opens below the trigger when
 // that fits, otherwise on whichever side has more room, and gets its own scroll (max-height) when even
