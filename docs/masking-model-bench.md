@@ -32,3 +32,26 @@ are synthetic, so model masks on them would mean nothing; real-photo labels are 
 
 ## Reproduce
 `python3 -m venv v && v/bin/pip install onnxruntime==1.19.2 numpy pillow && v/bin/python tools/scripts/mask_model_bench.py <models_dir> 5`
+
+## Matting candidates, scored (2026-10-19, CHR-297 22 reviewed photos)
+Whole-image models, run once per photo, scored against the reviewed labels. Alpha MAE / boundary-band MAE (lower is better). Timings are medians on the dev Intel Mac **while it was busy running other work, so treat them as pessimistic upper bounds**; they will be faster on an idle or newer machine and much faster with a GPU provider.
+
+| Category (n) | Current EdgeSAM click | BiRefNet-lite 512* | ISNet general (1024) | MODNet (<=1024) |
+|---|---|---|---|---|
+| hair (4) | 0.128 / 0.353 | 0.005 / 0.014 | 0.014 / 0.033 | 0.012 / 0.030 |
+| backlit (4) | 0.114 / 0.309 | 0.003 / 0.022 | 0.039 / 0.135 | 0.019 / 0.053 |
+| glasses (4) | 0.058 / 0.194 | 0.006 / 0.015 | 0.016 / 0.032 | 0.010 / 0.024 |
+| people (4) | 0.228 / 0.701 | 0.160 / 0.507 | 0.086 / 0.205 | 0.063 / 0.221 |
+| foliage (4) | 0.305 / 0.343 | 0.291 / 0.514 | 0.266 / 0.395 | 0.283 / 0.499 |
+| sky-branches (2) | 0.110 / 0.347 | 0.102 / 0.313 | 0.110 / 0.303 | 0.116 / 0.309 |
+| time / photo | 0.3 s (+0.04) | see below | 1.6 s | 0.6 s |
+| size, licence | 22 MB, non-commercial | 192 MB, MIT | 176 MB, MIT | 26 MB, Apache-2.0 |
+
+\* BiRefNet-lite made the draft labels, so its column is biased upward and is shown only as a ceiling.
+
+**Reading it:** independent matting models (ISNet, MODNet) beat the current click-mask by ~10x on hair/glasses boundary error and ~3x on groups of people, at 0.6-1.6 s. Nobody solves foliage-against-sky or fine branches without a different approach. They select the salient subject(s) automatically rather than the one thing you clicked, so they replace "Select Subject", not click prompts.
+
+**Tiered plan (user request):**
+- **Tier 1, older/CPU-only machines:** MODNet (26 MB, ~0.6 s). Default.
+- **Tier 2, modern machines with a GPU / Apple Silicon:** ISNet or BiRefNet at full size through a GPU execution provider (CoreML/DirectML/CUDA), selectable in settings; auto-picked by a one-time speed test.
+- Keep EdgeSAM/SAM 2.1 for click-to-select and Add/Subtract refinement.
