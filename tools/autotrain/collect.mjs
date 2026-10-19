@@ -15,7 +15,8 @@ import { parseXmpLabels, thumbnail, features, LABELS, FEATURE_NAMES } from './li
 const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const out = outIdx >= 0 ? args[outIdx + 1] : 'tools/autotrain/data/dataset.json';
-const root = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+const sizeIdx = args.indexOf('--size'), SIZE = sizeIdx >= 0 ? parseInt(args[sizeIdx + 1], 10) : 96;
+const root = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--out' && args[i - 1] !== '--size');
 if (!root) { console.error('usage: collect.mjs <folder> [--out file.json]'); process.exit(2); }
 
 const IMG = /\.(jpe?g|png|bmp|tiff?|dng|heic|cr2|cr3|nef|arw|rw2|orf|raf)$/i;
@@ -38,7 +39,7 @@ for (const file of walk(root).filter(f => IMG.test(f) && !path.basename(f).start
   const y = parseXmpLabels(xml);
   if (!y) { skipped.noTone++; continue; }
   try {
-    const t = thumbnail(file);
+    const t = thumbnail(file, SIZE);
     rows.push({ file: path.relative(root, file), x: features(t), y: LABELS.map(l => y[l.key]), w: t.w, h: t.h, rgb: Buffer.from(t.rgb).toString('base64') });
   } catch (e) { skipped.unreadable++; console.error(`skip ${file}: ${e.message}`); }
 }

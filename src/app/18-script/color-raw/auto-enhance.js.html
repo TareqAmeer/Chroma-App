@@ -6,7 +6,7 @@ const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint',
 // trims highlights by how much of the frame is actually crushed/blown, sets contrast from tonal
 // spread, and only touches white balance when enough near-neutral pixels make a gray-world estimate
 // trustworthy. Every move is damped and clamped: a good photo should barely change.
-function autoEnhanceParams(data){
+function autoEnhanceRules(data){
   const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v)),n=data.length>>2;
   const s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);
   const lin=new Float32Array(n),sl=new Float32Array(n);
@@ -45,22 +45,4 @@ function autoEnhanceParams(data){
     tint=Math.round(cl((1-(r+b)/(2*g+1e-9))/0.14*100*0.6,-30,30));
   }
   return{exp,bl,wh,temp,tint,hi,sh,con,vib};
-}
-function autoEnhance(){
-  const src=fxWork||fxImg;if(!src){log('Load an image first','warn');return;}
-  const aeBtn=document.querySelector('[onclick="autoEnhance()"]');
-  if(_autoEnh&&_AE_IDS.every((id,i)=>+document.getElementById(id)?.value===_autoEnh[i])){_autoEnh=null;aeBtn?.classList.remove('on');fxResetSection('adjust');return;}
-  const sw=src.naturalWidth||src.width,sh0=src.naturalHeight||src.height;
-  const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh0/sw)|0);
-  const tc=document.createElement('canvas');tc.width=mw;tc.height=mh;
-  tc.getContext('2d').drawImage(src,0,0,mw,mh);
-  const P=autoEnhanceParams(tc.getContext('2d').getImageData(0,0,mw,mh).data);
-  const setSlider=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
-  setSlider('sl-adj-exp',P.exp);setSlider('sl-adj-bl',P.bl);setSlider('sl-adj-wh',P.wh);
-  setSlider('sl-adj-temp',P.temp);setSlider('sl-adj-tint',P.tint);
-  setSlider('sl-adj-hi',P.hi);setSlider('sl-adj-sh',P.sh);setSlider('sl-adj-con',P.con);setSlider('sl-adj-vib',P.vib);
-  const tg=document.getElementById('tg-adjust');if(!tg.classList.contains('on'))toggleFX('adjust');
-  _autoEnh=[P.exp,P.bl,P.wh,P.temp,P.tint,P.hi,P.sh,P.con,P.vib];aeBtn?.classList.add('on');
-  fxUpdate();
-  log(`Auto-enhance: exp ${P.exp}, highlights ${P.hi}, shadows ${P.sh}, contrast ${P.con}, blacks ${P.bl}, whites ${P.wh}, vibrance ${P.vib}, temp ${P.temp}, tint ${P.tint}`,'ok');
 }

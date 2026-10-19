@@ -7286,7 +7286,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1018M';
+const BUILD='1.1019A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22066,7 +22066,7 @@ const _AE_IDS=['sl-adj-exp','sl-adj-bl','sl-adj-wh','sl-adj-temp','sl-adj-tint',
 // trims highlights by how much of the frame is actually crushed/blown, sets contrast from tonal
 // spread, and only touches white balance when enough near-neutral pixels make a gray-world estimate
 // trustworthy. Every move is damped and clamped: a good photo should barely change.
-function autoEnhanceParams(data){
+function autoEnhanceRules(data){
   const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v)),n=data.length>>2;
   const s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);
   const lin=new Float32Array(n),sl=new Float32Array(n);
@@ -22106,12 +22106,73 @@ function autoEnhanceParams(data){
   }
   return{exp,bl,wh,temp,tint,hi,sh,con,vib};
 }
+// ── Auto-enhance v3: RawTherapee-style histogram analysis + learned Lightroom-style priors ──────
+// autoEnhanceFeatures() ports the idea of RawTherapee's Auto Levels (getAutoExp): linear-light
+// histogram, two exposure estimates (mean -> middle grey 0.1842, and top-of-histogram -> just below
+// clipping), clip-percent black/white points, highlight compression from the white point, contrast
+// from the spread of the histogram's octiles. Those physical measurements, plus plain tonal
+// statistics, are the feature vector. AUTO_MODEL (a tiny ridge regressor, see tools/autotrain/) maps
+// them to our Basic sliders; without it (or if anything is off) autoEnhanceRules() is used.
+const AUTO_FEATURE_NAMES=['expc','exp1','exp2','hlcompr','black','bright','contr','ospread','p1','p5','p25','p50','p75','p95','p99','logGeo','std','chroma','clip','dark','rb','gb'];
+let AUTO_MODEL={"version":3,"labels":["exp","hi","sh","con","wh","bl","vib"],"clamp":{"exp":[-60,60],"hi":[-100,40],"sh":[-40,100],"con":[-30,40],"wh":[-50,50],"bl":[-50,30],"vib":[-10,50]},"mu":[0.1767,0.3502,0.0152,15.3132,0.3421,3.3986,22.6916,0.6462,0.0532,0.0913,0.1745,0.2895,0.4745,0.7615,0.8988,-2.7683,0.2249,0.1355,0.0167,0.0411,0.8882,0.8728],"sd":[0.3674,0.516,0.3288,19.9977,0.5863,3.2884,2.8164,0.0563,0.0437,0.0579,0.0833,0.1044,0.1201,0.1246,0.0877,0.6173,0.0559,0.0592,0.0309,0.0807,0.1242,0.2466],"W":[[0.7759,1.4809,6.7633,0.091,-5.4337,1.0089,0.0519],[3.8287,0.849,0.0064,-0.2259,-7.1448,0.1638,0.0148],[0.0644,-1.8529,-1.4611,-0.0336,-0.7952,0.0077,0.8118],[-0.4504,1.6335,-1.8227,-0.0086,0.4897,0.1246,0.1404],[-0.3637,-0.7517,2.7656,0.006,-1.9759,0.211,0.1615],[0.7466,3.2694,3.2097,0.025,-1.3269,0.2283,0.7328],[-0.7751,0.5524,-0.9589,0.0153,1.1493,-0.2174,-0.0024],[0.7751,-0.5524,0.9589,-0.0153,-1.1493,0.2174,0.0024],[1.8348,3.4367,-1.6976,0.0722,5.6241,0.4679,-1.0856],[-2.8334,-4.0102,-3.4463,-0.0574,-9.2215,-2.061,1.4809],[2.9645,1.5957,-0.8192,0.1113,5.8777,0.5088,-1.5218],[1.9932,4.3394,4.2,-0.0526,-3.3631,-0.0185,0.1985],[0.3605,2.9635,1.7874,0.135,-2.6668,1.5047,0.3116],[1.4343,0.2132,1.413,-0.0299,-5.8194,0.2425,0.9264],[-0.321,-2.5241,3.3852,-0.0079,-2.498,0.3891,-0.3105],[-4.0976,1.7218,-2.0448,-0.1404,-3.5728,-0.9785,1.9101],[1.4253,-1.0193,-1.7335,-0.1934,-1.7639,-0.3612,-0.687],[0.6757,-1.0003,3.2246,-0.0754,-4.2678,-0.279,-2.1966],[-0.3199,-2.9519,-0.2806,-0.081,-0.2742,-0.1193,0.4878],[-0.1928,1.1957,-3.1125,0.053,-0.8952,-0.1847,0.1247],[-1.6259,0.9723,-0.2079,0.08,0.7008,0.4069,-0.2755],[3.6457,-0.0048,1.6948,-0.0454,-3.3837,0.5681,-1.2118],[7.718,-53.363,33.6356,2.9487,7.8131,-8.0022,24.6716]],"trainedOn":563}; // {mu,sd,W,labels,clamp} injected by tools/autotrain/embed_model.mjs
+function autoEnhanceFeatures(data){
+  const n=data.length>>2,imax=65536,s2l=c=>c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);
+  const hist=new Uint32Array(imax),sl=new Float32Array(n);
+  let sum=0,ave=0,rawmax=0,logSum=0,chromaSum=0,sr=0,sg=0,sb=0,clip=0,dark=0;
+  for(let i=0;i<n;i++){
+    const r=data[i*4]/255,g=data[i*4+1]/255,b=data[i*4+2]/255,y=0.2126*s2l(r)+0.7152*s2l(g)+0.0722*s2l(b);
+    const bin=Math.min(imax-1,Math.round(y*(imax-1)));hist[bin]++;sum++;ave+=bin;if(bin>rawmax)rawmax=bin;
+    const l=0.2126*r+0.7152*g+0.0722*b;sl[i]=l;logSum+=Math.log(y+1e-4);
+    chromaSum+=Math.max(r,g,b)-Math.min(r,g,b);sr+=r;sg+=g;sb+=b;if(l>0.95)clip++;if(l<0.04)dark++;
+  }
+  ave/=sum;
+  const sorted=Float32Array.from(sl).sort(),q=p=>sorted[Math.min(n-1,Math.floor(n*p))];
+  // median + octiles (eight equal-population bands; the last closes at 1/16, as in RawTherapee)
+  let median=0,cnt=0;for(let i=0;i<imax;i++){cnt+=hist[i];if(cnt>=sum/2){median=i;break;}}
+  const oct=[0,0,0,0,0,0,0,0];let j=0;cnt=0;
+  for(let i=0;i<imax&&j<8;i++){cnt+=hist[i];if(cnt>(j<7?sum/8:sum/16)){oct[j]=Math.log2(1+i);cnt=0;j++;}}
+  for(let k=1;k<8;k++)if(!oct[k])oct[k]=oct[k-1];
+  const topBits=Math.log2(imax);let overex=0;
+  if(oct[6]>topBits-0.05){oct[6]=1.5*oct[5]-0.5*oct[4];overex=2;}
+  if(oct[7]>topBits-0.05){oct[7]=1.5*oct[6]-0.5*oct[5];if(!overex)overex=1;}
+  let ospread=0;for(let i=1;i<=5;i++){const d=i>2?oct[i+1]-oct[3]:oct[3]-oct[i];ospread+=(oct[i+1]-oct[i])/Math.max(0.5,d);}ospread/=5;
+  // clip points: let 0.2% of pixels clip at each end (RawTherapee's thumbnail default)
+  const clippable=sum*0.002;let whiteclip=imax-1,c2=0;while(whiteclip>1&&c2+hist[whiteclip]<=clippable){c2+=hist[whiteclip];whiteclip--;}
+  let shc=0;c2=0;while(shc<whiteclip-1&&c2+hist[shc]<=clippable){c2+=hist[shc];shc++;}
+  const mid=0.1842,e1=Math.log2(mid*imax/Math.max(1e-6,ave-shc+mid*shc));
+  const e2=0.5*((15.5-(2*oct[7]-oct[6]))+Math.log2(imax/Math.max(1,rawmax)));
+  let expc=Math.abs(e1)-Math.abs(e2)>1?(e1*Math.abs(e2)+e2*Math.abs(e1))/Math.max(1e-6,Math.abs(e1)+Math.abs(e2)):0.5*e1+0.5*e2;
+  expc=Math.max(-5,Math.min(5,expc));
+  const gain=Math.pow(2,expc),corr=Math.sqrt(gain*imax/Math.max(1,rawmax));
+  const hlcompr=Math.max(0,Math.min(100,100*((gain*whiteclip/imax-1)*2.3)/(Math.max(0,expc)+1)));
+  const black=shc*corr/imax;
+  const midtmp=gain*Math.sqrt(Math.max(1,median)*Math.max(1,ave))/imax;
+  const bright=Math.max(-100,Math.min(100,0.25*Math.max(0,(mid-midtmp)*15/(midtmp<0.1?midtmp:(0.10833-0.0833*midtmp)))));
+  const contr=Math.max(0,Math.min(100,50*(1.1-ospread)));
+  const clampF=v=>Math.max(-1e3,Math.min(1e3,v));
+  return[expc,e1,e2,hlcompr,black*100,bright,contr,ospread,q(.01),q(.05),q(.25),q(.5),q(.75),q(.95),q(.99),logSum/n,
+    Math.sqrt(sl.reduce((s,v)=>s+(v-q(.5))*(v-q(.5)),0)/n),chromaSum/n,clip/n,dark/n,sr/(sg+1e-6),sb/(sg+1e-6)].map(clampF);
+}
+function autoEnhanceParams(data){
+  if(AUTO_MODEL){
+    try{
+      const x=autoEnhanceFeatures(data),m=AUTO_MODEL,out={};
+      m.labels.forEach((l,o)=>{
+        let v=m.W[m.mu.length][o];for(let a=0;a<m.mu.length;a++)v+=((x[a]-m.mu[a])/m.sd[a])*m.W[a][o];
+        const c=m.clamp&&m.clamp[l]?m.clamp[l]:[-100,100];out[l]=Math.round(Math.max(c[0],Math.min(c[1],v)));
+      });
+      const base=autoEnhanceRules(data);
+      return{exp:out.exp,bl:out.bl,wh:out.wh,temp:base.temp,tint:base.tint,hi:out.hi,sh:out.sh,con:out.con,vib:out.vib};
+    }catch(e){/* fall through to the rule engine */}
+  }
+  return autoEnhanceRules(data);
+}
 function autoEnhance(){
   const src=fxWork||fxImg;if(!src){log('Load an image first','warn');return;}
   const aeBtn=document.querySelector('[onclick="autoEnhance()"]');
   if(_autoEnh&&_AE_IDS.every((id,i)=>+document.getElementById(id)?.value===_autoEnh[i])){_autoEnh=null;aeBtn?.classList.remove('on');fxResetSection('adjust');return;}
   const sw=src.naturalWidth||src.width,sh0=src.naturalHeight||src.height;
-  const mw=Math.min(sw,400),mh=Math.max(1,(mw*sh0/sw)|0);
+  const mw=Math.min(sw,128),mh=Math.max(1,(mw*sh0/sw)|0); // 128 px: the learned model was fitted on 128 px thumbnails
   const tc=document.createElement('canvas');tc.width=mw;tc.height=mh;
   tc.getContext('2d').drawImage(src,0,0,mw,mh);
   const P=autoEnhanceParams(tc.getContext('2d').getImageData(0,0,mw,mh).data);
