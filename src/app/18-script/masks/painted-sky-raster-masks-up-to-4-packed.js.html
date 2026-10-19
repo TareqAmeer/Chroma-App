@@ -19,32 +19,49 @@ function mskToggleSolo(){
 // Cached on the mask object under a non-serialized key so JSON.stringify (session save/undo/copy)
 // never carries it — it's cheap to rebuild and would only go stale silently otherwise.
 function _mskThumb(m){
-  const W=28,H=18;
-  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  // Mask-list thumbnail: the photo (dimmed) with the mask's selection tinted over it, like Lightroom's
+  // mask thumbnails, at photo aspect and 2x density. Raster masks are area-averaged (strided block mean),
+  // not point-sampled, so thin or sparse selections no longer alias away to a speck.
+  const H=36,S=2,it=(typeof curItem==='function')?curItem():null,img=it&&it.img;
+  const iw=img&&(img.naturalWidth||img.width),ih=img&&(img.naturalHeight||img.height);
+  const W=Math.round(H*(iw&&ih?Math.max(0.75,Math.min(2,iw/ih)):1.5)),PW=W*S,PH=H*S;
+  const cv=document.createElement('canvas');cv.width=PW;cv.height=PH;
   cv.style.cssText='width:'+W+'px;height:'+H+'px;border-radius:3px;flex:none;background:#222';
   const x=cv.getContext('2d');
-  x.fillStyle='#222';x.fillRect(0,0,W,H);
-  if(m.type==='brush'&&m.px&&m.mtW&&m.mtH){
-    const id=x.createImageData(W,H);
-    for(let ty=0;ty<H;ty++)for(let tx=0;tx<W;tx++){
-      const sx=Math.min(m.mtW-1,(tx/W*m.mtW)|0),sy=Math.min(m.mtH-1,(ty/H*m.mtH)|0);
-      const v=m.px[sy*m.mtW+sx]||0,j=(ty*W+tx)*4;
-      id.data[j]=255;id.data[j+1]=60;id.data[j+2]=60;id.data[j+3]=Math.round(v*0.9);
-    }
-    x.putImageData(id,0,0);
-  }else if(m.type==='none'){
-    x.fillStyle='rgba(255,60,60,0.55)';x.fillRect(0,0,W,H);
-  }else if(m.type==='linear'){
-    const g=x.createLinearGradient(m.x0*W,(1-m.y0)*H,m.x1*W,(1-m.y1)*H);
-    g.addColorStop(0,'rgba(255,60,60,0.85)');g.addColorStop(1,'rgba(255,60,60,0)');
-    x.fillStyle=g;x.fillRect(0,0,W,H);
-  }else{ // radial
-    const cx=(m.cx!=null?m.cx:0.5)*W,cy=(1-(m.cy!=null?m.cy:0.5))*H;
-    const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*W),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*H);
-    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
-    x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.8)';x.fill();x.restore();
+  x.fillStyle='#222';x.fillRect(0,0,PW,PH);
+  if(img&&iw&&ih){
+    try{
+      // One cached downscale per photo+size: drawImage of a full-size photo for every row on every rebuild is wasteful.
+      if(!img._mskThumbBase||img._mskThumbBase.width!==PW||img._mskThumbBase.height!==PH){
+        const b=document.createElement('canvas');b.width=PW;b.height=PH;b.getContext('2d').drawImage(img,0,0,PW,PH);img._mskThumbBase=b;
+      }
+      x.drawImage(img._mskThumbBase,0,0);x.fillStyle='rgba(0,0,0,0.45)';x.fillRect(0,0,PW,PH);
+    }catch(e){}
   }
-  if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=1;x.strokeRect(0.5,0.5,W-1,H-1);}
+  if(m.type==='brush'&&m.px&&m.mtW&&m.mtH){
+    const id=x.createImageData(PW,PH),N=3;
+    for(let ty=0;ty<PH;ty++)for(let tx=0;tx<PW;tx++){
+      let sum=0;
+      for(let ky=0;ky<N;ky++){const sy=Math.min(m.mtH-1,(((ty+(ky+.5)/N)/PH)*m.mtH)|0);
+        for(let kx=0;kx<N;kx++){const sx=Math.min(m.mtW-1,(((tx+(kx+.5)/N)/PW)*m.mtW)|0);sum+=m.px[sy*m.mtW+sx]||0;}}
+      const v=sum/(N*N),j=(ty*PW+tx)*4;
+      id.data[j]=255;id.data[j+1]=60;id.data[j+2]=60;id.data[j+3]=Math.round(v*0.8);
+    }
+    // putImageData replaces pixels; composite through a temp canvas so the photo underneath stays visible.
+    const t=document.createElement('canvas');t.width=PW;t.height=PH;t.getContext('2d').putImageData(id,0,0);x.drawImage(t,0,0);
+  }else if(m.type==='none'){
+    x.fillStyle='rgba(255,60,60,0.55)';x.fillRect(0,0,PW,PH);
+  }else if(m.type==='linear'){
+    const g=x.createLinearGradient(m.x0*PW,(1-m.y0)*PH,m.x1*PW,(1-m.y1)*PH);
+    g.addColorStop(0,'rgba(255,60,60,0.85)');g.addColorStop(1,'rgba(255,60,60,0)');
+    x.fillStyle=g;x.fillRect(0,0,PW,PH);
+  }else{ // radial
+    const cx=(m.cx!=null?m.cx:0.5)*PW,cy=(1-(m.cy!=null?m.cy:0.5))*PH;
+    const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*PW),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*PH);
+    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
+    x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.7)';x.fill();x.restore();
+  }
+  if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(1,1,PW-2,PH-2);}
   return cv;
 }
 // MAXD is the STORED raster-mask resolution (brush/sky/AI edges get finer as this rises). It is
