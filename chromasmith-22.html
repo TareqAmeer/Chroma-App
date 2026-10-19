@@ -7295,7 +7295,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1019O';
+const BUILD='1.1019P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11280,6 +11280,7 @@ function fxFullResPreviewToggle(){
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
   if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
+  if(fxFullResPreview){const it0=curItem();if(it0)it0._fullResKicked=false;}   // re-arm: the next render asks for the real frame
   fxRenderPreviewViewOnly();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
@@ -15772,6 +15773,14 @@ function diagLayout(){
     if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info',true);}
   }catch(e){}
 }
+// <main> is overflow:hidden but still programmatically scrollable: re-activating the window restores focus and
+// the browser scrolls the focused element into view, nudging <main> ~16px (its scrollHeight exceeds its height)
+// and the preview up with it, a bit more each app switch. Pin it.
+(function(){
+  const pin=()=>{const m=document.querySelector('main');if(m&&(m.scrollTop||m.scrollLeft)){m.scrollTop=0;m.scrollLeft=0;}};
+  const m0=document.querySelector('main');if(m0)m0.addEventListener('scroll',pin,{passive:true});
+  window.addEventListener('focus',pin);document.addEventListener('visibilitychange',pin);
+})();
 (function(){
   window.addEventListener('load',appHSync);
   window.addEventListener('resize',appHSync);
@@ -24160,6 +24169,10 @@ function renderPreview(){
   // composition remains coherent while zooming.
   if(fxFullResPreview&&!_fxPreviewInteracting){
     dpr=Math.min(iw/(cw||1),ih/(ch||1));
+    // Full res on a RAW opens on the ~2560px working copy and only promotes to the real frame after a
+    // settle delay or a first edit/zoom; until then "Full res" is just that copy stretched (soft next to
+    // Lightroom). Opting into Full res means "show me the real pixels": ask for the promotion once per photo.
+    const it0=curItem();if(it0&&!it0._fullResKicked&&typeof fxEnsureFullQuality==='function'){it0._fullResKicked=true;Promise.resolve(fxEnsureFullQuality('zoom')).then(()=>{if(curItem()===it0)fxRenderPreviewViewOnly();}).catch(()=>{});}
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
   // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path

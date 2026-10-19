@@ -49,6 +49,7 @@ function fxFullResPreviewToggle(){
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
   if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
+  if(fxFullResPreview){const it0=curItem();if(it0)it0._fullResKicked=false;}   // re-arm: the next render asks for the real frame
   fxRenderPreviewViewOnly();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no

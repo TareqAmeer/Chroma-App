@@ -143,6 +143,14 @@ function diagLayout(){
     if(msg!==_diagLast){_diagLast=msg;log(msg,over>2?'err':'info',true);}
   }catch(e){}
 }
+// <main> is overflow:hidden but still programmatically scrollable: re-activating the window restores focus and
+// the browser scrolls the focused element into view, nudging <main> ~16px (its scrollHeight exceeds its height)
+// and the preview up with it, a bit more each app switch. Pin it.
+(function(){
+  const pin=()=>{const m=document.querySelector('main');if(m&&(m.scrollTop||m.scrollLeft)){m.scrollTop=0;m.scrollLeft=0;}};
+  const m0=document.querySelector('main');if(m0)m0.addEventListener('scroll',pin,{passive:true});
+  window.addEventListener('focus',pin);document.addEventListener('visibilitychange',pin);
+})();
 (function(){
   window.addEventListener('load',appHSync);
   window.addEventListener('resize',appHSync);

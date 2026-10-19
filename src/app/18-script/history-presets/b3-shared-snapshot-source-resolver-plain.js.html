@@ -131,6 +131,10 @@ function renderPreview(){
   // composition remains coherent while zooming.
   if(fxFullResPreview&&!_fxPreviewInteracting){
     dpr=Math.min(iw/(cw||1),ih/(ch||1));
+    // Full res on a RAW opens on the ~2560px working copy and only promotes to the real frame after a
+    // settle delay or a first edit/zoom; until then "Full res" is just that copy stretched (soft next to
+    // Lightroom). Opting into Full res means "show me the real pixels": ask for the promotion once per photo.
+    const it0=curItem();if(it0&&!it0._fullResKicked&&typeof fxEnsureFullQuality==='function'){it0._fullResKicked=true;Promise.resolve(fxEnsureFullQuality('zoom')).then(()=>{if(curItem()===it0)fxRenderPreviewViewOnly();}).catch(()=>{});}
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
   // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
