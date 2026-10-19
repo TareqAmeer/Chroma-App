@@ -1121,7 +1121,7 @@
              the deskbar (desktop) — hiding, not deleting, keeps the web/mobile version unchanged. -->
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button class="zc-ic" id="btn-zoom-out" onclick="zoomBy(1/1.15)" title="Zoom out"><span class="fx-db-ic" id="ic-zoom-out"></span></button>
-          <input type="range" class="fx-slider" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)"
+          <input type="range" class="fx-slider" id="fx-zoom-slider" min="0" max="1000" value="500" step="1" oninput="zoomSetSlider(+this.value)"
             onmousedown="document.getElementById('fx-zoom-ctrl').classList.add('active')"
             ondblclick="zoomFit()" title="Drag to zoom · double-click to fit the whole image">
           <button class="zc-ic" id="btn-zoom-in" onclick="zoomBy(1.15)" title="Zoom in"><span class="fx-db-ic" id="ic-zoom-in"></span></button>

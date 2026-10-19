@@ -222,39 +222,29 @@ function _zoomRefit(oldW){
   if(changed||fxZoom<1)_applyZoom();
 }
 function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
+// TRUE zoom scale (Lightroom's convention): 100% = one source pixel per DEVICE pixel, "Fit" = the whole frame.
+// fxZoom stays the internal wrapper scale (1 = canvas footprint, FX_FIT = Fit); these convert to/from the
+// percent the user reads. Falls back to the old fit-relative mapping until a photo's size is known.
+const FX_ZOOM_MAX_PCT=1600;
+function _fxTrueZoomK(){
+  const src=fxWork,{w}=_fxZoomFootprint();if(!src||!w)return 0;
+  const FW=(src.naturalWidth||src.width)*fxFullScale();
+  return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
+}
+function _fxZoomToPct(z){const k=_fxTrueZoomK();return k?z*k:z/FX_FIT*100;}
+function _fxPctToZoom(p){const k=_fxTrueZoomK();return k?p/k:p/100*FX_FIT;}
+function _fxZoomMax(){const k=_fxTrueZoomK();return k?Math.max(FX_FIT*2,FX_ZOOM_MAX_PCT/k):8;}
+// Slider is logarithmic over [0.25 x wrapper .. 1600%] so 25%..1600% is usable with one control.
+function _fxSliderToZoom(v){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=lo*Math.pow(hi/lo,v/1000);
+  const fitPct=_fxZoomToPct(FX_FIT);return Math.abs(pct-fitPct)/fitPct<0.03?FX_FIT:_fxPctToZoom(pct);}
+function _fxZoomToSlider(z){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=Math.max(lo,Math.min(hi,_fxZoomToPct(z)));return Math.round(1000*Math.log(pct/lo)/Math.log(hi/lo));}
+function zoomSetSlider(v){if(fxLoupe)toggleLoupe();fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),_fxSliderToZoom(v)));_applyZoom();}
+// Click on the photo toggles Fit <-> 100% (1:1) about the click point; scroll/slider/buttons go on to 1600%.
+function _fxClickZoom(cx,cy){
+  if(!fxWork||fxLoupe)return;
+  if(Math.abs(fxZoom-FX_FIT)<0.002){_zoomAt(Math.min(_fxZoomMax(),_fxPctToZoom(100)),cx,cy);_applyZoom(true);}
+  else _resetZoom(true);
+}
 // Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
 // needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
 // export. No-op everywhere else (browser, non-RAW, already promoted).
-function fxEnsureFullQuality(why){
-  // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
-  // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
-  const it=curItem();
-  // Phones: zooming must NOT trigger the full-resolution decode — it holds the whole frame several times
-  // over (wasm output + 16-bit buffer + canvas) and the OS kills the page. Zoom keeps the half-size proxy;
-  // export still decodes the full frame on its own path.
-  if(it&&it._rawHalf&&why==='zoom'&&typeof isMemoryConstrained==='function'&&isMemoryConstrained())return Promise.resolve();
-  if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
-  // Non-RAW working copy (phones): same rule as the RAW proxy; zoom keeps it, loupe/export promote.
-  if(it&&it._srcTier){
-    if(why==='zoom'||why==='edit'||why==='crop')return Promise.resolve();
-    return fxPromoteSrcTier(it).catch(()=>{});
-  }
-  return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
-}
-// Replaces a browser RAW entry's half-size proxy with the full-resolution decode. One in-flight
-// decode per entry; _rawGen lets a RAW-profile reload supersede a promotion already running.
-function fxPromoteWebRaw(it){
-  if(!it||!it._rawHalf||!it.rawFile)return Promise.resolve();
-  if(it._rawFullP)return it._rawFullP;
-  const gen=it._rawGen=(it._rawGen||0)+1;
-  if(it===curItem()&&typeof toast==='function')toast('Loading full-resolution RAW…');
-  log(`${it.name}: decoding full resolution…`,'info');
-  return it._rawFullP=loadRw2(it.rawFile).then(r=>{
-    if(it._rawGen!==gen)return;
-    it.img=r.canvas;delete it._rawHalf;
-    if(it===curItem()){if(r.rgbaSrc)r.canvas._rgbaSrc=r.rgbaSrc;fxImg=it.img;try{autoDetectBW(it.img)}catch(_){}updateWork();r.canvas._rgbaSrc=null;renderPreview();}
-  }).catch(e=>{
-    log(`${it.name}: full-resolution decode failed — ${errStr(e)}`,'err');
-    throw e;
-  }).finally(()=>{if(it._rawGen===gen)delete it._rawFullP;});
-}

@@ -4880,7 +4880,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
              the deskbar (desktop) — hiding, not deleting, keeps the web/mobile version unchanged. -->
         <div class="fx-zoom-ctrl" id="fx-zoom-ctrl" style="display:none">
           <button class="zc-ic" id="btn-zoom-out" onclick="zoomBy(1/1.15)" title="Zoom out"><span class="fx-db-ic" id="ic-zoom-out"></span></button>
-          <input type="range" class="fx-slider" id="fx-zoom-slider" min="25" max="800" value="100" step="1" oninput="zoomSet(+this.value/100)"
+          <input type="range" class="fx-slider" id="fx-zoom-slider" min="0" max="1000" value="500" step="1" oninput="zoomSetSlider(+this.value)"
             onmousedown="document.getElementById('fx-zoom-ctrl').classList.add('active')"
             ondblclick="zoomFit()" title="Drag to zoom · double-click to fit the whole image">
           <button class="zc-ic" id="btn-zoom-in" onclick="zoomBy(1.15)" title="Zoom in"><span class="fx-db-ic" id="ic-zoom-in"></span></button>
@@ -7295,7 +7295,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1019P';
+const BUILD='1.1019Q';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21649,6 +21649,29 @@ function _zoomRefit(oldW){
   if(changed||fxZoom<1)_applyZoom();
 }
 function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
+// TRUE zoom scale (Lightroom's convention): 100% = one source pixel per DEVICE pixel, "Fit" = the whole frame.
+// fxZoom stays the internal wrapper scale (1 = canvas footprint, FX_FIT = Fit); these convert to/from the
+// percent the user reads. Falls back to the old fit-relative mapping until a photo's size is known.
+const FX_ZOOM_MAX_PCT=1600;
+function _fxTrueZoomK(){
+  const src=fxWork,{w}=_fxZoomFootprint();if(!src||!w)return 0;
+  const FW=(src.naturalWidth||src.width)*fxFullScale();
+  return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
+}
+function _fxZoomToPct(z){const k=_fxTrueZoomK();return k?z*k:z/FX_FIT*100;}
+function _fxPctToZoom(p){const k=_fxTrueZoomK();return k?p/k:p/100*FX_FIT;}
+function _fxZoomMax(){const k=_fxTrueZoomK();return k?Math.max(FX_FIT*2,FX_ZOOM_MAX_PCT/k):8;}
+// Slider is logarithmic over [0.25 x wrapper .. 1600%] so 25%..1600% is usable with one control.
+function _fxSliderToZoom(v){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=lo*Math.pow(hi/lo,v/1000);
+  const fitPct=_fxZoomToPct(FX_FIT);return Math.abs(pct-fitPct)/fitPct<0.03?FX_FIT:_fxPctToZoom(pct);}
+function _fxZoomToSlider(z){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=Math.max(lo,Math.min(hi,_fxZoomToPct(z)));return Math.round(1000*Math.log(pct/lo)/Math.log(hi/lo));}
+function zoomSetSlider(v){if(fxLoupe)toggleLoupe();fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),_fxSliderToZoom(v)));_applyZoom();}
+// Click on the photo toggles Fit <-> 100% (1:1) about the click point; scroll/slider/buttons go on to 1600%.
+function _fxClickZoom(cx,cy){
+  if(!fxWork||fxLoupe)return;
+  if(Math.abs(fxZoom-FX_FIT)<0.002){_zoomAt(Math.min(_fxZoomMax(),_fxPctToZoom(100)),cx,cy);_applyZoom(true);}
+  else _resetZoom(true);
+}
 // Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
 // needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
 // export. No-op everywhere else (browser, non-RAW, already promoted).
@@ -21687,14 +21710,14 @@ function fxPromoteWebRaw(it){
 }
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
-  pct.textContent=fxLoupe?'1:1':Math.round(fxZoom/FX_FIT*100)+'%';
+  pct.textContent=fxLoupe?'1:1':Math.abs(fxZoom-FX_FIT)<0.002?'Fit':Math.round(_fxZoomToPct(fxZoom))+'%';
   const sl=document.getElementById('fx-zoom-slider');
-  if(sl&&document.activeElement!==sl){sl.value=Math.round(fxZoom/FX_FIT*100);fxPaintSlider(sl);}
+  if(sl&&document.activeElement!==sl){sl.value=_fxZoomToSlider(fxZoom);fxPaintSlider(sl);}
 }
 // Absolute zoom set (from the slider), anchored on the frame centre.
 function zoomSet(z){
   if(fxLoupe)toggleLoupe();
-  fxZoom=Math.max(0.25,Math.min(8,z*FX_FIT));
+  fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),z*FX_FIT));
   _applyZoom();
 }
 // Zoom by a multiplicative step, anchored on the frame centre.
@@ -21709,7 +21732,7 @@ function zoomBy(factor){
 function _zoomAt(nz,cx,cy){
   const zw=document.getElementById('fx-zoom-wrap');
   const prev=fxZoom;
-  fxZoom=Math.max(0.25,Math.min(8,nz));
+  fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),nz));
   if(!zw||cx==null||fxZoom===prev)return;
   const {w,h}=_fxZoomFootprint();if(!w||!h)return;
   const r=zw.getBoundingClientRect();
@@ -21797,7 +21820,7 @@ function initZoomPan(){
     if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
     if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return; // a picked slider owns one-finger swipes: the photo stays put until two fingers zoom/pan
     e.preventDefault();if(pd&&pd.id!==e.pointerId)return; // a pinch's second finger never drives the pan
-    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
+    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY,moved:false,type:e.pointerType,btn:e.button,t:performance.now()};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
   });
@@ -21812,6 +21835,7 @@ function initZoomPan(){
   let _loupeDragT=null,_panRaf=0;
   zw.addEventListener('pointermove',e=>{
     if(!pd||pd.id!==e.pointerId||_pinching)return;
+    if(!pd.moved&&Math.hypot(e.clientX-pd.x,e.clientY-pd.y)>4)pd.moved=true;
     if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return;
     if(fxLoupe){
       const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
@@ -21836,17 +21860,19 @@ function initZoomPan(){
       fxPanTilesTick(); // Full res: fill newly exposed 1:1 tiles while still dragging
     }
   });
-  const pup=()=>{
+  const pup=(ev,cancelled)=>{
+    // A click (no drag, mouse/pen, primary button, no other photo tool armed) toggles Fit <-> 100%.
+    if(pd&&!cancelled&&!pd.moved&&!_pinching&&pd.type!=='touch'&&pd.btn===0&&!fxLoupe&&!cropMode&&!mskAiTapMode&&!fxSplit&&!(typeof healMode!=='undefined'&&healMode)&&performance.now()-pd.t<600)_fxClickZoom(pd.x,pd.y);
     if(_panRaf){cancelAnimationFrame(_panRaf);_panRaf=0;if(!fxLoupe&&pd){_applyZoom();}} // flush the last coalesced pan
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
     else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;fxRenderPreviewViewOnly();}
   };
-  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup();};
-  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',pupOwn);
+  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,false);};
+  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,true);});
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();_zoomAt(2.5,e.clientX,e.clientY);_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
   // Pinch: zooms about the fingers' midpoint and pans with it; one-finger pan is suspended until all
   // fingers lift, so a finger left behind after a pinch cannot yank the photo to a stale anchor.
   let _pt={},_pinching=false,_pmid=null;

@@ -1,13 +1,46 @@
+function fxEnsureFullQuality(why){
+  // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
+  // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
+  const it=curItem();
+  // Phones: zooming must NOT trigger the full-resolution decode — it holds the whole frame several times
+  // over (wasm output + 16-bit buffer + canvas) and the OS kills the page. Zoom keeps the half-size proxy;
+  // export still decodes the full frame on its own path.
+  if(it&&it._rawHalf&&why==='zoom'&&typeof isMemoryConstrained==='function'&&isMemoryConstrained())return Promise.resolve();
+  if(it&&it._rawHalf&&why!=='edit'&&why!=='crop')return fxPromoteWebRaw(it).catch(()=>{});
+  // Non-RAW working copy (phones): same rule as the RAW proxy; zoom keeps it, loupe/export promote.
+  if(it&&it._srcTier){
+    if(why==='zoom'||why==='edit'||why==='crop')return Promise.resolve();
+    return fxPromoteSrcTier(it).catch(()=>{});
+  }
+  return (typeof window.chromasmithEnsureFullQuality==='function')?window.chromasmithEnsureFullQuality():Promise.resolve();
+}
+// Replaces a browser RAW entry's half-size proxy with the full-resolution decode. One in-flight
+// decode per entry; _rawGen lets a RAW-profile reload supersede a promotion already running.
+function fxPromoteWebRaw(it){
+  if(!it||!it._rawHalf||!it.rawFile)return Promise.resolve();
+  if(it._rawFullP)return it._rawFullP;
+  const gen=it._rawGen=(it._rawGen||0)+1;
+  if(it===curItem()&&typeof toast==='function')toast('Loading full-resolution RAW…');
+  log(`${it.name}: decoding full resolution…`,'info');
+  return it._rawFullP=loadRw2(it.rawFile).then(r=>{
+    if(it._rawGen!==gen)return;
+    it.img=r.canvas;delete it._rawHalf;
+    if(it===curItem()){if(r.rgbaSrc)r.canvas._rgbaSrc=r.rgbaSrc;fxImg=it.img;try{autoDetectBW(it.img)}catch(_){}updateWork();r.canvas._rgbaSrc=null;renderPreview();}
+  }).catch(e=>{
+    log(`${it.name}: full-resolution decode failed — ${errStr(e)}`,'err');
+    throw e;
+  }).finally(()=>{if(it._rawGen===gen)delete it._rawFullP;});
+}
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
-  pct.textContent=fxLoupe?'1:1':Math.round(fxZoom/FX_FIT*100)+'%';
+  pct.textContent=fxLoupe?'1:1':Math.abs(fxZoom-FX_FIT)<0.002?'Fit':Math.round(_fxZoomToPct(fxZoom))+'%';
   const sl=document.getElementById('fx-zoom-slider');
-  if(sl&&document.activeElement!==sl){sl.value=Math.round(fxZoom/FX_FIT*100);fxPaintSlider(sl);}
+  if(sl&&document.activeElement!==sl){sl.value=_fxZoomToSlider(fxZoom);fxPaintSlider(sl);}
 }
 // Absolute zoom set (from the slider), anchored on the frame centre.
 function zoomSet(z){
   if(fxLoupe)toggleLoupe();
-  fxZoom=Math.max(0.25,Math.min(8,z*FX_FIT));
+  fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),z*FX_FIT));
   _applyZoom();
 }
 // Zoom by a multiplicative step, anchored on the frame centre.
@@ -22,7 +55,7 @@ function zoomBy(factor){
 function _zoomAt(nz,cx,cy){
   const zw=document.getElementById('fx-zoom-wrap');
   const prev=fxZoom;
-  fxZoom=Math.max(0.25,Math.min(8,nz));
+  fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),nz));
   if(!zw||cx==null||fxZoom===prev)return;
   const {w,h}=_fxZoomFootprint();if(!w||!h)return;
   const r=zw.getBoundingClientRect();
@@ -110,7 +143,7 @@ function initZoomPan(){
     if(_fxEyeArmed()||mskPaintMode||(typeof _ahRoiArmed!=='undefined'&&_ahRoiArmed))return;
     if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return; // a picked slider owns one-finger swipes: the photo stays put until two fingers zoom/pan
     e.preventDefault();if(pd&&pd.id!==e.pointerId)return; // a pinch's second finger never drives the pan
-    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY};
+    pd={id:e.pointerId,x:e.clientX,y:e.clientY,px:fxPanX,py:fxPanY,lcx:loupeCX,lcy:loupeCY,moved:false,type:e.pointerType,btn:e.button,t:performance.now()};
     zw.classList.add('dragging');zw.setPointerCapture(e.pointerId);
     _fxPreviewInteracting=true;  // E1: drag-pan never set this — see the wheel handler above
   });
@@ -125,6 +158,7 @@ function initZoomPan(){
   let _loupeDragT=null,_panRaf=0;
   zw.addEventListener('pointermove',e=>{
     if(!pd||pd.id!==e.pointerId||_pinching)return;
+    if(!pd.moved&&Math.hypot(e.clientX-pd.x,e.clientY-pd.y)>4)pd.moved=true;
     if(window.csSwipeAdjust&&window.csSwipeSlider&&document.body.classList.contains('mobile-fx'))return;
     if(fxLoupe){
       const dx=e.clientX-pd.x,dy=e.clientY-pd.y;
@@ -149,17 +183,19 @@ function initZoomPan(){
       fxPanTilesTick(); // Full res: fill newly exposed 1:1 tiles while still dragging
     }
   });
-  const pup=()=>{
+  const pup=(ev,cancelled)=>{
+    // A click (no drag, mouse/pen, primary button, no other photo tool armed) toggles Fit <-> 100%.
+    if(pd&&!cancelled&&!pd.moved&&!_pinching&&pd.type!=='touch'&&pd.btn===0&&!fxLoupe&&!cropMode&&!mskAiTapMode&&!fxSplit&&!(typeof healMode!=='undefined'&&healMode)&&performance.now()-pd.t<600)_fxClickZoom(pd.x,pd.y);
     if(_panRaf){cancelAnimationFrame(_panRaf);_panRaf=0;if(!fxLoupe&&pd){_applyZoom();}} // flush the last coalesced pan
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
     else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;fxRenderPreviewViewOnly();}
   };
-  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup();};
-  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',pupOwn);
+  const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,false);};
+  zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,true);});
   // Double-click to reset
-  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}else if(fxWork){e.stopPropagation();_zoomAt(2.5,e.clientX,e.clientY);_applyZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
+  wrap.addEventListener('dblclick',e=>{if(fxLoupe){e.stopPropagation();toggleLoupe();}else if(Math.abs(fxZoom-FX_FIT)>0.001){e.stopPropagation();_resetZoom(true);}}); // dbl-tap: Fit ↔ zoomed (animated)
   // Pinch: zooms about the fingers' midpoint and pans with it; one-finger pan is suspended until all
   // fingers lift, so a finger left behind after a pinch cannot yank the photo to a stale anchor.
   let _pt={},_pinching=false,_pmid=null;
