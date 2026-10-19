@@ -2044,6 +2044,30 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[test]
+    fn an_untagged_face_row_inside_a_dog_body_is_absorbed() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("absorb_untagged_face");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        let row = |x0: f32, x1: f32, score: f32, species: Option<&str>| -> i64 {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, species) VALUES (?1,?2,0.1,?3,0.9,?4,'[]',?5)",
+                params![photo, x0, x1, score, species],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let _body = row(0.2, 0.8, 0.9, Some("dog"));
+        let face = row(0.4, 0.6, 0.5, None);
+        assert_eq!(absorb_pet_faces(&conn).unwrap(), 1);
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM photo_faces WHERE id = ?1", params![face], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// Regression: named pets' dog-face rows (species NULL, tagged to a kind='pet' person) were
     /// re-embedded by the HUMAN face model after the DINOv2 switch, so pet_groups (species NOT
     /// NULL only) never saw them and no new sighting could ever join a named pet.

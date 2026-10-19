@@ -363,7 +363,8 @@ fn absorb_pet_faces(conn: &Connection) -> Result<usize, String> {
     let mut stmt = conn
         .prepare(
             "SELECT f.id, f.photo_id, f.x0, f.y0, f.x1, f.y1, f.person_id, f.confirmed FROM photo_faces f
-             WHERE (f.species = 'pet' OR (f.species IS NULL AND f.person_id IN (SELECT id FROM people WHERE kind = 'pet')))
+             WHERE (f.species = 'pet' OR (f.species IS NULL AND (f.person_id IN (SELECT id FROM people WHERE kind = 'pet')
+                                                                  OR (f.person_id IS NULL AND f.score < 0.7))))
                AND EXISTS (SELECT 1 FROM photo_faces a WHERE a.photo_id = f.photo_id AND a.species IS NOT NULL AND a.species != 'pet')",
         )
         .map_err(|e| e.to_string())?;
@@ -392,6 +393,8 @@ fn absorb_pet_faces(conn: &Connection) -> Result<usize, String> {
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .filter(|b| cx >= b.1 && cx <= b.3 && cy >= b.2 && cy <= b.4)
+            // An untagged face-detector row is only a dog's face when it is small next to the body.
+            .filter(|b| fperson.is_some() || (x1 - x0) * (y1 - y0) <= 0.5 * (b.3 - b.1) * (b.4 - b.2))
             .min_by(|a, b| ((a.3 - a.1) * (a.4 - a.2)).partial_cmp(&((b.3 - b.1) * (b.4 - b.2))).unwrap_or(std::cmp::Ordering::Equal))
             .map(|b| (b.0, b.5, b.6, b.7));
         let Some((bid, bperson, bconf, bauto)) = body else { continue };

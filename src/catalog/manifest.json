@@ -98,97 +98,97 @@
   {
    "file": "pet-detection-people-pets-wireframes-scr.part",
    "firstLine": 3675,
-   "lines": 1311
+   "lines": 1314
   },
   {
    "file": "face-embedding-ai-stack-phase-b-part-1-a.part",
-   "firstLine": 4986,
+   "firstLine": 4989,
    "lines": 193
   },
   {
    "file": "clustering-ai-stack-phase-b-part-2-phase.part",
-   "firstLine": 5179,
+   "firstLine": 5182,
    "lines": 549
   },
   {
    "file": "find-more-of-this-person-suggestions.part",
-   "firstLine": 5728,
+   "firstLine": 5731,
    "lines": 275
   },
   {
    "file": "google-photos-import-takeout.part",
-   "firstLine": 6003,
+   "firstLine": 6006,
    "lines": 472
   },
   {
    "file": "portable-people-pets-sidecar-people-pets.part",
-   "firstLine": 6475,
+   "firstLine": 6478,
    "lines": 315
   },
   {
    "file": "natural-language-search-ai-stack-phase-d.part",
-   "firstLine": 6790,
+   "firstLine": 6793,
    "lines": 743
   },
   {
    "file": "query.part",
-   "firstLine": 7533,
+   "firstLine": 7536,
    "lines": 594
   },
   {
    "file": "date-browser.part",
-   "firstLine": 8127,
+   "firstLine": 8130,
    "lines": 65
   },
   {
    "file": "scan-phase-d-offline-thumbnails.part",
-   "firstLine": 8192,
+   "firstLine": 8195,
    "lines": 30
   },
   {
    "file": "cache-budget.part",
-   "firstLine": 8222,
+   "firstLine": 8225,
    "lines": 155
   },
   {
    "file": "per-root-cache-usage-clearing.part",
-   "firstLine": 8377,
+   "firstLine": 8380,
    "lines": 307
   },
   {
    "file": "guaranteed-offline-tier-hq-offline.part",
-   "firstLine": 8684,
+   "firstLine": 8687,
    "lines": 469
   },
   {
    "file": "focus-sharpness-out-of-focus-review.part",
-   "firstLine": 9153,
+   "firstLine": 9156,
    "lines": 232
   },
   {
    "file": "offline-edit-queue-n1a.part",
-   "firstLine": 9385,
+   "firstLine": 9388,
    "lines": 172
   },
   {
    "file": "rebuild.part",
-   "firstLine": 9557,
+   "firstLine": 9560,
    "lines": 61
   },
   {
    "file": "delete.part",
-   "firstLine": 9618,
+   "firstLine": 9621,
    "lines": 13
   },
   {
    "file": "stacking.part",
-   "firstLine": 9631,
+   "firstLine": 9634,
    "lines": 642
   },
   {
    "file": "keyword-tree.part",
-   "firstLine": 10273,
-   "lines": 4277
+   "firstLine": 10276,
+   "lines": 4301
   }
  ]
 }

@@ -4037,7 +4037,8 @@ fn absorb_pet_faces(conn: &Connection) -> Result<usize, String> {
     let mut stmt = conn
         .prepare(
             "SELECT f.id, f.photo_id, f.x0, f.y0, f.x1, f.y1, f.person_id, f.confirmed FROM photo_faces f
-             WHERE (f.species = 'pet' OR (f.species IS NULL AND f.person_id IN (SELECT id FROM people WHERE kind = 'pet')))
+             WHERE (f.species = 'pet' OR (f.species IS NULL AND (f.person_id IN (SELECT id FROM people WHERE kind = 'pet')
+                                                                  OR (f.person_id IS NULL AND f.score < 0.7))))
                AND EXISTS (SELECT 1 FROM photo_faces a WHERE a.photo_id = f.photo_id AND a.species IS NOT NULL AND a.species != 'pet')",
         )
         .map_err(|e| e.to_string())?;
@@ -4066,6 +4067,8 @@ fn absorb_pet_faces(conn: &Connection) -> Result<usize, String> {
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .filter(|b| cx >= b.1 && cx <= b.3 && cy >= b.2 && cy <= b.4)
+            // An untagged face-detector row is only a dog's face when it is small next to the body.
+            .filter(|b| fperson.is_some() || (x1 - x0) * (y1 - y0) <= 0.5 * (b.3 - b.1) * (b.4 - b.2))
             .min_by(|a, b| ((a.3 - a.1) * (a.4 - a.2)).partial_cmp(&((b.3 - b.1) * (b.4 - b.2))).unwrap_or(std::cmp::Ordering::Equal))
             .map(|b| (b.0, b.5, b.6, b.7));
         let Some((bid, bperson, bconf, bauto)) = body else { continue };
@@ -12313,6 +12316,30 @@ mod tests {
         assert_eq!(n, 0);
         assert_eq!(who0(&conn, body), (Some(bala), 1), "the body row carries the user's confirmation");
         assert_eq!(who0(&conn, elsewhere), (Some(bala), 1));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_untagged_face_row_inside_a_dog_body_is_absorbed() {
+        let conn = temp_db();
+        let dir = scratch_photos_dir("absorb_untagged_face");
+        std::fs::write(dir.join("a.jpg"), b"a").unwrap();
+        let root = add_root_run(&conn, &dir.to_string_lossy(), None).unwrap();
+        scan_run(&conn, Some(root.volume_id), &mut |_| {}, &AtomicBool::new(false)).unwrap();
+        let photo: i64 = conn.query_row("SELECT id FROM photos", [], |r| r.get(0)).unwrap();
+        let row = |x0: f32, x1: f32, score: f32, species: Option<&str>| -> i64 {
+            conn.execute(
+                "INSERT INTO photo_faces (photo_id, x0,y0,x1,y1, score, kps, species) VALUES (?1,?2,0.1,?3,0.9,?4,'[]',?5)",
+                params![photo, x0, x1, score, species],
+            )
+            .unwrap();
+            conn.last_insert_rowid()
+        };
+        let _body = row(0.2, 0.8, 0.9, Some("dog"));
+        let face = row(0.4, 0.6, 0.5, None);
+        assert_eq!(absorb_pet_faces(&conn).unwrap(), 1);
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM photo_faces WHERE id = ?1", params![face], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
         std::fs::remove_dir_all(&dir).ok();
     }
 
