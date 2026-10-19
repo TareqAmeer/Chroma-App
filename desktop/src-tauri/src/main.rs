@@ -3163,6 +3163,7 @@ fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri:
     )
 }
 
+// ── App entry point: builder, plugins, setup hook, command registration ──────────
 fn main() {
     // First statement in main() on purpose — catches panics as early as possible.
     // See diag.rs: there was no panic::set_hook anywhere in this codebase before.

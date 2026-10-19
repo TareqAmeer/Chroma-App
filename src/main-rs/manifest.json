@@ -16,7 +16,8 @@
   "gain-map-hdr-export-iso-21496-1.part",
   "normal-photo-export.part",
   "streaming-save-for-large-video-exports-v.part",
-  "google-oauth-for-the-desktop-shell-the-w.part"
+  "google-oauth-for-the-desktop-shell-the-w.part",
+  "app-entry-point-builder-plugins-setup-ho.part"
  ],
  "info": [
   {
@@ -92,7 +93,12 @@
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
    "firstLine": 3053,
-   "lines": 1409
+   "lines": 113
+  },
+  {
+   "file": "app-entry-point-builder-plugins-setup-ho.part",
+   "firstLine": 3166,
+   "lines": 1297
   }
  ]
 }

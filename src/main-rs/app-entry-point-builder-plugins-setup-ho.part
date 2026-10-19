@@ -1,0 +1,1296 @@
+// ── App entry point: builder, plugins, setup hook, command registration ──────────
+fn main() {
+    // First statement in main() on purpose — catches panics as early as possible.
+    // See diag.rs: there was no panic::set_hook anywhere in this codebase before.
+    diag::install_panic_hook();
+
+    // Printed unconditionally, BEFORE anything else, straight to the terminal `npm run dev`
+    // (or `cargo run`) runs in — no JS round-trip needed, so it's visible even if the webview
+    // never loads. Compare against native_build_tag()'s value: if they differ (or this line
+    // never appears), the running process is NOT the one src-tauri/src was last edited for —
+    // a full quit + relaunch (real recompile) is needed before any native-side fix applies.
+    eprintln!("=== Chromasmith native build: {} ===", native_build_tag());
+    // Cap rayon's GLOBAL thread pool — every `.par_iter()` in this codebase (metadata_run,
+    // phash_batch, thumbnail/poster generation, RAW demosaic, DBSCAN clustering, ...) shares one
+    // pool by default, sized to the CPU count. With several of those phases able to run
+    // concurrently against a large library, they collectively saturate every core at once —
+    // confirmed on a real 719GB/57k-photo run: `top` showed chromasmith at up to 324% CPU across
+    // 29 threads on an 8-core machine, load average 7.56 (essentially every core busy), and a
+    // live stack sample (`sample <pid> 3`) caught the MAIN THREAD blocked on a single
+    // `pthread_cond_wait` for the entire 3-second window — inside the app's own `cs://` asset
+    // handler (a plain local-disk `std::fs::read`, touching no catalog state), starved of
+    // scheduling purely because every core was pegged by this process's own background work.
+    // That is macOS's "app not responding" state, not a deadlock or a bug in any one phase — the
+    // work itself was correct, there was just no reserved headroom for the interactive UI thread.
+    // Leaving 2 cores free (never fewer than 2 total, so a 2-core machine still gets real
+    // parallelism) is deliberately generous rather than tuned to the edge, since getting this
+    // wrong in the other direction (over-throttling) would erase some of this session's own
+    // speed-ups; revisit with real measurements if background passes end up feeling slow.
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let default_workers = (cores.saturating_sub(2)).max(2);
+    // Diagnostics can temporarily widen the pool for a controlled RAW-stage A/B. Keep the
+    // production default conservative so a large-folder scan cannot starve the WebView.
+    let workers = std::env::var("CS_RAYON_WORKERS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n >= 2)
+        .unwrap_or(default_workers);
+    // QoS (see bgwork.rs) is layered ON TOP of the count cap below, not instead of it — a
+    // thread-count cap only bounds concurrency, it can't stop a background thread from being
+    // scheduled ahead of the UI thread when both happen to be runnable at once. Marking every
+    // rayon worker `.utility` QoS as it starts means the OS scheduler itself prefers the UI
+    // thread under contention, the same mechanism Photos.app/Lightroom-class apps rely on for
+    // background indexing — researched before adding another thread-count tweak on top of the
+    // ones already here, since repeatedly tightening counts alone was treating the symptom.
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
+        .num_threads(workers)
+        .start_handler(|_| bgwork::mark_current_thread_background())
+        .build_global()
+    {
+        eprintln!("rayon: could not cap the global pool at {workers} threads ({e}) — proceeding with rayon's own default sizing");
+    }
+
+    // Hidden headless CLI mode: the SAME compiled binary, re-invoked as a child process by
+    // catalog.rs's run_ai_worker to run one AI-stack phase (face detect/embed, pet detect, CLIP
+    // embed) in a separate OS process — see CatalogState::ai_worker's doc comment for why (short
+    // version: it stops an unscoped scan from holding the main app's single writer-connection
+    // Mutex for the scan's entire multi-minute duration, which blocks every OTHER catalog write,
+    // and a separate process gets scheduled independently of the UI thread by the OS).
+    //
+    // ⚠️ Checked AFTER the rayon cap+QoS setup above, not before — an earlier version of this
+    // dispatch ran first and `std::process::exit`ed before that setup ever ran, which meant every
+    // worker process was silently running its OWN `.par_iter()` calls (faces_run, pets_run,
+    // embed_run, clip_embed_run all use rayon internally) at rayon's UNCAPPED, UN-QoS'd default —
+    // exactly the oversubscription this whole mechanism exists to prevent, just moved into the
+    // child process instead of fixed. Never touches Tauri/webview state either way — this path
+    // exits before any of that is constructed below.
+    let args: Vec<String> = std::env::args().collect();
+    let worker_flag = args.get(1).map(String::as_str);
+    type WorkerFn = fn(&std::path::Path, Option<&[i64]>) -> i32;
+    let worker_fn: Option<WorkerFn> = match worker_flag {
+        Some("--face-scan-worker") => Some(catalog::run_face_scan_worker),
+        Some("--pets-scan-worker") => Some(catalog::run_pets_scan_worker),
+        Some("--embed-faces-worker") => Some(catalog::run_embed_faces_worker),
+        Some("--clip-embed-worker") => Some(catalog::run_clip_embed_worker),
+        _ => None
+    };
+    if let Some(worker_fn) = worker_fn {
+        let Some(db_path) = args.get(2) else {
+            eprintln!("{} requires a catalog.db path argument", worker_flag.unwrap());
+            std::process::exit(1);
+        };
+        // An optional 3rd arg is a path to a newline-separated file of photo ids — a scoped
+        // scan (catalog.rs's run_ai_worker writes this for "Find faces in selection", which has
+        // no size cap and is exactly as unbounded as an unscoped scan for a large selection).
+        // Absent means a full-library scan, matching every worker fn's `None` behavior.
+        let photo_ids: Option<Vec<i64>> = args.get(3).and_then(|f| std::fs::read_to_string(f).ok()).map(|text| {
+            text.lines().filter_map(|l| l.trim().parse().ok()).collect()
+        });
+        // ⚠️ `.setup()` below never runs in a worker process, so the ORT dylib + model paths it sets must be
+        // set here too. Without this, every worker-side ArcFace/RT-DETR/CLIP call failed with
+        // "model path not set" and the failure was swallowed as "unreadable, retry later" — from
+        // the day scans moved into worker processes, no new face got an embedding (so it could
+        // never be clustered or suggested) and the pet scan found nothing. Same lookup order as
+        // `.setup()`'s resolve_vendor: the bundle's Resources dir, the exe's dir (Windows), dev.
+        {
+            let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()));
+            let resolve_vendor = |rel: &str| -> PathBuf {
+                let candidates = [
+                    exe_dir.as_ref().map(|d| d.join("../Resources").join(rel)),
+                    exe_dir.as_ref().map(|d| d.join(rel)),
+                ];
+                candidates
+                    .into_iter()
+                    .flatten()
+                    .find(|p| p.exists())
+                    .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel))
+            };
+            let bundled_ort = resolve_vendor(&format!("vendor/onnxruntime/{}", platform::ort_lib_filename()));
+            sam::set_dylib_path(if bundled_ort.exists() {
+                bundled_ort
+            } else {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(platform::ort_lib_dev_path())
+            });
+            petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
+            dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
+            arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
+            clip::set_model_paths(
+                resolve_vendor("vendor/clip/vision_model.onnx"),
+                resolve_vendor("vendor/clip/text_model.onnx"),
+                resolve_vendor("vendor/clip/tokenizer.json"),
+            );
+        }
+        bgwork::disable_app_nap();
+        std::process::exit(worker_fn(std::path::Path::new(db_path), photo_ids.as_deref()));
+    }
+    // ⚠️ The rayon cap above only bounds RAYON's own worker threads. Every `#[tauri::command]
+    // async fn` that does heavy per-file work (decode_raw_v2, get_thumbnail, catalog_scan's whole
+    // chain, thumbnail_run, faces_run, embed_run, clip_embed_run, sam_encode, ...) reaches that
+    // work via `tauri::async_runtime::spawn_blocking`, which — left on Tauri's default runtime —
+    // draws from TOKIO's blocking-thread pool, a SEPARATE pool with its own default ceiling of
+    // 512 threads, uncoordinated with rayon's. A large-folder scan fires several of these
+    // concurrently (catalog_scan's chain, the grid's own per-card get_thumbnail_or_offline calls
+    // at PREFETCH_CONCURRENCY=8, catalog_thumbnails' paced batches, faces/embed/clip if "Analyze
+    // photos" is running too) plus rayon's own already-capped pool doing full-image RAW decode
+    // and ONNX inference at the same time. On an 8-core machine that is `workers` (rayon) PLUS
+    // however many tokio blocking threads happen to be live simultaneously — nothing stops that
+    // sum from exceeding the whole machine's core count by a wide margin, which is a much more
+    // severe version of the CPU-saturation issue measured above (that one only stalled the UI
+    // thread; sustained full-core overload for minutes on end is what drives a thermal shutdown
+    // on a thermally-limited machine, not just "app not responding"). Building our OWN tokio
+    // runtime with max_blocking_threads capped to the SAME `workers` budget and handing it to
+    // Tauri via async_runtime::set (must happen before Builder::default() touches the runtime at
+    // all) means every spawn_blocking call — not just rayon's — respects one coordinated ceiling.
+    let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .max_blocking_threads(workers)
+        .build()
+        .expect("failed to build the capped tokio runtime");
+    tauri::async_runtime::set(tokio_rt.handle().clone());
+    // Rust's `#[cfg]` can't attach to a single `.plugin(...)` call in the middle of one long
+    // method-chain expression (it needs a real statement boundary) — hence the plugin's
+    // registration lives in its own function below and gets spliced in via an intermediate
+    // `let builder = ...;` rather than one unbroken chain from `Builder::default()` to `.run()`.
+    let builder = with_single_instance_plugin(tauri::Builder::default())
+        .manage(PendingOpen(Mutex::new(Vec::new())))
+        .manage(PendingOAuth(Mutex::new(None)))
+        .manage(ingest::IngestState::default())
+        .manage(catalog::CatalogState::new());
+    let builder = builder
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_deep_link::init())
+        // Native completion notices for exports that finish outside the foreground editor.
+        .plugin(tauri_plugin_notification::init())
+        // OS-level file drag-out (Finder and compatible receivers). The caller must provide an
+        // already-closed file; export rendering/lifetime policy remains in the frontend workflow.
+        .plugin(tauri_plugin_drag::init())
+        // Restores window position/size/maximized-state on launch, and saves it on resize/move/
+        // close — the window otherwise always opened at tauri.conf.json's fixed 1440x900. Default
+        // config (all flags) tracks every window the app creates, which today is just "main".
+        .plugin(tauri_plugin_window_state::Builder::default()
+            // Windows frame decorations belong to the title-bar design, not saved geometry.
+            // Restoring an older decorated=true would add a second row above our controls.
+            .with_state_flags(if cfg!(target_os = "windows") {
+                tauri_plugin_window_state::StateFlags::all()
+                    & !tauri_plugin_window_state::StateFlags::DECORATIONS
+            } else {
+                tauri_plugin_window_state::StateFlags::all()
+            })
+            .build())
+        // See Cargo.toml's comment on the dependency: a real log file replaces `log stream`,
+        // which does not capture this app's own log output at all (confirmed live).
+        // ⚠️ `file_name` below is NOT respected — verified live against a real running
+        // instance: the file is always named after the product name regardless of this
+        // setting (~/Library/Logs/com.tareq.chromasmith/Chromasmith.log, capital C). Left
+        // set (harmless) in case a future plugin version honors it; tools/diagnostics/log_file.py
+        // points at the real observed path, not this one.
+        // ⚠️ `attachConsole()` (chromasmith-22.html) forwarding JS console.* calls into this same
+        // pipeline works independently of these targets — it's the plugin's `log` command on the
+        // Rust side accepting records from anywhere. The Webview target below is the OTHER
+        // direction (relaying Rust-originated log records back into the page's own devtools
+        // console for visibility) — included for convenience, not required for the fix above.
+        // ⚠️ This logger is process-global — every dependency crate's own `log::` output lands
+        // here too. Verified live: `rawler` (the RAW decoder) alone produced 1383 WARN lines
+        // ("No lens data available") in one 45s session, drowning out anything else. Quieted
+        // at the source via level_for; tools/diagnostics/log_file.py is ALSO target-aware for any
+        // other dependency that turns out to be equally chatty in the future.
+        ;
+    let builder = with_log_plugin(builder);
+    builder.invoke_handler(tauri::generate_handler![
+            lightroom_preset_import::preview_lightroom_xmp_preset,
+            recipe_batch::recipe_batch_create, recipe_batch::recipe_batch_get, recipe_batch::recipe_batch_list,
+            recipe_batch::recipe_batch_apply_item, recipe_batch::recipe_batch_cancel, recipe_batch::recipe_batch_resume, recipe_batch::recipe_batch_undo,
+            raw_review_jobs::raw_review_jobs_create, raw_review_jobs::raw_review_jobs_list, raw_review_jobs::raw_review_jobs_get,
+            raw_review_jobs::raw_review_jobs_checkpoint, raw_review_jobs::raw_review_jobs_cancel, raw_review_jobs::raw_review_jobs_interrupt, raw_review_jobs::raw_review_jobs_resume,
+            raw_review_jobs::raw_review_jobs_finish,
+            publish::publish_collection_list,
+            publish::publish_collection_create,
+            publish::publish_collection_sync_photos,
+            publish::publish_collection_write_output,
+            publish::publish_collection_apply_deletions,
+            #[cfg(target_os = "macos")]
+            write_gainmap_heic,
+            #[cfg(target_os = "macos")]
+            write_gainmap_heic_from_map,
+            write_gainmap_uhdr_from_map,
+            extract_embedded_auxiliary,
+            #[cfg(target_os = "macos")]
+            source_has_hdr,
+            store_dcp_lut,
+            dcp_store::list_dcp_profiles,
+            dcp_store::read_dcp_file,
+            decode_raw_v2,
+            cache_raw_decode,
+            catalog_raw_face_detail,
+            get_cached_raw_decode,
+            decode_image_v1,
+            merge_hdr_photos,
+            merge_focus_photos,
+            merge_astro_photos,
+            merge_panorama_photos,
+            collage_output_path,
+            denoise_raw_high,
+            cancel_denoise_high,
+            list_lens_profiles,
+            download_url_native,
+            native_build_tag,
+            open_url_native,
+            haptic_feedback,
+            platform_capabilities,
+            peek_raw_camera,
+            read_file_bytes,
+            read_export_sidecar,
+            read_file_head,
+            peek_raw_camera_path,
+            write_file_bytes,
+            write_lightroom_tiff,
+            write_lightroom_tiff_raw,
+            http_native,
+            take_pending_open_path,
+            take_pending_oauth_callback,
+            google_oauth_loopback,
+            library::list_dir,
+            library::get_thumbnail_or_offline,
+            library::get_thumbnail_fast,
+            library::album_list,
+            library::album_create,
+            library::album_rename,
+            library::album_delete,
+            library::album_add,
+            library::list_album,
+            smart_albums::smart_album_sources,
+            smart_albums::smart_album_list,
+            smart_albums::smart_album_save,
+            smart_albums::smart_album_delete,
+            library::get_quicklook_preview,
+            library::get_meta,
+            library::get_meta_batch,
+            library::get_sidecar,
+            library::get_sidecar_batch,
+            library::sidecar_add_version,
+            library::sidecar_set_active_version,
+            library::sidecar_rename_version,
+            library::sidecar_delete_version,
+            library::set_sidecar,
+            library::set_color_label,
+            library::set_keywords,
+            library::reset_edit,
+            library::undo_reset_edit,
+            set_export_dir,
+            library::get_export_history,
+            library::append_export_history,
+            catalog_backup::library_backup_create,
+            catalog_backup::library_backup_last,
+            catalog_backup::library_backup_verify,
+            catalog_backup::library_backup_restore,
+            library::duplicate_file,
+            library::trash_file,
+            library::trash_file_with_undo,
+            library::restore_trashed_entry,
+            trash_undo::release_trash_receipts,
+            library::reveal_in_finder,
+            library::list_collection,
+            library::list_exported,
+            library::collection_counts,
+            library::touch_recent,
+            library::backfill_edited_registry,
+            library::rescan_edited_registry_recursive,
+            library::cancel_registry_rescan,
+            library::phash_batch,
+            library::registry_set_many,
+            library::get_decode_cache,
+            library::get_decode_cache_path,
+            library::hdr_headroom_clear,
+            library::get_hdr_companion,
+            library::get_display_decode_cache,
+            library::get_display_decode_cache_path,
+            library::get_lr_thumb,
+            library::save_lr_thumb,
+            sam_encode,
+            scrfd_detect,
+            sam_points,
+            sam_box,
+            subject_learn,
+            subject_locate,
+            subject_locate_multi,
+            subject_list,
+            subject_import,
+            subject_delete,
+            subject_remove_ref,
+            subject_merge,
+            subject_rename,
+            subject_rename_ref,
+            ingest::list_volumes,
+            ingest::scan_card,
+            ingest::ingest_preview,
+            ingest::ingest_copy,
+            ingest::ingest_cancel,
+            ingest::eject_volume,
+            session::session_create,
+            catalog::catalog_volumes,
+            catalog::queue_offline_edit,
+            catalog::list_offline_queue,
+            catalog::apply_queued_edit,
+            catalog::discard_queued_edit,
+            catalog::catalog_add_root,
+            catalog::catalog_remove_root,
+            catalog::catalog_root_identity,
+            catalog::catalog_keep_root,
+            catalog::catalog_scan,
+            catalog::catalog_sync_sidecars,
+            catalog::catalog_scan_cancel,
+            catalog::catalog_query,
+            catalog::catalog_rename_preview,
+            catalog::catalog_rename_apply,
+            catalog::catalog_counts,
+            catalog::catalog_date_counts,
+            catalog::catalog_note_deleted,
+            catalog::catalog_note_restored,
+            catalog::catalog_hash,
+            catalog::catalog_verify,
+            catalog::catalog_faces_scan,
+            catalog::catalog_pets_scan,
+            catalog::catalog_photo_faces,
+            catalog::catalog_faces_for_path,
+            catalog::catalog_photo_ids_for_paths,
+            catalog::catalog_face_scan_status,
+            catalog::catalog_record_pet_sighting,
+            catalog::catalog_face_crop,
+            catalog::catalog_face_preview,
+            catalog::catalog_face_box,
+            catalog::catalog_set_person_cover,
+            catalog::catalog_person_face_ids,
+            catalog::catalog_embed_faces,
+            catalog::catalog_cluster_faces,
+            catalog::catalog_people,
+            catalog::catalog_rename_person,
+            catalog::catalog_merge_people,
+            catalog::catalog_delete_person,
+            catalog::catalog_confirm_person,
+            catalog::catalog_split_faces,
+            catalog::catalog_set_person_ignored,
+            catalog::catalog_set_person_kind,
+            catalog::catalog_unnamed_clusters,
+            catalog::catalog_person_suggestions,
+            catalog::catalog_resolve_suggestions,
+            catalog::catalog_auto_assign,
+            catalog::catalog_undo_auto_assign,
+            catalog::catalog_untag_faces,
+            catalog::catalog_import_google_takeout,
+            catalog::catalog_clip_embed,
+            catalog::catalog_clip_search,
+            catalog::catalog_places,
+            catalog::catalog_auto_tag,
+            catalog::catalog_auto_tag_counts,
+            catalog::catalog_photo_tag_info,
+            catalog::catalog_thumbnails,
+            catalog::catalog_hq_offline,
+            catalog::catalog_hq_offline_list,
+            catalog::catalog_hq_offline_set_active,
+            catalog::catalog_cancel_reset,
+            catalog::catalog_bg_set_paused,
+            hq_offline_force_quit,
+            catalog::catalog_focus,
+            catalog::catalog_stack,
+            catalog::catalog_keywords,
+            catalog::cache_usage,
+            catalog::clear_cache_tier,
+            catalog::catalog_dismiss_review,
+            catalog::catalog_root_cache_usage,
+            catalog::clear_root_cache,
+            sam2_encode,
+            sam2_points,
+            faceparse_run,
+            depth_run,
+            superres_available,
+            superres_cancel,
+            superres_run,
+            inpaint_start,
+            inpaint_export_bundle,
+            inpaint::inpaint_model_status,
+            inpaint::inpaint_model_install,
+            inpaint::inpaint_job,
+            inpaint::inpaint_cancel,
+            inpaint::inpaint_accept,
+            inpaint::inpaint_resolve,
+            save_to_gphotos_downloads,
+            gphotos_downloads_dir,
+            save_to_lr_downloads,
+            save_export_file_raw,
+            stream_open,
+            stream_write,
+            stream_close,
+            lr_downloads_dir,
+            diag::diag_native_state,
+            diag::diag_state_path
+        ])
+        // Custom "cs://" protocol serving the embedded dist/ with EXPLICIT COOP/COEP headers
+        // on every single response, including the very first navigation — see the Cargo.toml
+        // comment for why the declarative app.security.headers config wasn't reliable here.
+        .register_uri_scheme_protocol("cs", |_ctx, request| {
+            let raw_path = request.uri().path().trim_start_matches('/');
+            let raw_path = if raw_path.is_empty() { "index.html" } else { raw_path };
+            // The URI path arrives percent-encoded (spaces -> %20 etc — several of the app's
+            // own asset filenames have spaces, e.g. "vendor/dcp/Panasonic DC-S9 Camera
+            // Standard.dcp") but std::fs::read needs the literal decoded path. Forgetting this
+            // silently 404s every asset whose name needs encoding.
+            let path = percent_decode(raw_path);
+            // Path::join, NOT a manually formatted "{dir}/{path}" string — the real bug behind
+            // this whole handler 404ing on Windows (docs/windows-port.md G21). Win32's "\\?\"
+            // verbatim-path prefix (which `dist_dir()` can carry — Tauri's `resource_dir()`
+            // returns one) disables ALL of the OS's normal path parsing, including treating "/"
+            // as a separator: a forward slash inside a "\\?\" path is a LITERAL, invalid
+            // character in a filename, not a separator, so the manually concatenated string
+            // named a file that could never exist. `Path::join` builds the path as structured
+            // components instead of raw bytes, so Rust always renders the final OS string with
+            // real backslash separators regardless of the "\\?\" prefix — exactly how every
+            // OTHER resource path in this file is already built (the dylib/model resolvers
+            // below), which is why only this hand-formatted one had the bug.
+            let full = dist_dir().join(&path);
+            let (body, mime, status): (Vec<u8>, String, u16) = match std::fs::read(&full) {
+                Ok(b) => (
+                    b,
+                    mime_guess::from_path(path)
+                        .first_raw()
+                        .unwrap_or("application/octet-stream")
+                        .to_string(),
+                    200,
+                ),
+                Err(_) => (b"404 Not Found".to_vec(), "text/plain".to_string(), 404),
+            };
+            tauri::http::Response::builder()
+                .status(status)
+                .header("Content-Type", mime)
+                .header("Cross-Origin-Opener-Policy", "same-origin")
+                .header("Cross-Origin-Embedder-Policy", "require-corp")
+                .body(body)
+                .unwrap()
+        })
+        .setup(|app| {
+            bgwork::disable_app_nap();
+            library::migrate_case_duplicate_keys();
+            let handle = app.handle();
+
+            // Deep links are only registered with the OS at INSTALL time (the NSIS installer,
+            // built from tauri.conf.json's plugins.deep-link.desktop.schemes) — fine for a
+            // packaged release, but `cargo tauri dev`/`cargo run` never runs that installer, so
+            // the Adobe OAuth custom scheme would silently never reach a dev build at all without
+            // this. macOS needs no equivalent: Info.plist's CFBundleURLTypes (from the same
+            // config) is read by Launch Services straight from the .app bundle, dev or not.
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+            }
+
+            // The window opened smaller than the screen on every launch, for two separate
+            // reasons that both land here (tauri_plugin_window_state has already restored by
+            // the time .setup runs):
+            //   1. A fresh profile has no saved state at all, so tauri.conf.json's fixed
+            //      1440x900 is what you get regardless of how big the display actually is.
+            //   2. A saved state can no longer FIT the current monitor — measured on this
+            //      machine: 2844x1584 physical saved at y=50, i.e. the full framebuffer height
+            //      but offset below the menu bar, so it overhangs the work area's bottom and
+            //      macOS silently shrinks it to fit rather than moving it up. Reconnecting a
+            //      display, or changing the scaled resolution, produces the same mismatch.
+            // ⚠️ Quit-blocking while the offline full-res cache is actively generating — the
+            // user's own explicit ask: closing mid-generation with no warning would silently
+            // strand the hot-100-edited/hot-100-added set half-built, with no indication anything
+            // was interrupted. `hq_offline_active` (CatalogState) is JS-controlled (set true when
+            // its drain loop starts, false when it naturally finishes) precisely so this check
+            // reflects "the whole drain sequence," not just whether one batch invoke happens to
+            // be in flight. On block: prevent the close and emit an event for the frontend's own
+            // Wait/Cancel-and-quit dialog — `hq_offline_force_quit` (below) is what actually exits
+            // once the user picks "cancel and quit."
+            if let Some(window) = app.get_webview_window("main") {
+                let handle_for_close = handle.clone();
+                hide_traffic_lights(&window);
+                let window_for_lights = window.clone();
+                window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(true)) {
+                        hide_traffic_lights(&window_for_lights);
+                    }
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        use tauri::{Emitter, Manager};
+                        let state = handle_for_close.state::<catalog::CatalogState>();
+                        if state.hq_offline_active.load(std::sync::atomic::Ordering::Relaxed) {
+                            api.prevent_close();
+                            let _ = handle_for_close.emit("hq-offline-quit-blocked", ());
+                        } else {
+                            // The close is actually proceeding — make sure the face-scan worker
+                            // child (CatalogState::ai_worker) doesn't outlive this process as an
+                            // orphan. Safe to kill unconditionally, same reasoning as
+                            // catalog_scan_cancel: it resumes correctly next launch.
+                            catalog::kill_ai_worker(&state);
+                        }
+                    }
+                });
+            }
+
+            // Resolve dist_dir() once — see DIST_DIR_RESOLVED's doc comment above. Same
+            // bundled-resource-with-dev-fallback pattern as the onnxruntime dylib below, EXCEPT
+            // the existence check has to test for a real FILE inside the candidate directory
+            // (index.html), not just the directory itself — every other resource fallback in this
+            // file joins a specific file's relative path before checking `.exists()`, but this one
+            // joins only "dist", the directory. On Windows (not macOS, found live during this
+            // port's first `cargo tauri dev` run), `cargo tauri dev`'s own resource staging
+            // creates a real `target/debug/dist` directory regardless of whether our own
+            // build-desktop.mjs has populated the real desktop/dist yet, so a bare `p.exists()`
+            // silently accepted an empty/wrong directory over the correct dev fallback — the
+            // whole app 404'd on every asset including index.html itself.
+            let bundled_dist = handle.path().resource_dir().ok().map(|d| d.join("dist"));
+            let dist = bundled_dist
+                .filter(|p| p.join("index.html").exists())
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../dist"));
+            let _ = DIST_DIR_RESOLVED.set(dist);
+
+            // CLI/manual-launch fallback for the Lightroom "Edit In" handoff (see PendingOpen
+            // above) — `open -a Chromasmith file1.tif file2.tif` or a direct binary launch with
+            // path arguments (plural — a multi-select Edit-In can hand off several). RunEvent::
+            // Opened in run() below is the real Launch-Services path Lightroom/Finder actually
+            // use; this just covers the same handoff when testing from a terminal, where no
+            // Opened event fires at all.
+            let cli_paths: Vec<String> = std::env::args()
+                .skip(1)
+                .filter(|a| Path::new(a).is_file())
+                .collect();
+            if !cli_paths.is_empty() {
+                *handle.state::<PendingOpen>().0.lock().unwrap() = cli_paths;
+            }
+
+            // Prune unbounded caches (thumbnails/decode JPEGs) in the background — see
+            // library::prune_caches for the caps. Never blocks startup.
+            // RE-ENABLED. Its two real bugs (deleting the favorites/flags/rejects/duplicates/
+            // edited/recents registries + export history that live in the same directory, and a
+            // too-small 500MB cap that thrashed a real ~30k-photo library's 1.2GB working set on
+            // every prune) are both fixed — see is_evictable_cache_file and the raised THUMB_CAP.
+            // The remaining TOCTOU concern this comment used to record — a race between prune's
+            // `remove_file` and a concurrent `get_thumbnail` read/write to the SAME path — is not
+            // a corruption risk on inspection: `fs::write` isn't atomic here, but POSIX unlink
+            // only removes the directory entry, never the data an already-open fd is reading or
+            // writing; the only observable effect of losing the race is a spurious cache MISS
+            // (file not found → regenerate), the exact same self-healing path a stale/missing
+            // cache entry already takes everywhere else in this file. The delay below is a light,
+            // free mitigation on top of that reasoning, not a requirement for correctness: it
+            // keeps prune off the CPU-contended first few seconds of boot this session's other
+            // fixes were about, so it can never compete with the interactive first-paint decode.
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                // One-time-per-install: the thumbnail cache key just became stable (path-only,
+                // no more mtime/size baked into the filename — see library::cache_key's own doc
+                // comment for the measured 3.04x orphan redundancy this fixes). Every file cached
+                // under the OLD key format is now permanently unreachable, so this reclaims it in
+                // one pass rather than leaving it to rot until prune_caches' 6GB cap is eventually
+                // exceeded, which a stable key (no longer generating fresh orphans on every edit)
+                // could take a very long time to reach. Runs once ever, before the ordinary prune
+                // below, on the same delayed background thread so neither competes with boot.
+                library::migrate_thumb_cache_v2();
+                library::prune_caches();
+            });
+
+            // macOS uses its system menu; Windows exposes these actions in the Gallery
+            // and Studio headers (header-menus.js), without a separate native menu row.
+            #[cfg(target_os = "macos")]
+            {
+            let open_item =
+                MenuItem::with_id(handle, "menu-open", "Open Photo…", true, Option::<&str>::None)?;
+            // library-ui.js already keeps a recents list (its own header "Recent" button,
+            // getRecentFolders()/#lib-recent) with no native menu entry point — this reuses that
+            // SAME dropdown rather than a parallel Rust-side mirror of the same folder list; see
+            // the JS-side listener (library-ui.js, next to its "menu-library" one) for why.
+            let open_recent_item = MenuItem::with_id(
+                handle, "menu-open-recent", "Open Recent…", true, Option::<&str>::None,
+            )?;
+            let library_item =
+                MenuItem::with_id(handle, "menu-library", "Library…", true, Option::<&str>::None)?;
+            let export_item =
+                MenuItem::with_id(handle, "menu-export", "Export…", true, Option::<&str>::None)?;
+            // Session save/load already existed as buttons (saveSession()/loadSession(), also in
+            // the ⌘K command palette) with no native menu entry point — grouped in their own
+            // submenu rather than flattened into File, which was already 4 items deep before this.
+            let save_session_item =
+                MenuItem::with_id(handle, "menu-save-session", "Save Session", true, Option::<&str>::None)?;
+            let load_session_item =
+                MenuItem::with_id(handle, "menu-load-session", "Load Session", true, Option::<&str>::None)?;
+            let session_menu = Submenu::with_items(
+                handle,
+                "Session",
+                true,
+                &[&save_session_item, &load_session_item],
+            )?;
+            let file_menu = Submenu::with_items(
+                handle,
+                "File",
+                true,
+                &[
+                    &open_item,
+                    &open_recent_item,
+                    &library_item,
+                    &session_menu,
+                    &export_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::close_window(handle, None)?,
+                ],
+            )?;
+
+            let undo_item = MenuItem::with_id(handle, "menu-undo", "Undo", true, Option::<&str>::None)?;
+            let redo_item = MenuItem::with_id(
+                handle,
+                "menu-redo",
+                "Redo",
+                true,
+                Option::<&str>::None,
+            )?;
+            let edit_menu = Submenu::with_items(
+                handle,
+                "Edit",
+                true,
+                &[
+                    &undo_item,
+                    &redo_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::cut(handle, None)?,
+                    &PredefinedMenuItem::copy(handle, None)?,
+                    &PredefinedMenuItem::paste(handle, None)?,
+                    &PredefinedMenuItem::select_all(handle, None)?,
+                ],
+            )?;
+
+            // Photo: culling flags + geometry, mirroring the Library grid's right-click menu and
+            // its keyboard culling (X/P/U, already handled in library-ui.js's own keydown
+            // listener — which correctly ignores keystrokes while a text field is focused).
+            // Deliberately NO accelerator on Reject/Pick/Clear/Toggle-Full-Library here: a bare,
+            // modifier-less menu key-equivalent is intercepted by AppKit's performKeyEquivalent:
+            // BEFORE it ever reaches a focused text field, so "X"/"P"/"U"/"G" as native menu
+            // shortcuts would silently eat those letters everywhere in the app (renaming a file,
+            // typing in search, the filename-pattern field) — exactly the class of bug this
+            // project's CLAUDE.md warns about re-testing in a real browser/app after a change.
+            // The menu items stay reachable by click; the real keyboard shortcuts are the
+            // existing JS-side, focus-aware ones.
+            let reject_item = MenuItem::with_id(handle, "menu-reject", "Reject", true, Option::<&str>::None)?;
+            let pick_item = MenuItem::with_id(handle, "menu-pick", "Pick (Flag)", true, Option::<&str>::None)?;
+            let clear_flag_item = MenuItem::with_id(handle, "menu-clear-flag", "Clear Flag", true, Option::<&str>::None)?;
+            let reset_edit_item = MenuItem::with_id(handle, "menu-reset-edit", "Reset Edit", true, Option::<&str>::None)?;
+            let rotate_left_item = MenuItem::with_id(handle, "menu-rotate-left", "Rotate Left", true, Option::<&str>::None)?;
+            let rotate_right_item = MenuItem::with_id(handle, "menu-rotate-right", "Rotate Right", true, Option::<&str>::None)?;
+            let flip_h_item = MenuItem::with_id(handle, "menu-flip-h", "Flip Horizontal", true, Option::<&str>::None)?;
+            let flip_v_item = MenuItem::with_id(handle, "menu-flip-v", "Flip Vertical", true, Option::<&str>::None)?;
+            let copy_edit_item = MenuItem::with_id(handle, "menu-copy-edit", "Copy Edit", true, Option::<&str>::None)?;
+            let paste_edit_item = MenuItem::with_id(handle, "menu-paste-edit", "Paste Edit", true, Option::<&str>::None)?;
+            // Geometry grouped into its own submenu — crop/straighten (cropToggle()) is the same
+            // on-canvas tool the crop button already opens, just with no prior menu path in.
+            let crop_item = MenuItem::with_id(handle, "menu-crop", "Crop / Straighten", true, Option::<&str>::None)?;
+            let geometry_menu = Submenu::with_items(
+                handle,
+                "Geometry",
+                true,
+                &[
+                    &rotate_left_item,
+                    &rotate_right_item,
+                    &flip_h_item,
+                    &flip_v_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &crop_item,
+                ],
+            )?;
+            // Auto Enhance / WB Eyedropper already existed as header buttons (autoEnhance()/
+            // wbEyedropper()) with no menu entry; Reshuffle already existed as the Film Artifacts
+            // panel's "Re-roll" button (artReshuffle()).
+            let auto_enhance_item = MenuItem::with_id(handle, "menu-auto-enhance", "Auto Enhance", true, Option::<&str>::None)?;
+            let wb_eyedrop_item = MenuItem::with_id(handle, "menu-wb-eyedrop", "White Balance Eyedropper", true, Option::<&str>::None)?;
+            let adjustments_menu = Submenu::with_items(
+                handle,
+                "Adjustments",
+                true,
+                &[&auto_enhance_item, &wb_eyedrop_item],
+            )?;
+            let reshuffle_item = MenuItem::with_id(handle, "menu-reshuffle-artifacts", "Reshuffle Film Artifacts", true, Option::<&str>::None)?;
+            let photo_menu = Submenu::with_items(
+                handle,
+                "Photo",
+                true,
+                &[
+                    &reject_item,
+                    &pick_item,
+                    &clear_flag_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &geometry_menu,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &copy_edit_item,
+                    &paste_edit_item,
+                    &reset_edit_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &adjustments_menu,
+                    &reshuffle_item,
+                ],
+            )?;
+
+            // View: zoom, split/compare, histogram, and the Library's expanded/grid view — the
+            // on-screen buttons for most of these already exist (fx-wrap zoom controls, the ○/⇔/▦
+            // preview-tools row, the ⛶ Library-expand button); this just gives them menu-bar
+            // discoverability and real shortcuts, same idiom as darktable/RawTherapee/digiKam.
+            let zoom_in_item = MenuItem::with_id(handle, "menu-zoom-in", "Zoom In", true, Option::<&str>::None)?;
+            let zoom_out_item = MenuItem::with_id(handle, "menu-zoom-out", "Zoom Out", true, Option::<&str>::None)?;
+            let zoom_fit_item = MenuItem::with_id(handle, "menu-zoom-fit", "Zoom to Fit", true, Option::<&str>::None)?;
+            let zoom_100_item = MenuItem::with_id(handle, "menu-zoom-100", "Zoom to 100%", true, Option::<&str>::None)?;
+            let split_item = MenuItem::with_id(handle, "menu-split", "Toggle Before/After Split", true, Option::<&str>::None)?;
+            let hist_item = MenuItem::with_id(handle, "menu-histogram", "Toggle Histogram", true, Option::<&str>::None)?;
+            let expand_lib_item = MenuItem::with_id(handle, "menu-expand-library", "Toggle Full Library", true, Option::<&str>::None)?; // bare "G" is already the JS-side shortcut — see the Photo-menu comment above on why it can't ALSO be a native accelerator
+            let zoom_menu = Submenu::with_items(
+                handle,
+                "Zoom",
+                true,
+                &[&zoom_in_item, &zoom_out_item, &zoom_fit_item, &zoom_100_item],
+            )?;
+            // toggleLoupe() (the "1:1" button) already existed with no menu path — true
+            // native-res preview, separate from the split/histogram toggles already wired.
+            let loupe_item = MenuItem::with_id(handle, "menu-loupe", "Toggle 1:1 Loupe", true, Option::<&str>::None)?;
+            let view_menu = Submenu::with_items(
+                handle,
+                "View",
+                true,
+                &[
+                    &zoom_menu,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &split_item,
+                    &hist_item,
+                    &loupe_item,
+                    &expand_lib_item,
+                ],
+            )?;
+
+            let window_menu = Submenu::with_items(
+                handle,
+                "Window",
+                true,
+                &[
+                    &PredefinedMenuItem::minimize(handle, None)?,
+                    &PredefinedMenuItem::maximize(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::fullscreen(handle, None)?,
+                ],
+            )?;
+
+            // Search opens the existing command palette. Shortcut dispatch belongs to the
+            // shared registry in chromasmith-22.html so user keymaps and menu actions cannot race.
+            let search_item = MenuItem::with_id(handle, "menu-search", "Search…", true, Option::<&str>::None)?;
+            let shortcuts_item = MenuItem::with_id(handle, "menu-shortcuts", "Keyboard Shortcuts…", true, Option::<&str>::None)?;
+            let guide_item = MenuItem::with_id(handle, "menu-guide", "Chromasmith Guide", true, Option::<&str>::None)?;
+            let whatsnew_item = MenuItem::with_id(handle, "menu-whatsnew", "What's New", true, Option::<&str>::None)?;
+            let tour_item = MenuItem::with_id(handle, "menu-tour", "Welcome Tour", true, Option::<&str>::None)?;
+            let help_menu = Submenu::with_items(
+                handle,
+                "Help",
+                true,
+                &[
+                    &search_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &shortcuts_item,
+                    &guide_item,
+                    &whatsnew_item,
+                    &tour_item,
+                ],
+            )?;
+
+            // No dedicated preferences window exists yet, so this opens the same About panel
+            // (csAbout(), chromasmith-22.html) the header's info button does — build/diagnostics
+            // today, the natural home for real app-wide settings if any are added later. Still
+            // worth having: Cmd+, is where every macOS user's muscle memory reaches first; the
+            // shared shortcut registry provides that default and keeps it user-remappable.
+            let settings_item = MenuItem::with_id(
+                handle, "menu-settings", "Settings…", true, Option::<&str>::None,
+            )?;
+            let app_menu = Submenu::with_items(
+                handle,
+                "Chromasmith",
+                true,
+                &[
+                    &PredefinedMenuItem::about(handle, None, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &settings_item,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::hide(handle, None)?,
+                    &PredefinedMenuItem::hide_others(handle, None)?,
+                    &PredefinedMenuItem::show_all(handle, None)?,
+                    &PredefinedMenuItem::separator(handle)?,
+                    &PredefinedMenuItem::quit(handle, None)?,
+                ],
+            )?;
+
+            let menu = Menu::with_items(
+                handle,
+                &[&app_menu, &file_menu, &edit_menu, &photo_menu, &view_menu, &window_menu, &help_menu],
+            )?;
+            app.set_menu(menu)?;
+
+            let handle2 = handle.clone();
+            app.on_menu_event(move |_app, event| {
+                let id = event.id().0.as_str();
+                if matches!(
+                    id,
+                    "menu-open" | "menu-open-recent" | "menu-settings" | "menu-library" | "menu-export" | "menu-undo" | "menu-redo"
+                        | "menu-save-session" | "menu-load-session"
+                        | "menu-reject" | "menu-pick" | "menu-clear-flag" | "menu-reset-edit"
+                        | "menu-rotate-left" | "menu-rotate-right" | "menu-flip-h" | "menu-flip-v" | "menu-crop"
+                        | "menu-copy-edit" | "menu-paste-edit"
+                        | "menu-auto-enhance" | "menu-wb-eyedrop" | "menu-reshuffle-artifacts"
+                        | "menu-zoom-in" | "menu-zoom-out" | "menu-zoom-fit" | "menu-zoom-100"
+                        | "menu-split" | "menu-histogram" | "menu-loupe" | "menu-expand-library"
+                        | "menu-search" | "menu-shortcuts" | "menu-guide" | "menu-whatsnew" | "menu-tour"
+                ) {
+                    let _ = handle2.emit(id, ());
+                }
+            });
+            } // desktop native menus
+
+            // AI tap-to-select's onnxruntime dylib (see sam.rs): a bundled RESOURCE (declared in
+            // tauri.conf.json's bundle.resources), not embedded in the binary — `ort`'s
+            // load-dynamic feature dlopen()s it by path at first use, and 28MB is fine as a
+            // resource file but not worth doubling the binary's link time via include_bytes!.
+            // Prefer the packaged resource_dir() (a real distributed .app); fall back to the
+            // source tree's vendor/ directly for `cargo tauri dev`, where resource_dir() may not
+            // point at a populated location.
+            // Bundled resource dest is always the FLATTENED "vendor/onnxruntime/<filename>"
+            // (tauri.conf.json's bundle.resources, both platforms), but the dev-tree source path
+            // differs (Windows keeps its dll under a win-x64/ subdir — see platform::ort_lib_dev_path's
+            // doc comment) — hence two different relative paths here, not one shared constant.
+            let bundled_rel = format!("vendor/onnxruntime/{}", platform::ort_lib_filename());
+            let bundled = handle.path().resource_dir().ok().map(|d| d.join(&bundled_rel));
+            let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(platform::ort_lib_dev_path());
+            let dylib_path = bundled.filter(|p| p.exists()).unwrap_or(dev_fallback);
+            sam::set_dylib_path(dylib_path);
+
+            // SAM 2.1's ~155MB models (see sam.rs's SAM2_ENCODER_PATH/SAM2_DECODER_PATH doc
+            // comment) — same bundled-resource-with-dev-fallback pattern as the dylib above,
+            // since include_bytes! would be a much bigger compile-time/binary-size hit here.
+            let resolve_vendor = |rel: &str| -> PathBuf {
+                let bundled = handle.path().resource_dir().ok().map(|d| d.join(rel));
+                let dev_fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+                bundled.filter(|p| p.exists()).unwrap_or(dev_fallback)
+            };
+            sam::set_sam2_model_paths(resolve_vendor("vendor/sam2/encoder.onnx"), resolve_vendor("vendor/sam2/decoder.onnx"));
+
+            // Warm the EdgeSAM sessions shortly after launch so the first AI mask click skips the
+            // cold start. ONE one-shot thread at background QoS (not per-item work), delayed so it
+            // never competes with boot/grid; one model at a time. CoreML stays off (sam.rs).
+            if std::env::var_os("CS_NO_AI_WARM").is_none() {
+                let _ = std::thread::Builder::new().name("cs-ai-warm".into()).spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    bgwork::mark_current_thread_background();
+                    let t = std::time::Instant::now();
+                    sam::warm();
+                    diag::log("info", format!("ai_warm edgesam ready in {}ms", t.elapsed().as_millis()));
+                });
+            }
+
+            // Face-feature auto-exclusion (ROADMAP item 16) — same bundled-resource-with-
+            // dev-fallback pattern as the SAM2 models above.
+            faceparse::set_model_path(resolve_vendor("vendor/faceparse/model_quantized.onnx"));
+            petdetect::set_model_path(resolve_vendor("vendor/rtdetr/model_quantized.onnx"));
+            dino::set_model_path(resolve_vendor("vendor/dinov2/model.onnx"));
+            depth::set_model_path(resolve_vendor("vendor/depth/model_quantized.onnx"));
+            superres::set_model_path(resolve_vendor("vendor/superres/realesr-general-x4v3.onnx"));
+            inpaint::set_root(handle.path().app_data_dir()?.join("inpainting"));
+
+            // AI stack Phase B: ArcFace embedding (buffalo_l/w600k_r50, 174MB) — same bundled-
+            // resource-with-dev-fallback pattern; too large for include_bytes! like SAM2/
+            // faceparse/rawdenoise above.
+            arcface::set_model_path(resolve_vendor("vendor/arcface/w600k_r50.onnx"));
+
+            // AI stack Phase D: CLIP natural-language search (vision + text encoders, ~350MB +
+            // ~254MB) — same bundled-resource-with-dev-fallback pattern; plus the BPE tokenizer,
+            // which is small but still resolved the same way so a packaged .app carries it too.
+            clip::set_model_paths(
+                resolve_vendor("vendor/clip/vision_model.onnx"),
+                resolve_vendor("vendor/clip/text_model.onnx"),
+                resolve_vendor("vendor/clip/tokenizer.json")
+            );
+
+            // High-tier RAW denoiser (rawdenoise.rs) — same bundled-resource-with-dev-fallback
+            // pattern; ~30MB each, so file-path CreateSession like SAM2/faceparse, not
+            // include_bytes! like EdgeSAM's much smaller models.
+            rawdenoise::set_model_paths(resolve_vendor("vendor/rawdenoise/model_linear.onnx"), resolve_vendor("vendor/rawdenoise/model_bayer.onnx"));
+
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building Chromasmith")
+        .run(|app_handle, event| {
+            // The window opened smaller than the screen on every launch, for two separate
+            // reasons:
+            //   1. A fresh profile has no saved state, so tauri.conf.json's fixed 1440x900 is
+            //      what you get however big the display actually is (now also "maximized": true
+            //      there, which covers the first launch before any state exists).
+            //   2. A saved state that no longer matches the screen just restores forever.
+            //      Measured here: 1422x792 restored into a 1440x792 work area — full height,
+            //      flush left, 18pt short of the right edge, every single launch.
+            // ⚠️ This MUST run on Ready, not in .setup(). tauri-plugin-window-state restores in
+            // its own `.on_window_ready()` hook, which fires AFTER setup — a maximize() in setup
+            // is applied and then silently overwritten by the restore, which is exactly what the
+            // first version of this fix did (verified: window still came back 1422 wide).
+            if matches!(event, tauri::RunEvent::Ready) {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    const FILL: f64 = 0.9;
+                    let fills = (|| -> Option<bool> {
+                        let monitor = window.current_monitor().ok()??;
+                        // ⚠️ work_area(), NOT size(): size() is the whole panel, so a genuinely
+                        // maximized 1584px-tall window measures 0.88 of an 1800px monitor and
+                        // would be judged "deliberately small" every launch. The work area
+                        // already excludes the menu bar and the Dock.
+                        let area = monitor.work_area().size;
+                        let size = window.outer_size().ok()?;
+                        Some(
+                            f64::from(size.width) >= f64::from(area.width) * FILL
+                                && f64::from(size.height) >= f64::from(area.height) * FILL,
+                        )
+                    })();
+                    // The test is "does it FILL the work area", not "does it FIT inside it": at
+                    // 98.75% of the available width it fits perfectly, so a fits-inside test
+                    // leaves the gap there forever. Near-full is drift and gets snapped to exact
+                    // full; a window genuinely smaller than FILL is a deliberate choice and is
+                    // restored untouched, which is the point of persisting state at all.
+                    // `None` (monitor unreadable) maximizes too — a full-screen window is a safer
+                    // failure mode than an arbitrary one we could not verify.
+                    // ⚠️ Set the frame explicitly rather than calling maximize(). On macOS
+                    // maximize() is NSWindow's `zoom:`, whose "standard frame" AppKit computes
+                    // itself — measured here, it left the window 1422 wide against a 1440-wide
+                    // work area, i.e. it does NOT mean "fill the screen" and did not fix this.
+                    // Writing work_area straight to position+size is deterministic.
+                    if fills != Some(false) {
+                        if let Ok(Some(monitor)) = window.current_monitor() {
+                            let wa = *monitor.work_area();
+                            let _ = window.set_position(wa.position);
+                            let _ = window.set_size(wa.size);
+                        }
+                    }
+                }
+            }
+            // macOS Launch-Services "open this document" — the actual mechanism behind Finder's
+            // "Open With", and (once tauri.conf.json's fileAssociations register Chromasmith as
+            // an editor) Lightroom's "Edit In" handoff. Fires both on a cold launch WITH a file
+            // and on a already-running app being handed a new one. Stash it via PendingOpen
+            // (see above) rather than emitting straight to the webview — on a cold launch this
+            // can arrive before the frontend has attached any listener, so an emitted event
+            // would just be silently dropped; also emit it for the already-running case, where
+            // a listener reliably exists already and the extra immediacy is worth it.
+            // `RunEvent::Opened` is itself cfg-gated upstream to macOS/iOS/Android only (tauri's
+            // app.rs) — on Windows/Linux the same information arrives in argv instead (a second
+            // process's command line, relayed to the first instance by a single-instance plugin).
+            // That's real, not-yet-done wiring (docs/windows-port.md G4, Phase 1b) — cfg-gating
+            // this match arm keeps the macOS behavior unchanged and makes the gap explicit rather
+            // than pretending a compile fix here means file-open/deep-link works on Windows.
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            if let tauri::RunEvent::Opened { urls } = event {
+                // A file:// URL (Lightroom Edit-In / Finder "Open With" / CLI open) goes to
+                // PendingOpen. Anything else — currently just Adobe's Lightroom OAuth
+                // custom-scheme callback (adobe+<id>://...), registered via tauri-plugin-deep-link
+                // in tauri.conf.json — goes to PendingOAuth instead. A single Opened event can
+                // carry MULTIPLE file:// urls at once (Lightroom's "Edit In" with several photos
+                // selected hands them all off together) — collect every file path from this
+                // event into one batch instead of overwriting PendingOpen per-url (which used to
+                // silently drop every file but the last one) and emit it as a single array so the
+                // frontend opens them together as one batch, not N separate single-photo opens.
+                let mut file_paths: Vec<String> = Vec::new();
+                for u in urls {
+                    if let Ok(path) = u.to_file_path() {
+                        file_paths.push(path.to_string_lossy().into_owned());
+                    } else {
+                        dispatch_oauth_url(app_handle, u.to_string());
+                    }
+                }
+                dispatch_open_files(app_handle, file_paths);
+            }
+        });
+}
+
+#[cfg(test)]
+mod effective_dcp_mode_tests {
+    use super::effective_dcp_mode;
+
+    #[test]
+    fn matching_make_honors_lut() {
+        let (mode, used) = effective_dcp_mode("lut", "Panasonic", Some("dcp:Panasonic DC-S9:Standard"));
+        assert_eq!(mode, "lut");
+        assert_eq!(used, 1);
+    }
+
+    #[test]
+    fn any_brand_now_scales_not_just_the_old_2_entry_allowlist() {
+        // docs/ROADMAP.md's F1: a Canon file requesting a Canon-prefixed key must be honored — the
+        // old fixed ["panasonic","sony"] allowlist would have downgraded this unconditionally.
+        let (mode, used) = effective_dcp_mode("lut", "Canon", Some("dcp:Canon EOS 5D Mark IV:Standard"));
+        assert_eq!(mode, "lut");
+        assert_eq!(used, 1);
+    }
+
+    #[test]
+    fn mismatched_make_downgrades_to_linear16() {
+        // Exactly the bug class this gate exists to catch: applying one camera's profile to a
+        // different camera's decoded pixels.
+        let (mode, used) = effective_dcp_mode("lut", "Nikon", Some("dcp:Sony DSC-RX100M5:Standard"));
+        assert_eq!(mode, "linear16");
+        assert_eq!(used, 0);
+    }
+
+    #[test]
+    fn missing_or_malformed_lut_key_downgrades() {
+        let (mode, _) = effective_dcp_mode("lut", "Sony", None);
+        assert_eq!(mode, "linear16");
+        let (mode, _) = effective_dcp_mode("lut", "Sony", Some("not-a-dcp-key"));
+        assert_eq!(mode, "linear16");
+    }
+
+    #[test]
+    fn non_lut_modes_pass_through_unaffected() {
+        let (mode, used) = effective_dcp_mode("srgb", "Nikon", None);
+        assert_eq!(mode, "srgb");
+        assert_eq!(used, 0);
+        let (mode, used) = effective_dcp_mode("linear16", "", None);
+        assert_eq!(mode, "linear16");
+        assert_eq!(used, 0);
+    }
+}
+
+#[cfg(test)]
+mod raw_display_only_cache_tests {
+    use super::{cache_raw_decode, run_raw_cache_development};
+    use std::path::Path;
+
+    fn unique_recipe(label: &str) -> String {
+        format!("raw-display-only-{label}-{}-{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos())
+    }
+
+    fn temp_raw(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("cs_raw_display_{label}_{}_{}.NEF", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::write(&path, b"synthetic cache-hit source").unwrap();
+        path
+    }
+
+    fn cache_display_only(path: &Path, recipe_key: &str) -> String {
+        cache_raw_decode(path.to_string_lossy().into_owned(), recipe_key.to_string(), "srgb".into(),
+            String::new(), "off".into(), false, "ahd".into(), String::new(), 0.0, Some(true), None).unwrap()
+    }
+
+    #[test]
+    fn cache_development_dispatch_promotes_only_review_work() {
+        let (pool_index, thread_name) = run_raw_cache_development(true, || (
+            rayon::current_thread_index(),
+            std::thread::current().name().unwrap_or("").to_string(),
+        ));
+        if std::env::var("CS_INTERACTIVE_POOL").as_deref() == Ok("0") {
+            assert!(pool_index.is_none(), "the documented pool-off setting must retain caller placement");
+        } else {
+            assert!(pool_index.is_some(), "review work must run inside a Rayon pool");
+            assert!(thread_name.starts_with("cs-interactive-"), "unexpected review worker: {thread_name}");
+        }
+        let caller = std::thread::current().id();
+        let batch_thread = run_raw_cache_development(false, || std::thread::current().id());
+        assert_eq!(batch_thread, caller, "full-cache batch work must keep caller placement");
+    }
+
+    #[test]
+    fn display_only_reuses_matching_proxy_without_full_or_memory_cache() {
+        let source = temp_raw("hit");
+        let path = source.to_string_lossy().into_owned();
+        let recipe = unique_recipe("hit");
+        let rgba = vec![127u8; 64 * 32 * 4];
+        let mut stage = std::time::Instant::now();
+        let expected = crate::library::write_display_cache_from_rgba(&path, &recipe, 64, 32, &rgba,
+            2560, "synthetic.NEF", &mut stage).unwrap();
+
+        let returned = cache_display_only(&source, &recipe);
+        assert_eq!(returned, expected);
+        assert!(!crate::library::decode_cache_exists(&path, &recipe).unwrap());
+        assert!(!super::RAW_EDITOR_CACHE.lock().unwrap().iter()
+            .any(|entry| entry.path == path && entry.recipe_key == recipe));
+
+        std::fs::remove_file(returned).unwrap();
+        std::fs::remove_file(source).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires CULL_RAW_PATH pointing to a real RAW fixture"]
+    fn real_raw_display_only_writes_bounded_proxy_only() {
+        let source = std::env::var_os("CULL_RAW_PATH").expect("set CULL_RAW_PATH to a real RAW fixture");
+        let source = Path::new(&source);
+        assert!(source.is_file(), "CULL_RAW_PATH must name a real RAW fixture");
+        let path = source.to_string_lossy().into_owned();
+        let recipe = unique_recipe("real");
+
+        let proxy = cache_display_only(source, &recipe);
+        let dimensions = image::image_dimensions(&proxy).unwrap();
+        assert!(dimensions.0.max(dimensions.1) <= 2560, "proxy dimensions were {dimensions:?}");
+        let aspect = dimensions.0 as f64 / dimensions.1 as f64;
+        assert!((aspect - 1.5).abs() < 0.01, "expected the fixture's 3:2 aspect, got {dimensions:?}");
+        assert!(!crate::library::decode_cache_exists(&path, &recipe).unwrap());
+        assert!(!super::RAW_EDITOR_CACHE.lock().unwrap().iter()
+            .any(|entry| entry.path == path && entry.recipe_key == recipe));
+
+        // This is keyed uniquely for this test, so the returned proxy is the only artifact to remove.
+        std::fs::remove_file(proxy).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod export_save_tests {
+    use super::{save_export_bytes, unique_dest};
+    use std::path::Path;
+
+    #[test]
+    fn collision_policies_write_reported_bytes_and_preserve_skipped_output() {
+        let dir = std::env::temp_dir().join(format!("cs_collision_{}_{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = dir.as_path().join("café.jpg");
+        std::fs::write(&original, b"original").unwrap();
+
+        let skipped = save_export_bytes(dir.as_path(), "café.jpg", b"replacement", "skip").unwrap();
+        assert_eq!(Path::new(&skipped.path), original);
+        assert_eq!(skipped.bytes, 0);
+        assert_eq!(std::fs::read(&original).unwrap(), b"original");
+        assert_eq!(std::fs::read_dir(dir.as_path()).unwrap().count(), 1);
+
+        for policy in ["suffix", "unknown"] {
+            let saved = save_export_bytes(dir.as_path(), "café.jpg", b"new bytes", policy).unwrap();
+            assert_ne!(Path::new(&saved.path), original);
+            assert_eq!(saved.bytes, 9);
+            assert_eq!(std::fs::read(&saved.path).unwrap(), b"new bytes");
+            assert_eq!(std::fs::read(&original).unwrap(), b"original");
+        }
+        assert!(dir.as_path().join("café (2).jpg").exists());
+        assert!(dir.as_path().join("café (3).jpg").exists());
+
+        let overwritten = save_export_bytes(dir.as_path(), "café.jpg", b"short", "overwrite").unwrap();
+        assert_eq!(Path::new(&overwritten.path), original);
+        assert_eq!(overwritten.bytes, 5);
+        assert_eq!(std::fs::read(&original).unwrap(), b"short");
+        assert_eq!(std::fs::read_dir(dir.as_path()).unwrap().count(), 3);
+
+        let fresh = save_export_bytes(dir.as_path(), "fresh.jpg", b"first", "skip").unwrap();
+        assert_eq!(fresh.bytes, 5);
+        assert_eq!(std::fs::read(&fresh.path).unwrap(), b"first");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // A batch export must never silently overwrite an existing file — the whole point of the
+    // native save path is that nothing disappears without the user hearing about it.
+    #[test]
+    fn unique_dest_avoids_collisions() {
+        let dir = std::env::temp_dir().join(format!("cs_unique_dest_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let first = unique_dest(&dir, "photo_1.0.jpg");
+        assert_eq!(first, dir.join("photo_1.0.jpg"));
+        std::fs::write(&first, b"x").unwrap();
+
+        let second = unique_dest(&dir, "photo_1.0.jpg");
+        assert_eq!(second, dir.join("photo_1.0 (2).jpg"));
+        std::fs::write(&second, b"x").unwrap();
+
+        assert_eq!(unique_dest(&dir, "photo_1.0.jpg"), dir.join("photo_1.0 (3).jpg"));
+
+        // Extensionless names keep working.
+        std::fs::write(dir.join("noext"), b"x").unwrap();
+        assert_eq!(unique_dest(&dir, "noext"), dir.join("noext (2)"));
+
+        // Non-ASCII round-trips (the reason the filename crosses IPC base64-encoded).
+        assert_eq!(unique_dest(&dir, "café ☕.jpg"), dir.join("café ☕.jpg"));
+
+        // Path separators are stripped by the caller, not here — confirm the caller's contract.
+        assert_eq!(Path::new("../../etc/passwd").file_name().unwrap(), "passwd");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::{stream_close_at, stream_write_at};
+    use std::io::Read;
+
+    fn tmp_dir(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("cs_stream_test_{}_{}", label, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // The whole reason `pos` is mandatory: a write that lands somewhere OTHER than the current
+    // end of the file (mediabunny's mp4-muxer patching a box size after the fact) must land
+    // exactly there, not get appended past whatever was already written.
+    #[test]
+    fn stream_write_at_seeks_before_writing() {
+        let dir = tmp_dir("seek");
+        let path = dir.join("out.part");
+        let mut file = std::fs::File::create(&path).unwrap();
+        stream_write_at(&mut file, 0, b"AAAAAAAAAA").unwrap(); // 10 bytes
+        stream_write_at(&mut file, 2, b"BB").unwrap(); // patch bytes 2..4, NOT appended at byte 10
+        drop(file);
+        let mut got = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut got).unwrap();
+        assert_eq!(got, "AABBAAAAAA");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // Out-of-order writes (a later chunk arriving before an earlier patch, or vice versa) must
+    // still land correctly purely by position — this is what makes streaming safe regardless of
+    // the order mediabunny's writer happens to call in.
+    #[test]
+    fn stream_write_at_out_of_order() {
+        let dir = tmp_dir("outoforder");
+        let path = dir.join("out.part");
+        let mut file = std::fs::File::create(&path).unwrap();
+        stream_write_at(&mut file, 5, b"XXXXX").unwrap();
+        stream_write_at(&mut file, 0, b"YYYYY").unwrap();
+        drop(file);
+        let mut got = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut got).unwrap();
+        assert_eq!(got, "YYYYYXXXXX");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // commit:true renames .part to a real, collision-free filename in the SAME directory.
+    #[test]
+    fn stream_close_commit_renames_part_file() {
+        let dir = tmp_dir("commit");
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"hello world").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", true).unwrap();
+        assert!(!part.exists(), ".part file must be gone after a committed close");
+        assert_eq!(result.path, dir.join("clip.mp4").to_string_lossy());
+        assert_eq!(result.bytes, 11);
+        assert!(std::path::Path::new(&result.path).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // A cancelled export (commit:false) must delete the .part file — never leave a half-written
+    // file that could be mistaken for a finished export.
+    #[test]
+    fn stream_close_cancel_deletes_part_file() {
+        let dir = tmp_dir("cancel");
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"partial").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", false).unwrap();
+        assert!(!part.exists(), ".part file must be deleted on cancel");
+        assert!(!dir.join("clip.mp4").exists(), "no renamed file should appear on cancel");
+        assert_eq!(result.bytes, 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // A commit onto a directory that ALREADY has a same-named file must not clobber it — same
+    // guarantee unique_dest already gives the plain export path.
+    #[test]
+    fn stream_close_commit_avoids_collision() {
+        let dir = tmp_dir("collide");
+        std::fs::write(dir.join("clip.mp4"), b"existing").unwrap();
+        let part = dir.join("clip.mp4.part");
+        std::fs::write(&part, b"new export").unwrap();
+        let result = stream_close_at(&part, "clip.mp4", true).unwrap();
+        assert_eq!(result.path, dir.join("clip (2).mp4").to_string_lossy());
+        assert_eq!(std::fs::read(dir.join("clip.mp4")).unwrap(), b"existing"); // untouched
+        assert_eq!(std::fs::read(dir.join("clip (2).mp4")).unwrap(), b"new export");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
