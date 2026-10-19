@@ -1,0 +1,4 @@
+{
+  "chosen": "2026-10-19, before any candidate was evaluated. Targets a visually clean matte: <=3% mean alpha error, <=20% boundary-band error, <=5% false-positive background coverage, <=3% composite error.",
+  "thresholds": { "alphaMae": 0.03, "boundaryMae": 0.2, "falsePositivePercent": 5, "blackCompositeMae": 0.03, "whiteCompositeMae": 0.03 }
+}

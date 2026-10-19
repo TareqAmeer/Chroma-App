@@ -1,0 +1,126 @@
+{
+ "note": "SIMULATED candidates (low-res threshold + box blur); harness baseline, not shipped-model measurements. Regenerate with node test/mask_quality_synth.mjs.",
+ "fixtures": 32,
+ "rows": [
+  {
+   "category": "hair",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.061328577112268454,
+    "boundaryMae": 0.3372490106038759,
+    "fp": 1.869662819048531
+   },
+   "refined": {
+    "alphaMae": 0.06006388612302532,
+    "boundaryMae": 0.32032629887417663,
+    "fp": 4.596258026077448
+   },
+   "failing": 4
+  },
+  {
+   "category": "foliage",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.06941952507999732,
+    "boundaryMae": 0.3716084091798865,
+    "fp": 2.5499996252327852
+   },
+   "refined": {
+    "alphaMae": 0.07237543509157099,
+    "boundaryMae": 0.35070072581553413,
+    "fp": 7.15104577600137
+   },
+   "failing": 4
+  },
+  {
+   "category": "glasses",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.05877119076797092,
+    "boundaryMae": 0.3692763144554434,
+    "fp": 0.31571636042179707
+   },
+   "refined": {
+    "alphaMae": 0.05461260893245902,
+    "boundaryMae": 0.3372711235476427,
+    "fp": 1.5533244932752415
+   },
+   "failing": 4
+  },
+  {
+   "category": "backlit",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.04132728992204525,
+    "boundaryMae": 0.32485260442909925,
+    "fp": 0.5949116860075488
+   },
+   "refined": {
+    "alphaMae": 0.0373291813470181,
+    "boundaryMae": 0.28456413384258594,
+    "fp": 2.347259412665376
+   },
+   "failing": 4
+  },
+  {
+   "category": "multi-person",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.01979581546160131,
+    "boundaryMae": 0.353596153048958,
+    "fp": 1.0979211948949452
+   },
+   "refined": {
+    "alphaMae": 0.021433844805283393,
+    "boundaryMae": 0.3365888709253959,
+    "fp": 3.745193111519813
+   },
+   "failing": 4
+  },
+  {
+   "category": "occluded",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.028388820806100237,
+    "boundaryMae": 0.33287640848194505,
+    "fp": 0.6102552653121976
+   },
+   "refined": {
+    "alphaMae": 0.033605664488017654,
+    "boundaryMae": 0.3772557891935042,
+    "fp": 3.1703505246706856
+   },
+   "failing": 4
+  },
+  {
+   "category": "complex-sky",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.05900469345724388,
+    "boundaryMae": 0.3679018495559827,
+    "fp": 1.0905877176019303
+   },
+   "refined": {
+    "alphaMae": 0.05711380038126363,
+    "boundaryMae": 0.35199195927826565,
+    "fp": 2.503397007819932
+   },
+   "failing": 4
+  },
+  {
+   "category": "fine-edge",
+   "n": 4,
+   "source": {
+    "alphaMae": 0.011767418555964027,
+    "boundaryMae": 0.13025523401035638,
+    "fp": 0
+   },
+   "refined": {
+    "alphaMae": 0.011767418555964027,
+    "boundaryMae": 0.13025523401035638,
+    "fp": 0
+   },
+   "failing": 0
+  }
+ ]
+}

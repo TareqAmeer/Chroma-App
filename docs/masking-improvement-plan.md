@@ -82,3 +82,8 @@ failing to sync; AI masking slowness; heavy reliance on brushing to patch AI mis
 Every mask type and entry point is listed from the running app's mask "+" menu and AI panel (scan the
 DOM, not this doc); each must appear in the A1 fixture matrix and in C3/C4 UI coverage across both themes
 and all panel widths. A fresh-context gap review signs off each phase.
+
+## Progress (2026-10-19)
+- CHR-297: procedural fixture harness + baseline (`test/mask_quality_synth.mjs`, `test/mask_quality_baseline.json`); real-photo labels still open.
+- CHR-298: licence/size table in [masking-model-bench.md](masking-model-bench.md); measurements pending model downloads.
+- CHR-299/300: quick fix-ups bar and mask-list chips + inline mute/solo shipped in the editor.

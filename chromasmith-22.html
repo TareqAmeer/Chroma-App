@@ -760,6 +760,9 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
 .msk-dragging{opacity:var(--op-2)}
+.msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
+.msk-li-ctl:hover,.msk-li-ctl:focus-visible{color:var(--txt);border-color:var(--acc)}
+.msk-li-ctl.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 #msk-paint-overlay.on{display:block}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed — previously the brush had no visible size/position at all
@@ -7286,7 +7289,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1019B';
+const BUILD='1.1019C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18288,6 +18291,22 @@ function mskRefineControls(m){
     +'<div class="fx-row"><div class="fx-label">Edge</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="'+e+'" oninput="mskRefinementSet(\'refineEdge\',this.value,this)"><div class="fx-val">'+e+'</div></div>'
     +'<div class="btn-row"><button class="btn bgh" onclick="mskRefinementReset()">Reset refinement</button></div></div>';
 }
+// One-click fix-ups for AI/sky raster masks: the three corrections people reach for first, so they
+// aren't buried in the ⋯ menu or the Feather/Edge sliders. All route through existing machinery
+// (guided-filter edge snap, derived-raster Edge, the brush) and are one undo step each.
+function mskFixupBar(m){
+  if(!m||m.type!=='brush'||!mskRefinementSupported(m))return '';
+  return '<div class="btn-row msk-fixups" role="group" aria-label="Quick fix-ups">'
+    +'<button class="btn bgh" onclick="mskFixup(\'refine\')" title="Snap rough or soft edges to real edges in the photo">'+icon('refine',14)+' Refine edges</button>'
+    +'<button class="btn bgh" onclick="mskFixup(\'add\')" title="Paint in an area the selection missed">'+icon('brush',14)+' Add missed area</button>'
+    +'<button class="btn bgh" onclick="mskFixup(\'spill\')" title="Pull the selection edge in a little to drop background spill / halos">Trim spill</button></div>';
+}
+function mskFixup(kind){
+  const m=fxState.masks[mskSel];if(!m||!mskRefinementSupported(m))return;
+  if(kind==='refine'){fxHistoryPush();mskRefineEdges(m);fxUpdate();return;}
+  if(kind==='spill'){fxHistoryPush();m.refineEdge=Math.max(-100,(Number(m.refineEdge)||0)-12);delete m._refineCache;_mskTexDirty=true;mskRebuild();fxUpdate();return;}
+  if(kind==='add'){mskPaintErase=false;mskPaintErase_sync();if(!mskPaintMode)mskPaintToggle();else mskRebuild();}
+}
 function mskRefinementSet(key,value,input){
   const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
   const n=Number(value);if(key!=='refineFeather'&&key!=='refineEdge')return;
@@ -19661,6 +19680,22 @@ function mskRebuild(){
     const label=document.createElement('span');
     label.textContent=(m.name||mskAutoLabel(m,i));
     b.appendChild(label);
+    label.style.flex='1 1 auto';label.style.minWidth='0';label.style.textAlign='left';
+    // Operation chip (composition graph) + inline mute/solo. Spans with role=button, not nested
+    // <button>s: the list stays one <button> per row and the stopPropagation keeps a click on a
+    // control from also selecting the row.
+    const opKey=m.isExclude?'erase':(m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':''));
+    const opTxt={add:'+ Add',subtract:'− Sub',intersect:'∩ Int',erase:'Erase'}[opKey];
+    if(opTxt){const c=document.createElement('span');c.className='msk-tag msk-op-chip';c.dataset.op=opKey;c.textContent=opTxt;b.appendChild(c);}
+    const mkCtl=(cls,txt,on,aria,fn)=>{
+      const s=document.createElement('span');s.className='msk-li-ctl '+cls+(on?' on':'');s.textContent=txt;
+      s.setAttribute('role','button');s.tabIndex=0;s.setAttribute('aria-pressed',String(!!on));s.setAttribute('aria-label',aria);s.title=aria;
+      const go=(e)=>{e.preventDefault();e.stopPropagation();const keep=mskSel;mskSel=i;fn();mskSel=keep;mskRebuild();};
+      s.onclick=go;s.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' ')go(e);};
+      s.draggable=false;b.appendChild(s);
+    };
+    mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute);
+    mkCtl('msk-li-solo','S',mskSolo===i,(mskSolo===i?'Stop soloing ':'Solo ')+(m.name||mskAutoLabel(m,i)),mskToggleSolo);
     if(m.muted)b.style.opacity='0.45';
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
@@ -19777,7 +19812,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
-         +mskRefineControls(m)
+         +mskFixupBar(m)+mskRefineControls(m)
        +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
       +(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
       +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>'

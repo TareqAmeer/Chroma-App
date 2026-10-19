@@ -721,6 +721,9 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
    control (Overlay/Isolate/Off) drives both, and "O" toggles it — see mskOverlaySync(). */
 #msk-paint-overlay{position:absolute;display:none;pointer-events:none} /* smooth (default) upscale — m.px is already a soft-falloff gradient, not a hard mask */
 .msk-dragging{opacity:var(--op-2)}
+.msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
+.msk-li-ctl:hover,.msk-li-ctl:focus-visible{color:var(--txt);border-color:var(--acc)}
+.msk-li-ctl.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 #msk-paint-overlay.on{display:block}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed — previously the brush had no visible size/position at all

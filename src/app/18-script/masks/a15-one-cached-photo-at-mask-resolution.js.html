@@ -170,6 +170,22 @@ function mskRefineControls(m){
     +'<div class="fx-row"><div class="fx-label">Edge</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="'+e+'" oninput="mskRefinementSet(\'refineEdge\',this.value,this)"><div class="fx-val">'+e+'</div></div>'
     +'<div class="btn-row"><button class="btn bgh" onclick="mskRefinementReset()">Reset refinement</button></div></div>';
 }
+// One-click fix-ups for AI/sky raster masks: the three corrections people reach for first, so they
+// aren't buried in the ⋯ menu or the Feather/Edge sliders. All route through existing machinery
+// (guided-filter edge snap, derived-raster Edge, the brush) and are one undo step each.
+function mskFixupBar(m){
+  if(!m||m.type!=='brush'||!mskRefinementSupported(m))return '';
+  return '<div class="btn-row msk-fixups" role="group" aria-label="Quick fix-ups">'
+    +'<button class="btn bgh" onclick="mskFixup(\'refine\')" title="Snap rough or soft edges to real edges in the photo">'+icon('refine',14)+' Refine edges</button>'
+    +'<button class="btn bgh" onclick="mskFixup(\'add\')" title="Paint in an area the selection missed">'+icon('brush',14)+' Add missed area</button>'
+    +'<button class="btn bgh" onclick="mskFixup(\'spill\')" title="Pull the selection edge in a little to drop background spill / halos">Trim spill</button></div>';
+}
+function mskFixup(kind){
+  const m=fxState.masks[mskSel];if(!m||!mskRefinementSupported(m))return;
+  if(kind==='refine'){fxHistoryPush();mskRefineEdges(m);fxUpdate();return;}
+  if(kind==='spill'){fxHistoryPush();m.refineEdge=Math.max(-100,(Number(m.refineEdge)||0)-12);delete m._refineCache;_mskTexDirty=true;mskRebuild();fxUpdate();return;}
+  if(kind==='add'){mskPaintErase=false;mskPaintErase_sync();if(!mskPaintMode)mskPaintToggle();else mskRebuild();}
+}
 function mskRefinementSet(key,value,input){
   const m=fxState.masks[mskSel];if(!mskRefinementSupported(m))return;
   const n=Number(value);if(key!=='refineFeather'&&key!=='refineEdge')return;
