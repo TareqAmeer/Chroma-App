@@ -124,9 +124,10 @@ function mskPaintOverlaySync(m,box,isolate){
   for(let i=0;i<m.px.length;i++){
     const v=m.px[i],j=i*4;
     if(isolate){
-      const outside=v<ISO_THRESH;
+      // Dim in proportion to how UNselected the pixel is, so a faint tail (a few % weight, no visible
+      // effect) stays nearly as dark as the background instead of reading as part of the subject.
       id.data[j]=0;id.data[j+1]=0;id.data[j+2]=0;
-      id.data[j+3]=outside?153:0; // .6*255≈153 dim outside; fully transparent (real photo shows) inside
+      id.data[j+3]=v<ISO_THRESH?153:Math.round(153*(1-v/255)); // .6*255≈153 at 0, 0 at full selection
     }else{
       id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
       id.data[j+3]=Math.round(v*0.65); // overlay mode: red tint proportional to paint strength

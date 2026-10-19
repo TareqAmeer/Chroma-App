@@ -7295,7 +7295,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1019M';
+const BUILD='1.1019N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16695,6 +16695,23 @@ function _samGuideGray(w,h){
 // Refines a raw SAM mask (Uint8Array 0-255) in place against the photo's own edges. Cheap
 // enough to run on every scribble release; falls back to the raw mask on any failure (e.g. a
 // mismatched guide size) rather than blocking the result.
+// Binary dilation of mask>127 by r px (square window, separable running max). 1 = within r px of the mask.
+function _samDilateBinary(mask,w,h,r){
+  const a=new Uint8Array(mask.length),b=new Uint8Array(mask.length);
+  for(let i=0;i<mask.length;i++)a[i]=mask[i]>127?1:0;
+  for(let y=0;y<h;y++){const row=y*w;let last=-1e9;
+    // forward/backward distance to nearest set pixel along the row, thresholded by r
+    const d=new Int32Array(w).fill(1e9);
+    for(let x=0;x<w;x++){if(a[row+x])last=x;d[x]=x-last;}
+    last=1e9;for(let x=w-1;x>=0;x--){if(a[row+x])last=x;d[x]=Math.min(d[x],last-x);}
+    for(let x=0;x<w;x++)b[row+x]=d[x]<=r?1:0;}
+  const o=new Uint8Array(mask.length);
+  for(let x=0;x<w;x++){const d=new Int32Array(h).fill(1e9);let last=-1e9;
+    for(let y=0;y<h;y++){if(b[y*w+x])last=y;d[y]=y-last;}
+    last=1e9;for(let y=h-1;y>=0;y--){if(b[y*w+x])last=y;d[y]=Math.min(d[y],last-y);}
+    for(let y=0;y<h;y++)o[y*w+x]=d[y]<=r?1:0;}
+  return o;
+}
 function _samRefineMask(mask,w,h){
   try{
     const guide=_samGuideGray(w,h);
@@ -16702,8 +16719,14 @@ function _samRefineMask(mask,w,h){
     const input=new Float32Array(mask.length);
     for(let i=0;i<mask.length;i++)input[i]=mask[i]/255;
     const refined=_guidedFilter(guide,input,w,h,8,1e-3);
+    // The guided filter only snaps the edge; it must not invent selection elsewhere. With a small eps it
+    // leaks low-level weight into ANY region whose guide brightness resembles the subject's (a stone wall
+    // behind a brown dog, ~150 px from the subject, following the wall's texture). Bound the result to a
+    // band around the original mask and drop the faint tail (<3%), so the raster is the selection the
+    // user sees and the effect actually applies to.
+    const band=_samDilateBinary(mask,w,h,12);
     const out=new Uint8ClampedArray(mask.length);
-    for(let i=0;i<mask.length;i++)out[i]=refined[i]*255;
+    for(let i=0;i<mask.length;i++){const v=band[i]?refined[i]:0;out[i]=v<0.03?0:v*255;}
     return out;
   }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
 }
@@ -20398,9 +20421,10 @@ function mskPaintOverlaySync(m,box,isolate){
   for(let i=0;i<m.px.length;i++){
     const v=m.px[i],j=i*4;
     if(isolate){
-      const outside=v<ISO_THRESH;
+      // Dim in proportion to how UNselected the pixel is, so a faint tail (a few % weight, no visible
+      // effect) stays nearly as dark as the background instead of reading as part of the subject.
       id.data[j]=0;id.data[j+1]=0;id.data[j+2]=0;
-      id.data[j+3]=outside?153:0; // .6*255≈153 dim outside; fully transparent (real photo shows) inside
+      id.data[j+3]=v<ISO_THRESH?153:Math.round(153*(1-v/255)); // .6*255≈153 at 0, 0 at full selection
     }else{
       id.data[j]=255;id.data[j+1]=40;id.data[j+2]=40;
       id.data[j+3]=Math.round(v*0.65); // overlay mode: red tint proportional to paint strength
