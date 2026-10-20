@@ -2,7 +2,27 @@
 // mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
 // way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
 let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=25,mskBrushFlow=60,mskBrushFeather=100,mskBrushDensity=100,_mskStroke=null,mskBrushAuto=false;
-let _mskBrushTransientReset=()=>{};
+let _mskBrushTransientReset=()=>{},_mskLastPt=null;
+// Brush slots (Lightroom A / B / Erase): each remembers its own size, flow, feather and density.
+// Selecting a slot saves the live values into the old slot and loads the new one; E is the erase slot.
+const _mskBrushSlots={A:{size:25,flow:60,feather:100,density:100},B:{size:60,flow:100,feather:60,density:100},E:{size:25,flow:100,feather:60,density:100}};
+let mskBrushSlot='A',mskBrushPrevSlot='A';
+function mskBrushSlotSelect(slot){
+  if(!_mskBrushSlots[slot])return;
+  const cur=mskPaintErase?'E':mskBrushSlot;
+  Object.assign(_mskBrushSlots[cur],{size:mskBrushSize,flow:mskBrushFlow,feather:mskBrushFeather,density:mskBrushDensity});
+  if(slot==='E'){mskBrushPrevSlot=mskBrushSlot;mskPaintErase=true;}
+  else{mskBrushSlot=slot;mskPaintErase=false;}
+  const v=_mskBrushSlots[slot];mskBrushSize=v.size;mskBrushFlow=v.flow;mskBrushFeather=v.feather;mskBrushDensity=v.density;
+  if(!mskPaintMode)mskPaintToggle();
+  mskPaintErase_sync();if(typeof mskRebuild==='function')mskRebuild();
+}
+function mskBrushNudge(what,d){
+  const m=fxState.masks[mskSel];if(!mskPaintMode||!m||m.type!=='brush')return false;
+  if(what==='size')mskBrushSize=Math.max(1,Math.min(100,mskBrushSize+d));else mskBrushFeather=Math.max(0,Math.min(100,mskBrushFeather+d));
+  if(typeof mskRebuild==='function')mskRebuild();
+}
+
 function mskPaintEndStroke(){if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
@@ -133,13 +153,22 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     _mskStroke=m;
-    const p=_mskPointToUV(e);if(p)mskPaintAt(m,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
+    const p=_mskPointToUV(e);
+    if(p){
+      const er=mskPaintErase||mskBrushEraseHeld;
+      // Shift-click: straight line from the end of the previous stroke on this mask (Lightroom)
+      if(e.shiftKey&&_mskLastPt&&_mskLastPt.m===m){
+        const dx=p.nx-_mskLastPt.nx,dy=p.ny-_mskLastPt.ny,step=Math.max(1,Math.ceil(Math.hypot(dx*m.mtW,dy*m.mtH)/Math.max(2,(mskBrushSize/100)*0.25*Math.max(m.mtW,m.mtH)*0.35)));
+        for(let i=1;i<=step;i++)mskPaintAt(m,_mskLastPt.nx+dx*i/step,_mskLastPt.ny+dy*i/step,er);
+      }else mskPaintAt(m,p.nx,p.ny,er);
+      _mskLastPt={m,nx:p.nx,ny:p.ny};
+    }
     queueRender();
   });
   fxCanvasOn('pointermove',e=>{
     if(!mskPaintMode||!_mskStroke)return;
     e.preventDefault();e.stopPropagation();
-    const p=_mskPointToUV(e);if(p)mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);
+    const p=_mskPointToUV(e);if(p){mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);_mskLastPt={m:_mskStroke,nx:p.nx,ny:p.ny};}
     queueRender();
   });
   const end=e=>{if(!_mskStroke)return;if(e.type==='pointercancel')clearTransientErase();mskPaintEndStroke();};

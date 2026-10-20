@@ -162,6 +162,17 @@ csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxS
 csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
 csShortcutRegister('editor.loupe',()=>{if(typeof toggleLoupe==='function'&&!fxLoupe)toggleLoupe();});
 csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next=mskPreviewMode==='select'?'off':'select';mskSetPreviewMode(next);});
+const _mskKeyOn=()=>{const ff=document.getElementById('ff-local');return !!(ff&&ff.offsetParent!==null);};
+csShortcutRegister('editor.mask-panel',()=>{if(!fxImages.length||typeof fxSection!=='function')return false;fxSection('local');});
+csShortcutRegister('editor.mask-overlay-style',()=>{if(!_mskKeyOn())return false;const i=MSK_SELVIEW_STYLES.indexOf(mskSelViewStyle);mskSetSelViewStyle(MSK_SELVIEW_STYLES[(i+1)%MSK_SELVIEW_STYLES.length]);});
+csShortcutRegister('editor.mask-pins',()=>{if(!_mskKeyOn())return false;mskPinsToggle(!mskShowPins);});
+csShortcutRegister('editor.mask-brush',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskPaintToggle();});
+csShortcutRegister('editor.mask-brush-erase',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskBrushSlotSelect(mskPaintErase?mskBrushPrevSlot:'E');});
+csShortcutRegister('editor.mask-brush-slot',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskBrushSlotSelect(mskBrushSlot==='A'?'B':'A');});
+csShortcutRegister('editor.mask-brush-smaller',()=>mskBrushNudge('size',-5));
+csShortcutRegister('editor.mask-brush-larger',()=>mskBrushNudge('size',5));
+csShortcutRegister('editor.mask-feather-less',()=>mskBrushNudge('feather',-10));
+csShortcutRegister('editor.mask-feather-more',()=>mskBrushNudge('feather',10));
 csShortcutRegister('editor.crop-grid',()=>{if(!fxImages.length)return false;cropGridCycle();});
 csShortcutRegister('editor.export',()=>exportFX());
 csShortcutRegister('editor.rotate-left',()=>geomRotate(-90));
