@@ -541,6 +541,9 @@
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
+          <div class="fx-row"><div class="fx-label">Show edit pins</div>
+            <input type="checkbox" id="ck-msk-pins" checked onchange="mskPinsToggle(this.checked)">
+          </div>
           <div class="fx-row" id="msk-selview-color-row" style="display:none">
             <div class="fx-label">Overlay colour</div>
             <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
@@ -1073,6 +1076,7 @@
             <rect id="fx-ahroi-rect" x="0" y="0" width="1" height="1" fill="rgba(255,180,60,.12)" stroke="rgba(255,180,60,.9)" stroke-width="0.004" vector-effect="non-scaling-stroke"/>
           </svg>
           <canvas id="msk-paint-overlay"></canvas>
+          <div id="msk-pin-layer" aria-label="Mask edit pins"></div>
           <!-- Rule-of-thirds + SMPTE safe-area guides, toggled by fxVideoGuidesToggle(). Pure
                overlay — never rendered into a preview snapshot or an export. Lives inside
                fx-zoom-wrap for the same reason the mask overlay does: it must ride the exact

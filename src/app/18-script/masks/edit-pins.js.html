@@ -1,0 +1,172 @@
+// ── Edit pins ───────────────────────────────────────────────────────────────────────────────────
+let mskShowPins=true;try{mskShowPins=localStorage.getItem('chromasmith_msk_pins')!=='0';}catch(_){}
+function mskPinsToggle(v){mskShowPins=!!v;try{localStorage.setItem('chromasmith_msk_pins',v?'1':'0');}catch(_){}mskPinSync();}
+// Anchor of a mask in 0..1 image space: shape centre for radial/linear, weighted centroid of the painted
+// or AI raster (cached per raster), else a staggered spot near the middle for shapeless range masks.
+function mskPinAnchor(m,i){
+  if(m.type==='radial')return[m.cx,m.cy];
+  if(m.type==='linear')return[(m.x0+m.x1)/2,(m.y0+m.y1)/2];
+  if(m.px&&m.mtW&&m.mtH&&m.px.length){
+    if(m._pinFor===m.px&&m._pin)return m._pin;
+    let sx=0,sy=0,sw=0;const w=m.mtW,h=m.mtH,st=Math.max(1,Math.round(Math.max(w,h)/256));
+    for(let y=0;y<h;y+=st)for(let x=0;x<w;x+=st){const v=m.px[y*w+x];if(v>64){sx+=x*v;sy+=y*v;sw+=v;}}
+    const a=sw?[sx/sw/w,sy/sw/h]:[0.5,0.5];
+    Object.defineProperty(m,'_pinFor',{value:m.px,writable:true,enumerable:false,configurable:true});
+    Object.defineProperty(m,'_pin',{value:a,writable:true,enumerable:false,configurable:true});
+    return a;
+  }
+  return[0.5+0.05*(i%5-2),0.5+0.05*Math.floor(i/5)];
+}
+let _pinDrag=null;
+function mskPinSync(){
+  const layer=document.getElementById('msk-pin-layer');if(!layer)return;
+  const ff=document.getElementById('ff-local'),visible=ff&&ff.offsetParent!==null;
+  const box=mskOverlayBox();
+  const masks=fxState.masks;
+  if(!mskShowPins||!visible||!box||!masks.length||cropMode||fxLoupe||mskPaintMode||(mskAiTapMode&&mskAiPromptMode)){layer.classList.remove('on');layer.innerHTML='';return;}
+  if(_pinDrag)return; // don't rebuild under the pointer mid-drag
+  layer.style.left=box.left+'px';layer.style.top=box.top+'px';layer.style.width=box.width+'px';layer.style.height=box.height+'px';
+  const r=layer.getBoundingClientRect(),sc=layer.offsetWidth?r.width/layer.offsetWidth:1;
+  layer.style.setProperty('--pin-s',String(sc>0?1/sc:1));
+  layer.innerHTML=masks.map((m,i)=>{const a=mskPinAnchor(m,i);
+    return '<div class="msk-pin'+(i===mskSel?' sel':'')+(m.muted?' muted':'')+'" data-i="'+i+'" style="left:'+(Math.max(0,Math.min(1,a[0]))*100)+'%;top:'+(Math.max(0,Math.min(1,a[1]))*100)+'%" title="'+String(m.name||mskAutoLabel(m,i)).replace(/[<>&"]/g,'')+'">'+(i+1)+'</div>';}).join('');
+  layer.classList.add('on');
+  layer.querySelectorAll('.msk-pin').forEach(el=>el.addEventListener('pointerdown',mskPinDown));
+}
+function mskPinDown(e){
+  e.stopPropagation();e.preventDefault();
+  const i=+e.currentTarget.dataset.i,m=fxState.masks[i];if(!m)return;
+  if(i!==mskSel){mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();}
+  if(m.type!=='radial'&&m.type!=='linear')return;
+  const layer=document.getElementById('msk-pin-layer'),r=layer.getBoundingClientRect();
+  _pinDrag={i,m,r,moved:false,start:{cx:m.cx,cy:m.cy,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1},px:e.clientX,py:e.clientY};
+  _fxHistLocked=true;
+  const mv=ev=>{
+    const d=_pinDrag;if(!d)return;
+    const dx=(ev.clientX-d.px)/d.r.width,dy=(ev.clientY-d.py)/d.r.height;
+    if(Math.abs(ev.clientX-d.px)+Math.abs(ev.clientY-d.py)>3)d.moved=true;if(!d.moved)return;
+    const c=v=>Math.max(0,Math.min(1,v));
+    if(d.m.type==='radial'){d.m.cx=c(d.start.cx+dx);d.m.cy=c(d.start.cy+dy);}
+    else{d.m.x0=c(d.start.x0+dx);d.m.y0=c(d.start.y0+dy);d.m.x1=c(d.start.x1+dx);d.m.y1=c(d.start.y1+dy);}
+    const pin=layer.querySelector('.msk-pin[data-i="'+d.i+'"]');const a=mskPinAnchor(d.m,d.i);
+    if(pin){pin.style.left=a[0]*100+'%';pin.style.top=a[1]*100+'%';}
+    _mskOverlaySyncCore();fxUpdate();
+  };
+  const up=()=>{
+    window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+    const d=_pinDrag;_pinDrag=null;_fxHistLocked=false;
+    if(d&&d.moved&&typeof fxHistoryPush==='function')fxHistoryPush();
+    mskPinSync();
+  };
+  window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+}
+let _mskDrag=null;
+function mskHandleDown(e){
+  e.stopPropagation();e.preventDefault();
+  const svg=document.getElementById('fx-mask-overlay');
+  _mskDrag={which:e.target.dataset.h,svg};
+  // Lock history for the drag: every pointermove calls fxUpdate → fxHistoryPush, which was
+  // recording an undo snapshot per mouse-movement (each including a full JSON of the masks) —
+  // one drag could flood all 20 history slots with intermediate positions. mskHandleUp pushes
+  // exactly one snapshot on release instead (same pattern fxUndo/fxRedo use).
+  _fxHistLocked=true;
+  svg.setPointerCapture(e.pointerId);
+  svg.addEventListener('pointermove',mskHandleMove);
+  svg.addEventListener('pointerup',mskHandleUp);
+}
+function mskHandlePos(e){
+  const r=document.getElementById('fx-mask-overlay').getBoundingClientRect();
+  return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];
+}
+function mskHandleMove(e){
+  if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
+  const[px,py]=mskHandlePos(e);
+  if(m.type==='radial'){
+    if(_mskDrag.which==='c'){m.cx=Math.max(0,Math.min(1,px));m.cy=Math.max(0,Math.min(1,py));}
+    else if(_mskDrag.which==='rot'){m.rot=Math.atan2(py-m.cy,px-m.cx);}
+    else if(_mskDrag.which==='rx'||_mskDrag.which==='ry'){
+      // project the pointer delta into the ellipse's own (rotated) axes — must match the
+      // shader's rotation convention (mskShapeWeight) so dragging rx/ry after a rotation
+      // resizes along the visually-rotated axis, not the raw image axis.
+      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),ddx=px-m.cx,ddy=py-m.cy;
+      const lx=ddx*cr+ddy*sr,ly=-ddx*sr+ddy*cr;
+      if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(lx));
+      else m.ry=Math.max(0.01,Math.abs(ly));
+    }
+  }else{
+    if(_mskDrag.which==='p0'){m.x0=Math.max(0,Math.min(1,px));m.y0=Math.max(0,Math.min(1,py));}
+    else{m.x1=Math.max(0,Math.min(1,px));m.y1=Math.max(0,Math.min(1,py));}
+  }
+  mskOverlaySync();fxUpdate();
+}
+function mskHandleUp(e){
+  if(!_mskDrag)return;
+  const svg=_mskDrag.svg;svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);
+  _mskDrag=null;_fxHistLocked=false;mskRebuild();fxHistoryPush();
+}
+window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskOverlaySync();});
+
+// ══ UNDO / REDO ═══════════════════════════════════════════════════════════════
+const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
+  // adj-dehaze was missing here (T2, editor_ux_spec.json: a script cross-checking this list
+  // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
+  // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
+  // gap as deconv-amt/deconv-rad before DT1.
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
+  'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
+  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
+  // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
+  // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
+  // ever actually appear; resetDeconv() itself already worked, only the visibility signal didn't.
+  'deconv-amt','deconv-rad',
+  'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
+  'b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig','lut-mix'];
+// nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
+// deconv-amt/deconv-rad sliders comment above describes: Noise Reduction and Deconvolution
+// predate the shared fx-mod/header-reset mechanism, so their toggle state was silently skipped
+// by reset/undo/session persistence.
+const _FX_SNAP_TOGGLES=['adjust','curves','hsl','wheels','pointcolor','local','grain','art','hal','hal-white','hal-noremjet','hal-extreme','bloom','vig','borders','canvas','nr','deconv','filmneg'];
+const _FX_SNAP_SELECTS=['sel-fneg-mode','sel-input','sel-tonemap','sel-lut','sel-print','sel-grain-fmt','sel-debug','sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'];
+const _FX_SNAP_COLORS=['cl-b1','cl-b2'];
+function getUISnapshot(opts){
+  const s={sliders:{},toggles:{},selects:{},colors:{}};
+  _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el)s.sliders[id]=el.value;});
+  _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);if(el)s.toggles[id]=el.classList.contains('on');});
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el)s.selects[id]=el.value;});
+  _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el)s.colors[id]=el.value;});
+  const it=curItem();s.geom=(it&&it.geom)?_clone(it.geom):null; // this photo's own geometry (crop/rotate/flip/straighten) — per-photo, see broadcastGeom
+  // ⚠️ Retouch MUST be in the snapshot, not merely saved by healAdd. fxHistoryPush dedupes on
+  // this object's JSON, so a heal op absent from it makes two consecutive states compare equal,
+  // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
+  // so `skipRaster` does not apply and history stays cheap.
+  s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
+  s.inpaint=(it&&it.inpaint&&it.inpaint.length)?_clone(it.inpaint):null;
+  s.redeye=(it&&it.redeye&&it.redeye.length)?_clone(it.redeye):null;
+  s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
+  // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
+  // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
+  s.curves=_clone(fxState.curves);   // tone-curve control points
+  s.curveMode=fxState.curveMode;     // 'point' or 'param' — ROADMAP R11
+  s.curveParam=_clone(fxState.curveParam); // parametric Shadows/Darks/Lights/Highlights
+  s.wheels=_clone(fxState.wheels);   // lift/gamma/gain colour wheels — ROADMAP R11
+  s.hsl=_clone(fxState.hsl);         // HSL mixer band settings
+  s.pointColors=_clone(fxState.pointColors||[]); // point color picks
+  s.artSeed=fxState.artSeed;                              // artifact placement seed
+  s.frameShuffle=fxState.frameShuffle||0;                 // film-frame variation offset
+  s.dustMode=fxState.dustMode||0;                         // dust speck colour mode (0 both,1 black,2 white) — was missing, so it wasn't undoable and undo clobbered it
+  // Masks carry a typed raster that JSON cannot represent — _mskToSnap base64s it. `skipRaster`
+  // is set only by fxHistoryPush, which keeps rasters alive by reference instead.
+  s.masks=fxState.masks.map(m=>_mskToSnap(m,opts&&opts.skipRaster));
+  s.canvas=_clone(fxState.canvas);    // canvas matte (ar/bg/blur)
+  s.ver=2; // 2: exposure slider is /20 (±5 stops) — bumped from the unversioned /50 (±2 stops) mapping
+  // Baked into the native RAW decode itself (not a shader term), so it can't live as a normal
+  // toggle read at render time — it has to travel with the per-photo recipe so each photo
+  // remembers its OWN setting instead of one global switch affecting every photo. See
+  // library-ui.js's openInEditorInner, which peeks this from the sidecar BEFORE decoding.
+  s.rawNr=window.chromasmithRawNr||'fast'; // 'off'|'fast'|'high' — see NrTier in raw_decode.rs
+  s.rawNrHighStrength=window.chromasmithRawNrHighStrength; // 0-100, High-tier blend amount
+  s.nativeNr=s.rawNr!=='off'; // kept for one release: an OLDER build reading a NEWER sidecar degrades to Fast rather than Off
+  s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as rawNr above
+  return s;
+}

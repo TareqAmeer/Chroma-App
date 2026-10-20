@@ -1,3 +1,12 @@
+let _mskGroupOpen={selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false};
+try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
+function mskGroupToggle(k){
+  _mskGroupOpen[k]=!_mskGroupOpen[k];
+  try{localStorage.setItem('chromasmith_msk_groups',JSON.stringify(_mskGroupOpen));}catch(e){}
+  mskRebuild();
+}
+// Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
+// Selection collapsed wants it collapsed for the next mask too.
 function _mskGroup(key,label,body,note){
   const open=_mskGroupOpen[key]!==false;
   return '<div class="msk-group'+(open?' open':'')+'">'
@@ -91,6 +100,7 @@ function mskMoreMenu(ev){
   const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
     +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
     +item('Rename…','rename','mskRename()')
+    +item('Reset adjustments','undo','mskResetAdjust()')
     +item('Duplicate','copy','mskDuplicate(false)')
     +item('Duplicate inverted','compare','mskDuplicate(true)')
     // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another

@@ -1,6 +1,13 @@
 // ── Mask list management: order, name, mute ──────────────────────────────────────────────────
 // Composition operands are stored by stable mask ID. Reordering changes their evaluated slot,
 // while preserving the identity of the referenced mask.
+// Zeroes every adjustment slider on the selected mask; the selection (shape, gates, raster) is untouched.
+function mskResetAdjust(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  ['exp','con','temp','tint','sat','vibrance','hue','hi','sh','wh','bl','dehaze','clarity','tex','sharp','sharpMask','nr','colAmt'].forEach(k=>{if(m[k]!=null&&m[k]!==0)m[k]=0;});
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();fxHistoryPush();
+}
 function mskMove(dir){
   const i=mskSel,j=i+dir;
   if(i<0||j<0||j>=fxState.masks.length)return;

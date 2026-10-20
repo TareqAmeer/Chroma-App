@@ -730,6 +730,16 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 .msk-li-ctl:hover,.msk-li-ctl:focus-visible{color:var(--txt);border-color:var(--acc)}
 .msk-li-ctl.on{color:var(--acc);border-color:var(--tint-6);background:var(--tint-2)}
 #msk-paint-overlay.on{display:block}
+/* Lightroom-style edit pins: one round pin per mask, anchored on the photo. The layer rides the zoom
+   transform, so each pin is counter-scaled (--pin-s) to stay a constant on-screen size. */
+#msk-pin-layer{position:absolute;display:none;pointer-events:none}
+#msk-pin-layer.on{display:block}
+.msk-pin{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;box-sizing:border-box;
+  border:2px solid #fff;background:rgba(0,0,0,.45);box-shadow:0 0 0 1px rgba(0,0,0,.6);color:#fff;font:600 10px/18px var(--sans);
+  text-align:center;pointer-events:auto;cursor:pointer;transform:scale(var(--pin-s,1));touch-action:none;user-select:none}
+.msk-pin.sel{background:var(--acc,#e8a33d);border-color:#fff;color:#000}
+.msk-pin.muted{opacity:.45}
+.msk-pin:hover{box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 0 4px rgba(255,255,255,.35)}
 /* Live brush cursor: a ring at the ACTUAL painted radius (matches mskPaintAt's soft falloff),
    only shown while "Paint" is armed â€” previously the brush had no visible size/position at all
    on the canvas itself, just a generic crosshair cursor. */
