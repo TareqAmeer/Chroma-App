@@ -776,12 +776,9 @@ test.describe('masks panel (MA1) — baseline, pre-redesign', () => {
     await expect(page.locator('#local-list button')).toHaveCount(countAfterAdd - 1);
   });
 
-  test('Show on photo (Overlay/Isolate/Selection/Off) still calls mskSetPreviewMode without throwing', async ({ editor: { page, errors } }) => {
+  test('Show selection dropdown (6 styles + Off) still calls mskSetPreviewMode without throwing', async ({ editor: { page, errors } }) => {
     await page.click('#fx-toolrail [data-sec="local"]');
-    const seg = page.locator('.fx-ctrl[data-fxsec="local"] .msk-prevmode-seg');
-    await seg.locator('button[data-v="isolate"]').click();
-    await expect(seg.locator('button[data-v="isolate"]')).toHaveClass(/\bon\b/);
-    await seg.locator('button[data-v="overlay"]').click();
+    await page.evaluate(() => { for (const v of ['imgblack', 'imgwhite', 'imgbw', 'wob', 'colorbw', 'off', 'color']) mskSetSelViewStyle(v); });
     await page.waitForTimeout(100);
     expect(errors).toEqual([]);
   });

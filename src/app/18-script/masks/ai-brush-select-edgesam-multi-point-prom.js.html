@@ -34,6 +34,7 @@ function mskAiTapToggle(force){
   // mskAiTapMode but left the bsec class and the ✓ from the last rebuild, so the button kept
   // showing armed no matter the real state. Drive every visual from mskAiTapMode here — and do it
   // WITHOUT calling mskRebuild, which itself calls back into this function.
+  if(FX.cv&&mskAiPromptMode==='scribble')FX.cv.style.cursor=mskAiTapMode?'none':(mskPaintMode?'none':''); // the round ring replaces the pointer
   const b=document.getElementById('btn-msk-ai-tap');
   if(b){
     b.classList.toggle('on',mskAiTapMode);
@@ -206,23 +207,66 @@ function _samDilateBinary(mask,w,h,r){
     for(let y=0;y<h;y++)o[y*w+x]=d[y]<=r?1:0;}
   return o;
 }
+// Local colour-model alpha matting for the edge band (hair, fur, foliage). SAM's mask is 256x256 logits
+// upsampled ~4x, so strands thinner than ~4 px simply are not in it; the photo is the only place they
+// exist. Inside a band around the SAM edge, estimate the local foreground and background colour from
+// nearby confident pixels (box-filtered colour means) and read alpha off the colour itself:
+// alpha = (C-B).(F-B)/|F-B|^2. Where F and B look alike the colour cannot separate them, so that pixel
+// falls back to a small-radius guided filter of the SAM mask. Pure (takes RGBA bytes) so it unit-tests.
+function _samMatteCore(mask,w,h,rgba){
+  const n=w*h,m01=new Float32Array(n),hard=new Uint8Array(n);
+  for(let i=0;i<n;i++){m01[i]=mask[i]/255;hard[i]=mask[i]>127?255:0;}
+  const inv=new Uint8Array(n);for(let i=0;i<n;i++)inv[i]=hard[i]?0:255;
+  const scale=Math.max(w,h)/1024,RE=Math.max(2,Math.round(5*scale)),RD=Math.max(3,Math.round(14*scale));
+  const nearBg=_samDilateBinary(inv,w,h,RE),nearFg=_samDilateBinary(hard,w,h,RD);
+  const fg=new Float32Array(n),bg=new Float32Array(n);
+  for(let i=0;i<n;i++){fg[i]=nearBg[i]?0:1;bg[i]=nearFg[i]?0:1;}
+  const ch=[new Float32Array(n),new Float32Array(n),new Float32Array(n)];
+  for(let i=0,j=0;i<n;i++,j+=4){ch[0][i]=rgba[j]/255;ch[1][i]=rgba[j+1]/255;ch[2][i]=rgba[j+2]/255;}
+  const stats=r=>{
+    const nf=_boxFilterMean(fg,w,h,r),nb=_boxFilterMean(bg,w,h,r),F=[],B=[];
+    for(let c=0;c<3;c++){
+      const f=new Float32Array(n),b=new Float32Array(n);
+      for(let i=0;i<n;i++){f[i]=ch[c][i]*fg[i];b[i]=ch[c][i]*bg[i];}
+      F.push(_boxFilterMean(f,w,h,r));B.push(_boxFilterMean(b,w,h,r));
+    }
+    return{nf,nb,F,B};
+  };
+  const near=stats(Math.max(4,Math.round(10*scale))),far=stats(Math.max(12,Math.round(36*scale)));
+  const gray=new Float32Array(n);
+  for(let i=0;i<n;i++)gray[i]=0.2126*ch[0][i]+0.7152*ch[1][i]+0.0722*ch[2][i];
+  const fallback=_guidedFilter(gray,m01,w,h,Math.max(2,Math.round(4*scale)),2e-4);
+  const alpha=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    if(fg[i]){alpha[i]=1;continue;}
+    if(bg[i]){alpha[i]=0;continue;}
+    const S=near.nf[i]>0.01&&near.nb[i]>0.01?near:far;
+    if(S.nf[i]<1e-4||S.nb[i]<1e-4){alpha[i]=Math.min(1,Math.max(0,fallback[i]));continue;}
+    let dd=0,num=0;
+    for(let c=0;c<3;c++){
+      const f=S.F[c][i]/S.nf[i],b=S.B[c][i]/S.nb[i],d=f-b;
+      dd+=d*d;num+=(ch[c][i]-b)*d;
+    }
+    const aC=Math.min(1,Math.max(0,num/Math.max(dd,1e-6)));
+    const t=Math.min(1,Math.max(0,(dd-0.004)/0.016)),conf=t*t*(3-2*t);
+    alpha[i]=conf*aC+(1-conf)*Math.min(1,Math.max(0,fallback[i]));
+  }
+  // A final tiny guided pass removes per-pixel colour noise without softening strand edges.
+  const smooth=_guidedFilter(gray,alpha,w,h,Math.max(1,Math.round(2*scale)),1e-4);
+  const out=new Uint8ClampedArray(n);
+  for(let i=0;i<n;i++){
+    let v=fg[i]?1:bg[i]?0:Math.min(1,Math.max(0,smooth[i]));
+    out[i]=v<0.04?0:v*255;
+  }
+  return out;
+}
 function _samRefineMask(mask,w,h){
   try{
-    const guide=_samGuideGray(w,h);
-    if(!guide||guide.length!==mask.length)return mask;
-    const input=new Float32Array(mask.length);
-    for(let i=0;i<mask.length;i++)input[i]=mask[i]/255;
-    const refined=_guidedFilter(guide,input,w,h,8,1e-3);
-    // The guided filter only snaps the edge; it must not invent selection elsewhere. With a small eps it
-    // leaks low-level weight into ANY region whose guide brightness resembles the subject's (a stone wall
-    // behind a brown dog, ~150 px from the subject, following the wall's texture). Bound the result to a
-    // band around the original mask and drop the faint tail (<3%), so the raster is the selection the
-    // user sees and the effect actually applies to.
-    const band=_samDilateBinary(mask,w,h,12);
-    const out=new Uint8ClampedArray(mask.length);
-    for(let i=0;i<mask.length;i++){const v=band[i]?refined[i]:0;out[i]=v<0.03?0:v*255;}
-    return out;
-  }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
+    const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+    const rgba=img&&mskSourceData(w,h,img);
+    if(!rgba||rgba.length!==w*h*4)return mask;
+    return _samMatteCore(mask,w,h,rgba);
+  }catch(e){log('AI Select: edge matting skipped — '+(e&&e.message||e),'warn');return mask;}
 }
 // "Select Background" complements only a usable subject segmentation. The two checks prevent
 // empty inference from becoming a full-frame selection and full-frame subject inference from

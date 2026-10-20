@@ -510,36 +510,35 @@ function mskRebuild(){
   }
 
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
-  let adjBody=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
+  // Four groups in Lightroom's order: Light, Color, Effects, Detail. Exposure uses the same
+  // +-100 = +-5 EV scale as the global Exposure slider (was +-1.5 stops).
+  const lightBody=_mskRow('Exposure','exp',m.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
-    +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
+    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
+    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
+    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.');
+  const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
-    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
-    // Texture: the local detail control masks never had. Negative softens — the standard portrait
-    // move of calming skin texture while eyes and hair stay sharp.
-    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
-    +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
-    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
-    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
-    +_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
-    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
-    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.')
+    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
-    // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
-    // from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already there).
+    // Color paint: tint the masked area toward a picked colour; distinct from Temp/Tint and Hue.
     +'<div class="fx-row" title="Pick any color to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Color</div>'
     +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
     +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
     +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
-    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
-    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
-    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false);
+  const effectsBody='<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
+    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
+    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
     +_mskRow('Dehaze','dehaze',m.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
-  h+=_mskGroup('adjust','Adjust',adjBody);
+  const detailBody=_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
+    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
+    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
+  h+=_mskGroup('adjust','Light',lightBody)+_mskGroup('adjColor','Color',colorBody)+_mskGroup('adjEffects','Effects',effectsBody)+_mskGroup('adjDetail','Detail',detailBody);
   ctl.innerHTML=h;
   mskUpdateSelViewControls();
   mskOverlaySync();

@@ -80,7 +80,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   function updateBrushCursor(e){
     if(!cursorEl)return;
     const m=fxState.masks[mskSel];
-    if(!mskPaintMode||!m||m.type!=='brush'){cursorEl.classList.remove('on');return;}
+    const aiScribble=!!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));
+    if(!aiScribble&&(!mskPaintMode||!m||m.type!=='brush')){cursorEl.classList.remove('on');return;}
     // #msk-brush-cursor is a sibling of #fx-zoom-wrap, both children of #fx-wrap (see
     // mskOverlayBox's identical convention for #fx-mask-overlay) — it's #fx-wrap that's the
     // positioned ancestor, NOT #fx-zoom-wrap. #fx-wrap centers the zoom-wrap via flexbox, so
@@ -90,10 +91,11 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect(),vr=fxVisibleCanvas().getBoundingClientRect();
     // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
     const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
-    const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
+    // AI scribble gets a Lightroom-style round brush; its stroke radius is the 0.02 used for the live dots
+    const diam=aiScribble?0.04*Math.max(pr.width,pr.height):(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
-    cursorEl.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));
+    cursorEl.classList.toggle('erase',aiScribble?!!e.altKey:!!(mskPaintErase||mskBrushEraseHeld));
     cursorEl.classList.add('on');
   }
   fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
@@ -141,7 +143,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
     svg.classList.add('on');
     const pts=m.aiPoints||[];
-    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
+    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.02" fill="${p.positive?'rgba(255,90,60,.35)':'rgba(60,160,255,.35)'}" stroke="none"/>`).join('');
   }
   function _aiRenderLiveBox(a,b){
     const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
@@ -241,7 +243,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
 // depth/Eye brightness stay the obvious, open-by-default thing; the older flow is still there,
 // one click under Advanced, for anyone who wants the Capture One-style convergence tool instead.
 // Skin masks are UNCHANGED — that flow is still the primary, open-by-default tool there.
-let _mskGroupOpen={selection:true,adjust:true,skin:true,coattone:false};
+let _mskGroupOpen={selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false};
 try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
 function mskGroupToggle(k){
   _mskGroupOpen[k]=!_mskGroupOpen[k];

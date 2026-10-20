@@ -7,7 +7,7 @@
 // they cannot show what the luminance or colour-range gates actually do. 'select' instead asks the
 // lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
 // way to tune a colour range without guessing. See mskShowSel in the shader / render().
-let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
+let mskPreviewMode='select'; // 'select' (selection shown in the chosen style) | 'off'
 // Selection-view display settings are global UI preferences, never photo/history state. The FX
 // renderer accepts them only with a private preview token; export and tiled render calls omit it.
 let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
@@ -15,11 +15,13 @@ let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-
 const MSK_SELVIEW_PREF_KEY='chromasmith.mask-selection-view.v1';
 const MSK_SELVIEW_DEFAULT_COLOR='#ff2626';
 const MSK_PREVIEW_RENDER_TOKEN=Symbol('mask preview only');
+const MSK_SELVIEW_STYLES=['color','colorbw','imgbw','imgblack','imgwhite','wob'];
+const MSK_SELVIEW_MODE_NUM={colorbw:0,color:1,wob:2,imgbw:3,imgblack:4,imgwhite:5};
 function mskReadSelViewPrefs(){
   try{
     const p=JSON.parse(localStorage.getItem(MSK_SELVIEW_PREF_KEY)||'{}');
-    return {style:['legacy','photo','bw'].includes(p.style)?p.style:'legacy',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
-  }catch(_){return {style:'legacy',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
+    const mig={legacy:'colorbw',photo:'color',bw:'wob'};const st=mig[p.style]||p.style;return {style:MSK_SELVIEW_STYLES.includes(st)?st:'color',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
+  }catch(_){return {style:'color',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
 }
 const _mskSelViewPrefs=mskReadSelViewPrefs();
 let mskSelViewStyle=_mskSelViewPrefs.style;
@@ -32,18 +34,17 @@ function mskSelViewRgb(){
 }
 function mskUpdateSelViewControls(){
   const hasSelection=mskSel>=0&&!!fxState.masks[mskSel];
-  const show=hasSelection&&(mskPreviewMode==='select'||mskAlwaysShowSelection);
-  const showSelectionControls=hasSelection&&mskPreviewMode==='select';
-  const styleRow=document.getElementById('msk-selview-style-row'),colorRow=document.getElementById('msk-selview-color-row'),alwaysRow=document.getElementById('msk-selview-always-row');
-  const opacityRow=document.getElementById('msk-selview-opacity-row'),outlineRow=document.getElementById('msk-selview-outline-row');
-  if(styleRow)styleRow.style.display=show?'':'none';
-  if(alwaysRow)alwaysRow.style.display=show?'':'none';
-  if(colorRow)colorRow.style.display=show&&mskSelViewStyle!=='bw'?'':'none';
-  if(opacityRow)opacityRow.style.display=showSelectionControls?'':'none';
-  if(outlineRow)outlineRow.style.display=showSelectionControls?'':'none';
-  const style=document.getElementById('msk-selview-style');if(style&&style.value!==mskSelViewStyle)style.value=mskSelViewStyle;
+  const on=mskPreviewMode==='select';
+  const colored=on&&(mskSelViewStyle==='color'||mskSelViewStyle==='colorbw');
+  const rowDisp=(id,v)=>{const r=document.getElementById(id);if(r)r.style.display=v?'':'none';};
+  rowDisp('msk-selview-style-row',hasSelection);
+  rowDisp('msk-selview-color-row',hasSelection&&colored);
+  rowDisp('msk-selview-opacity-row',hasSelection&&colored);
+  rowDisp('msk-selview-outline-row',hasSelection&&on);
+  const style=document.getElementById('msk-selview-style');
+  const want=on?mskSelViewStyle:'off';
+  if(style&&style.value!==want)style.value=want;
   const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
-  const always=document.getElementById('ck-msk-selview-always');if(always)always.checked=mskAlwaysShowSelection;
 }
 function mskSelViewOpacityInput(v){
   mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
@@ -51,36 +52,31 @@ function mskSelViewOpacityInput(v){
   if(typeof fxUpdate==='function')fxUpdate();
 }
 function mskSelViewOutlineToggle(v){mskSelViewOutline=!!v;if(typeof fxUpdate==='function')fxUpdate();}
-function mskSetSelViewStyle(v){if(!['legacy','photo','bw'].includes(v))return;mskSelViewStyle=v;mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+// One dropdown drives everything: 'off' hides the selection, any other value shows it in that style.
+function mskSetSelViewStyle(v){
+  if(v==='off'){mskSetPreviewMode('off');return;}
+  if(!MSK_SELVIEW_STYLES.includes(v))return;
+  mskSelViewStyle=v;mskSaveSelViewPrefs();
+  if(mskPreviewMode!=='select'){mskSetPreviewMode('select');return;}
+  mskUpdateSelViewControls();if(typeof fxUpdate==='function')fxUpdate();
+}
 function mskSelViewColorInput(v){if(!/^#[\da-f]{6}$/i.test(v||''))return;mskSelViewColor=v.toLowerCase();mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
 function mskSelViewAlwaysInput(v){mskAlwaysShowSelection=!!v;mskSaveSelViewPrefs();mskUpdateSelViewControls();mskOverlaySync();if(typeof renderPreview==='function')renderPreview();}
-const MSK_PREVMODE_HINT={
-  overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
-  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
-  select:'Showing the effective selection — shape x range gates x composition. This is the selection that drives the adjustment.',
-  off:''};
-function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
-  const hint=document.getElementById('msk-prevmode-hint');
-  if(hint)hint.textContent=MSK_PREVMODE_HINT[v]||'';
-  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  const opRow=document.getElementById('msk-selview-opacity-row'),edRow=document.getElementById('msk-selview-outline-row');
-  const showCtl=v==='select';
-  if(opRow)opRow.style.display=showCtl?'':'none';
-  if(edRow)edRow.style.display=showCtl?'':'none';
+function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskOverlaySync();
   mskUpdateSelViewControls();
-  if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
+  if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
 // Local Adjustments section being on and a mask being selected; preview render options carry a
 // private token so export/tile callers cannot activate this path with recipe data.
 function mskShowSelIdx(){
-  if((mskPreviewMode!=='select'&&!mskAlwaysShowSelection)||mskSel<0||!fxState.masks[mskSel])return -1;
+  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
 }
 function mskPreviewRenderOptions(extra={}){
   return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),
+    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
 }
 function mskOverlayBox(){
@@ -147,10 +143,10 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
   const m=fxState.masks[mskSel];
   // 'select' renders its own map in the shader — drawing the shape overlay on top of it too would
   // just obscure the thing it exists to show, so it hides these JS overlays like 'off' does.
-  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!mskAlwaysShowSelection&&!cropMode&&!fxLoupe;
+  const anyShowable=cardVisible&&m&&!cropMode&&!fxLoupe; // handles stay up in every mode; the selection itself is drawn by the shader
   if(m&&m.type==='brush'){
     svg.classList.remove('on');svg.innerHTML='';
-    if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
+    if(paintCv)paintCv.classList.remove('on'); // the shader's selection view replaces the JS paint tint
     return;
   }
   if(paintCv)paintCv.classList.remove('on');
@@ -159,7 +155,7 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
   const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
   svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
   svg.classList.add('on');
-  const isolate=mskPreviewMode==='isolate';
+  const isolate=false;
   let shapeD='',handles='';
   let featherLayer='';
   if(m.type==='radial'){
@@ -209,7 +205,7 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
     shapeD=`M${sideA[0]},${sideA[1]} L${sideB[0]},${sideB[1]} L${sideB[0]-ux*H},${sideB[1]-uy*H} L${sideA[0]-ux*H},${sideA[1]-uy*H} Z`;
   }
   const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
-  const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
+  const shapeLayer=`<path class="msk-shape" d="${shapeD}"/>`;
   svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
   svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }

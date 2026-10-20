@@ -593,7 +593,12 @@ if(mskN>0.5){
         float wD=mskSelWAt(i,gm+vec2(0.0,gs.y),uv+vec2(0.0,texSize.y));
         outlineWeight=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
       }
-      if(mskShowSelMode>1.5){
+      if(mskShowSelMode>2.5){
+        // 3 image on B&W, 4 image on black, 5 image on white: photo inside the selection, flat backdrop outside
+        float dw=mskShowSelOutline>0.5?outlineWeight:wv;
+        vec3 back=mskShowSelMode<3.5?vec3(g):(mskShowSelMode<4.5?vec3(0.0):vec3(1.0));
+        o=vec4(mix(back,c.rgb,dw),1.0);
+      }else if(mskShowSelMode>1.5){
         float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
         o=vec4(vec3(displayWeight),1.0);
       }else{

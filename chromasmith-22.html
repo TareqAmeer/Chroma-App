@@ -4285,13 +4285,12 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
-          <div class="fx-row"><div class="fx-label">Show on photo</div>
-            <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')">Overlay</button><button data-v="isolate" onclick="mskSetPreviewMode('isolate')">Isolate</button><button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off" onclick="mskSetPreviewMode('off')">Off</button></div>
+          <div class="fx-row" id="msk-selview-style-row" style="display:none">
+            <div class="fx-label">Show selection</div>
+            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
+              <option value="color">Colour overlay</option><option value="colorbw">Colour overlay on B&amp;W</option><option value="imgbw">Image on B&amp;W</option><option value="imgblack">Image on black</option><option value="imgwhite">Image on white</option><option value="wob">White on black</option><option value="off">Off</option>
+            </select>
           </div>
-          <!-- Overlay/Isolate are drawn in JS from the mask SHAPE only; Selection is rendered by
-               the shader and is the effective weight. For a gated mask those differ a lot, and
-               without saying so the three modes look like three contradictory answers. -->
-          <div id="msk-prevmode-hint" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px"></div>
           <div class="fx-row" id="msk-selview-opacity-row" style="display:none">
             <div class="fx-label">Overlay opacity</div>
             <input class="fx-slider" type="range" min="10" max="100" step="1" value="75" id="sl-msk-selview-opacity" oninput="mskSelViewOpacityInput(this.value)">
@@ -4301,19 +4300,9 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
-          <div class="fx-row" id="msk-selview-style-row" style="display:none">
-            <div class="fx-label">Selection display</div>
-            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
-              <option value="legacy">Colour overlay</option><option value="photo">On image</option><option value="bw">White on black</option>
-            </select>
-          </div>
           <div class="fx-row" id="msk-selview-color-row" style="display:none">
             <div class="fx-label">Overlay colour</div>
             <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
-          </div>
-          <div class="fx-row" id="msk-selview-always-row" style="display:none">
-            <div class="fx-label">Always show selection</div>
-            <input type="checkbox" id="ck-msk-selview-always" onchange="mskSelViewAlwaysInput(this.checked)">
           </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -7295,7 +7284,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1020A';
+const BUILD='1.1020B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8352,7 +8341,7 @@ uniform vec4 mskI[8];  // x,y,z: target hue 0..1 / sat 0..1 / value 0..1, w: mea
 uniform float mskShowSel; // >=0: render mask #n's EFFECTIVE selection weight in the preview display mode
 uniform float mskShowSelOp;      // Selection-view overlay opacity, 0.1..1.0 (UI-only, never exported)
 uniform float mskShowSelOutline; // Selection-view: >0.5 draws only the boundary of w (edge-detect), not a fill
-uniform float mskShowSelMode;    // 0 legacy grayscale/red, 1 graded-photo overlay, 2 white-on-black coverage
+uniform float mskShowSelMode;    // 0 colour on B&W, 1 colour on image, 2 white-on-black, 3 image on B&W, 4 image on black, 5 image on white
 uniform vec3 mskShowSelColor;    // UI-only overlay colour for modes 0 and 1
 uniform float mskAnyTex;  // 1 when any mask has a nonzero Texture, so the source high-pass is computed
 uniform float mskAnyClarity;  // same idea for per-mask Clarity, which needs a WIDER tap set
@@ -8995,7 +8984,12 @@ if(mskN>0.5){
         float wD=mskSelWAt(i,gm+vec2(0.0,gs.y),uv+vec2(0.0,texSize.y));
         outlineWeight=clamp((abs(wR-wL)+abs(wD-wU))*2.0,0.0,1.0);
       }
-      if(mskShowSelMode>1.5){
+      if(mskShowSelMode>2.5){
+        // 3 image on B&W, 4 image on black, 5 image on white: photo inside the selection, flat backdrop outside
+        float dw=mskShowSelOutline>0.5?outlineWeight:wv;
+        vec3 back=mskShowSelMode<3.5?vec3(g):(mskShowSelMode<4.5?vec3(0.0):vec3(1.0));
+        o=vec4(mix(back,c.rgb,dw),1.0);
+      }else if(mskShowSelMode>1.5){
         float displayWeight=mskShowSelOutline>0.5?outlineWeight:wv;
         o=vec4(vec3(displayWeight),1.0);
       }else{
@@ -16549,6 +16543,7 @@ function mskAiTapToggle(force){
   // mskAiTapMode but left the bsec class and the ✓ from the last rebuild, so the button kept
   // showing armed no matter the real state. Drive every visual from mskAiTapMode here — and do it
   // WITHOUT calling mskRebuild, which itself calls back into this function.
+  if(FX.cv&&mskAiPromptMode==='scribble')FX.cv.style.cursor=mskAiTapMode?'none':(mskPaintMode?'none':''); // the round ring replaces the pointer
   const b=document.getElementById('btn-msk-ai-tap');
   if(b){
     b.classList.toggle('on',mskAiTapMode);
@@ -16721,23 +16716,66 @@ function _samDilateBinary(mask,w,h,r){
     for(let y=0;y<h;y++)o[y*w+x]=d[y]<=r?1:0;}
   return o;
 }
+// Local colour-model alpha matting for the edge band (hair, fur, foliage). SAM's mask is 256x256 logits
+// upsampled ~4x, so strands thinner than ~4 px simply are not in it; the photo is the only place they
+// exist. Inside a band around the SAM edge, estimate the local foreground and background colour from
+// nearby confident pixels (box-filtered colour means) and read alpha off the colour itself:
+// alpha = (C-B).(F-B)/|F-B|^2. Where F and B look alike the colour cannot separate them, so that pixel
+// falls back to a small-radius guided filter of the SAM mask. Pure (takes RGBA bytes) so it unit-tests.
+function _samMatteCore(mask,w,h,rgba){
+  const n=w*h,m01=new Float32Array(n),hard=new Uint8Array(n);
+  for(let i=0;i<n;i++){m01[i]=mask[i]/255;hard[i]=mask[i]>127?255:0;}
+  const inv=new Uint8Array(n);for(let i=0;i<n;i++)inv[i]=hard[i]?0:255;
+  const scale=Math.max(w,h)/1024,RE=Math.max(2,Math.round(5*scale)),RD=Math.max(3,Math.round(14*scale));
+  const nearBg=_samDilateBinary(inv,w,h,RE),nearFg=_samDilateBinary(hard,w,h,RD);
+  const fg=new Float32Array(n),bg=new Float32Array(n);
+  for(let i=0;i<n;i++){fg[i]=nearBg[i]?0:1;bg[i]=nearFg[i]?0:1;}
+  const ch=[new Float32Array(n),new Float32Array(n),new Float32Array(n)];
+  for(let i=0,j=0;i<n;i++,j+=4){ch[0][i]=rgba[j]/255;ch[1][i]=rgba[j+1]/255;ch[2][i]=rgba[j+2]/255;}
+  const stats=r=>{
+    const nf=_boxFilterMean(fg,w,h,r),nb=_boxFilterMean(bg,w,h,r),F=[],B=[];
+    for(let c=0;c<3;c++){
+      const f=new Float32Array(n),b=new Float32Array(n);
+      for(let i=0;i<n;i++){f[i]=ch[c][i]*fg[i];b[i]=ch[c][i]*bg[i];}
+      F.push(_boxFilterMean(f,w,h,r));B.push(_boxFilterMean(b,w,h,r));
+    }
+    return{nf,nb,F,B};
+  };
+  const near=stats(Math.max(4,Math.round(10*scale))),far=stats(Math.max(12,Math.round(36*scale)));
+  const gray=new Float32Array(n);
+  for(let i=0;i<n;i++)gray[i]=0.2126*ch[0][i]+0.7152*ch[1][i]+0.0722*ch[2][i];
+  const fallback=_guidedFilter(gray,m01,w,h,Math.max(2,Math.round(4*scale)),2e-4);
+  const alpha=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    if(fg[i]){alpha[i]=1;continue;}
+    if(bg[i]){alpha[i]=0;continue;}
+    const S=near.nf[i]>0.01&&near.nb[i]>0.01?near:far;
+    if(S.nf[i]<1e-4||S.nb[i]<1e-4){alpha[i]=Math.min(1,Math.max(0,fallback[i]));continue;}
+    let dd=0,num=0;
+    for(let c=0;c<3;c++){
+      const f=S.F[c][i]/S.nf[i],b=S.B[c][i]/S.nb[i],d=f-b;
+      dd+=d*d;num+=(ch[c][i]-b)*d;
+    }
+    const aC=Math.min(1,Math.max(0,num/Math.max(dd,1e-6)));
+    const t=Math.min(1,Math.max(0,(dd-0.004)/0.016)),conf=t*t*(3-2*t);
+    alpha[i]=conf*aC+(1-conf)*Math.min(1,Math.max(0,fallback[i]));
+  }
+  // A final tiny guided pass removes per-pixel colour noise without softening strand edges.
+  const smooth=_guidedFilter(gray,alpha,w,h,Math.max(1,Math.round(2*scale)),1e-4);
+  const out=new Uint8ClampedArray(n);
+  for(let i=0;i<n;i++){
+    let v=fg[i]?1:bg[i]?0:Math.min(1,Math.max(0,smooth[i]));
+    out[i]=v<0.04?0:v*255;
+  }
+  return out;
+}
 function _samRefineMask(mask,w,h){
   try{
-    const guide=_samGuideGray(w,h);
-    if(!guide||guide.length!==mask.length)return mask;
-    const input=new Float32Array(mask.length);
-    for(let i=0;i<mask.length;i++)input[i]=mask[i]/255;
-    const refined=_guidedFilter(guide,input,w,h,8,1e-3);
-    // The guided filter only snaps the edge; it must not invent selection elsewhere. With a small eps it
-    // leaks low-level weight into ANY region whose guide brightness resembles the subject's (a stone wall
-    // behind a brown dog, ~150 px from the subject, following the wall's texture). Bound the result to a
-    // band around the original mask and drop the faint tail (<3%), so the raster is the selection the
-    // user sees and the effect actually applies to.
-    const band=_samDilateBinary(mask,w,h,12);
-    const out=new Uint8ClampedArray(mask.length);
-    for(let i=0;i<mask.length;i++){const v=band[i]?refined[i]:0;out[i]=v<0.03?0:v*255;}
-    return out;
-  }catch(e){log('AI Select: guided-filter refine skipped — '+(e&&e.message||e),'warn');return mask;}
+    const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+    const rgba=img&&mskSourceData(w,h,img);
+    if(!rgba||rgba.length!==w*h*4)return mask;
+    return _samMatteCore(mask,w,h,rgba);
+  }catch(e){log('AI Select: edge matting skipped — '+(e&&e.message||e),'warn');return mask;}
 }
 // "Select Background" complements only a usable subject segmentation. The two checks prevent
 // empty inference from becoming a full-frame selection and full-frame subject inference from
@@ -18621,7 +18659,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   function updateBrushCursor(e){
     if(!cursorEl)return;
     const m=fxState.masks[mskSel];
-    if(!mskPaintMode||!m||m.type!=='brush'){cursorEl.classList.remove('on');return;}
+    const aiScribble=!!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));
+    if(!aiScribble&&(!mskPaintMode||!m||m.type!=='brush')){cursorEl.classList.remove('on');return;}
     // #msk-brush-cursor is a sibling of #fx-zoom-wrap, both children of #fx-wrap (see
     // mskOverlayBox's identical convention for #fx-mask-overlay) — it's #fx-wrap that's the
     // positioned ancestor, NOT #fx-zoom-wrap. #fx-wrap centers the zoom-wrap via flexbox, so
@@ -18631,10 +18670,11 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect(),vr=fxVisibleCanvas().getBoundingClientRect();
     // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
     const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
-    const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
+    // AI scribble gets a Lightroom-style round brush; its stroke radius is the 0.02 used for the live dots
+    const diam=aiScribble?0.04*Math.max(pr.width,pr.height):(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
-    cursorEl.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));
+    cursorEl.classList.toggle('erase',aiScribble?!!e.altKey:!!(mskPaintErase||mskBrushEraseHeld));
     cursorEl.classList.add('on');
   }
   fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
@@ -18682,7 +18722,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
     svg.classList.add('on');
     const pts=m.aiPoints||[];
-    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.006" fill="${p.positive?'#ff5a3c':'#3ca0ff'}" stroke="#fff" stroke-width="0.0015" vector-effect="non-scaling-stroke"/>`).join('');
+    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.02" fill="${p.positive?'rgba(255,90,60,.35)':'rgba(60,160,255,.35)'}" stroke="none"/>`).join('');
   }
   function _aiRenderLiveBox(a,b){
     const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
@@ -18782,7 +18822,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
 // depth/Eye brightness stay the obvious, open-by-default thing; the older flow is still there,
 // one click under Advanced, for anyone who wants the Capture One-style convergence tool instead.
 // Skin masks are UNCHANGED — that flow is still the primary, open-by-default tool there.
-let _mskGroupOpen={selection:true,adjust:true,skin:true,coattone:false};
+let _mskGroupOpen={selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false};
 try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
 function mskGroupToggle(k){
   _mskGroupOpen[k]=!_mskGroupOpen[k];
@@ -20190,36 +20230,35 @@ function mskRebuild(){
   }
 
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
-  let adjBody=_mskRow('Exposure','exp',m.exp,-100,100,0.015,false)
+  // Four groups in Lightroom's order: Light, Color, Effects, Detail. Exposure uses the same
+  // +-100 = +-5 EV scale as the global Exposure slider (was +-1.5 stops).
+  const lightBody=_mskRow('Exposure','exp',m.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
     +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
-    +_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
+    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
+    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
+    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.');
+  const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
-    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
-    // Texture: the local detail control masks never had. Negative softens — the standard portrait
-    // move of calming skin texture while eyes and hair stay sharp.
-    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
-    +'<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
-    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
-    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
-    +_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
-    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
-    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.')
+    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
     +_mskRow('Hue','hue',m.hue,-100,100,1,false)
-    // Color paint: a Lightroom-style "tint the masked area toward this color" control — distinct
-    // from Temp/Tint (white-balance shifts) and Hue (rotates whatever hue is already there).
+    // Color paint: tint the masked area toward a picked colour; distinct from Temp/Tint and Hue.
     +'<div class="fx-row" title="Pick any color to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Color</div>'
     +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
     +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
     +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false)
-    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
-    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
-    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false);
+  const effectsBody='<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
+    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
+    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
     +_mskRow('Dehaze','dehaze',m.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
-  h+=_mskGroup('adjust','Adjust',adjBody);
+  const detailBody=_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
+    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
+    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
+  h+=_mskGroup('adjust','Light',lightBody)+_mskGroup('adjColor','Color',colorBody)+_mskGroup('adjEffects','Effects',effectsBody)+_mskGroup('adjDetail','Detail',detailBody);
   ctl.innerHTML=h;
   mskUpdateSelViewControls();
   mskOverlaySync();
@@ -20330,7 +20369,7 @@ function mskAutoLabel(m,i){
 // they cannot show what the luminance or colour-range gates actually do. 'select' instead asks the
 // lut shader to render the EFFECTIVE per-pixel weight (shape x lum gate x colour gate) — the only
 // way to tune a colour range without guessing. See mskShowSel in the shader / render().
-let mskPreviewMode='overlay'; // 'off' | 'overlay' (tinted shape) | 'isolate' (dim outside) | 'select' (shader weight)
+let mskPreviewMode='select'; // 'select' (selection shown in the chosen style) | 'off'
 // Selection-view display settings are global UI preferences, never photo/history state. The FX
 // renderer accepts them only with a private preview token; export and tiled render calls omit it.
 let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
@@ -20338,11 +20377,13 @@ let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-
 const MSK_SELVIEW_PREF_KEY='chromasmith.mask-selection-view.v1';
 const MSK_SELVIEW_DEFAULT_COLOR='#ff2626';
 const MSK_PREVIEW_RENDER_TOKEN=Symbol('mask preview only');
+const MSK_SELVIEW_STYLES=['color','colorbw','imgbw','imgblack','imgwhite','wob'];
+const MSK_SELVIEW_MODE_NUM={colorbw:0,color:1,wob:2,imgbw:3,imgblack:4,imgwhite:5};
 function mskReadSelViewPrefs(){
   try{
     const p=JSON.parse(localStorage.getItem(MSK_SELVIEW_PREF_KEY)||'{}');
-    return {style:['legacy','photo','bw'].includes(p.style)?p.style:'legacy',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
-  }catch(_){return {style:'legacy',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
+    const mig={legacy:'colorbw',photo:'color',bw:'wob'};const st=mig[p.style]||p.style;return {style:MSK_SELVIEW_STYLES.includes(st)?st:'color',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
+  }catch(_){return {style:'color',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
 }
 const _mskSelViewPrefs=mskReadSelViewPrefs();
 let mskSelViewStyle=_mskSelViewPrefs.style;
@@ -20355,18 +20396,17 @@ function mskSelViewRgb(){
 }
 function mskUpdateSelViewControls(){
   const hasSelection=mskSel>=0&&!!fxState.masks[mskSel];
-  const show=hasSelection&&(mskPreviewMode==='select'||mskAlwaysShowSelection);
-  const showSelectionControls=hasSelection&&mskPreviewMode==='select';
-  const styleRow=document.getElementById('msk-selview-style-row'),colorRow=document.getElementById('msk-selview-color-row'),alwaysRow=document.getElementById('msk-selview-always-row');
-  const opacityRow=document.getElementById('msk-selview-opacity-row'),outlineRow=document.getElementById('msk-selview-outline-row');
-  if(styleRow)styleRow.style.display=show?'':'none';
-  if(alwaysRow)alwaysRow.style.display=show?'':'none';
-  if(colorRow)colorRow.style.display=show&&mskSelViewStyle!=='bw'?'':'none';
-  if(opacityRow)opacityRow.style.display=showSelectionControls?'':'none';
-  if(outlineRow)outlineRow.style.display=showSelectionControls?'':'none';
-  const style=document.getElementById('msk-selview-style');if(style&&style.value!==mskSelViewStyle)style.value=mskSelViewStyle;
+  const on=mskPreviewMode==='select';
+  const colored=on&&(mskSelViewStyle==='color'||mskSelViewStyle==='colorbw');
+  const rowDisp=(id,v)=>{const r=document.getElementById(id);if(r)r.style.display=v?'':'none';};
+  rowDisp('msk-selview-style-row',hasSelection);
+  rowDisp('msk-selview-color-row',hasSelection&&colored);
+  rowDisp('msk-selview-opacity-row',hasSelection&&colored);
+  rowDisp('msk-selview-outline-row',hasSelection&&on);
+  const style=document.getElementById('msk-selview-style');
+  const want=on?mskSelViewStyle:'off';
+  if(style&&style.value!==want)style.value=want;
   const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
-  const always=document.getElementById('ck-msk-selview-always');if(always)always.checked=mskAlwaysShowSelection;
 }
 function mskSelViewOpacityInput(v){
   mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
@@ -20374,36 +20414,31 @@ function mskSelViewOpacityInput(v){
   if(typeof fxUpdate==='function')fxUpdate();
 }
 function mskSelViewOutlineToggle(v){mskSelViewOutline=!!v;if(typeof fxUpdate==='function')fxUpdate();}
-function mskSetSelViewStyle(v){if(!['legacy','photo','bw'].includes(v))return;mskSelViewStyle=v;mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
+// One dropdown drives everything: 'off' hides the selection, any other value shows it in that style.
+function mskSetSelViewStyle(v){
+  if(v==='off'){mskSetPreviewMode('off');return;}
+  if(!MSK_SELVIEW_STYLES.includes(v))return;
+  mskSelViewStyle=v;mskSaveSelViewPrefs();
+  if(mskPreviewMode!=='select'){mskSetPreviewMode('select');return;}
+  mskUpdateSelViewControls();if(typeof fxUpdate==='function')fxUpdate();
+}
 function mskSelViewColorInput(v){if(!/^#[\da-f]{6}$/i.test(v||''))return;mskSelViewColor=v.toLowerCase();mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
 function mskSelViewAlwaysInput(v){mskAlwaysShowSelection=!!v;mskSaveSelViewPrefs();mskUpdateSelViewControls();mskOverlaySync();if(typeof renderPreview==='function')renderPreview();}
-const MSK_PREVMODE_HINT={
-  overlay:'Showing the mask SHAPE only — for a Skin mask that is the raw AI subject, hair and glasses included. Not what gets adjusted.',
-  isolate:'Dimming everything outside the mask SHAPE. Same caveat as Overlay: the color range is not applied here.',
-  select:'Showing the effective selection — shape x range gates x composition. This is the selection that drives the adjustment.',
-  off:''};
-function mskSetPreviewMode(v){mskPreviewMode=v;mskOverlaySync();
-  const hint=document.getElementById('msk-prevmode-hint');
-  if(hint)hint.textContent=MSK_PREVMODE_HINT[v]||'';
-  document.querySelectorAll('.msk-prevmode-seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  const opRow=document.getElementById('msk-selview-opacity-row'),edRow=document.getElementById('msk-selview-outline-row');
-  const showCtl=v==='select';
-  if(opRow)opRow.style.display=showCtl?'':'none';
-  if(edRow)edRow.style.display=showCtl?'':'none';
+function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskOverlaySync();
   mskUpdateSelViewControls();
-  if(typeof fxUpdate==='function')fxUpdate();}   // 'select' changes the RENDER, not just the overlay
+  if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Which mask index the shader should render as a selection map (-1 = normal photo). Gated on the
 // Local Adjustments section being on and a mask being selected; preview render options carry a
 // private token so export/tile callers cannot activate this path with recipe data.
 function mskShowSelIdx(){
-  if((mskPreviewMode!=='select'&&!mskAlwaysShowSelection)||mskSel<0||!fxState.masks[mskSel])return -1;
+  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
 }
 function mskPreviewRenderOptions(extra={}){
   return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:mskSelViewStyle==='photo'?1:mskSelViewStyle==='bw'?2:0,showSelColor:mskSelViewRgb(),
+    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
 }
 function mskOverlayBox(){
@@ -20470,10 +20505,10 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
   const m=fxState.masks[mskSel];
   // 'select' renders its own map in the shader — drawing the shape overlay on top of it too would
   // just obscure the thing it exists to show, so it hides these JS overlays like 'off' does.
-  const anyShowable=cardVisible&&m&&mskPreviewMode!=='off'&&mskPreviewMode!=='select'&&!mskAlwaysShowSelection&&!cropMode&&!fxLoupe;
+  const anyShowable=cardVisible&&m&&!cropMode&&!fxLoupe; // handles stay up in every mode; the selection itself is drawn by the shader
   if(m&&m.type==='brush'){
     svg.classList.remove('on');svg.innerHTML='';
-    if(paintCv)mskPaintOverlaySync(anyShowable?m:null,mskOverlayBox(),mskPreviewMode==='isolate');
+    if(paintCv)paintCv.classList.remove('on'); // the shader's selection view replaces the JS paint tint
     return;
   }
   if(paintCv)paintCv.classList.remove('on');
@@ -20482,7 +20517,7 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
   const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
   svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
   svg.classList.add('on');
-  const isolate=mskPreviewMode==='isolate';
+  const isolate=false;
   let shapeD='',handles='';
   let featherLayer='';
   if(m.type==='radial'){
@@ -20532,7 +20567,7 @@ function mskOverlaySync(){if(typeof healOverlaySync==='function')try{healOverlay
     shapeD=`M${sideA[0]},${sideA[1]} L${sideB[0]},${sideB[1]} L${sideB[0]-ux*H},${sideB[1]-uy*H} L${sideA[0]-ux*H},${sideA[1]-uy*H} Z`;
   }
   const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
-  const shapeLayer=`<path class="msk-shape${mskPreviewMode==='overlay'?' filled':''}" d="${shapeD}"/>`;
+  const shapeLayer=`<path class="msk-shape" d="${shapeD}"/>`;
   svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
   svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }
@@ -31540,7 +31575,7 @@ document.addEventListener('keydown',e=>{
     const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
     const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return;
     e.preventDefault();
-    const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';
+    const next=mskPreviewMode==='select'?'off':'select';
     mskSetPreviewMode(next);
   }
   // ── Editor shortcuts (Lightroom/Capture One idiom). All skip when typing in an input, and
@@ -31616,7 +31651,7 @@ csShortcutRegister('editor.next',()=>{if(fxImages.length<=1)return false;fxSelec
 csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);});
 csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
 csShortcutRegister('editor.loupe',()=>{if(typeof toggleLoupe==='function'&&!fxLoupe)toggleLoupe();});
-csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';mskSetPreviewMode(next);});
+csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next=mskPreviewMode==='select'?'off':'select';mskSetPreviewMode(next);});
 csShortcutRegister('editor.crop-grid',()=>{if(!fxImages.length)return false;cropGridCycle();});
 csShortcutRegister('editor.export',()=>exportFX());
 csShortcutRegister('editor.rotate-left',()=>geomRotate(-90));

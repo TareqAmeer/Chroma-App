@@ -85,7 +85,7 @@ document.addEventListener('keydown',e=>{
     const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
     const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return;
     e.preventDefault();
-    const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';
+    const next=mskPreviewMode==='select'?'off':'select';
     mskSetPreviewMode(next);
   }
   // ── Editor shortcuts (Lightroom/Capture One idiom). All skip when typing in an input, and
@@ -161,7 +161,7 @@ csShortcutRegister('editor.next',()=>{if(fxImages.length<=1)return false;fxSelec
 csShortcutRegister('editor.previous',()=>{if(fxImages.length<=1)return false;fxSelectImage((fxCurIdx-1+fxImages.length)%fxImages.length);});
 csShortcutRegister('editor.crop',()=>{if(typeof cropToggle!=='function'||cropMode)return false;cropToggle();});
 csShortcutRegister('editor.loupe',()=>{if(typeof toggleLoupe==='function'&&!fxLoupe)toggleLoupe();});
-csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next={overlay:'isolate',isolate:'select',select:'off',off:'overlay'}[mskPreviewMode]||'overlay';mskSetPreviewMode(next);});
+csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return false;const next=mskPreviewMode==='select'?'off':'select';mskSetPreviewMode(next);});
 csShortcutRegister('editor.crop-grid',()=>{if(!fxImages.length)return false;cropGridCycle();});
 csShortcutRegister('editor.export',()=>exportFX());
 csShortcutRegister('editor.rotate-left',()=>geomRotate(-90));

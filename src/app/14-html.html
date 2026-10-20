@@ -526,13 +526,12 @@
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
-          <div class="fx-row"><div class="fx-label">Show on photo</div>
-            <div class="seg lib-seg msk-prevmode-seg"><button data-v="overlay" class="on" onclick="mskSetPreviewMode('overlay')">Overlay</button><button data-v="isolate" onclick="mskSetPreviewMode('isolate')">Isolate</button><button data-v="select" onclick="mskSetPreviewMode('select')" title="Shows the EFFECTIVE selection in red — shape combined with the luminance and colour-range gates. The Overlay/Isolate modes draw the shape only.">Selection</button><button data-v="off" onclick="mskSetPreviewMode('off')">Off</button></div>
+          <div class="fx-row" id="msk-selview-style-row" style="display:none">
+            <div class="fx-label">Show selection</div>
+            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
+              <option value="color">Colour overlay</option><option value="colorbw">Colour overlay on B&amp;W</option><option value="imgbw">Image on B&amp;W</option><option value="imgblack">Image on black</option><option value="imgwhite">Image on white</option><option value="wob">White on black</option><option value="off">Off</option>
+            </select>
           </div>
-          <!-- Overlay/Isolate are drawn in JS from the mask SHAPE only; Selection is rendered by
-               the shader and is the effective weight. For a gated mask those differ a lot, and
-               without saying so the three modes look like three contradictory answers. -->
-          <div id="msk-prevmode-hint" style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin:2px 0 6px"></div>
           <div class="fx-row" id="msk-selview-opacity-row" style="display:none">
             <div class="fx-label">Overlay opacity</div>
             <input class="fx-slider" type="range" min="10" max="100" step="1" value="75" id="sl-msk-selview-opacity" oninput="mskSelViewOpacityInput(this.value)">
@@ -542,19 +541,9 @@
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
-          <div class="fx-row" id="msk-selview-style-row" style="display:none">
-            <div class="fx-label">Selection display</div>
-            <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
-              <option value="legacy">Colour overlay</option><option value="photo">On image</option><option value="bw">White on black</option>
-            </select>
-          </div>
           <div class="fx-row" id="msk-selview-color-row" style="display:none">
             <div class="fx-label">Overlay colour</div>
             <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
-          </div>
-          <div class="fx-row" id="msk-selview-always-row" style="display:none">
-            <div class="fx-label">Always show selection</div>
-            <input type="checkbox" id="ck-msk-selview-always" onchange="mskSelViewAlwaysInput(this.checked)">
           </div>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
