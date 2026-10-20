@@ -74,6 +74,16 @@ try{
   assert.ok(Math.abs(c.click-100)<1e-6,'a real click on the photo zooms to 100%');
   assert.ok(Math.abs(c.afterDrag-100)<1e-6,'a drag pans, it does not toggle zoom');
   assert.equal(c.back,true);assert.equal(c.armed,true);
+  const nodom=await page.evaluate(()=>{
+    // The desktop open path can reach the readout before #fx-canvas / #fx-zoom-wrap exist: must not throw.
+    const keepZ=document.getElementById('fx-zoom-wrap'),keepC=document.getElementById('fx-canvas');
+    const zp=keepZ&&keepZ.parentNode,cp=keepC&&keepC.parentNode,zn=keepZ&&keepZ.nextSibling,cn=keepC&&keepC.nextSibling;
+    if(keepZ)keepZ.remove();if(keepC)keepC.remove();
+    let err=null;try{_updateZoomReadout();_fxZoomToPct(1);_fxZoomMax();_fxZoomFootprint();}catch(e){err=String(e);}
+    if(cp&&keepC)cp.insertBefore(keepC,cn);if(zp&&keepZ)zp.insertBefore(keepZ,zn);
+    return err;
+  });
+  assert.equal(nodom,null,'zoom readout/helpers must not throw when the canvas is not in the DOM: '+nodom);
   assert.deepEqual(errors,[]);
   done=true;console.log('PASS true zoom percent: Fit label, click Fit<->100%, 1600% cap, slider mapping');
 }finally{await browser.close();server.close();if(!done)process.exitCode=1;}

@@ -33,9 +33,10 @@ function fxPromoteWebRaw(it){
 }
 function _updateZoomReadout(){
   const pct=document.getElementById('fx-zoom-pct');if(!pct)return;
-  pct.textContent=fxLoupe?'1:1':Math.abs(fxZoom-FX_FIT)<0.002?'Fit':Math.round(_fxZoomToPct(fxZoom))+'%';
+  try{pct.textContent=fxLoupe?'1:1':Math.abs(fxZoom-FX_FIT)<0.002?'Fit':Math.round(_fxZoomToPct(fxZoom))+'%';
   const sl=document.getElementById('fx-zoom-slider');
   if(sl&&document.activeElement!==sl){sl.value=_fxZoomToSlider(fxZoom);fxPaintSlider(sl);}
+  }catch(e){}   // a readout must never abort the photo open that triggered it
 }
 // Absolute zoom set (from the slider), anchored on the frame centre.
 function zoomSet(z){

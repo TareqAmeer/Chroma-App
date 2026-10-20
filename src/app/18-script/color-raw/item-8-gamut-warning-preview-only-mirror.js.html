@@ -180,8 +180,8 @@ function drawScopeVectorscope(hc,px,srcW,srcH){
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
 function _fxZoomFootprint(){
   const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
-  return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||cv.clientWidth||0,
-    h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||cv.clientHeight||0};
+  return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0,
+    h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||(cv&&cv.clientHeight)||0};
 }
 let _fxZoomFQAt=-1e9;
 function _applyZoom(smooth){
@@ -227,7 +227,11 @@ function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // percent the user reads. Falls back to the old fit-relative mapping until a photo's size is known.
 const FX_ZOOM_MAX_PCT=1600;
 function _fxTrueZoomK(){
-  const src=fxWork,{w}=_fxZoomFootprint();if(!src||!w)return 0;
+  // Null-safe on purpose: this runs from _updateZoomReadout during a photo open, when the editor canvas /
+  // zoom wrapper may not be in the DOM yet (the desktop open path) — a throw here aborts the whole open.
+  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  const w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
+  const src=fxWork;if(!src||!w)return 0;
   const FW=(src.naturalWidth||src.width)*fxFullScale();
   return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
 }
