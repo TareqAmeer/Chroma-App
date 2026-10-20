@@ -184,7 +184,7 @@ function _fxZoomFootprint(){
     h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||(cv&&cv.clientHeight)||0};
 }
 let _fxZoomFQAt=-1e9;
-function _applyZoom(smooth){
+function _applyZoom(smooth,noRender){
   const zw=document.getElementById('fx-zoom-wrap');
   if(!zw)return;
   // smooth=true (dbl-tap / zoom buttons / reset) animates the transform like a native
@@ -208,7 +208,7 @@ function _applyZoom(smooth){
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
-  if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
+  if(!noRender&&typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
 // new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
@@ -219,7 +219,8 @@ function _zoomRefit(oldW){
   if(changed){const r=nw/oldW;fxPanX*=r;fxPanY*=r;}
   // Only when the size actually moved (or below 100%, the old new-photo re-centre): _applyZoom
   // schedules a re-render, which would call back here — unconditional would loop.
-  if(changed||fxZoom<1)_applyZoom();
+  // noRender: this is called FROM renderPreview; re-arming the zoom-settle re-render here looped forever below 100% (fxZoom<1 always re-applies)
+  if(changed||fxZoom<1)_applyZoom(false,true);
 }
 function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // TRUE zoom scale (Lightroom's convention): 100% = one source pixel per DEVICE pixel, "Fit" = the whole frame.

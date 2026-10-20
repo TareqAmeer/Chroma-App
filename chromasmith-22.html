@@ -1515,7 +1515,7 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 body.deskx{--deskx-topbar-h:56px;--deskbar-control-gap:12px}
 body.deskx header,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
-body.deskx.fx-deskb main{overflow:hidden;height:100vh}
+body.deskx.fx-deskb main{overflow:hidden;overflow:clip;height:100vh}   /* clip: not a scroll container, so focus restore on app switch cannot scroll (shift) the editor */
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
 /* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
    .topbar is 1fr auto auto 1fr-ish grid, not a flex row with the title floated on top. Grid
@@ -1747,7 +1747,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
+body.deskx .fx-canvas-wrap{overflow:clip;flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}
@@ -7284,7 +7284,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1020B';
+const BUILD='1.1020C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21646,7 +21646,7 @@ function _fxZoomFootprint(){
     h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||(cv&&cv.clientHeight)||0};
 }
 let _fxZoomFQAt=-1e9;
-function _applyZoom(smooth){
+function _applyZoom(smooth,noRender){
   const zw=document.getElementById('fx-zoom-wrap');
   if(!zw)return;
   // smooth=true (dbl-tap / zoom buttons / reset) animates the transform like a native
@@ -21670,7 +21670,7 @@ function _applyZoom(smooth){
   _updateZoomReadout();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
-  if(typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
+  if(!noRender&&typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
 // new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
@@ -21681,7 +21681,8 @@ function _zoomRefit(oldW){
   if(changed){const r=nw/oldW;fxPanX*=r;fxPanY*=r;}
   // Only when the size actually moved (or below 100%, the old new-photo re-centre): _applyZoom
   // schedules a re-render, which would call back here — unconditional would loop.
-  if(changed||fxZoom<1)_applyZoom();
+  // noRender: this is called FROM renderPreview; re-arming the zoom-settle re-render here looped forever below 100% (fxZoom<1 always re-applies)
+  if(changed||fxZoom<1)_applyZoom(false,true);
 }
 function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
 // TRUE zoom scale (Lightroom's convention): 100% = one source pixel per DEVICE pixel, "Fit" = the whole frame.
@@ -23997,12 +23998,20 @@ function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
 }
 // Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
+const FX_CROP_MAX_PX=16e6;   // 4096x4096: also the tile-grid maxDim, so a 1:1 view of any window up to 4K stays 1:1
 function _fxCropGeom(iw,ih,cw,ch){
   const wrap=document.getElementById('fx-wrap');
   const z=fxZoom;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
-  const padX=visW*0.18,padY=visH*0.18;
+  // Pad (so a small pan stays on crisp pixels) shrinks before resolution does: at 1:1 on a retina window the
+  // visible area alone is ~6MP, and the old fixed 18% pad + 5MP cap rendered the crop at ~0.88x then stretched it
+  // (bilinear upscale = soft 100%).
+  const sd0=Math.min(window.devicePixelRatio||1,2);
+  let padF=0.18;
+  while(padF>0.001&&Math.min(cw,visW*(1+2*padF))*z*sd0*Math.min(ch,visH*(1+2*padF))*z*sd0>FX_CROP_MAX_PX)padF/=2;
+  if(padF<=0.001)padF=0;
+  const padX=visW*padF,padY=visH*padF;
   const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
   const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
   const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
@@ -24017,7 +24026,7 @@ function _fxCropGeom(iw,ih,cw,ch){
   // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
   // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
   // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
-  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(FX_CROP_MAX_PX/(outW*outH)));
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
 }
@@ -24192,7 +24201,7 @@ function renderPreview(){
       const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
       const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
       document.getElementById('fx-no-img').style.display='none';
-      document.getElementById('fx-info').textContent=`Full res ${Math.round(fxZoom*100)}% — native-quality crop of ${iw}×${ih}`;
+      document.getElementById('fx-info').textContent=`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — native-quality crop of ${iw}×${ih}`;
       document.getElementById('btn-fx-export').disabled=false;
       if(fxHistOn)drawHistogram();
       if(fxPeakOn)fxPeakUpdate();
@@ -24235,6 +24244,10 @@ function renderPreview(){
   // composition remains coherent while zooming.
   if(fxFullResPreview&&!_fxPreviewInteracting){
     dpr=Math.min(iw/(cw||1),ih/(ch||1));
+    // Fit / zoomed-out: the compositor shrinks this canvas to cw*fxZoom CSS px. Handing it the whole source (4.7x too
+    // many pixels) makes that a point-sampled shrink (gritty, shimmering next to Lightroom). Render at 2x the displayed
+    // device size instead: the final 2:1 shrink is a clean bilinear/box, and the render is far cheaper.
+    if(fxZoom<=1&&!_previewComposition)dpr=Math.min(dpr,Math.max(1,2*Math.max(fxZoom,0.25)*(window.devicePixelRatio||1)));
     // Full res on a RAW opens on the ~2560px working copy and only promotes to the real frame after a
     // settle delay or a first edit/zoom; until then "Full res" is just that copy stretched (soft next to
     // Lightroom). Opting into Full res means "show me the real pixels": ask for the promotion once per photo.
@@ -24307,7 +24320,7 @@ function renderPreview(){
   if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
-    ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}`
+    ?`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`
     :`Preview ${pw}\u00d7${ph}`;
   fxRefreshDims();
   document.getElementById('btn-fx-export').disabled=false;

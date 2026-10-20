@@ -1476,7 +1476,7 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 body.deskx{--deskx-topbar-h:56px;--deskbar-control-gap:12px}
 body.deskx header,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
-body.deskx.fx-deskb main{overflow:hidden;height:100vh}
+body.deskx.fx-deskb main{overflow:hidden;overflow:clip;height:100vh}   /* clip: not a scroll container, so focus restore on app switch cannot scroll (shift) the editor */
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
 /* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
    .topbar is 1fr auto auto 1fr-ish grid, not a flex row with the title floated on top. Grid
@@ -1708,7 +1708,7 @@ body.deskx .fx-rail-sep{height:1px;background:var(--bdr);margin:3px var(--sp-2);
    image (indistinguishable from the app's own Borders FX), which is not what was asked for —
    "border" meant panel separation (library <-> editor), not framing the canvas. Back to
    edge-to-edge, matching DRK; only the library/editor divider (library-ui.js) is thicker now. */
-body.deskx .fx-canvas-wrap{flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
+body.deskx .fx-canvas-wrap{overflow:clip;flex:1 1 auto;min-height:0;background:var(--bg);border:none;border-radius:0;margin:0;padding:16px;box-sizing:border-box}
 body.deskx #fx-canvas{max-height:none}
 body.deskx #fx-crop-tools{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:var(--z-float);
   background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:8px 12px}

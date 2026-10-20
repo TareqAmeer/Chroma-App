@@ -110,12 +110,20 @@ function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
 }
 // Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
+const FX_CROP_MAX_PX=16e6;   // 4096x4096: also the tile-grid maxDim, so a 1:1 view of any window up to 4K stays 1:1
 function _fxCropGeom(iw,ih,cw,ch){
   const wrap=document.getElementById('fx-wrap');
   const z=fxZoom;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
   const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
-  const padX=visW*0.18,padY=visH*0.18;
+  // Pad (so a small pan stays on crisp pixels) shrinks before resolution does: at 1:1 on a retina window the
+  // visible area alone is ~6MP, and the old fixed 18% pad + 5MP cap rendered the crop at ~0.88x then stretched it
+  // (bilinear upscale = soft 100%).
+  const sd0=Math.min(window.devicePixelRatio||1,2);
+  let padF=0.18;
+  while(padF>0.001&&Math.min(cw,visW*(1+2*padF))*z*sd0*Math.min(ch,visH*(1+2*padF))*z*sd0>FX_CROP_MAX_PX)padF/=2;
+  if(padF<=0.001)padF=0;
+  const padX=visW*padF,padY=visH*padF;
   const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
   const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
   const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
@@ -130,7 +138,7 @@ function _fxCropGeom(iw,ih,cw,ch){
   // Caps: never beyond 2× the crop's native pixels, never past GPU-safe 8192, and a ~5MP
   // total-pixel budget — the full FX chain (halation/bloom blurs) runs per re-render on every
   // pan settle, and an uncapped 4K-wide render made deep zooms feel sluggish on Intel iGPUs.
-  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(5e6/(outW*outH)));
+  const s=Math.min(1,(cropW*2)/outW,8192/outW,8192/outH,Math.sqrt(FX_CROP_MAX_PX/(outW*outH)));
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
 }
