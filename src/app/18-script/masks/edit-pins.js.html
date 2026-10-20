@@ -21,6 +21,7 @@ let _pinDrag=null;
 function mskPinSync(){
   const layer=document.getElementById('msk-pin-layer');if(!layer)return;
   const ff=document.getElementById('ff-local'),visible=ff&&ff.offsetParent!==null;
+  if(visible){mskSceneEnsure();mskSceneRender();}
   const box=mskOverlayBox();
   const masks=fxState.masks;
   if(!mskShowPins||!visible||!box||!masks.length||cropMode||fxLoupe||mskPaintMode||(mskAiTapMode&&mskAiPromptMode)){layer.classList.remove('on');layer.innerHTML='';return;}

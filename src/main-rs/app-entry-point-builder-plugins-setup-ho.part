@@ -308,6 +308,7 @@ fn main() {
             library::get_lr_thumb,
             library::save_lr_thumb,
             sam_encode,
+            scene_detect,
             scrfd_detect,
             sam_points,
             sam_box,

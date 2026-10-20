@@ -17,6 +17,22 @@ static SAM_EMBED: Mutex<Option<SamEmbedCache>> = Mutex::new(None);
 /// canvas) via the framed body — encoding works off whatever resolution the caller hands in
 /// (the model resizes internally to 1024 either way), so callers should downsample to a
 /// reasonable working size (a few hundred px) themselves rather than sending a full-res RAW.
+/// Editor mask auto-detect: people and pets in the working-resolution RGB the editor already sends
+/// to sam_encode. Framed request {width,height} + rgb8; returns JSON [{label,score,x0,y0,x1,y1}]
+/// (0..1 corner boxes, best first).
+#[tauri::command(async)]
+fn scene_detect(request: tauri::ipc::Request) -> Result<serde_json::Value, String> {
+    let (json, payload) = parse_framed(request.body())?;
+    let w = json["width"].as_u64().ok_or("missing width")? as u32;
+    let h = json["height"].as_u64().ok_or("missing height")? as u32;
+    let dets = petdetect::detect_scene(payload, w, h)?;
+    Ok(serde_json::Value::Array(
+        dets.iter()
+            .map(|d| serde_json::json!({"label": d.species, "score": d.score, "x0": d.x0, "y0": d.y0, "x1": d.x1, "y1": d.y1}))
+            .collect(),
+    ))
+}
+
 #[tauri::command(async)]
 fn sam_encode(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;

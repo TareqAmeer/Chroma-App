@@ -772,6 +772,12 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 /* Lightroom-style edit pins: one round pin per mask, anchored on the photo. The layer rides the zoom
    transform, so each pin is counter-scaled (--pin-s) to stay a constant on-screen size. */
 #msk-pin-layer{position:absolute;display:none;pointer-events:none}
+.msk-scene{display:none;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 6px}
+.msk-scene.on{display:flex}
+.msk-scene-hd{font-size:var(--fs-0);color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.msk-chip{border:1px solid var(--bdr);background:var(--tint-1,transparent);color:var(--txt);border-radius:999px;padding:3px 10px;font:inherit;font-size:var(--fs-1);cursor:pointer}
+.msk-chip:hover{border-color:var(--acc);color:var(--acc)}
+.msk-chip[disabled]{opacity:.5;cursor:default}
 #msk-pin-layer.on{display:block}
 .msk-pin{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;box-sizing:border-box;
   border:2px solid #fff;background:rgba(0,0,0,.45);box-shadow:0 0 0 1px rgba(0,0,0,.6);color:#fff;font:600 10px/18px var(--sans);
@@ -4294,6 +4300,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
+          <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
           <div class="fx-row" id="msk-selview-style-row" style="display:none">
             <div class="fx-label">Show selection</div>
@@ -7298,7 +7305,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1020D';
+const BUILD='1.1020E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20617,6 +20624,95 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
   svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
   svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }
+// ── Auto-detect: people / pets / sky, with hover preview ────────────────────────────────────────
+// When the Masks panel is up on a desktop build, RT-DETR (native scene_detect) lists the people and
+// animals in the photo as chips ("Person 1", "Dog"). Hovering a chip previews the selection (EdgeSAM,
+// box prompt) as a red tint on the photo before anything is committed; clicking adds it as an AI mask.
+// Detection runs once per photo (cached, non-enumerable on the item so sessions never serialise it).
+function _mskSceneOf(item){return item&&item._scene;}
+async function mskSceneEnsure(){
+  if(!window.__TAURI__)return;
+  const item=curItem();if(!item||item.kind==='video'||item._scene)return;
+  const sc={state:'running',list:[],masks:{}};
+  Object.defineProperty(item,'_scene',{value:sc,writable:true,enumerable:false,configurable:true});
+  mskSceneRender();
+  const img=item.img||fxWork||fxImg;if(!img){sc.state='error';return;}
+  try{
+    const{w,h}=samInputDims();
+    const d=mskSourceData(w,h,img);
+    const rgb=new Uint8Array(w*h*3);
+    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);
+    if(curItem()!==item)return;
+    const byLabel={};
+    (dets||[]).filter(x=>x.score>=0.5).forEach(x=>{(byLabel[x.label]=byLabel[x.label]||[]).push(x);});
+    const names={person:'Person',bird:'Bird',cat:'Cat',dog:'Dog',horse:'Horse'};
+    Object.keys(byLabel).forEach(label=>{
+      const arr=byLabel[label].sort((a,b)=>(a.x0+a.x1)-(b.x0+b.x1)); // left to right
+      arr.forEach((x,i)=>sc.list.push({id:label+i,label:names[label]+(arr.length>1?' '+(i+1):''),kind:label,box:{x0:x.x0,y0:x.y0,x1:x.x1,y1:x.y1}}));
+    });
+    // Sky: reuse the heuristic's score raster; offer the chip only when it covers a real part of the frame.
+    try{const t={type:'brush',origin:'sky'};mskGenerateSky(t);
+      if(t.px&&t.px.length){let n=0;for(let i=0;i<t.px.length;i+=4)if(t.px[i]>128)n++;if(n*4/t.px.length>0.08)sc.list.push({id:'sky',label:'Sky',kind:'sky'});}}catch(_){}
+    sc.state='done';
+  }catch(e){sc.state='error';log('Auto-detect: '+(e&&e.message||e),'warn');}
+  mskSceneRender();
+}
+function mskSceneRender(){
+  const el=document.getElementById('msk-scene');if(!el)return;
+  const sc=_mskSceneOf(window.__TAURI__&&curItem());
+  if(!sc||sc.state==='error'||(sc.state==='done'&&!sc.list.length)){el.classList.remove('on');el.innerHTML='';el._sig='';return;}
+  const sig=sc.state+'|'+sc.list.map(c=>c.id).join(',');
+  if(el._sig===sig&&el.classList.contains('on'))return; // unchanged: keep the chips (and any hover) alive
+  el._sig=sig;
+  el.classList.add('on');
+  el.innerHTML='<span class="msk-scene-hd">'+(sc.state==='running'?'Detecting…':'Detected')+'</span>'
+    +sc.list.map(c=>'<button class="msk-chip" data-id="'+c.id+'" title="Hover to preview, click to add as a mask">'+c.label+'</button>').join('');
+  el.querySelectorAll('.msk-chip').forEach(b=>{
+    b.onmouseenter=()=>mskScenePreview(b.dataset.id);b.onmouseleave=mskScenePreviewClear;
+    b.onfocus=b.onmouseenter;b.onblur=mskScenePreviewClear;
+    b.onclick=()=>mskSceneAdd(b.dataset.id);
+  });
+}
+let _scenePrevId=null;
+function mskScenePreviewClear(){_scenePrevId=null;const cv=document.getElementById('msk-paint-overlay');if(cv)cv.classList.remove('on');}
+async function _mskSceneMask(c){ // preview raster for one candidate, cached
+  const item=curItem(),sc=item&&item._scene;if(!sc)return null;
+  if(sc.masks[c.id])return sc.masks[c.id];
+  if(c.kind==='sky'){const t={type:'brush',origin:'sky'};mskGenerateSky(t);return sc.masks[c.id]=t;}
+  await samEnsureEncoded({silent:true,noBackgroundRefine:true});
+  if(!_samToken||curItem()!==item)return null;
+  const box=_samNormalizeBox(c.box);if(!box)return null;
+  const buf=await window.__TAURI__.core.invoke('sam_box',{token:_samToken,rect:{x1:box.x0,y1:box.y0,x2:box.x1,y2:box.y1}});
+  const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
+  const px=new Uint8ClampedArray(new Uint8Array(buf,4+hl).slice());
+  return sc.masks[c.id]={type:'brush',px,mtW:hd.width,mtH:hd.height};
+}
+async function mskScenePreview(id){
+  const sc=_mskSceneOf(curItem());if(!sc)return;
+  const c=sc.list.find(x=>x.id===id);if(!c)return;
+  _scenePrevId=id;
+  try{
+    const t=await _mskSceneMask(c);
+    if(!t||_scenePrevId!==id)return; // pointer already left, or the photo changed
+    const box=mskOverlayBox();if(!box)return;
+    mskPaintOverlaySync(t,box,false);
+  }catch(e){log('Preview: '+(e&&e.message||e),'warn');}
+}
+async function mskSceneAdd(id){
+  const sc=_mskSceneOf(curItem());if(!sc)return;
+  const c=sc.list.find(x=>x.id===id);if(!c)return;
+  mskScenePreviewClear();
+  if(c.kind==='sky'){const m=mskAdd('sky');if(m){m.name='Sky';mskRebuild();}return;}
+  const box=_samNormalizeBox(c.box);if(!box)return;
+  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;});
+  if(!m)return;
+  mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
+  mskRebuild();
+  const r=await samRunPoints(m);
+  if(r&&r.ok===false&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
+  mskRebuild();fxUpdate();fxHistoryPush();
+}
 // ── Edit pins ───────────────────────────────────────────────────────────────────────────────────
 let mskShowPins=true;try{mskShowPins=localStorage.getItem('chromasmith_msk_pins')!=='0';}catch(_){}
 function mskPinsToggle(v){mskShowPins=!!v;try{localStorage.setItem('chromasmith_msk_pins',v?'1':'0');}catch(_){}mskPinSync();}
@@ -20640,6 +20736,7 @@ let _pinDrag=null;
 function mskPinSync(){
   const layer=document.getElementById('msk-pin-layer');if(!layer)return;
   const ff=document.getElementById('ff-local'),visible=ff&&ff.offsetParent!==null;
+  if(visible){mskSceneEnsure();mskSceneRender();}
   const box=mskOverlayBox();
   const masks=fxState.masks;
   if(!mskShowPins||!visible||!box||!masks.length||cropMode||fxLoupe||mskPaintMode||(mskAiTapMode&&mskAiPromptMode)){layer.classList.remove('on');layer.innerHTML='';return;}

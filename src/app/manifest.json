@@ -84,6 +84,7 @@
   "18-script/masks/cont-mskclearcomposition.js.html",
   "18-script/masks/mask-list-management-order-name-mute.js.html",
   "18-script/masks/on-canvas-mask-shape-overlay-an-svg-size.js.html",
+  "18-script/masks/auto-detect-people-pets-sky-with-hover-p.js.html",
   "18-script/masks/edit-pins.js.html",
   "18-script/masks/selective-paste-darktable-idiom-choose-w.js.html",
   "18-script/history-presets/b2-human-readable-per-step-label-diffed.js.html",
@@ -183,882 +184,888 @@
    "file": "04-html.html",
    "kind": "html",
    "firstLine": 40,
-   "lines": 3065
+   "lines": 3071
   },
   {
    "file": "05-script.js.html",
    "kind": "script",
-   "firstLine": 3105,
+   "firstLine": 3111,
    "lines": 11
   },
   {
    "file": "06-script.js.html",
    "kind": "script",
-   "firstLine": 3116,
+   "firstLine": 3122,
    "lines": 19
   },
   {
    "file": "07-script.js.html",
    "kind": "script",
-   "firstLine": 3135,
+   "firstLine": 3141,
    "lines": 90
   },
   {
    "file": "08-script.js.html",
    "kind": "script",
-   "firstLine": 3225,
+   "firstLine": 3231,
    "lines": 127
   },
   {
    "file": "09-script.js.html",
    "kind": "script",
-   "firstLine": 3352,
+   "firstLine": 3358,
    "lines": 51
   },
   {
    "file": "10-script.js.html",
    "kind": "script",
-   "firstLine": 3403,
+   "firstLine": 3409,
    "lines": 82
   },
   {
    "file": "11-html.html",
    "kind": "html",
-   "firstLine": 3485,
+   "firstLine": 3491,
    "lines": 46
   },
   {
    "file": "12-script.js.html",
    "kind": "script",
-   "firstLine": 3531,
+   "firstLine": 3537,
    "lines": 28
   },
   {
    "file": "13-script.js.html",
    "kind": "script",
-   "firstLine": 3559,
+   "firstLine": 3565,
    "lines": 211
   },
   {
    "file": "14-html.html",
    "kind": "html",
-   "firstLine": 3770,
-   "lines": 1616
+   "firstLine": 3776,
+   "lines": 1617
   },
   {
    "file": "15-script.js.html",
    "kind": "script",
-   "firstLine": 5386,
+   "firstLine": 5393,
    "lines": 5
   },
   {
    "file": "16-script.js.html",
    "kind": "script",
-   "firstLine": 5391,
+   "firstLine": 5398,
    "lines": 1651
   },
   {
    "file": "17-script.js.html",
    "kind": "script",
-   "firstLine": 7042,
+   "firstLine": 7049,
    "lines": 256
   },
   {
    "file": "18-script/head.js.html",
    "kind": "script",
-   "firstLine": 7298,
+   "firstLine": 7305,
    "lines": 52
   },
   {
    "file": "18-script/shell-ui/about-the-new-home-for-the-build-id-the.js.html",
    "kind": "script",
-   "firstLine": 7350,
+   "firstLine": 7357,
    "lines": 54
   },
   {
    "file": "18-script/google-photos/google-photos-oauth-callback-runs-in-the.js.html",
    "kind": "script",
-   "firstLine": 7404,
+   "firstLine": 7411,
    "lines": 259
   },
   {
    "file": "18-script/color-raw/cont-composeluts.js.html",
    "kind": "script",
-   "firstLine": 7663,
+   "firstLine": 7670,
    "lines": 262
   },
   {
    "file": "18-script/shell-ui/cont-cplutsample.js.html",
    "kind": "script",
-   "firstLine": 7925,
+   "firstLine": 7932,
    "lines": 250
   },
   {
    "file": "18-script/editor/cont-gpupreference.js.html",
    "kind": "script",
-   "firstLine": 8175,
+   "firstLine": 8182,
    "lines": 231
   },
   {
    "file": "18-script/renderer/hlg-bt-2100-rec-709.js.html",
    "kind": "script",
-   "firstLine": 8406,
+   "firstLine": 8413,
    "lines": 1112
   },
   {
    "file": "18-script/renderer/cont-mat3.js.html",
    "kind": "script",
-   "firstLine": 9518,
+   "firstLine": 9525,
    "lines": 1147
   },
   {
    "file": "18-script/renderer/calibrated-halation-bloom-constants-meas.js.html",
    "kind": "script",
-   "firstLine": 10665,
+   "firstLine": 10672,
    "lines": 283
   },
   {
    "file": "18-script/shell-ui/export-version-history-library-only-reci.js.html",
    "kind": "script",
-   "firstLine": 10948,
+   "firstLine": 10955,
    "lines": 35
   },
   {
    "file": "18-script/editor/auto-lens-profile-correction-desktop-onl.js.html",
    "kind": "script",
-   "firstLine": 10983,
+   "firstLine": 10990,
    "lines": 73
   },
   {
    "file": "18-script/editor/manual-lens-override-desktop-only-for-ma.js.html",
    "kind": "script",
-   "firstLine": 11056,
+   "firstLine": 11063,
    "lines": 77
   },
   {
    "file": "18-script/color-raw/native-rust-raw-noise-reduction-tier-des.js.html",
    "kind": "script",
-   "firstLine": 11133,
+   "firstLine": 11140,
    "lines": 107
   },
   {
    "file": "18-script/color-raw/raw-demosaic-algorithm-desktop-only-same.js.html",
    "kind": "script",
-   "firstLine": 11240,
+   "firstLine": 11247,
    "lines": 106
   },
   {
    "file": "18-script/export-io/dpi-read-write-metadata-preservation-exi.js.html",
    "kind": "script",
-   "firstLine": 11346,
+   "firstLine": 11353,
    "lines": 51
   },
   {
    "file": "18-script/export-io/splice-the-source-s-metadata-segments-ch.js.html",
    "kind": "script",
-   "firstLine": 11397,
+   "firstLine": 11404,
    "lines": 82
   },
   {
    "file": "18-script/export-io/icc-embedding-for-tiff-sources-whose-pro.js.html",
    "kind": "script",
-   "firstLine": 11479,
+   "firstLine": 11486,
    "lines": 49
   },
   {
    "file": "18-script/export-io/recipe-metadata-look-print-profile-into.js.html",
    "kind": "script",
-   "firstLine": 11528,
+   "firstLine": 11535,
    "lines": 95
   },
   {
    "file": "18-script/color-raw/lut-chart-self-serve-lightroom-preset-lu.js.html",
    "kind": "script",
-   "firstLine": 11623,
+   "firstLine": 11630,
    "lines": 81
   },
   {
    "file": "18-script/color-raw/built-in-preset-bytes-inline-core-looks.js.html",
    "kind": "script",
-   "firstLine": 11704,
+   "firstLine": 11711,
    "lines": 173
   },
   {
    "file": "18-script/color-raw/prophoto-rgb-srgb-conversion-iso-22028-3.js.html",
    "kind": "script",
-   "firstLine": 11877,
+   "firstLine": 11884,
    "lines": 142
   },
   {
    "file": "18-script/color-raw/panasonic-rw2-and-other-raw-input-via-li.js.html",
    "kind": "script",
-   "firstLine": 12019,
+   "firstLine": 12026,
    "lines": 333
   },
   {
    "file": "18-script/editor/cont-fxseekgen.js.html",
    "kind": "script",
-   "firstLine": 12352,
+   "firstLine": 12359,
    "lines": 258
   },
   {
    "file": "18-script/editor/cont-fxvideotrimchanged.js.html",
    "kind": "script",
-   "firstLine": 12610,
+   "firstLine": 12617,
    "lines": 50
   },
   {
    "file": "18-script/color-raw/dcp-adobe-dng-camera-profile-rendering-m.js.html",
    "kind": "script",
-   "firstLine": 12660,
+   "firstLine": 12667,
    "lines": 250
   },
   {
    "file": "18-script/editor/cont-cpuworker.js.html",
    "kind": "script",
-   "firstLine": 12910,
+   "firstLine": 12917,
    "lines": 279
   },
   {
    "file": "18-script/editor/cont-parsedngembeddedprofile.js.html",
    "kind": "script",
-   "firstLine": 13189,
+   "firstLine": 13196,
    "lines": 408
   },
   {
    "file": "18-script/editor/cont-installfximages.js.html",
    "kind": "script",
-   "firstLine": 13597,
+   "firstLine": 13604,
    "lines": 302
   },
   {
    "file": "18-script/editor/cont-autodetectbw.js.html",
    "kind": "script",
-   "firstLine": 13899,
+   "firstLine": 13906,
    "lines": 77
   },
   {
    "file": "18-script/editor/live-preview-feedback-while-a-control-is.js.html",
    "kind": "script",
-   "firstLine": 13976,
+   "firstLine": 13983,
    "lines": 133
   },
   {
    "file": "18-script/history-presets/chr-203-versions-panel.js.html",
    "kind": "script",
-   "firstLine": 14109,
+   "firstLine": 14116,
    "lines": 429
   },
   {
    "file": "18-script/color-raw/hue-population-histogram-how-much-of-the.js.html",
    "kind": "script",
-   "firstLine": 14538,
+   "firstLine": 14545,
    "lines": 142
   },
   {
    "file": "18-script/masks/pointer-photo-pixel-mapping-borders-matt.js.html",
    "kind": "script",
-   "firstLine": 14680,
+   "firstLine": 14687,
    "lines": 114
   },
   {
    "file": "18-script/shell-ui/editor-workspace-background-colour-via-r.js.html",
    "kind": "script",
-   "firstLine": 14794,
+   "firstLine": 14801,
    "lines": 262
   },
   {
    "file": "18-script/editor/cont-fxinfotapinit.js.html",
    "kind": "script",
-   "firstLine": 15056,
+   "firstLine": 15063,
    "lines": 240
   },
   {
    "file": "18-script/shell-ui/first-timer-aids.js.html",
    "kind": "script",
-   "firstLine": 15296,
+   "firstLine": 15303,
    "lines": 57
   },
   {
    "file": "18-script/shell-ui/command-palette-k-a-fuzzy-list-over-tabs.js.html",
    "kind": "script",
-   "firstLine": 15353,
+   "firstLine": 15360,
    "lines": 286
   },
   {
    "file": "18-script/shell-ui/app-height-owner-layout-safety-nets.js.html",
    "kind": "script",
-   "firstLine": 15639,
+   "firstLine": 15646,
    "lines": 293
   },
   {
    "file": "18-script/masks/a19-capability-flags-instead-of-comparin.js.html",
    "kind": "script",
-   "firstLine": 15932,
+   "firstLine": 15939,
    "lines": 30
   },
   {
    "file": "18-script/color-raw/oklab-bj-rn-ottosson-js-mirror-of-glsl-o.js.html",
    "kind": "script",
-   "firstLine": 15962,
+   "firstLine": 15969,
    "lines": 93
   },
   {
    "file": "18-script/masks/copy-on-write-so-undo-history-can-share.js.html",
    "kind": "script",
-   "firstLine": 16055,
+   "firstLine": 16062,
    "lines": 143
   },
   {
    "file": "18-script/masks/a18-one-source-of-truth-for-a-new-mask-s.js.html",
    "kind": "script",
-   "firstLine": 16198,
+   "firstLine": 16205,
    "lines": 326
   },
   {
    "file": "18-script/masks/ai-brush-select-edgesam-multi-point-prom.js.html",
    "kind": "script",
-   "firstLine": 16524,
+   "firstLine": 16531,
    "lines": 365
   },
   {
    "file": "18-script/subjects-ai/named-subjects-remember-this-dog-then-fi.js.html",
    "kind": "script",
-   "firstLine": 16889,
+   "firstLine": 16896,
    "lines": 18
   },
   {
    "file": "18-script/subjects-ai/export-import-the-whole-taught-subjects.js.html",
    "kind": "script",
-   "firstLine": 16907,
+   "firstLine": 16914,
    "lines": 91
   },
   {
    "file": "18-script/subjects-ai/small-client-side-thumbnails-for-subject.js.html",
    "kind": "script",
-   "firstLine": 16998,
+   "firstLine": 17005,
    "lines": 219
   },
   {
    "file": "18-script/subjects-ai/scan-every-loaded-photo-for-a-taught-sub.js.html",
    "kind": "script",
-   "firstLine": 17217,
+   "firstLine": 17224,
    "lines": 86
   },
   {
    "file": "18-script/subjects-ai/more-than-one-instance-of-a-taught-subje.js.html",
    "kind": "script",
-   "firstLine": 17303,
+   "firstLine": 17310,
    "lines": 218
   },
   {
    "file": "18-script/subjects-ai/face-feature-auto-exclusion-roadmap-item.js.html",
    "kind": "script",
-   "firstLine": 17521,
+   "firstLine": 17528,
    "lines": 56
   },
   {
    "file": "18-script/subjects-ai/depth-estimation-roadmap-r7-desktop-only.js.html",
    "kind": "script",
-   "firstLine": 17577,
+   "firstLine": 17584,
    "lines": 260
   },
   {
    "file": "18-script/masks/face-parse-skin-selector-roadmap-mask-sy.js.html",
    "kind": "script",
-   "firstLine": 17837,
+   "firstLine": 17844,
    "lines": 52
   },
   {
    "file": "18-script/subjects-ai/confirm-reject-a-find-result.js.html",
    "kind": "script",
-   "firstLine": 17889,
+   "firstLine": 17896,
    "lines": 316
   },
   {
    "file": "18-script/masks/painted-sky-raster-masks-up-to-4-packed.js.html",
    "kind": "script",
-   "firstLine": 18205,
+   "firstLine": 18212,
    "lines": 69
   },
   {
    "file": "18-script/masks/a15-one-cached-photo-at-mask-resolution.js.html",
    "kind": "script",
-   "firstLine": 18274,
+   "firstLine": 18281,
    "lines": 320
   },
   {
    "file": "18-script/masks/brush-painting-pointer-drag-stamps-a-sof.js.html",
    "kind": "script",
-   "firstLine": 18594,
+   "firstLine": 18601,
    "lines": 266
   },
   {
    "file": "18-script/masks/cont-mskgroupopen.js.html",
    "kind": "script",
-   "firstLine": 18860,
+   "firstLine": 18867,
    "lines": 229
   },
   {
    "file": "18-script/masks/guided-skin-tone.js.html",
    "kind": "script",
-   "firstLine": 19089,
+   "firstLine": 19096,
    "lines": 14
   },
   {
    "file": "18-script/masks/coat-pair-coat-creates-a-coat-mask-and-o.js.html",
    "kind": "script",
-   "firstLine": 19103,
+   "firstLine": 19110,
    "lines": 42
   },
   {
    "file": "18-script/masks/eye-detection-classical-not-learned.js.html",
    "kind": "script",
-   "firstLine": 19145,
+   "firstLine": 19152,
    "lines": 383
   },
   {
    "file": "18-script/color-raw/auto-seed-the-colour-samples-from-the-se.js.html",
    "kind": "script",
-   "firstLine": 19528,
+   "firstLine": 19535,
    "lines": 229
   },
   {
    "file": "18-script/subjects-ai/c4-one-skin-rendering-across-a-whole-sho.js.html",
    "kind": "script",
-   "firstLine": 19757,
+   "firstLine": 19764,
    "lines": 546
   },
   {
    "file": "18-script/masks/cont-mskclearcomposition.js.html",
    "kind": "script",
-   "firstLine": 20303,
+   "firstLine": 20310,
    "lines": 37
   },
   {
    "file": "18-script/masks/mask-list-management-order-name-mute.js.html",
    "kind": "script",
-   "firstLine": 20340,
+   "firstLine": 20347,
    "lines": 67
   },
   {
    "file": "18-script/masks/on-canvas-mask-shape-overlay-an-svg-size.js.html",
    "kind": "script",
-   "firstLine": 20407,
+   "firstLine": 20414,
    "lines": 213
+  },
+  {
+   "file": "18-script/masks/auto-detect-people-pets-sky-with-hover-p.js.html",
+   "kind": "script",
+   "firstLine": 20627,
+   "lines": 89
   },
   {
    "file": "18-script/masks/edit-pins.js.html",
    "kind": "script",
-   "firstLine": 20620,
-   "lines": 172
+   "firstLine": 20716,
+   "lines": 173
   },
   {
    "file": "18-script/masks/selective-paste-darktable-idiom-choose-w.js.html",
    "kind": "script",
-   "firstLine": 20792,
+   "firstLine": 20889,
    "lines": 197
   },
   {
    "file": "18-script/history-presets/b2-human-readable-per-step-label-diffed.js.html",
    "kind": "script",
-   "firstLine": 20989,
+   "firstLine": 21086,
    "lines": 303
   },
   {
    "file": "18-script/history-presets/b3-split-source-menu-original-pinned-his.js.html",
    "kind": "script",
-   "firstLine": 21292,
+   "firstLine": 21389,
    "lines": 103
   },
   {
    "file": "18-script/history-presets/b2-3-1-3-3-1-4-in-session-edit-history-t.js.html",
    "kind": "script",
-   "firstLine": 21395,
+   "firstLine": 21492,
    "lines": 176
   },
   {
    "file": "18-script/color-raw/item-8-gamut-warning-preview-only-mirror.js.html",
    "kind": "script",
-   "firstLine": 21571,
+   "firstLine": 21668,
    "lines": 255
   },
   {
    "file": "18-script/editor/cont-fxensurefullquality.js.html",
    "kind": "script",
-   "firstLine": 21826,
+   "firstLine": 21923,
    "lines": 232
   },
   {
    "file": "18-script/masks/wb-eyedropper.js.html",
    "kind": "script",
-   "firstLine": 22058,
+   "firstLine": 22155,
    "lines": 10
   },
   {
    "file": "18-script/masks/eyedropper-hover-pipette-cursor-live-col.js.html",
    "kind": "script",
-   "firstLine": 22068,
+   "firstLine": 22165,
    "lines": 45
   },
   {
    "file": "18-script/subjects-ai/film-negative-chr-262.js.html",
    "kind": "script",
-   "firstLine": 22113,
+   "firstLine": 22210,
    "lines": 287
   },
   {
    "file": "18-script/color-raw/auto-enhance.js.html",
    "kind": "script",
-   "firstLine": 22400,
+   "firstLine": 22497,
    "lines": 48
   },
   {
    "file": "18-script/color-raw/auto-enhance-v3-rawtherapee-style-histog.js.html",
    "kind": "script",
-   "firstLine": 22448,
+   "firstLine": 22545,
    "lines": 80
   },
   {
    "file": "18-script/history-presets/styles-named-reusable-re-editable-recipe.js.html",
    "kind": "script",
-   "firstLine": 22528,
+   "firstLine": 22625,
    "lines": 304
   },
   {
    "file": "18-script/export-io/named-export-presets-file-encoding-contr.js.html",
    "kind": "script",
-   "firstLine": 22832,
+   "firstLine": 22929,
    "lines": 91
   },
   {
    "file": "18-script/history-presets/chr-197-one-presets-manager-for-the-thre.js.html",
    "kind": "script",
-   "firstLine": 22923,
+   "firstLine": 23020,
    "lines": 67
   },
   {
    "file": "18-script/history-presets/session-save-restore.js.html",
    "kind": "script",
-   "firstLine": 22990,
+   "firstLine": 23087,
    "lines": 123
   },
   {
    "file": "18-script/export-io/exif-parser-jpeg-only.js.html",
    "kind": "script",
-   "firstLine": 23113,
+   "firstLine": 23210,
    "lines": 262
   },
   {
    "file": "18-script/editor/cont-fxrenderautotags.js.html",
    "kind": "script",
-   "firstLine": 23375,
+   "firstLine": 23472,
    "lines": 260
   },
   {
    "file": "18-script/editor/cont-fxrefpickfile.js.html",
    "kind": "script",
-   "firstLine": 23635,
+   "firstLine": 23732,
    "lines": 259
   },
   {
    "file": "18-script/editor/cont-fxwrapinner.js.html",
    "kind": "script",
-   "firstLine": 23894,
+   "firstLine": 23991,
    "lines": 103
   },
   {
    "file": "18-script/renderer/full-res-1-1-tile-cache.js.html",
    "kind": "script",
-   "firstLine": 23997,
+   "firstLine": 24094,
    "lines": 190
   },
   {
    "file": "18-script/renderer/b1-shared-snapshot-render-primitive-phas.js.html",
    "kind": "script",
-   "firstLine": 24187,
+   "firstLine": 24284,
    "lines": 35
   },
   {
    "file": "18-script/history-presets/b3-shared-snapshot-source-resolver-plain.js.html",
    "kind": "script",
-   "firstLine": 24222,
+   "firstLine": 24319,
    "lines": 218
   },
   {
    "file": "18-script/editor/canvas-matte-ins-style-put-the-bordered.js.html",
    "kind": "script",
-   "firstLine": 24440,
+   "firstLine": 24537,
    "lines": 74
   },
   {
    "file": "18-script/shell-ui/slider-fill-painting.js.html",
    "kind": "script",
-   "firstLine": 24514,
+   "firstLine": 24611,
    "lines": 268
   },
   {
    "file": "18-script/export-io/cont-exportresample.js.html",
    "kind": "script",
-   "firstLine": 24782,
+   "firstLine": 24879,
    "lines": 253
   },
   {
    "file": "18-script/editor/cont-bordersany.js.html",
    "kind": "script",
-   "firstLine": 25035,
+   "firstLine": 25132,
    "lines": 120
   },
   {
    "file": "18-script/editor/multi-photo-filmstrip-switch-which-loade.js.html",
    "kind": "script",
-   "firstLine": 25155,
+   "firstLine": 25252,
    "lines": 293
   },
   {
    "file": "18-script/masks/cont-healstrokedabs.js.html",
    "kind": "script",
-   "firstLine": 25448,
+   "firstLine": 25545,
    "lines": 257
   },
   {
    "file": "18-script/editor/manual-roi-box-item-7-16-constrains-wher.js.html",
    "kind": "script",
-   "firstLine": 25705,
+   "firstLine": 25802,
    "lines": 76
   },
   {
    "file": "18-script/masks/retouch-interaction.js.html",
    "kind": "script",
-   "firstLine": 25781,
+   "firstLine": 25878,
    "lines": 405
   },
   {
    "file": "18-script/editor/interactive-crop-overlay.js.html",
    "kind": "script",
-   "firstLine": 26186,
+   "firstLine": 26283,
    "lines": 198
   },
   {
    "file": "18-script/editor/one-tap-looks-gallery-live-thumbnails-of.js.html",
    "kind": "script",
-   "firstLine": 26384,
+   "firstLine": 26481,
    "lines": 224
   },
   {
    "file": "18-script/shell-ui/hold-to-compare-before-after.js.html",
    "kind": "script",
-   "firstLine": 26608,
+   "firstLine": 26705,
    "lines": 36
   },
   {
    "file": "18-script/color-raw/super-resolution-chr-249-desktop-only-re.js.html",
    "kind": "script",
-   "firstLine": 26644,
+   "firstLine": 26741,
    "lines": 256
   },
   {
    "file": "18-script/editor/cont-chromasmithsavetolightroom.js.html",
    "kind": "script",
-   "firstLine": 26900,
+   "firstLine": 26997,
    "lines": 664
   },
   {
    "file": "18-script/editor/cont-videocomposebordermatte.js.html",
    "kind": "script",
-   "firstLine": 27564,
+   "firstLine": 27661,
    "lines": 281
   },
   {
    "file": "18-script/history-presets/cont-allfx.js.html",
    "kind": "script",
-   "firstLine": 27845,
+   "firstLine": 27942,
    "lines": 1
   },
   {
    "file": "18-script/history-presets/all-fx-recipe-the-user-chooses-which-par.js.html",
    "kind": "script",
-   "firstLine": 27846,
+   "firstLine": 27943,
    "lines": 349
   },
   {
    "file": "18-script/export-io/capacitor-native-save-path-the-ios-app-s.js.html",
    "kind": "script",
-   "firstLine": 28195,
+   "firstLine": 28292,
    "lines": 95
   },
   {
    "file": "18-script/export-io/tauri-native-save-path-the-desktop-shell.js.html",
    "kind": "script",
-   "firstLine": 28290,
+   "firstLine": 28387,
    "lines": 400
   },
   {
    "file": "18-script/google-photos/pkce-helpers-rfc-7636-the-desktop-loopba.js.html",
    "kind": "script",
-   "firstLine": 28690,
+   "firstLine": 28787,
    "lines": 119
   },
   {
    "file": "18-script/google-photos/import-picker-api-session-flow.js.html",
    "kind": "script",
-   "firstLine": 28809,
+   "firstLine": 28906,
    "lines": 206
   },
   {
    "file": "18-script/google-photos/export-upload-into-the-app-created-chrom.js.html",
    "kind": "script",
-   "firstLine": 29015,
+   "firstLine": 29112,
    "lines": 257
   },
   {
    "file": "18-script/editor/cont-lrmasterblob.js.html",
    "kind": "script",
-   "firstLine": 29272,
+   "firstLine": 29369,
    "lines": 228
   },
   {
    "file": "18-script/shell-ui/fx-editor-section-model-mobile-strip-des.js.html",
    "kind": "script",
-   "firstLine": 29500,
+   "firstLine": 29597,
    "lines": 2
   },
   {
    "file": "18-script/shell-ui/deskx-overflow-menu-with-the-web-header.js.html",
    "kind": "script",
-   "firstLine": 29502,
+   "firstLine": 29599,
    "lines": 281
   },
   {
    "file": "18-script/shell-ui/cont-csworkspacerevealsection.js.html",
    "kind": "script",
-   "firstLine": 29783,
+   "firstLine": 29880,
    "lines": 330
   },
   {
    "file": "18-script/editor/cont-icon.js.html",
    "kind": "script",
-   "firstLine": 30113,
+   "firstLine": 30210,
    "lines": 175
   },
   {
    "file": "18-script/export-io/plain-export-choices-live-file-size-esti.js.html",
    "kind": "script",
-   "firstLine": 30288,
+   "firstLine": 30385,
    "lines": 423
   },
   {
    "file": "18-script/shell-ui/live-fit-while-the-bottom-sheet-animates.js.html",
    "kind": "script",
-   "firstLine": 30711,
+   "firstLine": 30808,
    "lines": 112
   },
   {
    "file": "18-script/shell-ui/sheet-drag-to-dismiss-grab-the-handle-an.js.html",
    "kind": "script",
-   "firstLine": 30823,
+   "firstLine": 30920,
    "lines": 147
   },
   {
    "file": "18-script/shell-ui/light-dark-theme.js.html",
    "kind": "script",
-   "firstLine": 30970,
+   "firstLine": 31067,
    "lines": 131
   },
   {
    "file": "18-script/shell-ui/responsive-layout-switch-mobile-pinned-e.js.html",
    "kind": "script",
-   "firstLine": 31101,
+   "firstLine": 31198,
    "lines": 256
   },
   {
    "file": "18-script/editor/cont-dustmodebuildchips.js.html",
    "kind": "script",
-   "firstLine": 31357,
+   "firstLine": 31454,
    "lines": 255
   },
   {
    "file": "18-script/shell-ui/accessibility-make-every-custom-clickabl.js.html",
    "kind": "script",
-   "firstLine": 31612,
+   "firstLine": 31709,
    "lines": 274
   },
   {
    "file": "18-script/collage/cont-cl-aspects.js.html",
    "kind": "script",
-   "firstLine": 31886,
+   "firstLine": 31983,
    "lines": 256
   },
   {
    "file": "18-script/collage/cont-clfontfam.js.html",
    "kind": "script",
-   "firstLine": 32142,
+   "firstLine": 32239,
    "lines": 271
   },
   {
    "file": "18-script/collage/cont-clexport.js.html",
    "kind": "script",
-   "firstLine": 32413,
+   "firstLine": 32510,
    "lines": 253
   },
   {
    "file": "18-script/collage/cont-catitem.js.html",
    "kind": "script",
-   "firstLine": 32666,
+   "firstLine": 32763,
    "lines": 180
   },
   {
    "file": "19-script.js.html",
    "kind": "script",
-   "firstLine": 32846,
+   "firstLine": 32943,
    "lines": 145
   },
   {
    "file": "20-html.html",
    "kind": "html",
-   "firstLine": 32991,
+   "firstLine": 33088,
    "lines": 1
   },
   {
    "file": "21-script.js.html",
    "kind": "script",
-   "firstLine": 32992,
+   "firstLine": 33089,
    "lines": 25
   },
   {
    "file": "22-script.js.html",
    "kind": "script",
-   "firstLine": 33017,
+   "firstLine": 33114,
    "lines": 29
   },
   {
    "file": "23-script.js.html",
    "kind": "script",
-   "firstLine": 33046,
+   "firstLine": 33143,
    "lines": 145
   },
   {
    "file": "24-script.js.html",
    "kind": "script",
-   "firstLine": 33191,
+   "firstLine": 33288,
    "lines": 1
   },
   {
    "file": "25-script.js.html",
    "kind": "script",
-   "firstLine": 33192,
+   "firstLine": 33289,
    "lines": 1
   },
   {
    "file": "26-script.js.html",
    "kind": "script",
-   "firstLine": 33193,
+   "firstLine": 33290,
    "lines": 1
   },
   {
    "file": "27-html.html",
    "kind": "html",
-   "firstLine": 33194,
+   "firstLine": 33291,
    "lines": 3
   }
  ]

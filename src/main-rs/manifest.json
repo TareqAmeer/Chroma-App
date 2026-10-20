@@ -33,72 +33,72 @@
   {
    "file": "ai-tap-to-select-masks-panel-see-sam-rs.part",
    "firstLine": 438,
-   "lines": 97
+   "lines": 113
   },
   {
    "file": "sam-2-1-phase-3-background-quality-upgra.part",
-   "firstLine": 535,
+   "firstLine": 551,
    "lines": 48
   },
   {
    "file": "named-subjects-remember-this-dog-see-sub.part",
-   "firstLine": 583,
+   "firstLine": 599,
    "lines": 170
   },
   {
    "file": "face-detection-ai-stack-phase-a-see-scrf.part",
-   "firstLine": 753,
+   "firstLine": 769,
    "lines": 22
   },
   {
    "file": "face-feature-auto-exclusion-skin-selecto.part",
-   "firstLine": 775,
+   "firstLine": 791,
    "lines": 38
   },
   {
    "file": "depth-estimation-roadmap-r7-see-depth-rs.part",
-   "firstLine": 813,
+   "firstLine": 829,
    "lines": 53
   },
   {
    "file": "super-resolution-chr-249-see-superres-rs.part",
-   "firstLine": 866,
+   "firstLine": 882,
    "lines": 49
   },
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
-   "firstLine": 915,
+   "firstLine": 931,
    "lines": 775
   },
   {
    "file": "raw-face-detail-crops-one-shot-develop-f.part",
-   "firstLine": 1690,
+   "firstLine": 1706,
    "lines": 640
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2330,
+   "firstLine": 2346,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2860,
+   "firstLine": 2876,
    "lines": 107
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 2967,
+   "firstLine": 2983,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 3074,
+   "firstLine": 3090,
    "lines": 113
   },
   {
    "file": "app-entry-point-builder-plugins-setup-ho.part",
-   "firstLine": 3187,
-   "lines": 1300
+   "firstLine": 3203,
+   "lines": 1301
   }
  ]
 }

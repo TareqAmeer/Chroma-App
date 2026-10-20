@@ -67,6 +67,18 @@ pub struct PetDetection {
 /// 640×640 input, exactly like `faceparse::parse`'s crop resize). Returns detections sorted by
 /// descending score, already filtered to `PET_CLASSES` and `SCORE_THRESH`.
 pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
+    detect_classes(rgb, w, h, &PET_CLASSES)
+}
+
+/// COCO classes the editor's mask auto-detect offers: person (id 0) plus the pet classes. Same
+/// model and thresholds as `detect`; only the class set differs, so people never leak into the
+/// pet-tagging path above.
+const SCENE_CLASSES: [(usize, &str); 5] = [(0, "person"), (14, "bird"), (15, "cat"), (16, "dog"), (17, "horse")];
+pub fn detect_scene(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
+    detect_classes(rgb, w, h, &SCENE_CLASSES)
+}
+
+fn detect_classes(rgb: &[u8], w: u32, h: u32, classes: &[(usize, &'static str)]) -> Result<Vec<PetDetection>, String> {
     if w == 0 || h == 0 {
         return Err("pet detect: zero-sized image".into());
     }
@@ -111,7 +123,7 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
         // argmax over the 80 classes, but only bother computing sigmoid for classes we keep —
         // this is a fixed small set (4), so the naive scan costs nothing at 300 queries.
         let mut best: Option<(usize, f32)> = None;
-        for &(class_idx, _) in PET_CLASSES.iter() {
+        for &(class_idx, _) in classes.iter() {
             let p = sigmoid(logits[q * NUM_CLASSES + class_idx]);
             if best.map(|(_, bp)| p > bp).unwrap_or(true) {
                 best = Some((class_idx, p));
@@ -121,7 +133,7 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
         if score < SCORE_THRESH {
             continue;
         }
-        let Some(species) = pet_class_name(class_idx) else { continue };
+        let Some(species) = classes.iter().find(|(i, _)| *i == class_idx).map(|(_, n)| *n) else { continue };
         // cxcywh, normalized 0..1 -> corner box, same normalized 0..1 space (the model's input
         // square maps 1:1 onto the ORIGINAL image's own aspect-agnostic fractional coordinates,
         // since both are 0..1 of "the whole frame" — no letterbox was used, just a stretch
