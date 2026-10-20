@@ -518,7 +518,8 @@ function mskRebuild(){
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.');
+    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+    +'<div class="msk-crv-wrap" title="Tone curve for this mask only. Click to add a point, drag to bend, double-click a point to remove it."><div class="fx-label">Curve <button class="btn bgh" style="float:right;padding:0 8px" onclick="mskCrvReset()">Reset</button></div><canvas id="msk-crv" width="240" height="240" style="width:100%;max-width:240px;aspect-ratio:1;touch-action:none;border:1px solid var(--bdr);border-radius:4px;display:block;margin:4px auto"></canvas></div>';
   const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
@@ -541,6 +542,7 @@ function mskRebuild(){
     +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
   h+=_mskGroup('adjust','Light',lightBody)+_mskGroup('adjColor','Color',colorBody)+_mskGroup('adjEffects','Effects',effectsBody)+_mskGroup('adjDetail','Detail',detailBody);
   ctl.innerHTML=h;
+  mskCrvInit();
   mskUpdateSelViewControls();
   mskOverlaySync();
 }

@@ -1,0 +1,106 @@
+// ── Per-mask tone curve editor ────────────────────────────────────────────────────────────────────
+function mskCrvDraw(){
+  const cv=document.getElementById('msk-crv'),m=fxState.masks[mskSel];if(!cv||!m)return;
+  const x=cv.getContext('2d'),W=cv.width,pts=m.crv||[[0,0],[1,1]];
+  x.clearRect(0,0,W,W);x.strokeStyle='rgba(128,128,128,.35)';x.lineWidth=1;
+  for(let i=1;i<4;i++){x.beginPath();x.moveTo(i*W/4,0);x.lineTo(i*W/4,W);x.moveTo(0,i*W/4);x.lineTo(W,i*W/4);x.stroke();}
+  x.strokeStyle='#fff';x.lineWidth=2;x.beginPath();
+  const f=curveEval(pts);for(let i=0;i<=64;i++){const u=i/64,v=Math.min(1,Math.max(0,f(u)));i?x.lineTo(u*W,(1-v)*W):x.moveTo(u*W,(1-v)*W);}x.stroke();
+  x.fillStyle='#fff';pts.forEach(p=>{x.beginPath();x.arc(p[0]*W,(1-p[1])*W,5,0,7);x.fill();});
+}
+function mskCrvReset(){const m=fxState.masks[mskSel];if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
+function mskCrvInit(){
+  const cv=document.getElementById('msk-crv');if(!cv)return;
+  mskCrvDraw();
+  let drag=-1,moved=false;
+  const pos=e=>{const r=cv.getBoundingClientRect();return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];};
+  cv.onpointerdown=e=>{
+    const m=fxState.masks[mskSel];if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
+    const pts=m.crv||(m.crv=[[0,0],[1,1]]),[px,py]=pos(e);
+    let hit=-1,best=0.07;pts.forEach((p,i)=>{const d=Math.hypot(p[0]-px,p[1]-py);if(d<best){best=d;hit=i;}});
+    if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
+    drag=hit;moved=false;_fxHistLocked=true;
+  };
+  cv.onpointermove=e=>{
+    const m=fxState.masks[mskSel];if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
+    const lo=drag>0?pts[drag-1][0]+0.01:0,hi=drag<pts.length-1?pts[drag+1][0]-0.01:1;
+    pts[drag][1]=py;if(drag>0&&drag<pts.length-1)pts[drag][0]=Math.min(hi,Math.max(lo,px));
+    mskCrvDraw();fxUpdate();
+  };
+  const end=()=>{
+    if(drag<0)return;drag=-1;_fxHistLocked=false;
+    const m=fxState.masks[mskSel];
+    if(m&&m.crv&&m.crv.length===2&&m.crv[0][1]===0&&m.crv[1][1]===1)m.crv=null; // untouched = no curve
+    mskCrvDraw();if(moved){fxUpdate();fxHistoryPush();}
+  };
+  cv.onpointerup=end;cv.onpointercancel=end;
+  cv.ondblclick=e=>{
+    const m=fxState.masks[mskSel];if(!m||!m.crv)return;const[px,py]=pos(e);
+    const i=m.crv.findIndex((p,k)=>k>0&&k<m.crv.length-1&&Math.hypot(p[0]-px,p[1]-py)<0.07);
+    if(i>0){m.crv.splice(i,1);mskCrvDraw();fxUpdate();fxHistoryPush();}
+  };
+}
+// Zeroes every adjustment slider on the selected mask; the selection (shape, gates, raster) is untouched.
+function mskResetAdjust(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  ['exp','con','temp','tint','sat','vibrance','hue','hi','sh','wh','bl','dehaze','clarity','tex','sharp','sharpMask','nr','colAmt'].forEach(k=>{if(m[k]!=null&&m[k]!==0)m[k]=0;});
+  m.crv=null;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();fxHistoryPush();
+}
+function mskMove(dir){
+  const i=mskSel,j=i+dir;
+  if(i<0||j<0||j>=fxState.masks.length)return;
+  const A=_mskEnsureIds(fxState.masks);
+  [A[i],A[j]]=[A[j],A[i]];
+  mskSel=j;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Drag-and-drop reorder (mskRebuild's row ondrop): moves the mask at `from` to land at `to`,
+// splice-out-then-splice-in rather than mskMove's single swap so a drag across several rows in
+// one gesture doesn't need N adjacent swaps. Stable operand IDs keep references intact.
+function mskReorder(from,to){
+  const A=_mskEnsureIds(fxState.masks);
+  if(from===to||from<0||to<0||from>=A.length||to>=A.length)return;
+  const[m]=A.splice(from,1);
+  A.splice(to,0,m);
+  mskSel=to;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();fxHistoryPush();
+}
+async function mskRename(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  // askTextModal, never window.prompt — see saveLUTToLibrary. Empty string is meaningful here
+  // (it clears back to the auto label) and is distinct from null/cancel, which askTextModal
+  // preserves exactly as prompt() did.
+  const v=await askTextModal('Name this mask','',m.name||mskAutoLabel(m,mskSel));
+  if(v===null)return;
+  m.name=v.trim().slice(0,24);
+  mskRebuild();
+}
+function mskToggleMute(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.muted=!m.muted;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// Turn a mask into an ERASER: it applies nothing of its own and is subtracted from every other
+// mask. Paint one over the lips, another over a pet, and both come out of the skin selection —
+// which "subtract prev" cannot do, since it only ever reaches back a single slot.
+function mskToggleExclude(){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.isExclude=!m.isExclude;
+  if(m.isExclude&&m.subtract)m.subtract=false;   // the two mechanisms would fight; exclude wins
+  if(m.isExclude&&m.intersect)m.intersect=false;
+  if(typeof hapt==='function')hapt();
+  mskRebuild();fxUpdate();
+}
+// The label shown on the list chip when the user hasn't named the mask themselves.
+function mskAutoLabel(m,i){
+  const t=m.origin==='skin'?(mskIsAI(m)?'Skin AI':'Skin'):m.origin==='coat'?(mskIsAI(m)?'Coat AI':'Coat')
+    :m.origin==='color'?'Color':m.origin==='lum'?'Lum'
+    :m.origin==='sky'?'Sky':m.origin==='ai'?'AI'
+    :m.type==='linear'?'Linear':m.type==='radial'?(m.crOn?'Color':'Radial'):'Brush';
+  return t+' '+(i+1);
+}

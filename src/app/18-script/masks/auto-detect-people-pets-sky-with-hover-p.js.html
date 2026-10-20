@@ -16,8 +16,10 @@ async function mskSceneEnsure(){
     const d=mskSourceData(w,h,img);
     const rgb=new Uint8Array(w*h*3);
     for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-    const dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);
+    const job=mskAiBusy('Detecting people and objects');
+    let dets;try{dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);}finally{job.done();}
     if(curItem()!==item)return;
+    if(job.cancelled){sc.state='error';mskSceneRender();return;}
     const byLabel={};
     (dets||[]).filter(x=>x.score>=0.5).forEach(x=>{(byLabel[x.label]=byLabel[x.label]||[]).push(x);});
     const names={person:'Person',bird:'Bird',cat:'Cat',dog:'Dog',horse:'Horse'};
@@ -84,6 +86,6 @@ async function mskSceneAdd(id){
   mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
   mskRebuild();
   const r=await samRunPoints(m);
-  if(r&&r.ok===false&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
+  if(r&&r.ok===false&&!r.cancelled&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
   mskRebuild();fxUpdate();fxHistoryPush();
 }

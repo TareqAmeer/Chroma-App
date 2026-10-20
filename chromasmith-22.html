@@ -772,6 +772,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 /* Lightroom-style edit pins: one round pin per mask, anchored on the photo. The layer rides the zoom
    transform, so each pin is counter-scaled (--pin-s) to stay a constant on-screen size. */
 #msk-pin-layer{position:absolute;display:none;pointer-events:none}
+.msk-ai-busy{display:none;align-items:center;gap:8px;margin:4px 0;padding:4px 8px;border:1px solid var(--bdr);border-radius:6px;font-size:var(--fs-1);color:var(--mut)}
+.msk-ai-busy.on{display:flex}
+.msk-ai-busy .msk-ai-spin{width:12px;height:12px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:mskspin .8s linear infinite}
+.msk-ai-busy button{margin-left:auto}
+@keyframes mskspin{to{transform:rotate(360deg)}}
 .msk-scene{display:none;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 6px}
 .msk-scene.on{display:flex}
 .msk-scene-hd{font-size:var(--fs-0);color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
@@ -4300,6 +4305,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
           </div>
+          <div id="msk-ai-busy" class="msk-ai-busy" role="status" aria-live="polite"></div>
           <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
           <div class="fx-row" id="msk-selview-style-row" style="display:none">
@@ -7305,7 +7311,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1020E';
+const BUILD='1.1020F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8402,6 +8408,7 @@ uniform vec4 mskDep[8];uniform sampler2D depthTx;uniform float useDepthTx;
 // masks so it lines up identically in preview/loupe/every export tile.
 uniform sampler2D maskTex;
 uniform sampler2D maskTex2;
+uniform sampler2D mskCrvTex; // 256x8: row i = mask i's tone curve (R,G,B columns), used when mskL[i].z>0.5
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}
@@ -9055,6 +9062,11 @@ if(mskN>0.5){
       }
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
+      if(mskL[i].z>0.5){                                              // per-mask tone curve, blended in by the mask weight
+        vec3 cc=clamp(c.rgb,0.0,1.0);float crow=(float(i)+0.5)/8.0;
+        vec3 cu=vec3(texture(mskCrvTex,vec2(cc.r,crow)).r,texture(mskCrvTex,vec2(cc.g,crow)).g,texture(mskCrvTex,vec2(cc.b,crow)).b);
+        c.rgb=mix(c.rgb,cu,w);
+      }
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;
@@ -10074,6 +10086,21 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
+  // Per-mask tone curves: 256x8 RGBA8, row i = mask i. Rebuilt only when a curve actually changes.
+  setMaskCurves(MK){const gl=this.gl;
+    const sig=MK.map(m=>m.crv&&m.crv.length>1?JSON.stringify(m.crv):'').join('|');
+    if(this._mskCrvSig===sig&&this.mskCrvTx)return;
+    this._mskCrvSig=sig;
+    const d=new Uint8Array(256*8*4);
+    for(let r=0;r<8;r++){
+      const pts=MK[r]&&MK[r].crv&&MK[r].crv.length>1?MK[r].crv:null,f=pts?curveEval(pts):null;
+      for(let i=0;i<256;i++){const v=f?Math.min(1,Math.max(0,f(i/255))):i/255,b=(r*256+i)*4,q=v*255+.5|0;d[b]=q;d[b+1]=q;d[b+2]=q;d[b+3]=255;}
+    }
+    if(!this.mskCrvTx)this.mskCrvTx=gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0+10);gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,8,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   setCurveTex(d){const gl=this.gl;this._curveSnapshot=new Uint8Array(d);if(!this.curveTx)this.curveTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.curveTx);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
@@ -10141,14 +10168,14 @@ void main(){
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -10246,6 +10273,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const allMasks=P.masks||[];_mskEnsureIds(allMasks);
     const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
+    if(MK.length)this.setMaskCurves(MK);
     const mskRef=this._maskReferenceSize,md=mskTexDims(this===FX?undefined:(mskRef&&mskRef.w||this.imgW),this===FX?undefined:(mskRef&&mskRef.h||this.imgH));
     // Preserve the native GPU depth comparison as the exact zero-refinement baseline.
     // Build a derived raster only when Feather/Edge actually modifies that selection.
@@ -10310,6 +10338,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
       mL[o]=(m.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
       mL[o+1]=(m.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
+      mL[o+2]=(m.crv&&m.crv.length>1)?1:0; // per-mask tone curve present
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -10433,7 +10462,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
-      maskTex:4,maskTex2:7,
+      maskTex:4,maskTex2:7,mskCrvTex:10,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,'mskO[0]':mO,'mskTopo[0]':mTopo,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,'mskL[0]':mL,'mskDep[0]':mDep,
@@ -10467,7 +10496,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]]);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -16044,12 +16073,14 @@ function _mskToSnap(m,skipRaster){
   o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
   if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
   if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
+  if(m.crv)o.crv=m.crv.map(p=>p.slice());
   if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
   return o;
 }
 function _mskFromSnap(o){
   const m=Object.assign({},o);
+  if(o.crv)m.crv=o.crv.map(p=>p.slice());
   m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
   if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
   if(o.aiBox)m.aiBox=Object.assign({},o.aiBox);
@@ -16816,6 +16847,25 @@ function _samNormalizeBox(box){
   const y0=Math.max(0,Math.min(1,Math.min(box.y0,box.y1))),y1=Math.max(0,Math.min(1,Math.max(box.y0,box.y1)));
   return x1-x0>=0.004&&y1-y0>=0.004?{x0,y0,x1,y1}:null;
 }
+// Progress + cancel for AI work in the Masks panel. A native model call cannot be interrupted, so Cancel
+// means "discard the result when it lands": the job is flagged and the caller drops its output.
+// The strip only appears after 300 ms so quick calls never flash it.
+const _aiJobs=new Set();
+function mskAiBusy(label){
+  const job={label,cancelled:false,done(){_aiJobs.delete(job);mskAiBusyRender();}};
+  _aiJobs.add(job);
+  setTimeout(()=>{if(_aiJobs.has(job))mskAiBusyRender();},300);
+  job._t0=Date.now();
+  return job;
+}
+function mskAiBusyCancel(){_aiJobs.forEach(j=>{j.cancelled=true;});_aiJobs.clear();mskAiBusyRender();if(typeof toast==='function')toast('AI selection cancelled');}
+function mskAiBusyRender(){
+  const el=document.getElementById('msk-ai-busy');if(!el)return;
+  const live=[..._aiJobs].filter(j=>Date.now()-j._t0>=300);
+  if(!live.length){el.classList.remove('on');el.innerHTML='';return;}
+  el.classList.add('on');
+  el.innerHTML='<span class="msk-ai-spin"></span><span>'+live[live.length-1].label+'…</span><button class="btn bgh" onclick="mskAiBusyCancel()">Cancel</button>';
+}
 async function samRunPoints(m,opts={}){
   if(!window.__TAURI__)return{ok:false,error:'AI mask recomputation requires the desktop app'};
   const aiBox=m.aiBox&&typeof _samNormalizeBox==='function'?_samNormalizeBox(m.aiBox):null,hasPoints=!!(m.aiPoints&&m.aiPoints.length);
@@ -16825,6 +16875,7 @@ async function samRunPoints(m,opts={}){
   // the mask's intent and are reapplied to the new photo by the normal raster builder.
   const detachedRefinement=opts.detached?{feather:m.refineFeather,edge:m.refineEdge}:null;
   const endActivity=opts.detached?()=>{}:fxPhotoActivity(item,'Selecting subject…');
+  const job=opts.detached?null:mskAiBusy('Selecting subject');
   try{
     await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached,preferredBackend:opts.preferredBackend,throwOnError:!!opts.preferredBackend});
     // A semantic-copy candidate is detached from live masks. If another encode was already
@@ -16849,6 +16900,7 @@ async function samRunPoints(m,opts={}){
     const cmd=aiBox?'sam_box':(useSam2?'sam2_points':'sam_points');
     const payload=aiBox?{token:_samToken,rect:{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}}:{token:useSam2?_sam2Token:_samToken,points};
     const buf=await window.__TAURI__.core.invoke(cmd,payload);
+    if(job&&job.cancelled)return{ok:false,error:'Cancelled',cancelled:true};
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
@@ -16890,7 +16942,7 @@ async function samRunPoints(m,opts={}){
       mskRebuild();}
     return{ok:false,error:msg};
   }finally{
-    endActivity();
+    endActivity();if(job)job.done();
   }
 }
 // ── Named subjects: "remember this dog", then find it again in another photo ──────────────────
@@ -20281,7 +20333,8 @@ function mskRebuild(){
     +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
     +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
     +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.');
+    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+    +'<div class="msk-crv-wrap" title="Tone curve for this mask only. Click to add a point, drag to bend, double-click a point to remove it."><div class="fx-label">Curve <button class="btn bgh" style="float:right;padding:0 8px" onclick="mskCrvReset()">Reset</button></div><canvas id="msk-crv" width="240" height="240" style="width:100%;max-width:240px;aspect-ratio:1;touch-action:none;border:1px solid var(--bdr);border-radius:4px;display:block;margin:4px auto"></canvas></div>';
   const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
     +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
     +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
@@ -20304,6 +20357,7 @@ function mskRebuild(){
     +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
   h+=_mskGroup('adjust','Light',lightBody)+_mskGroup('adjColor','Color',colorBody)+_mskGroup('adjEffects','Effects',effectsBody)+_mskGroup('adjDetail','Detail',detailBody);
   ctl.innerHTML=h;
+  mskCrvInit();
   mskUpdateSelViewControls();
   mskOverlaySync();
 }
@@ -20347,10 +20401,53 @@ function mskToggleIntersect(){
 // ── Mask list management: order, name, mute ──────────────────────────────────────────────────
 // Composition operands are stored by stable mask ID. Reordering changes their evaluated slot,
 // while preserving the identity of the referenced mask.
+// ── Per-mask tone curve editor ────────────────────────────────────────────────────────────────────
+function mskCrvDraw(){
+  const cv=document.getElementById('msk-crv'),m=fxState.masks[mskSel];if(!cv||!m)return;
+  const x=cv.getContext('2d'),W=cv.width,pts=m.crv||[[0,0],[1,1]];
+  x.clearRect(0,0,W,W);x.strokeStyle='rgba(128,128,128,.35)';x.lineWidth=1;
+  for(let i=1;i<4;i++){x.beginPath();x.moveTo(i*W/4,0);x.lineTo(i*W/4,W);x.moveTo(0,i*W/4);x.lineTo(W,i*W/4);x.stroke();}
+  x.strokeStyle='#fff';x.lineWidth=2;x.beginPath();
+  const f=curveEval(pts);for(let i=0;i<=64;i++){const u=i/64,v=Math.min(1,Math.max(0,f(u)));i?x.lineTo(u*W,(1-v)*W):x.moveTo(u*W,(1-v)*W);}x.stroke();
+  x.fillStyle='#fff';pts.forEach(p=>{x.beginPath();x.arc(p[0]*W,(1-p[1])*W,5,0,7);x.fill();});
+}
+function mskCrvReset(){const m=fxState.masks[mskSel];if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
+function mskCrvInit(){
+  const cv=document.getElementById('msk-crv');if(!cv)return;
+  mskCrvDraw();
+  let drag=-1,moved=false;
+  const pos=e=>{const r=cv.getBoundingClientRect();return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];};
+  cv.onpointerdown=e=>{
+    const m=fxState.masks[mskSel];if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
+    const pts=m.crv||(m.crv=[[0,0],[1,1]]),[px,py]=pos(e);
+    let hit=-1,best=0.07;pts.forEach((p,i)=>{const d=Math.hypot(p[0]-px,p[1]-py);if(d<best){best=d;hit=i;}});
+    if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
+    drag=hit;moved=false;_fxHistLocked=true;
+  };
+  cv.onpointermove=e=>{
+    const m=fxState.masks[mskSel];if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
+    const lo=drag>0?pts[drag-1][0]+0.01:0,hi=drag<pts.length-1?pts[drag+1][0]-0.01:1;
+    pts[drag][1]=py;if(drag>0&&drag<pts.length-1)pts[drag][0]=Math.min(hi,Math.max(lo,px));
+    mskCrvDraw();fxUpdate();
+  };
+  const end=()=>{
+    if(drag<0)return;drag=-1;_fxHistLocked=false;
+    const m=fxState.masks[mskSel];
+    if(m&&m.crv&&m.crv.length===2&&m.crv[0][1]===0&&m.crv[1][1]===1)m.crv=null; // untouched = no curve
+    mskCrvDraw();if(moved){fxUpdate();fxHistoryPush();}
+  };
+  cv.onpointerup=end;cv.onpointercancel=end;
+  cv.ondblclick=e=>{
+    const m=fxState.masks[mskSel];if(!m||!m.crv)return;const[px,py]=pos(e);
+    const i=m.crv.findIndex((p,k)=>k>0&&k<m.crv.length-1&&Math.hypot(p[0]-px,p[1]-py)<0.07);
+    if(i>0){m.crv.splice(i,1);mskCrvDraw();fxUpdate();fxHistoryPush();}
+  };
+}
 // Zeroes every adjustment slider on the selected mask; the selection (shape, gates, raster) is untouched.
 function mskResetAdjust(){
   const m=fxState.masks[mskSel];if(!m)return;
   ['exp','con','temp','tint','sat','vibrance','hue','hi','sh','wh','bl','dehaze','clarity','tex','sharp','sharpMask','nr','colAmt'].forEach(k=>{if(m[k]!=null&&m[k]!==0)m[k]=0;});
+  m.crv=null;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();fxHistoryPush();
 }
@@ -20642,8 +20739,10 @@ async function mskSceneEnsure(){
     const d=mskSourceData(w,h,img);
     const rgb=new Uint8Array(w*h*3);
     for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-    const dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);
+    const job=mskAiBusy('Detecting people and objects');
+    let dets;try{dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);}finally{job.done();}
     if(curItem()!==item)return;
+    if(job.cancelled){sc.state='error';mskSceneRender();return;}
     const byLabel={};
     (dets||[]).filter(x=>x.score>=0.5).forEach(x=>{(byLabel[x.label]=byLabel[x.label]||[]).push(x);});
     const names={person:'Person',bird:'Bird',cat:'Cat',dog:'Dog',horse:'Horse'};
@@ -20710,7 +20809,7 @@ async function mskSceneAdd(id){
   mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
   mskRebuild();
   const r=await samRunPoints(m);
-  if(r&&r.ok===false&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
+  if(r&&r.ok===false&&!r.cancelled&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
   mskRebuild();fxUpdate();fxHistoryPush();
 }
 // ── Edit pins ───────────────────────────────────────────────────────────────────────────────────

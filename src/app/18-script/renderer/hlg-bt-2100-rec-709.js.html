@@ -643,6 +643,11 @@ if(mskN>0.5){
       }
       c.rgb=skinUniformity(c.rgb,w,mskH[i],mskI[i],vLow,mskJ[i].z); // converge toward the target FIRST,
       c.rgb=maskAdjust(c.rgb,w,mskC[i],mskE[i].yz,mskF[i]);         // then the additive sliders act on it
+      if(mskL[i].z>0.5){                                              // per-mask tone curve, blended in by the mask weight
+        vec3 cc=clamp(c.rgb,0.0,1.0);float crow=(float(i)+0.5)/8.0;
+        vec3 cu=vec3(texture(mskCrvTex,vec2(cc.r,crow)).r,texture(mskCrvTex,vec2(cc.g,crow)).g,texture(mskCrvTex,vec2(cc.b,crow)).b);
+        c.rgb=mix(c.rgb,cu,w);
+      }
       if(D.z!=0.0||D.w!=0.0){                                     // per-mask Highlights/Shadows
         float lv3=dot(clamp(c.rgb,0.0,1.0),vec3(.2126,.7152,.0722));
         float t3=(D.w*0.30*gmp(lv3,.25,.20)+D.z*0.30*gmp(lv3,.80,.16))*w;

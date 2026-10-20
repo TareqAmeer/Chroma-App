@@ -221,6 +221,7 @@ uniform vec4 mskDep[8];uniform sampler2D depthTx;uniform float useDepthTx;
 // masks so it lines up identically in preview/loupe/every export tile.
 uniform sampler2D maskTex;
 uniform sampler2D maskTex2;
+uniform sampler2D mskCrvTex; // 256x8: row i = mask i's tone curve (R,G,B columns), used when mskL[i].z>0.5
 uniform vec2 texSize;
 float s2lp(float c){return c<=0.04045?c/12.92:pow((c+0.055)/1.055,2.4);}
 float l2sp(float c){return c<=0.0031308?c*12.92:1.055*pow(max(c,0.0),1.0/2.4)-0.055;}

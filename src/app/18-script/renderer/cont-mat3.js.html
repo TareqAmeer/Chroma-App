@@ -550,6 +550,21 @@ void main(){
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
+  // Per-mask tone curves: 256x8 RGBA8, row i = mask i. Rebuilt only when a curve actually changes.
+  setMaskCurves(MK){const gl=this.gl;
+    const sig=MK.map(m=>m.crv&&m.crv.length>1?JSON.stringify(m.crv):'').join('|');
+    if(this._mskCrvSig===sig&&this.mskCrvTx)return;
+    this._mskCrvSig=sig;
+    const d=new Uint8Array(256*8*4);
+    for(let r=0;r<8;r++){
+      const pts=MK[r]&&MK[r].crv&&MK[r].crv.length>1?MK[r].crv:null,f=pts?curveEval(pts):null;
+      for(let i=0;i<256;i++){const v=f?Math.min(1,Math.max(0,f(i/255))):i/255,b=(r*256+i)*4,q=v*255+.5|0;d[b]=q;d[b+1]=q;d[b+2]=q;d[b+3]=255;}
+    }
+    if(!this.mskCrvTx)this.mskCrvTx=gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0+10);gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,8,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
   setCurveTex(d){const gl=this.gl;this._curveSnapshot=new Uint8Array(d);if(!this.curveTx)this.curveTx=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,this.curveTx);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,256,1,0,gl.RGBA,gl.UNSIGNED_BYTE,d);
@@ -617,14 +632,14 @@ void main(){
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -722,6 +737,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const allMasks=P.masks||[];_mskEnsureIds(allMasks);
     const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
+    if(MK.length)this.setMaskCurves(MK);
     const mskRef=this._maskReferenceSize,md=mskTexDims(this===FX?undefined:(mskRef&&mskRef.w||this.imgW),this===FX?undefined:(mskRef&&mskRef.h||this.imgH));
     // Preserve the native GPU depth comparison as the exact zero-refinement baseline.
     // Build a derived raster only when Feather/Edge actually modifies that selection.
@@ -786,6 +802,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
       mL[o]=(m.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
       mL[o+1]=(m.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
+      mL[o+2]=(m.crv&&m.crv.length>1)?1:0; // per-mask tone curve present
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -909,7 +926,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
-      maskTex:4,maskTex2:7,
+      maskTex:4,maskTex2:7,mskCrvTex:10,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
       mskN:MK.length,'mskA[0]':mA,'mskB[0]':mB,'mskC[0]':mC,'mskD[0]':mD,'mskE[0]':mE,'mskF[0]':mF,'mskO[0]':mO,'mskTopo[0]':mTopo,
       'mskG[0]':mG,'mskH[0]':mH,'mskI[0]':mI,'mskCS[0]':mS,'mskJ[0]':mJ,'mskK[0]':mK,'mskL[0]':mL,'mskDep[0]':mDep,
@@ -943,7 +960,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false]]);
+      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]]);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the

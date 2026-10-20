@@ -286,6 +286,25 @@ function _samNormalizeBox(box){
   const y0=Math.max(0,Math.min(1,Math.min(box.y0,box.y1))),y1=Math.max(0,Math.min(1,Math.max(box.y0,box.y1)));
   return x1-x0>=0.004&&y1-y0>=0.004?{x0,y0,x1,y1}:null;
 }
+// Progress + cancel for AI work in the Masks panel. A native model call cannot be interrupted, so Cancel
+// means "discard the result when it lands": the job is flagged and the caller drops its output.
+// The strip only appears after 300 ms so quick calls never flash it.
+const _aiJobs=new Set();
+function mskAiBusy(label){
+  const job={label,cancelled:false,done(){_aiJobs.delete(job);mskAiBusyRender();}};
+  _aiJobs.add(job);
+  setTimeout(()=>{if(_aiJobs.has(job))mskAiBusyRender();},300);
+  job._t0=Date.now();
+  return job;
+}
+function mskAiBusyCancel(){_aiJobs.forEach(j=>{j.cancelled=true;});_aiJobs.clear();mskAiBusyRender();if(typeof toast==='function')toast('AI selection cancelled');}
+function mskAiBusyRender(){
+  const el=document.getElementById('msk-ai-busy');if(!el)return;
+  const live=[..._aiJobs].filter(j=>Date.now()-j._t0>=300);
+  if(!live.length){el.classList.remove('on');el.innerHTML='';return;}
+  el.classList.add('on');
+  el.innerHTML='<span class="msk-ai-spin"></span><span>'+live[live.length-1].label+'…</span><button class="btn bgh" onclick="mskAiBusyCancel()">Cancel</button>';
+}
 async function samRunPoints(m,opts={}){
   if(!window.__TAURI__)return{ok:false,error:'AI mask recomputation requires the desktop app'};
   const aiBox=m.aiBox&&typeof _samNormalizeBox==='function'?_samNormalizeBox(m.aiBox):null,hasPoints=!!(m.aiPoints&&m.aiPoints.length);
@@ -295,6 +314,7 @@ async function samRunPoints(m,opts={}){
   // the mask's intent and are reapplied to the new photo by the normal raster builder.
   const detachedRefinement=opts.detached?{feather:m.refineFeather,edge:m.refineEdge}:null;
   const endActivity=opts.detached?()=>{}:fxPhotoActivity(item,'Selecting subject…');
+  const job=opts.detached?null:mskAiBusy('Selecting subject');
   try{
     await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached,preferredBackend:opts.preferredBackend,throwOnError:!!opts.preferredBackend});
     // A semantic-copy candidate is detached from live masks. If another encode was already
@@ -319,6 +339,7 @@ async function samRunPoints(m,opts={}){
     const cmd=aiBox?'sam_box':(useSam2?'sam2_points':'sam_points');
     const payload=aiBox?{token:_samToken,rect:{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}}:{token:useSam2?_sam2Token:_samToken,points};
     const buf=await window.__TAURI__.core.invoke(cmd,payload);
+    if(job&&job.cancelled)return{ok:false,error:'Cancelled',cancelled:true};
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
     // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
     const dv=new DataView(buf);
@@ -360,6 +381,6 @@ async function samRunPoints(m,opts={}){
       mskRebuild();}
     return{ok:false,error:msg};
   }finally{
-    endActivity();
+    endActivity();if(job)job.done();
   }
 }

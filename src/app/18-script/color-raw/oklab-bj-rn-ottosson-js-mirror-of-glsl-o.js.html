@@ -76,12 +76,14 @@ function _mskToSnap(m,skipRaster){
   o.crSamples=(m.crSamples||[]).map(p=>Object.assign({},p));
   if(m.aiPoints)o.aiPoints=m.aiPoints.map(p=>Object.assign({},p));
   if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
+  if(m.crv)o.crv=m.crv.map(p=>p.slice());
   if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
   return o;
 }
 function _mskFromSnap(o){
   const m=Object.assign({},o);
+  if(o.crv)m.crv=o.crv.map(p=>p.slice());
   m.crSamples=(o.crSamples||[]).map(p=>Object.assign({},p));
   if(o.aiPoints)m.aiPoints=o.aiPoints.map(p=>Object.assign({},p));
   if(o.aiBox)m.aiBox=Object.assign({},o.aiBox);

@@ -105,3 +105,8 @@ Prototype: `tools/scripts/mask_matting_eval.py`, scored with the CHR-297 harness
 - A matting model (BiRefNet) on the subject region is the only candidate that can recover strands, but it costs 30-70 s on this CPU, so it can only be an opt-in background pass.
 - It cannot be scored fairly on the current labels (BiRefNet produced the drafts). Needs hand-corrected hair truth on a few photos first.
 - Selection failures on groups/foliage (people 0.70 boundary MAE, foliage 0.31 alpha MAE) are prompt/coverage problems: per-person instance selection (Track B1) and non-sky/foliage classes (B2) are the levers there, not edge refinement.
+
+## Progress (2026-10-20)
+- Shipped in the editor: Show-selection dropdown (6 styles + Off), Light/Color/Effects/Detail groups, Exposure ±5 EV, round AI scribble cursor, edit pins (select + drag radial/linear), Auto mask brush, Reset adjustments, auto-show selection while brushing, per-mask tone curve (256x8 `mskCrvTex`, `mskL[i].z` flag), auto-detect chips (native `scene_detect`, RT-DETR person + pets) with EdgeSAM hover preview, AI progress strip with Cancel (cancel discards the result; native calls cannot be interrupted).
+- Colour-model edge matting kept per owner decision despite the negative classical-matting result above; not yet scored on the real-photo set.
+- Not done: lifting the 8-mask cap (15 uniform arrays x8 plus two 4-channel raster textures; doubling exceeds the 224-vector WebGL2 minimum and needs two more raster textures), per-person body parts, CPU-worker parity for the mask curve.
