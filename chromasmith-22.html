@@ -789,6 +789,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 @keyframes mskspin{to{transform:rotate(360deg)}}
 .msk-scene{display:none;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 6px}
 .msk-scene.on{display:flex}
+.msk-people{display:none;flex-direction:column;gap:6px;margin:4px 0 6px}
+.msk-people.on{display:flex}
+.msk-person{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--bdr);border-radius:6px;font-size:var(--fs-1)}
+.msk-person-parts{display:flex;flex-wrap:wrap;gap:4px 10px;flex:1 1 100%;color:var(--mut)}
+.msk-people-sep{font-size:var(--fs-1);color:var(--mut)}
 .msk-scene-hd{font-size:var(--fs-0);color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
 .msk-chip{border:1px solid var(--bdr);background:var(--tint-1,transparent);color:var(--txt);border-radius:999px;padding:3px 10px;font:inherit;font-size:var(--fs-1);cursor:pointer}
 .msk-chip:hover{border-color:var(--acc);color:var(--acc)}
@@ -4317,6 +4322,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           </div>
           <div id="msk-ai-busy" class="msk-ai-busy" role="status" aria-live="polite"></div>
           <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
+          <div id="msk-people" class="msk-people" role="group" aria-label="People in this photo"></div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
           <div class="fx-row" id="msk-selview-style-row" style="display:none">
             <div class="fx-label">Show selection</div>
@@ -7323,7 +7329,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021E';
+const BUILD='1.1021F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20001,7 +20007,7 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Objects','wand','mskAddObjects()',desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
     ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
   g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
@@ -20874,7 +20880,8 @@ async function mskSceneEnsure(){
   }catch(e){sc.state='error';log('Auto-detect: '+(e&&e.message||e),'warn');}
   mskSceneRender();
 }
-function mskSceneRender(){
+function mskSceneRender(){_mskSceneRenderChips();mskPeopleRender();}
+function _mskSceneRenderChips(){
   const el=document.getElementById('msk-scene');if(!el)return;
   const sc=_mskSceneOf(window.__TAURI__&&curItem());
   if(!sc||sc.state==='error'||(sc.state==='done'&&!sc.list.length)){el.classList.remove('on');el.innerHTML='';el._sig='';return;}
@@ -20929,6 +20936,67 @@ async function mskSceneAdd(id){
   if(r&&r.ok===false&&!r.cancelled&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
   mskRebuild();fxUpdate();fxHistoryPush();
 }
+// ── People panel: per-person part checklist (only parts faceparse.rs really provides) ───────────
+// faceparse classes: skin, eyes+brows, glasses, lips, hair. There is no teeth/sclera/clothes class,
+// so those Lightroom options are deliberately absent rather than offered and failing.
+const PEOPLE_PARTS=[{k:'whole',label:'Whole person'},{k:'skin',label:'Face skin',g:4},{k:'eyes',label:'Eyes & brows',g:0},{k:'lips',label:'Lips',g:2},{k:'hair',label:'Hair',g:3},{k:'glasses',label:'Glasses',g:1}];
+const _mskPeople={sel:{},separate:true,busy:false};
+function mskPeopleToggle(id,k,on){const s=_mskPeople.sel[id]=_mskPeople.sel[id]||{whole:true};s[k]=!!on;}
+function mskPeopleSeparate(on){_mskPeople.separate=!!on;}
+function mskPeopleRender(){
+  const el=document.getElementById('msk-people');if(!el)return;
+  const sc=_mskSceneOf(window.__TAURI__&&curItem());
+  const people=sc&&sc.state==='done'?sc.list.filter(c=>c.kind==='person'):[];
+  if(!people.length){el.classList.remove('on');el.innerHTML='';return;}
+  const sig=people.map(c=>c.id).join(',')+'|'+_mskPeople.busy;
+  if(el._sig===sig&&el.classList.contains('on'))return;
+  el._sig=sig;el.classList.add('on');
+  el.innerHTML='<div class="msk-scene-hd">People</div>'+people.map(c=>{
+    const s=_mskPeople.sel[c.id]||{whole:true};
+    return '<div class="msk-person" data-id="'+c.id+'"><b>'+c.label+'</b><div class="msk-person-parts">'
+      +PEOPLE_PARTS.map(p=>'<label><input type="checkbox" data-k="'+p.k+'" '+(s[p.k]?'checked ':'')+'onchange="mskPeopleToggle(\''+c.id+'\',\''+p.k+'\',this.checked)"> '+p.label+'</label>').join('')
+      +'</div><button class="btn bgh" '+(_mskPeople.busy?'disabled ':'')+'onclick="mskPersonCreate(\''+c.id+'\')">Create</button></div>';
+  }).join('')+'<label class="msk-people-sep"><input type="checkbox" '+(_mskPeople.separate?'checked ':'')+'onchange="mskPeopleSeparate(this.checked)"> Create separate masks</label>';
+}
+async function mskPersonCreate(id){
+  if(_mskPeople.busy||!window.__TAURI__)return;
+  const sc=_mskSceneOf(curItem()),c=sc&&sc.list.find(x=>x.id===id);if(!c)return;
+  const s=_mskPeople.sel[id]||{whole:true},parts=PEOPLE_PARTS.filter(p=>s[p.k]);
+  if(!parts.length){toast('Tick at least one part');return;}
+  const feats=parts.filter(p=>p.g!=null),wantWhole=!!s.whole;
+  const box=_samNormalizeBox(c.box);if(!box)return;
+  _mskPeople.busy=true;mskPeopleRender();
+  try{
+    const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;});if(!m)return;
+    mskAiTapToggle(false);mskRebuild();
+    const r=await samRunPoints(m);
+    if(!r||r.ok===false){if(r&&!r.cancelled)toast(r.error||'Could not select '+c.label);return;}
+    if(feats.length){
+      if(fxState.masks.length+(_mskPeople.separate?feats.length:1)-(wantWhole?0:1)>MSK_MAX){log('Not enough free mask slots for these parts (max '+MSK_MAX+')','warn');}
+      else{
+        const fl=await _faceparseRunLayers(m);
+        const mk=(px,name)=>Object.assign({type:'brush',origin:'ai',ai:true,px,mtW:fl.mtW,mtH:fl.mtH,aiPoints:[]},_mskAdjustDefaults(),_mskSkinDefaults(),{name});
+        const made=[];
+        if(_mskPeople.separate)feats.forEach(p=>{const px=_facePlace(fl,[p.g]);if(px.some(v=>v>32))made.push(mk(px,p.label+' \u00b7 '+c.label));else log(p.label+' not found for '+c.label,'warn');});
+        else{const px=_facePlace(fl,feats.map(p=>p.g));if(px.some(v=>v>32))made.push(mk(px,c.label+' \u00b7 '+feats.map(p=>p.label).join(', ')));}
+        if(!wantWhole){const bi=fxState.masks.indexOf(m);if(bi>=0)fxState.masks.splice(bi,1);}
+        made.forEach(x=>fxState.masks.push(x));
+        mskSel=Math.max(0,fxState.masks.length-1);
+        if(!made.length)toast('No selected parts were found on '+c.label);
+      }
+    }
+    _mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+  }catch(e){const msg='Person mask failed \u2014 '+(e&&e.message||e);log(msg,'err');toast(msg);}
+  finally{_mskPeople.busy=false;mskPeopleRender();}
+}
+// Objects: new AI mask with the rectangle (EdgeSAM box) prompt armed; scribble stays one click away in the panel.
+function mskAddObjects(){
+  const m=mskAdd('ai');if(!m)return;
+  if(mskAiPromptMode!=='box')mskAiBoxToggle();else mskAiTapToggle(true);
+  mskRebuild();
+  log('Drag a rectangle around the object — or switch to Scribble in the panel','info');
+}
+
 // ── Edit pins ───────────────────────────────────────────────────────────────────────────────────
 let mskShowPins=true;try{mskShowPins=localStorage.getItem('chromasmith_msk_pins')!=='0';}catch(_){}
 function mskPinsToggle(v){mskShowPins=!!v;try{localStorage.setItem('chromasmith_msk_pins',v?'1':'0');}catch(_){}mskPinSync();}

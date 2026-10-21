@@ -51,7 +51,7 @@ Existing advantages to keep: Copy + re-evaluate (already more transparent than L
 - Range masks get an eyedropper on the photo: click to sample a point, drag to sample an area, Shift-click to add samples up to 5, and remove samples from a list.
 - Every AI component shows Edge and Feather sliders. Unlike Lightroom, don't hide them when a brush is added.
 
-**P4 — People and Objects** (gaps 4, 5). These depend on models.
+**P4 — People and Objects** (gaps 4, 5). These depend on models. *Status: done (UI verified with stubbed models; real RT-DETR/EdgeSAM/face-parse not run in this session).* People panel (`#msk-people`) lists each detected person with a checklist of Whole person, Face skin, Eyes & brows, Lips, Hair, Glasses (the only classes `faceparse.rs` provides; teeth/sclera/clothes are absent on purpose) and a "Create separate masks" toggle (off = one union mask). Objects: new create tile arms the EdgeSAM rectangle prompt; Scribble stays in the AI panel. Test: `test/mask_people_objects.mjs`.
 - People panel lists a thumbnail chip per detected person, and each person has a part checklist. Only show parts the face parser actually provides, so unsupported parts are hidden instead of failing.
 - "Create separate masks" toggle.
 - Objects tool: drag a box, using the existing EdgeSAM box route, or brush, using an EdgeSAM scribble.
