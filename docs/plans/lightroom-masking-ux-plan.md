@@ -37,7 +37,7 @@ Existing advantages to keep: Copy + re-evaluate (already more transparent than L
 **P1 — Shortcuts and direct manipulation** (gaps 1, 3, 11). Small change, large effect.
 - Global shortcuts as listed in gap 1, shown in a shortcut cheat-sheet and in control tooltips.
 - A/B and Erase brush slots, each remembering its own size, feather, flow and density. Shift-drag draws straight strokes.
-- Clicking a pin or a painted area on the photo selects that mask.
+- Clicking a pin or a painted area on the photo selects that mask. *(Shipped: `mskHitTest`/`mskPhotoClick` in edit-pins.js; test `test/mask_photo_click.mjs`, live click verified.)*
 
 **P2 — Masks made of components** (gaps 2, 9). The biggest structural change.
 

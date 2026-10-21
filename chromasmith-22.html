@@ -7318,7 +7318,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021B';
+const BUILD='1.1021C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20928,6 +20928,43 @@ function mskPinDown(e){
   };
   window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
 }
+// Click-to-select on the photo: a click (not a drag) on a mask's covered area selects that mask, topmost first.
+function mskHitTest(nx,ny){
+  const ms=fxState.masks;
+  for(let i=ms.length-1;i>=0;i--){
+    const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
+    if(m.type==='radial'){
+      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=nx-m.cx,dy=ny-m.cy;
+      const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
+      if((lx/Math.max(.01,m.rx))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
+    }else if(m.type==='linear'){
+      const ax=m.x1-m.x0,ay=m.y1-m.y0,L=ax*ax+ay*ay;
+      if(L>0){const t=((nx-m.x0)*ax+(ny-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
+    }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
+      const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
+      if(m.px[y*m.mtW+x]>64)return i;
+    }
+  }
+  return -1;
+}
+function mskPhotoClick(e){
+  const ff=document.getElementById('ff-local');
+  if(!ff||ff.offsetParent===null||!mskShowPins||cropMode||fxLoupe||mskPaintMode||mskAiTapMode||!fxState.masks.length)return;
+  if(e.target.closest&&e.target.closest('.msk-pin'))return;
+  if(e.target.dataset&&e.target.dataset.h)return;
+  const cv=document.getElementById('fx-canvas'),box=mskOverlayBox();if(!cv||!box)return;
+  const r=cv.getBoundingClientRect(),cw=parseFloat(cv.style.width)||cv.clientWidth;if(!cw||!r.width)return;
+  const sc=r.width/cw,nx=(e.clientX-r.left-box.left*sc)/(box.width*sc),ny=(e.clientY-r.top-box.top*sc)/(box.height*sc);
+  if(nx<0||nx>1||ny<0||ny>1)return;
+  const i=mskHitTest(nx,ny);
+  if(i<0||i===mskSel)return;
+  mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();
+}
+(function(){
+  let dn=null;
+  document.addEventListener('pointerdown',e=>{dn=(e.button===0&&e.target.closest&&e.target.closest('#fx-zoom-wrap'))?{x:e.clientX,y:e.clientY}:null;},true);
+  document.addEventListener('pointerup',e=>{const d=dn;dn=null;if(d&&Math.abs(e.clientX-d.x)+Math.abs(e.clientY-d.y)<=4)mskPhotoClick(e);},true);
+})();
 let _mskDrag=null;
 function mskHandleDown(e){
   e.stopPropagation();e.preventDefault();
