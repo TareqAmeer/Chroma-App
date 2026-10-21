@@ -81,3 +81,5 @@ The list of gaps comes from scanning the running app, not from a hand-typed list
 - **Review:** each phase plan gets a fresh-context gap review before its implementation starts.
 
 Sources: Adobe Lightroom Classic masking help (checked 2026-10-09 in the roadmap); fstoppers on Lightroom Classic 15.5 Edge/Feather refine and the 2026 Select Subject upgrade; lightroomkillertips on adaptive presets; Adobe Community threads on AI masks disappearing or needing updates; PhotoWorkout on DxO PhotoLab 10 masking.
+
+**Model gaps (2026-10-21):** Landscape mask shipped (UperNet-ConvNeXt-T, MIT, `landscape.rs`, tile + six chips). Body skin/clothes parts and teeth segmentation NOT shipped: no licence-clean model exists — see [mask-models-research.md](mask-models-research.md).

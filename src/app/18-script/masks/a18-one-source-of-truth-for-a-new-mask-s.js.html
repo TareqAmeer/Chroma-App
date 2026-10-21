@@ -323,3 +323,58 @@ async function mskEmbeddedMatteFallback(kind,label,item){
   if(typeof toast==='function')toast('Scribble around one person’s head. AI Select will run Face Parse for '+label+' when the selection is ready.',true);
   return true;
 }
+
+// ── Landscape mask (desktop, landscape.rs: UperNet-ConvNeXt-T / ADE20K, MIT) ─────────────────────
+// One native pass per photo yields six soft category rasters; the cached result lives non-enumerable
+// on the item (never serialised), so picking several categories costs one inference. The mask is an
+// ordinary AI raster mask, so Feather/Edge, Add/Subtract and the brush all work on it.
+const LANDSCAPE_GROUPS=[['sky','Sky'],['water','Water'],['vegetation','Vegetation'],['mountains','Mountains'],['buildings','Buildings'],['ground','Ground']];
+let _mskLandscapeAvail=null;
+async function mskLandscapeProbe(){
+  if(!window.__TAURI__)return false;
+  if(_mskLandscapeAvail===null){try{_mskLandscapeAvail=!!await window.__TAURI__.core.invoke('landscape_available');}catch(e){_mskLandscapeAvail=false;}
+    if(_mskLandscapeAvail&&typeof mskCreateGridSync==='function')mskCreateGridSync();}
+  return _mskLandscapeAvail;
+}
+function mskLandscapeToggle(){
+  const row=document.getElementById('msk-landscape-row');if(row)row.style.display=row.style.display==='none'?'flex':'none';
+}
+async function mskAddLandscape(cat){
+  const label=(LANDSCAPE_GROUPS.find(g=>g[0]===cat)||[])[1];
+  if(!label)return null;
+  if(!await mskLandscapeProbe()){toast('Landscape model is not installed','warn');return null;}
+  const it=curItem(),img=it&&it.img;
+  if(!img){toast('Open a photo first','warn');return null;}
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return null;}
+  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name=label+' (Landscape)';mask.aiSelectionMode='landscape';});
+  if(!m)return null;
+  const job=mskAiBusy('Finding '+label.toLowerCase());
+  try{
+    const{w,h}=samInputDims();
+    let lc=it._landscape;
+    if(!lc||lc.w!==w||lc.h!==h){
+      const d=mskSourceData(w,h,img),rgb=new Uint8Array(w*h*3);
+      for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+      const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
+      const hlen=new DataView(buf).getUint32(0,true);
+      const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+      const body=new Uint8Array(buf,4+hlen);
+      if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
+      lc={w,h,groups:header.groups,body};
+      Object.defineProperty(it,'_landscape',{value:lc,writable:true,enumerable:false,configurable:true});
+    }
+    if(job.cancelled)throw new Error('Cancelled');
+    const gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
+    if(!fxState.masks.includes(m))return null;
+    m.px=Uint8ClampedArray.from(lc.body.subarray(gi*w*h,(gi+1)*w*h));m.mtW=w;m.mtH=h;
+    let n=0;for(let i=0;i<m.px.length;i++)if(m.px[i]>127)n++;
+    _mskTexDirty=true;_mskRecordAIProvenance(m,it,'landscape:'+cat,false);
+    if(!n)toast('No '+label.toLowerCase()+' found in this photo','warn');
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    return m;
+  }catch(e){
+    log('Landscape failed: '+(e&&e.message||e),'error');toast('Landscape selection failed — see log','warn');
+    const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
+    return null;
+  }finally{job.done();}
+}

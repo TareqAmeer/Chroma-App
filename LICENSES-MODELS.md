@@ -18,6 +18,7 @@ are not in git (they are ~1.1 GB); the desktop build fetches them from the sourc
 | **MODNet** (`vendor/matte/modnet.onnx`) | Auto Subject mask (hair-accurate subject matte) | Apache-2.0 |
 | **ISNet general-use** (`vendor/matte/isnet.onnx`, optional download) | Higher-quality Auto Subject tier | MIT |
 | **RT-DETR r18vd** (`vendor/rtdetr`) | Finds cats/dogs/birds/horses in a photo (pet detection) | Apache-2.0 |
+| **UperNet-ConvNeXt-T, ADE20K** (`vendor/landscape`) | Landscape mask: sky / water / vegetation / mountains / buildings / ground | **MIT** (HF card; ADE20K dataset itself is research-terms — see its README) |
 | **ONNX Runtime** (`vendor/onnxruntime`) | Runs all of the above | MIT |
 | **Real-ESRGAN `realesr-general-x4v3`** (`vendor/superres`) | Export-time 2x/4x Super Resolution | **BSD-3-Clause** (code; no separate weights terms stated upstream — see its README) |
 | **MI-GAN-512 Places2 ONNX Pipeline v2** (optional local AI erase download) | Reviewed object-removal candidates | **MIT**, including explicit upstream `LICENSE-WEIGHTS` |

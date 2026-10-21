@@ -55,6 +55,7 @@ mod dino;
 mod faceparse;
 mod petdetect;
 mod depth;
+mod landscape;
 mod matte;
 mod superres;
 mod inpaint_alpha;

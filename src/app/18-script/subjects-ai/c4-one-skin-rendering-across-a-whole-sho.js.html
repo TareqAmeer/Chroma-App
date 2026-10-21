@@ -103,10 +103,17 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Objects','wand','mskAddObjects()',desktop],['Sky','sky',"mskAdd('sky')",true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Objects','wand','mskAddObjects()',desktop],['Sky','sky',"mskAdd('sky')",true],['Landscape','sky','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
     ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
   g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
+  if(desktop&&_mskLandscapeAvail===null)mskLandscapeProbe();
+  let lr=document.getElementById('msk-landscape-row');
+  if(desktop&&_mskLandscapeAvail===true){
+    if(!lr){lr=document.createElement('div');lr.id='msk-landscape-row';lr.style.cssText='display:none;flex-wrap:wrap;gap:6px;margin:6px 0';g.insertAdjacentElement('afterend',lr);
+      lr.innerHTML=LANDSCAPE_GROUPS.map(c=>'<button type="button" class="btn bgh" data-landscape="'+c[0]+'" onclick="mskAddLandscape(\''+c[0]+'\')">'+c[1]+'</button>').join('');}
+    lr.querySelectorAll('button').forEach(b=>{b.disabled=full;});
+  }else if(lr)lr.remove();
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
