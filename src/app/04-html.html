@@ -725,6 +725,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 .msk-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:var(--sp-2) var(--sp-1);background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-size:var(--fs-1);cursor:pointer;min-height:44px}
 .msk-tile:hover:not([disabled]),.msk-tile:focus-visible{border-color:var(--acc);color:var(--acc)}
 .msk-tile[disabled]{opacity:.4;cursor:not-allowed}
+.msk-tile.ai{border-style:dashed}
 .msk-compose-row{margin:0 0 var(--sp-2)}
 .msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
 .msk-count{font-size:var(--fs-0);color:var(--mut);margin:0 0 var(--sp-1)}
@@ -773,6 +774,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
   border:var(--bw-1) solid #fff;box-shadow:0 0 0 1px var(--scrim-b5),inset 0 0 0 1px var(--scrim-b5);
   transform:translate(-50%,-50%)}
 #msk-brush-cursor.on{display:block}
+#msk-brush-cursor::after{content:"";position:absolute;left:50%;top:50%;width:calc(var(--fth,1)*-100% + 100%);height:calc(var(--fth,1)*-100% + 100%);transform:translate(-50%,-50%);border-radius:50%;border:1px dashed rgba(255,255,255,.75);box-shadow:0 0 0 1px var(--scrim-b5);box-sizing:border-box;pointer-events:none}
+#msk-spotlight{position:absolute;display:none;pointer-events:none;z-index:var(--z-raised,5);
+  -webkit-backdrop-filter:grayscale(1) brightness(.62);backdrop-filter:grayscale(1) brightness(.62);
+  -webkit-mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro));mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro))}
+#msk-spotlight.on{display:block}
 #msk-brush-cursor.erase{border-color:var(--err)}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px var(--scrim-b4);cursor:move;box-sizing:border-box}
 .crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
@@ -2406,8 +2412,8 @@ body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) i
    0px corners everywhere except the on-photo tools the inventory marks restyle-neutral (crop,
    guides, masks, brush cursor, split knob, histogram), which keep their shapes. Soft drop
    shadows were stripped at source; only hard 0-blur blocks remain. */
-*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *){border-radius:0!important}
-*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::before,*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::after{border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *){border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *)::before,*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *)::after{border-radius:0!important}
 ::selection{background:var(--k-color-accent-a);color:#fff}
 ::-webkit-scrollbar-thumb{border-radius:0}
 :hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--k-color-ink) 28%,transparent)}

@@ -103,10 +103,11 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Objects','wand','mskAddObjects()',desktop],['Sky','sky',"mskAdd('sky')",true],['Landscape','sky','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','skin','depth'];
+  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
-    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
-  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
+    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','mskDepth',"mskAdd('depth')",desktop]];
+  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile'+(AI_KINDS.includes(t[0].toLowerCase())?' ai':'')+'" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask'+(AI_KINDS.includes(t[0].toLowerCase())?' (AI)':''))+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
   if(desktop&&_mskLandscapeAvail===null)mskLandscapeProbe();
   let lr=document.getElementById('msk-landscape-row');
   if(desktop&&_mskLandscapeAvail===true){
@@ -290,9 +291,9 @@ function mskRebuild(){
     shape+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+icon('brush',14)+(mskPaintMode?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(mskPaintErase)+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
-      +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" data-msk-brush-slider="size" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
-      +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" data-msk-brush-slider="feather" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row" title="Paint only pixels similar in colour to where the stroke starts, so the brush stops at edges"><div class="fx-label">Auto mask</div><input type="checkbox" '+(mskBrushAuto?'checked ':'')+'onchange="mskBrushAuto=this.checked"></div>'
       +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskFixupBar(m)+mskRefineControls(m)

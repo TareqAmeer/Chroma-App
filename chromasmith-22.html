@@ -764,6 +764,7 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 .msk-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:var(--sp-2) var(--sp-1);background:var(--sur2);border:1px solid var(--bdr);border-radius:6px;color:var(--txt);font-size:var(--fs-1);cursor:pointer;min-height:44px}
 .msk-tile:hover:not([disabled]),.msk-tile:focus-visible{border-color:var(--acc);color:var(--acc)}
 .msk-tile[disabled]{opacity:.4;cursor:not-allowed}
+.msk-tile.ai{border-style:dashed}
 .msk-compose-row{margin:0 0 var(--sp-2)}
 .msk-li-ctl{font-size:var(--fs-0);line-height:1;min-width:18px;padding:3px 4px;text-align:center;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);cursor:pointer}
 .msk-count{font-size:var(--fs-0);color:var(--mut);margin:0 0 var(--sp-1)}
@@ -812,6 +813,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
   border:var(--bw-1) solid #fff;box-shadow:0 0 0 1px var(--scrim-b5),inset 0 0 0 1px var(--scrim-b5);
   transform:translate(-50%,-50%)}
 #msk-brush-cursor.on{display:block}
+#msk-brush-cursor::after{content:"";position:absolute;left:50%;top:50%;width:calc(var(--fth,1)*-100% + 100%);height:calc(var(--fth,1)*-100% + 100%);transform:translate(-50%,-50%);border-radius:50%;border:1px dashed rgba(255,255,255,.75);box-shadow:0 0 0 1px var(--scrim-b5);box-sizing:border-box;pointer-events:none}
+#msk-spotlight{position:absolute;display:none;pointer-events:none;z-index:var(--z-raised,5);
+  -webkit-backdrop-filter:grayscale(1) brightness(.62);backdrop-filter:grayscale(1) brightness(.62);
+  -webkit-mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro));mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro))}
+#msk-spotlight.on{display:block}
 #msk-brush-cursor.erase{border-color:var(--err)}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px var(--scrim-b4);cursor:move;box-sizing:border-box}
 .crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
@@ -2445,8 +2451,8 @@ body.deskx #lib-overlay:not(.full) .lib-card:not(:hover):not(.sel):not(.multi) i
    0px corners everywhere except the on-photo tools the inventory marks restyle-neutral (crop,
    guides, masks, brush cursor, split knob, histogram), which keep their shapes. Soft drop
    shadows were stripped at source; only hard 0-blur blocks remain. */
-*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *){border-radius:0!important}
-*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::before,*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,.crop-rect) *)::after{border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *){border-radius:0!important}
+*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *)::before,*:not(:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect),:is(#fx-crop-overlay,#fx-guides-overlay,#fx-mask-overlay,#msk-paint-overlay,.fx-split-line,#fx-hist,#msk-brush-cursor,#msk-spotlight,.crop-rect) *)::after{border-radius:0!important}
 ::selection{background:var(--k-color-accent-a);color:#fff}
 ::-webkit-scrollbar-thumb{border-radius:0}
 :hover::-webkit-scrollbar-thumb,.fx-scrolling::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--k-color-ink) 28%,transparent)}
@@ -7329,7 +7335,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit â€” shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021G';
+const BUILD='1.1021H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20062,10 +20068,11 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const T=[['Auto Subject','wand','mskAddSubjectMatte()',desktop],['Subject','wand',"mskAdd('ai')",desktop],['Objects','wand','mskAddObjects()',desktop],['Sky','sky',"mskAdd('sky')",true],['Landscape','sky','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','wand','mskAddBackground()',desktop],['Skin','wand',"mskAdd('skin')",desktop],
+  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','skin','depth'];
+  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
-    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','focus',"mskAdd('depth')",desktop]];
-  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask')+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
+    ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','mskDepth',"mskAdd('depth')",desktop]];
+  g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile'+(AI_KINDS.includes(t[0].toLowerCase())?' ai':'')+'" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask'+(AI_KINDS.includes(t[0].toLowerCase())?' (AI)':''))+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
   if(desktop&&_mskLandscapeAvail===null)mskLandscapeProbe();
   let lr=document.getElementById('msk-landscape-row');
   if(desktop&&_mskLandscapeAvail===true){
@@ -20249,9 +20256,9 @@ function mskRebuild(){
     shape+='<div class="btn-row">'
       +'<button class="btn '+(mskPaintMode?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintToggle()" title="Paint into this mask on the preview">'+icon('brush',14)+(mskPaintMode?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(mskPaintErase)+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
-      +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" data-msk-brush-slider="size" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
-      +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
+      +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" data-msk-brush-slider="feather" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row" title="Paint only pixels similar in colour to where the stroke starts, so the brush stops at edges"><div class="fx-label">Auto mask</div><input type="checkbox" '+(mskBrushAuto?'checked ':'')+'onchange="mskBrushAuto=this.checked"></div>'
       +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskFixupBar(m)+mskRefineControls(m)
@@ -30594,6 +30601,14 @@ const ICONS={
  brush:'<path d="M11 15 20 4l1 1-10 10ZM10 14l-5 1-2 6 6-2 1-5"/>',
  eraser:'<path d="M3 16l9-9 6 6-9 9H6ZM9 10l6 6M12 22h9"/>',
  eyedropper:'<path d="M4 20l1-4 9-9 3 3-9 9ZM13 4l7 7M17 3l4 4-3 3-4-4Z"/>',
+ mskAuto:'<rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="10" r="2.5"/><path d="M7 18c.6-3 2.5-4.5 5-4.5s4.4 1.5 5 4.5"/><path d="M2 2l2 2M22 2l-2 2"/>',
+ mskSubject:'<circle cx="12" cy="8" r="3.5"/><path d="M5 21c0-4.5 3-7.5 7-7.5s7 3 7 7.5"/><path d="M3 8V3h5M16 3h5v5"/>',
+ mskObjects:'<rect x="3" y="5" width="13" height="13"/><path d="M12 12l9 3-4 1.5-1.5 4Z"/>',
+ mskSky:'<path d="M7 16a4 4 0 0 1 .5-8 5.5 5.5 0 0 1 10.5 1.5A3.3 3.3 0 0 1 17.5 16Z"/><path d="M3 20h18"/>',
+ mskLandscape:'<path d="M2 19 9 8l4 6 3-4 6 9Z"/><circle cx="18" cy="5" r="1.8"/>',
+ mskBackground:'<rect x="3" y="3" width="18" height="18"/><circle cx="12" cy="12" r="4.5"/><path d="M3 3l5 5M21 3l-5 5M3 21l5-5M21 21l-5-5"/>',
+ mskSkin:'<circle cx="12" cy="12" r="8"/><path d="M8 14c1 2 2.5 3 4 3s3-1 4-3M9 10h.01M15 10h.01"/>',
+ mskDepth:'<path d="M3 18h18M5 14h14M7 10h10M9 6h6"/>',
  wand:'<path d="M3 21 14 10M17 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/>',
  scissors:'<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8 8l12 12M8 16 20 4"/>',
  eye:'<path d="M2 12l10-6 10 6-10 6Z"/><circle cx="12" cy="12" r="2.5"/>',
