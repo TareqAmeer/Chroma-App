@@ -45,7 +45,7 @@ function mskUpdateSelViewControls(){
   const want=on?mskSelViewStyle:'off';
   if(style&&style.value!==want)style.value=want;
   const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
-  const pins=document.getElementById('ck-msk-pins');if(pins)pins.checked=mskShowPins;
+  const spl=document.getElementById('ck-msk-spotlight');if(spl)spl.checked=mskSpotlight;const pins=document.getElementById('ck-msk-pins');if(pins)pins.checked=mskShowPins;
 }
 function mskSelViewOpacityInput(v){
   mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));

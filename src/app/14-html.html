@@ -544,6 +544,9 @@
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
+          <div class="fx-row"><div class="fx-label">Spotlight</div>
+            <input type="checkbox" id="ck-msk-spotlight" aria-label="Spotlight: dim and desaturate outside the brush" onchange="mskSpotlightToggle(this.checked)">
+          </div>
           <div class="fx-row"><div class="fx-label">Show edit pins</div>
             <input type="checkbox" id="ck-msk-pins" checked onchange="mskPinsToggle(this.checked)">
           </div>
@@ -1102,6 +1105,7 @@
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
+        <div id="msk-spotlight"></div>
         <div id="msk-brush-cursor"></div>
         <!-- 3.1.7/3.1.12: dropped the "Fit" text button — zoomFit() survives on the slider's
              double-click instead of a dedicated button.

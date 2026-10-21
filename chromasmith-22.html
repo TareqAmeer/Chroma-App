@@ -4345,6 +4345,9 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-label">Edge only</div>
             <input type="checkbox" id="ck-msk-selview-outline" onchange="mskSelViewOutlineToggle(this.checked)">
           </div>
+          <div class="fx-row"><div class="fx-label">Spotlight</div>
+            <input type="checkbox" id="ck-msk-spotlight" aria-label="Spotlight: dim and desaturate outside the brush" onchange="mskSpotlightToggle(this.checked)">
+          </div>
           <div class="fx-row"><div class="fx-label">Show edit pins</div>
             <input type="checkbox" id="ck-msk-pins" checked onchange="mskPinsToggle(this.checked)">
           </div>
@@ -4903,6 +4906,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-split-line" id="fx-split-line"><div class="fx-split-knob">⇔</div></div>
         <canvas id="fx-hist"></canvas>
         <div id="fx-crop-overlay"></div>
+        <div id="msk-spotlight"></div>
         <div id="msk-brush-cursor"></div>
         <!-- 3.1.7/3.1.12: dropped the "Fit" text button — zoomFit() survives on the slider's
              double-click instead of a dedicated button.
@@ -7335,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021H';
+const BUILD='1.1021I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18790,10 +18794,31 @@ function mskBrushSlotSelect(slot){
   if(!mskPaintMode)mskPaintToggle();
   mskPaintErase_sync();if(typeof mskRebuild==='function')mskRebuild();
 }
+// Lightroom-style spotlight: preview-only DOM overlay (never touches the shader, export, loupe or
+// history). Backdrop-filter greys + dims everything OUTSIDE the brush circle; a radial mask keeps
+// the inside (to the feather ring) in full colour with a soft edge.
+let mskSpotlight=true,mskSpotlightRefresh=()=>{};try{mskSpotlight=localStorage.getItem('chromasmith_msk_spotlight')!=='0';}catch(_){}
+function mskSpotlightToggle(v){mskSpotlight=!!v;try{localStorage.setItem('chromasmith_msk_spotlight',v?'1':'0');}catch(_){}if(!mskSpotlight)mskSpotlightHide();else mskSpotlightRefresh();}
+function mskSpotlightHide(){const el=document.getElementById('msk-spotlight');if(el)el.classList.remove('on');}
+function mskSpotlightUpdate(x,y,r){
+  const el=document.getElementById('msk-spotlight');if(!el)return;
+  const box=mskSpotlight&&typeof mskOverlayBox==='function'?mskOverlayBox():null;
+  if(!box){el.classList.remove('on');return;}
+  el.style.left=box.left+'px';el.style.top=box.top+'px';el.style.width=box.width+'px';el.style.height=box.height+'px';
+  const f=Math.max(0,Math.min(1,mskBrushFeather/100));
+  el.style.setProperty('--sx',(x-box.left)+'px');el.style.setProperty('--sy',(y-box.top)+'px');
+  el.style.setProperty('--ro',r+'px');el.style.setProperty('--ri',(r*(1-f))+'px');
+  el.classList.add('on');
+}
+function mskScribbleDotR(){return Math.max(0.004,(mskBrushSize/100)*0.25).toFixed(4);}
 function mskBrushNudge(what,d){
-  const m=fxState.masks[mskSel];if(!mskPaintMode||!m||m.type!=='brush')return false;
+  const m=fxState.masks[mskSel];
+  const scrib=!!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));
+  if(!scrib&&(!mskPaintMode||!m||m.type!=='brush'))return false;
   if(what==='size')mskBrushSize=Math.max(1,Math.min(100,mskBrushSize+d));else mskBrushFeather=Math.max(0,Math.min(100,mskBrushFeather+d));
+  if(scrib){if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();return true;}
   if(typeof mskRebuild==='function')mskRebuild();
+  if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();
 }
 
 function mskPaintEndStroke(){if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
@@ -18804,11 +18829,11 @@ function mskPaintToggle(){
   else mskPaintTransientReset();
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
-  if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');}
+  if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();}
   mskTeethGuideSync();
 }
 function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
-  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskTeethGuideSync();}
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();}
 function mskTeethGuideSync(){
   const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
   let guide=document.getElementById('msk-teeth-guide');
@@ -18895,7 +18920,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     if(!cursorEl)return;
     const m=fxState.masks[mskSel];
     const aiScribble=!!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));
-    if(!aiScribble&&(!mskPaintMode||!m||m.type!=='brush')){cursorEl.classList.remove('on');return;}
+    if(!aiScribble&&(!mskPaintMode||!m||m.type!=='brush')){cursorEl.classList.remove('on');mskSpotlightHide();return;}
     // #msk-brush-cursor is a sibling of #fx-zoom-wrap, both children of #fx-wrap (see
     // mskOverlayBox's identical convention for #fx-mask-overlay) — it's #fx-wrap that's the
     // positioned ancestor, NOT #fx-zoom-wrap. #fx-wrap centers the zoom-wrap via flexbox, so
@@ -18906,16 +18931,30 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
     const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
     // AI scribble gets a Lightroom-style round brush; its stroke radius is the 0.02 used for the live dots
-    const diam=aiScribble?0.04*Math.max(pr.width,pr.height):(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
+    const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
     cursorEl.style.left=(e.clientX-wr.left)+'px';cursorEl.style.top=(e.clientY-wr.top)+'px';
     cursorEl.classList.toggle('erase',aiScribble?!!e.altKey:!!(mskPaintErase||mskBrushEraseHeld));
+    cursorEl.style.setProperty('--fth',String(Math.max(0,Math.min(1,mskBrushFeather/100))));
     cursorEl.classList.add('on');
+    mskSpotlightUpdate(e.clientX-wr.left,e.clientY-wr.top,diam/2);
   }
+  mskSpotlightRefresh=()=>{if(lastBrushPointer)updateBrushCursor(lastBrushPointer);};
+  // Alt/Option+scroll over the photo = brush size, Alt+Shift+scroll = feather (Lightroom); the same
+  // nudge feeds Paint and AI scribble so both rings update live and the panel sliders follow.
+  fxCanvasOn('wheel',e=>{
+    if(!e.altKey)return;
+    const m=fxState.masks[mskSel];
+    if(!((mskPaintMode&&m&&m.type==='brush')||(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m))))return;
+    e.preventDefault();e.stopPropagation();
+    const d=(e.deltaY||e.deltaX)<0?1:-1,both=e.shiftKey;
+    mskBrushNudge(both?'feather':'size',both?d*5:d*3);
+    document.querySelectorAll('[data-msk-brush-slider]').forEach(el=>{const v=el.dataset.mskBrushSlider==='feather'?mskBrushFeather:mskBrushSize;el.value=v;if(el.nextElementSibling)el.nextElementSibling.textContent=v;});
+  },{passive:false,capture:true});
   fxCanvasOn('pointermove',e=>{lastBrushPointer=e;updateBrushCursor(e);});
   // The shared held-modifier registry updates erase state and the stationary cursor, including
   // rebound modifiers. AI scribbles and color sampling retain their separate Alt meanings.
-  fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');});
+  fxCanvasOn('pointerleave',()=>{if(cursorEl)cursorEl.classList.remove('on');mskSpotlightHide();});
   fxCanvasOn('pointerdown',e=>{
     if(!mskPaintMode)return;
     const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;
@@ -18966,7 +19005,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
     svg.classList.add('on');
     const pts=m.aiPoints||[];
-    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="0.02" fill="${p.positive?'rgba(255,90,60,.35)':'rgba(60,160,255,.35)'}" stroke="none"/>`).join('');
+    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="${mskScribbleDotR()}" fill="${p.positive?'rgba(255,90,60,.35)':'rgba(60,160,255,.35)'}" stroke="none"/>`).join('');
   }
   function _aiRenderLiveBox(a,b){
     const svg=document.getElementById('fx-mask-overlay');if(!svg)return;
@@ -20747,7 +20786,7 @@ function mskUpdateSelViewControls(){
   const want=on?mskSelViewStyle:'off';
   if(style&&style.value!==want)style.value=want;
   const color=document.getElementById('msk-selview-color');if(color&&color.value!==mskSelViewColor)color.value=mskSelViewColor;
-  const pins=document.getElementById('ck-msk-pins');if(pins)pins.checked=mskShowPins;
+  const spl=document.getElementById('ck-msk-spotlight');if(spl)spl.checked=mskSpotlight;const pins=document.getElementById('ck-msk-pins');if(pins)pins.checked=mskShowPins;
 }
 function mskSelViewOpacityInput(v){
   mskSelViewOpacity=Math.max(0.1,Math.min(1,(+v)/100));
