@@ -4,7 +4,7 @@
 // i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
 function _fxEyeArmed(){
   return !!(_wbEyedropperActive||_fnPickActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
-    ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive));
+    ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive));
 }
 const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
 let _fxEyeEl=null,_fxEyeRaf=0,_fxEyeEv=null;

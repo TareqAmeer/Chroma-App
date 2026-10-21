@@ -47,7 +47,7 @@ Existing advantages to keep: Copy + re-evaluate (already more transparent than L
 - Migration: each current mask becomes one mask with one component. The current mask-to-mask "Compose with…" links become components.
 - The eight-mask cap now counts masks, not components. Show it in the panel as "5 of 8".
 
-**P3 — Sampling and refinement in place** (gaps 6, 10).
+**P3 — Sampling and refinement in place** (gaps 6, 10). *Status: done.* Colour eyedropper (click, Shift-add, chip list with removal, max 8) already existed; added drag-area sampling for Colour and Luminance, a Luminance eyedropper with sample chips (max 5) and Refine (band padding), a Colour Refine slider, and confirmed Feather/Edge (`mskRefineControls`) already render on every AI/sky raster mask. Test: `test/mask_range_sampling.mjs`.
 - Range masks get an eyedropper on the photo: click to sample a point, drag to sample an area, Shift-click to add samples up to 5, and remove samples from a list.
 - Every AI component shows Edge and Feather sliders. Unlike Lightroom, don't hide them when a brush is added.
 

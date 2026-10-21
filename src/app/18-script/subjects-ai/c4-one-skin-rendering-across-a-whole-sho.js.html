@@ -313,7 +313,8 @@ function mskRebuild(){
       +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)">'
       +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskPickSkin()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
       +chipRow()
-      +(m.crOn?_mskRow('Hue range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false,
+      +(m.crOn?'<div class="fx-row" title="One control to widen or narrow the match around the picked samples."><div class="fx-label">Refine</div><input class="fx-slider" type="range" min="0" max="100" value="'+(m.crRange!=null?m.crRange:35)+'" oninput="mskCrRefine(parseFloat(this.value));this.nextElementSibling.textContent=this.value"><div class="fx-val">'+(m.crRange!=null?m.crRange:35)+'</div></div>'
+        +_mskRow('Hue range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false,
           'How far around the picked hue counts as a match.')
         +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
           'How far from the picked saturation/purity counts as a match — independent of hue range, so you can tighten this alone to exclude a same-hued but duller/more-vivid object (e.g. sand vs skin) without also narrowing valid hue variation.')
@@ -321,7 +322,13 @@ function mskRebuild(){
         +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous. For a whole person or animal, <b>+ Skin</b>, <b>+ Coat</b> or <b>+ AI Select</b> segments the subject first, which sidesteps this entirely.</div>':'');
   }
   if(!caps.coatDepth&&!caps.eyeBright){
-    selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
+    const LS=m.lumSamples||[];
+    selBody+='<div class="fx-row" title="Click or drag on the photo to pick the tones to select; Shift-click adds more (up to 5)."><div class="fx-label">Pick tones</div>'
+      +'<button class="btn bgh" id="btn-msk-lum-eye" onclick="mskLumEyedropper()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
+      +(LS.length?'<div class="msk-chiprow">'+LS.map((y,i)=>'<button class="pc-chip msk-swatch" style="background:rgb('+Array(3).fill(Math.round(y*255)).join(',')+')" title="Sample '+(i+1)+' — click to remove" onclick="mskLumDropSample('+i+')"></button>').join('')
+        +'<span class="msk-hint">'+LS.length+'/5</span></div>'
+        +'<div class="fx-row"><div class="fx-label">Refine</div><input class="fx-slider" type="range" min="0" max="50" value="'+Math.round((m.lumPad!=null?m.lumPad:0.1)*100)+'" oninput="mskLumPad(parseFloat(this.value));this.nextElementSibling.textContent=this.value"><div class="fx-val">'+Math.round((m.lumPad!=null?m.lumPad:0.1)*100)+'</div></div>':'')
+      +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
       +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
   }
   // ROADMAP R7 — Depth Range gate: on EVERY mask type, mirroring how Colour range works above

@@ -7,4 +7,60 @@ function fxCanvasClick(e){
   if(_wbEyedropperActive){wbEyedropperClick(e);return;}
   if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
   if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
+  if(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive){mskLumEyedropperClick(e);return;}
 }
+// ── Range-mask sampling: drag an area, Luminance eyedropper ───────────────────────────────────
+let _mskLumEyeActive=false;
+function mskLumEyedropper(force){
+  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;
+  if(_mskLumEyeActive&&typeof mskCrEyedropper==='function'&&_mskCrEyeActive)mskCrEyedropper(false);
+  const btn=document.getElementById('btn-msk-lum-eye');if(btn)btn.classList.toggle('on',_mskLumEyeActive);
+  if(FX.cv)FX.cv.style.cursor=_mskLumEyeActive?'crosshair':'';
+  if(_mskLumEyeActive&&force==null)log('Click or drag on the photo to pick the tones to select — Shift-click adds more','info');
+}
+function _mskLumBand(m){
+  const S=m.lumSamples||[];if(!S.length)return;
+  const pad=m.lumPad!=null?m.lumPad:0.1;
+  m.lumLo=Math.max(0,Math.min(...S)-pad);m.lumHi=Math.min(1,Math.max(...S)+pad);
+}
+function mskLumEyedropperClick(e){
+  const m=fxState.masks[mskSel];if(!m){mskLumEyedropper(false);return;}
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before sampling','warn');return;}
+  const avg=_pickAvgRGB(e,true);if(!avg)return;
+  const y=(0.2126*avg[0]+0.7152*avg[1]+0.0722*avg[2])/255;
+  const add=!!(e.shiftKey||e.altKey);
+  if(!add||!m.lumSamples)m.lumSamples=[];
+  if(m.lumSamples.length>=5){log('Maximum 5 luminance samples','warn');return;}
+  m.lumSamples.push(Math.round(y*1000)/1000);
+  _mskLumBand(m);
+  if(!add)mskLumEyedropper(false);
+  fxHistoryPush();mskRebuild();fxUpdate();
+}
+function mskLumDropSample(i){
+  const m=fxState.masks[mskSel];if(!m||!m.lumSamples)return;
+  m.lumSamples.splice(i,1);
+  if(m.lumSamples.length)_mskLumBand(m);else{m.lumLo=0;m.lumHi=1;}
+  mskRebuild();fxUpdate();
+}
+function mskLumPad(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.lumPad=v/100;_mskLumBand(m);mskRebuild();fxUpdate();
+}
+// Refine: one slider that widens/narrows the Colour range around the picked samples (hue + purity together).
+function mskCrRefine(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.crRange=v;m.crRangeC=null;mskSrcVDebounced();fxUpdate();
+}
+(function(){
+  let dn=null,swallow=false;
+  const armed=()=>(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||_mskLumEyeActive;
+  window.addEventListener('pointerdown',e=>{dn=(armed()&&e.button===0&&FX.cv&&e.target===FX.cv)?{clientX:e.clientX,clientY:e.clientY}:null;},true);
+  window.addEventListener('pointerup',e=>{
+    const d=dn;dn=null;if(!d||!armed())return;
+    if(Math.abs(e.clientX-d.clientX)+Math.abs(e.clientY-d.clientY)<=6)return;
+    swallow=true;setTimeout(()=>{swallow=false;},0);
+    const ev={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,altKey:e.altKey,_from:d};
+    if(_mskLumEyeActive)mskLumEyedropperClick(ev);else mskCrEyedropperClick(ev);
+  },true);
+  window.addEventListener('click',e=>{if(swallow){e.stopImmediatePropagation();e.preventDefault();swallow=false;}},true);
+})();

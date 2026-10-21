@@ -7318,7 +7318,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021C';
+const BUILD='1.1021D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14762,7 +14762,24 @@ function fxPointerToCanvasPx(e){
   }
   return{x,y};
 }
+// Average colour of the rectangle dragged from `from` to `e` (client coords), for area-sampling eyedroppers.
+function _pickRegionRGB(from,e){
+  _fxEnsureNormalRender();
+  const src=FX.cv;if(!src)return null;
+  const p0=fxPointerToCanvasPx(from),p1=fxPointerToCanvasPx(e);if(!p0||!p1)return null;
+  const W=src.width,H=src.height;
+  const x0=Math.max(0,Math.floor(Math.min(p0.x,p1.x))),x1=Math.min(W,Math.ceil(Math.max(p0.x,p1.x)));
+  const y0=Math.max(0,Math.floor(Math.min(p0.y,p1.y))),y1=Math.min(H,Math.ceil(Math.max(p0.y,p1.y)));
+  const w=Math.max(1,x1-x0),h=Math.max(1,y1-y0),k=Math.min(1,48/Math.max(w,h));
+  const tw=Math.max(1,Math.round(w*k)),th=Math.max(1,Math.round(h*k));
+  const tc=document.createElement('canvas');tc.width=tw;tc.height=th;
+  const cx=tc.getContext('2d');cx.drawImage(src,x0,y0,w,h,0,0,tw,th);
+  const d=cx.getImageData(0,0,tw,th).data;let r=0,g=0,b=0;const n=tw*th;
+  for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
+  return[r/n,g/n,b/n];
+}
 function _pickAvgRGB(e,fromCanvas){
+  if(e&&e._from&&fromCanvas)return _pickRegionRGB(e._from,e);
   if(fromCanvas)_fxEnsureNormalRender();
   const src=fromCanvas?FX.cv:(fxWork||fxImg);if(!src)return null;
   const pt=fxPointerToCanvasPx(e);if(!pt)return null;
@@ -20164,7 +20181,8 @@ function mskRebuild(){
       +'<input type="checkbox" '+(m.crOn?'checked':'')+' onchange="mskCrToggle(this)">'
       +'<button class="btn bgh" id="btn-msk-cr-eye" onclick="mskPickSkin()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
       +chipRow()
-      +(m.crOn?_mskRow('Hue range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false,
+      +(m.crOn?'<div class="fx-row" title="One control to widen or narrow the match around the picked samples."><div class="fx-label">Refine</div><input class="fx-slider" type="range" min="0" max="100" value="'+(m.crRange!=null?m.crRange:35)+'" oninput="mskCrRefine(parseFloat(this.value));this.nextElementSibling.textContent=this.value"><div class="fx-val">'+(m.crRange!=null?m.crRange:35)+'</div></div>'
+        +_mskRow('Hue range','crRange',m.crRange!=null?m.crRange:35,0,100,1,false,
           'How far around the picked hue counts as a match.')
         +_mskRow('Color purity range','crRangeC',m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35),0,100,1,false,
           'How far from the picked saturation/purity counts as a match — independent of hue range, so you can tighten this alone to exclude a same-hued but duller/more-vivid object (e.g. sand vs skin) without also narrowing valid hue variation.')
@@ -20172,7 +20190,13 @@ function mskRebuild(){
         +'<div class="msk-hint">Color alone cannot tell skin from a pet, sand or wood — keep those out with the shape, a Brush mask, or Subtract previous. For a whole person or animal, <b>+ Skin</b>, <b>+ Coat</b> or <b>+ AI Select</b> segments the subject first, which sidesteps this entirely.</div>':'');
   }
   if(!caps.coatDepth&&!caps.eyeBright){
-    selBody+=_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
+    const LS=m.lumSamples||[];
+    selBody+='<div class="fx-row" title="Click or drag on the photo to pick the tones to select; Shift-click adds more (up to 5)."><div class="fx-label">Pick tones</div>'
+      +'<button class="btn bgh" id="btn-msk-lum-eye" onclick="mskLumEyedropper()" style="flex:0 0 auto">'+icon('eyedropper',14)+' Pick</button></div>'
+      +(LS.length?'<div class="msk-chiprow">'+LS.map((y,i)=>'<button class="pc-chip msk-swatch" style="background:rgb('+Array(3).fill(Math.round(y*255)).join(',')+')" title="Sample '+(i+1)+' — click to remove" onclick="mskLumDropSample('+i+')"></button>').join('')
+        +'<span class="msk-hint">'+LS.length+'/5</span></div>'
+        +'<div class="fx-row"><div class="fx-label">Refine</div><input class="fx-slider" type="range" min="0" max="50" value="'+Math.round((m.lumPad!=null?m.lumPad:0.1)*100)+'" oninput="mskLumPad(parseFloat(this.value));this.nextElementSibling.textContent=this.value"><div class="fx-val">'+Math.round((m.lumPad!=null?m.lumPad:0.1)*100)+'</div></div>':'')
+      +_mskRow('Lum floor','lumLo',m.lumLo,0,100,0.01,false)
       +_mskRow('Lum ceiling','lumHi',m.lumHi,0,100,0.01,false);
   }
   // ROADMAP R7 — Depth Range gate: on EVERY mask type, mirroring how Colour range works above
@@ -22350,14 +22374,71 @@ function fxCanvasClick(e){
   if(_wbEyedropperActive){wbEyedropperClick(e);return;}
   if(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive){pcEyedropperClick(e);return;}
   if(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive){mskCrEyedropperClick(e);return;}
+  if(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive){mskLumEyedropperClick(e);return;}
 }
+// ── Range-mask sampling: drag an area, Luminance eyedropper ───────────────────────────────────
+let _mskLumEyeActive=false;
+function mskLumEyedropper(force){
+  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;
+  if(_mskLumEyeActive&&typeof mskCrEyedropper==='function'&&_mskCrEyeActive)mskCrEyedropper(false);
+  const btn=document.getElementById('btn-msk-lum-eye');if(btn)btn.classList.toggle('on',_mskLumEyeActive);
+  if(FX.cv)FX.cv.style.cursor=_mskLumEyeActive?'crosshair':'';
+  if(_mskLumEyeActive&&force==null)log('Click or drag on the photo to pick the tones to select — Shift-click adds more','info');
+}
+function _mskLumBand(m){
+  const S=m.lumSamples||[];if(!S.length)return;
+  const pad=m.lumPad!=null?m.lumPad:0.1;
+  m.lumLo=Math.max(0,Math.min(...S)-pad);m.lumHi=Math.min(1,Math.max(...S)+pad);
+}
+function mskLumEyedropperClick(e){
+  const m=fxState.masks[mskSel];if(!m){mskLumEyedropper(false);return;}
+  if(fxLoupe){log('Exit the 1:1 view (Fit) before sampling','warn');return;}
+  const avg=_pickAvgRGB(e,true);if(!avg)return;
+  const y=(0.2126*avg[0]+0.7152*avg[1]+0.0722*avg[2])/255;
+  const add=!!(e.shiftKey||e.altKey);
+  if(!add||!m.lumSamples)m.lumSamples=[];
+  if(m.lumSamples.length>=5){log('Maximum 5 luminance samples','warn');return;}
+  m.lumSamples.push(Math.round(y*1000)/1000);
+  _mskLumBand(m);
+  if(!add)mskLumEyedropper(false);
+  fxHistoryPush();mskRebuild();fxUpdate();
+}
+function mskLumDropSample(i){
+  const m=fxState.masks[mskSel];if(!m||!m.lumSamples)return;
+  m.lumSamples.splice(i,1);
+  if(m.lumSamples.length)_mskLumBand(m);else{m.lumLo=0;m.lumHi=1;}
+  mskRebuild();fxUpdate();
+}
+function mskLumPad(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.lumPad=v/100;_mskLumBand(m);mskRebuild();fxUpdate();
+}
+// Refine: one slider that widens/narrows the Colour range around the picked samples (hue + purity together).
+function mskCrRefine(v){
+  const m=fxState.masks[mskSel];if(!m)return;
+  m.crRange=v;m.crRangeC=null;mskSrcVDebounced();fxUpdate();
+}
+(function(){
+  let dn=null,swallow=false;
+  const armed=()=>(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||_mskLumEyeActive;
+  window.addEventListener('pointerdown',e=>{dn=(armed()&&e.button===0&&FX.cv&&e.target===FX.cv)?{clientX:e.clientX,clientY:e.clientY}:null;},true);
+  window.addEventListener('pointerup',e=>{
+    const d=dn;dn=null;if(!d||!armed())return;
+    if(Math.abs(e.clientX-d.clientX)+Math.abs(e.clientY-d.clientY)<=6)return;
+    swallow=true;setTimeout(()=>{swallow=false;},0);
+    const ev={clientX:e.clientX,clientY:e.clientY,shiftKey:e.shiftKey,altKey:e.altKey,_from:d};
+    if(_mskLumEyeActive)mskLumEyedropperClick(ev);else mskCrEyedropperClick(ev);
+  },true);
+  window.addEventListener('click',e=>{if(swallow){e.stopImmediatePropagation();e.preventDefault();swallow=false;}},true);
+})();
+
 // ── Eyedropper hover: pipette cursor + live colour loupe ─────────────────────────────────────
 // While any pick mode is armed, the cursor becomes a pipette (hotspot at its tip) and a small
 // swatch follows it showing the colour under the tip (read from the canvas actually on screen,
 // i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
 function _fxEyeArmed(){
   return !!(_wbEyedropperActive||_fnPickActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
-    ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive));
+    ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive));
 }
 const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
 let _fxEyeEl=null,_fxEyeRaf=0,_fxEyeEv=null;
