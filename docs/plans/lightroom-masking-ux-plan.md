@@ -40,6 +40,8 @@ Existing advantages to keep: Copy + re-evaluate (already more transparent than L
 - Clicking a pin or a painted area on the photo selects that mask.
 
 **P2 — Masks made of components** (gaps 2, 9). The biggest structural change.
+
+*Status: done (derived-group model).* **Decision:** keep the flat `fxState.masks` array and the existing `composeOp`/`operandId` graph; a "component" is a mask whose operand chain leads to a root mask. Groups are derived at render time (row indent by operand depth), not stored. Why: the shared preview/export/tiled evaluator, save/load, styles, portable copy and undo all already round-trip operand IDs, so a true component array would force a migration of every consumer with no behavioural gain. **Migration:** none needed; every existing mask is a root with zero components and existing Compose-with links already are components, so rendering is byte-identical. **UI shipped:** per-row hover/focus/selected actions (Add to / Subtract from / Intersect with / Invert) that select the row then open the create menu with the new mask attached; "N of 8 masks" counter above the list. Test: `test/mask_list_controls.mjs` (row actions) and `test/mask_components.mjs`. Known limit: components still carry their own adjustment sliders (shared-adjustment container is a later option).
 - Each mask becomes a container with an ordered component list, each component tagged add, subtract or intersect.
 - Hovering the mask row shows Add, Subtract, Intersect and Invert. Those buttons open the existing create menu and apply the result to this mask.
 - Migration: each current mask becomes one mask with one component. The current mask-to-mask "Compose with…" links become components.

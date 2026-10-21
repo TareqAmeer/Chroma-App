@@ -60,6 +60,23 @@ try{
     const before=document.querySelector('.msk-more-menu');
     return {tiles,rowBtns,hdr,n:{op:n.composeOp,operand:n.operandId,sub:n.subtract},plainOp:plain.composeOp||'',pending:_mskPendingCompose};
   });
+  const rowAct=await page.evaluate(()=>{
+    fxState.masks=[{id:'a',name:'A',type:'radial',cx:.5,cy:.5,rx:.3,ry:.3,feather:.5,compositionMigrated:true,crSamples:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0},
+      {id:'b',name:'B',type:'radial',cx:.2,cy:.5,rx:.3,ry:.3,feather:.5,compositionMigrated:true,crSamples:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0}];mskSel=1;mskRebuild();
+    const rows=[...document.querySelectorAll('#local-list > button')];
+    const acts=[...rows[0].querySelectorAll('.msk-li-act')].map(x=>x.title);
+    const count=document.getElementById('msk-count').textContent;
+    rows[0].querySelectorAll('.msk-li-act')[1].click();
+    const hdr=document.querySelector('.msk-more-menu .msk-more-hd')?.textContent;
+    mskAdd('radial');
+    const n=fxState.masks[2];
+    const depth=document.querySelectorAll('#local-list > button')[2].dataset.depth;
+    rows[0].querySelectorAll('.msk-li-act')[3].click();
+    return {acts,count,hdr,sel:mskSel,op:n.composeOp,operand:n.operandId,depth,inv:fxState.masks[0].invert};
+  });
+  assert.deepEqual(rowAct.acts,['Add to','Subtract from','Intersect with','Invert']);
+  assert.equal(rowAct.count,'2 of '+8+' masks');assert.match(rowAct.hdr,/Subtract from/);
+  assert.equal(rowAct.op,'subtract');assert.equal(rowAct.operand,'a');assert.equal(rowAct.depth,'1');assert.equal(rowAct.inv,true);
   assert.deepEqual(g.tiles,['sky','brush','linear','radial','color','luminance']);
   assert.deepEqual(g.rowBtns,['+ Add','\u2212 Subtract','\u2229 Intersect','Invert']);
   assert.match(g.hdr,/Subtract from/);

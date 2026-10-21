@@ -110,7 +110,7 @@ function mskCreateGridSync(){
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
@@ -137,6 +137,23 @@ function mskRebuild(){
     };
     mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute);
     mkCtl('msk-li-solo','S',mskSolo===i,(mskSolo===i?'Stop soloing ':'Solo ')+(m.name||mskAutoLabel(m,i)),mskToggleSolo);
+    // Row actions (Add / Subtract / Intersect / Invert): shown on hover/focus/selection. Each selects
+    // this row's mask then opens the create menu, so the new component attaches to THIS mask.
+    const act=(txt,aria,fn)=>{
+      const s=document.createElement('span');s.className='msk-li-ctl msk-li-act';s.textContent=txt;
+      s.setAttribute('role','button');s.tabIndex=0;s.setAttribute('aria-label',aria+' '+(m.name||mskAutoLabel(m,i)));s.title=aria;
+      const go=(e)=>{e.preventDefault();e.stopPropagation();mskSel=i;fn(e);};
+      s.onclick=go;s.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' ')go(e);};
+      b.appendChild(s);
+    };
+    act('+','Add to',(e)=>{mskComposeMenu(e,'add');});
+    act('\u2212','Subtract from',(e)=>{mskComposeMenu(e,'subtract');});
+    act('\u2229','Intersect with',(e)=>{mskComposeMenu(e,'intersect');});
+    act('\u21C5','Invert',()=>{mskInvert();mskRebuild();});
+    // Component depth: how many operand links lead from this mask to a mask with no composition.
+    let depth=0,cur=m;const seenIds=new Set();
+    while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
+    if(depth)b.dataset.depth=String(depth);
     if(m.muted)b.style.opacity='0.45';
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
