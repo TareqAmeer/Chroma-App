@@ -65,7 +65,7 @@ function mskCopyToAll(){
   // Each target photo needs its OWN raster, not a shared reference — painting on one photo must
   // not paint on the rest. _mskCloneLive round-trips through the snapshot form, which copies the
   // typed array (a JSON clone would have turned it into an object and silently lost the mask).
-  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(_mskCloneLive);
+  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(m=>{const c=_mskCloneLive(m);if(mskIsAI(c)||c.origin==='sky')c.aiState='stale';return c;});
   if(fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky'))log('Static copy: AI and sky raster pixels were copied as-is from the source photo. Use “Copy + re-evaluate” to regenerate supported selections.','warn');
   if(typeof hapt==='function')hapt();
   toast(`Copied ${fxState.masks.length} mask(s) as-is to ${fxImages.length-1} other photo(s)`,true);
@@ -105,6 +105,7 @@ async function _mskPortableCopyProcess(sourceMasks,targets,deps){
         deps.clearSourceRaster(candidate);
         const outcome=await deps.reevaluate(candidate,target);
         if(!outcome||!outcome.ok)throw new Error(outcome&&outcome.error||'Mask recomputation failed');
+        delete candidate.aiState;
         if(outcome.warning)warning+=(warning?'; ':'')+outcome.warning;
         if(deps.cancelled())throw new Error('Cancelled while recomputing this photo');
         if(deps.current()!==target.item)throw new Error('Active photo changed during recomputation');
@@ -194,6 +195,30 @@ async function _mskPortableReevaluate(m,target){
   }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
+}
+// AI mask state: undefined = ready, 'stale' = pixels came from another photo/source, 'failed' = last Update failed.
+function mskAiStateOf(m){return(mskIsAI(m)||m.origin==='sky')?(m.aiState||'ready'):null;}
+function mskAiCanUpdate(m){return !!window.__TAURI__&&_mskPortableNeedsReevaluation(m);}
+let _mskAiUpdating=false;
+async function mskAiUpdate(i){
+  const m=fxState.masks[i];if(!m||!mskAiCanUpdate(m)||_mskAiUpdating)return false;
+  const item=curItem(),keep={px:m.px,mtW:m.mtW,mtH:m.mtH};
+  _mskAiUpdating=true;const job=mskAiBusy('Updating '+(m.name||'mask'));
+  try{
+    m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;delete m._refineCache;delete m._refineSourceHash;
+    const out=await _mskPortableReevaluate(m,{item});
+    if(job.cancelled)throw new Error('Cancelled');
+    if(!out||!out.ok)throw new Error(out&&out.error||'Update failed');
+    delete m.aiState;delete m.aiStateMsg;
+  }catch(e){
+    m.px=keep.px;m.mtW=keep.mtW;m.mtH=keep.mtH;
+    m.aiState=job.cancelled?'stale':'failed';m.aiStateMsg=String(e&&e.message||e);
+    log('Mask update failed: '+m.aiStateMsg,'warn');
+  }finally{job.done();_mskAiUpdating=false;_mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
+  return !m.aiState;
+}
+async function mskAiUpdateAll(){
+  for(let i=0;i<fxState.masks.length;i++){const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
 }
 async function mskCopyAndReevaluate(){
   if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;

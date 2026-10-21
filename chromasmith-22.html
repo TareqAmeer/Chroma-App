@@ -778,6 +778,10 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 /* Lightroom-style edit pins: one round pin per mask, anchored on the photo. The layer rides the zoom
    transform, so each pin is counter-scaled (--pin-s) to stay a constant on-screen size. */
 #msk-pin-layer{position:absolute;display:none;pointer-events:none}
+.msk-ai-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--ok,#4caf50)}
+.msk-ai-dot.stale{background:var(--warn,#e0a030)}
+.msk-ai-dot.failed{background:var(--err,#d9534f)}
+.msk-ai-update{font-size:var(--fs-0);text-decoration:underline}
 .msk-ai-busy{display:none;align-items:center;gap:8px;margin:4px 0;padding:4px 8px;border:1px solid var(--bdr);border-radius:6px;font-size:var(--fs-1);color:var(--mut)}
 .msk-ai-busy.on{display:flex}
 .msk-ai-busy .msk-ai-spin{width:12px;height:12px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:mskspin .8s linear infinite}
@@ -4337,6 +4341,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
           </div>
           <div class="msk-count" id="msk-count" aria-live="polite"></div>
+          <button class="btn bgh" id="msk-update-all" style="display:none;align-self:flex-start" onclick="mskAiUpdateAll()" title="Re-evaluate every stale or failed AI mask on this photo">Update all AI masks</button>
           <div class="btn-row" id="local-list" style="flex-wrap:wrap;gap:4px"></div>
           <div id="local-ctl" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
@@ -7318,7 +7323,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021D';
+const BUILD='1.1021E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18036,7 +18041,7 @@ function mskCopyToAll(){
   // Each target photo needs its OWN raster, not a shared reference — painting on one photo must
   // not paint on the rest. _mskCloneLive round-trips through the snapshot form, which copies the
   // typed array (a JSON clone would have turned it into an object and silently lost the mask).
-  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(_mskCloneLive);
+  for(let i=0;i<fxImages.length;i++)if(i!==fxCurIdx)fxImages[i].masks=fxState.masks.map(m=>{const c=_mskCloneLive(m);if(mskIsAI(c)||c.origin==='sky')c.aiState='stale';return c;});
   if(fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky'))log('Static copy: AI and sky raster pixels were copied as-is from the source photo. Use “Copy + re-evaluate” to regenerate supported selections.','warn');
   if(typeof hapt==='function')hapt();
   toast(`Copied ${fxState.masks.length} mask(s) as-is to ${fxImages.length-1} other photo(s)`,true);
@@ -18076,6 +18081,7 @@ async function _mskPortableCopyProcess(sourceMasks,targets,deps){
         deps.clearSourceRaster(candidate);
         const outcome=await deps.reevaluate(candidate,target);
         if(!outcome||!outcome.ok)throw new Error(outcome&&outcome.error||'Mask recomputation failed');
+        delete candidate.aiState;
         if(outcome.warning)warning+=(warning?'; ':'')+outcome.warning;
         if(deps.cancelled())throw new Error('Cancelled while recomputing this photo');
         if(deps.current()!==target.item)throw new Error('Active photo changed during recomputation');
@@ -18165,6 +18171,30 @@ async function _mskPortableReevaluate(m,target){
   }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
+}
+// AI mask state: undefined = ready, 'stale' = pixels came from another photo/source, 'failed' = last Update failed.
+function mskAiStateOf(m){return(mskIsAI(m)||m.origin==='sky')?(m.aiState||'ready'):null;}
+function mskAiCanUpdate(m){return !!window.__TAURI__&&_mskPortableNeedsReevaluation(m);}
+let _mskAiUpdating=false;
+async function mskAiUpdate(i){
+  const m=fxState.masks[i];if(!m||!mskAiCanUpdate(m)||_mskAiUpdating)return false;
+  const item=curItem(),keep={px:m.px,mtW:m.mtW,mtH:m.mtH};
+  _mskAiUpdating=true;const job=mskAiBusy('Updating '+(m.name||'mask'));
+  try{
+    m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;delete m._refineCache;delete m._refineSourceHash;
+    const out=await _mskPortableReevaluate(m,{item});
+    if(job.cancelled)throw new Error('Cancelled');
+    if(!out||!out.ok)throw new Error(out&&out.error||'Update failed');
+    delete m.aiState;delete m.aiStateMsg;
+  }catch(e){
+    m.px=keep.px;m.mtW=keep.mtW;m.mtH=keep.mtH;
+    m.aiState=job.cancelled?'stale':'failed';m.aiStateMsg=String(e&&e.message||e);
+    log('Mask update failed: '+m.aiStateMsg,'warn');
+  }finally{job.done();_mskAiUpdating=false;_mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
+  return !m.aiState;
+}
+async function mskAiUpdateAll(){
+  for(let i=0;i<fxState.masks.length;i++){const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
 }
 async function mskCopyAndReevaluate(){
   if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;
@@ -19978,7 +20008,7 @@ function mskCreateGridSync(){
 }
 function mskRebuild(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}{const ua=document.getElementById('msk-update-all');if(ua)ua.style.display=fxState.masks.some(m=>m.aiState&&mskAiCanUpdate(m))?'':'none';}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
@@ -19993,6 +20023,16 @@ function mskRebuild(){
     // Operation chip (composition graph) + inline mute/solo. Spans with role=button, not nested
     // <button>s: the list stays one <button> per row and the stopPropagation keeps a click on a
     // control from also selecting the row.
+    const aiSt=mskAiStateOf(m);
+    if(aiSt){
+      const d=document.createElement('span');d.className='msk-ai-dot '+aiSt;d.setAttribute('role','img');
+      const tip={ready:'AI mask is up to date',stale:'AI mask came from another photo or source — Update to re-evaluate it on this photo',failed:'Last update failed'+(m.aiStateMsg?': '+m.aiStateMsg:'')}[aiSt];
+      d.title=tip;d.setAttribute('aria-label','AI mask '+aiSt);b.appendChild(d);
+      if(aiSt!=='ready'&&mskAiCanUpdate(m)){
+        const u=document.createElement('span');u.className='msk-li-ctl msk-ai-update';u.textContent='Update';u.setAttribute('role','button');u.tabIndex=0;u.title='Re-evaluate this AI mask on the current photo';
+        const go=(e)=>{e.preventDefault();e.stopPropagation();mskAiUpdate(i);};u.onclick=go;u.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' ')go(e);};b.appendChild(u);
+      }
+    }
     const opKey=m.isExclude?'erase':(m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':''));
     const opTxt={add:'+ Add',subtract:'− Sub',intersect:'∩ Int',erase:'Erase'}[opKey];
     if(opTxt){const c=document.createElement('span');c.className='msk-tag msk-op-chip';c.dataset.op=opKey;c.textContent=opTxt;b.appendChild(c);}
@@ -21154,6 +21194,8 @@ function pasteEditSelectiveApply(base,src,checkedKeys){
     (c.colors||[]).forEach(id=>{if(has('color',id)&&src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
     (c.extra||[]).forEach(k=>{if(has('extra',k)&&src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
   });
+  // Pasted AI/sky masks carry the SOURCE photo's pixels: flag them stale so the panel offers Update.
+  if(Array.isArray(base.masks)&&(chosen.has('masks')||chosen.has('extra:masks')))base.masks.forEach(m=>{if(m&&(m.origin==='sky'||m.origin==='ai'||m.ai))m.aiState='stale';});
   return base;
 }
 window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);

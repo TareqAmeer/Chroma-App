@@ -53,6 +53,8 @@ function pasteEditSelectiveApply(base,src,checkedKeys){
     (c.colors||[]).forEach(id=>{if(has('color',id)&&src.colors&&src.colors[id]!==undefined){base.colors=base.colors||{};base.colors[id]=src.colors[id];}});
     (c.extra||[]).forEach(k=>{if(has('extra',k)&&src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
   });
+  // Pasted AI/sky masks carry the SOURCE photo's pixels: flag them stale so the panel offers Update.
+  if(Array.isArray(base.masks)&&(chosen.has('masks')||chosen.has('extra:masks')))base.masks.forEach(m=>{if(m&&(m.origin==='sky'||m.origin==='ai'||m.ai))m.aiState='stale';});
   return base;
 }
 window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);

@@ -56,7 +56,7 @@ Existing advantages to keep: Copy + re-evaluate (already more transparent than L
 - "Create separate masks" toggle.
 - Objects tool: drag a box, using the existing EdgeSAM box route, or brush, using an EdgeSAM scribble.
 
-**P5 — AI mask state and sync** (gaps 7, 8).
+**P5 — AI mask state and sync** (gaps 7, 8). *Status: done.* `m.aiState` (ready/stale/failed) drives a row status dot, per-row Update and header "Update all AI masks" (re-evaluates prompted-SAM and sky masks via the Copy + re-evaluate path; desktop only). Static copy to all and Paste edit (masks) mark AI/sky masks stale on targets; Copy + re-evaluate clears the flag. Not covered: auto-detecting stale from crop/source change. **Cancel:** the native SAM call cannot be interrupted (no cancel command in `main.rs`); Cancel flags the job and discards the result when it returns (decoder calls are sub-second; the encode is the long one). A true abort needs a Rust-side cooperative flag, left undone. Test: `test/mask_ai_state.mjs`.
 - Each AI mask row shows a status dot: ready, stale (photo, crop or source changed) or failed. Stale and failed rows get an Update button, and the panel header gets Update all.
 - Pasting or syncing a mask to other photos marks it stale on each target rather than silently copying the old pixels.
 

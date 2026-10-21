@@ -739,6 +739,10 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 /* Lightroom-style edit pins: one round pin per mask, anchored on the photo. The layer rides the zoom
    transform, so each pin is counter-scaled (--pin-s) to stay a constant on-screen size. */
 #msk-pin-layer{position:absolute;display:none;pointer-events:none}
+.msk-ai-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--ok,#4caf50)}
+.msk-ai-dot.stale{background:var(--warn,#e0a030)}
+.msk-ai-dot.failed{background:var(--err,#d9534f)}
+.msk-ai-update{font-size:var(--fs-0);text-decoration:underline}
 .msk-ai-busy{display:none;align-items:center;gap:8px;margin:4px 0;padding:4px 8px;border:1px solid var(--bdr);border-radius:6px;font-size:var(--fs-1);color:var(--mut)}
 .msk-ai-busy.on{display:flex}
 .msk-ai-busy .msk-ai-spin{width:12px;height:12px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:mskspin .8s linear infinite}
