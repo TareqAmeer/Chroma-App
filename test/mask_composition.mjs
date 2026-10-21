@@ -18,7 +18,7 @@ function declaration(name) {
 const context = vm.createContext({ Date, Math, Set, Map, CR_MAX_SAMPLES: 8,
   _pxToB64: () => '', _pxFromB64: () => new Uint8ClampedArray(0) });
 vm.runInContext([
-  '_mskNewId', '_mskEnsureIds', '_mskCompositionPlan', '_mskCompositionCandidateCheck',
+  'mskIsAI', '_mskNewId', '_mskEnsureIds', '_mskCompositionPlan', '_mskCompositionCandidateCheck',
   'mskSetComposition', 'mskClearComposition', '_mskSkinDefaults', '_mskMigrate', '_mskToSnap', '_mskFromSnap',
 ].map(declaration).join('\n'), context);
 const ensure = context._mskEnsureIds;
