@@ -45,12 +45,15 @@ function fxSyncDcpProfileUI(){
   if(!sel)return;
   const it=(typeof curItem==='function')?curItem():null;
   const isRaw=!!(it&&it.rawFile);
-  sel.disabled=!isRaw;
-  sel.title=isRaw?'':'RAW profile only applies to RAW files';
+  // Desktop Library opens served from the decode cache carry no rawFile (only ext), but the profile
+  // still applies there: setRawProfile re-opens via chromasmithReloadCurrentPhoto.
+  const profOk=isRaw||!!(window.__TAURI__&&it&&it.ext&&RAW_FILE_EXT_RE.test('.'+it.ext));
+  sel.disabled=!profOk;
+  sel.title=profOk?'':'RAW profile only applies to RAW files';
   // RAW-only controls are hidden (not just disabled) for JPEG/PNG/etc. Auto lens profile also
   // needs the desktop (Tauri) lensfun lookup, so it is hidden on web/iOS/Android regardless.
   const show=(id,on)=>{const el=document.getElementById(id);if(el)el.style.display=on?'':'none';};
-  show('row-raw-profile',isRaw);show('row-raw-nr',isRaw);show('row-raw-ahd',isRaw);
+  show('row-raw-profile',profOk);show('row-raw-nr',isRaw);show('row-raw-ahd',isRaw);
   const lensAuto=isRaw&&!!window.__TAURI__;
   show('row-lens-auto',lensAuto);show('lens-auto-status',lensAuto);
   {const tg=document.getElementById('tg-lens-auto');if(tg)tg.style.display=lensAuto?'':'none';}
