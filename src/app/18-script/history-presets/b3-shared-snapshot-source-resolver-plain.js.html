@@ -97,6 +97,10 @@ function renderPreview(){
   }
   _fxCropShown=false;_fxHideFullBase();window.__fxCrispView=null; // leaving crop mode — hide the underlay (kept, keyed by recipe)
   const zw=document.getElementById('fx-zoom-wrap');
+  // Read the footprint BEFORE un-pinning the wrap: once zw's width is cleared the footprint falls
+  // back to FX.cv's style width, which in crop mode is only the crisp TILE, so _zoomRefit below
+  // scaled the pan by footprint/tile (~3x) and the photo jumped on any re-render (toggle, app switch).
+  const _preFootW=_fxZoomFootprint().w;
   if(zw){zw.style.width='';zw.style.height='';}
   FX.cv.style.transform='';                            // clear any full-res-crop offset
   // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
@@ -173,7 +177,7 @@ function renderPreview(){
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
   if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
-  const _oldFootW=_fxZoomFootprint().w;
+  const _oldFootW=_preFootW;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
   // to only run below 100%, so a zoomed-in photo jumped when the sheet changed the preview size).
