@@ -43,9 +43,10 @@ function fxLiveFit(ms){
       const s=Math.min(aw/nativeW,ah/nativeH,1);
       const oldW=_fxZoomFootprint().w;
       cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
+      if(zw&&zw.style.width){zw.style.width=cv.style.width;zw.style.height=cv.style.height;} // pinned footprint follows the composite
       // Full-res crop mode pins #fx-zoom-wrap to the photo footprint and cv is only the crisp
       // tile — its own re-render re-fits; here the footprint IS the canvas, so re-anchor the pan.
-      if(cv.id==='fx-canvas')_zoomRefit(oldW);
+      _zoomRefit(oldW); // bordered composite too: it is the footprint now (was fx-canvas only, so a bordered zoomed photo drifted on resize)
     }
   };
   const step=()=>{fit();_lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;};
@@ -64,9 +65,12 @@ function fxLiveFit(ms){
 // fresh at that one viewport with no resize in between. fxLiveFit already exists for exactly
 // this continuous-rescale job (cheap CSS-only, no WebGL re-render each frame); reuse it here,
 // then land one crisp renderPreview() once the drag settles, mirroring the sheet/panel pattern.
-let _fxWinResizeT=0;
+let _fxWinResizeT=0,_fxWinSizeKey=innerWidth+'x'+innerHeight+'@'+devicePixelRatio;
 window.addEventListener('resize',()=>{
   if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+  // WKWebView (and several panel toggles here) fire 'resize' with no size change at all: re-rendering
+  // then is pure waste. A real size or devicePixelRatio change still goes through.
+  const k=innerWidth+'x'+innerHeight+'@'+devicePixelRatio;if(k===_fxWinSizeKey)return;_fxWinSizeKey=k;
   fxLiveFit(220);
   clearTimeout(_fxWinResizeT);
   _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
@@ -90,8 +94,8 @@ window.addEventListener('resize',()=>{
     // Refit on the next frame: resizing the observed wrap synchronously can trigger
     // WebKit's ResizeObserver delivery loop when a mobile sheet changes height.
     cancelAnimationFrame(_fitFrame);_fitFrame=requestAnimationFrame(()=>fxLiveFit(220));
-    clearTimeout(_rt);
-    _rt=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+    clearTimeout(_fxWinResizeT); // ONE settle timer shared with the window 'resize' listener: a window resize hit both and rendered twice
+    _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
   }).observe(wrap);
 })();
 // Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).

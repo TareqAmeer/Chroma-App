@@ -179,7 +179,10 @@ function drawScopeVectorscope(hc,px,srcW,srcH){
 
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
 function _fxZoomFootprint(){
-  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  const zw=document.getElementById('fx-zoom-wrap');let cv=document.getElementById('fx-canvas');
+  // Borders/matte on: the composited #fx-canvas-bd is what's on screen (FX.cv is hidden), so IT is the
+  // footprint the zoom centring and the pan re-anchor must use — not the hidden photo-only canvas.
+  const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width&&parseFloat(bd.style.width))cv=bd;
   return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0,
     h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||(cv&&cv.clientHeight)||0};
 }
@@ -231,7 +234,9 @@ function _fxTrueZoomK(){
   // Null-safe on purpose: this runs from _updateZoomReadout during a photo open, when the editor canvas /
   // zoom wrapper may not be in the DOM yet (the desktop open path) — a throw here aborts the whole open.
   const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
-  const w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
+  let w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
+  // Borders/matte: the pinned wrap is the composite; the PHOTO's width inside it is what 100% means.
+  if(_fxDisplayMap&&w){const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width)w=w*_fxDisplayMap.w/bd.width;}
   const src=fxWork;if(!src||!w)return 0;
   const FW=(src.naturalWidth||src.width)*fxFullScale();
   return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
@@ -243,13 +248,3 @@ function _fxZoomMax(){const k=_fxTrueZoomK();return k?Math.max(FX_FIT*2,FX_ZOOM_
 function _fxSliderToZoom(v){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=lo*Math.pow(hi/lo,v/1000);
   const fitPct=_fxZoomToPct(FX_FIT);return Math.abs(pct-fitPct)/fitPct<0.03?FX_FIT:_fxPctToZoom(pct);}
 function _fxZoomToSlider(z){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=Math.max(lo,Math.min(hi,_fxZoomToPct(z)));return Math.round(1000*Math.log(pct/lo)/Math.log(hi/lo));}
-function zoomSetSlider(v){if(fxLoupe)toggleLoupe();fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),_fxSliderToZoom(v)));_applyZoom();}
-// Click on the photo toggles Fit <-> 100% (1:1) about the click point; scroll/slider/buttons go on to 1600%.
-function _fxClickZoom(cx,cy){
-  if(!fxWork||fxLoupe)return;
-  if(Math.abs(fxZoom-FX_FIT)<0.002){_zoomAt(Math.min(_fxZoomMax(),_fxPctToZoom(100)),cx,cy);_applyZoom(true);}
-  else _resetZoom(true);
-}
-// Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
-// needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
-// export. No-op everywhere else (browser, non-RAW, already promoted).

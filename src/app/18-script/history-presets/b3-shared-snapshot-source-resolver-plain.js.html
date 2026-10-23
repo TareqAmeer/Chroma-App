@@ -194,7 +194,6 @@ function renderPreview(){
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
   // to only run below 100%, so a zoomed-in photo jumped when the sheet changed the preview size).
-  _zoomRefit(_oldFootW);
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxComparePreviousSnapshot!==null){
@@ -223,6 +222,14 @@ function renderPreview(){
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
   if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
+  // Pin #fx-zoom-wrap to the on-screen footprint (the photo, or the bordered composite) in this
+  // whole-frame mode too, exactly like the full-res crop mode does. Left auto, the wrap took the
+  // width of its widest child, so the photo sat ~25px off the centre the zoom maths assumes, and
+  // every switch between this path and the crop path (slider draft while zoomed, Alt preview,
+  // panel toggle) jumped the zoomed photo by that offset times the zoom.
+  {const bdv=document.getElementById('fx-canvas-bd');const onBd=bdv&&bdv.style.display!=='none'&&parseFloat(bdv.style.width);
+   if(zw){zw.style.width=onBd?bdv.style.width:cw+'px';zw.style.height=onBd?bdv.style.height:ch+'px';}}
+  _zoomRefit(_oldFootW); // after the composite is sized: with borders on, IT is the footprint
   _fxWholeLast=(fxComparePreviousSnapshot===null&&!fxSplit)?{key:_wholeKey,rc:FX._rc,work}:{};
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`

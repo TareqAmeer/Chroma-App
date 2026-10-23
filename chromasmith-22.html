@@ -668,7 +668,7 @@ body.light .fx-select:hover{background-color:rgba(0,0,0,.035)}
 .fx-split-line[data-axis="horizontal"]{top:auto;right:0;bottom:auto;height:3px;width:auto;cursor:row-resize}
 .fx-split-knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 2px 8px var(--scrim-b5);display:flex;align-items:center;justify-content:center;font-size:var(--fs-2);color:#000;user-select:none}
 #fx-hist{display:none;position:absolute;bottom:8px;right:8px;border-radius:4px;background:var(--scrim-b3);opacity:var(--op-8);pointer-events:none}
-.fx-zoom-wrap{transform-origin:0 0;cursor:grab;touch-action:none;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.fx-zoom-wrap{flex:none;transform-origin:0 0;cursor:grab;touch-action:none;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .fx-zoom-wrap.dragging{cursor:grabbing}
 .fx-zoom-ctrl{position:absolute;left:8px;bottom:8px;display:flex;align-items:center;gap:2px;background:var(--scrim-b4);border:1px solid var(--bdr);border-radius:6px;padding:2px;z-index:var(--z-sticky);font-family:var(--sans);font-variant-numeric:tabular-nums}
 .fx-zoom-ctrl #fx-zoom-slider{width:70px}
@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1023G';
+const BUILD='1.1023H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -22298,7 +22298,10 @@ function drawScopeVectorscope(hc,px,srcW,srcH){
 
 // ══ ZOOM / PAN ════════════════════════════════════════════════════════════════
 function _fxZoomFootprint(){
-  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  const zw=document.getElementById('fx-zoom-wrap');let cv=document.getElementById('fx-canvas');
+  // Borders/matte on: the composited #fx-canvas-bd is what's on screen (FX.cv is hidden), so IT is the
+  // footprint the zoom centring and the pan re-anchor must use — not the hidden photo-only canvas.
+  const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width&&parseFloat(bd.style.width))cv=bd;
   return {w:parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0,
     h:parseFloat(zw&&zw.style.height)||parseFloat(cv&&cv.style.height)||(cv&&cv.clientHeight)||0};
 }
@@ -22350,7 +22353,9 @@ function _fxTrueZoomK(){
   // Null-safe on purpose: this runs from _updateZoomReadout during a photo open, when the editor canvas /
   // zoom wrapper may not be in the DOM yet (the desktop open path) — a throw here aborts the whole open.
   const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
-  const w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
+  let w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
+  // Borders/matte: the pinned wrap is the composite; the PHOTO's width inside it is what 100% means.
+  if(_fxDisplayMap&&w){const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width)w=w*_fxDisplayMap.w/bd.width;}
   const src=fxWork;if(!src||!w)return 0;
   const FW=(src.naturalWidth||src.width)*fxFullScale();
   return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
@@ -25036,7 +25041,6 @@ function renderPreview(){
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
   // to only run below 100%, so a zoomed-in photo jumped when the sheet changed the preview size).
-  _zoomRefit(_oldFootW);
   document.getElementById('fx-no-img').style.display='none';
   // Split view: render original into overlay canvas, clip each side at fxSplitPos
   if(fxComparePreviousSnapshot!==null){
@@ -25065,6 +25069,14 @@ function renderPreview(){
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
   if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
+  // Pin #fx-zoom-wrap to the on-screen footprint (the photo, or the bordered composite) in this
+  // whole-frame mode too, exactly like the full-res crop mode does. Left auto, the wrap took the
+  // width of its widest child, so the photo sat ~25px off the centre the zoom maths assumes, and
+  // every switch between this path and the crop path (slider draft while zoomed, Alt preview,
+  // panel toggle) jumped the zoomed photo by that offset times the zoom.
+  {const bdv=document.getElementById('fx-canvas-bd');const onBd=bdv&&bdv.style.display!=='none'&&parseFloat(bdv.style.width);
+   if(zw){zw.style.width=onBd?bdv.style.width:cw+'px';zw.style.height=onBd?bdv.style.height:ch+'px';}}
+  _zoomRefit(_oldFootW); // after the composite is sized: with borders on, IT is the footprint
   _fxWholeLast=(fxComparePreviousSnapshot===null&&!fxSplit)?{key:_wholeKey,rc:FX._rc,work}:{};
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`
@@ -25720,7 +25732,12 @@ function applyPreviewBorders(P,pw,ph){
   // fxLiveFit may have set both CSS dimensions on the previous photo while the layout was
   // resizing. Clear those stale dimensions before showing a new-aspect result; the intrinsic
   // canvas size plus height:auto must be the only sizing source for the composed image.
-  bd.style.width='';bd.style.height='';
+  // Size the composite explicitly to the preview's fit box (same rule fxLiveFit uses). It used to be
+  // max-width:100%;height:auto of an auto-width parent: its on-screen size followed the container
+  // width alone, so a panel/sidebar toggle or window resize rescaled it on its own and the zoomed
+  // photo jumped (zoom centring and pan re-anchor were computed from a different size).
+  {const fw=fxWrapInner().w||bd.width,fh=fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
+   bd.style.maxWidth='none';bd.style.width=Math.round(bd.width*k)+'px';bd.style.height=Math.round(bd.height*k)+'px';} // whole px: mskOverlayBox reads offsetWidth (integer)
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;
   if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
@@ -31403,9 +31420,10 @@ function fxLiveFit(ms){
       const s=Math.min(aw/nativeW,ah/nativeH,1);
       const oldW=_fxZoomFootprint().w;
       cv.style.width=(nativeW*s)+'px';cv.style.height=(nativeH*s)+'px';
+      if(zw&&zw.style.width){zw.style.width=cv.style.width;zw.style.height=cv.style.height;} // pinned footprint follows the composite
       // Full-res crop mode pins #fx-zoom-wrap to the photo footprint and cv is only the crisp
       // tile — its own re-render re-fits; here the footprint IS the canvas, so re-anchor the pan.
-      if(cv.id==='fx-canvas')_zoomRefit(oldW);
+      _zoomRefit(oldW); // bordered composite too: it is the footprint now (was fx-canvas only, so a bordered zoomed photo drifted on resize)
     }
   };
   const step=()=>{fit();_lfRaf=(performance.now()<_lfUntil)?requestAnimationFrame(step):0;};
@@ -31424,9 +31442,12 @@ function fxLiveFit(ms){
 // fresh at that one viewport with no resize in between. fxLiveFit already exists for exactly
 // this continuous-rescale job (cheap CSS-only, no WebGL re-render each frame); reuse it here,
 // then land one crisp renderPreview() once the drag settles, mirroring the sheet/panel pattern.
-let _fxWinResizeT=0;
+let _fxWinResizeT=0,_fxWinSizeKey=innerWidth+'x'+innerHeight+'@'+devicePixelRatio;
 window.addEventListener('resize',()=>{
   if(cropMode||fxLoupe)return; // both own the canvas / have their own resize handling
+  // WKWebView (and several panel toggles here) fire 'resize' with no size change at all: re-rendering
+  // then is pure waste. A real size or devicePixelRatio change still goes through.
+  const k=innerWidth+'x'+innerHeight+'@'+devicePixelRatio;if(k===_fxWinSizeKey)return;_fxWinSizeKey=k;
   fxLiveFit(220);
   clearTimeout(_fxWinResizeT);
   _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
@@ -31450,8 +31471,8 @@ window.addEventListener('resize',()=>{
     // Refit on the next frame: resizing the observed wrap synchronously can trigger
     // WebKit's ResizeObserver delivery loop when a mobile sheet changes height.
     cancelAnimationFrame(_fitFrame);_fitFrame=requestAnimationFrame(()=>fxLiveFit(220));
-    clearTimeout(_rt);
-    _rt=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
+    clearTimeout(_fxWinResizeT); // ONE settle timer shared with the window 'resize' listener: a window resize hit both and rendered twice
+    _fxWinResizeT=setTimeout(()=>{fxLiveFitStop();if(!cropMode&&!fxLoupe)renderPreview();},220);
   }).observe(wrap);
 })();
 // Re-fit the render when the sheet finishes opening/closing (the photo's flex space changed).

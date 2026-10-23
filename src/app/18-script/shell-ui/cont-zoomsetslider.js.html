@@ -1,3 +1,13 @@
+function zoomSetSlider(v){if(fxLoupe)toggleLoupe();fxZoom=Math.max(0.25,Math.min(_fxZoomMax(),_fxSliderToZoom(v)));_applyZoom();}
+// Click on the photo toggles Fit <-> 100% (1:1) about the click point; scroll/slider/buttons go on to 1600%.
+function _fxClickZoom(cx,cy){
+  if(!fxWork||fxLoupe)return;
+  if(Math.abs(fxZoom-FX_FIT)<0.002){_zoomAt(Math.min(_fxZoomMax(),_fxPctToZoom(100)),cx,cy);_applyZoom(true);}
+  else _resetZoom(true);
+}
+// Desktop Library RAW opens edit on the 2560px display tier until full resolution is actually
+// needed (library-ui.js's chromasmithEnsureFullQuality): zoom past fit, loupe, first edit, crop,
+// export. No-op everywhere else (browser, non-RAW, already promoted).
 function fxEnsureFullQuality(why){
   // Browser RAW proxy: a full decode is ~20-40s, so only the things that SHOW the extra pixels
   // (zoom past fit, loupe, export) wait for it — edits and crop work fine on the proxy.
