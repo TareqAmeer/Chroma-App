@@ -105,10 +105,14 @@ let _fxPeoplePathToken='';
 // zoomed crop it's only the visible slice, translated.
 function fxPhotoClientRect(){
   const zw=document.getElementById('fx-zoom-wrap'),b=typeof mskOverlayBox==='function'?mskOverlayBox():null;
-  if(!zw||!b||!zw.offsetWidth)return null;
-  const r=zw.getBoundingClientRect();if(!r.width)return null;
-  const k=r.width/zw.offsetWidth;
-  return{left:r.left+b.left*k,top:r.top+b.top*k,width:b.width*k,height:b.height*k};
+  if(!zw||!b)return null;
+  // An invisible anchor laid out at the box INSIDE the zoom wrap: the browser applies the exact
+  // same transform to it as to the canvas, so its client rect is the photo — no separate maths.
+  let a=document.getElementById('fx-photo-anchor');
+  if(!a){a=document.createElement('div');a.id='fx-photo-anchor';a.setAttribute('aria-hidden','true');
+    a.style.cssText='position:absolute;visibility:hidden;pointer-events:none;margin:0;padding:0;border:0';zw.appendChild(a);}
+  a.style.left=b.left+'px';a.style.top=b.top+'px';a.style.width=b.width+'px';a.style.height=b.height+'px';
+  const r=a.getBoundingClientRect();return r.width&&r.height?{left:r.left,top:r.top,width:r.width,height:r.height}:null;
 }
 // Pointer → photo-normalised 0..1 (top-origin), null when off the photo. Mask/ROI input uses this.
 function fxPointerToPhotoNorm(e,clamp){

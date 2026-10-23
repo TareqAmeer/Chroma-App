@@ -91,13 +91,14 @@ function mskOverlayBox(){
   // photo's rect within that composited canvas, not #fx-canvas's own (hidden) size at 0,0.
   const bd=document.getElementById('fx-canvas-bd');
   if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
-    const bw=parseFloat(bd.style.width)||bd.clientWidth;if(!bw)return null;
+    const bw=bd.offsetWidth||parseFloat(bd.style.width);if(!bw)return null; // laid-out width (max-width:100% can shrink it below style.width)
     const s=bw/bd.width;
     return{left:_fxDisplayMap.offX*s,top:_fxDisplayMap.offY*s,width:_fxDisplayMap.w*s,height:_fxDisplayMap.h*s};
   }
   // Full-res zoomed crop (_fxCropShown): #fx-canvas is shrunk to the visible crop and translated,
   // so its own CSS size is NOT the photo — the zoom-wrap footprint is (the "mask offset when zoomed" bug).
-  const fp=_fxZoomFootprint(),w=fp.w,h=fp.h;
+  // Otherwise use the canvas's LAID-OUT size: CSS max-width can render it narrower than style.width.
+  const fp=_fxZoomFootprint(),w=_fxCropShown?fp.w:(cv.offsetWidth||fp.w),h=_fxCropShown?fp.h:(cv.offsetHeight||fp.h);
   if(!w||!h)return null;
   return{left:0,top:0,width:w,height:h};
 }
