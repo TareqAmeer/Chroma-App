@@ -667,7 +667,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   // opts.scOverride: force the sigma-scale (=fullImageWidth/REF) — used by the tiled path so
   //   a tile blurs with the WHOLE image's radius, not the tile's.
   // opts.uvOff/uvScale: map this render's local uv → global image uv (grain continuity for tiles).
-  render(P,w,h,opts){const gl=this.gl;const gs=(opts&&opts.glowScale)||1;
+  render(P,w,h,opts){this._rc=(this._rc||0)+1;const gl=this.gl;const gs=(opts&&opts.glowScale)||1;
     // ROADMAP.md R1: the scene-referred tonemap needs the SAME float intermediate video already
     // uses (opts.hdrIntermediate) — OR'd in here rather than requiring every still call site to
     // remember to pass it, since "tonemap is on" already implies "float FBOs are needed" by

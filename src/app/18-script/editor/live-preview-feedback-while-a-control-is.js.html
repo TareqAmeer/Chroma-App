@@ -13,6 +13,9 @@
 let _fxRenderRAF=0;
 function fxSharpMaskPreview(on,target=document.activeElement){
   const next=!!on;
+  // Releasing a preview that isn't on is a no-op: this runs on EVERY window blur (app switch), and the
+  // unconditional re-render it used to schedule resized the backing store mid-switch and moved the photo.
+  if(!next&&!_adjSharpMaskPreview&&!_mskSharpMaskPreview)return;
   if(next){
     const active=target||document.activeElement;
     if(active&&active.dataset&&active.dataset.k==='sharpMask'&&mskSel>=0&&fxState.masks[mskSel])_mskSharpMaskPreview=true;

@@ -191,7 +191,7 @@ function initZoomPan(){
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
-    else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;fxRenderPreviewViewOnly();}
+    else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;clearTimeout(_fxZoomRenderTimer);fxRenderPreviewViewOnly();} // the pan's _applyZoom calls armed the 90ms settle render too: one render, not two
   };
   const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,false);};
   zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,true);});

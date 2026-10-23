@@ -95,6 +95,7 @@ function renderPreview(){
       return;
     }
   }
+  const _wasCropShown=_fxCropShown;
   _fxCropShown=false;_fxHideFullBase();window.__fxCrispView=null; // leaving crop mode — hide the underlay (kept, keyed by recipe)
   const zw=document.getElementById('fx-zoom-wrap');
   // Read the footprint BEFORE un-pinning the wrap: once zw's width is cleared the footprint falls
@@ -176,6 +177,18 @@ function renderPreview(){
   // "before" snapshot, so the processed frame has to be drawn again afterwards. Rendering it
   // here as well meant split view paid for the graded frame TWICE on every single preview
   // update. Only render it up front when we are not about to throw it away.
+  // A zoom/pan settle (view-only) on this whole-frame path whose backing store would come out identical
+  // to what FX.cv already holds (same size, no recipe change, nothing else drawn into FX.cv since) is pure
+  // CSS: skip it. At Full res on a bordered/matted photo zoomed in, this render is the WHOLE source
+  // (~2s in WKWebView) and used to run on every pan release.
+  const _wholeKey=_fxTileGen+'|'+pw+'x'+ph+'|'+cw+'x'+ch+'|'+(fxCompare?1:0)+'|'+JSON.stringify(mskPreviewRenderOptions({}))+'|'+gs;
+  if(_fxViewOnlyRender&&!_wasCropShown&&!fxSplit&&fxComparePreviousSnapshot===null&&!_curIsVideo&&
+     _fxWholeLast.key===_wholeKey&&_fxWholeLast.rc===FX._rc&&_fxWholeLast.work===work){
+    _zoomRefit(_preFootW);
+    if(fxFullResPreview)document.getElementById('fx-info').textContent=`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`;
+    if(typeof mskOverlaySync==='function')mskOverlaySync();
+    return;
+  }
   if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
   const _oldFootW=_preFootW;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
@@ -210,6 +223,7 @@ function renderPreview(){
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
   if(fxComparePreviousSnapshot===null)drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
+  _fxWholeLast=(fxComparePreviousSnapshot===null&&!fxSplit)?{key:_wholeKey,rc:FX._rc,work}:{};
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`
     :`Preview ${pw}\u00d7${ph}`;
