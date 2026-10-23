@@ -98,6 +98,7 @@ function _fxShowFullBase(iw,ih,cw,ch){
     if(el.width!==b.canvas.width||el.height!==b.canvas.height){el.width=b.canvas.width;el.height=b.canvas.height;}
     el.getContext('2d').drawImage(b.canvas,0,0);el._baseVer=b.ver;
   }
+  el.style.maxWidth='none'; // generic canvas max-width:100% squashed the underlay narrower than the photo
   el.style.width=cw+'px';el.style.height=ch+'px';el.style.display='block';
 }
 function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase');if(el)el.style.display='none';}

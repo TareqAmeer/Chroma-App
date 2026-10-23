@@ -134,6 +134,12 @@ function pcEyedropper(){
 // graded photo. If the preview is currently showing the red SELECTION map they'd sample that
 // instead, so force one normal render first; the caller's own fxUpdate() puts the map back.
 function _fxEnsureNormalRender(){
+  // Zoomed full-res crop: FX.cv holds only the visible tile, so canvas reads at full-frame coords
+  // need a full-frame render first; re-render the crop view afterwards.
+  if(typeof _fxCropShown!=='undefined'&&_fxCropShown&&FX&&FX.cv&&FX.cv.width&&!(typeof fxLoupe!=='undefined'&&fxLoupe)){
+    try{FX.render(getFXParams(),FX.cv.width,FX.cv.height,{glowScale:fxGlowScale(),showSel:-1});}catch(err){}
+    if(typeof fxScheduleRender==='function')setTimeout(fxScheduleRender,0);return;
+  }
   if(typeof mskShowSelIdx!=='function'||mskShowSelIdx()<0)return;
   if(!FX||!FX.cv||!FX.cv.width)return;
   if(typeof fxLoupe!=='undefined'&&fxLoupe)return;  // the loupe render has its own uv window; a

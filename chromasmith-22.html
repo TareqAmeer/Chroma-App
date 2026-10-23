@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1023E';
+const BUILD='1.1023F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14741,6 +14741,12 @@ function pcEyedropper(){
 // graded photo. If the preview is currently showing the red SELECTION map they'd sample that
 // instead, so force one normal render first; the caller's own fxUpdate() puts the map back.
 function _fxEnsureNormalRender(){
+  // Zoomed full-res crop: FX.cv holds only the visible tile, so canvas reads at full-frame coords
+  // need a full-frame render first; re-render the crop view afterwards.
+  if(typeof _fxCropShown!=='undefined'&&_fxCropShown&&FX&&FX.cv&&FX.cv.width&&!(typeof fxLoupe!=='undefined'&&fxLoupe)){
+    try{FX.render(getFXParams(),FX.cv.width,FX.cv.height,{glowScale:fxGlowScale(),showSel:-1});}catch(err){}
+    if(typeof fxScheduleRender==='function')setTimeout(fxScheduleRender,0);return;
+  }
   if(typeof mskShowSelIdx!=='function'||mskShowSelIdx()<0)return;
   if(!FX||!FX.cv||!FX.cv.width)return;
   if(typeof fxLoupe!=='undefined'&&fxLoupe)return;  // the loupe render has its own uv window; a
@@ -14774,6 +14780,12 @@ function fxVisibleCanvas(){
   return (bd&&bd.style.display!=='none'&&bd.width)?bd:FX.cv;
 }
 function fxPointerToCanvasPx(e){
+  // Same image→screen transform as every overlay (fxPhotoClientRect): pointer → photo 0..1 →
+  // FX.cv's FULL-FRAME pixel grid. Reading FX.cv's own rect broke under the zoomed full-res crop,
+  // where #fx-canvas is only the visible tile, translated (picks landed in the wrong place).
+  if(typeof fxPointerToPhotoNorm==='function'&&FX.cv&&FX.cv.width){
+    const p=fxPointerToPhotoNorm(e);return p?{x:p.nx*FX.cv.width,y:p.ny*FX.cv.height}:null;
+  }
   const bd=document.getElementById('fx-canvas-bd');
   const usingBd=_fxDisplayMap&&bd&&bd.style.display!=='none'&&_fxDisplayMap.el===bd;
   const el=usingBd?bd:FX.cv;
@@ -24596,6 +24608,7 @@ function _fxShowFullBase(iw,ih,cw,ch){
     if(el.width!==b.canvas.width||el.height!==b.canvas.height){el.width=b.canvas.width;el.height=b.canvas.height;}
     el.getContext('2d').drawImage(b.canvas,0,0);el._baseVer=b.ver;
   }
+  el.style.maxWidth='none'; // generic canvas max-width:100% squashed the underlay narrower than the photo
   el.style.width=cw+'px';el.style.height=ch+'px';el.style.display='block';
 }
 function _fxHideFullBase(){const el=document.getElementById('fx-canvas-fullbase');if(el)el.style.display='none';}

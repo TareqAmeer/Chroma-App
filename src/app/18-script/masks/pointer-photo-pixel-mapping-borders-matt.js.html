@@ -25,6 +25,12 @@ function fxVisibleCanvas(){
   return (bd&&bd.style.display!=='none'&&bd.width)?bd:FX.cv;
 }
 function fxPointerToCanvasPx(e){
+  // Same image→screen transform as every overlay (fxPhotoClientRect): pointer → photo 0..1 →
+  // FX.cv's FULL-FRAME pixel grid. Reading FX.cv's own rect broke under the zoomed full-res crop,
+  // where #fx-canvas is only the visible tile, translated (picks landed in the wrong place).
+  if(typeof fxPointerToPhotoNorm==='function'&&FX.cv&&FX.cv.width){
+    const p=fxPointerToPhotoNorm(e);return p?{x:p.nx*FX.cv.width,y:p.ny*FX.cv.height}:null;
+  }
   const bd=document.getElementById('fx-canvas-bd');
   const usingBd=_fxDisplayMap&&bd&&bd.style.display!=='none'&&_fxDisplayMap.el===bd;
   const el=usingBd?bd:FX.cv;

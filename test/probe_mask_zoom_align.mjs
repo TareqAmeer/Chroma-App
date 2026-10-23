@@ -57,18 +57,22 @@ try {
         const cvr = FX.cv.getBoundingClientRect();
         const cx = e.left + .3 * e.width, cy = e.top + .7 * e.height;
         const uv = _mskPointToUV({ clientX: cx, clientY: cy });
+        const cp = fxPointerToCanvasPx({ clientX: cx, clientY: cy });
+        const dPick = cp ? Math.max(Math.abs(cp.x / FX.cv.width - .3), Math.abs(cp.y / FX.cv.height - .7)) : 'null';
+        const fbEl = document.getElementById('fx-canvas-fullbase'), fb = fbEl.style.display !== 'none' ? fbEl.getBoundingClientRect() : null;
+        const dBase = fb ? Math.max(Math.abs(fb.left - e.left), Math.abs(fb.top - e.top), Math.abs(fb.width - e.width), Math.abs(fb.height - e.height)) : null;
         const pin = document.querySelector('#msk-pin-layer .msk-pin'); const pr = pin && pin.getBoundingClientRect();
         out.push({ border, pct, crop: _fxCropShown, cvr: [cvr.left, cvr.top, cvr.width].map(Math.round), exp: [e.left, e.top, e.width, e.height].map(Math.round), ov: [ov.left, ov.top, ov.width, ov.height].map(Math.round), svg: [svg.left, svg.top, svg.width, svg.height].map(Math.round), fp: _fxZoomFootprint(), cvh: FX.cv.style.height, cvw: FX.cv.style.width, bdOn: !!_fxDisplayMap,
           dRect: Math.max(Math.abs(ov.left - e.left), Math.abs(ov.top - e.top), Math.abs(ov.width - e.width), Math.abs(ov.height - e.height)),
           dSvg: Math.max(Math.abs(svg.left - e.left), Math.abs(svg.top - e.top), Math.abs(svg.width - e.width), Math.abs(svg.height - e.height)),
-          dUV: uv ? Math.max(Math.abs(uv.nx - .3), Math.abs(uv.ny - .7)) : 'null',
+          dPick, dBase, dUV: uv ? Math.max(Math.abs(uv.nx - .3), Math.abs(uv.ny - .7)) : 'null',
           pinOff: pr ? Math.hypot(pr.left + pr.width / 2 - (e.left + .5 * e.width), pr.top + pr.height / 2 - (e.top + .5 * e.height)) : null });
       }
     }
     return out;
   });
   let bad = 0;
-  for (const r of res) { const fail = r.dRect > 1.5 || r.dSvg > 1.5 || r.dUV === 'null' || r.dUV > .005; if (fail) bad++; console.log(fail ? 'FAIL' : 'ok  ', JSON.stringify(r)); }
+  for (const r of res) { const fail = r.dRect > 1.5 || r.dSvg > 1.5 || r.dUV === 'null' || r.dUV > .005 || r.dPick === 'null' || r.dPick > .005 || (r.dBase != null && r.dBase > 1.5); if (fail) bad++; console.log(fail ? 'FAIL' : 'ok  ', JSON.stringify(r)); }
   if (errors.length) console.log('errors', errors);
   ok = bad === 0 && res.some(r => r.crop);
   console.log(ok ? 'PASS mask overlay zoom alignment' : `FAIL ${bad} misaligned (crop path exercised: ${res.some(r => r.crop)})`);
