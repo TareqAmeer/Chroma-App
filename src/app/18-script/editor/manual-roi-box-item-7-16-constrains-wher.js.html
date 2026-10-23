@@ -25,8 +25,8 @@ function ahRoiClear(){
   ahRoiSyncUI();
 }
 function _ahRoiFrac(e){
-  const pt=fxPointerToCanvasPx(e);if(!pt||!FX.cv.width||!FX.cv.height)return null;
-  return{x:Math.min(1,Math.max(0,pt.x/FX.cv.width)),y:Math.min(1,Math.max(0,pt.y/FX.cv.height))};
+  if(!fxPointerToPhotoNorm(e))return null;
+  const p=fxPointerToPhotoNorm(e,true);return{x:p.nx,y:p.ny};
 }
 (function(){
   const wrap=document.getElementById('fx-zoom-wrap');

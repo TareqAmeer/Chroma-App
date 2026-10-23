@@ -2791,7 +2791,7 @@ body.sk2 details#sk2-hist>summary{justify-content:flex-start;gap:12px;font-size:
 body.sk2 details#sk2-hist>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
 body.sk2 details#sk2-hist[open]>summary::before{transform:rotate(45deg)}
 body.sk2 details#sk2-hist>summary::after{content:none}
-body.sk2 details.fx-info-part{border-top:0;margin:0;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
+body.sk2 details.fx-info-part,body.sk2 details.sk2-more.fx-info-part{border-top:0;margin:0;padding-top:0;box-shadow:0 1px 0 var(--bdr)}
 body.sk2 details.fx-info-part>summary{justify-content:flex-start!important;text-align:left;gap:12px;font-size:17px;font-weight:500;letter-spacing:-.01em;color:var(--k-color-ink);min-height:48px;align-items:center}
 body.sk2 details.fx-info-part>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 0 0 2px;transition:transform .15s}
 body.sk2 details.fx-info-part[open]>summary::before{transform:rotate(45deg)}
@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1021I';
+const BUILD='1.1023A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18802,8 +18802,11 @@ function mskSpotlightToggle(v){mskSpotlight=!!v;try{localStorage.setItem('chroma
 function mskSpotlightHide(){const el=document.getElementById('msk-spotlight');if(el)el.classList.remove('on');}
 function mskSpotlightUpdate(x,y,r){
   const el=document.getElementById('msk-spotlight');if(!el)return;
-  const box=mskSpotlight&&typeof mskOverlayBox==='function'?mskOverlayBox():null;
-  if(!box){el.classList.remove('on');return;}
+  // #msk-spotlight lives in #fx-wrap (outside the zoom transform) and x,y are #fx-wrap-relative,
+  // so the box must be the photo's SCREEN rect in #fx-wrap coords, not the zoom-wrap-local box.
+  const pr=mskSpotlight&&typeof fxPhotoClientRect==='function'?fxPhotoClientRect():null,wrap=document.getElementById('fx-wrap');
+  if(!pr||!wrap){el.classList.remove('on');return;}
+  const wr=wrap.getBoundingClientRect(),box={left:pr.left-wr.left,top:pr.top-wr.top,width:pr.width,height:pr.height};
   el.style.left=box.left+'px';el.style.top=box.top+'px';el.style.width=box.width+'px';el.style.height=box.height+'px';
   const f=Math.max(0,Math.min(1,mskBrushFeather/100));
   el.style.setProperty('--sx',(x-box.left)+'px');el.style.setProperty('--sy',(y-box.top)+'px');
@@ -18851,10 +18854,8 @@ function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;mskPaintErase_sync(
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
   const src=fxWork||fxImg;if(!src||!FX.cv)return null;
-  const pt=fxPointerToCanvasPx(e);if(!pt)return null;
-  const cx=pt.x,cy=pt.y;
-  const sw=src.naturalWidth||src.width,sh=src.naturalHeight||src.height;
-  return{nx:Math.min(1,Math.max(0,cx*sw/FX.cv.width/sw)),ny:Math.min(1,Math.max(0,cy*sh/FX.cv.height/sh))};
+  if(!fxPointerToPhotoNorm(e))return null; // on the frame/matte, not the photo
+  return fxPointerToPhotoNorm(e,true);
 }
 function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // The ONE in-place raster mutation in the app, so the ONE place copy-on-write has to fire.
@@ -18927,9 +18928,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     // using the wrong container here would offset the ring by that centering gap whenever the
     // photo's aspect ratio doesn't exactly fill fx-wrap.
     const wrap=document.getElementById('fx-wrap');if(!wrap)return;
-    const wr=wrap.getBoundingClientRect(),cr=cv.getBoundingClientRect(),vr=fxVisibleCanvas().getBoundingClientRect();
-    // photo box on screen: the hidden #fx-canvas has a zero rect when a border is showing
-    const pr=(cr.width&&cr.height)?cr:(_fxDisplayMap?{width:vr.width*_fxDisplayMap.w/fxVisibleCanvas().width,height:vr.height*_fxDisplayMap.h/fxVisibleCanvas().height}:vr);
+    const wr=wrap.getBoundingClientRect(),pr=fxPhotoClientRect();if(!pr){cursorEl.classList.remove('on');mskSpotlightHide();return;}
     // AI scribble gets a Lightroom-style round brush; its stroke radius is the 0.02 used for the live dots
     const diam=(mskBrushSize/100)*0.5*Math.max(pr.width,pr.height);
     cursorEl.style.width=diam+'px';cursorEl.style.height=diam+'px';
@@ -20836,7 +20835,9 @@ function mskOverlayBox(){
     const s=bw/bd.width;
     return{left:_fxDisplayMap.offX*s,top:_fxDisplayMap.offY*s,width:_fxDisplayMap.w*s,height:_fxDisplayMap.h*s};
   }
-  const w=parseFloat(cv.style.width)||cv.clientWidth,h=parseFloat(cv.style.height)||cv.clientHeight;
+  // Full-res zoomed crop (_fxCropShown): #fx-canvas is shrunk to the visible crop and translated,
+  // so its own CSS size is NOT the photo — the zoom-wrap footprint is (the "mask offset when zoomed" bug).
+  const fp=_fxZoomFootprint(),w=fp.w,h=fp.h;
   if(!w||!h)return null;
   return{left:0,top:0,width:w,height:h};
 }
@@ -21192,10 +21193,8 @@ function mskPhotoClick(e){
   if(!ff||ff.offsetParent===null||!mskShowPins||cropMode||fxLoupe||mskPaintMode||mskAiTapMode||!fxState.masks.length)return;
   if(e.target.closest&&e.target.closest('.msk-pin'))return;
   if(e.target.dataset&&e.target.dataset.h)return;
-  const cv=document.getElementById('fx-canvas'),box=mskOverlayBox();if(!cv||!box)return;
-  const r=cv.getBoundingClientRect(),cw=parseFloat(cv.style.width)||cv.clientWidth;if(!cw||!r.width)return;
-  const sc=r.width/cw,nx=(e.clientX-r.left-box.left*sc)/(box.width*sc),ny=(e.clientY-r.top-box.top*sc)/(box.height*sc);
-  if(nx<0||nx>1||ny<0||ny>1)return;
+  const p=fxPointerToPhotoNorm(e);if(!p)return;
+  const nx=p.nx,ny=p.ny;
   const i=mskHitTest(nx,ny);
   if(i<0||i===mskSel)return;
   mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();
@@ -23796,14 +23795,24 @@ let _fxPeoplePathToken='';
 // On-screen rect of the PHOTO itself (zoom/pan included). With Borders / Canvas matte on, the canvas
 // on screen is the composited #fx-canvas-bd and #fx-canvas is display:none (zero rect), so the photo is
 // the inset box inside it — every overlay that maps 0..1 photo fractions must use this, not #fx-canvas.
+// The photo's on-screen rect: the ONE image→screen transform for every overlay and pointer
+// mapping = #fx-zoom-wrap's transformed rect (zoom+pan) applied to mskOverlayBox() (the photo
+// inside the wrap, inset by borders/matte). Never read #fx-canvas's own rect — under the full-res
+// zoomed crop it's only the visible slice, translated.
 function fxPhotoClientRect(){
-  const bd=document.getElementById('fx-canvas-bd');
-  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
-    const vr=bd.getBoundingClientRect();if(!vr.width)return null;const k=vr.width/bd.width;
-    return{left:vr.left+_fxDisplayMap.offX*k,top:vr.top+_fxDisplayMap.offY*k,width:_fxDisplayMap.w*k,height:_fxDisplayMap.h*k};
-  }
-  const cv=document.getElementById('fx-canvas');if(!cv)return null;
-  const r=cv.getBoundingClientRect();return r.width?r:null;
+  const zw=document.getElementById('fx-zoom-wrap'),b=typeof mskOverlayBox==='function'?mskOverlayBox():null;
+  if(!zw||!b||!zw.offsetWidth)return null;
+  const r=zw.getBoundingClientRect();if(!r.width)return null;
+  const k=r.width/zw.offsetWidth;
+  return{left:r.left+b.left*k,top:r.top+b.top*k,width:b.width*k,height:b.height*k};
+}
+// Pointer → photo-normalised 0..1 (top-origin), null when off the photo. Mask/ROI input uses this.
+function fxPointerToPhotoNorm(e,clamp){
+  const r=fxPhotoClientRect();if(!r||!r.width||!r.height)return null;
+  let nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height;
+  if(clamp){nx=Math.min(1,Math.max(0,nx));ny=Math.min(1,Math.max(0,ny));}
+  else if(nx<0||ny<0||nx>1||ny>1)return null;
+  return{nx,ny};
 }
 // Size/position a 0..1-viewBox SVG overlay inside #fx-zoom-wrap onto the photo (inset by borders/matte).
 function fxPlacePhotoOverlay(ov){
@@ -26314,8 +26323,8 @@ function ahRoiClear(){
   ahRoiSyncUI();
 }
 function _ahRoiFrac(e){
-  const pt=fxPointerToCanvasPx(e);if(!pt||!FX.cv.width||!FX.cv.height)return null;
-  return{x:Math.min(1,Math.max(0,pt.x/FX.cv.width)),y:Math.min(1,Math.max(0,pt.y/FX.cv.height))};
+  if(!fxPointerToPhotoNorm(e))return null;
+  const p=fxPointerToPhotoNorm(e,true);return{x:p.nx,y:p.ny};
 }
 (function(){
   const wrap=document.getElementById('fx-zoom-wrap');

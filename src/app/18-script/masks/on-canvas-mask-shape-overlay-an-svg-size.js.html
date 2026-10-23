@@ -95,7 +95,9 @@ function mskOverlayBox(){
     const s=bw/bd.width;
     return{left:_fxDisplayMap.offX*s,top:_fxDisplayMap.offY*s,width:_fxDisplayMap.w*s,height:_fxDisplayMap.h*s};
   }
-  const w=parseFloat(cv.style.width)||cv.clientWidth,h=parseFloat(cv.style.height)||cv.clientHeight;
+  // Full-res zoomed crop (_fxCropShown): #fx-canvas is shrunk to the visible crop and translated,
+  // so its own CSS size is NOT the photo — the zoom-wrap footprint is (the "mask offset when zoomed" bug).
+  const fp=_fxZoomFootprint(),w=fp.w,h=fp.h;
   if(!w||!h)return null;
   return{left:0,top:0,width:w,height:h};
 }

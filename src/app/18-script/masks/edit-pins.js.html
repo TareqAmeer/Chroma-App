@@ -85,10 +85,8 @@ function mskPhotoClick(e){
   if(!ff||ff.offsetParent===null||!mskShowPins||cropMode||fxLoupe||mskPaintMode||mskAiTapMode||!fxState.masks.length)return;
   if(e.target.closest&&e.target.closest('.msk-pin'))return;
   if(e.target.dataset&&e.target.dataset.h)return;
-  const cv=document.getElementById('fx-canvas'),box=mskOverlayBox();if(!cv||!box)return;
-  const r=cv.getBoundingClientRect(),cw=parseFloat(cv.style.width)||cv.clientWidth;if(!cw||!r.width)return;
-  const sc=r.width/cw,nx=(e.clientX-r.left-box.left*sc)/(box.width*sc),ny=(e.clientY-r.top-box.top*sc)/(box.height*sc);
-  if(nx<0||nx>1||ny<0||ny>1)return;
+  const p=fxPointerToPhotoNorm(e);if(!p)return;
+  const nx=p.nx,ny=p.ny;
   const i=mskHitTest(nx,ny);
   if(i<0||i===mskSel)return;
   mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();

@@ -99,14 +99,24 @@ let _fxPeoplePathToken='';
 // On-screen rect of the PHOTO itself (zoom/pan included). With Borders / Canvas matte on, the canvas
 // on screen is the composited #fx-canvas-bd and #fx-canvas is display:none (zero rect), so the photo is
 // the inset box inside it — every overlay that maps 0..1 photo fractions must use this, not #fx-canvas.
+// The photo's on-screen rect: the ONE image→screen transform for every overlay and pointer
+// mapping = #fx-zoom-wrap's transformed rect (zoom+pan) applied to mskOverlayBox() (the photo
+// inside the wrap, inset by borders/matte). Never read #fx-canvas's own rect — under the full-res
+// zoomed crop it's only the visible slice, translated.
 function fxPhotoClientRect(){
-  const bd=document.getElementById('fx-canvas-bd');
-  if(_fxDisplayMap&&bd&&bd.style.display!=='none'&&bd.width){
-    const vr=bd.getBoundingClientRect();if(!vr.width)return null;const k=vr.width/bd.width;
-    return{left:vr.left+_fxDisplayMap.offX*k,top:vr.top+_fxDisplayMap.offY*k,width:_fxDisplayMap.w*k,height:_fxDisplayMap.h*k};
-  }
-  const cv=document.getElementById('fx-canvas');if(!cv)return null;
-  const r=cv.getBoundingClientRect();return r.width?r:null;
+  const zw=document.getElementById('fx-zoom-wrap'),b=typeof mskOverlayBox==='function'?mskOverlayBox():null;
+  if(!zw||!b||!zw.offsetWidth)return null;
+  const r=zw.getBoundingClientRect();if(!r.width)return null;
+  const k=r.width/zw.offsetWidth;
+  return{left:r.left+b.left*k,top:r.top+b.top*k,width:b.width*k,height:b.height*k};
+}
+// Pointer → photo-normalised 0..1 (top-origin), null when off the photo. Mask/ROI input uses this.
+function fxPointerToPhotoNorm(e,clamp){
+  const r=fxPhotoClientRect();if(!r||!r.width||!r.height)return null;
+  let nx=(e.clientX-r.left)/r.width,ny=(e.clientY-r.top)/r.height;
+  if(clamp){nx=Math.min(1,Math.max(0,nx));ny=Math.min(1,Math.max(0,ny));}
+  else if(nx<0||ny<0||nx>1||ny>1)return null;
+  return{nx,ny};
 }
 // Size/position a 0..1-viewBox SVG overlay inside #fx-zoom-wrap onto the photo (inset by borders/matte).
 function fxPlacePhotoOverlay(ov){

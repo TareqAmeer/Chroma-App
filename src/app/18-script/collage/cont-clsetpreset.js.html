@@ -1,3 +1,51 @@
+function clSetPreset(v){
+  CL.preset=v||'';const m=/^(?:px|in):(\d+)x(\d+)$/.exec(CL.preset);
+  if(m){const w=+m[1],h=+m[2];let a=CL_ASPECTS.find(x=>Math.abs(x[1]/x[2]-w/h)<1e-3);if(!a)a=[w+':'+h,w,h];CL.aspect=a;
+    const sel=document.getElementById('cl-aspect');if(sel)sel.value=a[0];
+    const sp=document.getElementById('cl-split');if(sp)sp.checked=a[0].indexOf('carousel')>=0&&CL.preset.indexOf('2160x')>=0;}
+  clSyncPresetNote();clRenderFrame();
+}
+function clShuffle(){
+  const lc=CL.assign.length,idxs=CL.photos.map((_,i)=>i);
+  for(let i=idxs.length-1;i>0;i--){const j=Math.random()*(i+1)|0;const t=idxs[i];idxs[i]=idxs[j];idxs[j]=t;}
+  CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<idxs.length?idxs[i]:null);
+  CL.cells=CL.cells.map(()=>({scale:1,ox:0,oy:0}));clRenderFrame();
+}
+function clReset(){CL.photos.forEach(clRevokePhoto);CL.photos=[];CL.assign=[];CL.cells=[];CL.freeItems=[];CL.freeSel=-1;CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
+function clRoundRect(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function clDrawFreeform(ctx,W,H){
+  CL.freeItems.forEach(it=>{const p=CL.photos[it.photo];if(!p||!p.img)return;const w=it.w/100*W,h=it.h/100*H;
+    ctx.save();ctx.translate(it.x/100*W,it.y/100*H);ctx.rotate((it.rotation||0)*Math.PI/180);ctx.drawImage(p.img,-w/2,-h/2,w,h);ctx.restore();});
+}
+// One cell, drawn identically for the single-image export and the Book pages. Frame shapes come
+// from clFrameInset; the deckled outline from clDeckPts (same shape as the on-screen polygon).
+function clDrawCell(ctx,R,i,base,rad,tg,fam){
+  const pIdx=CL.assign[i],photo=pIdx!=null&&CL.photos[pIdx];if(!photo||!photo.img)return;
+  const img=photo.img,c=CL.cells[i]||{scale:1,ox:0,oy:0},iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;if(!iw||!ih)return;
+  const fi=clFrameInset(R.w,R.h);let matCap=null,r=R;
+  if(fi){ // mat + soft shadow first, then the photo clipped to the opening
+    ctx.save();ctx.shadowColor=fi.heavy?'rgba(0,0,0,.45)':'rgba(0,0,0,.28)';ctx.shadowBlur=base*(fi.heavy?0.025:0.012);ctx.shadowOffsetY=base*(fi.heavy?0.008:0.003);
+    ctx.fillStyle=fi.col;
+    if(fi.deckle){ctx.beginPath();clDeckPts(R.w,R.h,i+1).forEach((q,k)=>k?ctx.lineTo(R.x+q[0],R.y+q[1]):ctx.moveTo(R.x+q[0],R.y+q[1]));ctx.closePath();}
+    else clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);
+    ctx.fill();ctx.restore();
+    if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
+    r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};
+  }
+  ctx.save();if(fi&&!fi.round){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
+  const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
+  const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
+  const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
+  ctx.drawImage(img,r.x+(r.w-dw)/2+ox*r.w,r.y+(r.h-dh)/2+oy*r.h,dw,dh);
+  const cap=clCaption(i);
+  if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle=CL.capColor||'#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
+    ctx.fillText(cap,matCap.x+tg.capPx*0.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
+  else if(cap){if(!CL.capColor){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+      ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);}
+    ctx.fillStyle=CL.capColor||'#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
+    ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
+  ctx.restore();
+}
 function clExport(){
   if(!CL.photos.length){log('Add photos to the collage first','warn');return;}
   const{W,H}=clTargetSize();
@@ -216,38 +264,4 @@ function _catEnsureHoverSheet(){
   }
   _catHoverSheet=sheet;
   return sheet;
-}
-function _catState(clone,state){
-  // Applied to the CLONE, never the live app node.
-  if(state==='hover'){
-    _catEnsureHoverSheet();
-    clone.classList.add('is-cat-hover');
-    clone.querySelectorAll('*').forEach(el=>el.classList.add('is-cat-hover'));
-  } else if(state==='disabled'){
-    const ctl=clone.matches('input,select,button')?clone:clone.querySelector('input,select,button');
-    if(ctl)ctl.disabled=true; else clone.classList.add('is-cat-disabled'); // no native control on this node (e.g. .fx-sub) — nothing to disable, kept as rest
-  } else if(state==='modified'){
-    if(clone.matches('.fx-row'))clone.classList.add('fx-mod');
-    else if(clone.matches('.fx-ctrl')){const r=clone.querySelector('.fx-row');if(r)r.classList.add('fx-mod');}
-    else if(clone.matches('.fx-toggle'))clone.classList.add('on');
-    else if(clone.matches('.seg')){const b=clone.querySelector('button');if(b){clone.querySelectorAll('button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');}}
-    else clone.classList.add('is-cat-modified'); // btn/fx-sub/fx-info-i have no distinct "modified" visual — rest stands in
-  } else if(state==='longlabel'){
-    if(clone.matches('.fx-info-i')){
-      // A 14x14 icon has no visible label text of its own (its "label" is the tooltip) — stress
-      // the title instead of overwriting the "i" glyph, which would just look broken.
-      clone.title='A very long tooltip label that would wrap across multiple lines to stress the layout width if it were shown on screen instead of on hover';
-      return;
-    }
-    const lbl=clone.matches('.fx-ctrl')?clone.querySelector('.fx-ctrl-title'):
-               clone.matches('.fx-row')?clone.querySelector('.fx-label'):
-               clone.matches('.btn')?clone:
-               clone.matches('.fx-sub')?clone:null;
-    if(lbl){
-      // Keep any child controls (toggle/info-i) — only rewrite the label's own leading text node.
-      const walker=[...lbl.childNodes].find(n=>n.nodeType===3);
-      if(walker)walker.textContent='A very long label that wraps across multiple lines to stress the layout width';
-      else lbl.textContent='A very long label that wraps across multiple lines to stress the layout width';
-    }
-  }
 }

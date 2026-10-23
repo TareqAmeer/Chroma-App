@@ -1,3 +1,30 @@
+function csSyncControlUnitTree(root){
+  if(root&&root.matches&&root.matches('input[type="range"]'))csSyncControlUnit(root);
+  if(root&&root.querySelectorAll)root.querySelectorAll('input[type="range"]').forEach(csSyncControlUnit);
+}
+csSyncControlUnitTree(document);
+document.addEventListener('input',e=>csSyncControlUnit(e.target));
+document.addEventListener('change',e=>csSyncControlUnit(e.target));
+new MutationObserver(records=>{
+  for(const r of records){
+    if(r.target.nodeType===1&&r.target.matches&&r.target.matches('.fx-val,.vlb')){
+      const row=r.target.closest('.fx-row,.vrow');const input=row&&row.querySelector('input[type="range"]');if(input)csSyncControlUnit(input);
+    }
+    for(const n of r.addedNodes)if(n.nodeType===1)csSyncControlUnitTree(n);
+  }
+}).observe(document.body,{childList:true,subtree:true});
+log(`Chromasmith ready (v. ${BUILD}) — all processing runs locally in your browser`,'ok');
+// Warm the vendor/luts/ cache in the background, after first paint. Deliberately on 'load' and
+// then behind requestIdleCallback: this is the price of having taken 16 MB of LUT data out of
+// the page, and it must never compete with the photo the user is actually opening.
+if(typeof window!=='undefined')window.addEventListener('load',()=>{try{lutWarmCache()}catch(e){}});
+// An IntersectionObserver delivers nothing while the tab is hidden, so a gallery built in a
+// background tab has no queued work at all when the user comes back. Re-seed on the way in.
+if(typeof document!=='undefined')document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&typeof buildLookGallery!=='undefined'&&buildLookGallery._reseed)buildLookGallery._reseed();
+});
+
+// ════════════════════ COLLAGE TAB ════════════════════
 const CL_ASPECTS=[['1:1',1,1],['4:5',4,5],['5:4',5,4],['3:4',3,4],['4:3',4,3],['2:3',2,3],['3:2',3,2],['9:16',9,16],['16:9',16,9],['2:1 carousel',2,1],['3:1 carousel',3,1]];
 const CL_SWATCHES=['#ffffff','#000000','#f4f1ea','#e8d9c5','#171717','#c8553d','#2e4756','#a3b18a'];
 const CL={photos:[],aspect:CL_ASPECTS[0],tree:null,templates:[],templateIdx:0,assign:[],cells:[],dividers:[],mode:'grid',freeItems:[],freeSel:-1,bg:'#ffffff',inner:8,outer:0,radius:0,frame:'none',title:'',titlePos:'bottom',titleSize:45,capSize:28,capAuto:false,capDate:false,capCam:false,capLook:false,font:'',capColor:'',titleColor:'',edits:true,oneLook:false,preset:'',dpi:300,sel:-1,frameW:0,frameH:0,inited:false};
@@ -222,35 +249,3 @@ function clRemovePhoto(i){
 }
 // CHR-215: one place decides where the title band goes and how big text is, in units of the
 // frame's short side — so the on-screen frame and the exported file always match.
-function clTextGeom(W,H){
-  const base=Math.min(W,H),outer=CL.outer/1000*base;
-  const tPx=CL.title.trim()?CL.titleSize/1000*base:0,band=tPx?tPx*1.9:0;
-  return{base,outer,tPx,band,capPx:CL.capSize/1000*base,
-    lx:outer,ly:outer+(CL.titlePos==='top'?band:0),lw:W-2*outer,lh:H-2*outer-band,
-    ty:CL.titlePos==='top'?outer:H-outer-band};
-}
-function clTextColor(){if(CL.titleColor)return CL.titleColor;const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
-  const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
-// CHR-217: per-cell photo frames. Returns the photo's inset inside its cell (px) and the mat
-// colour; "print" is the instant-print shape (thick bottom, where its caption is written).
-function clFrameInset(w,h){
-  const m=Math.min(w,h);
-  if(CL.frame==='keyline'){const k=Math.max(2,m*0.015);return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
-  if(CL.frame==='mat'){const k=m*0.05;return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
-  if(CL.frame==='print'){const k=m*0.055;return{t:k,r:k,b:k*3.6,l:k,col:'#fbfaf6'};}
-  if(CL.frame==='deckle'){const k=m*0.07;return{t:k,r:k,b:k,l:k,col:'#f6f1e6',deckle:true};}
-  if(CL.frame==='shadow')return{t:0,r:0,b:0,l:0,col:'#ffffff',round:true,heavy:true};
-  return null;
-}
-// CHR-217: deckled paper edge. One deterministic outline (fractions of the cell, so the preview
-// polygon and the exported path are the same shape at any size); seeded per cell.
-function clDeckPts(w,h,seed){
-  const m=Math.min(w,h),amp=m*0.014,nx=Math.max(8,Math.round(w/m*46)),ny=Math.max(8,Math.round(h/m*46));
-  let a=(seed*2654435761+12345)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};
-  const j=()=>rnd()*amp,pts=[];
-  for(let i=0;i<nx;i++)pts.push([w*i/nx,j()]);
-  for(let i=0;i<ny;i++)pts.push([w-j(),h*i/ny]);
-  for(let i=0;i<nx;i++)pts.push([w-w*i/nx,h-j()]);
-  for(let i=0;i<ny;i++)pts.push([j(),h-h*i/ny]);
-  return pts;
-}

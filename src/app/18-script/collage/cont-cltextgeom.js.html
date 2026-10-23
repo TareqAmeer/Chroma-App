@@ -1,3 +1,35 @@
+function clTextGeom(W,H){
+  const base=Math.min(W,H),outer=CL.outer/1000*base;
+  const tPx=CL.title.trim()?CL.titleSize/1000*base:0,band=tPx?tPx*1.9:0;
+  return{base,outer,tPx,band,capPx:CL.capSize/1000*base,
+    lx:outer,ly:outer+(CL.titlePos==='top'?band:0),lw:W-2*outer,lh:H-2*outer-band,
+    ty:CL.titlePos==='top'?outer:H-outer-band};
+}
+function clTextColor(){if(CL.titleColor)return CL.titleColor;const h=CL.bg.replace('#','');const n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h,16)||0;
+  const l=(0.299*(n>>16&255)+0.587*(n>>8&255)+0.114*(n&255))/255;return l<0.55?'#ffffff':'#111111';}
+// CHR-217: per-cell photo frames. Returns the photo's inset inside its cell (px) and the mat
+// colour; "print" is the instant-print shape (thick bottom, where its caption is written).
+function clFrameInset(w,h){
+  const m=Math.min(w,h);
+  if(CL.frame==='keyline'){const k=Math.max(2,m*0.015);return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='mat'){const k=m*0.05;return{t:k,r:k,b:k,l:k,col:'#ffffff'};}
+  if(CL.frame==='print'){const k=m*0.055;return{t:k,r:k,b:k*3.6,l:k,col:'#fbfaf6'};}
+  if(CL.frame==='deckle'){const k=m*0.07;return{t:k,r:k,b:k,l:k,col:'#f6f1e6',deckle:true};}
+  if(CL.frame==='shadow')return{t:0,r:0,b:0,l:0,col:'#ffffff',round:true,heavy:true};
+  return null;
+}
+// CHR-217: deckled paper edge. One deterministic outline (fractions of the cell, so the preview
+// polygon and the exported path are the same shape at any size); seeded per cell.
+function clDeckPts(w,h,seed){
+  const m=Math.min(w,h),amp=m*0.014,nx=Math.max(8,Math.round(w/m*46)),ny=Math.max(8,Math.round(h/m*46));
+  let a=(seed*2654435761+12345)>>>0;const rnd=()=>{a=(a+0x6D2B79F5)>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;};
+  const j=()=>rnd()*amp,pts=[];
+  for(let i=0;i<nx;i++)pts.push([w*i/nx,j()]);
+  for(let i=0;i<ny;i++)pts.push([w-j(),h*i/ny]);
+  for(let i=0;i<nx;i++)pts.push([w-w*i/nx,h-j()]);
+  for(let i=0;i<ny;i++)pts.push([j(),h-h*i/ny]);
+  return pts;
+}
 function clFontFam(){return CL.font||getComputedStyle(document.body).fontFamily||'sans-serif';}
 // CHR-215: automatic caption info (file name, date, camera, film look). Each part is simply left
 // out when the file carries no such metadata, so a stripped photo gives an empty caption, never "undefined".
@@ -220,52 +252,4 @@ function clSyncPresetNote(){
   if(dpiRow)dpiRow.style.display=pd&&!pd.px?'flex':'none';if(resRow)resRow.style.display=pd?'none':'flex';
   if(note){note.style.display=pd?'block':'none';
     if(pd)note.textContent=pd.px?`Exports exactly ${pd.w} x ${pd.h} px.`:`${pd.inW} x ${pd.inH} in at ${CL.dpi} dpi = ${pd.w} x ${pd.h} px${pd.capped?' (limited to '+CL_MAX_PX+' px on the long side)':''}.`;}
-}
-function clSetPreset(v){
-  CL.preset=v||'';const m=/^(?:px|in):(\d+)x(\d+)$/.exec(CL.preset);
-  if(m){const w=+m[1],h=+m[2];let a=CL_ASPECTS.find(x=>Math.abs(x[1]/x[2]-w/h)<1e-3);if(!a)a=[w+':'+h,w,h];CL.aspect=a;
-    const sel=document.getElementById('cl-aspect');if(sel)sel.value=a[0];
-    const sp=document.getElementById('cl-split');if(sp)sp.checked=a[0].indexOf('carousel')>=0&&CL.preset.indexOf('2160x')>=0;}
-  clSyncPresetNote();clRenderFrame();
-}
-function clShuffle(){
-  const lc=CL.assign.length,idxs=CL.photos.map((_,i)=>i);
-  for(let i=idxs.length-1;i>0;i--){const j=Math.random()*(i+1)|0;const t=idxs[i];idxs[i]=idxs[j];idxs[j]=t;}
-  CL.assign=[];for(let i=0;i<lc;i++)CL.assign.push(i<idxs.length?idxs[i]:null);
-  CL.cells=CL.cells.map(()=>({scale:1,ox:0,oy:0}));clRenderFrame();
-}
-function clReset(){CL.photos.forEach(clRevokePhoto);CL.photos=[];CL.assign=[];CL.cells=[];CL.freeItems=[];CL.freeSel=-1;CL.sel=-1;CL.templateIdx=0;clHideCellPanel();clPhotosChanged();clRenderTray();}
-function clRoundRect(ctx,x,y,w,h,r){r=Math.max(0,Math.min(r,w/2,h/2));ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
-function clDrawFreeform(ctx,W,H){
-  CL.freeItems.forEach(it=>{const p=CL.photos[it.photo];if(!p||!p.img)return;const w=it.w/100*W,h=it.h/100*H;
-    ctx.save();ctx.translate(it.x/100*W,it.y/100*H);ctx.rotate((it.rotation||0)*Math.PI/180);ctx.drawImage(p.img,-w/2,-h/2,w,h);ctx.restore();});
-}
-// One cell, drawn identically for the single-image export and the Book pages. Frame shapes come
-// from clFrameInset; the deckled outline from clDeckPts (same shape as the on-screen polygon).
-function clDrawCell(ctx,R,i,base,rad,tg,fam){
-  const pIdx=CL.assign[i],photo=pIdx!=null&&CL.photos[pIdx];if(!photo||!photo.img)return;
-  const img=photo.img,c=CL.cells[i]||{scale:1,ox:0,oy:0},iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height;if(!iw||!ih)return;
-  const fi=clFrameInset(R.w,R.h);let matCap=null,r=R;
-  if(fi){ // mat + soft shadow first, then the photo clipped to the opening
-    ctx.save();ctx.shadowColor=fi.heavy?'rgba(0,0,0,.45)':'rgba(0,0,0,.28)';ctx.shadowBlur=base*(fi.heavy?0.025:0.012);ctx.shadowOffsetY=base*(fi.heavy?0.008:0.003);
-    ctx.fillStyle=fi.col;
-    if(fi.deckle){ctx.beginPath();clDeckPts(R.w,R.h,i+1).forEach((q,k)=>k?ctx.lineTo(R.x+q[0],R.y+q[1]):ctx.moveTo(R.x+q[0],R.y+q[1]));ctx.closePath();}
-    else clRoundRect(ctx,R.x,R.y,R.w,R.h,rad);
-    ctx.fill();ctx.restore();
-    if(CL.frame==='print')matCap={x:R.x+fi.l,y:R.y+R.h-fi.b,h:fi.b,w:R.w-fi.l-fi.r};
-    r={x:R.x+fi.l,y:R.y+fi.t,w:R.w-fi.l-fi.r,h:R.h-fi.t-fi.b};
-  }
-  ctx.save();if(fi&&!fi.round){ctx.beginPath();ctx.rect(r.x,r.y,r.w,r.h);}else clRoundRect(ctx,r.x,r.y,r.w,r.h,rad);ctx.clip();
-  const cover=Math.max(r.w/iw,r.h/ih)*c.scale,dw=iw*cover,dh=ih*cover;
-  const mx=Math.max(0,(dw-r.w)/(2*r.w)),my=Math.max(0,(dh-r.h)/(2*r.h)); // keep the image covering the cell
-  const ox=Math.min(mx,Math.max(-mx,c.ox)),oy=Math.min(my,Math.max(-my,c.oy));
-  ctx.drawImage(img,r.x+(r.w-dw)/2+ox*r.w,r.y+(r.h-dh)/2+oy*r.h,dw,dh);
-  const cap=clCaption(i);
-  if(cap&&matCap){ctx.restore();ctx.save();ctx.fillStyle=CL.capColor||'#222';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='middle';ctx.textAlign='left';
-    ctx.fillText(cap,matCap.x+tg.capPx*0.6,matCap.y+matCap.h/2,matCap.w-tg.capPx*1.2);}
-  else if(cap){if(!CL.capColor){const ch=tg.capPx*2.4,g=ctx.createLinearGradient(0,r.y+r.h-ch,0,r.y+r.h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
-      ctx.fillStyle=g;ctx.fillRect(r.x,r.y+r.h-ch,r.w,ch);}
-    ctx.fillStyle=CL.capColor||'#fff';ctx.font=`${tg.capPx}px ${fam}`;ctx.textBaseline='alphabetic';ctx.textAlign='left';
-    ctx.fillText(cap,r.x+tg.capPx*0.6,r.y+r.h-tg.capPx*0.55,r.w-tg.capPx*1.2);}
-  ctx.restore();
 }

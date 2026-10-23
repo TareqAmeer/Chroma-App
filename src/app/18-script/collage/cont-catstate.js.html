@@ -1,3 +1,37 @@
+function _catState(clone,state){
+  // Applied to the CLONE, never the live app node.
+  if(state==='hover'){
+    _catEnsureHoverSheet();
+    clone.classList.add('is-cat-hover');
+    clone.querySelectorAll('*').forEach(el=>el.classList.add('is-cat-hover'));
+  } else if(state==='disabled'){
+    const ctl=clone.matches('input,select,button')?clone:clone.querySelector('input,select,button');
+    if(ctl)ctl.disabled=true; else clone.classList.add('is-cat-disabled'); // no native control on this node (e.g. .fx-sub) — nothing to disable, kept as rest
+  } else if(state==='modified'){
+    if(clone.matches('.fx-row'))clone.classList.add('fx-mod');
+    else if(clone.matches('.fx-ctrl')){const r=clone.querySelector('.fx-row');if(r)r.classList.add('fx-mod');}
+    else if(clone.matches('.fx-toggle'))clone.classList.add('on');
+    else if(clone.matches('.seg')){const b=clone.querySelector('button');if(b){clone.querySelectorAll('button.on').forEach(x=>x.classList.remove('on'));b.classList.add('on');}}
+    else clone.classList.add('is-cat-modified'); // btn/fx-sub/fx-info-i have no distinct "modified" visual — rest stands in
+  } else if(state==='longlabel'){
+    if(clone.matches('.fx-info-i')){
+      // A 14x14 icon has no visible label text of its own (its "label" is the tooltip) — stress
+      // the title instead of overwriting the "i" glyph, which would just look broken.
+      clone.title='A very long tooltip label that would wrap across multiple lines to stress the layout width if it were shown on screen instead of on hover';
+      return;
+    }
+    const lbl=clone.matches('.fx-ctrl')?clone.querySelector('.fx-ctrl-title'):
+               clone.matches('.fx-row')?clone.querySelector('.fx-label'):
+               clone.matches('.btn')?clone:
+               clone.matches('.fx-sub')?clone:null;
+    if(lbl){
+      // Keep any child controls (toggle/info-i) — only rewrite the label's own leading text node.
+      const walker=[...lbl.childNodes].find(n=>n.nodeType===3);
+      if(walker)walker.textContent='A very long label that wraps across multiple lines to stress the layout width';
+      else lbl.textContent='A very long label that wraps across multiple lines to stress the layout width';
+    }
+  }
+}
 function _catItem(label,key,srcSel,state){
   const wrap=document.createElement('div');wrap.className='cat-item';
   wrap.innerHTML='<div class="cat-item-label">'+label+' — '+state+'</div>';
