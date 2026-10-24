@@ -7343,7 +7343,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024K';
+const BUILD='1.1024L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24896,6 +24896,14 @@ function renderSnapshotTo(dstCanvas,snap,pw,ph,opts){
 // test/edit_preview_render.mjs). Storage writes are blocked in this mode (00-html.html) so it can
 // never clobber the user's saved session/prefs.
 window.csRenderEditPreview=async function(srcBuf,recipeB64,longEdge){
+  // The Library fires the first render the instant this function exists -- which is BEFORE boot
+  // finishes (FX not built, _fxPristineDefault unset, sel-lut still only "None" until the async
+  // refreshLUTSelect() lands). A look written into a not-yet-populated <select> reads back as ''
+  // so selectLUT never ran and the render died with "look not loaded" (no edited preview ever
+  // stored -> Space kept showing the original). Wait for boot to settle first.
+  {const t0=Date.now(),lutSel=()=>document.getElementById('sel-lut');
+  while((typeof _fxPristineDefault==='undefined'||!_fxPristineDefault||typeof FX==='undefined'||!FX.ok||!lutSel()||lutSel().options.length<2)&&Date.now()-t0<30000)await new Promise(r=>setTimeout(r,25));
+  if(typeof FX==='undefined'||!FX.ok||!lutSel()||lutSel().options.length<2)throw new Error('render instance not ready');}
   const snap=JSON.parse(decodeURIComponent(escape(atob(recipeB64))));
   if(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault)applyUISnapshot(JSON.parse(JSON.stringify(_fxPristineDefault)));
   await loadFXImages([new File([srcBuf],'edit-preview.jpg',{type:'image/jpeg'})]);
