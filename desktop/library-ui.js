@@ -26,7 +26,7 @@
   };
   // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
   // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
-  const QUICKLOOK_CACHE_MAX = 5;
+  const QUICKLOOK_CACHE_MAX = 10; // embedded previews are small; QUICKLOOK_CACHE_BYTES still bounds memory
   const QUICKLOOK_CACHE_BYTES = 32 * 1024 * 1024;
   const quicklookPreviews = new Map();
   const quicklookRequests = new Map();
@@ -62,6 +62,13 @@
       }
       pumpRawReview();
     });
+  }
+  // Navigating away makes queued (not yet running) Quick Look decodes for far-away photos pointless.
+  function purgeRawReviewQueue(keep) {
+    for (let i = rawReviewQueue.length - 1; i >= 0; i--) {
+      const job = rawReviewQueue[i];
+      if (job.kind === 'quicklook' && !keep.has(job.path)) rawReviewQueue.splice(i, 1)[0].reject(new Error('RAW preview superseded'));
+    }
   }
   function pumpRawReview() {
     if (rawReviewActive || !rawReviewQueue.length) return;
@@ -11087,26 +11094,34 @@
   // RAW review uses our native development pipeline and bounded fit-size proxies.
   // Cold files show a loading state; camera JPEGs never substitute for review pixels.
   const quicklook = { editedBlob: '', editedKind: '', rendering: false, holdOrig: false, baseNote: '', active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
-  function queueQuickLookNeighbors(path) {
-    if (!quicklook.active || quicklook.path !== path) return;
+  // Neighbour prefetch: N+1..N+3 then N-1 (arrow-right is the common direction while culling),
+  // started the moment a photo is requested - NOT after it has loaded - with a small concurrency
+  // cap shared across navigations. Holding an arrow replaces the queue per target but never
+  // cancels in-flight requests, so they still land in the cache for the frames that follow.
+  const QL_PREFETCH_CONCURRENCY = 2;
+  function qlPrefetchWindow(path) {
     const nav = libraryNavigationOrder(), shown = nav.entries;
     const index = nav.index.get(path) ?? -1;
-    if (index < 0) return;
-    const generation = quicklook.generation;
-    quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
-      .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
-    quicklook.prefetchQueue.forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
-    const pump = () => {
-      if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
+    if (index < 0) return [];
+    return [shown[index + 1]?.path, shown[index + 2]?.path, shown[index - 1]?.path, shown[index + 3]?.path]
+      .filter((candidate) => candidate && candidate !== path);
+  }
+  function pumpQuickLookPrefetch() {
+    while (quicklook.active && quicklook.prefetchActive < QL_PREFETCH_CONCURRENCY && quicklook.prefetchQueue.length) {
       const next = quicklook.prefetchQueue.shift();
+      if (quicklookPreviews.has(next) || quicklookRequests.has(next)) continue;
       quicklook.prefetchActive++;
-      quicklookPreview(next).catch(() => {}).finally(() => {
-        quicklook.prefetchActive--;
-        if (quicklook.active && quicklook.generation === generation) pump();
-        else if (quicklook.active) queueQuickLookNeighbors(quicklook.path);
-      });
-    };
-    pump();
+      quicklookPreview(next).catch(() => {}).finally(() => { quicklook.prefetchActive--; pumpQuickLookPrefetch(); });
+    }
+  }
+  function queueQuickLookNeighbors(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const window_ = qlPrefetchWindow(path);
+    // Drop queued (not yet started) developed-RAW review jobs that are no longer near the cursor.
+    if (window_.length) purgeRawReviewQueue(new Set([path, ...window_])); // only when the photo is in the navigation order
+    quicklook.prefetchQueue = window_.filter((candidate) => !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    window_.slice(0, 1).concat(window_.slice(2, 3)).forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
+    pumpQuickLookPrefetch();
   }
   // Flag / rating / colour badges, styled like the grid's flag chips (same FLAG_SVG_* glyphs).
   // Read-only; qlBadgesRefresh is called from every sidecar setter so P/X/U/0-5 update live.
@@ -11251,7 +11266,9 @@
       img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
     }
     try {
-      const buf = await quicklookPreview(path, developed);
+      const bufPromise = quicklookPreview(path, developed); // started first so it wins the IPC race...
+      queueQuickLookNeighbors(path); // ...then the neighbours go out without waiting for it
+      const buf = await bufPromise;
       const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
@@ -11265,12 +11282,35 @@
       quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
       qlCaptionSync(path);
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
-      queueQuickLookNeighbors(path);
     } catch (e) {
       if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
     }
   }
+  // Shared by the hard-wired arrows and the rebindable library.next/previous commands.
+  // Key-repeat is throttled to one navigation per QL_NAV_REPEAT_MS (trailing edge, target
+  // accumulates): a held arrow used to start a full load per repeat tick, each superseding the
+  // last before it painted. A fresh press is always immediate.
+  function qlStep(delta, repeat) {
+    const nav = libraryNavigationOrder(), shown = nav.entries;
+    if (!shown.length) return;
+    const idx = nav.index.get(quicklook.path) ?? -1;
+    const base = repeat && qlNav.timer ? qlNav.idx : (idx < 0 ? 0 : idx);
+    const next = Math.max(0, Math.min(shown.length - 1, base + delta));
+    if (!repeat) { qlNavCancel(); if (shown[next].path !== quicklook.path) showQuickLook(shown[next].path); return; }
+    qlNav.idx = next; qlNav.entries = shown;
+    if (!qlNav.timer) qlNav.timer = setTimeout(qlNavFlush, QL_NAV_REPEAT_MS);
+  }
+  const QL_NAV_REPEAT_MS = 90;
+  const qlNav = { timer: 0, idx: 0, entries: null };
+  function qlNavCancel() { clearTimeout(qlNav.timer); qlNav.timer = 0; qlNav.entries = null; }
+  function qlNavFlush() {
+    const entry = qlNav.entries && qlNav.entries[qlNav.idx];
+    qlNavCancel();
+    if (entry && quicklook.active && entry.path !== quicklook.path) showQuickLook(entry.path);
+  }
+  document.addEventListener('keyup', (e) => { if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && qlNav.timer) qlNavFlush(); });
   function hideQuickLook() {
+    qlNavCancel();
     quicklook.generation++;
     quicklook.prefetchQueue = [];
     quicklook.active = false;
@@ -11349,11 +11389,7 @@
     if (quicklook.active) {
       const navQl = libraryNavigationOrder(), shownQl = navQl.entries;
       const idxQl = navQl.index.get(quicklook.path) ?? -1;
-      const gotoQl = (delta) => {
-        if (!shownQl.length) return;
-        const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
-        showQuickLook(shownQl[next].path);
-      };
+      const gotoQl = (delta) => qlStep(delta, e.repeat);
       if (e.key === '\\') { e.preventDefault(); qlShowOriginal(true); return; }
       if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
@@ -17345,9 +17381,7 @@
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(1); return; }
       if (quicklook.active) {
-        const nav = libraryNavigationOrder(), shown = nav.entries;
-        const i = nav.index.get(quicklook.path) ?? -1;
-        if (i >= 0 && i + 1 < shown.length) showQuickLook(shown[i + 1].path);
+        if ((nav0 => nav0.index.get(quicklook.path) ?? -1)(libraryNavigationOrder()) >= 0) qlStep(1, e && e.repeat);
       } else {
         const nav = libraryNavigationOrder(), shown = nav.entries;
         const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
@@ -17368,9 +17402,7 @@
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(-1); return; }
       if (quicklook.active) {
-        const nav = libraryNavigationOrder(), shown = nav.entries;
-        const i = nav.index.get(quicklook.path) ?? -1;
-        if (i > 0) showQuickLook(shown[i - 1].path);
+        if ((nav0 => nav0.index.get(quicklook.path) ?? -1)(libraryNavigationOrder()) > 0 || qlNav.timer) qlStep(-1, e && e.repeat);
       } else {
         const nav = libraryNavigationOrder(), shown = nav.entries;
         const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
