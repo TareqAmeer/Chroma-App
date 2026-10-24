@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024B';
+const BUILD='1.1024C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25006,7 +25006,7 @@ function renderPreview(){
     // Fit / zoomed-out: the compositor shrinks this canvas to cw*fxZoom CSS px. Handing it the whole source (4.7x too
     // many pixels) makes that a point-sampled shrink (gritty, shimmering next to Lightroom). Render at 2x the displayed
     // device size instead: the final 2:1 shrink is a clean bilinear/box, and the render is far cheaper.
-    if(fxZoom<=1&&!_previewComposition)dpr=Math.min(dpr,Math.max(1,2*Math.max(fxZoom,0.25)*(window.devicePixelRatio||1)));
+    if(fxZoom<=1)dpr=Math.min(dpr,Math.max(1,2*Math.max(fxZoom,0.25)*(window.devicePixelRatio||1)));
     // Full res on a RAW opens on the ~2560px working copy and only promotes to the real frame after a
     // settle delay or a first edit/zoom; until then "Full res" is just that copy stretched (soft next to
     // Lightroom). Opting into Full res means "show me the real pixels": ask for the promotion once per photo.
