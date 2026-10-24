@@ -1,1 +1,145 @@
-<script src="mobile/mobile-editor.js"></script>
+<script>
+/* Mobile UX pass 2 — see docs/mobile-ux-review.md. Everything here is inert unless body.mobile-fx. */
+(function(){
+  var mob=function(){return document.body.classList.contains('mobile-fx');};
+  var LS=function(k,d){try{return JSON.parse(localStorage.getItem(k)||'null')||d;}catch(e){return d;}};
+  var SV=function(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  var key=function(val){return String(val||'').replace(/^p:/,'');};
+  // ---- favourites / recents (looks are stored by preset key)
+  window.csIsFav=function(val){return !!val&&LS('csFavLooks',[]).indexOf(key(val))>=0;};
+  window.csLookSpecials=function(){if(!mob())return[];var o=[];if(LS('csRecentLooks',[]).length)o.push('Recent');if(LS('csFavLooks',[]).length)o.push('Favourites');return o;};
+  window.csLookSpecialKeys=function(cat){if(cat==='Recent')return LS('csRecentLooks',[]);if(cat==='Favourites')return LS('csFavLooks',[]);return null;};
+  function refreshLooks(){if(typeof buildLookCatChips==='function')buildLookCatChips();}
+  document.addEventListener('click',function(e){
+    if(!mob())return;var cell=e.target.closest&&e.target.closest('.look-cell');if(!cell)return;
+    if(cell._csLP){cell._csLP=false;e.stopPropagation();e.preventDefault();return;}
+    var val=cell._lookJob&&cell._lookJob.val;if(!val){document.body.classList.remove('lk-strength');return;}
+    if(cell.classList.contains('sel')){document.body.classList.toggle('lk-strength');return;}
+    document.body.classList.remove('lk-strength');
+    var r=LS('csRecentLooks',[]).filter(function(k){return k!==key(val);});r.unshift(key(val));SV('csRecentLooks',r.slice(0,8));
+    setTimeout(refreshLooks,400);
+  },true);
+  var lpT=null,lpCell=null,lpX=0,lpY=0;
+  document.addEventListener('pointerdown',function(e){
+    if(!mob())return;var cell=e.target.closest&&e.target.closest('.look-cell');if(!cell||!cell._lookJob||!cell._lookJob.val)return;
+    lpCell=cell;lpX=e.clientX;lpY=e.clientY;clearTimeout(lpT);
+    lpT=setTimeout(function(){
+      var k=key(cell._lookJob.val),f=LS('csFavLooks',[]),i=f.indexOf(k);if(i>=0)f.splice(i,1);else f.unshift(k);SV('csFavLooks',f);
+      cell.classList.toggle('fav',i<0);cell._csLP=true;try{hapt('MEDIUM');}catch(_){}
+      if(typeof toast==='function')toast(i<0?'Added to favourites':'Removed from favourites');
+      refreshLooks();if(typeof fxLookCatFilter!=='undefined'&&fxLookCatFilter==='Favourites'&&typeof buildLookGallery==='function')buildLookGallery();
+    },550);
+  },true);
+  document.addEventListener('pointermove',function(e){if(lpT&&Math.hypot(e.clientX-lpX,e.clientY-lpY)>10){clearTimeout(lpT);lpT=null;}},true);
+  ['pointerup','pointercancel'].forEach(function(n){document.addEventListener(n,function(){clearTimeout(lpT);lpT=null;},true);});
+
+  // ---- tool strip at the top of the sheet: hop between tools without the Tools list
+  // Tools that live only in the Tools grid (or the bottom bar: Looks, Crop) — kept off the sheet's quick strip.
+  var STRIP_SKIP=['nr','looks','inprint','curves','pointcolor','lens','retouch','crop','straighten','local','vig','style','versions'];
+  function stripBuild(){
+    var panel=document.querySelector('.fx-panel');if(!panel)return null;
+    var btns=[].slice.call(document.querySelectorAll('#fx-tool-grid .fx-sec-btn')).filter(function(b){return STRIP_SKIP.indexOf(b.dataset.sec)<0;});if(!btns.length)return null;
+    var st=document.getElementById('fx-sheet-strip');
+    if(!st){st=document.createElement('div');st.id='fx-sheet-strip';var hd=document.getElementById('fx-sheet-handle');if(hd&&hd.parentElement===panel)hd.insertAdjacentElement('afterend',st);else panel.insertBefore(st,panel.firstChild);}
+    if(st.children.length!==btns.length){st.innerHTML='';btns.forEach(function(b){var k=document.createElement('button');k.type='button';k.dataset.sec=b.dataset.sec;k.textContent=(b.querySelector('.fx-sec-lb')||b).textContent.trim();k.onclick=function(){if(k.classList.contains('on')&&document.body.classList.contains('sheet-open')){fxSheetClose();return;}fxSection(b.dataset.sec);};st.appendChild(k);});}
+    return st;
+  }
+  function stripSync(){
+    if(!mob())return;var st=stripBuild();if(!st)return;
+    if(typeof syncSectionEnabled==='function')syncSectionEnabled();
+    var c=document.querySelector('.fx-ctrl.sec-active'),cur=c&&c.dataset.fxsec,act=null;
+    [].forEach.call(st.children,function(b){var on=b.dataset.sec===cur;b.classList.toggle('on',on);if(on)act=b;});
+    if(act&&act.scrollIntoView)try{st.scrollTo({left:act.offsetLeft-st.clientWidth/2+act.offsetWidth/2,behavior:'smooth'});}catch(_){}
+  }
+  var _fs=window.fxSection;
+  if(typeof _fs==='function')window.fxSection=function(){var r=_fs.apply(this,arguments);try{stripSync();}catch(_){}return r;};
+
+  // ---- single-slider focus mode: tap a slider's label
+  var ff=null,ffSl=null,ffProxy=null,ft=null;
+  function ffList(){var c=ffSl&&ffSl.closest('.fx-ctrl');return c?[].filter.call(c.querySelectorAll('input.fx-slider[type=range]'),function(x){return x.offsetParent!==null;}):[];}
+  function ffSync(){
+    if(!ffSl||!ff)return;var row=ffSl.closest('.fx-row'),lb=row&&row.querySelector('.fx-label'),vl=row&&row.querySelector('.fx-val');
+    ff.querySelector('.ff-name').textContent=lb?lb.textContent.replace(/\s+/g,' ').trim():'';
+    ff.querySelector('.ff-val').textContent=vl?vl.textContent:ffSl.value;
+    ffProxy.min=ffSl.min;ffProxy.max=ffSl.max;ffProxy.step=ffSl.step||'any';ffProxy.value=ffSl.value;ffProxy.defaultValue=ffSl.defaultValue;
+    try{fxPaintSlider(ffProxy);}catch(_){}
+  }
+  function ffPush(v){ffSl.value=v;ffSl.dispatchEvent(new Event('input',{bubbles:true}));setTimeout(ffSync,0);}
+  function ffOpen(sl){
+    if(!ff){ff=document.createElement('div');ff.id='fx-focus';
+      ff.innerHTML='<div class="ff-head"><span class="ff-name"></span><b class="ff-val"></b></div><input type="range" class="fx-slider"><div class="ff-hint">Swipe the photo to adjust</div><div class="ff-nav"><button type="button" class="ff-prev">‹ Prev</button><button type="button" class="ff-done">Done</button><button type="button" class="ff-next">Next ›</button></div>';
+      document.body.appendChild(ff);ffProxy=ff.querySelector('input');
+      ffProxy.addEventListener('input',function(){ffPush(ffProxy.value);});
+      ff.querySelector('.ff-done').onclick=ffClose;
+      ff.querySelector('.ff-prev').onclick=function(){var l=ffList(),i=l.indexOf(ffSl);if(i>0){ffSl=l[i-1];ffSync();}};
+      ff.querySelector('.ff-next').onclick=function(){var l=ffList(),i=l.indexOf(ffSl);if(i>=0&&i<l.length-1){ffSl=l[i+1];ffSync();}};
+    }
+    ffSl=sl;ff.classList.add('on');ffSync();
+  }
+  function ffClose(){if(ff)ff.classList.remove('on');ffSl=null;}
+  document.addEventListener('click',function(e){
+    if(!mob())return;var lb=e.target.closest&&e.target.closest('.fx-panel .fx-row > .fx-label');if(!lb||e.target.closest('button,.fx-info-i'))return;
+    var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
+    // Single-tap no longer opens the full-screen focus slider (felt unnecessary on phones);
+    // double-tapping the label still resets the slider.
+  });
+  document.addEventListener('dblclick',function(){clearTimeout(ft);});
+  new MutationObserver(function(){if(!document.body.classList.contains('sheet-open'))ffClose();}).observe(document.body,{attributes:true,attributeFilter:['class']});
+  // swipe the photo horizontally while focus mode is open
+  (function(){
+    var w=document.getElementById('fx-wrap');if(!w)return;var x0=0,v0=0,on=false,ids=new Set();
+    w.addEventListener('pointerdown',function(e){ids.add(e.pointerId);if(!ffSl||ids.size>1){on=false;return;}x0=e.clientX;v0=parseFloat(ffSl.value);on=true;});
+    w.addEventListener('pointermove',function(e){
+      if(!on||!ffSl||ids.size>1)return;var dx=e.clientX-x0;if(Math.abs(dx)<6)return;
+      var min=parseFloat(ffSl.min),max=parseFloat(ffSl.max),st=parseFloat(ffSl.step)||((max-min)/200);
+      var v=Math.max(min,Math.min(max,v0+dx/Math.max(200,w.clientWidth)*(max-min)*0.9));v=Math.round((v-min)/st)*st+min;
+      if(String(v)!==ffSl.value)ffPush(v);
+    });
+    ['pointerup','pointercancel'].forEach(function(n){w.addEventListener(n,function(e){ids.delete(e.pointerId);on=false;});});
+  })();
+
+  // ---- double-tap the photo: toggle the 1:1 loupe (sharpness check)
+  (function(){
+    var w=document.getElementById('fx-wrap');if(!w)return;var lt=0,lx=0,ly=0;
+    w.addEventListener('pointerdown',function(e){
+      if(!mob()||!e.isPrimary||typeof fxWork==='undefined'||!fxWork||(typeof cropMode!=='undefined'&&cropMode)||ffSl)return;
+      var n=Date.now();if(n-lt<300&&Math.hypot(e.clientX-lx,e.clientY-ly)<30){lt=0;try{toggleLoupe();hapt();}catch(_){}}else{lt=n;lx=e.clientX;ly=e.clientY;}
+    });
+  })();
+
+  // ---- histogram (from ⋯ menu)
+  window.csToggleHist=function(){try{toggleHist();}catch(_){}};
+
+  // ---- export: presets + size estimate + remembered choice
+  var PRESETS=[['Web',{size:'2048',fmt:'jpg',q:88}],['Print',{size:'0',fmt:'jpg',q:99}],['Original',{size:'0',fmt:'auto',q:99}]];
+  window.csExportPresets=function(sh){
+    var row=document.createElement('div');row.className='mm-presets';var last=LS('csExpPreset','');
+    PRESETS.forEach(function(pr){var b=document.createElement('button');b.type='button';b.textContent=pr[0];b.className=last===pr[0]?'on':'';
+      b.onclick=function(){var v=pr[1],set=function(id,val,ev){var el=document.getElementById(id);if(el){el.value=val;el.dispatchEvent(new Event(ev,{bubbles:true}));}};
+        set('sel-exp-size',v.size,'change');set('sel-exp-fmt',v.fmt,'change');set('sl-exp-q',v.q,'input');SV('csExpPreset',pr[0]);
+        var old=document.getElementById('fx-more-menu');if(old)old.remove();fxMobileExportSheet();};
+      row.appendChild(b);});
+    sh.appendChild(row);
+  };
+  window.csExportEstimate=function(sh){
+    var el=document.createElement('div');el.className='mm-est';sh.appendChild(el);
+    var upd=function(){
+      var it=typeof curItem==='function'?curItem():null,im=it&&it.img;if(!im){el.textContent='';return;}
+      var w0=im.naturalWidth||im.width,h0=im.naturalHeight||im.height;if(!w0||!h0){el.textContent='';return;}
+      var le=parseInt((document.getElementById('sel-exp-size')||{}).value||'0',10)||0,mx=Math.max(w0,h0),sc=le&&mx>le?le/mx:1;
+      var w=Math.round(w0*sc),h=Math.round(h0*sc),px=w*h,q=parseInt((document.getElementById('sl-exp-q')||{}).value||'99',10);
+      var f=(document.getElementById('sel-exp-fmt')||{}).value||'auto';
+      var bpp=q>=98?4.2:q>=95?3:q>=90?2:q>=85?1.5:1.1,bytes=f==='png'?px*3*0.6:px*bpp/8*(f==='webp'?0.72:1);
+      el.textContent='≈ '+(bytes>1e6?(bytes/1e6).toFixed(1)+' MB':Math.round(bytes/1e3)+' KB')+'  ·  '+w+' × '+h;
+    };
+    upd();sh.addEventListener('change',upd);sh.addEventListener('input',upd);
+  };
+
+  // ---- keyboard + safe-area care
+  function navH(){var n=document.getElementById('fx-mobile-nav');if(n&&n.offsetHeight)document.body.style.setProperty('--mnav-h',n.offsetHeight+'px');}
+  window.addEventListener('resize',navH);document.addEventListener('DOMContentLoaded',function(){navH();setTimeout(navH,600);});
+  if(window.visualViewport){var kb=function(){var d=Math.max(0,window.innerHeight-window.visualViewport.height-window.visualViewport.offsetTop);document.body.style.setProperty('--kb-h',(d>80?d:0)+'px');};
+    window.visualViewport.addEventListener('resize',kb);window.visualViewport.addEventListener('scroll',kb);}
+  document.addEventListener('focusin',function(e){if(!mob())return;var t=e.target;if(t.closest&&t.closest('.fx-panel')&&(t.matches('input:not([type=range]),select,textarea,[contenteditable="true"]')))setTimeout(function(){try{t.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){}},320);});
+})();
+</script>

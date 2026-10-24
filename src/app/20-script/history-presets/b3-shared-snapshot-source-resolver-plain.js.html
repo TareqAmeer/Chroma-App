@@ -80,7 +80,7 @@ function renderPreview(){
   // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
   // normal full-frame path for framed/matted images, whose composition must span the whole
   // image rather than be rebuilt from only the visible source tile.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
+  if(fxCrispZoom()&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
     const Pc=fxCompare?fxCompareParams():getFXParams();
     // Crisp crop FIRST; the coarse underlay behind it (smooth panning) is only shown here — a
     // missing or stale one is rebuilt on idle afterwards, never ahead of the crisp frame.

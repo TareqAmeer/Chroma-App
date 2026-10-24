@@ -1,82 +1,127 @@
-<script>/* Swiss v2 review pass 2 — desktop flag, wheels grid, option-row dropdown, opening state. */
-(function(){
-function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
-ready(function(){
-  var b=document.body;if(window.__TAURI__)b.classList.add('sk2-native');
-  // Wheels: tag their row so all three share one grid track size.
-  var lift=document.getElementById('cv-wheel-lift'),row=lift&&lift.parentElement&&lift.parentElement.parentElement;if(row)row.classList.add('sk2-wheels');
-  // Option rows: each segmented control gets a mirror <select> shown only in a very narrow panel.
-  function mirror(seg){if(seg._sk2sel)return;var btns=[].slice.call(seg.querySelectorAll(':scope>button'));if(btns.length<2)return;
-    var sel=document.createElement('select');sel.className='fx-select sk2-seg-sel';
-    var lb=seg.closest('.fx-row')&&seg.closest('.fx-row').querySelector('.fx-label');if(lb)sel.setAttribute('aria-label',lb.textContent.trim());
-    btns.forEach(function(x,i){var o=document.createElement('option');o.value=i;o.textContent=x.textContent.trim();sel.appendChild(o)});
-    var sync=function(){var i=btns.findIndex(function(x){return x.classList.contains('on')||x.getAttribute('aria-pressed')==='true'});if(i>=0)sel.value=i};
-    sel.onchange=function(){btns[+sel.value].click();sync()};
-    new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
-    seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
-  document.querySelectorAll('.fx-panel .seg').forEach(mirror);
-  // Light stage: a folded histogram above Basic; drawn only while it is open.
-  var adj=document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
-  if(adj&&!document.getElementById('sk2-hist')){var d=document.createElement('details');d.id='sk2-hist';d.className='sk2-more sk2-hist';
-    d.innerHTML='<summary>Histogram</summary><div class="sk2h-box"><canvas aria-label="Histogram of the edited photo"></canvas><button class="sk2h-clip lo" title="Shadow clipping — click to show clipped areas on the photo"></button><button class="sk2h-clip hi" title="Highlight clipping — click to show clipped areas on the photo"></button></div><div class="sk2h-read"><span class="sk2h-zone">&nbsp;</span><span class="sk2h-val"></span></div>';
-    adj.parentNode.insertBefore(d,adj);var cv=d.querySelector('canvas'),q=0,H=null,box=d.querySelector('.sk2h-box'),rz=d.querySelector('.sk2h-zone'),rv=d.querySelector('.sk2h-val'),cLo=d.querySelector('.lo'),cHi=d.querySelector('.hi');
-    var ZN=[[0,13,'Blacks'],[13,64,'Shadows'],[64,166,'Midtones'],[166,230,'Highlights'],[230,256,'Whites']];
-    var idle=function(){if(!H){rz.innerHTML='&nbsp;';rv.textContent='';return}var f=function(v){return v<0.05?'0%':v<1?v.toFixed(1)+'%':Math.round(v)+'%'};rz.textContent='Clipped  '+f(H.lo)+' shadows · '+f(H.hi)+' highlights';rv.textContent=''};
-    var paint=function(){var w=Math.max(60,box.clientWidth|0),h=80,dp=window.devicePixelRatio||1;cv.width=w*dp;cv.height=h*dp;var c=cv.getContext('2d');c.setTransform(dp,0,0,dp,0,0);c.clearRect(0,0,w,h);
-      var g=getComputedStyle(d).getPropertyValue('--bdr')||'#444';c.strokeStyle=g;c.globalAlpha=.5;c.lineWidth=1;for(var k=1;k<4;k++){var gx=Math.round(w*k/4)+.5;c.beginPath();c.moveTo(gx,0);c.lineTo(gx,h);c.stroke()}c.globalAlpha=1;
-      if(!H)return;var ch=[[H.r,'rgba(255,70,70,.55)'],[H.g,'rgba(70,230,90,.55)'],[H.b,'rgba(80,130,255,.6)']];
-      c.globalCompositeOperation='lighter';ch.forEach(function(e){var a=e[0];c.beginPath();c.moveTo(0,h);for(var i=0;i<256;i++){var x=i/255*w;c.lineTo(x,h-Math.min(1,a[i]/H.pk)*(h-3))}c.lineTo(w,h);c.closePath();c.fillStyle=e[1];c.fill()});
-      c.globalCompositeOperation='source-over';c.beginPath();for(var i=0;i<256;i++){var x=i/255*w,y=h-Math.min(1,H.l[i]/H.pk)*(h-3);i?c.lineTo(x,y):c.moveTo(x,y)}c.strokeStyle='rgba(235,235,235,.8)';c.lineWidth=1;c.stroke();
-      if(H.z){var z=ZN[H.z-1];c.fillStyle='rgba(255,255,255,.07)';c.fillRect(z[0]/256*w,0,(z[1]-z[0])/256*w,h)}};
-    var redraw=function(){if(d.open&&typeof renderPreview==='function')renderPreview()};
-    var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width)return;
-      var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,480/Math.max(src.width,src.height));t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
-      var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);var px=x.getImageData(0,0,t.width,t.height).data;
-      var r=new Float32Array(256),gg=new Float32Array(256),bb=new Float32Array(256),l=new Float32Array(256),lo=0,hi=0,n=px.length/4;
-      var ov=fxClipCode()>0&&fxClipCode()<4;for(var i=0;i<px.length;i+=4){var R=px[i],G=px[i+1],B=px[i+2];
-        // The clipping overlay paints flat blue/red over the photo; read those back as clipped black/white.
-        if(ov){if(B>=250&&G>=105&&G<=125&&R>=55&&R<=75)R=G=B=0;else if(R>=250&&G>=50&&G<=68&&B>=24&&B<=40)R=G=B=255}r[R]++;gg[G]++;bb[B]++;l[(R*.2126+G*.7152+B*.0722+.5)|0]++;if(R<=1&&G<=1&&B<=1)lo++;if(R>=254||G>=254||B>=254)hi++}
-      // Peak ignores the two end bins so a clipped spike does not flatten the rest; sqrt keeps thin tones visible.
-      var pk=1;[r,gg,bb,l].forEach(function(a){for(var i=0;i<256;i++)a[i]=Math.sqrt(a[i]);for(i=2;i<254;i++)if(a[i]>pk)pk=a[i]});
-      H={r:r,g:gg,b:bb,l:l,pk:pk*1.05,n:n,raw:l,lo:lo/n*100,hi:hi/n*100,z:H&&H.z};
-      cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw||fxClipLo);cHi.classList.toggle('act',gw||fxClipHi);
-      paint();if(!H.z)idle()};
-    cLo.addEventListener('click',function(e){e.stopPropagation();fxClipLo=!fxClipLo;renderPreview()});
-    cHi.addEventListener('click',function(e){e.stopPropagation();fxClipHi=!fxClipHi;renderPreview()});
-    // Drag a zone left/right to move its Basic slider (Lightroom-style); midtones = Exposure.
-    var SL=['sl-adj-bl','sl-adj-sh','sl-adj-exp','sl-adj-hi','sl-adj-wh'],drag=null;
-    cv.addEventListener('pointerdown',function(e){if(!H||!H.z)return;var el=document.getElementById(SL[H.z-1]);if(!el)return;drag={el:el,x:e.clientX,v:+el.value,z:H.z};cv.setPointerCapture(e.pointerId);e.preventDefault()});
-    cv.addEventListener('pointermove',function(e){if(!drag)return;var w=cv.getBoundingClientRect().width||200,nv=Math.max(-100,Math.min(100,Math.round(drag.v+(e.clientX-drag.x)/w*200)));
-      if(nv!=drag.el.value){drag.el.value=nv;drag.el.dispatchEvent(new Event('input',{bubbles:true}))}rv.textContent=ZN[drag.z-1][2].replace('Midtones','Exposure')+'  '+(nv>0?'+':'')+nv});
-    var end=function(){if(!drag)return;drag.el.dispatchEvent(new Event('change',{bubbles:true}));drag=null};cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
-    cv.addEventListener('mousemove',function(e){if(!H||drag)return;var rc=cv.getBoundingClientRect(),v=Math.max(0,Math.min(255,Math.round((e.clientX-rc.left)/rc.width*255)));
-      var zi=0;ZN.forEach(function(z,j){if(v>=z[0]&&v<z[1])zi=j+1});var z=ZN[zi-1],cnt=0;for(var i=z[0];i<z[1];i++)cnt+=H.l[i]*H.l[i];
-      H.z=zi;rz.textContent=z[2];rv.textContent=Math.round(v/2.55)+'%  ·  '+Math.round(cnt/H.n*100)+'% of photo';paint()});
-    cv.addEventListener('mouseleave',function(){if(H&&!drag){H.z=0;paint();idle()}});
-    if(window.ResizeObserver)new ResizeObserver(function(){if(d.open)paint()}).observe(box);
-    // Settings > View > "Pin histogram": its own always-open section at the top of every stage.
-    var home=adj,PK='cs.histPin';
-    window.sk2HistPinned=function(){try{return localStorage.getItem(PK)==='1'}catch(e){return false}};
-    var pinApply=function(){var on=sk2HistPinned(),pn=adj.closest('.fx-panel');b.classList.toggle('sk2-hist-pin',on);
-      if(on&&pn){var hd=pn.querySelector(':scope>.sk2-in'),nv=hd&&hd.nextElementSibling&&hd.nextElementSibling.tagName==='NAV'?hd.nextElementSibling:null,af=nv||hd;
-        pn.insertBefore(d,af?af.nextSibling:pn.firstChild);d.style.top=((af?(parseFloat(getComputedStyle(af).top)||0)+af.offsetHeight:0)|0)+'px';d.open=true}
-      else{d.style.top='';home.parentNode.insertBefore(d,home);}redraw()};
-    window.sk2HistPinToggle=function(){try{localStorage.setItem(PK,sk2HistPinned()?'0':'1')}catch(e){}pinApply()};
-    d.querySelector('summary').addEventListener('click',function(e){if(sk2HistPinned())e.preventDefault()});
-    if(sk2HistPinned())pinApply();
-    d.addEventListener('toggle',redraw);
-    // Sample right after each preview render, in the same task: once the frame is composited the
-    // WebGL canvas reads back blank (no preserveDrawingBuffer). Throttled, with a trailing re-render.
-    if(typeof FX!=='undefined'&&FX.render){var fr=FX.render,last=0,tr=0;FX.render=function(P,w,h,op){var r=fr.apply(this,arguments);
-      if(d.open&&op&&('gamutWarn' in op)){var now=performance.now();clearTimeout(tr);if(now-last>70){last=now;draw()}else tr=setTimeout(function(){if(typeof renderPreview==='function')renderPreview()},90)}return r};}}
-  // Rail: no tooltip that just repeats the word already under the icon.
-  var rail=document.getElementById('fx-toolrail');
-  function untitle(){if(!rail)return;rail.querySelectorAll('.fx-rail-btn[title]').forEach(function(x){var lb=x.querySelector('.fx-rail-lb');if(lb&&x.title.trim().toLowerCase()===lb.textContent.trim().toLowerCase()){x.setAttribute('aria-label',x.title);x.removeAttribute('title')}})}
-  if(rail){untitle();new MutationObserver(untitle).observe(rail,{childList:true,subtree:true})}
-  // Opening a photo: a thin progress line replaces the "Add photos" prompt instead of overlapping it.
-  var ni=document.getElementById('fx-no-img');
-  if(ni){var o=document.createElement('div');o.className='sk2-open';o.innerHTML='<span></span><i></i>';ni.appendChild(o);
-    var orig=window.fxDeskbarTitle;if(typeof orig==='function'){window.fxDeskbarTitle=function(name,st,spin){
-      var opening=!!spin&&/^Opening/.test(st||'');b.classList.toggle('sk2-opening',opening);if(opening)o.firstChild.textContent=name||'';
-      return orig.apply(this,arguments)};}}
-});})();</script>
+<script>/* Swiss v2 — Export as a slide-over sheet (desktop layout): size + format presets and one big
+   button up front; the full Output / Watermark / Presets / Styles / Sharing cards live under
+   "More" inside the sheet (moved, not copied — every control and id is the original). */
+let FXSoftProof=null,_fxSoftProofTimer=0,_fxSoftProofRevision=0,_fxSoftProofQueue=Promise.resolve(),_fxSoftProofBefore=false;
+function fxSoftProofEstimate(sampleBytes,sampleW,sampleH,outputW,outputH){
+  if(!(sampleBytes>0&&sampleW>0&&sampleH>0&&outputW>0&&outputH>0))return 0;
+  return Math.round(sampleBytes*(outputW*outputH)/(sampleW*sampleH));
+}
+function fxSoftProofInvalidate(){
+  _fxSoftProofRevision++;clearTimeout(_fxSoftProofTimer);
+  _fxSoftProofQueue=_fxSoftProofQueue.catch(()=>{}).then(()=>{
+    if(document.body.classList.contains('sk2-exp-open')||!FXSoftProof)return;
+    try{FXSoftProof.gl.getExtension('WEBGL_lose_context')?.loseContext();}catch(_){}
+    FXSoftProof=null;
+  });
+}
+function fxSoftProofSchedule(){
+  if(!document.body.classList.contains('sk2-exp-open'))return;
+  clearTimeout(_fxSoftProofTimer);const revision=++_fxSoftProofRevision;
+  _fxSoftProofTimer=setTimeout(()=>{
+    _fxSoftProofQueue=_fxSoftProofQueue.catch(()=>{}).then(()=>fxSoftProofRender(revision));
+  },180);
+}
+async function fxSoftProofRender(revision){
+  const sh=document.getElementById('sk2-export'),canvas=sh&&sh.querySelector('.sk2x-proof canvas'),meta=sh&&sh.querySelector('.sk2x-proof-est');
+  const it=typeof curItem==='function'?curItem():null;
+  if(!canvas||revision!==_fxSoftProofRevision)return;
+  if(!it||it.kind==='video'||!fxWork){
+    if(meta)meta.textContent=it&&it.kind==='video'?'Still photos only':'Choose a still photo';
+    canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);return;
+  }
+  const sizeEl=document.getElementById('sel-exp-size'),sharpEl=document.getElementById('sel-exp-sharp'),qualityEl=document.getElementById('sl-exp-q'),formatEl=document.getElementById('sel-exp-fmt');
+  const size=parseInt(sizeEl?.value||'0',10)||0,sharp=parseInt(sharpEl?.value||'0',10)||0;
+  const quality=Math.max(0,Math.min(1,(parseFloat(qualityEl?.value||'99')||99)/100));
+  const format=formatEl?.value||'auto',itemKey=`${fxCurIdx}:${it.name||''}:${size}:${sharp}:${quality}:${format}:${_fxSoftProofBefore}`;
+  const label=sh.querySelector('.sk2x-proof-toggle');if(label)label.textContent=_fxSoftProofBefore?'Show edited':'Show original';
+  if(meta)meta.textContent='Rendering export preview…';
+  let proofSource=null,proofOut=null;
+  try{
+    const source=geomCanvas(it),iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height;
+    const scale=Math.min(1,1000/Math.max(iw,ih),Math.sqrt(800000/(iw*ih)));
+    const pw=Math.max(1,Math.round(iw*scale)),ph=Math.max(1,Math.round(ih*scale));
+    proofSource=document.createElement('canvas');proofSource.width=pw;proofSource.height=ph;
+    proofSource.getContext('2d').drawImage(source,0,0,pw,ph);
+    const P=_fxSoftProofBefore?FX_ORIG_PARAMS:(()=>{const live=getFXParams(),copy=JSON.parse(JSON.stringify(live));
+      copy.redEyeOps=it.redeye||[];const depth=it.img&&it.img._depthMap;copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;return copy;})();
+    if(!FXSoftProof){FXSoftProof=new FXR(document.createElement('canvas'));if(!FXSoftProof.ok)throw new Error('Could not create the preview renderer');}
+    FXSoftProof.resetTextureSnapshotFrom(FX);
+    proofOut=await processToCanvas(P,proofSource,pw,ph,()=>{},FXSoftProof);
+    if(revision!==_fxSoftProofRevision)return;
+    if(!_fxSoftProofBefore){
+      const{b1t,b2t}=borderLayerSizes(P,proofOut.width,proofOut.height);
+      if(bordersAny(P,b1t,b2t)){const c=document.createElement('canvas');c.width=proofOut.width+2*(b1t+b2t);c.height=proofOut.height+2*(b1t+b2t);drawBorderLayers(c.getContext('2d'),proofOut,P,b1t,b2t,borderSeed(it,P));proofOut.width=proofOut.height=0;proofOut=c;}
+      if(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none'){const c=filmFrameCompose(proofOut,P.filmFrame);if(c!==proofOut){proofOut.width=proofOut.height=0;proofOut=c;}}
+      if(P.canvas&&P.canvas.enabled&&P.canvas.ar){const c=canvasCompose(proofOut,P.canvas);if(c!==proofOut){proofOut.width=proofOut.height=0;proofOut=c;}}
+    }
+    proofOut=await exportResample(proofOut,{size,sharp});
+    if(revision!==_fxSoftProofRevision)return;
+    const lossless=it.ext==='png'||it.ext==='tif'||it.ext==='tiff'||RAW_FILE_EXT_RE.test('.'+it.ext)||RUST_ONLY_RE.test('.'+it.ext);
+    const mime=format==='png'?'image/png':format==='webp'?'image/webp':format==='jpg'?'image/jpeg':(lossless?'image/png':'image/jpeg');
+    const blob=await new Promise(resolve=>proofOut.toBlob(resolve,mime,mime==='image/png'?undefined:quality));
+    if(!blob)throw new Error('Could not encode preview');
+    if(revision!==_fxSoftProofRevision)return;
+    const decoded=await createImageBitmap(blob);
+    if(revision!==_fxSoftProofRevision){decoded.close?.();return;}
+    const ctx=canvas.getContext('2d');canvas.width=decoded.width;canvas.height=decoded.height;ctx.drawImage(decoded,0,0);decoded.close?.();
+    // Extrapolate from the downscaled sample to the full output dimensions. Export resize never
+    // enlarges, so an output size larger than the sample is reflected in the estimate only.
+    const sampleLong=Math.max(proofOut.width,proofOut.height);
+    const fullLong=sampleLong*(Math.max(iw,ih)/Math.max(pw,ph));
+    const desiredLong=size?Math.min(size,fullLong):fullLong;
+    const fullScale=desiredLong/sampleLong;
+    const outW=Math.max(1,Math.round(proofOut.width*fullScale)),outH=Math.max(1,Math.round(proofOut.height*fullScale));
+    const estimated=fxSoftProofEstimate(blob.size,proofOut.width,proofOut.height,outW,outH);
+    const fmt=mime==='image/png'?'PNG':mime==='image/webp'?'WebP':'JPEG';
+    const tiffFinal=!!(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath&&(it.ext==='tif'||it.ext==='tiff')&&format==='auto');
+    const kb=estimated>=1048576?(estimated/1048576).toFixed(1)+' MB':Math.max(1,Math.round(estimated/1024))+' KB';
+    if(meta)meta.textContent=`${outW} × ${outH} · ≈ ${kb} estimated ${fmt}${tiffFinal?' sample · final TIFF differs':' · preview based'}`;
+    canvas.setAttribute('aria-label',`${_fxSoftProofBefore?'Original':'Export'} preview, ${outW} by ${outH} pixels`);
+    canvas.dataset.previewKey=itemKey;canvas.dataset.estimateBytes=String(estimated);canvas.dataset.sampleBytes=String(blob.size);
+  }catch(e){if(revision===_fxSoftProofRevision&&meta)meta.textContent='Preview unavailable · '+String(e?.message||e);}
+  finally{if(proofSource){proofSource.width=proofSource.height=0;}if(proofOut&&proofOut!==canvas){proofOut.width=proofOut.height=0;}}
+}
+function sk2ExportBuild(){
+  let sh=document.getElementById('sk2-export');if(sh)return sh;
+  sh=document.createElement('aside');sh.id='sk2-export';sh.setAttribute('aria-label','Export');sh.setAttribute('aria-hidden','true');
+  sh.innerHTML=`<div class="sk2x-hd"><h2>Export</h2><button type="button" class="sk2x-close" aria-label="Close export" title="Close (Esc)">×</button></div>
+    <div class="sk2x-body"><div class="sk2x-cap">Size</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-size"></div>
+    <div class="sk2x-cap">Format</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-fmt"></div>
+    <section class="sk2x-proof" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
+    <div class="sk2x-scope"></div>
+    <details class="sk2-more sk2x-more"><summary>More</summary><div class="sk2x-cards"></div></details></div>
+    <div class="sk2x-go"><button type="button" class="sk2x-btn">Export <span>→</span></button></div>`;
+  document.body.appendChild(sh);
+  const lbl={'0':'Full size','4096':'4096','2560':'2560','2048':'2048','1600':'1600','1080':'1080 social','auto':'Match source','jpg':'JPG','png':'PNG','webp':'WebP'};
+  sh.querySelectorAll('.sk2x-opts').forEach(box=>{const sel=document.getElementById(box.dataset.sel);if(!sel)return;
+    const draw=()=>{box.innerHTML=[...sel.options].filter(o=>!o.hidden&&!o.disabled).map(o=>`<button type="button" class="btn bgh${o.value===sel.value?' on':''}" data-v="${o.value}">${lbl[o.value]||o.textContent}</button>`).join('');};
+    draw();sel.addEventListener('change',draw);box._draw=draw;
+    box.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;sel.value=b.dataset.v;sel.dispatchEvent(new Event('change',{bubbles:true}));draw();});});
+  const cards=sh.querySelector('.sk2x-cards');
+  ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
+  sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
+  sh.querySelector('.sk2x-proof-toggle').onclick=()=>{_fxSoftProofBefore=!_fxSoftProofBefore;fxSoftProofSchedule();};
+  sh.querySelector('.sk2x-btn').onclick=()=>{const b=document.getElementById('btn-fx-export');if(b&&b.disabled&&!fxImages.length)return;exportFX();};
+  ['sel-exp-size','sel-exp-fmt','sel-exp-sharp','sl-exp-q'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener(id==='sl-exp-q'?'input':'change',fxSoftProofSchedule);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sk2-exp-open')){e.stopPropagation();sk2ExportClose();}},true);
+  return sh;
+}
+function sk2ExportOpen(){
+  if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
+  const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
+  const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
+  sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
+  document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
+  _fxSoftProofBefore=false;fxSoftProofSchedule();
+  setTimeout(()=>sh.querySelector('.sk2x-btn').focus(),50);
+}
+function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
+function sk2ExportWire(){
+  if(!document.body.classList.contains('deskx'))return;
+  sk2ExportBuild();
+  const b=document.getElementById('btn-export-db');if(b&&!b._sk2){b._sk2=1;b.removeAttribute('onclick');b.addEventListener('click',()=>document.body.classList.contains('sk2-exp-open')?sk2ExportClose():sk2ExportOpen());b.title='Export…';}
+  FX_GROUPS.output.members=['crop','rotate','straighten','borders','canvas'];
+  if(typeof buildToolRail==='function')buildToolRail();
+}
+</script>

@@ -1,51 +1,90 @@
-<script>/* Swiss v2 — behaviour half (logo, hover/arrow-key look preview, "More" fold, "?" shortcuts). */
-(function(){
-function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
-ready(function(){
-  // "More": fold the Image card's secondary button rows (Google Photos, library save/delete, LUT chart/.cube)
-  var ids=['btn-gp-import','btn-lut-save','btn-lut-dl'],rows=[];
-  ids.forEach(function(id){var b=document.getElementById(id),r=b&&b.closest('.btn-row');if(r&&rows.indexOf(r)<0)rows.push(r)});
-  if(rows.length){var d=document.createElement('details');d.className='sk2-more';d.innerHTML='<summary title="Google Photos, saved LUTs, LUT chart">More</summary>';
-    rows[0].parentNode.insertBefore(d,rows[0]);rows.forEach(function(r){d.appendChild(r)});
-    // Desktop: the Apply LUT row is placed under the Looks grid by fxDesktopReorderLooksPanel, which can run
-    // before this fold exists, so the fold follows that row here instead of staying at its build position.
-    var lutRow=document.getElementById('fx-apply-lut-row');if(lutRow)lutRow.insertAdjacentElement('afterend',d);}
-  // Border ("frames") tool: one layer at a time — Inner | Outer word tabs over the same rows;
-  // Film variation + Overlay fold under "More". Rows are only hidden/shown, never rebuilt.
-  (function(){var ff=document.getElementById('ff-borders');if(!ff||ff.querySelector('.sk2-layers'))return;
-    var rows=[].slice.call(ff.querySelectorAll(':scope>.fx-row'));
-    rows.forEach(function(r){var id=(r.querySelector('[id]')||{}).id||'',fr=r.getAttribute('data-film-row');
-      var L=fr||(/(^|-)b1(-|$)/.test(id)?'b1':/(^|-)b2(-|$)/.test(id)?'b2':'');if(L)r.setAttribute('data-layer',L);
-      var lb=r.querySelector('.fx-label');if(L&&lb&&lb.firstChild&&lb.firstChild.nodeType===3)lb.firstChild.textContent=lb.firstChild.textContent.replace(/^(Inner|Outer) /,'').replace(/^./,function(c){return c.toUpperCase()});});
-    var tabs=document.createElement('div');tabs.className='btn-row chip-tap sk2-layers';tabs.setAttribute('role','tablist');
-    tabs.innerHTML='<button type="button" role="tab" aria-selected="true" class="btn bgh on" data-l="b1">Inner</button><button type="button" role="tab" aria-selected="false" class="btn bgh" data-l="b2">Outer</button>';
-    ff.insertBefore(tabs,ff.firstChild);ff.setAttribute('data-sk2-layer','b1');
-    tabs.onclick=function(e){var b=e.target.closest('button[data-l]');if(!b)return;ff.setAttribute('data-sk2-layer',b.dataset.l);
-      tabs.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b);x.setAttribute('aria-selected',String(x===b))});};
-    var more=document.createElement('details');more.className='sk2-more';more.innerHTML='<summary>More</summary>';
-    rows.filter(function(r){return !r.hasAttribute('data-layer')}).forEach(function(r){more.appendChild(r)});
-    ff.appendChild(more);})();
-  // "?" opens the keyboard shortcuts sheet
-  document.addEventListener('keydown',function(e){if(e.key!=='?'||e.metaKey||e.ctrlKey)return;var t=e.target;
-    if(t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))return;
-    if(window.chromasmithShowShortcuts){e.preventDefault();window.chromasmithShowShortcuts();}});
-  // Hover a look (~200ms) or arrow-key onto it to preview it on the photo; leaving / Escape
-  // restores the chosen one, a click or Enter commits. Only the renderer's LUT is swapped
-  // (FX.setLUT + fxState.lut) — no history entry, no film defaults, nothing saved.
-  var host=document.getElementById('fx-looks');if(!host)return;
-  var timer=0,peek=null,saved,seq=0;
-  function end(commit){clearTimeout(timer);seq++;if(!peek)return;peek.classList.remove('sk2-peek');peek=null;
-    if(commit)return;try{fxState.lut=saved;if(saved)FX.setLUT(saved);renderPreview();}catch(e){}}
-  async function show(c){var v=c._lookJob&&c._lookJob.val;if(c.classList.contains('sel')){end();return;}
-    var my=++seq,lut=null;
-    try{if(v&&v.startsWith('p:')&&typeof presetLut==='function')lut=await presetLut(v.slice(2));else if(v!=='')return;}catch(e){return}
-    if(my!==seq)return;if(!peek)saved=fxState.lut;else peek.classList.remove('sk2-peek');
-    peek=c;c.classList.add('sk2-peek');try{fxState.lut=lut;if(lut)FX.setLUT(lut);renderPreview();}catch(e){}}
-  window.sk2PeekLook=function(c){clearTimeout(timer);show(c)};
-  window.sk2PeekEnd=end;
-  host.addEventListener('pointerover',function(e){if(e.pointerType==='touch'||document.body.classList.contains('mobile-fx'))return; /* touch scrolling is not hovering */var c=e.target.closest&&e.target.closest('.look-cell');if(!c||c===peek)return;
-    clearTimeout(timer);timer=setTimeout(function(){if(c.matches(':hover'))show(c)},200);});
-  host.addEventListener('pointerleave',function(){end()});
-  host.addEventListener('keydown',function(e){if(e.key==='Escape'&&peek){e.stopPropagation();end();}},true);
-  host.addEventListener('click',function(){end(true)},true);
-});})();</script>
+<script>/* Swiss v2 — stage header for the tool panel: a big stage title, then a sticky sub-tab row that
+   jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
+// CHR-196: ONE visible name per tool, used by the jump strip, the section headers, the rail
+// section list and the command palette (all four used to drift: Basic/Tone, Sharpen/
+// Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
+const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Exposure & Tone',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
+  pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
+  retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate',straighten:'Transform',borders:'Borders',canvas:'Canvas',
+  versions:'Versions & History',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
+// Everyday words and old names that should find each tool in the command palette (⌘K).
+const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
+  looks:'presets film luts look',curves:'tone curve',hsl:'hsl color mixer hue saturation luminance',pointcolor:'point color',wheels:'color wheels grading lift gamma gain',
+  nr:'noise denoise',deconv:'deconvolution sharpening detail',local:'local adjustments mask brush radial linear sky',retouch:'heal clone spot removal',redeye:'red eye pupil flash',
+  crop:'crop aspect',rotate:'rotate flip',straighten:'level horizon angle',borders:'border frame',canvas:'matte background',vig:'vignette clarity texture dehaze',
+  art:'dust scratches light leak',grain:'film grain',info:'exif info metadata keywords',exppreset:'export presets recipes',style:'styles presets saved edits',inprint:'input profile print v-log'};
+const SK2_SUB=Object.assign({},CS_NAMES);
+function sk2SubTabs(g,jump){
+  const panel=document.querySelector('.fx-panel');if(!panel)return;
+  let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
+  if(!h){h=document.createElement('h2');h.id='sk2-stage-h';nav=document.createElement('nav');nav.id='sk2-sub';nav.setAttribute('aria-label','Tools in this stage');
+    panel.prepend(h,nav);
+    nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b){sk2Focus(b.dataset.k);sk2Jump(b.dataset.k,true);}});
+    panel.addEventListener('scroll',sk2Spy,{passive:true});}
+  const G=FX_GROUPS[g];
+  const nt=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
+  if(h.textContent!==nt){h.textContent=nt;h.classList.remove('sk2-in');void h.offsetWidth;h.classList.add('sk2-in');}
+  const rail=document.getElementById('fx-toolrail'),on=rail&&rail.querySelector('.fx-rail-btn.on');
+  if(rail){let mk=document.getElementById('sk2-rail-mk');if(!mk){mk=document.createElement('i');mk.id='sk2-rail-mk';mk.setAttribute('aria-hidden','true');}
+    if(mk.parentNode!==rail)rail.appendChild(mk);rail.classList.add('sk2-mk');
+    mk.style.opacity=on?1:0;if(on)mk.style.transform=`translateY(${on.offsetTop+8}px)`;}
+  const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>getComputedStyle(c).display!=='none'&&!c.hidden):[];
+  nav.hidden=cards.length<2;
+  panel.querySelectorAll('.sk2-dup-title').forEach(c=>c.classList.remove('sk2-dup-title'));
+  if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');
+    // Hide the long name properly (display:none) instead of a 0px font that screen readers still read.
+    [...t.childNodes].forEach(n=>{if(n.nodeType===3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='sk2-long';n.replaceWith(sp);sp.appendChild(n);}});}});
+  if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
+  // The Light stage's folded histogram sits above Basic, so it gets the first tab.
+  const hist=document.getElementById('sk2-hist'),histTab=g==='light'&&hist&&hist.offsetParent?'<button type="button" data-k="hist">Histogram</button>':'';
+  nav.innerHTML=histTab+cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
+  document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+  document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');
+  // The stage title scales with the panel and its font loads late, so a one-off measurement leaves
+  // the sticky card headers parked at the wrong offset (a gap with content showing through).
+  if('ResizeObserver' in window){if(window._sk2StickRO)window._sk2StickRO.disconnect();
+    window._sk2StickRO=new ResizeObserver(()=>{
+      document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
+      document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');});
+    [h,nav,panel].forEach(el=>window._sk2StickRO.observe(el,{box:'border-box'}));}
+  // Tail spacer: lets the last card of a stage scroll right up under the header when its tab is picked.
+  let tail=document.getElementById('sk2-tail');if(!tail){tail=document.createElement('div');tail.id='sk2-tail';tail.setAttribute('aria-hidden','true');}
+  panel.appendChild(tail);tail.style.height='0px';
+  // Strength rides at the bottom of the look grid (sticky), whatever layout the row started in.
+  if(g==='look'){const mix=document.getElementById('row-lut-mix'),lc=document.getElementById('fx-looks-ctrl');if(mix&&lc&&mix.parentElement!==lc)lc.appendChild(mix);}
+  if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
+}
+// Picking a sub-tab by hand focuses that tool: every other tool in the stage folds, the picked one opens.
+function sk2Focus(k){
+  const panel=document.querySelector('.fx-panel');if(!panel)return;
+  panel.querySelectorAll('.fx-ctrl.sec-active[data-fxsec]').forEach(c=>{
+    const want=c.dataset.fxsec!==k;if(c.classList.contains('fx-sec-collapsed')!==want&&typeof fxSecToggle==='function')fxSecToggle(c);});
+  const h=document.getElementById('sk2-hist');if(h&&h.offsetParent)h.open=k==='hist';
+}
+function sk2Jump(k,smooth){
+  const panel=document.querySelector('.fx-panel'),c=panel&&(k==='hist'?document.getElementById('sk2-hist'):panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`));if(!c)return;
+  if(k==='hist'&&!c.open)c.open=true;
+  if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
+  const nav=document.getElementById('sk2-sub'),hd=document.getElementById('sk2-stage-h'),off=(nav&&!nav.hidden?nav.offsetHeight:0)+(hd?hd.offsetHeight:0);
+  const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
+  sk2Jump.k=k;sk2Jump.top=Math.max(0,top);sk2Jump.t=Date.now();
+  const tail=document.getElementById('sk2-tail');
+  if(tail){const cur=tail.offsetHeight,need=top+panel.clientHeight-(panel.scrollHeight-cur);tail.style.height=Math.max(0,Math.ceil(need))+'px';}
+  panel.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
+  // Cards can still be settling (stage switch, fold opening) — re-land once they have.
+  if(smooth){clearTimeout(sk2Jump._t);sk2Jump._t=setTimeout(()=>{const d=c.getBoundingClientRect().top-panel.getBoundingClientRect().top-off;if(Math.abs(d)>2)sk2Jump(k,false);sk2Spy();},450);}
+  if(nav)nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+}
+function sk2Spy(){
+  const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
+  const hd=document.getElementById('sk2-stage-h'),line=panel.getBoundingClientRect().top+(hd?hd.offsetHeight:0)+nav.offsetHeight+8;let cur=null;
+  const hasHist=!!nav.querySelector('button[data-k=hist]');
+  panel.querySelectorAll(hasHist?'.fx-ctrl.sec-active,#sk2-hist':'.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.id==='sk2-hist'?'hist':c.dataset.fxsec;});
+  if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
+  const tail=document.getElementById('sk2-tail'),padded=tail&&tail.offsetHeight>0;
+  if(!padded&&panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
+  // The tab you clicked stays underlined while the panel sits where that click put it.
+  if(sk2Jump.k&&(Date.now()-sk2Jump.t<900||Math.abs(panel.scrollTop-sk2Jump.top)<6))cur=sk2Jump.k;else sk2Jump.k=null;
+  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
+}
+</script>

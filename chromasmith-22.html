@@ -7343,7 +7343,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024G';
+const BUILD='1.1024H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11351,6 +11351,9 @@ let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // t
 // full-quality preview toggle.
 let fxFullResPreview=false; try{fxFullResPreview=localStorage.getItem('chromasmith_fullres_preview')==='1';}catch(e){}
 let _fxPreviewInteracting=false;
+// Zoomed past Fit the visible crop is always rendered at native detail (bounded cost: only the visible tile), with or without the
+// opt-in Full res toggle; otherwise the capped whole-frame buffer is CSS-upscaled and a 100% view is visibly soft next to export.
+function fxCrispZoom(){return fxFullResPreview||fxZoom>1;}
 function fxFullResPreviewToggle(){
   fxFullResPreview=!fxFullResPreview;
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
@@ -11364,7 +11367,7 @@ function fxFullResPreviewToggle(){
 // actually swap backing-store resolution — but not on every wheel/pinch tick (60+/s mid-gesture).
 let _fxZoomRenderTimer=null, _fxZoomInteractTimer=null;
 function _fxZoomRenderDebounced(){
-  if(!fxFullResPreview)return;
+  if(!fxCrispZoom())return;
   clearTimeout(_fxZoomRenderTimer);
   _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)fxRenderPreviewViewOnly();},90);
 }
@@ -15734,7 +15737,7 @@ document.addEventListener('pointerdown',e=>{
 document.addEventListener('pointerup',e=>{
   if(!_fxPreviewInteracting)return;
   _fxPreviewInteracting=false;
-  if(fxFullResPreview)renderPreview();
+  if(fxCrispZoom())renderPreview();
 });
 // pointerup doesn't fire if the gesture is interrupted (e.g. dragged off-window, browser takes
 // over for a system gesture) — without this, _fxPreviewInteracting can stick `true` forever and
@@ -15742,7 +15745,7 @@ document.addEventListener('pointerup',e=>{
 document.addEventListener('pointercancel',e=>{
   if(!_fxPreviewInteracting)return;
   _fxPreviewInteracting=false;
-  if(fxFullResPreview)renderPreview();
+  if(fxCrispZoom())renderPreview();
 });
 // Safety net for the same stuck state when NO pointerup/pointercancel ever reaches us (release outside the window, a context
 // menu swallowing it, a capture lost mid-pan): the OS keeps reporting moves with no button held, so if the preview is still
@@ -22547,7 +22550,7 @@ function initZoomPan(){
     // "interacting" (cheap capped preview) for the whole burst, then render once for real.
     _fxPreviewInteracting=true;
     clearTimeout(_fxZoomInteractTimer);
-    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxFullResPreview)fxRenderPreviewViewOnly();},150);
+    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxCrispZoom())fxRenderPreviewViewOnly();},150);
     // 2.5% per tick: a trackpad pinch arrives as a rapid burst of wheel events.
     _zoomAt(fxZoom*(e.deltaY<0?1.025:0.975),e.clientX,e.clientY);
     _applyZoom();
@@ -22605,7 +22608,7 @@ function initZoomPan(){
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
-    else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;clearTimeout(_fxZoomRenderTimer);fxRenderPreviewViewOnly();} // the pan's _applyZoom calls armed the 90ms settle render too: one render, not two
+    else if(fxCrispZoom()){clearTimeout(_fxPanTileT);_fxPanTileT=0;clearTimeout(_fxZoomRenderTimer);fxRenderPreviewViewOnly();} // the pan's _applyZoom calls armed the 90ms settle render too: one render, not two
   };
   const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,false);};
   zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,true);});
@@ -22640,7 +22643,7 @@ function initZoomPan(){
     [...e.changedTouches].forEach(t=>delete _pt[t.identifier]);
     if(e.touches.length===0&&_pinching){_pinching=false;_pmid=null;}
     else if(e.touches.length===1)_pmid=null;
-    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxFullResPreview)fxRenderPreviewViewOnly();}
+    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxCrispZoom())fxRenderPreviewViewOnly();}
   },{passive:true});
 }
 
@@ -24614,7 +24617,7 @@ function _fxScheduleFullBase(ms){
   _fxFullBase.timer=setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(run,{timeout:400});else run();},ms);
 }
 function _fxRebuildFullBase(){
-  if(!_fxCropShown||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  if(!_fxCropShown||!fxCrispZoom()||fxZoom<=1||fxLoupe)return;
   if(_fxPreviewInteracting){_fxScheduleFullBase(250);return;}
   const work=fxWork;if(!work||!FX.ok)return;
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;
@@ -24833,7 +24836,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions){
 // (throttled), instead of only after release. No-op unless the tiled crisp view is showing.
 let _fxPanTileT=0;
 function fxPanTilesTick(){
-  if(_fxPanTileT||!_fxCropShown||!window.__fxCrispView||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  if(_fxPanTileT||!_fxCropShown||!window.__fxCrispView||!fxCrispZoom()||fxZoom<=1||fxLoupe)return;
   _fxPanTileT=setTimeout(()=>{
     _fxPanTileT=0;
     if(!_fxCropShown||!window.__fxCrispView||!fxWork||fxLoupe||fxZoom<=1)return;
@@ -24996,7 +24999,7 @@ function renderPreview(){
   // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
   // normal full-frame path for framed/matted images, whose composition must span the whole
   // image rather than be rebuilt from only the visible source tile.
-  if(fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
+  if(fxCrispZoom()&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&!_previewComposition&&fxComparePreviousSnapshot===null){
     const Pc=fxCompare?fxCompareParams():getFXParams();
     // Crisp crop FIRST; the coarse underlay behind it (smooth panning) is only shown here — a
     // missing or stale one is rebuilt on idle afterwards, never ahead of the crisp frame.

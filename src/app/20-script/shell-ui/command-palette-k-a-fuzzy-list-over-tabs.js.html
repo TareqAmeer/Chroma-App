@@ -264,7 +264,7 @@ document.addEventListener('pointerdown',e=>{
 document.addEventListener('pointerup',e=>{
   if(!_fxPreviewInteracting)return;
   _fxPreviewInteracting=false;
-  if(fxFullResPreview)renderPreview();
+  if(fxCrispZoom())renderPreview();
 });
 // pointerup doesn't fire if the gesture is interrupted (e.g. dragged off-window, browser takes
 // over for a system gesture) — without this, _fxPreviewInteracting can stick `true` forever and
@@ -272,7 +272,7 @@ document.addEventListener('pointerup',e=>{
 document.addEventListener('pointercancel',e=>{
   if(!_fxPreviewInteracting)return;
   _fxPreviewInteracting=false;
-  if(fxFullResPreview)renderPreview();
+  if(fxCrispZoom())renderPreview();
 });
 // Safety net for the same stuck state when NO pointerup/pointercancel ever reaches us (release outside the window, a context
 // menu swallowing it, a capture lost mid-pan): the OS keeps reporting moves with no button held, so if the preview is still

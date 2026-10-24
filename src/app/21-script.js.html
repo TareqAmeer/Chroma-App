@@ -1,25 +1,145 @@
 <script>
-/* Touch slider detent + tick, and double-tap a slider's label to reset it. */
+/* ── Swiss Kinetic helper (design/prototypes/swiss-kinetic/index.html makeSwitch/snap/bezier) ──
+   One shared implementation for the Editor and the Library (desktop/library-ui.js renders into
+   this same document, so its .lib-seg controls are picked up by the same observer; window.Kinetic
+   is exposed for any control that needs to attach explicitly). Look-only: selection still happens
+   through each button's own click handler — a drag just ends by clicking the button it lands on. */
 (function(){
-  var coarse=matchMedia('(pointer:coarse)').matches;
-  // Landscape and foldable layouts are supported; never force portrait.
-  var lastTick=0;
-  document.addEventListener('input',function(e){
-    var sl=e.target;if(!coarse||!sl||sl.type!=='range'||!sl.classList.contains('fx-slider')||sl._snapping)return;
-    var min=+sl.min,max=+sl.max,def=parseFloat(sl.defaultValue),v=+sl.value;
-    if(isFinite(def)&&def>min&&def<max&&Math.abs(v-def)<=(max-min)*0.015&&v!==def){sl._snapping=true;sl.value=def;sl.dispatchEvent(new Event('input',{bubbles:true}));sl._snapping=false;}
-    var now=Date.now(),step=(max-min)/40;
-    if(now-lastTick>45&&Math.abs(v-(sl._lastTick==null?v:sl._lastTick))>=step){lastTick=now;sl._lastTick=v;try{if(typeof hapt==='function')hapt('LIGHT');if(navigator.vibrate&&(!window.MobileUI||MobileUI.pref('haptics',true)))navigator.vibrate(4);}catch(_){}}
-    if(sl._lastTick==null)sl._lastTick=v;
-  },true);
-  document.addEventListener('dblclick',function(e){
-    var lb=e.target.closest&&e.target.closest('.fx-row > .fx-label');if(!lb)return;
-    var sl=lb.parentElement.querySelector('input[type=range]');if(!sl)return;
-    var base=(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault&&_fxPristineDefault.sliders)||{};
-    var key=sl.id.replace(/^sl-/,''),d=base[key]!==undefined?base[key]:sl.defaultValue;
-    if(String(sl.value)===String(d))return;
-    e.preventDefault();sl.value=d;sl.dispatchEvent(new Event('input',{bubbles:true}));
-    try{if(typeof hapt==='function')hapt('MEDIUM');}catch(_){}
-  });
+  const root=document.documentElement;
+  const tok=(n)=>getComputedStyle(document.body||root).getPropertyValue(n).trim();
+  const num=(v)=>parseFloat(v)||0;
+  const reduced=()=>tok('--k-motion-reduce-motion')!=='off'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ac;
+  function snap(){
+    if(tok('--k-motion-snap-sound')==='off'||reduced())return;
+    const tick=tok('--k-motion-snap-sound')==='tick';
+    try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain(),now=ac.currentTime;
+      o.type=tick?'square':'sine';o.frequency.setValueAtTime(tick?2400:180,now);o.frequency.exponentialRampToValueAtTime(tick?1200:60,now+0.05);
+      g.gain.setValueAtTime(tick?0.05:0.25,now);g.gain.exponentialRampToValueAtTime(0.0001,now+(tick?0.03:0.09));
+      o.connect(g).connect(ac.destination);o.start(now);o.stop(now+0.1);}catch(e){}
+  }
+  function bezier(x1,y1,x2,y2){
+    const A=(a,b)=>1-3*b+3*a,B=(a,b)=>3*b-6*a,C=(a)=>3*a;
+    const calc=(t,a,b)=>((A(a,b)*t+B(a,b))*t+C(a))*t,slope=(t,a,b)=>3*A(a,b)*t*t+2*B(a,b)*t+C(a);
+    return(x)=>{if(x<=0)return 0;if(x>=1)return 1;let t=x;for(let i=0;i<8;i++){const s=slope(t,x1,x2);if(Math.abs(s)<1e-6)break;t-=(calc(t,x1,x2)-x)/s;}return calc(t,y1,y2);};
+  }
+  const ease=()=>{const m=/cubic-bezier\(([^)]*)\)/.exec(tok('--k-motion-easing'));return bezier(...(m?m[1]:'.16,1,.3,1').split(',').map(Number));};
+  function syncTheme(){root.dataset.kPsel=tok('--k-variants-photo-selection')||'slab';root.dataset.kSlabFront=tok('--k-two-tone-slab-in-front')||'a';root.dataset.kSlab=tok('--k-offset-slab-style')||'stepped';root.dataset.kMenu=tok('--k-menu-colour')||'ink';root.dataset.kSeg=tok('--k-segmented-style')||'cell';root.dataset.kSegdiv=tok('--k-segmented-dividers')||'none';}
+  function attachSwitch(el){
+    if(el._kSwitch)return el._kSwitch;
+    const opts=()=>[...el.children].filter(c=>c.tagName==='BUTTON'&&c.offsetParent!==null);
+    const cur=()=>{const o=opts();const i=o.findIndex(b=>b.classList.contains('on'));return i;};
+    let p=Math.max(0,cur()),idx=cur(),raf=0,start=null,dragged=false;
+    function render(){
+      const o=opts();if(!o.length||idx<0){el.removeAttribute('data-k-on');return;}
+      const n=o.length-1,c=Math.max(0,Math.min(n,p)),i0=Math.floor(c),i1=Math.min(n,i0+1),f=c-i0;
+      const a=o[i0],b=o[i1];let x=a.offsetLeft+(b.offsetLeft-a.offsetLeft)*f,w=a.offsetWidth+(b.offsetWidth-a.offsetWidth)*f;
+      if(p<0)x+=p*a.offsetWidth;if(p>n)x+=(p-n)*b.offsetWidth;
+      el.style.setProperty('--k-sx',x+'px');el.style.setProperty('--k-sw',w+'px');el.setAttribute('data-k-on','');
+      if(el.id==='cs-brand-tog')el.style.setProperty('--k-sgn',(-1+2*(c/(n||1))).toFixed(3));
+    }
+    function tweenTo(t){cancelAnimationFrame(raf);const from=p,dur=num(tok('--k-motion-duration')),e=ease();let t0=0;
+      if(reduced()||dur<=0||from===t){p=t;render();return;}
+      const step=(now)=>{if(!t0)t0=now;const k=Math.min(1,(now-t0)/dur);p=from+(t-from)*e(k);render();if(k<1)raf=requestAnimationFrame(step);else raf=0;};raf=requestAnimationFrame(step);}
+    function springTo(t,v){cancelAnimationFrame(raf);if(reduced()){p=t;render();return;}
+      const T=num(tok('--k-motion-duration'))/1000||0.5,w0=2*Math.PI/T,z=Math.max(0.12,1-num(tok('--k-motion-drag-bounce'))*1.1);let last=0;
+      const step=(now)=>{const dt=last?Math.min(0.032,(now-last)/1000):1/60;last=now;
+        for(let i=0;i<4;i++){const h=dt/4,a=-w0*w0*(p-t)-2*z*w0*v;v+=a*h;p+=v*h;}
+        render();if(Math.abs(p-t)>0.0008||Math.abs(v)>0.002)raf=requestAnimationFrame(step);else{p=t;raf=0;render();}};raf=requestAnimationFrame(step);}
+    // Follow the app's own .on changes (click handlers, programmatic state restores).
+    const mo=new MutationObserver(()=>{const i=cur();if(i===idx){if(!raf)render();return;}const was=idx;idx=i;
+      if(i<0){render();return;}if(was<0){p=i;render();return;}if(el._kSpring){el._kSpring=false;return;}if(dragged)return;tweenTo(i);snap();el.dispatchEvent(new CustomEvent('k-switch',{detail:i}));});
+    mo.observe(el,{subtree:true,attributes:true,attributeFilter:['class'],childList:true});
+    el.addEventListener('pointerdown',(e)=>{if(e.button||idx<0)return;start={x:e.clientX,p,hist:[],id:e.pointerId};dragged=false;});
+    el.addEventListener('pointermove',(e)=>{if(!start)return;const d=e.clientX-start.x;
+      if(Math.abs(d)>3&&!dragged){dragged=true;el.classList.add('k-dragging');cancelAnimationFrame(raf);try{el.setPointerCapture(start.id);}catch(_){}}
+      if(!dragged)return;const o=opts(),n=o.length-1,unit=(o[Math.min(n,idx)].offsetWidth+8),rub=num(tok('--k-motion-edge-stretch'));let np=start.p+d/unit;
+      if(np<0)np=-(1-1/(1+(-np)*rub*3))/3;if(np>n)np=n+(1-1/(1+(np-n)*rub*3))/3;
+      p=np;render();start.hist.push([performance.now(),p]);if(start.hist.length>6)start.hist.shift();});
+    const end=()=>{if(!start)return;el.classList.remove('k-dragging');const s=start;start=null;if(!dragged)return;
+      const h=s.hist,v=h.length>1?(h[h.length-1][1]-h[0][1])/Math.max(0.016,(h[h.length-1][0]-h[0][0])/1000):0;
+      const o=opts(),t=Math.max(0,Math.min(o.length-1,Math.round(p+v*num(tok('--k-motion-throw'))))),changed=t!==idx;
+      springTo(t,v);if(changed){el._kSpring=true;idx=t;snap();o[t].click();el.dispatchEvent(new CustomEvent('k-switch',{detail:t}));}
+      // Swallow the click the browser fires at the end of a drag so it doesn't select the start cell.
+      el.addEventListener('click',(ev)=>{ev.stopPropagation();ev.preventDefault();},{capture:true,once:true});setTimeout(()=>{dragged=false;},0);};
+    window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);
+    if('ResizeObserver' in window)new ResizeObserver(()=>{if(!start){cancelAnimationFrame(raf);raf=0;idx=cur();p=Math.max(0,idx);requestAnimationFrame(render);}}).observe(el);
+    requestAnimationFrame(()=>{render();requestAnimationFrame(render);});
+    return(el._kSwitch={render,snapTo:()=>{p=Math.max(0,idx);render();}});
+  }
+  // Rolling digits for a value readout: see the .k-roll CSS. Only ever adds empty <i> elements,
+  // so el.textContent — what the app writes, reads back and lets you type into — never changes.
+  function attachRoll(el){
+    if(el._kRoll||tok('--k-variants-value-readout')!=='roll')return;
+    const strip=document.createElement('span');strip.className='k-roll-strip';strip.setAttribute('aria-hidden','true');
+    el._kRoll=strip;el.classList.add('k-roll');
+    const sync=()=>{
+      if(document.activeElement===el)return;
+      if(strip.parentNode!==el){el.appendChild(strip);return;}   // re-append fires the observer again
+      const t=el.textContent;if(strip._t===t)return;strip._t=t;
+      // Values changing continuously (slider drag) snap instead of rolling — otherwise digits sit mid-roll.
+      const now=performance.now(),fast=now-(strip._ts||0)<700||[...t].length!==strip.children.length;strip._ts=now; // also snap when the digit count changes: columns shift places and would roll through unrelated digits
+      strip.classList.toggle('k-snap',fast);clearTimeout(strip._snapT);strip._snapT=setTimeout(()=>strip.classList.remove('k-snap'),700);
+      const cs=[...t];
+      while(strip.children.length>cs.length)strip.firstElementChild.remove();
+      while(strip.children.length<cs.length)strip.prepend(document.createElement('i'));
+      // Right-aligned: digit columns keep their place as the number of characters changes.
+      cs.forEach((c,i)=>{const d=strip.children[i];
+        if(/[0-9]/.test(c)){if(!d.classList.contains('k-num')){d.className='k-num';d.removeAttribute('data-c');}d.style.setProperty('--k-d',c);}
+        else{d.className='';d.style.removeProperty('--k-d');d.setAttribute('data-c',c);}});
+    };
+    new MutationObserver(sync).observe(el,{childList:true,characterData:true,subtree:true});
+    el.addEventListener('focusout',()=>setTimeout(sync,0));
+    sync();
+  }
+  // Bar swap (approved barSwap "slide"): when gallery|studio changes, the incoming top bar's
+  // tools slide in from the side of the word that was picked.
+  function slideBar(i){
+    if(reduced())return;
+    const bar=i?document.getElementById('fx-deskbar'):document.querySelector('#lib-overlay #lib-top');if(!bar)return;
+    const dir=i?1:-1,d=num(tok('--k-motion-duration'))||500,easing=tok('--k-motion-easing')||'ease';
+    [...bar.children].filter(x=>x.offsetParent!==null).forEach(x=>x.animate([{transform:`translateX(${-dir*56}px)`,opacity:0},{transform:'none',opacity:1}],{duration:d,easing}));
+  }
+  // Filters panel: "set" state on each dropdown (accent square + offset shadow).
+  function attachFilterField(f){
+    if(f._kField)return;const lb=f.querySelector(':scope>label'),sel=f.querySelector(':scope>select');if(!lb||!sel)return;f._kField=1;
+    const set=()=>sel.classList.toggle('k-set',sel.selectedIndex>0);
+    // Approved playground dropdown: a k-sel button ("Camera: All cameras") + a wipe-down menu
+    // with an accent square on the chosen row, bounded and scrolling — replaces the native
+    // option list (a long unstyled system popup for camera/lens/ISO). The <select> stays the
+    // source of truth, so every existing onchange handler and state redraw keeps working.
+    const dd=document.createElement('div');dd.className='k-fsel';
+    dd.innerHTML='<button type="button"><span class="dl"></span><span class="dv"></span><svg viewBox="0 0 10 10"><path d="m1 3 4 4 4-4"/></svg></button><div class="k-fmenu" role="listbox"></div>';
+    sel.after(dd);const btn=dd.firstChild,menu=dd.lastChild;
+    const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const render=()=>{
+      dd.querySelector('.dl').textContent=lb.textContent.trim()+':';
+      const o=sel.options[sel.selectedIndex];dd.querySelector('.dv').textContent=o?o.textContent.trim():'';
+      menu.innerHTML=[...sel.options].map((o,i)=>'<div data-i="'+i+'"'+(o.disabled?' class="dis"':'')+(i===sel.selectedIndex?' aria-selected="true"':'')+'>'+esc(o.textContent.trim())+'<i class="sq"></i></div>').join('');
+      dd.classList.toggle('k-set',sel.selectedIndex>0);
+    };
+    const close=()=>dd.classList.remove('open');
+    btn.addEventListener('click',e=>{e.stopPropagation();const open=!dd.classList.contains('open');
+      document.querySelectorAll('.k-fsel.open').forEach(x=>x.classList.remove('open'));if(open){render();dd.classList.add('open');}});
+    menu.addEventListener('click',e=>{e.stopPropagation();const d=e.target.closest('[data-i]');if(!d||d.classList.contains('dis'))return;
+      const i=+d.dataset.i;close();if(i!==sel.selectedIndex){sel.selectedIndex=i;sel.dispatchEvent(new Event('change',{bubbles:true}));}render();});
+    document.addEventListener('click',e=>{if(!dd.contains(e.target))close();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')close();});
+    // Code sets sel.value directly (clear-all, saved views, shared filter state) without a
+    // change event — route those writes through render too.
+    const P=HTMLSelectElement.prototype;
+    for(const k of ['value','selectedIndex']){const d=Object.getOwnPropertyDescriptor(P,k);
+      Object.defineProperty(sel,k,{configurable:true,get(){return d.get.call(this);},set(v){d.set.call(this,v);set();render();}});}
+    sel.addEventListener('change',render);new MutationObserver(()=>{set();render();}).observe(sel,{childList:true,subtree:true,attributes:true,attributeFilter:["disabled","selected"]});render();
+    // CHR-161: label now sits above the select (CSS), so no in-field padding.
+  }
+  const SEL='.seg,#lib-overlay .lib-seg,#cs-brand-tog';
+  function scan(n){if(!n||n.nodeType!==1||n.classList.contains('k-roll-strip'))return;if(n.matches(SEL))attachSwitch(n);if(n.matches('.fx-val'))attachRoll(n);n.querySelectorAll(SEL).forEach(attachSwitch);n.querySelectorAll('.fx-val').forEach(attachRoll);n.querySelectorAll('#lib-filters-panel .lib-filter-field').forEach(attachFilterField);}
+  function boot(){syncTheme();scan(document.body);
+    const bt=document.getElementById('cs-brand-tog');if(bt)bt.addEventListener('k-switch',(e)=>requestAnimationFrame(()=>slideBar(e.detail)));
+    new MutationObserver((ms)=>{for(const m of ms)m.addedNodes.forEach(scan);}).observe(document.body,{childList:true,subtree:true});
+    new MutationObserver(syncTheme).observe(document.body,{attributes:true,attributeFilter:['class']});}
+  window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};
+  if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
 })();
 </script>

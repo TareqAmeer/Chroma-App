@@ -143,7 +143,7 @@ function initZoomPan(){
     // "interacting" (cheap capped preview) for the whole burst, then render once for real.
     _fxPreviewInteracting=true;
     clearTimeout(_fxZoomInteractTimer);
-    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxFullResPreview)fxRenderPreviewViewOnly();},150);
+    _fxZoomInteractTimer=setTimeout(()=>{_fxPreviewInteracting=false;if(fxCrispZoom())fxRenderPreviewViewOnly();},150);
     // 2.5% per tick: a trackpad pinch arrives as a rapid burst of wheel events.
     _zoomAt(fxZoom*(e.deltaY<0?1.025:0.975),e.clientX,e.clientY);
     _applyZoom();
@@ -201,7 +201,7 @@ function initZoomPan(){
     pd=null;zw.classList.remove('dragging');
     _fxPreviewInteracting=false;
     if(fxLoupe){clearTimeout(_loupeDragT);FX.cv.style.transform='';fxRenderPreviewViewOnly();}
-    else if(fxFullResPreview){clearTimeout(_fxPanTileT);_fxPanTileT=0;clearTimeout(_fxZoomRenderTimer);fxRenderPreviewViewOnly();} // the pan's _applyZoom calls armed the 90ms settle render too: one render, not two
+    else if(fxCrispZoom()){clearTimeout(_fxPanTileT);_fxPanTileT=0;clearTimeout(_fxZoomRenderTimer);fxRenderPreviewViewOnly();} // the pan's _applyZoom calls armed the 90ms settle render too: one render, not two
   };
   const pupOwn=e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,false);};
   zw.addEventListener('pointerup',pupOwn);zw.addEventListener('pointercancel',e=>{if(pd&&pd.id!==e.pointerId)return;pup(e,true);});
@@ -236,6 +236,6 @@ function initZoomPan(){
     [...e.changedTouches].forEach(t=>delete _pt[t.identifier]);
     if(e.touches.length===0&&_pinching){_pinching=false;_pmid=null;}
     else if(e.touches.length===1)_pmid=null;
-    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxFullResPreview)fxRenderPreviewViewOnly();}
+    if(e.touches.length<2){_fxPreviewInteracting=false;if(fxCrispZoom())fxRenderPreviewViewOnly();}
   },{passive:true});
 }

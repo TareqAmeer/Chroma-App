@@ -1,28 +1,82 @@
-<script>
-// Desktop: let clicks around the splash fall through to the desktop while it's up (the window is
-// transparent and full-size, so otherwise it silently swallows every click). hideBootSplash()
-// turns this off again before the app is revealed.
-// Tauri has no per-region click-through, so poll the cursor: ignore the mouse only while it's
-// OUTSIDE the card, so clicks on the card itself are swallowed (never reach the desktop or the app).
-// Every call is guarded; any failure stops polling and leaves the window NOT click-through.
+<script>/* Swiss v2 review pass 2 — desktop flag, wheels grid, option-row dropdown, opening state. */
 (function(){
-  const T=window.__TAURI__;if(!T||!T.window||typeof T.window.cursorPosition!=='function')return;
-  let win;try{win=T.window.getCurrentWindow();}catch(e){return;}
-  const card=document.querySelector('#boot-splash .bs');
-  if(card)['pointerdown','pointerup','mousedown','mouseup','click','dblclick','contextmenu','wheel'].forEach(t=>card.addEventListener(t,e=>{e.preventDefault();e.stopPropagation();},{capture:true,passive:false}));
-  let ignoring=null,busy=false;
-  const set=v=>{if(ignoring===v)return;ignoring=v;win.setIgnoreCursorEvents(v).catch(()=>window._bootCursorStop&&window._bootCursorStop());};
-  window._bootCursorStop=function(){if(window._bootCursorTimer){clearInterval(window._bootCursorTimer);window._bootCursorTimer=null;}ignoring=null;try{win.setIgnoreCursorEvents(false).catch(()=>{});}catch(e){}};
-  window._bootCursorTimer=setInterval(async()=>{
-    if(busy||!window._bootCursorTimer)return;busy=true;
-    try{
-      const [c,o,sf]=await Promise.all([T.window.cursorPosition(),win.innerPosition(),win.scaleFactor()]);
-      if(!window._bootCursorTimer)return;
-      const el=document.querySelector('#boot-splash .bs');if(!el){window._bootCursorStop();return;}
-      const r=el.getBoundingClientRect(),x=(c.x-o.x)/sf,y=(c.y-o.y)/sf;
-      set(!(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom));
-    }catch(e){window._bootCursorStop&&window._bootCursorStop();}
-    finally{busy=false;}
-  },40);
-})();
-</script>
+function ready(f){if(document.readyState!=='loading')f();else document.addEventListener('DOMContentLoaded',f)}
+ready(function(){
+  var b=document.body;if(window.__TAURI__)b.classList.add('sk2-native');
+  // Wheels: tag their row so all three share one grid track size.
+  var lift=document.getElementById('cv-wheel-lift'),row=lift&&lift.parentElement&&lift.parentElement.parentElement;if(row)row.classList.add('sk2-wheels');
+  // Option rows: each segmented control gets a mirror <select> shown only in a very narrow panel.
+  function mirror(seg){if(seg._sk2sel)return;var btns=[].slice.call(seg.querySelectorAll(':scope>button'));if(btns.length<2)return;
+    var sel=document.createElement('select');sel.className='fx-select sk2-seg-sel';
+    var lb=seg.closest('.fx-row')&&seg.closest('.fx-row').querySelector('.fx-label');if(lb)sel.setAttribute('aria-label',lb.textContent.trim());
+    btns.forEach(function(x,i){var o=document.createElement('option');o.value=i;o.textContent=x.textContent.trim();sel.appendChild(o)});
+    var sync=function(){var i=btns.findIndex(function(x){return x.classList.contains('on')||x.getAttribute('aria-pressed')==='true'});if(i>=0)sel.value=i};
+    sel.onchange=function(){btns[+sel.value].click();sync()};
+    new MutationObserver(sync).observe(seg,{subtree:true,attributes:true,attributeFilter:['class','aria-pressed']});
+    seg.insertAdjacentElement('afterend',sel);seg.classList.add('sk2-has-sel');seg._sk2sel=sel;sync();}
+  document.querySelectorAll('.fx-panel .seg').forEach(mirror);
+  // Light stage: a folded histogram above Basic; drawn only while it is open.
+  var adj=document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
+  if(adj&&!document.getElementById('sk2-hist')){var d=document.createElement('details');d.id='sk2-hist';d.className='sk2-more sk2-hist';
+    d.innerHTML='<summary>Histogram</summary><div class="sk2h-box"><canvas aria-label="Histogram of the edited photo"></canvas><button class="sk2h-clip lo" title="Shadow clipping — click to show clipped areas on the photo"></button><button class="sk2h-clip hi" title="Highlight clipping — click to show clipped areas on the photo"></button></div><div class="sk2h-read"><span class="sk2h-zone">&nbsp;</span><span class="sk2h-val"></span></div>';
+    adj.parentNode.insertBefore(d,adj);var cv=d.querySelector('canvas'),q=0,H=null,box=d.querySelector('.sk2h-box'),rz=d.querySelector('.sk2h-zone'),rv=d.querySelector('.sk2h-val'),cLo=d.querySelector('.lo'),cHi=d.querySelector('.hi');
+    var ZN=[[0,13,'Blacks'],[13,64,'Shadows'],[64,166,'Midtones'],[166,230,'Highlights'],[230,256,'Whites']];
+    var idle=function(){if(!H){rz.innerHTML='&nbsp;';rv.textContent='';return}var f=function(v){return v<0.05?'0%':v<1?v.toFixed(1)+'%':Math.round(v)+'%'};rz.textContent='Clipped  '+f(H.lo)+' shadows · '+f(H.hi)+' highlights';rv.textContent=''};
+    var paint=function(){var w=Math.max(60,box.clientWidth|0),h=80,dp=window.devicePixelRatio||1;cv.width=w*dp;cv.height=h*dp;var c=cv.getContext('2d');c.setTransform(dp,0,0,dp,0,0);c.clearRect(0,0,w,h);
+      var g=getComputedStyle(d).getPropertyValue('--bdr')||'#444';c.strokeStyle=g;c.globalAlpha=.5;c.lineWidth=1;for(var k=1;k<4;k++){var gx=Math.round(w*k/4)+.5;c.beginPath();c.moveTo(gx,0);c.lineTo(gx,h);c.stroke()}c.globalAlpha=1;
+      if(!H)return;var ch=[[H.r,'rgba(255,70,70,.55)'],[H.g,'rgba(70,230,90,.55)'],[H.b,'rgba(80,130,255,.6)']];
+      c.globalCompositeOperation='lighter';ch.forEach(function(e){var a=e[0];c.beginPath();c.moveTo(0,h);for(var i=0;i<256;i++){var x=i/255*w;c.lineTo(x,h-Math.min(1,a[i]/H.pk)*(h-3))}c.lineTo(w,h);c.closePath();c.fillStyle=e[1];c.fill()});
+      c.globalCompositeOperation='source-over';c.beginPath();for(var i=0;i<256;i++){var x=i/255*w,y=h-Math.min(1,H.l[i]/H.pk)*(h-3);i?c.lineTo(x,y):c.moveTo(x,y)}c.strokeStyle='rgba(235,235,235,.8)';c.lineWidth=1;c.stroke();
+      if(H.z){var z=ZN[H.z-1];c.fillStyle='rgba(255,255,255,.07)';c.fillRect(z[0]/256*w,0,(z[1]-z[0])/256*w,h)}};
+    var redraw=function(){if(d.open&&typeof renderPreview==='function')renderPreview()};
+    var draw=function(){q=0;if(!d.open)return;var src=document.getElementById('fx-canvas');if(!src||!src.width)return;
+      var t=draw._t||(draw._t=document.createElement('canvas'));var k=Math.min(1,480/Math.max(src.width,src.height));t.width=Math.max(1,src.width*k|0);t.height=Math.max(1,src.height*k|0);
+      var x=t.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,t.width,t.height);var px=x.getImageData(0,0,t.width,t.height).data;
+      var r=new Float32Array(256),gg=new Float32Array(256),bb=new Float32Array(256),l=new Float32Array(256),lo=0,hi=0,n=px.length/4;
+      var ov=fxClipCode()>0&&fxClipCode()<4;for(var i=0;i<px.length;i+=4){var R=px[i],G=px[i+1],B=px[i+2];
+        // The clipping overlay paints flat blue/red over the photo; read those back as clipped black/white.
+        if(ov){if(B>=250&&G>=105&&G<=125&&R>=55&&R<=75)R=G=B=0;else if(R>=250&&G>=50&&G<=68&&B>=24&&B<=40)R=G=B=255}r[R]++;gg[G]++;bb[B]++;l[(R*.2126+G*.7152+B*.0722+.5)|0]++;if(R<=1&&G<=1&&B<=1)lo++;if(R>=254||G>=254||B>=254)hi++}
+      // Peak ignores the two end bins so a clipped spike does not flatten the rest; sqrt keeps thin tones visible.
+      var pk=1;[r,gg,bb,l].forEach(function(a){for(var i=0;i<256;i++)a[i]=Math.sqrt(a[i]);for(i=2;i<254;i++)if(a[i]>pk)pk=a[i]});
+      H={r:r,g:gg,b:bb,l:l,pk:pk*1.05,n:n,raw:l,lo:lo/n*100,hi:hi/n*100,z:H&&H.z};
+      cLo.classList.toggle('on',H.lo>0.1);cHi.classList.toggle('on',H.hi>0.1);var gw=typeof fxGamutWarn!=='undefined'&&fxGamutWarn;cLo.classList.toggle('act',gw||fxClipLo);cHi.classList.toggle('act',gw||fxClipHi);
+      paint();if(!H.z)idle()};
+    cLo.addEventListener('click',function(e){e.stopPropagation();fxClipLo=!fxClipLo;renderPreview()});
+    cHi.addEventListener('click',function(e){e.stopPropagation();fxClipHi=!fxClipHi;renderPreview()});
+    // Drag a zone left/right to move its Basic slider (Lightroom-style); midtones = Exposure.
+    var SL=['sl-adj-bl','sl-adj-sh','sl-adj-exp','sl-adj-hi','sl-adj-wh'],drag=null;
+    cv.addEventListener('pointerdown',function(e){if(!H||!H.z)return;var el=document.getElementById(SL[H.z-1]);if(!el)return;drag={el:el,x:e.clientX,v:+el.value,z:H.z};cv.setPointerCapture(e.pointerId);e.preventDefault()});
+    cv.addEventListener('pointermove',function(e){if(!drag)return;var w=cv.getBoundingClientRect().width||200,nv=Math.max(-100,Math.min(100,Math.round(drag.v+(e.clientX-drag.x)/w*200)));
+      if(nv!=drag.el.value){drag.el.value=nv;drag.el.dispatchEvent(new Event('input',{bubbles:true}))}rv.textContent=ZN[drag.z-1][2].replace('Midtones','Exposure')+'  '+(nv>0?'+':'')+nv});
+    var end=function(){if(!drag)return;drag.el.dispatchEvent(new Event('change',{bubbles:true}));drag=null};cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+    cv.addEventListener('mousemove',function(e){if(!H||drag)return;var rc=cv.getBoundingClientRect(),v=Math.max(0,Math.min(255,Math.round((e.clientX-rc.left)/rc.width*255)));
+      var zi=0;ZN.forEach(function(z,j){if(v>=z[0]&&v<z[1])zi=j+1});var z=ZN[zi-1],cnt=0;for(var i=z[0];i<z[1];i++)cnt+=H.l[i]*H.l[i];
+      H.z=zi;rz.textContent=z[2];rv.textContent=Math.round(v/2.55)+'%  ·  '+Math.round(cnt/H.n*100)+'% of photo';paint()});
+    cv.addEventListener('mouseleave',function(){if(H&&!drag){H.z=0;paint();idle()}});
+    if(window.ResizeObserver)new ResizeObserver(function(){if(d.open)paint()}).observe(box);
+    // Settings > View > "Pin histogram": its own always-open section at the top of every stage.
+    var home=adj,PK='cs.histPin';
+    window.sk2HistPinned=function(){try{return localStorage.getItem(PK)==='1'}catch(e){return false}};
+    var pinApply=function(){var on=sk2HistPinned(),pn=adj.closest('.fx-panel');b.classList.toggle('sk2-hist-pin',on);
+      if(on&&pn){var hd=pn.querySelector(':scope>.sk2-in'),nv=hd&&hd.nextElementSibling&&hd.nextElementSibling.tagName==='NAV'?hd.nextElementSibling:null,af=nv||hd;
+        pn.insertBefore(d,af?af.nextSibling:pn.firstChild);d.style.top=((af?(parseFloat(getComputedStyle(af).top)||0)+af.offsetHeight:0)|0)+'px';d.open=true}
+      else{d.style.top='';home.parentNode.insertBefore(d,home);}redraw()};
+    window.sk2HistPinToggle=function(){try{localStorage.setItem(PK,sk2HistPinned()?'0':'1')}catch(e){}pinApply()};
+    d.querySelector('summary').addEventListener('click',function(e){if(sk2HistPinned())e.preventDefault()});
+    if(sk2HistPinned())pinApply();
+    d.addEventListener('toggle',redraw);
+    // Sample right after each preview render, in the same task: once the frame is composited the
+    // WebGL canvas reads back blank (no preserveDrawingBuffer). Throttled, with a trailing re-render.
+    if(typeof FX!=='undefined'&&FX.render){var fr=FX.render,last=0,tr=0;FX.render=function(P,w,h,op){var r=fr.apply(this,arguments);
+      if(d.open&&op&&('gamutWarn' in op)){var now=performance.now();clearTimeout(tr);if(now-last>70){last=now;draw()}else tr=setTimeout(function(){if(typeof renderPreview==='function')renderPreview()},90)}return r};}}
+  // Rail: no tooltip that just repeats the word already under the icon.
+  var rail=document.getElementById('fx-toolrail');
+  function untitle(){if(!rail)return;rail.querySelectorAll('.fx-rail-btn[title]').forEach(function(x){var lb=x.querySelector('.fx-rail-lb');if(lb&&x.title.trim().toLowerCase()===lb.textContent.trim().toLowerCase()){x.setAttribute('aria-label',x.title);x.removeAttribute('title')}})}
+  if(rail){untitle();new MutationObserver(untitle).observe(rail,{childList:true,subtree:true})}
+  // Opening a photo: a thin progress line replaces the "Add photos" prompt instead of overlapping it.
+  var ni=document.getElementById('fx-no-img');
+  if(ni){var o=document.createElement('div');o.className='sk2-open';o.innerHTML='<span></span><i></i>';ni.appendChild(o);
+    var orig=window.fxDeskbarTitle;if(typeof orig==='function'){window.fxDeskbarTitle=function(name,st,spin){
+      var opening=!!spin&&/^Opening/.test(st||'');b.classList.toggle('sk2-opening',opening);if(opening)o.firstChild.textContent=name||'';
+      return orig.apply(this,arguments)};}}
+});})();</script>

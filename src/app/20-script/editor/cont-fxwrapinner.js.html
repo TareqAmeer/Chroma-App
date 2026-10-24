@@ -61,7 +61,7 @@ function _fxScheduleFullBase(ms){
   _fxFullBase.timer=setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(run,{timeout:400});else run();},ms);
 }
 function _fxRebuildFullBase(){
-  if(!_fxCropShown||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  if(!_fxCropShown||!fxCrispZoom()||fxZoom<=1||fxLoupe)return;
   if(_fxPreviewInteracting){_fxScheduleFullBase(250);return;}
   const work=fxWork;if(!work||!FX.ok)return;
   const iw=work.naturalWidth||work.width,ih=work.naturalHeight||work.height;

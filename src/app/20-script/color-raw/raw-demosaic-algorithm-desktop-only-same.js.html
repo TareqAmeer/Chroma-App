@@ -44,6 +44,9 @@ let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // t
 // full-quality preview toggle.
 let fxFullResPreview=false; try{fxFullResPreview=localStorage.getItem('chromasmith_fullres_preview')==='1';}catch(e){}
 let _fxPreviewInteracting=false;
+// Zoomed past Fit the visible crop is always rendered at native detail (bounded cost: only the visible tile), with or without the
+// opt-in Full res toggle; otherwise the capped whole-frame buffer is CSS-upscaled and a 100% view is visibly soft next to export.
+function fxCrispZoom(){return fxFullResPreview||fxZoom>1;}
 function fxFullResPreviewToggle(){
   fxFullResPreview=!fxFullResPreview;
   try{localStorage.setItem('chromasmith_fullres_preview',fxFullResPreview?'1':'0');}catch(e){}
@@ -57,7 +60,7 @@ function fxFullResPreviewToggle(){
 // actually swap backing-store resolution — but not on every wheel/pinch tick (60+/s mid-gesture).
 let _fxZoomRenderTimer=null, _fxZoomInteractTimer=null;
 function _fxZoomRenderDebounced(){
-  if(!fxFullResPreview)return;
+  if(!fxCrispZoom())return;
   clearTimeout(_fxZoomRenderTimer);
   _fxZoomRenderTimer=setTimeout(()=>{if(!_fxPreviewInteracting)fxRenderPreviewViewOnly();},90);
 }

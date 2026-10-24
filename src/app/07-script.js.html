@@ -1,90 +1,11 @@
-<script>/* Swiss v2 — stage header for the tool panel: a big stage title, then a sticky sub-tab row that
-   jumps between the stage's stacked cards and follows the scroll. Called by fxSection (deskx). */
-// CHR-196: ONE visible name per tool, used by the jump strip, the section headers, the rail
-// section list and the command palette (all four used to drift: Basic/Tone, Sharpen/
-// Deconvolution, Mixer/Color Mixer, "rotate" in lower case…). Change a name here only.
-const CS_NAMES={image:'Image',looks:'Looks',filmneg:'Film Negative',inprint:'Input & Prints',adjust:'Exposure & Tone',curves:'Curves',hsl:'Colour Mixer',wheels:'Colour Wheels',
-  pointcolor:'Point Colour',nr:'Noise Reduction',deconv:'Sharpen',lens:'Lens',art:'Artifacts',grain:'Grain',hal:'Halation',bloom:'Bloom',vig:'Effects',
-  retouch:'Retouch',redeye:'Red Eye',local:'Masks',crop:'Crop',rotate:'Rotate',straighten:'Transform',borders:'Borders',canvas:'Canvas',
-  versions:'Versions & History',export:'Output',wm:'Watermark',exppreset:'Export Recipes',style:'Edit Styles',share:'Sharing',info:'Metadata',diag:'Diagnostics'};
-// Everyday words and old names that should find each tool in the command palette (⌘K).
-const CS_ALIASES={adjust:'basic tone exposure brightness contrast highlights shadows whites blacks white balance wb temperature tint vibrance saturation',
-  looks:'presets film luts look',curves:'tone curve',hsl:'hsl color mixer hue saturation luminance',pointcolor:'point color',wheels:'color wheels grading lift gamma gain',
-  nr:'noise denoise',deconv:'deconvolution sharpening detail',local:'local adjustments mask brush radial linear sky',retouch:'heal clone spot removal',redeye:'red eye pupil flash',
-  crop:'crop aspect',rotate:'rotate flip',straighten:'level horizon angle',borders:'border frame',canvas:'matte background',vig:'vignette clarity texture dehaze',
-  art:'dust scratches light leak',grain:'film grain',info:'exif info metadata keywords',exppreset:'export presets recipes',style:'styles presets saved edits',inprint:'input profile print v-log'};
-const SK2_SUB=Object.assign({},CS_NAMES);
-function sk2SubTabs(g,jump){
-  const panel=document.querySelector('.fx-panel');if(!panel)return;
-  let h=document.getElementById('sk2-stage-h'),nav=document.getElementById('sk2-sub');
-  if(!h){h=document.createElement('h2');h.id='sk2-stage-h';nav=document.createElement('nav');nav.id='sk2-sub';nav.setAttribute('aria-label','Tools in this stage');
-    panel.prepend(h,nav);
-    nav.addEventListener('click',e=>{const b=e.target.closest('button[data-k]');if(b){sk2Focus(b.dataset.k);sk2Jump(b.dataset.k,true);}});
-    panel.addEventListener('scroll',sk2Spy,{passive:true});}
-  const G=FX_GROUPS[g];
-  const nt=G?G.label:(FX_SECTIONS.find(x=>x[0]===g)||[,''])[1];
-  if(h.textContent!==nt){h.textContent=nt;h.classList.remove('sk2-in');void h.offsetWidth;h.classList.add('sk2-in');}
-  const rail=document.getElementById('fx-toolrail'),on=rail&&rail.querySelector('.fx-rail-btn.on');
-  if(rail){let mk=document.getElementById('sk2-rail-mk');if(!mk){mk=document.createElement('i');mk.id='sk2-rail-mk';mk.setAttribute('aria-hidden','true');}
-    if(mk.parentNode!==rail)rail.appendChild(mk);rail.classList.add('sk2-mk');
-    mk.style.opacity=on?1:0;if(on)mk.style.transform=`translateY(${on.offsetTop+8}px)`;}
-  const cards=G?[...panel.querySelectorAll('.fx-ctrl.sec-active')].filter(c=>getComputedStyle(c).display!=='none'&&!c.hidden):[];
-  nav.hidden=cards.length<2;
-  panel.querySelectorAll('.sk2-dup-title').forEach(c=>c.classList.remove('sk2-dup-title'));
-  if(cards.length>1)cards.forEach(c=>{const t=c.querySelector(':scope>.fx-ctrl-title');if(t){c.classList.add('sk2-dup-title');t.setAttribute('data-sk2-name',SK2_SUB[c.dataset.fxsec]||'');
-    // Hide the long name properly (display:none) instead of a 0px font that screen readers still read.
-    [...t.childNodes].forEach(n=>{if(n.nodeType===3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='sk2-long';n.replaceWith(sp);sp.appendChild(n);}});}});
-  if(G&&G.members.includes('wheels')&&typeof drawWheel==='function')setTimeout(()=>['lift','gamma','gain'].forEach(drawWheel),30);
-  // The Light stage's folded histogram sits above Basic, so it gets the first tab.
-  const hist=document.getElementById('sk2-hist'),histTab=g==='light'&&hist&&hist.offsetParent?'<button type="button" data-k="hist">Histogram</button>':'';
-  nav.innerHTML=histTab+cards.map(c=>`<button type="button" data-k="${c.dataset.fxsec}">${SK2_SUB[c.dataset.fxsec]||c.dataset.fxsec}</button>`).join('');
-  document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
-  document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');
-  // The stage title scales with the panel and its font loads late, so a one-off measurement leaves
-  // the sticky card headers parked at the wrong offset (a gap with content showing through).
-  if('ResizeObserver' in window){if(window._sk2StickRO)window._sk2StickRO.disconnect();
-    window._sk2StickRO=new ResizeObserver(()=>{
-      document.body.style.setProperty('--sk2-sub-h',(nav.hidden?0:nav.offsetHeight)+'px');
-      document.body.style.setProperty('--sk2-h-h',h.offsetHeight+'px');});
-    [h,nav,panel].forEach(el=>window._sk2StickRO.observe(el,{box:'border-box'}));}
-  // Tail spacer: lets the last card of a stage scroll right up under the header when its tab is picked.
-  let tail=document.getElementById('sk2-tail');if(!tail){tail=document.createElement('div');tail.id='sk2-tail';tail.setAttribute('aria-hidden','true');}
-  panel.appendChild(tail);tail.style.height='0px';
-  // Strength rides at the bottom of the look grid (sticky), whatever layout the row started in.
-  if(g==='look'){const mix=document.getElementById('row-lut-mix'),lc=document.getElementById('fx-looks-ctrl');if(mix&&lc&&mix.parentElement!==lc)lc.appendChild(mix);}
-  if(jump)requestAnimationFrame(()=>sk2Jump(jump,false));else sk2Spy();
-}
-// Picking a sub-tab by hand focuses that tool: every other tool in the stage folds, the picked one opens.
-function sk2Focus(k){
-  const panel=document.querySelector('.fx-panel');if(!panel)return;
-  panel.querySelectorAll('.fx-ctrl.sec-active[data-fxsec]').forEach(c=>{
-    const want=c.dataset.fxsec!==k;if(c.classList.contains('fx-sec-collapsed')!==want&&typeof fxSecToggle==='function')fxSecToggle(c);});
-  const h=document.getElementById('sk2-hist');if(h&&h.offsetParent)h.open=k==='hist';
-}
-function sk2Jump(k,smooth){
-  const panel=document.querySelector('.fx-panel'),c=panel&&(k==='hist'?document.getElementById('sk2-hist'):panel.querySelector(`.fx-ctrl.sec-active[data-fxsec="${k}"]`));if(!c)return;
-  if(k==='hist'&&!c.open)c.open=true;
-  if(c.classList.contains('fx-sec-collapsed'))c.querySelector('.fx-ctrl-title')?.click();
-  const nav=document.getElementById('sk2-sub'),hd=document.getElementById('sk2-stage-h'),off=(nav&&!nav.hidden?nav.offsetHeight:0)+(hd?hd.offsetHeight:0);
-  const top=c.getBoundingClientRect().top-panel.getBoundingClientRect().top+panel.scrollTop-off;
-  sk2Jump.k=k;sk2Jump.top=Math.max(0,top);sk2Jump.t=Date.now();
-  const tail=document.getElementById('sk2-tail');
-  if(tail){const cur=tail.offsetHeight,need=top+panel.clientHeight-(panel.scrollHeight-cur);tail.style.height=Math.max(0,Math.ceil(need))+'px';}
-  panel.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
-  // Cards can still be settling (stage switch, fold opening) — re-land once they have.
-  if(smooth){clearTimeout(sk2Jump._t);sk2Jump._t=setTimeout(()=>{const d=c.getBoundingClientRect().top-panel.getBoundingClientRect().top-off;if(Math.abs(d)>2)sk2Jump(k,false);sk2Spy();},450);}
-  if(nav)nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
-}
-function sk2Spy(){
-  const panel=document.querySelector('.fx-panel'),nav=document.getElementById('sk2-sub');if(!panel||!nav||nav.hidden)return;
-  const hd=document.getElementById('sk2-stage-h'),line=panel.getBoundingClientRect().top+(hd?hd.offsetHeight:0)+nav.offsetHeight+8;let cur=null;
-  const hasHist=!!nav.querySelector('button[data-k=hist]');
-  panel.querySelectorAll(hasHist?'.fx-ctrl.sec-active,#sk2-hist':'.fx-ctrl.sec-active').forEach(c=>{if(c.style.display!=='none'&&c.getBoundingClientRect().top<=line)cur=c.id==='sk2-hist'?'hist':c.dataset.fxsec;});
-  if(!cur){const f=nav.querySelector('button');cur=f&&f.dataset.k;}
-  const tail=document.getElementById('sk2-tail'),padded=tail&&tail.offsetHeight>0;
-  if(!padded&&panel.scrollTop+panel.clientHeight>=panel.scrollHeight-2){const l=nav.querySelector('button:last-child');if(l)cur=l.dataset.k;}
-  // The tab you clicked stays underlined while the panel sits where that click put it.
-  if(sk2Jump.k&&(Date.now()-sk2Jump.t<900||Math.abs(panel.scrollTop-sk2Jump.top)<6))cur=sk2Jump.k;else sk2Jump.k=null;
-  nav.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.k===cur));
-}
-</script>
+<script>(function(){var b=document.body,L=document.getElementById('cs-tog-lib'),S=document.getElementById('cs-tog-studio');
+function sync(){var f=b.classList.contains('lib-full');L.classList.toggle('on',f);S.classList.toggle('on',!f);L.setAttribute('aria-pressed',f);S.setAttribute('aria-pressed',!f)}
+new MutationObserver(sync).observe(b,{attributes:true,attributeFilter:['class']});sync();
+function go(lib){if(b.classList.contains('lib-full')===lib)return;var t=document.getElementById(lib?'lib-side-tab-library':'lib-side-tab-develop');if(t)t.click();else if(window.chromasmithToggleLibrary)window.chromasmithToggleLibrary()}
+L.onclick=function(){if(!window.__TAURI__){window.open('https://github.com/TareqAmeer/Chroma-App/releases/latest','_blank','noopener');return}go(true)};S.onclick=function(){if(b.classList.contains('cs-page-other')&&typeof switchTab==='function')switchTab('fx');go(false)};
+/* Both top bars pad themselves past the brand by --cs-brand-w. It used to be a hand-typed guess per breakpoint (four stacked overrides, all wrong at some width), so the search field slid under the gallery|studio switch. Measure the real brand instead. */
+var br=document.getElementById('cs-brand');
+function fit(){if(!br||!b.classList.contains('deskx'))return;var r=br.getBoundingClientRect();if(!r.width)return;var base=b.classList.contains('mac-titlebar-overlay')?84:12;b.style.setProperty('--cs-brand-w',Math.max(0,Math.ceil(r.right+16-base))+'px')}
+if(window.ResizeObserver&&br)new ResizeObserver(fit).observe(br);
+new MutationObserver(fit).observe(b,{attributes:true,attributeFilter:['class']});addEventListener('resize',fit);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fit);fit();
+})();</script>

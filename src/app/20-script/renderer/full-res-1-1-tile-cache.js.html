@@ -176,7 +176,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions){
 // (throttled), instead of only after release. No-op unless the tiled crisp view is showing.
 let _fxPanTileT=0;
 function fxPanTilesTick(){
-  if(_fxPanTileT||!_fxCropShown||!window.__fxCrispView||!fxFullResPreview||fxZoom<=1||fxLoupe)return;
+  if(_fxPanTileT||!_fxCropShown||!window.__fxCrispView||!fxCrispZoom()||fxZoom<=1||fxLoupe)return;
   _fxPanTileT=setTimeout(()=>{
     _fxPanTileT=0;
     if(!_fxCropShown||!window.__fxCrispView||!fxWork||fxLoupe||fxZoom<=1)return;

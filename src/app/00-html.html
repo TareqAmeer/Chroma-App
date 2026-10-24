@@ -1,33 +1,3 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script>
-/* Render-only instance (?csrender=1, hosted hidden by the Library): block storage writes so this copy can never overwrite the user's saved session/prefs. */
-if(/[?&]csrender=1/.test(location.search)){window.__csRender=true;try{Storage.prototype.setItem=function(){};Storage.prototype.removeItem=function(){};Storage.prototype.clear=function(){};}catch(e){}}
-</script>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<!-- Home-Screen (standalone PWA) metas: without these iOS picks its own display mode and
-     env(safe-area-inset-*) geometry is mode-dependent/undefined — the cause of the
-     inconsistent top-bar/bottom-nav placement. black-translucent = webview extends
-     edge-to-edge under the status bar, so safe-area insets are always real values.
-     NOTE: read at ADD time — users must remove + re-add the Home Screen icon to pick
-     these up. -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CHRO-MA-SMITH">
-<title>CHRO-MA-SMITH</title>
-<link rel="shortcut icon" href="favicon.ico?v=3">
-<link rel="icon" href="assets/brand/favicon.svg?v=3" type="image/svg+xml">
-<link rel="icon" href="assets/brand/icon-32.png?v=3" sizes="32x32" type="image/png">
-<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=3">
-<link rel="manifest" href="assets/brand/site.webmanifest">
-<meta property="og:title" content="CHRO-MA-SMITH">
-<meta property="og:image" content="https://tareqameer.github.io/Chroma-App/assets/brand/og-image.jpeg">
-<!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
-     so header/main can be hidden from their very first paint rather than relying solely on
-     #boot-splash's z-index to cover them. window.__TAURI__ is injected by Tauri's own document-
-     start init script, so it's already present by the time this runs. Web/iOS builds never see
-     __TAURI__ so this is a no-op there. Cleared by library-ui.js's startup chain once Library has
-     actually opened/expanded (see hideBootSplash() call site), the same moment the splash itself
-     is hidden — never on a timer, or it could reveal the editor before Library is ready. -->
