@@ -51,7 +51,9 @@ function applyPreviewBorders(P,pw,ph){
   // max-width:100%;height:auto of an auto-width parent: its on-screen size followed the container
   // width alone, so a panel/sidebar toggle or window resize rescaled it on its own and the zoomed
   // photo jumped (zoom centring and pan re-anchor were computed from a different size).
-  {const fw=fxWrapInner().w||bd.width,fh=fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
+  // Box from renderPreview's start: measuring the wrap here read a height already inflated by the
+  // un-bordered canvas just pinned inside it, so a new photo flashed ~5% too big for one frame.
+  {const fw=(_fxFitBox&&_fxFitBox.w)||fxWrapInner().w||bd.width,fh=(_fxFitBox&&_fxFitBox.h)||fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
    bd.style.maxWidth='none';bd.style.width=Math.round(bd.width*k)+'px';bd.style.height=Math.round(bd.height*k)+'px';} // whole px: mskOverlayBox reads offsetWidth (integer)
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;

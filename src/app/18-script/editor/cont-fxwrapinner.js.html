@@ -40,7 +40,7 @@ function fxPreviewMaxH(){
 let _fxFullBase={canvas:null,key:'',sameImage:false,w:0,h:0,ver:0,timer:0};
 // Any non-view-only renderPreview (recipe/photo changed) bumps this; tiles and the underlay are
 // keyed on it plus a fingerprint of the params, so a stale tile can never be shown.
-let _fxTileGen=0,_fxViewOnlyRender=false,_fxCropShown=false,_fxWholeLast={};
+let _fxTileGen=0,_fxViewOnlyRender=false,_fxCropShown=false,_fxWholeLast={},_fxFitBox=null;
 function fxInvalidateTiles(){_fxTileGen++;}
 // The image or its geometry changed: neither the underlay nor any cached tile shows it any more.
 function fxInvalidateFullBase(){_fxFullBase.sameImage=false;_fxTileGen++;}

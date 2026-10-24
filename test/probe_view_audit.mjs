@@ -85,3 +85,6 @@ try {
   console.log(rows.join('\n'));
   ok = bad === 0; console.log(ok ? 'PASS view audit' : `FAIL view audit (${bad} rows)`);
 } finally { await browser.close(); server.close(); if (!ok) process.exitCode = 1; }
+
+// Photo-switch rows (landscape<->portrait, borders off/on, sampled every 50ms for 3s): test/probe_photo_switch.mjs
+if (!process.env.AUDIT_ONLY) await import('./probe_photo_switch.mjs');

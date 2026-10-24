@@ -71,6 +71,7 @@ function renderPreview(){
   // than fxLiveFit's fit and the photo jumped (and a zoomed view shifted) every time the sheet moved.
   const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
+  _fxFitBox={w:maxW,h:maxH}; // measured BEFORE this render resizes anything inside #fx-wrap (see applyPreviewBorders)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
   const _previewComposition=(()=>{const p=getFXParams();return !!(

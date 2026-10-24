@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1023H';
+const BUILD='1.1024A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24558,7 +24558,7 @@ function fxPreviewMaxH(){
 let _fxFullBase={canvas:null,key:'',sameImage:false,w:0,h:0,ver:0,timer:0};
 // Any non-view-only renderPreview (recipe/photo changed) bumps this; tiles and the underlay are
 // keyed on it plus a fingerprint of the params, so a stale tile can never be shown.
-let _fxTileGen=0,_fxViewOnlyRender=false,_fxCropShown=false,_fxWholeLast={};
+let _fxTileGen=0,_fxViewOnlyRender=false,_fxCropShown=false,_fxWholeLast={},_fxFitBox=null;
 function fxInvalidateTiles(){_fxTileGen++;}
 // The image or its geometry changed: neither the underlay nor any cached tile shows it any more.
 function fxInvalidateFullBase(){_fxFullBase.sameImage=false;_fxTileGen++;}
@@ -24918,6 +24918,7 @@ function renderPreview(){
   // than fxLiveFit's fit and the photo jumped (and a zoomed view shifted) every time the sheet moved.
   const maxW=deskx?(fxWrapInner().w||900):Math.min(900,fxWrapInner().w||wrap.clientWidth||900);
   const maxH=fxPreviewMaxH();                           // cap height on phones (sticky preview)
+  _fxFitBox={w:maxW,h:maxH}; // measured BEFORE this render resizes anything inside #fx-wrap (see applyPreviewBorders)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
   const _previewComposition=(()=>{const p=getFXParams();return !!(
@@ -25736,7 +25737,9 @@ function applyPreviewBorders(P,pw,ph){
   // max-width:100%;height:auto of an auto-width parent: its on-screen size followed the container
   // width alone, so a panel/sidebar toggle or window resize rescaled it on its own and the zoomed
   // photo jumped (zoom centring and pan re-anchor were computed from a different size).
-  {const fw=fxWrapInner().w||bd.width,fh=fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
+  // Box from renderPreview's start: measuring the wrap here read a height already inflated by the
+  // un-bordered canvas just pinned inside it, so a new photo flashed ~5% too big for one frame.
+  {const fw=(_fxFitBox&&_fxFitBox.w)||fxWrapInner().w||bd.width,fh=(_fxFitBox&&_fxFitBox.h)||fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
    bd.style.maxWidth='none';bd.style.width=Math.round(bd.width*k)+'px';bd.style.height=Math.round(bd.height*k)+'px';} // whole px: mskOverlayBox reads offsetWidth (integer)
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;
