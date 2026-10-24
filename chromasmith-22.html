@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024D';
+const BUILD='1.1024E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11478,6 +11478,18 @@ function jpegMetaSegs(b){ // APPn (0xE0-0xEF) + COM (0xFE) segments before SOS, 
 function neutralizeExifOrientation(seg){
   try{
     if(seg[0]!==0xFF||seg[1]!==0xE1)return seg; // not APP1
+    // XMP APP1 carries its own copy (tiff:Orientation) that viewers honour too (exiftool showed "Rotate 270 CW" on an upright 4000x6000 export
+    // whose EXIF IFD0 said 1). Same-length edit: the single digit becomes 1, as attribute or element form.
+    if(seg[4]===0x68&&seg[5]===0x74&&seg[6]===0x74&&seg[7]===0x70){ // 'http://ns.adobe.com/xap/1.0/'
+      let t='';for(let i=0;i<seg.length;i++)t+=String.fromCharCode(seg[i]);
+      const key='tiff:Orientation',copy=seg.slice();let hit=false,at=t.indexOf(key);
+      while(at>=0){ // value = first digit after the key (past = and a quote, or past > and whitespace)
+        let j=at+key.length;while(j<t.length&&(t.charCodeAt(j)<48||t.charCodeAt(j)>57)&&j-at<key.length+8)j++;
+        if(t.charCodeAt(j)>=50&&t.charCodeAt(j)<=56){copy[j]=49;hit=true;}
+        at=t.indexOf(key,at+key.length);
+      }
+      return hit?copy:seg;
+    }
     if(!(seg[4]===0x45&&seg[5]===0x78&&seg[6]===0x69&&seg[7]===0x66))return seg; // not 'Exif'
     const t=10; // TIFF header starts after 'Exif\0\0'
     const le=seg[t]===0x49&&seg[t+1]===0x49; // 'II' little-endian, else 'MM' big-endian
