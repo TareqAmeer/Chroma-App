@@ -28,6 +28,14 @@ function cropEnter(){
     FX.pushTempImage(sm);FX.render(getFXParams(),rw,rh,{glowScale:typeof fxPreviewGlowScale==='function'?fxPreviewGlowScale():1,scOverride:bw/FXR.CAL.refWidth});
     cc.getContext('2d').drawImage(FX.cv,0,0,bw,bh);}catch(err){console.warn('graded crop view failed',err);}
   finally{if(!FX.popTempImage()&&fxWork)FX.setImage(fxWork);}
+  // The crop canvas must take the photo's place, not sit beside it: #fx-wrap is a flex row and the zoom wrap is pinned (flex:none) to the
+  // photo's size, so left in flow it pushed the crop canvas ~half a photo-width sideways whenever a ratio was picked from outside crop mode.
+  // Size it to the on-screen photo box (fit-sized, unzoomed), so entering crop leaves the picture where it was.
+  {const zw=document.getElementById('fx-zoom-wrap'),bdv=document.getElementById('fx-canvas-bd'),vis=bdv&&bdv.style.display!=='none'&&bdv.offsetWidth?bdv:FX.cv;
+   const vr=vis.getBoundingClientRect(),wr=wrap.getBoundingClientRect(),kk=Math.min(1,wr.width/(vr.width||1),wr.height/(vr.height||1));let bw0=vr.width*kk,bh0=vr.height*kk; // on-screen size (includes the Fit scale); clamped when zoomed in
+   if(!saved&&bw0&&bh0){cc.style.maxWidth='none';cc.style.maxHeight='none';cc.style.width=Math.round(bw0)+'px';cc.style.height=Math.round(bh0)+'px';}
+   else{cc.style.maxWidth='100%';cc.style.maxHeight='70vh';cc.style.width='';cc.style.height='auto';}
+   if(zw){zw.dataset.cropHid='1';zw.style.display='none';}}
   FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
   cropN=saved?{...saved}:cropDefaultForAR();
   ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
@@ -194,4 +202,5 @@ function cropExit(){
   document.getElementById('fx-preview-tools').style.display=curItem()?'flex':'none';
   {const b=document.getElementById('btn-crop');b.classList.remove('bpri');b.textContent='Crop';}
   const cc=document.getElementById('fx-canvas-crop');if(cc)cc.style.display='none';
+  const zw=document.getElementById('fx-zoom-wrap');if(zw&&zw.dataset.cropHid){delete zw.dataset.cropHid;zw.style.display='';}
 }
