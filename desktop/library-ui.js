@@ -4171,7 +4171,7 @@
   // 500 concurrent Rust decodes at once (the <img loading="lazy"> attribute is useless here,
   // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
   // visibility via an IntersectionObserver; visible cards jump the queue.
-  const THUMB_POOL = 6;
+  const THUMB_POOL = 10; // was 6: embedded-preview thumbnails are IO-bound, not CPU-bound
   // _pickNextIdx() below strictly prefers any non-video job over a video one, so a mixed folder
   // paints ALL its photos (JPEG via the embedded-preview tier, then RAW) before the first clip is
   // touched. That ordering is about COST, not about blocking: a cold video poster is an
@@ -4182,7 +4182,7 @@
   // (see videothumb.rs), so the cap is the ordinary pool — kept as a named constant rather than
   // deleted so it is a one-line change if cold 4K generation ever needs throttling again.
   let _thumbActiveVideo = 0;
-  const THUMB_POOL_VIDEO = THUMB_POOL;
+  const THUMB_POOL_VIDEO = 6; // unchanged by the THUMB_POOL raise: video posters are the CPU-heavy kind
   let _thumbQueue = []; // [{path, imgEl, visible}]
   let _thumbActive = 0;
   let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped
@@ -4253,10 +4253,11 @@
   let _thumbFailCount = 0;
   let _thumbTotalCount = 0;
   let _thumbFailToastShown = false;
+  const _thumbByEl = new Map(); // imgEl -> queued job, so the IntersectionObserver callback is O(1) per entry
   const _thumbIO = (typeof IntersectionObserver === 'function')
     ? new IntersectionObserver((ents) => {
         for (const en of ents) {
-          const q = _thumbQueue.find((t) => t.imgEl === en.target);
+          const q = _thumbByEl.get(en.target);
           if (q) q.visible = en.isIntersecting;
         }
       }, { rootMargin: '200px' })
@@ -4280,6 +4281,7 @@
       const i = _pickNextIdx();
       if (i < 0) break; // only videos left and the video pool is already full — wait for a slot
       const job = _thumbQueue.splice(i, 1)[0];
+      _thumbByEl.delete(job.imgEl);
       // NOTE: job.imgEl.isConnected requires the card to already be in the DOM by the time
       // loadThumb() is called — renderGrid() must appendChild(card) BEFORE calling loadThumb(),
       // or every job is silently dropped here (this was the "thumbnails never load" bug: the
@@ -4314,7 +4316,8 @@
       // decoded clips in a hidden <video> and cached the resulting blob URL while ALSO handing it
       // to the per-generation revoke list below, so any grid rebuild revoked a URL the cache kept
       // serving and every video card became a permanent broken-image "?".
-      invoke('get_thumbnail_fast', { path: job.path })
+      // Rust only serves tier 1 for jpg/jpeg/tif/tiff (RAW, video, everything else declines), so skip the IPC round-trip otherwise.
+      (!/\.(?:jpe?g|tiff?)$/i.test(job.path) ? Promise.resolve(null) : invoke('get_thumbnail_fast', { path: job.path }))
         .catch(() => null)
         .then((fastBuf) => {
           if (fastBuf && job.imgEl.isConnected) {
@@ -4475,7 +4478,8 @@
       imgEl.classList.add('loaded');
       return;
     }
-    _thumbQueue.push({ path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
+    const queuedJob = { path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen };
+    _thumbQueue.push(queuedJob); _thumbByEl.set(imgEl, queuedJob);
     _thumbTotalCount++;
     if (_thumbIO) _thumbIO.observe(imgEl);
     _thumbPump();
@@ -4483,7 +4487,7 @@
   function thumbQueueReset() {
     _thumbGen++;
     if (_thumbIO) _thumbQueue.forEach((t) => _thumbIO.unobserve(t.imgEl));
-    _thumbQueue = [];
+    _thumbQueue = []; _thumbByEl.clear();
     _thumbActive = 0; // defensive: never let a stale count strand future pumps
     _thumbActiveVideo = 0;
     // ⚠️ Deliberately does NOT touch _thumbCache. Its URLs are owned by the cache and are still
