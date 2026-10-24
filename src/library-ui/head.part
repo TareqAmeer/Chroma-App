@@ -576,6 +576,10 @@
         (window.__libtestEditPreviews ||= new Map()).set(arguments[2] && arguments[2].headers && arguments[2].headers['x-key'], A);
         return Promise.resolve(null);
       }
+      case 'get_thumbnail_large': {
+        (window.__libtestLargeThumbCalls ||= []).push(A.path);
+        return Promise.resolve(png);
+      }
       case 'get_quicklook_preview_hq': {
         (window.__libtestQuicklookHqCalls ||= []).push(A.path);
         return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);

@@ -576,6 +576,10 @@
         (window.__libtestEditPreviews ||= new Map()).set(arguments[2] && arguments[2].headers && arguments[2].headers['x-key'], A);
         return Promise.resolve(null);
       }
+      case 'get_thumbnail_large': {
+        (window.__libtestLargeThumbCalls ||= []).push(A.path);
+        return Promise.resolve(png);
+      }
       case 'get_quicklook_preview_hq': {
         (window.__libtestQuicklookHqCalls ||= []).push(A.path);
         return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);
@@ -1082,9 +1086,13 @@
   // an 8GB-reported Mac and, combined with full-resolution GPU targets and RAW thumbnail work,
   // drove the app above 1.8GB during a cold Library session. Keep enough entries for quick
   // back-and-forth navigation while reserving headroom for the active editor and OS.
+  // Fixed per platform, not RAM-scaled: WKWebView never reports navigator.deviceMemory, so the old formula assumed 8GB
+  // and gave every Mac 1GB. 512MB (~5 full 24MP frames, the LRU keeps only 2 full-size anyway) on desktop; 256MB on
+  // touch/mobile webviews and on anything that does report <= 4GB.
   const IMG_CACHE_BUDGET = (() => {
-    const gb = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
-    return Math.min(Math.max(gb, 4) * 0.125, 1) * 1024 * 1024 * 1024; // 512MB@4GB … 1GB max
+    const mb = (typeof isMemoryConstrained === 'function' && isMemoryConstrained())
+      || (typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4) ? 256 : 512;
+    return mb * 1024 * 1024;
   })();
   const imgCache = new Map(); // path -> {entry, size, ts}
   // The editor's stroke icon set (chromasmith-22.html ICONS/icon()). Emoji render differently on
@@ -2178,6 +2186,15 @@
     .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
       cursor:pointer;position:relative;box-shadow:none;transition:box-shadow var(--duration-press,120ms) ease}
     .lib-card:hover .lib-thumb-wrap{box-shadow:0 0 0 1px var(--acc2)}
+    /* Keyboard focus: cards are tab stops (roving tabindex, see renderCards). Ring only for keyboard focus, not mouse clicks. */
+    .lib-card:focus{outline:none}
+    .lib-card:focus-visible{outline:2px solid var(--acc2);outline-offset:-2px}
+    /* Touch: stars / flags / badges are 11-16px glyphs. Grow the HIT area to >=44px without moving anything (pseudo-element, no layout change). */
+    @media (hover:none),(pointer:coarse){
+      .lib-star,.lib-flag,.lib-raw-badge.lib-stack-badge{position:relative}
+      .lib-star::after,.lib-flag::after,.lib-raw-badge.lib-stack-badge::after{content:"";position:absolute;left:50%;top:50%;
+        width:max(100%,44px);height:44px;transform:translate(-50%,-50%)}
+    }
     .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc2),0 0 0 4px var(--acc2)}
@@ -4065,11 +4082,32 @@
     const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
     renderCards(gridEl, all.slice(from, to), all, false, {
       offset: from,
+      reuse: !force,
       // A spacer is itself a grid item, so it brings its own row-gap: subtract it, or content
       // jumps one gap (16px) the moment the top spacer first appears mid-scroll.
       padTop: firstRow > 0 ? Math.max(1, firstRow * m.rowH - (m.rowH - m.cardH)) : 0,
       padBot: lastRow < totalRows - 1 ? Math.max(1, (totalRows - 1 - lastRow) * m.rowH - (m.rowH - m.cardH)) : 0,
     });
+    pruneThumbQueue();
+  }
+  /// Cards that scrolled out of the virtualised window were removed from the DOM, but their queued thumbnail jobs
+  /// stayed in the queue (and observed) until the pump got to them. Drop them now: a fast scroll through a big grid
+  /// otherwise leaves thousands of dead jobs ahead of the cards the user is actually looking at.
+  function pruneThumbQueue() {
+    if (!_thumbQueue.length) return;
+    const keep = [];
+    let dropped = 0;
+    for (const t of _thumbQueue) {
+      if (t.imgEl && t.imgEl.isConnected) { keep.push(t); continue; }
+      dropped++;
+      if (_thumbIO && t.imgEl) _thumbIO.unobserve(t.imgEl);
+      if (t.imgEl) _thumbByEl.delete(t.imgEl);
+    }
+    if (!dropped) return;
+    _thumbQueue = keep;
+    _thumbDoneCount += dropped; // "will never run" counts as settled (same rule as the pump's own drop path)
+    updateThumbProgress();
+    _resolveThumbPaintWaiters();
   }
 
   /// Re-measures cols/rowH after the grid's width changed (dock resizer, window resize) and keeps
@@ -4229,6 +4267,25 @@
       if (dead) URL.revokeObjectURL(dead);
     }
   }
+  // Large-cell tier: the base thumbnail is 360px, so a cell wider than ~380 device px (big grid zoom or a retina 2x cell of
+  // 190 css px) shows it upscaled. After the base paints, fetch the 512px q85 tier for just those cells (own cache key, max 3 in
+  // flight, only while the card is still on screen). Never blocks the base thumbnail pool.
+  let _thumbLargeActive = 0;
+  function upgradeLargeThumb(job) {
+    const el = job.imgEl;
+    if (!el || !el.isConnected || job.isVideo) return;
+    const need = (el.clientWidth || 0) * (window.devicePixelRatio || 1);
+    if (need <= 380 || _thumbLargeActive >= 3) return;
+    const lkey = job.key + '|512';
+    const hit = thumbCacheGet(lkey);
+    if (hit) { el.src = hit; return; }
+    _thumbLargeActive++;
+    invoke('get_thumbnail_large', { path: job.path }).then((buf) => {
+      const url = thumbCacheGet(lkey) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      if (!_thumbCache.has(lkey)) thumbCachePut(lkey, url);
+      if (el.isConnected) el.src = url;
+    }).catch(() => {}).finally(() => { _thumbLargeActive--; });
+  }
   function requestThumbnail(path, key) {
     const existing = _thumbFetches.get(key);
     if (existing) return existing;
@@ -4302,6 +4359,7 @@
         // dropped job as done is the correct fix, not a workaround: from this readout's own
         // perspective, "will never complete" and "completed" both mean "nothing left to wait for".
         _thumbDoneCount++;
+        if (_thumbIO && job.imgEl) _thumbIO.unobserve(job.imgEl); // dropped job: stop observing its (detached) element
         updateThumbProgress();
         continue;
       }
@@ -4348,6 +4406,7 @@
             job.imgEl.classList.add('loaded');
           }
           if (job._fastUrl) { URL.revokeObjectURL(job._fastUrl); job._fastUrl = null; }
+          upgradeLargeThumb(job);
         })
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
@@ -9236,7 +9295,15 @@
   function renderCards(grid, list, allList, isList, opts) {
     const offset = (opts && opts.offset) || 0;
     const shown = allList;
-    grid.innerHTML = '';
+    // Scroll-only window shifts (virtUpdate(false)) keep the cards that are still inside the window: their DOM, loaded
+    // <img> and handlers are reused as-is instead of tearing the whole grid down and re-queueing every thumbnail. Reuse
+    // only when the same entry object sits at the same index of the same list in the same view mode (so no state change
+    // can have slipped in: every non-scroll path calls virtUpdate(true) / renderGrid, which rebuild everything).
+    const reuseMap = new Map();
+    if (opts && opts.reuse) {
+      for (const ch of grid.children) if (ch._reuseTag) reuseMap.set(ch.dataset.path, ch);
+    }
+    if (!reuseMap.size) grid.innerHTML = '';
     const frag = document.createDocumentFragment();
     const built = [];
     if (opts && opts.padTop) {
@@ -9247,6 +9314,11 @@
     }
     list.forEach((entry, _i) => {
       const idx = offset + _i;
+      const kept = reuseMap.get(entry.path);
+      if (kept && kept._reuseTag.entry === entry && kept._reuseTag.idx === idx && kept._reuseTag.shown === shown && kept._reuseTag.isList === isList) {
+        frag.appendChild(kept);
+        return;
+      }
     const cachedSidecar = state.sidecars.get(entry.path);
     const sc = { rating: 0, label: '', color_label: entry.color_label || '', edited: false, ...(cachedSidecar || {}) };
       const card = document.createElement('div');
@@ -9255,6 +9327,8 @@
       card.dataset.path = entry.path;
       // Named and marked clickable for screen readers (keyboard moves the grid cursor already).
       card.setAttribute('role', 'button');
+      card.tabIndex = (entry.path === state._kbCursor || entry.path === state.openedPath) ? 0 : -1; // roving tab stop; arrow keys already move the cursor
+      card.onfocus = () => { if (state._kbCursor !== entry.path) state._kbCursor = entry.path; };
       card.setAttribute('aria-label', entry.name || '');
       card.setAttribute('aria-pressed', String(entry.path === state.openedPath || state.selected.has(entry.path)));
       if (entry.thumb_path) card.dataset.thumbPath = entry.thumb_path;
@@ -9315,10 +9389,13 @@
           ${offlineBadge}
           ${stripInfo}`;
       }
+      card._reuseTag = { entry, idx, shown, isList };
       frag.appendChild(card);
       built.push({ entry, card, idx });
     });
+    if (reuseMap.size) grid.textContent = ''; // everything still wanted is already in frag; drop the rest (old pads, scrolled-out cards)
     grid.appendChild(frag);
+    if (!grid.querySelector('.lib-card[tabindex="0"]')) { const first = grid.querySelector('.lib-card'); if (first) first.tabIndex = 0; } // always one tab stop into the grid
     syncPhotoWorkBadges();
     // Second pass: every card is now connected, so loadThumb()'s isConnected check (see its
     // comment) sees it correctly instead of silently dropping the job.

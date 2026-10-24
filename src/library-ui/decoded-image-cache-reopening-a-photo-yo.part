@@ -11,9 +11,13 @@
   // an 8GB-reported Mac and, combined with full-resolution GPU targets and RAW thumbnail work,
   // drove the app above 1.8GB during a cold Library session. Keep enough entries for quick
   // back-and-forth navigation while reserving headroom for the active editor and OS.
+  // Fixed per platform, not RAM-scaled: WKWebView never reports navigator.deviceMemory, so the old formula assumed 8GB
+  // and gave every Mac 1GB. 512MB (~5 full 24MP frames, the LRU keeps only 2 full-size anyway) on desktop; 256MB on
+  // touch/mobile webviews and on anything that does report <= 4GB.
   const IMG_CACHE_BUDGET = (() => {
-    const gb = typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : 8;
-    return Math.min(Math.max(gb, 4) * 0.125, 1) * 1024 * 1024 * 1024; // 512MB@4GB … 1GB max
+    const mb = (typeof isMemoryConstrained === 'function' && isMemoryConstrained())
+      || (typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4) ? 256 : 512;
+    return mb * 1024 * 1024;
   })();
   const imgCache = new Map(); // path -> {entry, size, ts}
   // The editor's stroke icon set (chromasmith-22.html ICONS/icon()). Emoji render differently on

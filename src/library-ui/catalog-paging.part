@@ -243,11 +243,32 @@
     const from = firstRow * m.cols, to = Math.min(all.length, (lastRow + 1) * m.cols);
     renderCards(gridEl, all.slice(from, to), all, false, {
       offset: from,
+      reuse: !force,
       // A spacer is itself a grid item, so it brings its own row-gap: subtract it, or content
       // jumps one gap (16px) the moment the top spacer first appears mid-scroll.
       padTop: firstRow > 0 ? Math.max(1, firstRow * m.rowH - (m.rowH - m.cardH)) : 0,
       padBot: lastRow < totalRows - 1 ? Math.max(1, (totalRows - 1 - lastRow) * m.rowH - (m.rowH - m.cardH)) : 0,
     });
+    pruneThumbQueue();
+  }
+  /// Cards that scrolled out of the virtualised window were removed from the DOM, but their queued thumbnail jobs
+  /// stayed in the queue (and observed) until the pump got to them. Drop them now: a fast scroll through a big grid
+  /// otherwise leaves thousands of dead jobs ahead of the cards the user is actually looking at.
+  function pruneThumbQueue() {
+    if (!_thumbQueue.length) return;
+    const keep = [];
+    let dropped = 0;
+    for (const t of _thumbQueue) {
+      if (t.imgEl && t.imgEl.isConnected) { keep.push(t); continue; }
+      dropped++;
+      if (_thumbIO && t.imgEl) _thumbIO.unobserve(t.imgEl);
+      if (t.imgEl) _thumbByEl.delete(t.imgEl);
+    }
+    if (!dropped) return;
+    _thumbQueue = keep;
+    _thumbDoneCount += dropped; // "will never run" counts as settled (same rule as the pump's own drop path)
+    updateThumbProgress();
+    _resolveThumbPaintWaiters();
   }
 
   /// Re-measures cols/rowH after the grid's width changed (dock resizer, window resize) and keeps

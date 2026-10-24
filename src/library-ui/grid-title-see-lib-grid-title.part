@@ -83,7 +83,15 @@
   function renderCards(grid, list, allList, isList, opts) {
     const offset = (opts && opts.offset) || 0;
     const shown = allList;
-    grid.innerHTML = '';
+    // Scroll-only window shifts (virtUpdate(false)) keep the cards that are still inside the window: their DOM, loaded
+    // <img> and handlers are reused as-is instead of tearing the whole grid down and re-queueing every thumbnail. Reuse
+    // only when the same entry object sits at the same index of the same list in the same view mode (so no state change
+    // can have slipped in: every non-scroll path calls virtUpdate(true) / renderGrid, which rebuild everything).
+    const reuseMap = new Map();
+    if (opts && opts.reuse) {
+      for (const ch of grid.children) if (ch._reuseTag) reuseMap.set(ch.dataset.path, ch);
+    }
+    if (!reuseMap.size) grid.innerHTML = '';
     const frag = document.createDocumentFragment();
     const built = [];
     if (opts && opts.padTop) {
@@ -94,6 +102,11 @@
     }
     list.forEach((entry, _i) => {
       const idx = offset + _i;
+      const kept = reuseMap.get(entry.path);
+      if (kept && kept._reuseTag.entry === entry && kept._reuseTag.idx === idx && kept._reuseTag.shown === shown && kept._reuseTag.isList === isList) {
+        frag.appendChild(kept);
+        return;
+      }
     const cachedSidecar = state.sidecars.get(entry.path);
     const sc = { rating: 0, label: '', color_label: entry.color_label || '', edited: false, ...(cachedSidecar || {}) };
       const card = document.createElement('div');
@@ -102,6 +115,8 @@
       card.dataset.path = entry.path;
       // Named and marked clickable for screen readers (keyboard moves the grid cursor already).
       card.setAttribute('role', 'button');
+      card.tabIndex = (entry.path === state._kbCursor || entry.path === state.openedPath) ? 0 : -1; // roving tab stop; arrow keys already move the cursor
+      card.onfocus = () => { if (state._kbCursor !== entry.path) state._kbCursor = entry.path; };
       card.setAttribute('aria-label', entry.name || '');
       card.setAttribute('aria-pressed', String(entry.path === state.openedPath || state.selected.has(entry.path)));
       if (entry.thumb_path) card.dataset.thumbPath = entry.thumb_path;
@@ -162,10 +177,13 @@
           ${offlineBadge}
           ${stripInfo}`;
       }
+      card._reuseTag = { entry, idx, shown, isList };
       frag.appendChild(card);
       built.push({ entry, card, idx });
     });
+    if (reuseMap.size) grid.textContent = ''; // everything still wanted is already in frag; drop the rest (old pads, scrolled-out cards)
     grid.appendChild(frag);
+    if (!grid.querySelector('.lib-card[tabindex="0"]')) { const first = grid.querySelector('.lib-card'); if (first) first.tabIndex = 0; } // always one tab stop into the grid
     syncPhotoWorkBadges();
     // Second pass: every card is now connected, so loadThumb()'s isConnected check (see its
     // comment) sees it correctly instead of silently dropping the job.

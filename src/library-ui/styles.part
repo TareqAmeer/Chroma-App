@@ -862,6 +862,15 @@
     .lib-card{background:transparent;border:none;border-radius:0;overflow:hidden;
       cursor:pointer;position:relative;box-shadow:none;transition:box-shadow var(--duration-press,120ms) ease}
     .lib-card:hover .lib-thumb-wrap{box-shadow:0 0 0 1px var(--acc2)}
+    /* Keyboard focus: cards are tab stops (roving tabindex, see renderCards). Ring only for keyboard focus, not mouse clicks. */
+    .lib-card:focus{outline:none}
+    .lib-card:focus-visible{outline:2px solid var(--acc2);outline-offset:-2px}
+    /* Touch: stars / flags / badges are 11-16px glyphs. Grow the HIT area to >=44px without moving anything (pseudo-element, no layout change). */
+    @media (hover:none),(pointer:coarse){
+      .lib-star,.lib-flag,.lib-raw-badge.lib-stack-badge{position:relative}
+      .lib-star::after,.lib-flag::after,.lib-raw-badge.lib-stack-badge::after{content:"";position:absolute;left:50%;top:50%;
+        width:max(100%,44px);height:44px;transform:translate(-50%,-50%)}
+    }
     .lib-card.sel{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.multi{box-shadow:0 0 0 2px var(--acc2)}
     .lib-card.sel.multi{box-shadow:0 0 0 2px var(--acc2),0 0 0 4px var(--acc2)}

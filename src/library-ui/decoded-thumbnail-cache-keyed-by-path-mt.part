@@ -37,6 +37,25 @@
       if (dead) URL.revokeObjectURL(dead);
     }
   }
+  // Large-cell tier: the base thumbnail is 360px, so a cell wider than ~380 device px (big grid zoom or a retina 2x cell of
+  // 190 css px) shows it upscaled. After the base paints, fetch the 512px q85 tier for just those cells (own cache key, max 3 in
+  // flight, only while the card is still on screen). Never blocks the base thumbnail pool.
+  let _thumbLargeActive = 0;
+  function upgradeLargeThumb(job) {
+    const el = job.imgEl;
+    if (!el || !el.isConnected || job.isVideo) return;
+    const need = (el.clientWidth || 0) * (window.devicePixelRatio || 1);
+    if (need <= 380 || _thumbLargeActive >= 3) return;
+    const lkey = job.key + '|512';
+    const hit = thumbCacheGet(lkey);
+    if (hit) { el.src = hit; return; }
+    _thumbLargeActive++;
+    invoke('get_thumbnail_large', { path: job.path }).then((buf) => {
+      const url = thumbCacheGet(lkey) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+      if (!_thumbCache.has(lkey)) thumbCachePut(lkey, url);
+      if (el.isConnected) el.src = url;
+    }).catch(() => {}).finally(() => { _thumbLargeActive--; });
+  }
   function requestThumbnail(path, key) {
     const existing = _thumbFetches.get(key);
     if (existing) return existing;
@@ -110,6 +129,7 @@
         // dropped job as done is the correct fix, not a workaround: from this readout's own
         // perspective, "will never complete" and "completed" both mean "nothing left to wait for".
         _thumbDoneCount++;
+        if (_thumbIO && job.imgEl) _thumbIO.unobserve(job.imgEl); // dropped job: stop observing its (detached) element
         updateThumbProgress();
         continue;
       }
@@ -156,6 +176,7 @@
             job.imgEl.classList.add('loaded');
           }
           if (job._fastUrl) { URL.revokeObjectURL(job._fastUrl); job._fastUrl = null; }
+          upgradeLargeThumb(job);
         })
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
