@@ -5009,3 +5009,72 @@ mod cache_prune_tests {
         assert!(s.request());
     }
 }
+
+
+// ── Edited-look preview store (Library Quick Look) ─────────────────────────────────────────────
+// The Library renders each edited photo's look in a hidden render-only app instance (JS side:
+// library-ui.js "edited preview" queue) and parks the resulting ~1600px JPEG here, keyed by a
+// 16-hex hash of path + the photo's full recipe (so ANY edit change is a different key — nothing
+// ever needs invalidating, stale files just age out). Own small dir + cap; no threads: the prune
+// runs inline, every EDIT_PREVIEW_PRUNE_EVERY puts, on the already-bounded async command pool.
+const EDIT_PREVIEW_CAP: u64 = 1536 * 1024 * 1024;
+const EDIT_PREVIEW_PRUNE_EVERY: usize = 25;
+static EDIT_PREVIEW_PUTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn edit_preview_dir() -> PathBuf {
+    let dir = crate::platform::cache_root().join("editprev");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+fn edit_preview_file(key: &str) -> Result<PathBuf, String> {
+    if key.len() != 16 || !key.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("bad edit-preview key".into());
+    }
+    Ok(edit_preview_dir().join(format!("{key}.jpg")))
+}
+fn is_edit_preview_file(name: &str) -> bool {
+    name.strip_suffix(".jpg").map(|s| s.len() == 16 && s.chars().all(|c| c.is_ascii_hexdigit())).unwrap_or(false)
+}
+
+/// Cached edited preview JPEG for `key`; Err when absent (the JS side treats that as a miss).
+#[tauri::command(async)]
+pub fn get_edit_preview(key: String) -> Result<tauri::ipc::Response, String> {
+    let p = edit_preview_file(&key)?;
+    let bytes = std::fs::read(&p).map_err(|_| "no edit preview".to_string())?;
+    // Touch mtime so the LRU prune keeps recently-viewed previews.
+    if let Ok(f) = std::fs::OpenOptions::new().write(true).open(&p) { let _ = f.set_modified(SystemTime::now()); }
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Stores a rendered edited preview. Raw invoke body = the JPEG bytes; the key rides in the
+/// `x-key` header (avoids a JSON-array argument).
+#[tauri::command(async)]
+pub fn put_edit_preview(request: tauri::ipc::Request) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("expected raw invoke body".into()) };
+    let key = request.headers().get("x-key").and_then(|v| v.to_str().ok()).ok_or("missing x-key")?;
+    if bytes.len() < 4 || bytes.len() > 32 * 1024 * 1024 { return Err("bad edit-preview size".into()); }
+    let p = edit_preview_file(key)?;
+    let tmp = p.with_extension(format!("tmp.{}", std::process::id()));
+    std::fs::write(&tmp, bytes).map_err(|e| format!("write edit preview: {e}"))?;
+    if let Err(e) = std::fs::rename(&tmp, &p) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("write edit preview: {e}"));
+    }
+    if EDIT_PREVIEW_PUTS.fetch_add(1, Ordering::Relaxed) % EDIT_PREVIEW_PRUNE_EVERY == EDIT_PREVIEW_PRUNE_EVERY - 1 {
+        prune_cache_dir(&edit_preview_dir(), EDIT_PREVIEW_CAP, is_edit_preview_file, true, Duration::from_secs(5), SystemTime::now());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod edit_preview_tests {
+    use super::*;
+    #[test]
+    fn key_validation_and_file_names() {
+        assert!(edit_preview_file("0123456789abcdef").is_ok());
+        assert!(edit_preview_file("../../etc/passwd").is_err());
+        assert!(edit_preview_file("0123456789abcdeg").is_err());
+        assert!(is_edit_preview_file("0123456789abcdef.jpg"));
+        assert!(!is_edit_preview_file("0123456789abcdef.tmp.1"));
+    }
+}

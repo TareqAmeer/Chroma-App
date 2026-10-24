@@ -1,6 +1,6 @@
 // Windows title bar combines application menus and window controls; macOS retains its system menu.
 (function () {
-  if (!window.__TAURI__) return;
+  if (!window.__TAURI__ || window.__csRender) return;
   const groups = {
     File: [['Open Photo…', 'menu-open'], ['Open Folder…', 'menu-open-folder'], ['Open Recent…', 'menu-open-recent'], ['Library…', 'menu-library'], ['Save Session', 'menu-save-session'], ['Load Session…', 'menu-load-session'], ['Export…', 'menu-export'], null, ['Exit', 'window-close']],
     Edit: [['Undo', 'menu-undo'], ['Redo', 'menu-redo'], ['Copy Edit', 'menu-copy-edit'], ['Paste Edit', 'menu-paste-edit'], ['Reset Edit', 'menu-reset-edit'], ['Settings…', 'menu-preferences']],

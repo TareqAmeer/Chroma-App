@@ -1,7 +1,7 @@
   // ── Quick Look (Space) ──────────────────────────────────────────────────────────────────
   // RAW review uses our native development pipeline and bounded fit-size proxies.
   // Cold files show a loading state; camera JPEGs never substitute for review pixels.
-  const quicklook = { active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
+  const quicklook = { editedBlob: '', editedKind: '', rendering: false, holdOrig: false, baseNote: '', active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
   function queueQuickLookNeighbors(path) {
     if (!quicklook.active || quicklook.path !== path) return;
     const nav = libraryNavigationOrder(), shown = nav.entries;
@@ -10,6 +10,7 @@
     const generation = quicklook.generation;
     quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
       .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    quicklook.prefetchQueue.forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
     const pump = () => {
       if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
       const next = quicklook.prefetchQueue.shift();
@@ -34,6 +35,7 @@
     if (STARS_ENABLED && sc.rating) h += `<span class="lib-ql-b"><span class="on">${'★'.repeat(sc.rating)}</span></span>`;
     if (COLOR_LABELS_ENABLED && sc.color_label) h += `<span class="lib-ql-b">${colorLabelHtml(sc.color_label)}${sc.color_label}</span>`;
     if (sc.edited) h += '<span class="lib-ql-b edit">Edited</span>';
+    if (quicklook.rendering && quicklook.path === path) h += '<span class="lib-ql-b edit" id="lib-ql-rendering">Rendering edit…</span>';
     return h;
   }
   function qlBadgesRefresh(path) {
@@ -51,11 +53,53 @@
     const im = card && card.querySelector('.lib-thumb-wrap img');
     return im && im.dataset.canvasThumb && im.src && im.src.startsWith('blob:') ? im.src : '';
   }
+  function qlRevokeEdited() {
+    if (quicklook.editedBlob) { URL.revokeObjectURL(quicklook.editedBlob); quicklook.editedBlob = ''; }
+    quicklook.editedKind = '';
+  }
+  function qlCaptionSync(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const caption = document.getElementById('lib-ql-caption');
+    if (!caption) return;
+    const sc = state.sidecars.get(path) || {};
+    const name = baseName(path);
+    if (quicklook.editedKind === 'cache') caption.textContent = name + ' · edited look — hold \\ for original';
+    else if (quicklook.rendering) caption.textContent = name + ' · original shown — rendering edit…';
+    else if (quicklook.editedKind === 'thumb') caption.textContent = name + ' · edited look (thumbnail) — hold \\ for original';
+    else if (sc.edited && !quicklook.baseNote.includes('RAW development')) caption.textContent = name + ' · original shown (edit not rendered yet)';
+    else caption.textContent = name + quicklook.baseNote;
+  }
+  // Pull the persisted edited render for the previewed photo; on a miss, queue a render at the
+  // front of the edit-preview queue (see edited-look-previews-for-quick-look-hidden.part) and
+  // keep showing the original until it lands.
+  async function qlEditedRefresh(path) {
+    const generation = quicklook.generation;
+    const r = await epFetch(path).catch(() => null);
+    if (!quicklook.active || quicklook.path !== path || quicklook.generation !== generation || !r) return;
+    if (r.bytes) {
+      qlRevokeEdited();
+      quicklook.editedBlob = URL.createObjectURL(new Blob([r.bytes], { type: 'image/jpeg' }));
+      quicklook.editedUrl = quicklook.editedBlob; quicklook.editedKind = 'cache';
+      quicklook.rendering = false;
+      const img = document.getElementById('lib-ql-img');
+      if (img && !quicklook.holdOrig) { img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-cache'; img.classList.add('loaded'); }
+    } else {
+      quicklook.rendering = true;
+      epEnqueue(path, { priority: true });
+    }
+    qlBadgesRefresh(path); qlCaptionSync(path);
+  }
+  function qlRenderingDone(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    quicklook.rendering = false;
+    qlBadgesRefresh(path); qlCaptionSync(path);
+  }
   function qlShowOriginal(on) {
     const img = document.getElementById('lib-ql-img');
+    quicklook.holdOrig = !!on;
     if (!img || !quicklook.editedUrl || !quicklook.url) return;
     img.src = on ? quicklook.url : quicklook.editedUrl;
-    img.dataset.previewSource = on ? 'original' : 'edited-thumb';
+    img.dataset.previewSource = on ? 'original' : (quicklook.editedKind === 'cache' ? 'edited-cache' : 'edited-thumb');
   }
   function quicklookEl() {
     let el = document.getElementById('lib-quicklook');
@@ -114,7 +158,10 @@
     caption.title = '';
     img.classList.remove('loaded');
     document.getElementById('lib-ql-badges').innerHTML = qlBadgesHtml(path);
+    qlRevokeEdited(); quicklook.rendering = false; quicklook.holdOrig = false; quicklook.baseNote = '';
     quicklook.editedUrl = qlEditedThumbUrl(path);
+    if (quicklook.editedUrl) quicklook.editedKind = 'thumb';
+    if (!wantDeveloped && (state.sidecars.get(path) || { edited: true }).edited) qlEditedRefresh(path);
     if (quicklook.editedUrl) { // instant edited look from the cached grid thumb; full original loads behind it
       img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
     }
@@ -130,10 +177,8 @@
       }
       img.classList.add('loaded');
       const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
-      const edSc = state.sidecars.get(path);
-      if (quicklook.editedUrl) caption.textContent = baseName(path) + ' · edited look (thumbnail) — hold \\ for original';
-      else if (edSc && edSc.edited && !wantDeveloped) caption.textContent = baseName(path) + ' · original shown (edit not cached — Enter to open in Editor)';
-      else caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
+      quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
+      qlCaptionSync(path);
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
       queueQuickLookNeighbors(path);
     } catch (e) {
@@ -145,7 +190,7 @@
     quicklook.prefetchQueue = [];
     quicklook.active = false;
     quicklook.path = '';
-    quicklook.editedUrl = '';
+    quicklook.editedUrl = ''; quicklook.rendering = false; quicklook.holdOrig = false; qlRevokeEdited();
     const el = document.getElementById('lib-quicklook');
     if (el) el.classList.remove('on');
     if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }

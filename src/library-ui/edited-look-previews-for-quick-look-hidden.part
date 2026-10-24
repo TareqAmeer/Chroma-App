@@ -1,0 +1,127 @@
+  // ── Edited-look previews for Quick Look (Space) ────────────────────────────────────────────────
+  // Photos edited in bulk (paste / apply-all) never pass through the Editor, so nothing renders
+  // their look. This queue renders each edited photo's saved recipe in ONE hidden render-only app
+  // instance (iframe, ?csrender=1 -> window.csRenderEditPreview in chromasmith-22.html), from the
+  // same ~1600px Quick Look source, and stores the JPEG in the native store (get/put_edit_preview).
+  // Key = hash(path + full recipe), so any edit change is automatically a different key.
+  //   - strictly sequential (1 job at a time), 400-job bound, yields while the user is interacting
+  //   - the previewed photo jumps the queue; jobs re-read the sidecar when they RUN, so a recipe
+  //     that changed again after enqueue renders the newest one, and a result whose recipe changed
+  //     mid-render is discarded and re-queued
+  //   - the hidden instance is torn down after 90s idle (memory is only held while there is work)
+  // Limitation: RAW photos render from the camera-embedded preview, not the developed RAW.
+  const EP_VER = '1';
+  const ep = { frame: null, ready: null, queue: [], running: false, current: null, known: new Set(), lastInput: 0, idleTimer: 0, failures: 0, pausedUntil: 0 };
+  ['keydown', 'pointerdown', 'wheel', 'pointermove'].forEach((t) => document.addEventListener(t, () => { ep.lastInput = performance.now(); }, { capture: true, passive: true }));
+  const epSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function epHash(s) {
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x9747b28c;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      a = Math.imul(a ^ c, 0x01000193) >>> 0;
+      b = Math.imul(b + c + i, 0x85ebca6b) >>> 0; b ^= b >>> 13;
+    }
+    return a.toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+  }
+  const epKey = (path, recipe) => epHash(EP_VER + '\0' + path + '\0' + recipe);
+  function epTeardown() {
+    clearTimeout(ep.idleTimer);
+    if (ep.frame) { ep.frame.remove(); ep.frame = null; ep.ready = null; }
+  }
+  function epFrame() {
+    clearTimeout(ep.idleTimer);
+    if (ep.ready) return ep.ready;
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1; f.title = 'edit preview renderer';
+    f.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    f.src = location.pathname + '?csrender=1';
+    document.body.appendChild(f);
+    ep.frame = f;
+    ep.ready = new Promise((resolve, reject) => {
+      const t0 = performance.now();
+      const tick = () => {
+        if (ep.frame !== f) return reject(new Error('render instance closed'));
+        let w = null; try { w = f.contentWindow; } catch (_) {}
+        if (w && typeof w.csRenderEditPreview === 'function') return resolve(w);
+        if (performance.now() - t0 > 45000) return reject(new Error('render instance did not boot'));
+        setTimeout(tick, 120);
+      };
+      tick();
+    });
+    ep.ready.catch(() => { if (ep.frame === f) epTeardown(); });
+    return ep.ready;
+  }
+  // Cached edited preview for a photo: { key, bytes } on hit, { key, bytes: null, recipe } on miss,
+  // null when the photo has no edit.
+  async function epFetch(path) {
+    const sc = await getSidecar(path);
+    if (!sc || !sc.edited || !sc.recipe) return null;
+    const key = epKey(path, sc.recipe);
+    try {
+      const bytes = await invoke('get_edit_preview', { key });
+      if (ep.known.size > 20000) ep.known.clear();
+      ep.known.add(key);
+      return { key, bytes };
+    } catch (_) { return { key, bytes: null, recipe: sc.recipe }; }
+  }
+  function epEnqueue(path, { priority = false } = {}) {
+    if (!path || ep.pausedUntil > performance.now()) return;
+    const existing = ep.queue.find((j) => j.path === path);
+    if (existing) {
+      if (priority && ep.queue[0] !== existing) { ep.queue.splice(ep.queue.indexOf(existing), 1); ep.queue.unshift(existing); }
+      if (priority) existing.priority = true;
+      return;
+    }
+    if (ep.current && ep.current.path === path && ep.current.fresh) { if (!priority) return; }
+    const job = { path, priority };
+    if (priority) ep.queue.unshift(job); else ep.queue.push(job);
+    if (ep.queue.length > 400) ep.queue.length = 400;
+    epPump();
+  }
+  async function epRunJob(job) {
+    const sc = await getSidecar(job.path);
+    if (!sc || !sc.edited || !sc.recipe) return;
+    const key = epKey(job.path, sc.recipe);
+    if (ep.known.has(key)) return;
+    try { await invoke('get_edit_preview', { key }); ep.known.add(key); return; } catch (_) {}
+    job.fresh = true;
+    const source = await quicklookPreview(job.path);
+    const w = await epFrame();
+    const out = await w.csRenderEditPreview(source, sc.recipe, 1600);
+    const jpeg = new Uint8Array(out);
+    const again = await getSidecar(job.path);
+    if (!again || again.recipe !== sc.recipe) { epEnqueue(job.path); return; } // edited again mid-render: drop this result
+    await invoke('put_edit_preview', jpeg, { headers: { 'x-key': key } });
+    ep.known.add(key);
+    if (quicklook.active && quicklook.path === job.path) qlEditedRefresh(job.path);
+  }
+  async function epPump() {
+    if (ep.running) return;
+    ep.running = true;
+    try {
+      while (ep.queue.length) {
+        const job = ep.queue[0];
+        if (!job.priority && performance.now() - ep.lastInput < 400) { await epSleep(300); continue; }
+        ep.queue.shift();
+        ep.current = job;
+        try { await epRunJob(job); ep.failures = 0; }
+        catch (e) {
+          console.warn('edit preview failed', job.path, e && e.message || e);
+          if (++ep.failures >= 3) { ep.queue.length = 0; ep.pausedUntil = performance.now() + 60000; ep.failures = 0; epTeardown(); }
+          else await epSleep(500);
+        }
+        ep.current = null;
+        if (quicklook.active && quicklook.path === job.path) qlRenderingDone(job.path);
+        await epSleep(0);
+      }
+    } finally {
+      ep.running = false; ep.current = null;
+      clearTimeout(ep.idleTimer);
+      ep.idleTimer = setTimeout(() => { if (!ep.running && !ep.queue.length) epTeardown(); }, 90000);
+    }
+  }
+  // Hooks: a recipe was saved (Editor autosave is skipped for the open photo — the live canvas
+  // already shows it) or a batch applied one.
+  function epOnSidecarSaved(path) { if (path && path !== state.openedPath) epEnqueue(path); }
+  window.__libEditPreviewEnqueue = epEnqueue; window.__libEditPreviewTeardown = epTeardown; window.__libEditPreviewKey = epKey;
+  window.__libEditPreviewDebug = () => ({ queue: ep.queue.map((j) => j.path), running: ep.running, current: ep.current && ep.current.path, known: ep.known.size, frame: !!ep.frame });

@@ -44,6 +44,7 @@
       sc = await getSidecar(item.path);
     }
     if (sc.edited) markCardEdited(item.path);
+    if (item.status === 'applied') epEnqueue(item.path);
     else overlay.querySelector(`.lib-card[data-path="${CSS.escape(item.path)}"] .lib-edited-badge`)?.remove();
     if (item.path === state.openedPath && recipeBatchEditorBaseline.get(item.path) === snapshotToB64(getUISnapshot())) {
       applyUISnapshot(sc.recipe ? snapshotFromB64(sc.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, [])); fxUpdate();
