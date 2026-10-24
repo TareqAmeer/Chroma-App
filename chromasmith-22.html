@@ -7343,7 +7343,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024M';
+const BUILD='1.1025A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10268,6 +10268,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Halation v6: channel-split σ_R=6.14 σ_G=2.62 σ_B=1.0 px; gain_R=6.89 gain_G=0.109 @amount70
     // Bloom v6:    source-coloured; σ=12.42 gain=0.111 @amount40
     const C=FXR.CAL;
+    const BLUR_MAX_SIG=15,HBLUR_MAX_SIG=20;   // largest sigma one pass of the capped blur / blur_hal kernels renders as a true Gaussian
     const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
@@ -10546,8 +10547,15 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.src,this.fbs.hemitF,
         {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
       this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
-      this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2},[[0,'bsrc',false]],RG);
-      this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2},[[0,'bglow_h',false]],RG);
+      // The blur shader's kernel is capped (r<=48 taps => a true Gaussian only up to sigma~16). Bloom sigma scales with the
+      // render width (sc=w/REF), so a 6000px export (sigma~32) was silently truncated at ~1.5 sigma while a Fit preview
+      // (sigma~5) was not: the export halo came out tighter than the preview. A Gaussian of sigma s is N passes of
+      // s/sqrt(N), so wide glows run as N passes and stay a true Gaussian at any resolution. N=1 (sigma<=16) is the old path.
+      const bN=Math.max(1,Math.ceil(bSig2/BLUR_MAX_SIG)),bS=bSig2/Math.sqrt(bN);
+      for(let k=0;k<bN;k++){
+        this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bS},[[0,k?'bglow_v':'bsrc',false]],RG);
+        this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bS},[[0,'bglow_h',false]],RG);
+      }
     }
 
     // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
@@ -10561,8 +10569,12 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     if(glowOn){
       this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
       this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
-      this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hsrc',false]],RG);
-      this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2},[[0,'hglow_h',false]],RG);
+      // blur_hal caps at r<=64 taps (true Gaussian to sigma~21): same N-pass rule as the bloom above (N=1 = unchanged).
+      const hN=Math.max(1,Math.ceil(Math.max(hSigR2,hSigG2,hSigB2)/HBLUR_MAX_SIG)),hq=1/Math.sqrt(hN);
+      for(let k=0;k<hN;k++){
+        this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,k?'hglow_v':'hsrc',false]],RG);
+        this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,'hglow_h',false]],RG);
+      }
     }
 
     // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow
@@ -22372,9 +22384,67 @@ function _applyZoom(smooth,noRender){
   // current (proxy) frame and the full one swaps in when it arrives (updateWork + renderPreview).
   if(fxZoom>1){const now=performance.now();if(now-_fxZoomFQAt>400)fxEnsureFullQuality('zoom');_fxZoomFQAt=now;}
   _updateZoomReadout();
+  if(smooth){fxCrispSuspend();setTimeout(fxCrispSchedule,300);}else fxCrispSchedule();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
   if(!noRender&&typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
+}
+// ── Crisp view (WebKit) ──────────────────────────────────────────────────────────────────────────────────────────────
+// WKWebView rasterises the zoom wrapper's compositing layer at its UNSCALED size (745 css px = ~1490 device px) and then magnifies
+// that texture with the transform's scale(): a 6240px preview buffer shown at 100% came out as a ~1500px image stretched 4x
+// (measured against the export of the same recipe: high-frequency energy 0.18x, pixel-identical backing store). Chromium
+// re-rasters at the final scale, so this only bites in Safari/WKWebView (the desktop app). Fix: when the view settles, copy the
+// visible part of the on-screen canvas straight from its full-resolution backing store into a plain viewport-sized device-pixel
+// canvas that sits BELOW the zoom wrapper, and make the wrapper's image canvases transparent (opacity 0, so they keep taking
+// pointer events; every overlay inside the wrapper stays on top and aligned). At 100% that is an exact pixel copy.
+let _fxCrispRaf=0,_fxCrispOn=false;
+// Redraw after every preview render (bound at load: renderPreview lives in a later script block).
+window.addEventListener('load',()=>{if(typeof renderPreview==='function'&&!renderPreview.__crisp){const rp=renderPreview;renderPreview=function(){const r=rp.apply(this,arguments);fxCrispSchedule();return r;};renderPreview.__crisp=true;}});
+function _fxCrispEnabled(){
+  if(window.__fxCrispForce!=null)return !!window.__fxCrispForce;
+  const ua=navigator.userAgent;return /AppleWebKit/.test(ua)&&!/Chrome|Chromium|Edg\//.test(ua);
+}
+function fxCrispSuspend(){
+  const cv=document.getElementById('fx-canvas-crisp');if(cv)cv.style.display='none';
+  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.opacity='';if(FX&&FX.cv)FX.cv.style.opacity='';
+  _fxCrispOn=false;
+}
+function fxCrispSchedule(){
+  if(_fxCrispRaf||!_fxCrispEnabled())return;
+  _fxCrispRaf=requestAnimationFrame(()=>{_fxCrispRaf=0;try{fxCrispDraw();}catch(e){fxCrispSuspend();}});
+}
+function fxCrispDraw(){
+  const wrap=document.getElementById('fx-wrap'),zw=document.getElementById('fx-zoom-wrap');
+  const cur=typeof curItem==='function'?curItem():null;
+  if(!wrap||!zw||!FX||!FX.ok||_fxPreviewInteracting||fxSplit||fxLoupe||cropMode||fxCompare||(cur&&cur.kind==='video')||
+     fxComparePreviousSnapshot!==null||zw.style.transition){fxCrispSuspend();return;}
+  const bd=document.getElementById('fx-canvas-bd');
+  const src=(bd&&bd.style.display!=='none'&&bd.width)?bd:(FX.cv&&FX.cv.style.display!=='none'&&FX.cv.width?FX.cv:null);
+  if(!src){fxCrispSuspend();return;}
+  let cv=document.getElementById('fx-canvas-crisp');
+  if(!cv){cv=document.createElement('canvas');cv.id='fx-canvas-crisp';cv.setAttribute('aria-hidden','true');
+    cv.style.cssText='position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;display:block';
+    wrap.insertBefore(cv,zw);}
+  const d=window.devicePixelRatio||1,box=wrap.getBoundingClientRect();
+  const W=Math.max(1,Math.round(box.width*d)),H=Math.max(1,Math.round(box.height*d));
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+  cv.style.display='block';
+  const org=cv.getBoundingClientRect(),r=src.getBoundingClientRect();
+  if(!r.width||!r.height)return;
+  const bw=src.width,bh=src.height;
+  let dx=Math.round((r.left-org.left)*d),dy=Math.round((r.top-org.top)*d),dw=Math.max(1,Math.round(r.width*d)),dh=Math.max(1,Math.round(r.height*d));
+  // Within 1% of one backing px per device px (CSS sizes are rounded to whole px) is a 1:1 view: copy exact pixels, no resample.
+  if(Math.abs(dw/bw-1)<0.01&&Math.abs(dh/bh-1)<0.01){dw=bw;dh=bh;}
+  const x0=Math.max(0,dx),y0=Math.max(0,dy),x1=Math.min(W,dx+dw),y1=Math.min(H,dy+dh);
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
+  if(x1>x0&&y1>y0){
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality=dw<bw?'high':'low';
+    const from=src,sx=(x0-dx)*bw/dw,sy=(y0-dy)*bh/dh,sw=(x1-x0)*bw/dw,sh=(y1-y0)*bh/dh;
+    ctx.drawImage(from,sx,sy,sw,sh,x0,y0,x1-x0,y1-y0);
+  }
+  // Only the active image canvas goes transparent; the other (hidden) one is left alone.
+  src.style.opacity='0';const other=src===bd?FX.cv:bd;if(other)other.style.opacity='';
+  _fxCrispOn=true;
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
 // new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
@@ -24774,6 +24844,7 @@ function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   FX.cv.style.width=(sw/iw*cw)+'px';FX.cv.style.height=(sh/ih*ch)+'px';
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
+  fxCrispSchedule();
 }
 // Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
 const FX_CROP_MAX_PX=16e6;   // 4096x4096: also the tile-grid maxDim, so a 1:1 view of any window up to 4K stays 1:1
@@ -25064,8 +25135,10 @@ function renderPreview(){
   // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped
   // buffer was CSS-upscaled (4x at 200%). Raise the density in power-of-2 tiers of the zoom (few re-renders), bounded by the source and 8192px.
   if(_previewComposition&&!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&cw>0&&ch>0){
-    const t=Math.min(4,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
-    dpr=Math.max(dpr,Math.min((window.devicePixelRatio||1)*t,Math.min(iw/cw,ih/ch),8192/Math.max(cw,ch)));
+    // Tier cap 16 (was 4): at dpr 2 a 100% view of a 26MP photo needs ~9x the Fit density, so the old cap of 4 left the
+    // composite CSS-upscaled ~1.1-2x at 100-200%. Still bounded by the source's own pixels, 8192px and a 50MP budget.
+    const t=Math.min(16,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
+    dpr=Math.max(dpr,Math.min((window.devicePixelRatio||1)*t,Math.min(iw/cw,ih/ch),8192/Math.max(cw,ch),Math.sqrt(5e7/(cw*ch))));
   }
   // Phones: a mid-drag draft only needs ~1.5x (2.25 vs 9 Mpx at dpr 3 on a 900px preview); the settle frame
   // (_fxPreviewInteracting false) restores the full dpr above. Desktop / non-constrained devices untouched.
@@ -25086,6 +25159,9 @@ function renderPreview(){
     const it0=curItem();if(it0&&!it0._fullResKicked&&typeof fxEnsureFullQuality==='function'){it0._fullResKicked=true;Promise.resolve(fxEnsureFullQuality('zoom')).then(()=>{if(curItem()===it0)fxRenderPreviewViewOnly();}).catch(()=>{});}
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
+  // cw/ch are floored, so a 1:1 render of a 6240x4160 source came out 6240x4154: a 0.14% non-integer resample (bilinear
+  // blur, and it never matched the export pixel grid). Within 1.5% of the source, render the source grid exactly.
+  if(!_curIsVideoDraft()&&Math.abs(pw/iw-1)<0.015&&Math.abs(ph/ih-1)<0.015&&(pw!==iw||ph!==ih)){pw=iw;ph=ih;}
   // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
   // only handles Fit and the split/interacting fallbacks.)
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)

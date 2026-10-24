@@ -209,42 +209,8 @@ function _applyZoom(smooth,noRender){
   // current (proxy) frame and the full one swaps in when it arrives (updateWork + renderPreview).
   if(fxZoom>1){const now=performance.now();if(now-_fxZoomFQAt>400)fxEnsureFullQuality('zoom');_fxZoomFQAt=now;}
   _updateZoomReadout();
+  if(smooth){fxCrispSuspend();setTimeout(fxCrispSchedule,300);}else fxCrispSchedule();
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // keep the mask shape glued to the zoomed/panned canvas rect
   if(fxSplit&&typeof _applySplitPos==='function')_applySplitPos(); // divider follows the zoomed/panned photo rect
   if(!noRender&&typeof _fxZoomRenderDebounced==='function')_fxZoomRenderDebounced(); // full-res preview: swap backing-store res once zooming settles
 }
-// The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
-// new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
-// the footprint; then re-derive the centring offset from the new size.
-function _zoomRefit(oldW){
-  const nw=_fxZoomFootprint().w;
-  const changed=oldW>0&&nw>0&&Math.abs(nw-oldW)>0.5;
-  if(changed){const r=nw/oldW;fxPanX*=r;fxPanY*=r;}
-  // Only when the size actually moved (or below 100%, the old new-photo re-centre): _applyZoom
-  // schedules a re-render, which would call back here — unconditional would loop.
-  // noRender: this is called FROM renderPreview; re-arming the zoom-settle re-render here looped forever below 100% (fxZoom<1 always re-applies)
-  if(changed||fxZoom<1)_applyZoom(false,true);
-}
-function _resetZoom(smooth){fxZoom=FX_FIT;fxPanX=0;fxPanY=0;_applyZoom(smooth);}
-// TRUE zoom scale (Lightroom's convention): 100% = one source pixel per DEVICE pixel, "Fit" = the whole frame.
-// fxZoom stays the internal wrapper scale (1 = canvas footprint, FX_FIT = Fit); these convert to/from the
-// percent the user reads. Falls back to the old fit-relative mapping until a photo's size is known.
-const FX_ZOOM_MAX_PCT=1600;
-function _fxTrueZoomK(){
-  // Null-safe on purpose: this runs from _updateZoomReadout during a photo open, when the editor canvas /
-  // zoom wrapper may not be in the DOM yet (the desktop open path) — a throw here aborts the whole open.
-  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
-  let w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
-  // Borders/matte: the pinned wrap is the composite; the PHOTO's width inside it is what 100% means.
-  if(_fxDisplayMap&&w){const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width)w=w*_fxDisplayMap.w/bd.width;}
-  const src=fxWork;if(!src||!w)return 0;
-  const FW=(src.naturalWidth||src.width)*fxFullScale();
-  return FW?(w*(window.devicePixelRatio||1))/FW*100:0;   // percent per unit of fxZoom
-}
-function _fxZoomToPct(z){const k=_fxTrueZoomK();return k?z*k:z/FX_FIT*100;}
-function _fxPctToZoom(p){const k=_fxTrueZoomK();return k?p/k:p/100*FX_FIT;}
-function _fxZoomMax(){const k=_fxTrueZoomK();return k?Math.max(FX_FIT*2,FX_ZOOM_MAX_PCT/k):8;}
-// Slider is logarithmic over [0.25 x wrapper .. 1600%] so 25%..1600% is usable with one control.
-function _fxSliderToZoom(v){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=lo*Math.pow(hi/lo,v/1000);
-  const fitPct=_fxZoomToPct(FX_FIT);return Math.abs(pct-fitPct)/fitPct<0.03?FX_FIT:_fxPctToZoom(pct);}
-function _fxZoomToSlider(z){const lo=_fxZoomToPct(0.25),hi=FX_ZOOM_MAX_PCT,pct=Math.max(lo,Math.min(hi,_fxZoomToPct(z)));return Math.round(1000*Math.log(pct/lo)/Math.log(hi/lo));}

@@ -131,8 +131,10 @@ function renderPreview(){
   // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped
   // buffer was CSS-upscaled (4x at 200%). Raise the density in power-of-2 tiers of the zoom (few re-renders), bounded by the source and 8192px.
   if(_previewComposition&&!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&cw>0&&ch>0){
-    const t=Math.min(4,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
-    dpr=Math.max(dpr,Math.min((window.devicePixelRatio||1)*t,Math.min(iw/cw,ih/ch),8192/Math.max(cw,ch)));
+    // Tier cap 16 (was 4): at dpr 2 a 100% view of a 26MP photo needs ~9x the Fit density, so the old cap of 4 left the
+    // composite CSS-upscaled ~1.1-2x at 100-200%. Still bounded by the source's own pixels, 8192px and a 50MP budget.
+    const t=Math.min(16,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
+    dpr=Math.max(dpr,Math.min((window.devicePixelRatio||1)*t,Math.min(iw/cw,ih/ch),8192/Math.max(cw,ch),Math.sqrt(5e7/(cw*ch))));
   }
   // Phones: a mid-drag draft only needs ~1.5x (2.25 vs 9 Mpx at dpr 3 on a 900px preview); the settle frame
   // (_fxPreviewInteracting false) restores the full dpr above. Desktop / non-constrained devices untouched.
@@ -153,6 +155,9 @@ function renderPreview(){
     const it0=curItem();if(it0&&!it0._fullResKicked&&typeof fxEnsureFullQuality==='function'){it0._fullResKicked=true;Promise.resolve(fxEnsureFullQuality('zoom')).then(()=>{if(curItem()===it0)fxRenderPreviewViewOnly();}).catch(()=>{});}
   }
   let pw=(cw*dpr)|0,ph=(ch*dpr)|0;                     // WebGL backing store
+  // cw/ch are floored, so a 1:1 render of a 6240x4160 source came out 6240x4154: a 0.14% non-integer resample (bilinear
+  // blur, and it never matched the export pixel grid). Within 1.5% of the source, render the source grid exactly.
+  if(!_curIsVideoDraft()&&Math.abs(pw/iw-1)<0.015&&Math.abs(ph/ih-1)<0.015&&(pw!==iw||ph!==ih)){pw=iw;ph=ih;}
   // (fxZoom>1 full-res now renders a visible crop — see renderFullResCrop above; this path
   // only handles Fit and the split/interacting fallbacks.)
   // "hold to compare": render the untouched original (no LUT / adjust / FX, but with geometry)

@@ -108,6 +108,7 @@ function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   FX.cv.style.width=(sw/iw*cw)+'px';FX.cv.style.height=(sh/ih*ch)+'px';
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
+  fxCrispSchedule();
 }
 // Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
 const FX_CROP_MAX_PX=16e6;   // 4096x4096: also the tile-grid maxDim, so a 1:1 view of any window up to 4K stays 1:1
