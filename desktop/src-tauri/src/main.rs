@@ -305,7 +305,22 @@ struct RawEditorCacheEntry {
 }
 static RAW_EDITOR_CACHE: Mutex<Vec<RawEditorCacheEntry>> = Mutex::new(Vec::new());
 
-/// Inserts a developed frame into RAW_EDITOR_CACHE (FIFO, 3 entries).
+/// Byte budget for RAW_EDITOR_CACHE. The old cap was 3 ENTRIES, i.e. 3 x 96MB (a 24MP RGBA frame) = 288MB for a 24MP body
+/// but 3 x 360MB = >1GB for a 100MP one; counting bytes keeps the worst case flat whatever the sensor. The newest frame is
+/// always kept (it is the one about to be reopened), however large.
+const RAW_EDITOR_CACHE_BYTES: usize = 256 * 1024 * 1024;
+
+/// Evicts oldest-first until the cache fits `budget` bytes (never evicting the newest entry). Pure, for testing.
+fn raw_editor_cache_trim(sizes: &mut Vec<usize>, budget: usize) -> usize {
+    let mut dropped = 0;
+    while sizes.len() > 1 && sizes.iter().sum::<usize>() > budget {
+        sizes.remove(0);
+        dropped += 1;
+    }
+    dropped
+}
+
+/// Inserts a developed frame into RAW_EDITOR_CACHE (FIFO, bounded by RAW_EDITOR_CACHE_BYTES and 3 entries).
 fn raw_editor_cache_insert(path: &str, recipe_key: &str, mtime: u64, size: u64, width: u32, height: u32,
                            rgba: std::sync::Arc<Vec<u8>>) {
     if let Ok(mut guard) = RAW_EDITOR_CACHE.lock() {
@@ -315,6 +330,9 @@ fn raw_editor_cache_insert(path: &str, recipe_key: &str, mtime: u64, size: u64, 
         });
         const MAX_IN_PROCESS_RAW_CACHES: usize = 3;
         if guard.len() > MAX_IN_PROCESS_RAW_CACHES { guard.remove(0); }
+        let mut sizes: Vec<usize> = guard.iter().map(|e| e.rgba.len()).collect();
+        let drop_n = raw_editor_cache_trim(&mut sizes, RAW_EDITOR_CACHE_BYTES);
+        guard.drain(..drop_n);
     }
 }
 
@@ -3496,6 +3514,7 @@ fn main() {
             smart_albums::smart_album_delete,
             library::get_quicklook_preview,
             library::get_quicklook_preview_hq,
+            library::get_thumbnail_large,
             library::get_edit_preview,
             library::put_edit_preview,
             library::get_meta,
@@ -4533,5 +4552,24 @@ mod stream_tests {
         assert_eq!(std::fs::read(dir.join("clip.mp4")).unwrap(), b"existing"); // untouched
         assert_eq!(std::fs::read(dir.join("clip (2).mp4")).unwrap(), b"new export");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod raw_editor_cache_budget_tests {
+    use super::raw_editor_cache_trim;
+
+    #[test]
+    fn trims_oldest_first_until_under_budget_but_keeps_newest() {
+        let mut v = vec![100, 100, 100];
+        assert_eq!(raw_editor_cache_trim(&mut v, 250), 1);
+        assert_eq!(v, vec![100, 100]);
+        // a single frame larger than the budget is still kept
+        let mut one = vec![900];
+        assert_eq!(raw_editor_cache_trim(&mut one, 250), 0);
+        // 100MP frames: only the newest survives a 256MB budget
+        let mut big = vec![400, 400, 400];
+        assert_eq!(raw_editor_cache_trim(&mut big, 256), 2);
+        assert_eq!(big, vec![400]);
     }
 }

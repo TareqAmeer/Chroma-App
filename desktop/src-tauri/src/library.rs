@@ -36,6 +36,105 @@ fn raw_orientation(path: &str) -> u16 {
     .unwrap_or(1)
 }
 
+/// Largest head slice read for the bounded-IO RAW preview below. The embedded JPEG of every RAW family we ship
+/// sits inside this (RAF/RW2/ARW/CR2/NEF headers + IFDs + preview are all in the first few MB); a file whose preview
+/// lies beyond it simply falls back to the whole-file path.
+const RAW_HEAD_BYTES: usize = 24 * 1024 * 1024;
+
+/// Embedded preview + EXIF orientation of a RAW from only its first `RAW_HEAD_BYTES`. rawler's `RawSource::new` mmaps
+/// with `populate()`, i.e. pages in the WHOLE file (87 MB RAF: ~1 s cold), and `extract_preview_pixels` plus
+/// `raw_orientation` each did that, so the instant embedded stand-in in the Editor/Quick Look cost two full reads.
+/// Returns None (caller falls back to the old path) for small files, any decoder error, or a panic on the truncated buffer.
+fn raw_preview_head(path: &str) -> Option<(image::DynamicImage, u16)> {
+    raw_preview_head_try(path).ok()
+}
+
+fn raw_preview_head_try(path: &str) -> Result<(image::DynamicImage, u16), String> {
+    use std::io::Read;
+    let f = std::fs::File::open(path).map_err(|e| format!("open: {e}"))?;
+    let len = f.metadata().map_err(|e| format!("stat: {e}"))?.len() as usize;
+    if len <= RAW_HEAD_BYTES {
+        return Err("small file".into()); // the whole-file read is no more expensive than this one
+    }
+    let mut buf = Vec::with_capacity(RAW_HEAD_BYTES);
+    f.take(RAW_HEAD_BYTES as u64).read_to_end(&mut buf).map_err(|e| format!("read: {e}"))?;
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(image::DynamicImage, u16), String> {
+        let src = rawler::rawsource::RawSource::new_from_shared_vec(std::sync::Arc::new(buf)).with_path(path);
+        let dec = rawler::get_decoder(&src).map_err(|e| format!("decoder: {e}"))?;
+        let params = RawDecodeParams::default();
+        let md = dec.raw_metadata(&src, &params).map_err(|e| format!("metadata: {e}"))?;
+        // Same chain as rawler::analyze::extract_preview_pixels (preview -> full) + the thumbnail fallback the old path used.
+        let img = match dec.preview_image(&src, &params).map_err(|e| format!("preview: {e}"))? {
+            Some(i) => i,
+            None => match dec.full_image(&src, &params).map_err(|e| format!("full: {e}"))? {
+                Some(i) => i,
+                None => dec.thumbnail_image(&src, &params).map_err(|e| format!("thumbnail: {e}"))?.ok_or("no preview image")?,
+            },
+        };
+        Ok((img, md.exif.orientation.unwrap_or(1)))
+    }))
+    .map_err(|_| "panic on truncated buffer".to_string())?
+}
+
+/// EXIF orientation tag (1..8) of a still image file; 1 when absent or unreadable.
+fn exif_orientation_of_file(path: &str) -> u16 {
+    (|| -> Option<u16> {
+        let f = std::fs::File::open(path).ok()?;
+        let mut br = std::io::BufReader::new(f);
+        let exif = exif::Reader::new().read_from_container(&mut br).ok()?;
+        exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY).and_then(|f| f.value.get_uint(0)).map(|v| v as u16)
+    })()
+    .unwrap_or(1)
+}
+
+/// Rotates an already-encoded thumbnail JPEG per `orientation` (3/6/8, same set as apply_orientation_dynamic). Returns the
+/// input untouched for orientation 1/unsupported values or on any decode/encode failure.
+fn orient_jpeg_bytes(bytes: Vec<u8>, orientation: u16) -> Vec<u8> {
+    if !matches!(orientation, 3 | 6 | 8) {
+        return bytes;
+    }
+    let Ok(img) = image::load_from_memory(&bytes) else { return bytes };
+    let img = apply_orientation_dynamic(img, orientation);
+    let mut out = Vec::new();
+    match image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut out), 85).encode_image(&img.to_rgb8()) {
+        Ok(()) => out,
+        Err(_) => bytes,
+    }
+}
+
+/// Windows thumbnails (WIC) come back in stored pixel order; make them upright. No-op for orientation 1.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn orient_thumbnail_jpeg(path: &str, bytes: Vec<u8>) -> Vec<u8> {
+    orient_jpeg_bytes(bytes, exif_orientation_of_file(path))
+}
+
+#[cfg(test)]
+mod orient_jpeg_tests {
+    use super::*;
+
+    fn jpeg(w: u32, h: u32) -> Vec<u8> {
+        let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(w, h, image::Rgb([200, 80, 40])));
+        let mut out = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut Cursor::new(&mut out), 90).encode_image(&img.to_rgb8()).unwrap();
+        out
+    }
+    fn dims(b: &[u8]) -> (u32, u32) {
+        let i = image::load_from_memory(b).unwrap();
+        (i.width(), i.height())
+    }
+
+    #[test]
+    fn rotating_orientations_swap_axes_and_normal_is_untouched() {
+        let src = jpeg(64, 32);
+        assert_eq!(orient_jpeg_bytes(src.clone(), 1), src); // byte-identical, no re-encode
+        assert_eq!(dims(&orient_jpeg_bytes(src.clone(), 6)), (32, 64));
+        assert_eq!(dims(&orient_jpeg_bytes(src.clone(), 8)), (32, 64));
+        assert_eq!(dims(&orient_jpeg_bytes(src.clone(), 3)), (64, 32));
+        assert_eq!(orient_jpeg_bytes(vec![1, 2, 3], 6), vec![1, 2, 3]); // undecodable input comes back as-is
+        assert_eq!(exif_orientation_of_file("/definitely/not/a/file.jpg"), 1);
+    }
+}
+
 /// Rotate/flip a decoded thumbnail/preview per EXIF orientation (1=as-is, 3=180°, 6=90° CW,
 /// 8=90° CCW — the only values cameras emit).
 pub(crate) fn apply_orientation_dynamic(img: image::DynamicImage, orientation: u16) -> image::DynamicImage {
@@ -1311,10 +1410,15 @@ fn quicklook_preview_bytes_q(path: &str, long_edge: u32, quality: u8, hq: bool) 
         // embedded JPEG — see quicklook_preview_bytes_at's own siblings). Falling back to the
         // thumbnail tier instead of failing keeps every caller of this function (Quick Look,
         // face crops, the offline reference tier) working for exactly the files that regressed.
-        let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
-            .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
-            .map_err(|e| format!("preview decode: {e}"))?;
-        let img = apply_orientation_dynamic(img, raw_orientation(path));
+        let img = match raw_preview_head(path) {
+            Some((img, orientation)) => apply_orientation_dynamic(img, orientation),
+            None => {
+                let img = rawler::analyze::extract_preview_pixels(path, &RawDecodeParams::default())
+                    .or_else(|_| rawler::analyze::extract_thumbnail_pixels(path, &RawDecodeParams::default()))
+                    .map_err(|e| format!("preview decode: {e}"))?;
+                apply_orientation_dynamic(img, raw_orientation(path))
+            }
+        };
         let (w, h) = (img.width(), img.height());
         let scale = long_edge as f32 / w.max(h) as f32;
         let out_img = if scale < 1.0 {
@@ -1428,6 +1532,16 @@ pub(crate) const OFFLINE_REFERENCE_LONG_EDGE: u32 = 800;
 /// Quick Look's idle "sharpen" tier: requested by the UI only after the user dwells on one photo, so it
 /// never costs anything during rapid navigation. Larger long edge (retina full-screen), q92, Lanczos3.
 /// Uncached — a one-shot upgrade of the frame already on screen.
+/// Larger-cell grid thumbnail: 512px long edge, JPEG q85 (the 360px base tier is q75 and is deliberately left alone so a
+/// 50k-photo library does not have to regenerate its whole cache). Own cache entry keyed by (path, 512), so it is only ever
+/// generated for photos that are actually shown in a cell wider than the base tier — requested by the grid after the base
+/// thumbnail has already painted.
+pub(crate) const GRID_LARGE_LONG_EDGE: u32 = 512;
+#[tauri::command(async)]
+pub fn get_thumbnail_large(path: String) -> Result<tauri::ipc::Response, String> {
+    cached_preview_bytes_at(&path, GRID_LARGE_LONG_EDGE).map(tauri::ipc::Response::new)
+}
+
 const QUICKLOOK_HQ_LONG_EDGE: u32 = 3200;
 #[tauri::command(async)]
 pub fn get_quicklook_preview_hq(path: String) -> Result<tauri::ipc::Response, String> {
@@ -5160,5 +5274,31 @@ mod edit_preview_tests {
         assert!(edit_preview_file("0123456789abcdeg").is_err());
         assert!(is_edit_preview_file("0123456789abcdef.jpg"));
         assert!(!is_edit_preview_file("0123456789abcdef.tmp.1"));
+    }
+}
+
+#[cfg(test)]
+mod raw_preview_head_tests {
+    use super::*;
+
+    /// CS_TEST_RAWS=/a.RAF:/b.RW2 cargo test raw_preview_head -- --nocapture
+    /// The bounded head read must give the SAME pixels and orientation as the whole-file path.
+    #[test]
+    fn head_preview_matches_full_path() {
+        let Ok(list) = std::env::var("CS_TEST_RAWS") else { return };
+        for p in list.split(':').filter(|s| !s.is_empty()) {
+            let t = Instant::now();
+            let (h, o) = raw_preview_head_try(p).unwrap_or_else(|e| panic!("head path unavailable for {p}: {e}"));
+            let head_ms = t.elapsed().as_millis();
+            let t = Instant::now();
+            let full = rawler::analyze::extract_preview_pixels(p, &RawDecodeParams::default())
+                .or_else(|_| rawler::analyze::extract_thumbnail_pixels(p, &RawDecodeParams::default()))
+                .unwrap();
+            let full_o = raw_orientation(p);
+            println!("{p}: head {head_ms} ms, full {} ms, {}x{}", t.elapsed().as_millis(), h.width(), h.height());
+            assert_eq!((h.width(), h.height()), (full.width(), full.height()), "{p}");
+            assert_eq!(o, full_o, "{p}");
+            assert_eq!(h.to_rgb8().as_raw(), full.to_rgb8().as_raw(), "{p}");
+        }
     }
 }

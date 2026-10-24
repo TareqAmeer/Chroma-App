@@ -3,14 +3,11 @@
 // motivating this (JPEG, not RAW, is the expensive format at 24MP; RAW keeps using rawler's own
 // fast embedded-preview path and never comes through here).
 //
-// ⚠️ Known gap, not a silent omission: this does NOT read/apply EXIF orientation (fastthumb.rs's
-// `kCGImageSourceCreateThumbnailWithTransform` does this for free on macOS). WIC exposes
-// orientation via a metadata-query-language string ("/app1/ifd/{ushort=274}" for JPEG) returning
-// a PROPVARIANT that needs per-VARTYPE unpacking — real additional complexity this first pass
-// deliberately scoped out rather than guess at without being able to verify against real
-// EXIF-rotated photos from multiple camera brands. A photo whose camera wrote a non-Normal
-// orientation tag will thumbnail sideways/upside-down until this is added — see
-// docs/windows-port.md G11.
+// EXIF orientation: WIC returns the stored pixel order, so `thumbnail_jpeg` finishes by calling
+// library.rs `orient_thumbnail_jpeg`, which reads the orientation tag with the cross-platform `exif`
+// crate and rotates the (already small) result with the `image` crate. That helper is plain Rust with
+// a unit test that runs on every platform; the WIC code below is untouched. Not yet confirmed on a real
+// Windows machine with a portrait JPEG — see docs/windows-port.md G11.
 //
 // Falls back to the `image` crate on ANY failure rather than erroring, same as fastthumb.rs:
 // this is an optimization, not a feature — a file WIC dislikes must still get a thumbnail.
@@ -37,7 +34,8 @@ pub fn thumbnail_jpeg(path: &str, long_edge: u32) -> Option<Vec<u8>> {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let result = thumbnail_jpeg_inner(path, long_edge);
         CoUninitialize();
-        result
+        // WIC hands back the pixels as stored; apply the file's EXIF orientation here (portrait shots were sideways).
+        result.map(|bytes| crate::library::orient_thumbnail_jpeg(path, bytes))
     }
 }
 

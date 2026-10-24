@@ -65,3 +65,29 @@ mod edit_preview_tests {
         assert!(!is_edit_preview_file("0123456789abcdef.tmp.1"));
     }
 }
+
+#[cfg(test)]
+mod raw_preview_head_tests {
+    use super::*;
+
+    /// CS_TEST_RAWS=/a.RAF:/b.RW2 cargo test raw_preview_head -- --nocapture
+    /// The bounded head read must give the SAME pixels and orientation as the whole-file path.
+    #[test]
+    fn head_preview_matches_full_path() {
+        let Ok(list) = std::env::var("CS_TEST_RAWS") else { return };
+        for p in list.split(':').filter(|s| !s.is_empty()) {
+            let t = Instant::now();
+            let (h, o) = raw_preview_head_try(p).unwrap_or_else(|e| panic!("head path unavailable for {p}: {e}"));
+            let head_ms = t.elapsed().as_millis();
+            let t = Instant::now();
+            let full = rawler::analyze::extract_preview_pixels(p, &RawDecodeParams::default())
+                .or_else(|_| rawler::analyze::extract_thumbnail_pixels(p, &RawDecodeParams::default()))
+                .unwrap();
+            let full_o = raw_orientation(p);
+            println!("{p}: head {head_ms} ms, full {} ms, {}x{}", t.elapsed().as_millis(), h.width(), h.height());
+            assert_eq!((h.width(), h.height()), (full.width(), full.height()), "{p}");
+            assert_eq!(o, full_o, "{p}");
+            assert_eq!(h.to_rgb8().as_raw(), full.to_rgb8().as_raw(), "{p}");
+        }
+    }
+}

@@ -131,7 +131,23 @@ static DEMOSAIC_CACHE: std::sync::Mutex<Option<(u64, DemosaicOut)>> = std::sync:
 pub fn raw_bytes_hash(bytes: &[u8]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut h);
+    // Identity of a file for the IN-PROCESS decode caches only (never persisted, never compared across runs). Hashing every
+    // byte of a 60-90MB RAW cost 50-150ms on every open and bought nothing a length + head + tail + 256 evenly spaced 4KB
+    // samples does not: two different RAW frames that agree on all of those (sensor noise included) do not exist in practice,
+    // and an edited-in-place file changes length or the header/tail it carries.
+    const SAMPLE: usize = 4096;
+    bytes.len().hash(&mut h);
+    if bytes.len() <= 512 * SAMPLE {
+        bytes.hash(&mut h);
+    } else {
+        bytes[..64 * SAMPLE].hash(&mut h);
+        bytes[bytes.len() - 64 * SAMPLE..].hash(&mut h);
+        let span = bytes.len() - 128 * SAMPLE;
+        for i in 0..256usize {
+            let at = 64 * SAMPLE + span / 256 * i;
+            bytes[at..at + SAMPLE].hash(&mut h);
+        }
+    }
     h.finish()
 }
 
@@ -2549,5 +2565,29 @@ mod open_speed_tests {
         let mut x = prepared_bayer("RGGB", 8, 6, None);
         x.px = PreparedPixels::Linear { pixels: vec![0.0; 8 * 6 * 3] };
         assert!(half_superpixel(&x).is_none(), "LinearRaw has no mosaic to superpixel");
+    }
+}
+
+#[cfg(test)]
+mod raw_bytes_hash_tests {
+    use super::raw_bytes_hash;
+
+    #[test]
+    fn sampled_hash_is_stable_distinguishes_edits_and_never_indexes_out_of_range() {
+        for len in [0usize, 10, 4096 * 512, 4096 * 512 + 1, 4096 * 600, 3_000_001, 31_457_280] {
+            let a: Vec<u8> = (0..len).map(|i| (i.wrapping_mul(2654435761) >> 7) as u8).collect();
+            assert_eq!(raw_bytes_hash(&a), raw_bytes_hash(&a.clone()));
+            if len > 0 {
+                let mut b = a.clone();
+                b[len - 1] ^= 1; // tail edit
+                assert_ne!(raw_bytes_hash(&a), raw_bytes_hash(&b), "len {len}");
+                let mut c = a.clone();
+                c[0] ^= 1; // header edit
+                assert_ne!(raw_bytes_hash(&a), raw_bytes_hash(&c), "len {len}");
+            }
+            let mut d = a.clone();
+            d.push(0); // different length
+            assert_ne!(raw_bytes_hash(&a), raw_bytes_hash(&d), "len {len}");
+        }
     }
 }
