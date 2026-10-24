@@ -23,8 +23,28 @@ at the final scale, which is why no Chromium test ever showed it. Fixes:
 | 200% | 1.67 / 0.44 | 0.25 / 1.04 |
 | 500% | 0.92 / 0.52 | 0.15 / 1.11 |
 
+## Items 2-10 (commits: Rust 3d5eb524, library JS e29e1f9b, html+goldens bf69ee97)
+| item | status | measured |
+|---|---|---|
+| 2 RAW instant first paint | already existed (embedded JPEG overlay `open-embedded-overlay`, stage 0 -> half -> full). Fixed what made it slow: the embedded preview + orientation each paged in the WHOLE file (rawler `RawSource::new` = mmap populate). New bounded 24MB head read (`raw_preview_head`), falls back to the old path | output pixel-identical to the whole-file path on 2 RAF + 1 RW2 (`CS_TEST_RAWS=... cargo test raw_preview_head`); cold RW2 quicklook (1920px decode+resize+encode) 220-370 ms in the real app. Old cold RAF was 975 ms; a cold RAF was NOT re-measured (all local RAFs are now page-cached) |
+| 3 byte budgets | IMG_CACHE_BUDGET fixed 512MB desktop / 256MB touch or <=4GB; RAW_EDITOR_CACHE now 256MB by bytes (newest always kept); RAW_DECODE_CACHE and DEMOSAIC_CACHE are already single-slot and the refine already `take()`s the demosaic slot, left as is | cargo unit test `trims_oldest_first...` |
+| 4 thumbnails | new `get_thumbnail_large` (512px, q85, own cache entry, only for cells wider than ~380 device px, max 3 in flight). THUMB_RENDER_VER NOT bumped on purpose: a bump regenerates the whole cache of a 50k-photo library and the 360px tier stays q75 | cold 26MP JPEG 841 ms -> 34KB; cached 35 ms |
+| 5 leaks/waste | dropped thumbnail jobs now unobserve; `pruneThumbQueue()` drops jobs of unmounted cards on every virtUpdate (counted as settled); RAW identity hash is now length + head + tail + 256 strided 4KB samples instead of every byte (the decode request carries bytes, not a path, so path+mtime+size was not usable there) | cargo unit test for the sampled hash (stable, tail/head/length edits change it, no out-of-range index) |
+| 6 16-bit + dither | stills export with RGBA16F intermediates + half-LSB TPDF dither (<=36MP single shot, always when tiled, off on memory-constrained devices); goldens regenerated | identity recipe mean diff 0.00; other recipes mean <=0.43 levels, max 1 level, halation max 67 (chart edge) / 18 (portrait). Real app 26MP export: steady state 2.8-3.5 s (8-bit 2.8-2.9 s); the FIRST export after launch is ~+2 s for float buffer allocation |
+| 7 glow parity | done as part of item 1 (kernel cap -> N passes). Tiled vs single-shot glowScale: identical on desktop (both 1); on phones single-shot uses 2 by design for memory, left alone | `test/probe_glow_scale_parity.mjs`: 2x-width render vs 1x render: old 0.074 mean level diff, new 0.029 |
+| 8 grid pool | scroll-only window shifts reuse card DOM (same entry, index, list, mode) instead of `innerHTML=''`; every other path still rebuilds | `test/probe_grid_card_reuse.mjs`: 168/182 cards kept on a 2-row scroll, forced render rebuilds all |
+| 9 Windows sideways portraits | `orient_thumbnail_jpeg` (exif crate + image rotate) applied to WIC output; the helper is cross-platform and unit tested | rotate/untouched/undecodable cases unit tested on macOS. NOT run on Windows |
+| 10 UX/a11y | roving tabindex on grid cards + `:focus-visible` ring; 44px hit areas via pseudo-elements for stars/flags/stack badge on touch; backdrop blur removed from popovers under `(hover:none),(pointer:coarse)` (their `--glass-bg` is already opaque) | probe_grid_card_reuse asserts tabindex; touch/Android visuals NOT checked on a device |
+
+## Final gates (once, at the end)
+- `npm run unit:test` PASS; `node test/export_harness.mjs` no GLSL errors, goldens regenerated; `npm run perf:test` PASS.
+- `npm run ui:test` FAIL: `TOKEN --z-raised used 1x but never defined` at the `#msk-spotlight` rule. Not from this run (not in the diff).
+- `node test/library_perf.mjs` FAIL on DOM-node budgets (n=200 8644>8000 ...). Identical on the pre-run `library-ui.js` (checked), so pre-existing.
+- `npm run lint:src` FAIL: `src/catalog/keyword-tree.part: 4301 lines > 4300` (another session's file).
+- probe_preview_px, probe_allfx_sharp, library_scroll_anchor PASS.
+
 ## BLOCKERS
-- Item 1/7: large-image exports (bloom sigma > ~16px, i.e. sources wider than ~3100px) now get the true calibrated
+- Item 1/7 (taste call): large-image exports (bloom sigma > ~16px, i.e. sources wider than ~3100px) now get the true calibrated
   Gaussian bloom instead of one truncated at ~1.5 sigma, so their bloom halo is visibly WIDER than before. That is the
   calibrated look (calibration was done at 2400px where nothing truncates) and matches the preview, but it changes existing
   exports. Revert switch: set `BLUR_MAX_SIG` / `HBLUR_MAX_SIG` to 1e9 in the renderer (restores old truncation).
@@ -35,3 +55,9 @@ at the final scale, which is why no Chromium test ever showed it. Fixes:
 
 ## Not verified
 - Windows (WebView2 is Chromium: crisp view disabled there by design, unaffected).
+- Item 4: q85 on the 360px base tier needs a THUMB_RENDER_VER bump, i.e. regenerating every cached thumbnail of a 50k library. Not done; say if you want it.
+- Item 9: needs one run on a Windows machine with a portrait JPEG.
+- Item 10: touch hit areas and Android popovers need a look on a real device.
+- Pre-existing red gates listed above (ui:test token, library_perf DOM budget, lint:src keyword-tree) are not mine and were left alone.
+
+Next item: none (all 10 done or logged).
