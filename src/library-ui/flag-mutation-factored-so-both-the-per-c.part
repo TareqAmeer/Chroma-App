@@ -13,7 +13,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
@@ -47,7 +47,7 @@
     const prev = cur.color_label || '';
     if (prev === colorLabel) return true;
     const updated = { ...cur, color_label: colorLabel };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_color_label', { path, colorLabel }).catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     if (!saved) return false;
@@ -68,7 +68,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     const updated = { ...cur, favorite };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);

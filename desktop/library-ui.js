@@ -1973,6 +1973,12 @@
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
+    #lib-ql-badges{display:flex;gap:6px;align-items:center;min-height:22px}
+    #lib-ql-badges .lib-ql-b{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#e8e8e8;font-size:11px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
+    #lib-ql-badges .lib-ql-b.pick{border-color:var(--green-pine)}
+    #lib-ql-badges .lib-ql-b.rej{border-color:var(--red-oxide)}
+    #lib-ql-badges .lib-ql-b.edit{border-color:var(--acc2)}
+    #lib-ql-badges .lib-ql-b .on{color:#f5c518}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     #lib-ql-peak{position:absolute;top:14px;right:16px;height:28px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:var(--r);background:transparent;color:#cfcfcf;font-size:12px;cursor:pointer}
     #lib-ql-peak.on{color:#fff;border-color:#ff3b1f;background:rgba(255,59,31,.25)}
@@ -4765,7 +4771,7 @@
     libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
@@ -7008,7 +7014,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
@@ -7042,7 +7048,7 @@
     const prev = cur.color_label || '';
     if (prev === colorLabel) return true;
     const updated = { ...cur, color_label: colorLabel };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_color_label', { path, colorLabel }).catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     if (!saved) return false;
@@ -7063,7 +7069,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     const updated = { ...cur, favorite };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
@@ -11043,12 +11049,48 @@
     };
     pump();
   }
+  // Flag / rating / colour badges, styled like the grid's flag chips (same FLAG_SVG_* glyphs).
+  // Read-only; qlBadgesRefresh is called from every sidecar setter so P/X/U/0-5 update live.
+  function qlBadgesHtml(path) {
+    const sc = state.sidecars.get(path) || {};
+    let h = '';
+    if (sc.label === 'Green') h += `<span class="lib-ql-b pick">${FLAG_SVG_GREEN}Pick</span>`;
+    else if (sc.label === 'Red') h += `<span class="lib-ql-b rej">${FLAG_SVG_RED}Reject</span>`;
+    else h += '<span class="lib-ql-b">Unflagged</span>';
+    if (sc.favorite) h += `<span class="lib-ql-b">${HEART_SVG}Fav</span>`;
+    if (STARS_ENABLED && sc.rating) h += `<span class="lib-ql-b"><span class="on">${'★'.repeat(sc.rating)}</span></span>`;
+    if (COLOR_LABELS_ENABLED && sc.color_label) h += `<span class="lib-ql-b">${colorLabelHtml(sc.color_label)}${sc.color_label}</span>`;
+    if (sc.edited) h += '<span class="lib-ql-b edit">Edited</span>';
+    return h;
+  }
+  function qlBadgesRefresh(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const el = document.getElementById('lib-ql-badges');
+    if (el) el.innerHTML = qlBadgesHtml(path);
+  }
+  // Edited look: the only edited render that exists is the grid card's session canvas thumbnail
+  // (refreshCardThumbFromCanvas, 360px long edge, set after an Editor edit and invalidated on the
+  // next edit). Reuse it instantly when present; never render or decode anything here.
+  function qlEditedThumbUrl(path) {
+    const sc = state.sidecars.get(path);
+    if (!sc || !sc.edited) return '';
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const im = card && card.querySelector('.lib-thumb-wrap img');
+    return im && im.dataset.canvasThumb && im.src && im.src.startsWith('blob:') ? im.src : '';
+  }
+  function qlShowOriginal(on) {
+    const img = document.getElementById('lib-ql-img');
+    if (!img || !quicklook.editedUrl || !quicklook.url) return;
+    img.src = on ? quicklook.url : quicklook.editedUrl;
+    img.dataset.previewSource = on ? 'original' : 'edited-thumb';
+  }
   function quicklookEl() {
     let el = document.getElementById('lib-quicklook');
     if (el) return el;
     el = document.createElement('div');
     el.id = 'lib-quicklook';
     el.innerHTML = `<img id="lib-ql-img" alt="">
+      <div id="lib-ql-badges"></div>
       <div id="lib-ql-caption"></div>
       <button id="lib-ql-peak" type="button" aria-pressed="false" title="Focus peaking (E) — red marks the sharpest edges">Focus peaking</button>`;
     document.body.appendChild(el);
@@ -11098,17 +11140,27 @@
     img.dataset.previewSource = '';
     caption.title = '';
     img.classList.remove('loaded');
+    document.getElementById('lib-ql-badges').innerHTML = qlBadgesHtml(path);
+    quicklook.editedUrl = qlEditedThumbUrl(path);
+    if (quicklook.editedUrl) { // instant edited look from the cached grid thumb; full original loads behind it
+      img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
+    }
     try {
       const buf = await quicklookPreview(path, developed);
       const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      img.src = quicklook.url;
-      img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      if (!quicklook.editedUrl) {
+        img.src = quicklook.url;
+        img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      }
       img.classList.add('loaded');
       const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
-      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
+      const edSc = state.sidecars.get(path);
+      if (quicklook.editedUrl) caption.textContent = baseName(path) + ' · edited look (thumbnail) — hold \\ for original';
+      else if (edSc && edSc.edited && !wantDeveloped) caption.textContent = baseName(path) + ' · original shown (edit not cached — Enter to open in Editor)';
+      else caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
       queueQuickLookNeighbors(path);
     } catch (e) {
@@ -11120,11 +11172,13 @@
     quicklook.prefetchQueue = [];
     quicklook.active = false;
     quicklook.path = '';
+    quicklook.editedUrl = '';
     const el = document.getElementById('lib-quicklook');
     if (el) el.classList.remove('on');
     if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }
   }
 
+  document.addEventListener('keyup', (e) => { if (e.key === '\\' && quicklook.active) qlShowOriginal(false); });
   function isNativeActivationTarget(target) {
     const el = target && target.nodeType === 1 ? target : (target && target.parentElement);
     return !!(el && el.closest && el.closest(
@@ -11197,6 +11251,7 @@
         const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
         showQuickLook(shownQl[next].path);
       };
+      if (e.key === '\\') { e.preventDefault(); qlShowOriginal(true); return; }
       if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); gotoQl(-1); return; }
