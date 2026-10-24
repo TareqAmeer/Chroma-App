@@ -26,6 +26,15 @@ function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduc
 function fxPreviewGlowScale(){return _fxPreviewInteracting?Math.max(2,fxGlowScale()):fxGlowScale();}
 // Tile aggressively on phones: the single-shot path needs ~4 full-res GPU buffers, which is
 // what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
+// Still-export quality: RGBA16F intermediates (the LUT/adjust/glow stages no longer re-quantise to 8 bits between passes) plus
+// TPDF dither at the final 8-bit write, which breaks up banding in smooth gradients (skies, bokeh) that grain alone leaves on
+// grain-free recipes. Off on memory-constrained devices (float targets double texture memory) and for single-shot frames over
+// 36MP (tiled exports keep their tiles small, so they always get it). The EXT_color_buffer_float fallback to 8-bit is automatic.
+function fxStillQualityOpts(w,h,tiled){
+  if(isMemoryConstrained())return{};
+  if(!tiled&&w*h>36e6)return{};
+  return{hdrIntermediate:true,dither:2}; // 2 = half-LSB still dither (see the shader's useDither)
+}
 function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 // Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
 function fxSetCapturedExportDepth(renderer,P){

@@ -2768,6 +2768,11 @@ body.sk2 #lib-overlay .sk2-manage-btn{display:flex;align-items:center;justify-co
 body.sk2 #lib-overlay .sk2-manage-btn:hover{color:var(--k-color-ink)}
 body.sk2 #lib-overlay .sk2-manage-btn::after{content:'+'}
 body.sk2 #lib-overlay .sk2-manage-open .sk2-manage-btn::after{content:'–'}
+/* Touch / Android WebView: a 20px backdrop blur behind a popover is a per-frame GPU cost for no visible gain (--glass-bg is
+   already an opaque colour). Popovers keep a SOLID background; the blur is dropped. */
+@media (hover:none),(pointer:coarse){
+  .msk-more-menu,#fx-toast,[style*="var(--glass-bg"][style*="backdrop-filter"]{background:var(--glass-bg,var(--k-color-bg))!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+}
 /* 13 · Selection bar: big count, three words, More. */
 body.sk2 #lib-batchbar{background:var(--k-color-bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:0 12px 32px rgba(0,0,0,.22)!important;gap:18px!important;padding:6px 18px 6px 14px!important}
 body.sk2 .sk2-bb-n{font-size:30px;letter-spacing:-.04em;line-height:1;color:var(--k-color-ink)}
@@ -7343,7 +7348,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025C';
+const BUILD='1.1025D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9744,7 +9749,9 @@ void main(){
   // (useDither=0) so every still golden is untouched — see the JS call site for why.
   if(useDither>0.5){
     float d=hash12(gl_FragCoord.xy+ditherSeed)+hash12(gl_FragCoord.xy*1.37+ditherSeed+7.0)-1.0;
-    res+=d/255.0;
+    // useDither 2 = still export: HALF-LSB amplitude, so a value that is already an exact 8-bit level (identity / untouched
+    // pixels) always rounds back to itself while smooth gradients still get their band edges broken up. 1 = video, full +/-1 LSB.
+    res+=d*(useDither>1.5?0.5:1.0)/255.0;
   }
   // GAMUT WARNING — preview-only diagnostic overlay (item 8), same "never in export" contract as
   // the mask Selection view: only preview render() call sites ever pass gamutWarn=1 (see the JS
@@ -10660,7 +10667,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
     // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
     // so it changes frame to frame rather than fixing a static dither pattern to the screen.
-    gl.uniform1f(ul('useDither'),(opts&&opts.dither)?1:0);
+    gl.uniform1f(ul('useDither'),(opts&&opts.dither===2)?2:(opts&&opts.dither)?1:0);
     gl.uniform1f(ul('ditherSeed'),seedForFrame);
     const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
     gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);
@@ -27472,6 +27479,15 @@ function fxGlowScale(){return isMemoryConstrained()?2:1;}           // 2× reduc
 function fxPreviewGlowScale(){return _fxPreviewInteracting?Math.max(2,fxGlowScale()):fxGlowScale();}
 // Tile aggressively on phones: the single-shot path needs ~4 full-res GPU buffers, which is
 // what was killing the tab on 24–48MP iPhone photos. Tiles keep peak memory small & constant.
+// Still-export quality: RGBA16F intermediates (the LUT/adjust/glow stages no longer re-quantise to 8 bits between passes) plus
+// TPDF dither at the final 8-bit write, which breaks up banding in smooth gradients (skies, bokeh) that grain alone leaves on
+// grain-free recipes. Off on memory-constrained devices (float targets double texture memory) and for single-shot frames over
+// 36MP (tiled exports keep their tiles small, so they always get it). The EXT_color_buffer_float fallback to 8-bit is automatic.
+function fxStillQualityOpts(w,h,tiled){
+  if(isMemoryConstrained())return{};
+  if(!tiled&&w*h>36e6)return{};
+  return{hdrIntermediate:true,dither:2}; // 2 = half-LSB still dither (see the shader's useDither)
+}
 function shouldTile(w,h){return isMemoryConstrained()?w*h>16e6:w*h>80e6;}
 // Produce the processed FULL-RES image as a canvas (no borders). Picks tiled vs single-shot.
 function fxSetCapturedExportDepth(renderer,P){
@@ -27523,7 +27539,7 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     renderer.setImage(src);
     fxSetCapturedExportDepth(renderer,P);
-    renderer.render(P,iw,ih,{glowScale:fxGlowScale()});
+    renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});
     const{px,w,h}=renderer.getPixels();
     const c=document.createElement('canvas');c.width=w;c.height=h;
     // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
@@ -27668,7 +27684,7 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     renderer.setImage(tileSrc);
     // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
     // row (image row ey-1) is (ih-ey)/ih.
-    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
+    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,...fxStillQualityOpts(iw,ih,true),
       uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
     if(centerReadback)octx.putImageData(fxReadExportTile(renderer,tx-sx,ty-sy,tw,th),tx,ty);
     else{

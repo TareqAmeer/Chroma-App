@@ -176,7 +176,9 @@ void main(){
   // (useDither=0) so every still golden is untouched — see the JS call site for why.
   if(useDither>0.5){
     float d=hash12(gl_FragCoord.xy+ditherSeed)+hash12(gl_FragCoord.xy*1.37+ditherSeed+7.0)-1.0;
-    res+=d/255.0;
+    // useDither 2 = still export: HALF-LSB amplitude, so a value that is already an exact 8-bit level (identity / untouched
+    // pixels) always rounds back to itself while smooth gradients still get their band edges broken up. 1 = video, full +/-1 LSB.
+    res+=d*(useDither>1.5?0.5:1.0)/255.0;
   }
   // GAMUT WARNING — preview-only diagnostic overlay (item 8), same "never in export" contract as
   // the mask Selection view: only preview render() call sites ever pass gamutWarn=1 (see the JS
@@ -1092,7 +1094,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // low-bit-depth (4:2:0 video) source. Off by default (useDither=0 → the shader adds
     // nothing) so every still golden is untouched; keyed on the SAME per-frame seed as grain
     // so it changes frame to frame rather than fixing a static dither pattern to the screen.
-    gl.uniform1f(ul('useDither'),(opts&&opts.dither)?1:0);
+    gl.uniform1f(ul('useDither'),(opts&&opts.dither===2)?2:(opts&&opts.dither)?1:0);
     gl.uniform1f(ul('ditherSeed'),seedForFrame);
     const uvOff=(opts&&opts.uvOff)||[0,0],uvScale=(opts&&opts.uvScale)||[1,1];
     gl.uniform2f(ul('uvOff'),uvOff[0],uvOff[1]);gl.uniform2f(ul('uvScale'),uvScale[0],uvScale[1]);

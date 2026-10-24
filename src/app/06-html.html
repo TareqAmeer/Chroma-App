@@ -2725,6 +2725,11 @@ body.sk2 #lib-overlay .sk2-manage-btn{display:flex;align-items:center;justify-co
 body.sk2 #lib-overlay .sk2-manage-btn:hover{color:var(--k-color-ink)}
 body.sk2 #lib-overlay .sk2-manage-btn::after{content:'+'}
 body.sk2 #lib-overlay .sk2-manage-open .sk2-manage-btn::after{content:'–'}
+/* Touch / Android WebView: a 20px backdrop blur behind a popover is a per-frame GPU cost for no visible gain (--glass-bg is
+   already an opaque colour). Popovers keep a SOLID background; the blur is dropped. */
+@media (hover:none),(pointer:coarse){
+  .msk-more-menu,#fx-toast,[style*="var(--glass-bg"][style*="backdrop-filter"]{background:var(--glass-bg,var(--k-color-bg))!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+}
 /* 13 · Selection bar: big count, three words, More. */
 body.sk2 #lib-batchbar{background:var(--k-color-bg)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border:1px solid var(--bdr)!important;border-radius:0!important;box-shadow:0 12px 32px rgba(0,0,0,.22)!important;gap:18px!important;padding:6px 18px 6px 14px!important}
 body.sk2 .sk2-bb-n{font-size:30px;letter-spacing:-.04em;line-height:1;color:var(--k-color-ink)}

@@ -41,7 +41,7 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     renderer.setImage(src);
     fxSetCapturedExportDepth(renderer,P);
-    renderer.render(P,iw,ih,{glowScale:fxGlowScale()});
+    renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});
     const{px,w,h}=renderer.getPixels();
     const c=document.createElement('canvas');c.width=w;c.height=h;
     // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
@@ -186,7 +186,7 @@ async function renderTiled(P,src,iw,ih,onTile,renderer=FX){
     renderer.setImage(tileSrc);
     // uv origin is bottom-left (texture uploaded flipped), so global v of this tile's bottom
     // row (image row ey-1) is (ih-ey)/ih.
-    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,
+    renderer.render(P,rw,rh,{glowScale:1,scOverride:sc,seed,...fxStillQualityOpts(iw,ih,true),
       uvOff:[sx/iw,(ih-ey)/ih],uvScale:[rw/iw,rh/ih]});
     if(centerReadback)octx.putImageData(fxReadExportTile(renderer,tx-sx,ty-sy,tw,th),tx,ty);
     else{
