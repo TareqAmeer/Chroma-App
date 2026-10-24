@@ -128,6 +128,12 @@ function renderPreview(){
     dpr=Math.max(dpr,halfSourceDpr);
   }
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
+  // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped
+  // buffer was CSS-upscaled (4x at 200%). Raise the density in power-of-2 tiers of the zoom (few re-renders), bounded by the source and 8192px.
+  if(_previewComposition&&!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&cw>0&&ch>0){
+    const t=Math.min(4,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
+    dpr=Math.max(dpr,Math.min((window.devicePixelRatio||1)*t,Math.min(iw/cw,ih/ch),8192/Math.max(cw,ch)));
+  }
   // Phones: a mid-drag draft only needs ~1.5x (2.25 vs 9 Mpx at dpr 3 on a 900px preview); the settle frame
   // (_fxPreviewInteracting false) restores the full dpr above. Desktop / non-constrained devices untouched.
   if(_fxPreviewInteracting&&!deskx&&!_curIsVideoDraft()&&isMemoryConstrained())dpr=Math.min(dpr,1.5);

@@ -40,11 +40,17 @@ try {
     fxZoom = _fxPctToZoom(100); _applyZoom(false); renderPreview(); await sleep(1500);
     out.zoom100 = dev(); out.zoom100Size = [FX.cv.width, FX.cv.height, Math.round(FX.cv.getBoundingClientRect().width)];
     out.zoomInfo = document.getElementById('fx-info').textContent;
+    // framed/matted composite zoomed 200%, Full res off: whole-frame path, density vs displayed device px
+    _resetZoom(false); enableAll(); await sleep(2500);
+    fxZoom = _fxPctToZoom(200); _applyZoom(false); renderPreview(); await sleep(2500);
+    { const bd = document.getElementById('fx-canvas-bd'); const on = bd && bd.style.display !== 'none';
+      const el = on ? bd : FX.cv; const b = el.getBoundingClientRect(); out.framed200 = +(el.width / (b.width * devicePixelRatio)).toFixed(3); out.framedBd = on; out.framedInfo = document.getElementById('fx-info').textContent; }
     return out;
   });
   console.log(JSON.stringify(r));
   const assert = (await import('node:assert/strict')).default;
   assert.ok(r.fit >= 1, `Fit backing must be >=1 px per device px (got ${r.fit})`);
   assert.ok(r.zoom100 >= 0.99, `zoomed 100% (Full res OFF) must be native detail, got ${r.zoom100} backing px per device px = upscaled/soft`);
+  assert.ok(r.framed200 >= 0.49, `framed/matted preview at 200% (Full res OFF) must be source-native (0.5 backing px per device px at 200%; was 0.25 = 4x upscaled), got ${r.framed200}`);
   ok = true; console.log('PASS preview px density');
 } finally { await browser.close(); server.close(); if (!ok) process.exitCode = 1; }
