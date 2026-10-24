@@ -3495,6 +3495,7 @@ fn main() {
             smart_albums::smart_album_save,
             smart_albums::smart_album_delete,
             library::get_quicklook_preview,
+            library::get_quicklook_preview_hq,
             library::get_edit_preview,
             library::put_edit_preview,
             library::get_meta,

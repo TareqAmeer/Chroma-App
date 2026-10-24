@@ -1,4 +1,3 @@
-
 // ── Edited-look preview store (Library Quick Look) ─────────────────────────────────────────────
 // The Library renders each edited photo's look in a hidden render-only app instance (JS side:
 // library-ui.js "edited preview" queue) and parks the resulting ~1600px JPEG here, keyed by a

@@ -12,7 +12,7 @@
   "export-version-history.part",
   "perceptual-hash-duplicate-detection-dhas.part",
   "albums-user-made-collections-that-link-t.part",
-  "edited-preview-store.part"
+  "edited-look-preview-store-library-quick.part"
  ],
  "info": [
   {
@@ -23,47 +23,52 @@
   {
    "file": "stable-cache-hashing.part",
    "firstLine": 268,
-   "lines": 745
+   "lines": 771
   },
   {
    "file": "hdr-companion-cache-stem-hdrext.part",
-   "firstLine": 1013,
-   "lines": 475
+   "firstLine": 1039,
+   "lines": 492
   },
   {
    "file": "photo-metadata-camera-lens-date-iso-for.part",
-   "firstLine": 1488,
+   "firstLine": 1531,
    "lines": 206
   },
   {
    "file": "xmp-sidecar-rating-label-edited-flag-edi.part",
-   "firstLine": 1694,
+   "firstLine": 1737,
    "lines": 85
   },
   {
    "file": "keywords-hierarchical-lightroom-compatib.part",
-   "firstLine": 1779,
-   "lines": 974
+   "firstLine": 1822,
+   "lines": 993
   },
   {
    "file": "cross-folder-smart-collections-edited-fa.part",
-   "firstLine": 2753,
+   "firstLine": 2815,
    "lines": 127
   },
   {
    "file": "export-version-history.part",
-   "firstLine": 2880,
+   "firstLine": 2942,
    "lines": 199
   },
   {
    "file": "perceptual-hash-duplicate-detection-dhas.part",
-   "firstLine": 3079,
+   "firstLine": 3141,
    "lines": 781
   },
   {
    "file": "albums-user-made-collections-that-link-t.part",
-   "firstLine": 3860,
-   "lines": 1153
+   "firstLine": 3922,
+   "lines": 1176
+  },
+  {
+   "file": "edited-look-preview-store-library-quick.part",
+   "firstLine": 5098,
+   "lines": 68
   }
  ]
 }

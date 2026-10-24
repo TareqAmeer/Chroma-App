@@ -576,6 +576,10 @@
         (window.__libtestEditPreviews ||= new Map()).set(arguments[2] && arguments[2].headers && arguments[2].headers['x-key'], A);
         return Promise.resolve(null);
       }
+      case 'get_quicklook_preview_hq': {
+        (window.__libtestQuicklookHqCalls ||= []).push(A.path);
+        return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);
+      }
       case 'get_quicklook_preview': {
         (window.__libtestQuicklookCalls ||= []).push(A.path);
         return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);
@@ -11245,6 +11249,29 @@
     qlPeakSync();
     toast(qlPeakOn ? 'Focus peaking on — red marks the sharpest edges' : 'Focus peaking off');
   }
+  // Instant-then-sharpen: the 1600px tier paints at once; only after the user dwells on one photo
+  // (no navigation for QL_SHARPEN_DWELL_MS) is the larger, higher-quality tier decoded and swapped in.
+  // Rapid navigation / key-repeat never reaches it, so culling speed is unchanged.
+  const QL_SHARPEN_DWELL_MS = 300;
+  let qlSharpenTimer = 0;
+  function qlScheduleSharpen(path, generation) {
+    clearTimeout(qlSharpenTimer);
+    qlSharpenTimer = setTimeout(async () => {
+      const stale = () => !quicklook.active || quicklook.path !== path || generation !== quicklook.generation;
+      if (stale() || quicklook.editedUrl) return;
+      try {
+        const bytes = await invoke('get_quicklook_preview_hq', { path });
+        if (stale() || quicklook.editedUrl) return;
+        const img = document.getElementById('lib-ql-img');
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+        const old = quicklook.url;
+        quicklook.url = url;
+        img.src = url;
+        img.dataset.previewSource = (img.dataset.previewSource || 'image') + '+sharp';
+        if (old) setTimeout(() => URL.revokeObjectURL(old), 400);
+      } catch (_) { /* keep the instant tier */ }
+    }, QL_SHARPEN_DWELL_MS);
+  }
   async function showQuickLook(path, developed = false) {
     if (!path) return;
     const isRawPath = RAW_EXT_RE.test(path);
@@ -11286,6 +11313,7 @@
       quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
       qlCaptionSync(path);
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
+      if (!wantDeveloped) qlScheduleSharpen(path, generation);
     } catch (e) {
       if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
     }

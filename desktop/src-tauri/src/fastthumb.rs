@@ -43,6 +43,11 @@ extern "C" {
 /// Decodes `path` to a JPEG thumbnail whose long edge is at most `long_edge`, using ImageIO.
 /// Returns None when ImageIO cannot handle the file, so the caller falls back.
 pub fn thumbnail_jpeg(path: &str, long_edge: u32) -> Option<Vec<u8>> {
+    thumbnail_jpeg_q(path, long_edge, 0.82)
+}
+
+/// Same as `thumbnail_jpeg` with an explicit JPEG quality (0..1) — the idle "sharpen" tier of Quick Look.
+pub fn thumbnail_jpeg_q(path: &str, long_edge: u32, quality: f64) -> Option<Vec<u8>> {
     // Own autorelease pool: this runs on rayon/worker threads that never drain one, and
     // NSBitmapImageRep hands back autoreleased data plus raster buffers. Without it every call
     // leaked the decoded bitmap (12 GB "CG raster data" in the pets worker, swap-thrashing an 8 GB Mac).
@@ -87,7 +92,7 @@ pub fn thumbnail_jpeg(path: &str, long_edge: u32) -> Option<Vec<u8>> {
             return None;
         }
         let k_q = NSString::from_str("NSImageCompressionFactor");
-        let v_q = NSNumber::new_f64(0.82);
+        let v_q = NSNumber::new_f64(quality);
         let qk: [&NSString; 1] = [&k_q];
         let qv: [&AnyObject; 1] = [&v_q];
         let props = NSDictionary::from_slices(&qk, &qv);
