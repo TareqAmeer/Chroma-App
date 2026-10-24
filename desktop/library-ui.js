@@ -13,10 +13,16 @@
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
   let ltAlbums = [];
   let ltSmartAlbums = [];
-  if (!window.__TAURI__ && !LIBTEST) return;
+  if ((!window.__TAURI__ && !LIBTEST) || window.__csRender) return;
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
-  const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
+  const invoke = (cmd, ...rest) => {
+    const p = invokeBase(cmd, ...rest);
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
+    return p;
+  };
   // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
   // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
   const QUICKLOOK_CACHE_MAX = 5;
@@ -554,9 +560,17 @@
         });
         return Promise.resolve(rows);
       }
+      case 'get_edit_preview': {
+        const hit = (window.__libtestEditPreviews ||= new Map()).get(A.key);
+        return hit ? Promise.resolve(hit) : Promise.reject(new Error('no edit preview'));
+      }
+      case 'put_edit_preview': {
+        (window.__libtestEditPreviews ||= new Map()).set(arguments[2] && arguments[2].headers && arguments[2].headers['x-key'], A);
+        return Promise.resolve(null);
+      }
       case 'get_quicklook_preview': {
         (window.__libtestQuicklookCalls ||= []).push(A.path);
-        return Promise.resolve(window.__libtestQuicklookBytes || png);
+        return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);
       }
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a
@@ -1973,6 +1987,12 @@
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
+    #lib-ql-badges{display:flex;gap:6px;align-items:center;min-height:22px}
+    #lib-ql-badges .lib-ql-b{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#e8e8e8;font-size:11px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
+    #lib-ql-badges .lib-ql-b.pick{border-color:var(--green-pine)}
+    #lib-ql-badges .lib-ql-b.rej{border-color:var(--red-oxide)}
+    #lib-ql-badges .lib-ql-b.edit{border-color:var(--acc2)}
+    #lib-ql-badges .lib-ql-b .on{color:#f5c518}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     #lib-ql-peak{position:absolute;top:14px;right:16px;height:28px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:var(--r);background:transparent;color:#cfcfcf;font-size:12px;cursor:pointer}
     #lib-ql-peak.on{color:#fff;border-color:#ff3b1f;background:rgba(255,59,31,.25)}
@@ -4765,7 +4785,7 @@
     libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
@@ -7008,7 +7028,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
@@ -7042,7 +7062,7 @@
     const prev = cur.color_label || '';
     if (prev === colorLabel) return true;
     const updated = { ...cur, color_label: colorLabel };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_color_label', { path, colorLabel }).catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
     if (!saved) return false;
@@ -7063,7 +7083,7 @@
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     const updated = { ...cur, favorite };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
       .catch((e) => sidecarWriteFailed(path, cur, e));
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
@@ -8040,6 +8060,7 @@
       sc = await getSidecar(item.path);
     }
     if (sc.edited) markCardEdited(item.path);
+    if (item.status === 'applied') epEnqueue(item.path);
     else overlay.querySelector(`.lib-card[data-path="${CSS.escape(item.path)}"] .lib-edited-badge`)?.remove();
     if (item.path === state.openedPath && recipeBatchEditorBaseline.get(item.path) === snapshotToB64(getUISnapshot())) {
       applyUISnapshot(sc.recipe ? snapshotFromB64(sc.recipe) : window.chromasmithMergeSelectiveRecipe(null, {}, [])); fxUpdate();
@@ -11022,7 +11043,7 @@
   // ── Quick Look (Space) ──────────────────────────────────────────────────────────────────
   // RAW review uses our native development pipeline and bounded fit-size proxies.
   // Cold files show a loading state; camera JPEGs never substitute for review pixels.
-  const quicklook = { active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
+  const quicklook = { editedBlob: '', editedKind: '', rendering: false, holdOrig: false, baseNote: '', active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
   function queueQuickLookNeighbors(path) {
     if (!quicklook.active || quicklook.path !== path) return;
     const nav = libraryNavigationOrder(), shown = nav.entries;
@@ -11031,6 +11052,7 @@
     const generation = quicklook.generation;
     quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
       .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    quicklook.prefetchQueue.forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
     const pump = () => {
       if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
       const next = quicklook.prefetchQueue.shift();
@@ -11043,12 +11065,91 @@
     };
     pump();
   }
+  // Flag / rating / colour badges, styled like the grid's flag chips (same FLAG_SVG_* glyphs).
+  // Read-only; qlBadgesRefresh is called from every sidecar setter so P/X/U/0-5 update live.
+  function qlBadgesHtml(path) {
+    const sc = state.sidecars.get(path) || {};
+    let h = '';
+    if (sc.label === 'Green') h += `<span class="lib-ql-b pick">${FLAG_SVG_GREEN}Pick</span>`;
+    else if (sc.label === 'Red') h += `<span class="lib-ql-b rej">${FLAG_SVG_RED}Reject</span>`;
+    else h += '<span class="lib-ql-b">Unflagged</span>';
+    if (sc.favorite) h += `<span class="lib-ql-b">${HEART_SVG}Fav</span>`;
+    if (STARS_ENABLED && sc.rating) h += `<span class="lib-ql-b"><span class="on">${'★'.repeat(sc.rating)}</span></span>`;
+    if (COLOR_LABELS_ENABLED && sc.color_label) h += `<span class="lib-ql-b">${colorLabelHtml(sc.color_label)}${sc.color_label}</span>`;
+    if (sc.edited) h += '<span class="lib-ql-b edit">Edited</span>';
+    if (quicklook.rendering && quicklook.path === path) h += '<span class="lib-ql-b edit" id="lib-ql-rendering">Rendering edit…</span>';
+    return h;
+  }
+  function qlBadgesRefresh(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const el = document.getElementById('lib-ql-badges');
+    if (el) el.innerHTML = qlBadgesHtml(path);
+  }
+  // Edited look: the only edited render that exists is the grid card's session canvas thumbnail
+  // (refreshCardThumbFromCanvas, 360px long edge, set after an Editor edit and invalidated on the
+  // next edit). Reuse it instantly when present; never render or decode anything here.
+  function qlEditedThumbUrl(path) {
+    const sc = state.sidecars.get(path);
+    if (!sc || !sc.edited) return '';
+    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    const im = card && card.querySelector('.lib-thumb-wrap img');
+    return im && im.dataset.canvasThumb && im.src && im.src.startsWith('blob:') ? im.src : '';
+  }
+  function qlRevokeEdited() {
+    if (quicklook.editedBlob) { URL.revokeObjectURL(quicklook.editedBlob); quicklook.editedBlob = ''; }
+    quicklook.editedKind = '';
+  }
+  function qlCaptionSync(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const caption = document.getElementById('lib-ql-caption');
+    if (!caption) return;
+    const sc = state.sidecars.get(path) || {};
+    const name = baseName(path);
+    if (quicklook.editedKind === 'cache') caption.textContent = name + ' · edited look — hold \\ for original';
+    else if (quicklook.rendering) caption.textContent = name + ' · original shown — rendering edit…';
+    else if (quicklook.editedKind === 'thumb') caption.textContent = name + ' · edited look (thumbnail) — hold \\ for original';
+    else if (sc.edited && !quicklook.baseNote.includes('RAW development')) caption.textContent = name + ' · original shown (edit not rendered yet)';
+    else caption.textContent = name + quicklook.baseNote;
+  }
+  // Pull the persisted edited render for the previewed photo; on a miss, queue a render at the
+  // front of the edit-preview queue (see edited-look-previews-for-quick-look-hidden.part) and
+  // keep showing the original until it lands.
+  async function qlEditedRefresh(path) {
+    const generation = quicklook.generation;
+    const r = await epFetch(path).catch(() => null);
+    if (!quicklook.active || quicklook.path !== path || quicklook.generation !== generation || !r) return;
+    if (r.bytes) {
+      qlRevokeEdited();
+      quicklook.editedBlob = URL.createObjectURL(new Blob([r.bytes], { type: 'image/jpeg' }));
+      quicklook.editedUrl = quicklook.editedBlob; quicklook.editedKind = 'cache';
+      quicklook.rendering = false;
+      const img = document.getElementById('lib-ql-img');
+      if (img && !quicklook.holdOrig) { img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-cache'; img.classList.add('loaded'); }
+    } else {
+      quicklook.rendering = true;
+      epEnqueue(path, { priority: true });
+    }
+    qlBadgesRefresh(path); qlCaptionSync(path);
+  }
+  function qlRenderingDone(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    quicklook.rendering = false;
+    qlBadgesRefresh(path); qlCaptionSync(path);
+  }
+  function qlShowOriginal(on) {
+    const img = document.getElementById('lib-ql-img');
+    quicklook.holdOrig = !!on;
+    if (!img || !quicklook.editedUrl || !quicklook.url) return;
+    img.src = on ? quicklook.url : quicklook.editedUrl;
+    img.dataset.previewSource = on ? 'original' : (quicklook.editedKind === 'cache' ? 'edited-cache' : 'edited-thumb');
+  }
   function quicklookEl() {
     let el = document.getElementById('lib-quicklook');
     if (el) return el;
     el = document.createElement('div');
     el.id = 'lib-quicklook';
     el.innerHTML = `<img id="lib-ql-img" alt="">
+      <div id="lib-ql-badges"></div>
       <div id="lib-ql-caption"></div>
       <button id="lib-ql-peak" type="button" aria-pressed="false" title="Focus peaking (E) — red marks the sharpest edges">Focus peaking</button>`;
     document.body.appendChild(el);
@@ -11098,17 +11199,28 @@
     img.dataset.previewSource = '';
     caption.title = '';
     img.classList.remove('loaded');
+    document.getElementById('lib-ql-badges').innerHTML = qlBadgesHtml(path);
+    qlRevokeEdited(); quicklook.rendering = false; quicklook.holdOrig = false; quicklook.baseNote = '';
+    quicklook.editedUrl = qlEditedThumbUrl(path);
+    if (quicklook.editedUrl) quicklook.editedKind = 'thumb';
+    if (!wantDeveloped && (state.sidecars.get(path) || { edited: true }).edited) qlEditedRefresh(path);
+    if (quicklook.editedUrl) { // instant edited look from the cached grid thumb; full original loads behind it
+      img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
+    }
     try {
       const buf = await quicklookPreview(path, developed);
       const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      img.src = quicklook.url;
-      img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      if (!quicklook.editedUrl) {
+        img.src = quicklook.url;
+        img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      }
       img.classList.add('loaded');
       const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
-      caption.textContent = baseName(path) + (creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '');
+      quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
+      qlCaptionSync(path);
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
       queueQuickLookNeighbors(path);
     } catch (e) {
@@ -11120,11 +11232,13 @@
     quicklook.prefetchQueue = [];
     quicklook.active = false;
     quicklook.path = '';
+    quicklook.editedUrl = ''; quicklook.rendering = false; quicklook.holdOrig = false; qlRevokeEdited();
     const el = document.getElementById('lib-quicklook');
     if (el) el.classList.remove('on');
     if (quicklook.url) { URL.revokeObjectURL(quicklook.url); quicklook.url = ''; }
   }
 
+  document.addEventListener('keyup', (e) => { if (e.key === '\\' && quicklook.active) qlShowOriginal(false); });
   function isNativeActivationTarget(target) {
     const el = target && target.nodeType === 1 ? target : (target && target.parentElement);
     return !!(el && el.closest && el.closest(
@@ -11197,6 +11311,7 @@
         const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
         showQuickLook(shownQl[next].path);
       };
+      if (e.key === '\\') { e.preventDefault(); qlShowOriginal(true); return; }
       if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); gotoQl(-1); return; }
@@ -11435,6 +11550,134 @@
     if (!STARS_ENABLED) { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = 'none'; }
     else { const row = _rf.closest('label') || _rf.parentElement; if (row) row.style.display = ''; }
   }
+  // ── Edited-look previews for Quick Look (Space) ────────────────────────────────────────────────
+  // Photos edited in bulk (paste / apply-all) never pass through the Editor, so nothing renders
+  // their look. This queue renders each edited photo's saved recipe in ONE hidden render-only app
+  // instance (iframe, ?csrender=1 -> window.csRenderEditPreview in chromasmith-22.html), from the
+  // same ~1600px Quick Look source, and stores the JPEG in the native store (get/put_edit_preview).
+  // Key = hash(path + full recipe), so any edit change is automatically a different key.
+  //   - strictly sequential (1 job at a time), 400-job bound, yields while the user is interacting
+  //   - the previewed photo jumps the queue; jobs re-read the sidecar when they RUN, so a recipe
+  //     that changed again after enqueue renders the newest one, and a result whose recipe changed
+  //     mid-render is discarded and re-queued
+  //   - the hidden instance is torn down after 90s idle (memory is only held while there is work)
+  // Limitation: RAW photos render from the camera-embedded preview, not the developed RAW.
+  const EP_VER = '1';
+  const ep = { frame: null, ready: null, queue: [], running: false, current: null, known: new Set(), lastInput: 0, idleTimer: 0, failures: 0, pausedUntil: 0 };
+  ['keydown', 'pointerdown', 'wheel', 'pointermove'].forEach((t) => document.addEventListener(t, () => { ep.lastInput = performance.now(); }, { capture: true, passive: true }));
+  const epSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function epHash(s) {
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x9747b28c;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      a = Math.imul(a ^ c, 0x01000193) >>> 0;
+      b = Math.imul(b + c + i, 0x85ebca6b) >>> 0; b ^= b >>> 13;
+    }
+    return a.toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+  }
+  const epKey = (path, recipe) => epHash(EP_VER + '\0' + path + '\0' + recipe);
+  function epTeardown() {
+    clearTimeout(ep.idleTimer);
+    if (ep.frame) { ep.frame.remove(); ep.frame = null; ep.ready = null; }
+  }
+  function epFrame() {
+    clearTimeout(ep.idleTimer);
+    if (ep.ready) return ep.ready;
+    const f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1; f.title = 'edit preview renderer';
+    f.style.cssText = 'position:fixed;left:0;top:0;width:1280px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+    f.src = location.pathname + '?csrender=1';
+    document.body.appendChild(f);
+    ep.frame = f;
+    ep.ready = new Promise((resolve, reject) => {
+      const t0 = performance.now();
+      const tick = () => {
+        if (ep.frame !== f) return reject(new Error('render instance closed'));
+        let w = null; try { w = f.contentWindow; } catch (_) {}
+        if (w && typeof w.csRenderEditPreview === 'function') return resolve(w);
+        if (performance.now() - t0 > 45000) return reject(new Error('render instance did not boot'));
+        setTimeout(tick, 120);
+      };
+      tick();
+    });
+    ep.ready.catch(() => { if (ep.frame === f) epTeardown(); });
+    return ep.ready;
+  }
+  // Cached edited preview for a photo: { key, bytes } on hit, { key, bytes: null, recipe } on miss,
+  // null when the photo has no edit.
+  async function epFetch(path) {
+    const sc = await getSidecar(path);
+    if (!sc || !sc.edited || !sc.recipe) return null;
+    const key = epKey(path, sc.recipe);
+    try {
+      const bytes = await invoke('get_edit_preview', { key });
+      if (ep.known.size > 20000) ep.known.clear();
+      ep.known.add(key);
+      return { key, bytes };
+    } catch (_) { return { key, bytes: null, recipe: sc.recipe }; }
+  }
+  function epEnqueue(path, { priority = false } = {}) {
+    if (!path || ep.pausedUntil > performance.now()) return;
+    const existing = ep.queue.find((j) => j.path === path);
+    if (existing) {
+      if (priority && ep.queue[0] !== existing) { ep.queue.splice(ep.queue.indexOf(existing), 1); ep.queue.unshift(existing); }
+      if (priority) existing.priority = true;
+      return;
+    }
+    if (ep.current && ep.current.path === path && ep.current.fresh) { if (!priority) return; }
+    const job = { path, priority };
+    if (priority) ep.queue.unshift(job); else ep.queue.push(job);
+    if (ep.queue.length > 400) ep.queue.length = 400;
+    epPump();
+  }
+  async function epRunJob(job) {
+    const sc = await getSidecar(job.path);
+    if (!sc || !sc.edited || !sc.recipe) return;
+    const key = epKey(job.path, sc.recipe);
+    if (ep.known.has(key)) return;
+    try { await invoke('get_edit_preview', { key }); ep.known.add(key); return; } catch (_) {}
+    job.fresh = true;
+    const source = await quicklookPreview(job.path);
+    const w = await epFrame();
+    const out = await w.csRenderEditPreview(source, sc.recipe, 1600);
+    const jpeg = new Uint8Array(out);
+    const again = await getSidecar(job.path);
+    if (!again || again.recipe !== sc.recipe) { epEnqueue(job.path); return; } // edited again mid-render: drop this result
+    await invoke('put_edit_preview', jpeg, { headers: { 'x-key': key } });
+    ep.known.add(key);
+    if (quicklook.active && quicklook.path === job.path) qlEditedRefresh(job.path);
+  }
+  async function epPump() {
+    if (ep.running) return;
+    ep.running = true;
+    try {
+      while (ep.queue.length) {
+        const job = ep.queue[0];
+        if (!job.priority && performance.now() - ep.lastInput < 400) { await epSleep(300); continue; }
+        ep.queue.shift();
+        ep.current = job;
+        try { await epRunJob(job); ep.failures = 0; }
+        catch (e) {
+          console.warn('edit preview failed', job.path, e && e.message || e);
+          if (++ep.failures >= 3) { ep.queue.length = 0; ep.pausedUntil = performance.now() + 60000; ep.failures = 0; epTeardown(); }
+          else await epSleep(500);
+        }
+        ep.current = null;
+        if (quicklook.active && quicklook.path === job.path) qlRenderingDone(job.path);
+        await epSleep(0);
+      }
+    } finally {
+      ep.running = false; ep.current = null;
+      clearTimeout(ep.idleTimer);
+      ep.idleTimer = setTimeout(() => { if (!ep.running && !ep.queue.length) epTeardown(); }, 90000);
+    }
+  }
+  // Hooks: a recipe was saved (Editor autosave is skipped for the open photo — the live canvas
+  // already shows it) or a batch applied one.
+  function epOnSidecarSaved(path) { if (path && path !== state.openedPath) epEnqueue(path); }
+  window.__libEditPreviewEnqueue = epEnqueue; window.__libEditPreviewTeardown = epTeardown; window.__libEditPreviewKey = epKey;
+  window.__libEditPreviewDebug = () => ({ queue: ep.queue.map((j) => j.path), running: ep.running, current: ep.current && ep.current.path, known: ep.known.size, frame: !!ep.frame });
+
   // ── Filters panel: toggle button, active-filter chips, clear-all ──────────────────────
   const FILTER_SELECT_IDS = ['lib-type-filter', 'lib-camera-filter', 'lib-lens-filter', 'lib-iso-filter', 'lib-dupe-filter', 'lib-synced-filter', 'lib-faces-filter', 'lib-tag-filter', 'lib-rating-filter', 'lib-color-label-filter'];
   // One filter state, two views: state.* is the source of truth and both the chip row and the

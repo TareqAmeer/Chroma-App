@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+/* Render-only instance (?csrender=1, hosted hidden by the Library): block storage writes so this copy can never overwrite the user's saved session/prefs. */
+if(/[?&]csrender=1/.test(location.search)){window.__csRender=true;try{Storage.prototype.setItem=function(){};Storage.prototype.removeItem=function(){};Storage.prototype.clear=function(){};}catch(e){}}
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <!-- Home-Screen (standalone PWA) metas: without these iOS picks its own display mode and
@@ -7339,7 +7343,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024F';
+const BUILD='1.1024G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24876,6 +24880,40 @@ function renderSnapshotTo(dstCanvas,snap,pw,ph,opts){
     _fxHistLocked=false;
   }
 }
+// ── Render-only instance (?csrender=1): the Library hosts ONE hidden copy of this app in an iframe
+// and asks it to render a photo's saved edit, so the live Editor's controls/LUT/masks are never
+// swapped (renderSnapshotTo's in-place swap cannot await a LUT load). Same getFXParams/FXR code as
+// the Editor, so output is byte-identical to the Editor's render of that recipe (verified in
+// test/edit_preview_render.mjs). Storage writes are blocked in this mode (00-html.html) so it can
+// never clobber the user's saved session/prefs.
+window.csRenderEditPreview=async function(srcBuf,recipeB64,longEdge){
+  const snap=JSON.parse(decodeURIComponent(escape(atob(recipeB64))));
+  if(typeof _fxPristineDefault!=='undefined'&&_fxPristineDefault)applyUISnapshot(JSON.parse(JSON.stringify(_fxPristineDefault)));
+  await loadFXImages([new File([srcBuf],'edit-preview.jpg',{type:'image/jpeg'})]);
+  const clean={...snap};delete clean._desc;
+  clean.selects={'sel-lut':'','sel-print':'',...(clean.selects||{})};
+  applyUISnapshot(clean);
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const wl=clean.selects['sel-lut'],wp=clean.selects['sel-print'],t0=Date.now();
+  while(((wl?!fxState.lut:!!fxState.lut)||(wp?fxState.print!==wp:!!fxState.print))&&Date.now()-t0<8000)await new Promise(r=>setTimeout(r,20));
+  if((wl&&!fxState.lut)||(wp&&fxState.print!==wp))throw new Error('look not loaded');
+  const it=curItem();
+  const P=getFXParams(it.adjustOverride||undefined);
+  P.redEyeOps=it.redeye||[];
+  let src=geomCanvas(it);const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
+  const k=Math.min(1,(longEdge||1600)/Math.max(iw,ih));
+  const pw=Math.max(1,Math.round(iw*k)),ph=Math.max(1,Math.round(ih*k));
+  if(k<1){const c=document.createElement('canvas');c.width=pw;c.height=ph;const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(src,0,0,pw,ph);src=c;}
+  let out=await processToCanvas(P,src,pw,ph,()=>{});
+  const{b1t,b2t}=borderLayerSizes(P,out.width,out.height);
+  if(bordersAny(P,b1t,b2t)){const c=document.createElement('canvas');c.width=out.width+2*(b1t+b2t);c.height=out.height+2*(b1t+b2t);drawBorderLayers(c.getContext('2d'),out,P,b1t,b2t,borderSeed(it,P));out=c;}
+  if(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none'){const c=filmFrameCompose(out,P.filmFrame);if(c!==out)out=c;}
+  if(P.canvas&&P.canvas.enabled&&P.canvas.ar){const c=canvasCompose(out,P.canvas);if(c!==out)out=c;}
+  const blob=await new Promise(res=>out.toBlob(res,'image/jpeg',0.9));
+  if(!blob)throw new Error('encode failed');
+  return await blob.arrayBuffer();
+};
+
 // ── B3: shared snapshot-source resolver. Plain top-level function (not closured inside the
 // split-toolbar UI) so a later Library compare-pair mode can call it too — see CLAUDE.md-adjacent
 // plan notes. Resolves a `fxSplitSrc`-shaped descriptor to whatever renderSnapshotTo(B1) accepts.

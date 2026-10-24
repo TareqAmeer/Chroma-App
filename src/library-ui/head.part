@@ -13,10 +13,16 @@
   const LIBTEST = !window.__TAURI__ && /[?&]libtest=1/.test(location.search);
   let ltAlbums = [];
   let ltSmartAlbums = [];
-  if (!window.__TAURI__ && !LIBTEST) return;
+  if ((!window.__TAURI__ && !LIBTEST) || window.__csRender) return;
   // Resolve through the current Tauri function at call time so the native diagnostics
   // wrapper installed by chromasmith-22.html can observe Library IPC too.
-  const invoke = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
+  // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
+  const invoke = (cmd, ...rest) => {
+    const p = invokeBase(cmd, ...rest);
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
+    return p;
+  };
   // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
   // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
   const QUICKLOOK_CACHE_MAX = 5;
@@ -554,9 +560,17 @@
         });
         return Promise.resolve(rows);
       }
+      case 'get_edit_preview': {
+        const hit = (window.__libtestEditPreviews ||= new Map()).get(A.key);
+        return hit ? Promise.resolve(hit) : Promise.reject(new Error('no edit preview'));
+      }
+      case 'put_edit_preview': {
+        (window.__libtestEditPreviews ||= new Map()).set(arguments[2] && arguments[2].headers && arguments[2].headers['x-key'], A);
+        return Promise.resolve(null);
+      }
       case 'get_quicklook_preview': {
         (window.__libtestQuicklookCalls ||= []).push(A.path);
-        return Promise.resolve(window.__libtestQuicklookBytes || png);
+        return Promise.resolve((window.__libtestQuicklookBytesByPath && window.__libtestQuicklookBytesByPath[A.path]) || window.__libtestQuicklookBytes || png);
       }
       case 'catalog_dismiss_review': return Promise.resolve((A.paths || []).length);
       // trash_file/duplicate_file: no catalog involvement, just the underlying file op — a

@@ -3,7 +3,7 @@
 // and iOS builds are completely unaffected). Everything here is gated on window.__TAURI__ so
 // this file is a safe no-op if it were ever loaded outside the native shell.
 (function () {
-  if (!window.__TAURI__) return;
+  if (!window.__TAURI__ || window.__csRender) return;
   // Cheap wall-clock marks into window.__rawPerfLog (same array library-ui.js's rawPerf fills) so
   // the cold-open timeline can be read precisely from the live app (tools/diagnostics/app_control.py eval).
   window.__pm = (e) => { (window.__rawPerfLog || (window.__rawPerfLog = [])).push({ event: e, t: performance.now(), wall: Date.now() }); };

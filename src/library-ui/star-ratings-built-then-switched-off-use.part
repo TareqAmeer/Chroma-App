@@ -167,7 +167,7 @@
     libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated);
+    state.sidecars.set(path, updated); qlBadgesRefresh(path);
     let saved = true;
     await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
       .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });

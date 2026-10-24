@@ -1,5 +1,6 @@
 /* CHR-246 local erase: immutable sources, reviewed candidates, portable hash refs. */
 (() => {
+  if (window.__csRender) return;
   const invoke=(cmd,args)=>window.__TAURI__.core.invoke(cmd,args);
   const native=()=>!!window.__TAURI__?.core;
   const sourcePath=it=>it.path||(window.chromasmithGetOpenedPaths?.()||[])[fxImages.indexOf(it)];

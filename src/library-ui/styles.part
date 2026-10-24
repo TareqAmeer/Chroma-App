@@ -683,6 +683,12 @@
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
+    #lib-ql-badges{display:flex;gap:6px;align-items:center;min-height:22px}
+    #lib-ql-badges .lib-ql-b{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#e8e8e8;font-size:11px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
+    #lib-ql-badges .lib-ql-b.pick{border-color:var(--green-pine)}
+    #lib-ql-badges .lib-ql-b.rej{border-color:var(--red-oxide)}
+    #lib-ql-badges .lib-ql-b.edit{border-color:var(--acc2)}
+    #lib-ql-badges .lib-ql-b .on{color:#f5c518}
     #lib-ql-caption{color:var(--mut);font-size:12px;font-family:var(--mono);letter-spacing:.02em}
     #lib-ql-peak{position:absolute;top:14px;right:16px;height:28px;padding:0 12px;border:1px solid rgba(255,255,255,.35);border-radius:var(--r);background:transparent;color:#cfcfcf;font-size:12px;cursor:pointer}
     #lib-ql-peak.on{color:#fff;border-color:#ff3b1f;background:rgba(255,59,31,.25)}
