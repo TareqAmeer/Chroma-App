@@ -274,6 +274,25 @@ document.addEventListener('pointercancel',e=>{
   _fxPreviewInteracting=false;
   if(fxFullResPreview)renderPreview();
 });
+// Safety net for the same stuck state when NO pointerup/pointercancel ever reaches us (release outside the window, a context
+// menu swallowing it, a capture lost mid-pan): the OS keeps reporting moves with no button held, so if the preview is still
+// in its draft state while no button is down, settle it. Without this the editor stays on the blurry screen-res draft
+// (glowScale 2 halation, no grain, no full-res crop) until the next slider drag.
+let _fxPtrButtons=0,_fxDraftGuardT=0;
+function _fxDraftGuard(){
+  clearTimeout(_fxDraftGuardT);
+  if(!_fxPreviewInteracting)return;
+  _fxDraftGuardT=setTimeout(()=>{
+    if(!_fxPreviewInteracting)return;
+    if(_fxPtrButtons||_fxRenderRAF)return _fxDraftGuard();
+    _fxPreviewInteracting=false;
+    renderPreview();
+  },700);
+}
+['pointerdown','pointermove','pointerup','pointercancel'].forEach(t=>document.addEventListener(t,e=>{
+  _fxPtrButtons=(t==='pointerup'||t==='pointercancel')?0:(e.pointerType==='touch'?(t==='pointermove'?_fxPtrButtons:1):e.buttons);
+  _fxDraftGuard();
+},true));
 // De-webification bits that need JS: lock page zoom on touch/native (the app pinch-zooms the
 // PHOTO, the page itself must not zoom), and kill the long-press context menu on the preview.
 (function(){
