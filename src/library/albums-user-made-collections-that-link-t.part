@@ -724,6 +724,28 @@ mod sidecar_preservation_tests {
         assert_eq!(sc.keywords, vec!["Rock & Roll|Q&A <live>".to_string()]);
     }
 
+    /// get_thumbnail_fast no longer reads the whole file: the bounded-read result must equal the
+    /// old whole-file derivation (second SOI + EXIF length) for real fixtures.
+    #[test]
+    fn fast_thumbnail_bounded_read_matches_whole_file() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/fixtures/chr246-real");
+        let mut checked = 0;
+        for name in ["woman-crossing.jpg", "power-lines.jpg"] {
+            let p = root.join(name);
+            if !p.exists() { continue; }
+            let path = p.to_string_lossy().to_string();
+            let got = fast_thumbnail_bytes(&path).expect("embedded thumbnail");
+            let file = std::fs::File::open(&path).unwrap();
+            let exif = exif::Reader::new().read_from_container(&mut std::io::BufReader::new(file)).unwrap();
+            let len = exif.get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL).and_then(|f| f.value.get_uint(0)).unwrap() as usize;
+            let all = std::fs::read(&path).unwrap();
+            let start = find_embedded_soi(&all).unwrap();
+            assert_eq!(got, all[start..(start + len).min(all.len())].to_vec(), "{name}");
+            checked += 1;
+        }
+        assert!(checked > 0, "no fixture available");
+    }
+
     /// A rating/label click through `set_sidecar` must never drop existing keywords — the
     /// exact class of bug phase 0a fixed for foreign XMP fields, now guarded for this app's OWN
     /// keyword feature too.

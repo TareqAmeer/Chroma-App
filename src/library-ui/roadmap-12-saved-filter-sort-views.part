@@ -240,13 +240,28 @@
   async function cullCommitAndAdvance(targetPath, write, stillSaved) {
     const path = targetPath; if (!path) return;
     const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus, entry = compareState.entryToken;
-    const saved = await write(); surveySyncPath(path);
+    // The write function applies its optimistic state synchronously and returns the IPC promise.
+    const wp = write(); surveySyncPath(path);
+    const next = currentOffset + currentFocus + 1;
+    // Within a page, advance NOW (no wait on the disk write); a failed write rolls the decision
+    // back (setLabel/setRating do that) and steps focus back onto the photo. Page boundary and
+    // end-of-shoot still wait for the confirmed write because they reload cells / offer delete.
+    if (next < currentOffset + surveyState.cells.length && next < surveyState.cullPaths.length) {
+      if (!cullAutoAdvanceEnabled() || !stillSaved() || compareState.mode !== 'cull' || state.viewMode !== 'survey') { wp.then(() => surveySyncPath(path)); return; }
+      if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
+      surveyFocus(1);
+      wp.then((ok) => {
+        surveySyncPath(path);
+        if (!ok && entry === compareState.entryToken && surveyState.cullOffset === currentOffset && surveyState.focus === currentFocus + 1 && compareState.mode === 'cull') surveyFocus(-1);
+      });
+      return;
+    }
+    const saved = await wp; surveySyncPath(path);
     // A rebound command and a button use the same saved-write boundary. Moving away while
     // IPC is pending must not advance an unrelated photo when the old decision completes.
     if (!saved || !cullAutoAdvanceEnabled() || !stillSaved()) return;
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
     if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
-    const next = currentOffset + currentFocus + 1;
     if (next >= surveyState.cullPaths.length) {
       // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
       if (cullRejectedPaths().length) await cullDeleteRejected({ exiting: true });
@@ -257,13 +272,13 @@
     else surveyFocus(1);
   }
   function cullAdvance(label = 'Green', path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
+    return cullCommitAndAdvance(path, () => setLabel(path, label, { immediate: true }), () => (state.sidecars.get(path) || {}).label === label);
   }
   function cullColorAndAdvance(colorLabel, path = surveyTargetPath()) {
     return cullCommitAndAdvance(path, () => setColorLabel(path, colorLabel), () => (state.sidecars.get(path) || {}).color_label === colorLabel);
   }
   function cullRateAndAdvance(rating, path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
+    return cullCommitAndAdvance(path, () => setRating(path, rating, { immediate: true }), () => (state.sidecars.get(path) || {}).rating === rating);
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.

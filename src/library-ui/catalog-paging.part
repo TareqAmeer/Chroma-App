@@ -353,7 +353,7 @@
   // 500 concurrent Rust decodes at once (the <img loading="lazy"> attribute is useless here,
   // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
   // visibility via an IntersectionObserver; visible cards jump the queue.
-  const THUMB_POOL = 6;
+  const THUMB_POOL = 10; // was 6: embedded-preview thumbnails are IO-bound, not CPU-bound
   // _pickNextIdx() below strictly prefers any non-video job over a video one, so a mixed folder
   // paints ALL its photos (JPEG via the embedded-preview tier, then RAW) before the first clip is
   // touched. That ordering is about COST, not about blocking: a cold video poster is an
@@ -364,7 +364,7 @@
   // (see videothumb.rs), so the cap is the ordinary pool — kept as a named constant rather than
   // deleted so it is a one-line change if cold 4K generation ever needs throttling again.
   let _thumbActiveVideo = 0;
-  const THUMB_POOL_VIDEO = THUMB_POOL;
+  const THUMB_POOL_VIDEO = 6; // unchanged by the THUMB_POOL raise: video posters are the CPU-heavy kind
   let _thumbQueue = []; // [{path, imgEl, visible}]
   let _thumbActive = 0;
   let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped

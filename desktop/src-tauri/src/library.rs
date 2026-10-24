@@ -491,11 +491,15 @@ fn migrate_thumb_cache_v2_in(dir: &Path) {
 /// straight to tier 2 rather than show nothing.
 #[tauri::command(async)]
 pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> {
-    let ext = ext_lower(Path::new(&path));
+    fast_thumbnail_bytes(&path).map(tauri::ipc::Response::new)
+}
+
+fn fast_thumbnail_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let ext = ext_lower(Path::new(path));
     if !matches!(ext.as_str(), "jpg" | "jpeg" | "tif" | "tiff") {
         return Err("no embedded preview for this type".into());
     }
-    let file = std::fs::File::open(&path).map_err(|e| format!("open {path}: {e}"))?;
+    let file = std::fs::File::open(path).map_err(|e| format!("open {path}: {e}"))?;
     let mut br = std::io::BufReader::new(file);
     let exif = exif::Reader::new()
         .read_from_container(&mut br)
@@ -509,7 +513,29 @@ pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> 
         .get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL)
         .and_then(|f| f.value.get_uint(0))
         .ok_or("no embedded thumbnail length")? as usize;
-    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    // Read only the embedded bytes, not the whole (often 20-60MB) file. TIFF: the offset is from
+    // the file start (== TIFF header), so seek straight to it. JPEG: the preview lives inside the
+    // APP1 segment (max 64KB) right after the SOI, so a bounded head read always contains it.
+    let mut head: Option<Vec<u8>> = None;
+    if matches!(ext.as_str(), "tif" | "tiff") && len >= 128 && len <= 8 * 1024 * 1024 {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut f = br.into_inner();
+        let mut buf = vec![0u8; len];
+        if f.seek(SeekFrom::Start(offset as u64)).is_ok() && f.read_exact(&mut buf).is_ok() && buf[0] == 0xFF && buf[1] == 0xD8 {
+            return Ok(buf);
+        }
+    } else if matches!(ext.as_str(), "jpg" | "jpeg") {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut f = br.into_inner();
+        let mut buf = Vec::with_capacity(160 * 1024);
+        if f.seek(SeekFrom::Start(0)).is_ok() && f.take(160 * 1024).read_to_end(&mut buf).is_ok() {
+            if let Some(start) = find_embedded_soi(&buf) {
+                if start + len <= buf.len() { head = Some(buf); }
+            }
+        }
+    }
+    // Fallback (unusual layouts): the previous whole-file path.
+    let bytes = match head { Some(h) => h, None => std::fs::read(path).map_err(|e| format!("read {path}: {e}"))? };
     // ⚠️ The offset is relative to the start of the TIFF header inside the APP1 segment, not to
     // the start of the file. Locating the embedded SOI directly is both simpler and robust to
     // that, and a sanity check on the recovered slice keeps a malformed file from panicking.
@@ -519,7 +545,7 @@ pub fn get_thumbnail_fast(path: String) -> Result<tauri::ipc::Response, String> 
     if slice.len() < 128 || slice[0] != 0xFF || slice[1] != 0xD8 {
         return Err(format!("embedded thumbnail malformed (offset hint {offset})"));
     }
-    Ok(tauri::ipc::Response::new(slice.to_vec()))
+    Ok(slice.to_vec())
 }
 
 /// Byte offset of the SECOND JPEG SOI marker — i.e. the embedded preview, not the main image.
@@ -2138,6 +2164,22 @@ fn set_sidecar_run_inner(
         "Red" | "Green" | "Star" => label,
         _ => String::new(),
     };
+    // No-op write (e.g. a repeated flag/rating keypress, or a debounced flush after the user
+    // toggled back): the sidecar already holds exactly these values, so skip the XMP rewrite
+    // (fsync + rename) and the four registry read/parse passes.
+    if update_registry
+        && existing.rating == rating
+        && existing.label == label
+        && existing.edited == edited
+        && existing.favorite == favorite
+        && existing.recipe == recipe
+        && sidecar_path(&path).exists()
+    {
+        if let Some(conn) = catalog_conn {
+            crate::catalog::sync_sidecar_fields_run(conn, &path, rating, &label, &existing.color_label, edited, favorite);
+        }
+        return Ok(());
+    }
     // Editing a photo edits the version you are looking at — otherwise switching back to
     // "Original" would show the edits you just made to a copy.
     let mut versions = existing.versions;
@@ -2156,14 +2198,17 @@ fn set_sidecar_run_inner(
     } else {
         (existing.last_reset_recipe, existing.last_reset_edited)
     };
+    let (prev_edited, prev_favorite, prev_label) = (existing.edited, existing.favorite, existing.label.clone());
     let color_label = existing.color_label;
     let sc = Sidecar { rating, label: label.clone(), color_label: color_label.clone(), edited, recipe, favorite, versions, active: existing.active, keywords: existing.keywords, last_reset_recipe, last_reset_edited };
     write_sidecar(&path, &sc)?;
     if update_registry {
-    registry_set("edited", &path, edited);
-    registry_set("favorites", &path, favorite);
-    registry_set("flagged", &path, label == "Green");
-    registry_set("rejected", &path, label == "Red");
+        // Only touch a registry whose membership can actually change (each call re-reads and
+        // parses its whole JSON file).
+        if prev_edited != edited { registry_set("edited", &path, edited); }
+        if prev_favorite != favorite { registry_set("favorites", &path, favorite); }
+        if (prev_label == "Green") != (label == "Green") { registry_set("flagged", &path, label == "Green"); }
+        if (prev_label == "Red") != (label == "Red") { registry_set("rejected", &path, label == "Red"); }
     }
     // Keeps the catalog's own rating/label/edited/favorite columns from going stale the moment
     // the user changes any of them — see sync_sidecar_fields_run's own doc comment for why this
@@ -4581,6 +4626,28 @@ mod sidecar_preservation_tests {
         set_keywords(path.clone(), vec!["Rock & Roll|Q&A <live>".into()]).unwrap();
         let sc = get_sidecar(path);
         assert_eq!(sc.keywords, vec!["Rock & Roll|Q&A <live>".to_string()]);
+    }
+
+    /// get_thumbnail_fast no longer reads the whole file: the bounded-read result must equal the
+    /// old whole-file derivation (second SOI + EXIF length) for real fixtures.
+    #[test]
+    fn fast_thumbnail_bounded_read_matches_whole_file() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test/fixtures/chr246-real");
+        let mut checked = 0;
+        for name in ["woman-crossing.jpg", "power-lines.jpg"] {
+            let p = root.join(name);
+            if !p.exists() { continue; }
+            let path = p.to_string_lossy().to_string();
+            let got = fast_thumbnail_bytes(&path).expect("embedded thumbnail");
+            let file = std::fs::File::open(&path).unwrap();
+            let exif = exif::Reader::new().read_from_container(&mut std::io::BufReader::new(file)).unwrap();
+            let len = exif.get_field(exif::Tag::JPEGInterchangeFormatLength, exif::In::THUMBNAIL).and_then(|f| f.value.get_uint(0)).unwrap() as usize;
+            let all = std::fs::read(&path).unwrap();
+            let start = find_embedded_soi(&all).unwrap();
+            assert_eq!(got, all[start..(start + len).min(all.len())].to_vec(), "{name}");
+            checked += 1;
+        }
+        assert!(checked > 0, "no fixture available");
     }
 
     /// A rating/label click through `set_sidecar` must never drop existing keywords — the

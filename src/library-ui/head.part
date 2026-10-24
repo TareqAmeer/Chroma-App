@@ -19,13 +19,14 @@
   const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
   // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
   const invoke = (cmd, ...rest) => {
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe && typeof sidecarFlushPath === 'function') sidecarFlushPath(rest[0].path); // keep rating/flag writes ordered before a recipe write
     const p = invokeBase(cmd, ...rest);
     if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
     return p;
   };
   // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
   // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
-  const QUICKLOOK_CACHE_MAX = 5;
+  const QUICKLOOK_CACHE_MAX = 10; // embedded previews are small; QUICKLOOK_CACHE_BYTES still bounds memory
   const QUICKLOOK_CACHE_BYTES = 32 * 1024 * 1024;
   const quicklookPreviews = new Map();
   const quicklookRequests = new Map();
@@ -61,6 +62,13 @@
       }
       pumpRawReview();
     });
+  }
+  // Navigating away makes queued (not yet running) Quick Look decodes for far-away photos pointless.
+  function purgeRawReviewQueue(keep) {
+    for (let i = rawReviewQueue.length - 1; i >= 0; i--) {
+      const job = rawReviewQueue[i];
+      if (job.kind === 'quicklook' && !keep.has(job.path)) rawReviewQueue.splice(i, 1)[0].reject(new Error('RAW preview superseded'));
+    }
   }
   function pumpRawReview() {
     if (rawReviewActive || !rawReviewQueue.length) return;

@@ -19,13 +19,14 @@
   const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
   // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
   const invoke = (cmd, ...rest) => {
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe && typeof sidecarFlushPath === 'function') sidecarFlushPath(rest[0].path); // keep rating/flag writes ordered before a recipe write
     const p = invokeBase(cmd, ...rest);
     if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
     return p;
   };
   // Quick Look RAWs use our developed display proxies, never camera-embedded JPEGs.
   // Share requests and retain a small compressed LRU; cold RAW preparation is serialized.
-  const QUICKLOOK_CACHE_MAX = 5;
+  const QUICKLOOK_CACHE_MAX = 10; // embedded previews are small; QUICKLOOK_CACHE_BYTES still bounds memory
   const QUICKLOOK_CACHE_BYTES = 32 * 1024 * 1024;
   const quicklookPreviews = new Map();
   const quicklookRequests = new Map();
@@ -61,6 +62,13 @@
       }
       pumpRawReview();
     });
+  }
+  // Navigating away makes queued (not yet running) Quick Look decodes for far-away photos pointless.
+  function purgeRawReviewQueue(keep) {
+    for (let i = rawReviewQueue.length - 1; i >= 0; i--) {
+      const job = rawReviewQueue[i];
+      if (job.kind === 'quicklook' && !keep.has(job.path)) rawReviewQueue.splice(i, 1)[0].reject(new Error('RAW preview superseded'));
+    }
   }
   function pumpRawReview() {
     if (rawReviewActive || !rawReviewQueue.length) return;
@@ -4163,7 +4171,7 @@
   // 500 concurrent Rust decodes at once (the <img loading="lazy"> attribute is useless here,
   // since the eager invoke IS the expensive part, not the <img> fetch). Cards report
   // visibility via an IntersectionObserver; visible cards jump the queue.
-  const THUMB_POOL = 6;
+  const THUMB_POOL = 10; // was 6: embedded-preview thumbnails are IO-bound, not CPU-bound
   // _pickNextIdx() below strictly prefers any non-video job over a video one, so a mixed folder
   // paints ALL its photos (JPEG via the embedded-preview tier, then RAW) before the first clip is
   // touched. That ordering is about COST, not about blocking: a cold video poster is an
@@ -4174,7 +4182,7 @@
   // (see videothumb.rs), so the cap is the ordinary pool — kept as a named constant rather than
   // deleted so it is a one-line change if cold 4K generation ever needs throttling again.
   let _thumbActiveVideo = 0;
-  const THUMB_POOL_VIDEO = THUMB_POOL;
+  const THUMB_POOL_VIDEO = 6; // unchanged by the THUMB_POOL raise: video posters are the CPU-heavy kind
   let _thumbQueue = []; // [{path, imgEl, visible}]
   let _thumbActive = 0;
   let _thumbGen = 0; // bumped per grid rebuild so stale queue entries from the previous folder are dropped
@@ -4245,10 +4253,11 @@
   let _thumbFailCount = 0;
   let _thumbTotalCount = 0;
   let _thumbFailToastShown = false;
+  const _thumbByEl = new Map(); // imgEl -> queued job, so the IntersectionObserver callback is O(1) per entry
   const _thumbIO = (typeof IntersectionObserver === 'function')
     ? new IntersectionObserver((ents) => {
         for (const en of ents) {
-          const q = _thumbQueue.find((t) => t.imgEl === en.target);
+          const q = _thumbByEl.get(en.target);
           if (q) q.visible = en.isIntersecting;
         }
       }, { rootMargin: '200px' })
@@ -4272,6 +4281,7 @@
       const i = _pickNextIdx();
       if (i < 0) break; // only videos left and the video pool is already full — wait for a slot
       const job = _thumbQueue.splice(i, 1)[0];
+      _thumbByEl.delete(job.imgEl);
       // NOTE: job.imgEl.isConnected requires the card to already be in the DOM by the time
       // loadThumb() is called — renderGrid() must appendChild(card) BEFORE calling loadThumb(),
       // or every job is silently dropped here (this was the "thumbnails never load" bug: the
@@ -4306,7 +4316,8 @@
       // decoded clips in a hidden <video> and cached the resulting blob URL while ALSO handing it
       // to the per-generation revoke list below, so any grid rebuild revoked a URL the cache kept
       // serving and every video card became a permanent broken-image "?".
-      invoke('get_thumbnail_fast', { path: job.path })
+      // Rust only serves tier 1 for jpg/jpeg/tif/tiff (RAW, video, everything else declines), so skip the IPC round-trip otherwise.
+      (!/\.(?:jpe?g|tiff?)$/i.test(job.path) ? Promise.resolve(null) : invoke('get_thumbnail_fast', { path: job.path }))
         .catch(() => null)
         .then((fastBuf) => {
           if (fastBuf && job.imgEl.isConnected) {
@@ -4467,7 +4478,8 @@
       imgEl.classList.add('loaded');
       return;
     }
-    _thumbQueue.push({ path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen });
+    const queuedJob = { path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen };
+    _thumbQueue.push(queuedJob); _thumbByEl.set(imgEl, queuedJob);
     _thumbTotalCount++;
     if (_thumbIO) _thumbIO.observe(imgEl);
     _thumbPump();
@@ -4475,7 +4487,7 @@
   function thumbQueueReset() {
     _thumbGen++;
     if (_thumbIO) _thumbQueue.forEach((t) => _thumbIO.unobserve(t.imgEl));
-    _thumbQueue = [];
+    _thumbQueue = []; _thumbByEl.clear();
     _thumbActive = 0; // defensive: never let a stale count strand future pumps
     _thumbActiveVideo = 0;
     // ⚠️ Deliberately does NOT touch _thumbCache. Its URLs are owned by the cache and are still
@@ -4780,20 +4792,14 @@
     }
     toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
-  async function setRating(path, rating) {
+  async function setRating(path, rating, opts) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
-    const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    let saved = true;
-    await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
-      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    const holder = card && card.querySelector('.lib-stars');
-    if (holder) holder.outerHTML = starsHtml((state.sidecars.get(path) || cur).rating || 0);
-    if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
-    return saved;
+    if ((cur.rating || 0) === n) return true; // no-op: no undo entry, no write, no repaint
+    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
+    state.sidecars.set(path, { ...cur, rating: n });
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -7024,36 +7030,73 @@
     if (typeof toast === 'function') toast('Could not save flag/edit state — is this folder writable?', false);
     else if (typeof log === 'function') log(`Sidecar write failed for ${path}: ${e}`, 'warn');
   }
-  async function setLabel(path, label) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
-    const updated = { ...cur, label };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    let saved = true;
-    await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
-      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+  // -- Coalesced, serialised sidecar writes (rating/flag/favorite) -------------------------------
+  // The UI already updates optimistically; the disk write is trailing-debounced per path so a
+  // burst of keypresses on one photo (1..5, X/P, held key) costs ONE XMP rewrite carrying the
+  // latest state. Every caller's promise resolves with that single write's outcome. A failure
+  // rolls state back to the value BEFORE the first coalesced change. `immediate` (cull
+  // decisions, one per photo) sends now. Pending writes flush on pagehide/blur/hide and before
+  // any recipe write to the same path (see the invoke wrapper in head.part).
+  const SIDECAR_DEBOUNCE_MS = 200;
+  const sidecarPending = new Map(), sidecarInflight = new Map();
+  function sidecarRepaint(path) {
+    const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    qlBadgesRefresh(path);
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
-      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite, updated.color_label);
-      // HANDOVER §8 item #12: this optimistic patch updated the flag ICONS but never the
-      // card's own lbl-red/lbl-green class — the .lbl-red rule that dims a rejected thumbnail
-      // (UI_SPEC.md's deliberate black-overlay design, :1173-1183) only ever applied correctly
-      // after a full renderGrid() rebuilt card.className from sc.label. A flag click, which
-      // goes through exactly this path, never dimmed anything until the next unrelated re-render.
+      const flags = card.querySelector('.lib-flags');
+      if (flags) flags.innerHTML = flagsHtml(sc.label, sc.favorite, sc.color_label);
+      // HANDOVER section 8 item 12: keep the lbl-red/lbl-green class in step (the .lbl-red rule dims a
+      // rejected thumbnail; it only applied after a full renderGrid() rebuilt card.className).
       card.classList.remove('lbl-red', 'lbl-green');
-      if (label === 'Red') card.classList.add('lbl-red');
-      else if (label === 'Green') card.classList.add('lbl-green');
+      if (sc.label === 'Red') card.classList.add('lbl-red');
+      else if (sc.label === 'Green') card.classList.add('lbl-green');
+      const holder = card.querySelector('.lib-stars');
+      if (holder) holder.outerHTML = starsHtml(sc.rating || 0);
     }
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
-    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel is the ONE canonical write path every
-    // flag UI funnels through (grid click, right-click menu, keyboard X/P/U, compare pane, the
-    // docked filmstrip's own flag row) — but none of them ever told the Editor's topbar flag
-    // buttons (fxUpdateFlagBtns, chromasmith-22.html) to re-read state, so flagging the
-    // CURRENTLY OPEN photo from anywhere in the Library left the topbar showing stale state
-    // ("updates in the sidebar but not the top bar"). Fixing it here once covers every entry
-    // point instead of patching each call site.
+    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel/setRating/setFavorite are the ONE
+    // canonical write path every flag UI funnels through; tell the Editor's topbar flag buttons
+    // (fxUpdateFlagBtns, chromasmith-22.html) to re-read state so flagging the CURRENTLY OPEN photo
+    // from anywhere in the Library never leaves the topbar stale.
     if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
-    return saved;
+  }
+  function sidecarSend(path, entry) {
+    clearTimeout(entry.timer);
+    if (sidecarPending.get(path) === entry) sidecarPending.delete(path);
+    const prior = sidecarInflight.get(path) || Promise.resolve();
+    const run = prior.then(() => {
+      const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+      return invoke('set_sidecar', { path, rating: sc.rating, label: sc.label, edited: sc.edited, favorite: sc.favorite })
+        .then(() => true, (e) => { sidecarWriteFailed(path, entry.prev, e); sidecarRepaint(path); return false; });
+    }).then((ok) => { entry.waiters.forEach((w) => w(ok)); if (sidecarInflight.get(path) === run) sidecarInflight.delete(path); });
+    sidecarInflight.set(path, run);
+    return run;
+  }
+  function sidecarWriteSoon(path, prev, immediate) {
+    return new Promise((resolve) => {
+      let e = sidecarPending.get(path);
+      if (!e) { e = { prev, waiters: [], timer: 0 }; sidecarPending.set(path, e); }
+      e.waiters.push(resolve);
+      clearTimeout(e.timer);
+      if (immediate) sidecarSend(path, e); else e.timer = setTimeout(() => sidecarSend(path, e), SIDECAR_DEBOUNCE_MS);
+    });
+  }
+  function sidecarFlushPath(path) { const e = sidecarPending.get(path); if (e) sidecarSend(path, e); }
+  function sidecarFlushAll() { for (const [p, e] of [...sidecarPending]) sidecarSend(p, e); }
+  window.__sidecarFlushAll = sidecarFlushAll;
+  window.addEventListener('pagehide', sidecarFlushAll);
+  window.addEventListener('beforeunload', sidecarFlushAll);
+  window.addEventListener('blur', sidecarFlushAll);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sidecarFlushAll(); });
+  async function setLabel(path, label, opts) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    if ((cur.label || '') === (label || '')) return true; // no-op: no undo entry, no write, no repaint
+    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
+    const updated = { ...cur, label };
+    state.sidecars.set(path, updated);
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
@@ -7081,15 +7124,11 @@
   // (and can coexist with) a Red/Green flag.
   async function setFavorite(path, favorite) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    if (!!cur.favorite === !!favorite) return true;
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
-    const updated = { ...cur, favorite };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
-      .catch((e) => sidecarWriteFailed(path, cur, e));
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite, updated.color_label);
-    renderCollectionCounts();
-    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see setLabel's comment
+    state.sidecars.set(path, { ...cur, favorite });
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, false);
   }
   // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
   // CURRENTLY OPEN photo without needing the Library panel open — same underlying
@@ -10745,13 +10784,28 @@
   async function cullCommitAndAdvance(targetPath, write, stillSaved) {
     const path = targetPath; if (!path) return;
     const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus, entry = compareState.entryToken;
-    const saved = await write(); surveySyncPath(path);
+    // The write function applies its optimistic state synchronously and returns the IPC promise.
+    const wp = write(); surveySyncPath(path);
+    const next = currentOffset + currentFocus + 1;
+    // Within a page, advance NOW (no wait on the disk write); a failed write rolls the decision
+    // back (setLabel/setRating do that) and steps focus back onto the photo. Page boundary and
+    // end-of-shoot still wait for the confirmed write because they reload cells / offer delete.
+    if (next < currentOffset + surveyState.cells.length && next < surveyState.cullPaths.length) {
+      if (!cullAutoAdvanceEnabled() || !stillSaved() || compareState.mode !== 'cull' || state.viewMode !== 'survey') { wp.then(() => surveySyncPath(path)); return; }
+      if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
+      surveyFocus(1);
+      wp.then((ok) => {
+        surveySyncPath(path);
+        if (!ok && entry === compareState.entryToken && surveyState.cullOffset === currentOffset && surveyState.focus === currentFocus + 1 && compareState.mode === 'cull') surveyFocus(-1);
+      });
+      return;
+    }
+    const saved = await wp; surveySyncPath(path);
     // A rebound command and a button use the same saved-write boundary. Moving away while
     // IPC is pending must not advance an unrelated photo when the old decision completes.
     if (!saved || !cullAutoAdvanceEnabled() || !stillSaved()) return;
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
     if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
-    const next = currentOffset + currentFocus + 1;
     if (next >= surveyState.cullPaths.length) {
       // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
       if (cullRejectedPaths().length) await cullDeleteRejected({ exiting: true });
@@ -10762,13 +10816,13 @@
     else surveyFocus(1);
   }
   function cullAdvance(label = 'Green', path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
+    return cullCommitAndAdvance(path, () => setLabel(path, label, { immediate: true }), () => (state.sidecars.get(path) || {}).label === label);
   }
   function cullColorAndAdvance(colorLabel, path = surveyTargetPath()) {
     return cullCommitAndAdvance(path, () => setColorLabel(path, colorLabel), () => (state.sidecars.get(path) || {}).color_label === colorLabel);
   }
   function cullRateAndAdvance(rating, path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
+    return cullCommitAndAdvance(path, () => setRating(path, rating, { immediate: true }), () => (state.sidecars.get(path) || {}).rating === rating);
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
@@ -11044,26 +11098,34 @@
   // RAW review uses our native development pipeline and bounded fit-size proxies.
   // Cold files show a loading state; camera JPEGs never substitute for review pixels.
   const quicklook = { editedBlob: '', editedKind: '', rendering: false, holdOrig: false, baseNote: '', active: false, path: '', url: '', generation: 0, prefetchQueue: [], prefetchActive: 0 };
-  function queueQuickLookNeighbors(path) {
-    if (!quicklook.active || quicklook.path !== path) return;
+  // Neighbour prefetch: N+1..N+3 then N-1 (arrow-right is the common direction while culling),
+  // started the moment a photo is requested - NOT after it has loaded - with a small concurrency
+  // cap shared across navigations. Holding an arrow replaces the queue per target but never
+  // cancels in-flight requests, so they still land in the cache for the frames that follow.
+  const QL_PREFETCH_CONCURRENCY = 2;
+  function qlPrefetchWindow(path) {
     const nav = libraryNavigationOrder(), shown = nav.entries;
     const index = nav.index.get(path) ?? -1;
-    if (index < 0) return;
-    const generation = quicklook.generation;
-    quicklook.prefetchQueue = [shown[index - 1]?.path, shown[index + 1]?.path]
-      .filter((candidate) => candidate && candidate !== path && !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
-    quicklook.prefetchQueue.forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
-    const pump = () => {
-      if (quicklook.prefetchActive || !quicklook.active || quicklook.generation !== generation || !quicklook.prefetchQueue.length) return;
+    if (index < 0) return [];
+    return [shown[index + 1]?.path, shown[index + 2]?.path, shown[index - 1]?.path, shown[index + 3]?.path]
+      .filter((candidate) => candidate && candidate !== path);
+  }
+  function pumpQuickLookPrefetch() {
+    while (quicklook.active && quicklook.prefetchActive < QL_PREFETCH_CONCURRENCY && quicklook.prefetchQueue.length) {
       const next = quicklook.prefetchQueue.shift();
+      if (quicklookPreviews.has(next) || quicklookRequests.has(next)) continue;
       quicklook.prefetchActive++;
-      quicklookPreview(next).catch(() => {}).finally(() => {
-        quicklook.prefetchActive--;
-        if (quicklook.active && quicklook.generation === generation) pump();
-        else if (quicklook.active) queueQuickLookNeighbors(quicklook.path);
-      });
-    };
-    pump();
+      quicklookPreview(next).catch(() => {}).finally(() => { quicklook.prefetchActive--; pumpQuickLookPrefetch(); });
+    }
+  }
+  function queueQuickLookNeighbors(path) {
+    if (!quicklook.active || quicklook.path !== path) return;
+    const window_ = qlPrefetchWindow(path);
+    // Drop queued (not yet started) developed-RAW review jobs that are no longer near the cursor.
+    if (window_.length) purgeRawReviewQueue(new Set([path, ...window_])); // only when the photo is in the navigation order
+    quicklook.prefetchQueue = window_.filter((candidate) => !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
+    window_.slice(0, 1).concat(window_.slice(2, 3)).forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
+    pumpQuickLookPrefetch();
   }
   // Flag / rating / colour badges, styled like the grid's flag chips (same FLAG_SVG_* glyphs).
   // Read-only; qlBadgesRefresh is called from every sidecar setter so P/X/U/0-5 update live.
@@ -11208,7 +11270,9 @@
       img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
     }
     try {
-      const buf = await quicklookPreview(path, developed);
+      const bufPromise = quicklookPreview(path, developed); // started first so it wins the IPC race...
+      queueQuickLookNeighbors(path); // ...then the neighbours go out without waiting for it
+      const buf = await bufPromise;
       const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
       if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
@@ -11222,12 +11286,35 @@
       quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
       qlCaptionSync(path);
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
-      queueQuickLookNeighbors(path);
     } catch (e) {
       if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
     }
   }
+  // Shared by the hard-wired arrows and the rebindable library.next/previous commands.
+  // Key-repeat is throttled to one navigation per QL_NAV_REPEAT_MS (trailing edge, target
+  // accumulates): a held arrow used to start a full load per repeat tick, each superseding the
+  // last before it painted. A fresh press is always immediate.
+  function qlStep(delta, repeat) {
+    const nav = libraryNavigationOrder(), shown = nav.entries;
+    if (!shown.length) return;
+    const idx = nav.index.get(quicklook.path) ?? -1;
+    const base = repeat && qlNav.timer ? qlNav.idx : (idx < 0 ? 0 : idx);
+    const next = Math.max(0, Math.min(shown.length - 1, base + delta));
+    if (!repeat) { qlNavCancel(); if (shown[next].path !== quicklook.path) showQuickLook(shown[next].path); return; }
+    qlNav.idx = next; qlNav.entries = shown;
+    if (!qlNav.timer) qlNav.timer = setTimeout(qlNavFlush, QL_NAV_REPEAT_MS);
+  }
+  const QL_NAV_REPEAT_MS = 90;
+  const qlNav = { timer: 0, idx: 0, entries: null };
+  function qlNavCancel() { clearTimeout(qlNav.timer); qlNav.timer = 0; qlNav.entries = null; }
+  function qlNavFlush() {
+    const entry = qlNav.entries && qlNav.entries[qlNav.idx];
+    qlNavCancel();
+    if (entry && quicklook.active && entry.path !== quicklook.path) showQuickLook(entry.path);
+  }
+  document.addEventListener('keyup', (e) => { if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && qlNav.timer) qlNavFlush(); });
   function hideQuickLook() {
+    qlNavCancel();
     quicklook.generation++;
     quicklook.prefetchQueue = [];
     quicklook.active = false;
@@ -11306,11 +11393,7 @@
     if (quicklook.active) {
       const navQl = libraryNavigationOrder(), shownQl = navQl.entries;
       const idxQl = navQl.index.get(quicklook.path) ?? -1;
-      const gotoQl = (delta) => {
-        if (!shownQl.length) return;
-        const next = Math.max(0, Math.min(shownQl.length - 1, (idxQl < 0 ? 0 : idxQl) + delta));
-        showQuickLook(shownQl[next].path);
-      };
+      const gotoQl = (delta) => qlStep(delta, e.repeat);
       if (e.key === '\\') { e.preventDefault(); qlShowOriginal(true); return; }
       if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); hideQuickLook(); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); gotoQl(1); return; }
@@ -17045,7 +17128,16 @@
     const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');
     if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
   }
+  // Coalesced to once per frame (a held rating/flag key fired one IPC pair per keypress); the
+  // timeout covers hidden windows where rAF never fires.
+  let rccScheduled = false;
   function renderCollectionCounts() {
+    if (rccScheduled) return;
+    rccScheduled = true;
+    const go = () => { if (!rccScheduled) return; rccScheduled = false; renderCollectionCountsNow(); };
+    requestAnimationFrame(go); setTimeout(go, 50);
+  }
+  function renderCollectionCountsNow() {
     invoke('collection_counts').then((counts) => {
       collectionCounts = counts;
       // Derive this smart collection from the live guaranteed-offline index rather than
@@ -17293,9 +17385,7 @@
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(1); return; }
       if (quicklook.active) {
-        const nav = libraryNavigationOrder(), shown = nav.entries;
-        const i = nav.index.get(quicklook.path) ?? -1;
-        if (i >= 0 && i + 1 < shown.length) showQuickLook(shown[i + 1].path);
+        if ((nav0 => nav0.index.get(quicklook.path) ?? -1)(libraryNavigationOrder()) >= 0) qlStep(1, e && e.repeat);
       } else {
         const nav = libraryNavigationOrder(), shown = nav.entries;
         const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;
@@ -17316,9 +17406,7 @@
       if (state.viewMode === 'compare' && compareState.active) { compareCycleB(-1); return; }
       if (state.viewMode === 'survey' && compareState.active) { surveyFocus(-1); return; }
       if (quicklook.active) {
-        const nav = libraryNavigationOrder(), shown = nav.entries;
-        const i = nav.index.get(quicklook.path) ?? -1;
-        if (i > 0) showQuickLook(shown[i - 1].path);
+        if ((nav0 => nav0.index.get(quicklook.path) ?? -1)(libraryNavigationOrder()) > 0 || qlNav.timer) qlStep(-1, e && e.repeat);
       } else {
         const nav = libraryNavigationOrder(), shown = nav.entries;
         const i = nav.index.get(state._kbCursor || state.openedPath) ?? -1;

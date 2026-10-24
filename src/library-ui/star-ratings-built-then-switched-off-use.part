@@ -162,18 +162,12 @@
     }
     toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
-  async function setRating(path, rating) {
+  async function setRating(path, rating, opts) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
-    const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    let saved = true;
-    await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
-      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    const holder = card && card.querySelector('.lib-stars');
-    if (holder) holder.outerHTML = starsHtml((state.sidecars.get(path) || cur).rating || 0);
-    if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
-    return saved;
+    if ((cur.rating || 0) === n) return true; // no-op: no undo entry, no write, no repaint
+    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
+    state.sidecars.set(path, { ...cur, rating: n });
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
