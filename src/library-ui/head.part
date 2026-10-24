@@ -19,6 +19,7 @@
   const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
   // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
   const invoke = (cmd, ...rest) => {
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe && typeof sidecarFlushPath === 'function') sidecarFlushPath(rest[0].path); // keep rating/flag writes ordered before a recipe write
     const p = invokeBase(cmd, ...rest);
     if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
     return p;

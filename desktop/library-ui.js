@@ -19,6 +19,7 @@
   const invokeBase = LIBTEST ? libtestInvoke : (...args) => window.__TAURI__.core.invoke(...args);
   // Every saved recipe also (re)queues that photo's edited-look preview (Quick Look); see epOnSidecarSaved.
   const invoke = (cmd, ...rest) => {
+    if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe && typeof sidecarFlushPath === 'function') sidecarFlushPath(rest[0].path); // keep rating/flag writes ordered before a recipe write
     const p = invokeBase(cmd, ...rest);
     if (cmd === 'set_sidecar' && rest[0] && rest[0].recipe) p.then(() => epOnSidecarSaved(rest[0].path), () => {});
     return p;
@@ -4780,20 +4781,14 @@
     }
     toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
-  async function setRating(path, rating) {
+  async function setRating(path, rating, opts) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
-    const updated = { ...cur, rating: n };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    let saved = true;
-    await invoke('set_sidecar', { path, rating: n, label: updated.label, edited: updated.edited, favorite: updated.favorite })
-      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    const holder = card && card.querySelector('.lib-stars');
-    if (holder) holder.outerHTML = starsHtml((state.sidecars.get(path) || cur).rating || 0);
-    if (typeof renderCollectionCounts === 'function') renderCollectionCounts();
-    return saved;
+    if ((cur.rating || 0) === n) return true; // no-op: no undo entry, no write, no repaint
+    libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
+    state.sidecars.set(path, { ...cur, rating: n });
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
 
   // ── options for a <select> populated with the distinct values present in this folder ─────
@@ -7024,36 +7019,73 @@
     if (typeof toast === 'function') toast('Could not save flag/edit state — is this folder writable?', false);
     else if (typeof log === 'function') log(`Sidecar write failed for ${path}: ${e}`, 'warn');
   }
-  async function setLabel(path, label) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
-    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
-    const updated = { ...cur, label };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    let saved = true;
-    await invoke('set_sidecar', { path, rating: updated.rating, label, edited: updated.edited })
-      .catch((e) => { saved = false; sidecarWriteFailed(path, cur, e); });
+  // -- Coalesced, serialised sidecar writes (rating/flag/favorite) -------------------------------
+  // The UI already updates optimistically; the disk write is trailing-debounced per path so a
+  // burst of keypresses on one photo (1..5, X/P, held key) costs ONE XMP rewrite carrying the
+  // latest state. Every caller's promise resolves with that single write's outcome. A failure
+  // rolls state back to the value BEFORE the first coalesced change. `immediate` (cull
+  // decisions, one per photo) sends now. Pending writes flush on pagehide/blur/hide and before
+  // any recipe write to the same path (see the invoke wrapper in head.part).
+  const SIDECAR_DEBOUNCE_MS = 200;
+  const sidecarPending = new Map(), sidecarInflight = new Map();
+  function sidecarRepaint(path) {
+    const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    qlBadgesRefresh(path);
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
     if (card) {
-      card.querySelector('.lib-flags').innerHTML = flagsHtml(label, updated.favorite, updated.color_label);
-      // HANDOVER §8 item #12: this optimistic patch updated the flag ICONS but never the
-      // card's own lbl-red/lbl-green class — the .lbl-red rule that dims a rejected thumbnail
-      // (UI_SPEC.md's deliberate black-overlay design, :1173-1183) only ever applied correctly
-      // after a full renderGrid() rebuilt card.className from sc.label. A flag click, which
-      // goes through exactly this path, never dimmed anything until the next unrelated re-render.
+      const flags = card.querySelector('.lib-flags');
+      if (flags) flags.innerHTML = flagsHtml(sc.label, sc.favorite, sc.color_label);
+      // HANDOVER section 8 item 12: keep the lbl-red/lbl-green class in step (the .lbl-red rule dims a
+      // rejected thumbnail; it only applied after a full renderGrid() rebuilt card.className).
       card.classList.remove('lbl-red', 'lbl-green');
-      if (label === 'Red') card.classList.add('lbl-red');
-      else if (label === 'Green') card.classList.add('lbl-green');
+      if (sc.label === 'Red') card.classList.add('lbl-red');
+      else if (sc.label === 'Green') card.classList.add('lbl-green');
+      const holder = card.querySelector('.lib-stars');
+      if (holder) holder.outerHTML = starsHtml(sc.rating || 0);
     }
     if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
-    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel is the ONE canonical write path every
-    // flag UI funnels through (grid click, right-click menu, keyboard X/P/U, compare pane, the
-    // docked filmstrip's own flag row) — but none of them ever told the Editor's topbar flag
-    // buttons (fxUpdateFlagBtns, chromasmith-22.html) to re-read state, so flagging the
-    // CURRENTLY OPEN photo from anywhere in the Library left the topbar showing stale state
-    // ("updates in the sidebar but not the top bar"). Fixing it here once covers every entry
-    // point instead of patching each call site.
+    // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel/setRating/setFavorite are the ONE
+    // canonical write path every flag UI funnels through; tell the Editor's topbar flag buttons
+    // (fxUpdateFlagBtns, chromasmith-22.html) to re-read state so flagging the CURRENTLY OPEN photo
+    // from anywhere in the Library never leaves the topbar stale.
     if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns();
-    return saved;
+  }
+  function sidecarSend(path, entry) {
+    clearTimeout(entry.timer);
+    if (sidecarPending.get(path) === entry) sidecarPending.delete(path);
+    const prior = sidecarInflight.get(path) || Promise.resolve();
+    const run = prior.then(() => {
+      const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+      return invoke('set_sidecar', { path, rating: sc.rating, label: sc.label, edited: sc.edited, favorite: sc.favorite })
+        .then(() => true, (e) => { sidecarWriteFailed(path, entry.prev, e); sidecarRepaint(path); return false; });
+    }).then((ok) => { entry.waiters.forEach((w) => w(ok)); if (sidecarInflight.get(path) === run) sidecarInflight.delete(path); });
+    sidecarInflight.set(path, run);
+    return run;
+  }
+  function sidecarWriteSoon(path, prev, immediate) {
+    return new Promise((resolve) => {
+      let e = sidecarPending.get(path);
+      if (!e) { e = { prev, waiters: [], timer: 0 }; sidecarPending.set(path, e); }
+      e.waiters.push(resolve);
+      clearTimeout(e.timer);
+      if (immediate) sidecarSend(path, e); else e.timer = setTimeout(() => sidecarSend(path, e), SIDECAR_DEBOUNCE_MS);
+    });
+  }
+  function sidecarFlushPath(path) { const e = sidecarPending.get(path); if (e) sidecarSend(path, e); }
+  function sidecarFlushAll() { for (const [p, e] of [...sidecarPending]) sidecarSend(p, e); }
+  window.__sidecarFlushAll = sidecarFlushAll;
+  window.addEventListener('pagehide', sidecarFlushAll);
+  window.addEventListener('beforeunload', sidecarFlushAll);
+  window.addEventListener('blur', sidecarFlushAll);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sidecarFlushAll(); });
+  async function setLabel(path, label, opts) {
+    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    if ((cur.label || '') === (label || '')) return true; // no-op: no undo entry, no write, no repaint
+    libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
+    const updated = { ...cur, label };
+    state.sidecars.set(path, updated);
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
@@ -7081,15 +7113,11 @@
   // (and can coexist with) a Red/Green flag.
   async function setFavorite(path, favorite) {
     const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    if (!!cur.favorite === !!favorite) return true;
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
-    const updated = { ...cur, favorite };
-    state.sidecars.set(path, updated); qlBadgesRefresh(path);
-    await invoke('set_sidecar', { path, rating: updated.rating, label: updated.label, edited: updated.edited, favorite })
-      .catch((e) => sidecarWriteFailed(path, cur, e));
-    const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
-    if (card) card.querySelector('.lib-flags').innerHTML = flagsHtml(updated.label, favorite, updated.color_label);
-    renderCollectionCounts();
-    if (path === state.openedPath && typeof window.fxUpdateFlagBtns === 'function') window.fxUpdateFlagBtns(); // E5 fix — see setLabel's comment
+    state.sidecars.set(path, { ...cur, favorite });
+    sidecarRepaint(path);
+    return sidecarWriteSoon(path, cur, false);
   }
   // Exposed so the main editor toolbar (chromasmith-22.html's top bar) can flag the
   // CURRENTLY OPEN photo without needing the Library panel open — same underlying
@@ -10745,13 +10773,28 @@
   async function cullCommitAndAdvance(targetPath, write, stillSaved) {
     const path = targetPath; if (!path) return;
     const currentOffset = surveyState.cullOffset, currentFocus = surveyState.focus, entry = compareState.entryToken;
-    const saved = await write(); surveySyncPath(path);
+    // The write function applies its optimistic state synchronously and returns the IPC promise.
+    const wp = write(); surveySyncPath(path);
+    const next = currentOffset + currentFocus + 1;
+    // Within a page, advance NOW (no wait on the disk write); a failed write rolls the decision
+    // back (setLabel/setRating do that) and steps focus back onto the photo. Page boundary and
+    // end-of-shoot still wait for the confirmed write because they reload cells / offer delete.
+    if (next < currentOffset + surveyState.cells.length && next < surveyState.cullPaths.length) {
+      if (!cullAutoAdvanceEnabled() || !stillSaved() || compareState.mode !== 'cull' || state.viewMode !== 'survey') { wp.then(() => surveySyncPath(path)); return; }
+      if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
+      surveyFocus(1);
+      wp.then((ok) => {
+        surveySyncPath(path);
+        if (!ok && entry === compareState.entryToken && surveyState.cullOffset === currentOffset && surveyState.focus === currentFocus + 1 && compareState.mode === 'cull') surveyFocus(-1);
+      });
+      return;
+    }
+    const saved = await wp; surveySyncPath(path);
     // A rebound command and a button use the same saved-write boundary. Moving away while
     // IPC is pending must not advance an unrelated photo when the old decision completes.
     if (!saved || !cullAutoAdvanceEnabled() || !stillSaved()) return;
     if (compareState.mode !== 'cull' || state.viewMode !== 'survey') return;
     if (entry !== compareState.entryToken || surveyState.cullOffset !== currentOffset || surveyState.focus !== currentFocus || surveyTargetPath() !== path) return;
-    const next = currentOffset + currentFocus + 1;
     if (next >= surveyState.cullPaths.length) {
       // End of the shoot: offer the Delete rejected step (cancelling just leaves the rejects flagged).
       if (cullRejectedPaths().length) await cullDeleteRejected({ exiting: true });
@@ -10762,13 +10805,13 @@
     else surveyFocus(1);
   }
   function cullAdvance(label = 'Green', path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setLabel(path, label), () => (state.sidecars.get(path) || {}).label === label);
+    return cullCommitAndAdvance(path, () => setLabel(path, label, { immediate: true }), () => (state.sidecars.get(path) || {}).label === label);
   }
   function cullColorAndAdvance(colorLabel, path = surveyTargetPath()) {
     return cullCommitAndAdvance(path, () => setColorLabel(path, colorLabel), () => (state.sidecars.get(path) || {}).color_label === colorLabel);
   }
   function cullRateAndAdvance(rating, path = surveyTargetPath()) {
-    return cullCommitAndAdvance(path, () => setRating(path, rating), () => (state.sidecars.get(path) || {}).rating === rating);
+    return cullCommitAndAdvance(path, () => setRating(path, rating, { immediate: true }), () => (state.sidecars.get(path) || {}).rating === rating);
   }
   // ←/→ cycles pane B's photo through the rest of the current selection; ⏎ promotes B to A
   // (swap which photo/source is "the keeper"); handled from the shared keydown listener below.
@@ -17045,7 +17088,16 @@
     const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');
     if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
   }
+  // Coalesced to once per frame (a held rating/flag key fired one IPC pair per keypress); the
+  // timeout covers hidden windows where rAF never fires.
+  let rccScheduled = false;
   function renderCollectionCounts() {
+    if (rccScheduled) return;
+    rccScheduled = true;
+    const go = () => { if (!rccScheduled) return; rccScheduled = false; renderCollectionCountsNow(); };
+    requestAnimationFrame(go); setTimeout(go, 50);
+  }
+  function renderCollectionCountsNow() {
     invoke('collection_counts').then((counts) => {
       collectionCounts = counts;
       // Derive this smart collection from the live guaranteed-offline index rather than

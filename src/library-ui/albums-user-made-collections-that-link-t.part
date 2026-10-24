@@ -534,7 +534,16 @@
     const chipOut = document.querySelector('#lib-lr-chip .lib-lr-signout');
     if (chipOut && !chipOut._wired) { chipOut._wired = true; chipOut.onclick = lrSignOut; }
   }
+  // Coalesced to once per frame (a held rating/flag key fired one IPC pair per keypress); the
+  // timeout covers hidden windows where rAF never fires.
+  let rccScheduled = false;
   function renderCollectionCounts() {
+    if (rccScheduled) return;
+    rccScheduled = true;
+    const go = () => { if (!rccScheduled) return; rccScheduled = false; renderCollectionCountsNow(); };
+    requestAnimationFrame(go); setTimeout(go, 50);
+  }
+  function renderCollectionCountsNow() {
     invoke('collection_counts').then((counts) => {
       collectionCounts = counts;
       // Derive this smart collection from the live guaranteed-offline index rather than
