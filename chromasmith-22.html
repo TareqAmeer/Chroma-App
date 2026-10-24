@@ -7339,7 +7339,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024E';
+const BUILD='1.1024F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21652,7 +21652,7 @@ function fxHistoryPush(opts){
   const entry={j,snap,rasters,label:opts.label||snapDiffLabel(prev,snap),ts:Date.now()};
   if(opts.geometryBatch)entry.geometryBatch=opts.geometryBatch;
   fxHistory.push(entry);
-  if(fxHistory.length>20){fxHistory.shift();}
+  if(fxHistory.length>20)fxHistory.splice(1,1); // never drop entry 0: it is the pristine baseline fxResetAll returns to (shift() made Reset land on the oldest kept edit, look included)
   fxHistIdx=fxHistory.length-1;
   fxSyncTopbarDisabled();
   // Freeze every live raster: an entry now references these exact arrays, so the next in-place

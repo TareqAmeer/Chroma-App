@@ -84,7 +84,7 @@ function fxHistoryPush(opts){
   const entry={j,snap,rasters,label:opts.label||snapDiffLabel(prev,snap),ts:Date.now()};
   if(opts.geometryBatch)entry.geometryBatch=opts.geometryBatch;
   fxHistory.push(entry);
-  if(fxHistory.length>20){fxHistory.shift();}
+  if(fxHistory.length>20)fxHistory.splice(1,1); // never drop entry 0: it is the pristine baseline fxResetAll returns to (shift() made Reset land on the oldest kept edit, look included)
   fxHistIdx=fxHistory.length-1;
   fxSyncTopbarDisabled();
   // Freeze every live raster: an entry now references these exact arrays, so the next in-place
