@@ -7343,7 +7343,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1024J';
+const BUILD='1.1024K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11656,6 +11656,12 @@ function mergeExportSidecarXmp(recipeXml,sidecarXml,keepGps){
   if(!sourceRdf)throw Error('Source XMP has no RDF metadata');
   // Preserve whole source descriptions, including namespaces and fields unknown to this app.
   for(const child of [...sourceRdf.children])rdf.appendChild(target.importNode(child,true));
+  // Pixels are baked upright at load; the source's tiff:Orientation (attribute or element form) would rotate them again.
+  for(const node of [...rdf.getElementsByTagName('*')]){
+    if(node.localName==='Orientation'&&node.namespaceURI==='http://ns.adobe.com/tiff/1.0/'&&node.children.length===0)node.textContent='1';
+    const a=node.getAttributeNodeNS&&node.getAttributeNodeNS('http://ns.adobe.com/tiff/1.0/','Orientation');
+    if(a)a.value='1';
+  }
   if(!keepGps){
     for(const node of [...rdf.getElementsByTagName('*')]){
       if(/^GPS/i.test(node.localName)){node.remove();continue;}
