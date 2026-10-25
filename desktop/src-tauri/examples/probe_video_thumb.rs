@@ -3,9 +3,16 @@
 // handler (IShellItemImageFactory) actually produces a poster frame for these files.
 //
 //   cargo run --release --example probe_video_thumb -- <path1> [path2] ...
+#[cfg(windows)]
 #[path = "../src/winvideothumb.rs"]
 mod winvideothumb;
 
+#[cfg(not(windows))]
+fn main() {
+    eprintln!("probe_video_thumb exercises the Windows shell thumbnail handler; run it on Windows.");
+}
+
+#[cfg(windows)]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {

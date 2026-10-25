@@ -216,7 +216,11 @@ impl CatalogState {
     /// `.expect(...)`, which is exactly the "never a startup failure" invariant this exists to
     /// guarantee, undone in the one case actually worth guarding against.
     pub fn new() -> Self {
-        let path = catalog_db_path();
+        Self::new_at(catalog_db_path())
+    }
+
+    /// `new()` against an explicit db path (tests exercise the failure fallbacks without touching the process-wide CS_CATALOG_DIR).
+    pub(crate) fn new_at(path: PathBuf) -> Self {
         let conn = open_and_migrate(&path)
             .or_else(|e| {
                 crate::diag::log("error", format!("catalog: open failed ({e}), starting fresh"));
@@ -13149,15 +13153,14 @@ mod tests {
         // than mocking it.
         let blocker = std::env::temp_dir().join(format!("cs_catalog_blocker_{}", std::process::id()));
         std::fs::write(&blocker, b"not a directory").unwrap();
-        std::env::set_var("CS_CATALOG_DIR", blocker.join("nested").to_string_lossy().to_string());
-
-        let state = CatalogState::new(); // must not panic
+        // Explicit path, NOT the process-wide CS_CATALOG_DIR: setting that env var here briefly pointed every parallel test's thumbs/
+        // dir below a plain file (ENOTDIR in cache_usage_by_root_and_clear_are_scoped_correctly) and, unset, wrote into the real app-support dir.
+        let state = CatalogState::new_at(blocker.join("nested").join("catalog.db")); // must not panic
         let conn = state.conn.lock().unwrap();
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(version, SCHEMA_VERSION, "the in-memory fallback must still be a fully migrated, usable catalog");
 
         std::fs::remove_file(&blocker).ok();
-        std::env::remove_var("CS_CATALOG_DIR");
     }
 
     // ── Offline thumbnails ──────────────────────────────────────────────────────────────────

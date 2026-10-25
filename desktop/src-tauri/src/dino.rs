@@ -25,12 +25,10 @@ pub fn set_model_path(path: PathBuf) {
 
 fn session() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
-    S.get_or_init(|| {
-        let path = MODEL_PATH.get().ok_or("DINOv2 model path not set — set_model_path() must run before any use")?;
-        create_session_from_path(path).map(Mutex::new)
-    })
-    .as_ref()
-    .map_err(|e| e.clone())
+    // "Path not set" is NOT cached: a call that races ahead of set_model_path() (parallel tests, or any early caller) used to freeze
+    // that Err into the OnceLock for the whole process, so a later call after set_model_path() still failed.
+    let path = MODEL_PATH.get().ok_or("DINOv2 model path not set — set_model_path() must run before any use")?;
+    S.get_or_init(|| create_session_from_path(path).map(Mutex::new)).as_ref().map_err(|e| e.clone())
 }
 
 /// Unit-length 384-dim embedding of an RGB8 crop (any size; squashed to 224x224, as measured).

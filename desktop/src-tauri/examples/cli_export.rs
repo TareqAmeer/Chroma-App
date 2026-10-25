@@ -23,6 +23,12 @@
 // demosaic/lens/NR code paths as the app, rendered to a per-camera-corrected sRGB image, for
 // batch scripting, calibration tooling, or anywhere a plain "get me a viewable image from this
 // RAW" step is wanted without opening the GUI.
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
+#[path = "../src/diag.rs"]
+mod diag;
 #[path = "../src/lens_correct.rs"]
 mod lens_correct;
 #[path = "../src/sam.rs"]

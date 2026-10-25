@@ -24,6 +24,10 @@
 //! not the question. (The app itself is unaffected: it encodes from its own preview canvas, which
 //! geomCanvas has already oriented.)
 
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 #[path = "../src/subject.rs"]

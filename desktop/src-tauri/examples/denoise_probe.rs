@@ -19,6 +19,10 @@
 //      unchanged.
 //
 // Usage: cargo run --release --example denoise_probe
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 #[path = "../src/rawdenoise.rs"]

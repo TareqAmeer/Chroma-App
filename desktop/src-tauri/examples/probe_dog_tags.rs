@@ -3,6 +3,8 @@
 // embedding in the real catalog (read-only) and compares the "dog" count it SHOULD produce
 // with what photo_auto_tags actually holds. Fails if the stored count is far below expected.
 // Usage: cargo run --release --example probe_dog_tags
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
 #[path = "../src/platform/mod.rs"]
 #[allow(dead_code)]
 mod platform;

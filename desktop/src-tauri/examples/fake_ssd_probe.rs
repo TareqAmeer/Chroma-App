@@ -16,6 +16,42 @@
 // app's — the Originals/ folder it produces is left on disk afterward specifically so the real
 // app's own "Choose folder…" can be pointed at it too, which populates the REAL catalog.db
 // through the real UI path instead of this probe's.
+#[path = "../src/platform/mod.rs"]
+mod platform;
+#[path = "../src/rawdenoise.rs"]
+mod rawdenoise;
+#[path = "../src/sam.rs"]
+mod sam;
+#[path = "../src/arcface.rs"]
+mod arcface;
+#[path = "../src/bgwork.rs"]
+mod bgwork;
+#[path = "../src/canon.rs"]
+mod canon;
+#[path = "../src/clip.rs"]
+mod clip;
+#[path = "../src/diag.rs"]
+mod diag;
+#[path = "../src/dino.rs"]
+mod dino;
+#[path = "../src/formats.rs"]
+mod formats;
+#[path = "../src/geocode.rs"]
+mod geocode;
+#[path = "../src/petdetect.rs"]
+mod petdetect;
+#[path = "../src/raw_decode.rs"]
+mod raw_decode;
+#[path = "../src/scrfd.rs"]
+mod scrfd;
+#[path = "../src/smart_albums.rs"]
+mod smart_albums;
+#[path = "../src/still_decode.rs"]
+mod still_decode;
+#[path = "../src/strip_cache.rs"]
+mod strip_cache;
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
 #[path = "../src/fastthumb.rs"]
 mod fastthumb;
 #[path = "../src/videothumb.rs"]
@@ -51,6 +87,11 @@ pub(crate) fn unique_dest_pub(dir: &Path, name: &str) -> std::path::PathBuf {
     unique_dest(dir, name)
 }
 
+
+// The app's main.rs owns these two crate-root helpers that the #[path] modules above call as crate::...; reproduced here so this example links.
+#[allow(dead_code)]
+fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R { f() }
+
 fn main() {
     let card = "/tmp/chroma_fake_card";
     let ssd_root = std::env::var("HOME").unwrap() + "/Desktop/chroma-test-ssd";
@@ -74,8 +115,10 @@ fn main() {
             backup_root: None,
             folder_template: None, // default "{YYYY}/{YYYY-MM-DD}" — the real SSD layout
             filename_template: None,
+            sequence_start: None,
             skip_duplicates: true,
             only: Vec::new(),
+            metadata: Default::default(),
         },
         &mut |_p| ticks += 1,
     )
@@ -124,7 +167,7 @@ fn main() {
 
     println!("\n=== 7. Set a real rating via the app's own sidecar writer ===");
     let target = page.entries[0].path.clone();
-    library::set_sidecar(target.clone(), 5, "Green".to_string(), true, None, Some(true)).expect("set_sidecar");
+    library::set_sidecar_run(target.clone(), 5, "Green".to_string(), true, None, Some(true), None).expect("set_sidecar");
     println!("rated {} 5 stars + Green + Favorite via the real XMP writer", page.entries[0].name);
 
     println!("\n=== 8. Catalog: scan phase A+C picks up the sidecar ===");

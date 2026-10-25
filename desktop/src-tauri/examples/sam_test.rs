@@ -3,6 +3,10 @@
 // Usage: cargo run --example sam_test -- <input.jpg> <norm_x> <norm_y> <output_mask.png> [--model sam2]
 // Default model is EdgeSAM (the fast tier); pass `--model sam2` to run the same query through
 // SAM 2.1 Hiera-Tiny instead, for a direct quality/speed comparison against the same photo/point.
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 

@@ -36,7 +36,7 @@ fn main() {
     let source = std::fs::read(&args[2]).expect("read source");
     dump("source  ", &source);
     dump("rendered", &rendered);
-    match tiff_meta::splice_metadata(&rendered, &source) {
+    match tiff_meta::splice_metadata(&rendered, &source, tiff_meta::GpsExportPolicy::Preserve) {
         Some(out) => {
             dump("spliced ", &out);
             if let Some(p) = args.get(3) {

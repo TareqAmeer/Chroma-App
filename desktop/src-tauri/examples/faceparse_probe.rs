@@ -6,6 +6,10 @@
 //
 // Usage: cargo run --example faceparse_probe -- <input.jpg> <cx> <cy> <half> <out_prefix>
 // where (cx,cy) is the center of a square head crop of side 2*half, in image pixels.
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 #[path = "../src/faceparse.rs"]

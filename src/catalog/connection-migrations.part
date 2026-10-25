@@ -55,7 +55,11 @@ impl CatalogState {
     /// `.expect(...)`, which is exactly the "never a startup failure" invariant this exists to
     /// guarantee, undone in the one case actually worth guarding against.
     pub fn new() -> Self {
-        let path = catalog_db_path();
+        Self::new_at(catalog_db_path())
+    }
+
+    /// `new()` against an explicit db path (tests exercise the failure fallbacks without touching the process-wide CS_CATALOG_DIR).
+    pub(crate) fn new_at(path: PathBuf) -> Self {
         let conn = open_and_migrate(&path)
             .or_else(|e| {
                 crate::diag::log("error", format!("catalog: open failed ({e}), starting fresh"));

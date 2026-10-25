@@ -6,6 +6,10 @@
 // catalog_clip_search is picked from evidence, not a guessed round number.
 //
 // Usage: cargo run --release --example clip_search_probe
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 #[path = "../src/clip.rs"]

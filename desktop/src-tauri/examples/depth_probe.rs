@@ -4,6 +4,10 @@
 // actually matches what the code assumes, before shipping. Mirrors faceparse_probe.rs's structure.
 //
 // Usage: cargo run --example depth_probe -- <input.jpg> <out.png>
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/platform/mod.rs"]
+mod platform;
 #[path = "../src/sam.rs"]
 mod sam;
 #[path = "../src/depth.rs"]

@@ -1,5 +1,41 @@
 // How long a COLD thumbnail actually takes, per source type. Item 15 (decode tiering) assumes the
 // answer is "too long"; this checks before anything is built.
+#[path = "../src/platform/mod.rs"]
+mod platform;
+#[path = "../src/arcface.rs"]
+mod arcface;
+#[path = "../src/clip.rs"]
+mod clip;
+#[path = "../src/dino.rs"]
+mod dino;
+#[path = "../src/ingest.rs"]
+mod ingest;
+#[path = "../src/petdetect.rs"]
+mod petdetect;
+#[path = "../src/scrfd.rs"]
+mod scrfd;
+#[path = "../src/smart_albums.rs"]
+mod smart_albums;
+#[path = "../src/bgwork.rs"]
+mod bgwork;
+#[path = "../src/canon.rs"]
+mod canon;
+#[path = "../src/catalog.rs"]
+mod catalog;
+#[path = "../src/diag.rs"]
+mod diag;
+#[path = "../src/formats.rs"]
+mod formats;
+#[path = "../src/geocode.rs"]
+mod geocode;
+#[path = "../src/still_decode.rs"]
+mod still_decode;
+#[path = "../src/strip_cache.rs"]
+mod strip_cache;
+#[path = "../src/trash_undo.rs"]
+mod trash_undo;
+#[path = "../src/videothumb.rs"]
+mod videothumb;
 #[path = "../src/lens_correct.rs"] mod lens_correct;
 #[path = "../src/sam.rs"] mod sam;
 #[path = "../src/rawdenoise.rs"] mod rawdenoise;
@@ -7,6 +43,25 @@
 #[cfg(target_os = "macos")]
 #[path = "../src/fastthumb.rs"] mod fastthumb;
 #[path = "../src/library.rs"] mod library;
+
+// The app's main.rs owns these two crate-root helpers that the #[path] modules above call as crate::...; reproduced here so this example links.
+#[allow(dead_code)]
+fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R { f() }
+#[allow(dead_code)]
+pub(crate) fn unique_dest_pub(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
+    let base = std::path::Path::new(name);
+    let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
+    let ext = base.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    let mut dest = dir.join(name);
+    let mut n = 2;
+    while dest.exists() {
+        let alt = if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") };
+        dest = dir.join(alt);
+        n += 1;
+    }
+    dest
+}
+
 fn main() {
     for f in std::env::args().skip(1) {
         // Bust the disk cache so this measures a real cold decode, not a file read.
