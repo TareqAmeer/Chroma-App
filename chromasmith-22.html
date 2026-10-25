@@ -7348,7 +7348,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025E';
+const BUILD='1.1025F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9242,10 +9242,11 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 dir;uniform float sig;
+uniform sampler2D img;uniform vec2 dir;uniform float sig;uniform float capScale;
 void main(){
   vec4 s=vec4(0.);float t=0.;
-  int r=min(int(sig*3.)+1,48);
+  int cap=capScale>0.?min(48,max(1,int(48.*capScale+0.5))):48;
+  int r=min(int(sig*3.)+1,cap);
   for(int i=-48;i<=48;i++){
     if(abs(i)>r)continue;
     float w=exp(-float(i*i)/(2.*sig*sig));
@@ -9342,11 +9343,12 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 dir;uniform float sigR,sigG,sigB;
+uniform sampler2D img;uniform vec2 dir;uniform float sigR,sigG,sigB;uniform float capScale;
 void main(){
   vec3 s=vec3(0.),t=vec3(0.);
   float sm=max(max(sigR,sigG),sigB);
-  int r=min(int(sm*3.)+1,64);
+  int cap=capScale>0.?min(64,max(1,int(64.*capScale+0.5))):64;
+  int r=min(int(sm*3.)+1,cap);
   for(int i=-64;i<=64;i++){
     if(abs(i)>r)continue;
     float fi=float(i);
@@ -10275,8 +10277,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Halation v6: channel-split σ_R=6.14 σ_G=2.62 σ_B=1.0 px; gain_R=6.89 gain_G=0.109 @amount70
     // Bloom v6:    source-coloured; σ=12.42 gain=0.111 @amount40
     const C=FXR.CAL;
-    const BLUR_MAX_SIG=15,HBLUR_MAX_SIG=20;   // largest sigma one pass of the capped blur / blur_hal kernels renders as a true Gaussian
     const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
+    // Preview only: emulate the export's kernel truncation at this render's scale (see the blur passes). opts.truncRefW = the
+    // width the export will render at; the tap cap shrinks by sc / (truncRefW/REF) (per reduced-res texel: / gs). 0 = no emulation.
+    const capK=(opts&&opts.truncRefW>0&&sc<opts.truncRefW/REF)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0;
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
@@ -10554,15 +10558,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.src,this.fbs.hemitF,
         {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
       this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
-      // The blur shader's kernel is capped (r<=48 taps => a true Gaussian only up to sigma~16). Bloom sigma scales with the
-      // render width (sc=w/REF), so a 6000px export (sigma~32) was silently truncated at ~1.5 sigma while a Fit preview
-      // (sigma~5) was not: the export halo came out tighter than the preview. A Gaussian of sigma s is N passes of
-      // s/sqrt(N), so wide glows run as N passes and stay a true Gaussian at any resolution. N=1 (sigma<=16) is the old path.
-      const bN=Math.max(1,Math.ceil(bSig2/BLUR_MAX_SIG)),bS=bSig2/Math.sqrt(bN);
-      for(let k=0;k<bN;k++){
-        this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bS},[[0,k?'bglow_v':'bsrc',false]],RG);
-        this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bS},[[0,'bglow_h',false]],RG);
-      }
+      // The blur kernels are capped (blur r<=48 taps, blur_hal r<=64), so on a wide image (sigma scales with render width) the
+      // EXPORT's glow is a truncated Gaussian: that tighter halo is the look. A smaller render must reproduce the same SHAPE, so
+      // capK scales the tap cap by (this render's sigma scale / the export's): see opts.truncRefW. capK=0 => the plain cap (export).
+      this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2,capScale:capK},[[0,'bsrc',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2,capScale:capK},[[0,'bglow_h',false]],RG);
     }
 
     // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
@@ -10576,12 +10576,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     if(glowOn){
       this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
       this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
-      // blur_hal caps at r<=64 taps (true Gaussian to sigma~21): same N-pass rule as the bloom above (N=1 = unchanged).
-      const hN=Math.max(1,Math.ceil(Math.max(hSigR2,hSigG2,hSigB2)/HBLUR_MAX_SIG)),hq=1/Math.sqrt(hN);
-      for(let k=0;k<hN;k++){
-        this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,k?'hglow_v':'hsrc',false]],RG);
-        this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,'hglow_h',false]],RG);
-      }
+      this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2,capScale:capK},[[0,'hsrc',false]],RG);
+      this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2,capScale:capK},[[0,'hglow_h',false]],RG);
     }
 
     // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow
@@ -20899,10 +20895,16 @@ function mskShowSelIdx(){
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
 }
+// Width the EXPORT of the current photo renders at (working copy width x its full-res factor): the preview emulates the export's
+// capped glow kernels relative to this (see render()'s capK).
+function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
   return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
-    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
+    // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
+    // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
+    ...(_fxPreviewInteracting||(extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};
 }
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
@@ -25137,6 +25139,22 @@ function renderPreview(){
   if(cw>0&&ch>0&&!_fxPreviewInteracting){
     const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
     dpr=Math.max(dpr,halfSourceDpr);
+  }
+  // Fit / zoomed-out: the compositor shrinks this buffer to its displayed size, and anything but a clean 2:1 shrink aliases or
+  // softens (the old half-source rule gave 2.2-2.5x). Render so the DISPLAYED bitmap is exactly 2x its device size; for a
+  // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
+  if(!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1&&cw>0&&ch>0&&!_curIsVideoDraft()){
+    const dd=window.devicePixelRatio||1,zf=Math.max(fxZoom,0.25);
+    let pwT=cw*zf*2*dd;
+    try{
+      const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
+      if(_previewComposition&&bordersOnly){
+        const pw0=Math.max(2,Math.round(pwT)),ph0=Math.round(pw0*ch/cw),bz=borderLayerSizes(Pq,pw0),inset=2*(bz.b1t+bz.b2t);
+        const Wc0=pw0+inset,Hc0=ph0+inset,cssDisp=Math.min(maxW,maxH*Wc0/Hc0,Wc0)*zf;
+        pwT=pw0*(2*dd*cssDisp)/Wc0;
+      }
+    }catch(e){}
+    dpr=Math.min(pwT/cw,iw/cw,ih/ch);
   }
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
   // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped

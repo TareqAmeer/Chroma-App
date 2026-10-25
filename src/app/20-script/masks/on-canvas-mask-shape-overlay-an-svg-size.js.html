@@ -75,10 +75,16 @@ function mskShowSelIdx(){
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
 }
+// Width the EXPORT of the current photo renders at (working copy width x its full-res factor): the preview emulates the export's
+// capped glow kernels relative to this (see render()'s capK).
+function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
   return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
-    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN};
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
+    // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
+    // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
+    ...(_fxPreviewInteracting||(extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};
 }
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so

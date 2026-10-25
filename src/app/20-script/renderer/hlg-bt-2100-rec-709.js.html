@@ -786,10 +786,11 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 dir;uniform float sig;
+uniform sampler2D img;uniform vec2 dir;uniform float sig;uniform float capScale;
 void main(){
   vec4 s=vec4(0.);float t=0.;
-  int r=min(int(sig*3.)+1,48);
+  int cap=capScale>0.?min(48,max(1,int(48.*capScale+0.5))):48;
+  int r=min(int(sig*3.)+1,cap);
   for(int i=-48;i<=48;i++){
     if(abs(i)>r)continue;
     float w=exp(-float(i*i)/(2.*sig*sig));
@@ -886,11 +887,12 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform vec2 dir;uniform float sigR,sigG,sigB;
+uniform sampler2D img;uniform vec2 dir;uniform float sigR,sigG,sigB;uniform float capScale;
 void main(){
   vec3 s=vec3(0.),t=vec3(0.);
   float sm=max(max(sigR,sigG),sigB);
-  int r=min(int(sm*3.)+1,64);
+  int cap=capScale>0.?min(64,max(1,int(64.*capScale+0.5))):64;
+  int r=min(int(sm*3.)+1,cap);
   for(int i=-64;i<=64;i++){
     if(abs(i)>r)continue;
     float fi=float(i);

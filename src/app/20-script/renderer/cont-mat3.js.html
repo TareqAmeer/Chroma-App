@@ -702,8 +702,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // Halation v6: channel-split σ_R=6.14 σ_G=2.62 σ_B=1.0 px; gain_R=6.89 gain_G=0.109 @amount70
     // Bloom v6:    source-coloured; σ=12.42 gain=0.111 @amount40
     const C=FXR.CAL;
-    const BLUR_MAX_SIG=15,HBLUR_MAX_SIG=20;   // largest sigma one pass of the capped blur / blur_hal kernels renders as a true Gaussian
     const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
+    // Preview only: emulate the export's kernel truncation at this render's scale (see the blur passes). opts.truncRefW = the
+    // width the export will render at; the tap cap shrinks by sc / (truncRefW/REF) (per reduced-res texel: / gs). 0 = no emulation.
+    const capK=(opts&&opts.truncRefW>0&&sc<opts.truncRefW/REF)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0;
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
@@ -981,15 +983,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       this._pass(this.progs.src,this.fbs.hemitF,
         {img:0,thr:bThr,knee:B.knee,power:B.power,bluesupp:0.0,mode:1.0,powL:1.0,kW:0.0,kC:0.0,aG:0.0,bP:0.0,powLg:1.0,gA:0.0,gB:1.0},[[0,'lut',false]]);
       this._pass(this.progs.blur,this.fbs.bsrc,DS,[[0,'hemitF',false]],RG);
-      // The blur shader's kernel is capped (r<=48 taps => a true Gaussian only up to sigma~16). Bloom sigma scales with the
-      // render width (sc=w/REF), so a 6000px export (sigma~32) was silently truncated at ~1.5 sigma while a Fit preview
-      // (sigma~5) was not: the export halo came out tighter than the preview. A Gaussian of sigma s is N passes of
-      // s/sqrt(N), so wide glows run as N passes and stay a true Gaussian at any resolution. N=1 (sigma<=16) is the old path.
-      const bN=Math.max(1,Math.ceil(bSig2/BLUR_MAX_SIG)),bS=bSig2/Math.sqrt(bN);
-      for(let k=0;k<bN;k++){
-        this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bS},[[0,k?'bglow_v':'bsrc',false]],RG);
-        this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bS},[[0,'bglow_h',false]],RG);
-      }
+      // The blur kernels are capped (blur r<=48 taps, blur_hal r<=64), so on a wide image (sigma scales with render width) the
+      // EXPORT's glow is a truncated Gaussian: that tighter halo is the look. A smaller render must reproduce the same SHAPE, so
+      // capK scales the tap cap by (this render's sigma scale / the export's): see opts.truncRefW. capK=0 => the plain cap (export).
+      this._pass(this.progs.blur,this.fbs.bglow_h,{img:0,dir:[iw2,0],sig:bSig2,capScale:capK},[[0,'bsrc',false]],RG);
+      this._pass(this.progs.blur,this.fbs.bglow_v,{img:0,dir:[0,ih2],sig:bSig2,capScale:capK},[[0,'bglow_h',false]],RG);
     }
 
     // HALATION emit (rule-based; powL,kW,kC,aG,bP; bluesupp doubles as bB — see CAL.halation).
@@ -1003,12 +1001,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     if(glowOn){
       this._pass(this.progs.src,this.fbs.hemitF,emitU,[[0,'lut',false]]);   // FULL res
       this._pass(this.progs.blur,this.fbs.hsrc,DS,[[0,'hemitF',false]],RG); // downsampled blur input
-      // blur_hal caps at r<=64 taps (true Gaussian to sigma~21): same N-pass rule as the bloom above (N=1 = unchanged).
-      const hN=Math.max(1,Math.ceil(Math.max(hSigR2,hSigG2,hSigB2)/HBLUR_MAX_SIG)),hq=1/Math.sqrt(hN);
-      for(let k=0;k<hN;k++){
-        this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,k?'hglow_v':'hsrc',false]],RG);
-        this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2*hq,sigG:hSigG2*hq,sigB:hSigB2*hq},[[0,'hglow_h',false]],RG);
-      }
+      this._pass(this.progs.blur_hal,this.fbs.hglow_h,{img:0,dir:[iw2,0],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2,capScale:capK},[[0,'hsrc',false]],RG);
+      this._pass(this.progs.blur_hal,this.fbs.hglow_v,{img:0,dir:[0,ih2],sigR:hSigR2,sigG:hSigG2,sigB:hSigB2,capScale:capK},[[0,'hglow_h',false]],RG);
     }
 
     // FINAL composite (linear screen) + grain — FULL resolution; samples the reduced glow

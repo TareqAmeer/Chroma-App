@@ -127,6 +127,22 @@ function renderPreview(){
     const halfSourceDpr=Math.min(iw/cw,ih/ch)*0.5;
     dpr=Math.max(dpr,halfSourceDpr);
   }
+  // Fit / zoomed-out: the compositor shrinks this buffer to its displayed size, and anything but a clean 2:1 shrink aliases or
+  // softens (the old half-source rule gave 2.2-2.5x). Render so the DISPLAYED bitmap is exactly 2x its device size; for a
+  // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
+  if(!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1&&cw>0&&ch>0&&!_curIsVideoDraft()){
+    const dd=window.devicePixelRatio||1,zf=Math.max(fxZoom,0.25);
+    let pwT=cw*zf*2*dd;
+    try{
+      const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
+      if(_previewComposition&&bordersOnly){
+        const pw0=Math.max(2,Math.round(pwT)),ph0=Math.round(pw0*ch/cw),bz=borderLayerSizes(Pq,pw0),inset=2*(bz.b1t+bz.b2t);
+        const Wc0=pw0+inset,Hc0=ph0+inset,cssDisp=Math.min(maxW,maxH*Wc0/Hc0,Wc0)*zf;
+        pwT=pw0*(2*dd*cssDisp)/Wc0;
+      }
+    }catch(e){}
+    dpr=Math.min(pwT/cw,iw/cw,ih/ch);
+  }
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
   // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped
   // buffer was CSS-upscaled (4x at 200%). Raise the density in power-of-2 tiers of the zoom (few re-renders), bounded by the source and 8192px.

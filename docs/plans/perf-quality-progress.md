@@ -44,6 +44,7 @@ at the final scale, which is why no Chromium test ever showed it. Fixes:
 - probe_preview_px, probe_allfx_sharp, library_scroll_anchor PASS.
 
 ## BLOCKERS
+- RESOLVED 2026-10-25 (user): old truncated bloom/halation look is the correct look. Export restored byte-for-byte; the preview emulates it (see 'Bloom decision' below). Original note:
 - Item 1/7 (taste call): large-image exports (bloom sigma > ~16px, i.e. sources wider than ~3100px) now get the true calibrated
   Gaussian bloom instead of one truncated at ~1.5 sigma, so their bloom halo is visibly WIDER than before. That is the
   calibrated look (calibration was done at 2400px where nothing truncates) and matches the preview, but it changes existing
@@ -61,3 +62,15 @@ at the final scale, which is why no Chromium test ever showed it. Fixes:
 - Pre-existing red gates listed above (ui:test token, library_perf DOM budget, lint:src keyword-tree) are not mine and were left alone.
 
 Next item: none (all 10 done or logged).
+
+
+## Bloom decision (user, 2026-10-25): export keeps the old truncated-kernel look; preview matches it
+- Export: the N-pass blur was removed. `capScale` is 0 for exports, i.e. the shader keeps its plain 48 / 64 tap caps.
+  Proof, `test/probe_export_identity.mjs` (old app at b96045f3~1 vs working tree, 8-bit path, halation+bloom on, two images wider than 3100px):
+  4800x3200 and 6240x2400 FNV hash IDENTICAL, coarse diff 0 / max 0. Golden harness: all 35 renders match the goldens (1 file differs by mean 0.007 = dither seed).
+- Preview: `opts.truncRefW` (the export width = working copy width x `fxFullScale()`) scales the tap cap by sc/(truncRefW/REF)/glowScale, so a
+  3000px preview gets the same truncated SHAPE a 6000px export gets (cap defined in ref-width units). Added to `mskPreviewRenderOptions`, so every
+  preview path (Fit, crop, tiles, loupe) carries it. Settled previews also use the export's float intermediates + half-LSB dither.
+- `test/probe_glow_scale_parity.mjs` (4800px export vs 2400px preview, bloom radius 30, halation 14): preview WITHOUT emulation 0.544 mean levels off the export, WITH emulation 0.031.
+- Fit buffer is rendered at exactly 2x the displayed size (real app: 2681px backing for 671 css px at dpr 2 = 1.998x).
+- Real-app parity (halation+bloom on, Full res off, composed with borders) after this change, before the float-parity fix: Fit 0.751 sharpness / diff 3.14; 100% 1.31 / 0.64; 200% 1.06 / 0.36; 500% 1.03 / 0.12. The 100% shift was the float-vs-8-bit emission mismatch, fixed afterwards by giving settled previews the export's quality options (re-measured below).
