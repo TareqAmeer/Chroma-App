@@ -33,9 +33,12 @@ try {
   console.log('PASS brush mode radio (7 sequences + held modifier + rebuild)');
 
   // ---- 2. continuous stroke: slow + fast, several sizes
-  const box = await page.evaluate(() => { const r = FX.cv.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+  await page.evaluate(() => FX.cv.scrollIntoView({ block: 'center' })); // headless layout stacks the panel above the canvas
+  let box;
   for (const cfg of [{ size: 20, flow: 60, feather: 100, steps: 60 }, { size: 20, flow: 60, feather: 100, steps: 4 }, { size: 8, flow: 30, feather: 40, steps: 6 }, { size: 40, flow: 100, feather: 0, steps: 3 }]) {
     await page.evaluate(c => { mskPaintStop(); mskPaintErase = false; const m = fxState.masks[mskSel]; m.px.fill(0); mskBrushSize = c.size; mskBrushFlow = c.flow; mskBrushFeather = c.feather; mskBrushDensity = 100; mskPaintToggle(); }, cfg);
+    await page.evaluate(() => FX.cv.scrollIntoView({ block: 'center' }));
+    box = await page.evaluate(() => { const r = FX.cv.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
     const y = box.y + box.h * 0.5, x0 = box.x + box.w * 0.2, x1 = box.x + box.w * 0.8;
     await page.mouse.move(x0, y); await page.mouse.down();
     for (let i = 1; i <= cfg.steps; i++) await page.mouse.move(x0 + (x1 - x0) * i / cfg.steps, y);
@@ -58,6 +61,7 @@ try {
       await page.evaluate(a => { if (a === 'paintbtn') mskPaintButton(); if (a === 'erasebtn') mskPaintErase_toggle(); if (a === 'add') { mskAdd('brush'); mskSel = 0; mskRebuild(); } }, act);
       if (act === 'paint' || act === 'erase') {
         await page.evaluate(a => { mskPaintErase = a === 'erase'; mskPaintErase_sync(); }, act);
+        await page.evaluate(() => FX.cv.scrollIntoView({ block: 'center' })); box = await page.evaluate(() => { const r = FX.cv.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
         await page.mouse.move(box.x + box.w * .4, box.y + box.h * .4); await page.mouse.down(); await page.mouse.move(box.x + box.w * .5, box.y + box.h * .45); await page.mouse.up();
       }
       const after = await view();

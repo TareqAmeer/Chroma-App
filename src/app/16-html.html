@@ -529,8 +529,13 @@
           <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
           <div id="msk-people" class="msk-people" role="group" aria-label="People in this photo"></div>
           <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
+          <div class="fx-row" id="msk-overlay-row" style="display:none">
+            <div class="fx-label">Show overlay</div>
+            <input type="checkbox" id="ck-msk-overlay" role="switch" aria-label="Show mask overlay (O). Hold backslash to peek the matte" title="Show mask overlay (O). Hold \\ to peek the matte" onchange="mskSetPreviewMode(this.checked?'select':'off')">
+            <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Overlay colour" title="Overlay colour" onchange="mskSelViewColorInput(this.value)">
+          </div>
           <div class="fx-row" id="msk-selview-style-row" style="display:none">
-            <div class="fx-label">Show selection</div>
+            <div class="fx-label">Overlay style</div>
             <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
               <option value="color">Colour overlay</option><option value="colorbw">Colour overlay on B&amp;W</option><option value="imgbw">Image on B&amp;W</option><option value="imgblack">Image on black</option><option value="imgwhite">Image on white</option><option value="wob">White on black</option><option value="off">Off</option>
             </select>
@@ -549,10 +554,6 @@
           </div>
           <div class="fx-row"><div class="fx-label">Show edit pins</div>
             <input type="checkbox" id="ck-msk-pins" checked onchange="mskPinsToggle(this.checked)">
-          </div>
-          <div class="fx-row" id="msk-selview-color-row" style="display:none">
-            <div class="fx-label">Overlay colour</div>
-            <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Selection overlay colour" onchange="mskSelViewColorInput(this.value)">
           </div>
           <div class="msk-count" id="msk-count" aria-live="polite"></div>
           <button class="btn bgh" id="msk-update-all" style="display:none;align-self:flex-start" onclick="mskAiUpdateAll()" title="Re-evaluate every stale or failed AI mask on this photo">Update all AI masks</button>

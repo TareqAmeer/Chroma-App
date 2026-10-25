@@ -82,7 +82,7 @@ document.addEventListener('keydown',e=>{
   // is actually open and the user isn't typing somewhere else.
   if(e.key==='o'||e.key==='O'){
     if(e.metaKey||e.ctrlKey||e.altKey)return;
-    const t=e.target;if(t&&t.closest&&t.closest('input,textarea,[contenteditable]'))return;
+    const t=e.target;if(t&&t.closest&&t.closest('textarea,select,[contenteditable],input:not([type=checkbox]):not([type=range]):not([type=button]):not([type=color])'))return;
     const ff=document.getElementById('ff-local');if(!ff||ff.offsetParent===null)return;
     e.preventDefault();
     const next=mskPreviewMode==='select'?'off':'select';
