@@ -780,6 +780,8 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
   -webkit-mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro));mask-image:radial-gradient(circle at var(--sx) var(--sy),transparent var(--ri),#000 var(--ro))}
 #msk-spotlight.on{display:block}
 #msk-brush-cursor.erase{border-color:var(--err)}
+/* Paint / Erase radio pair: the active mode must be unmistakable in every skin (sk2 flattens .bsec to an underline) */
+body #btn-msk-paint[aria-pressed=true],body #btn-msk-erase[aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--acc)!important;font-weight:600}
 .crop-rect{position:absolute;border:1px solid #fff;box-shadow:0 0 0 9999px var(--scrim-b4);cursor:move;box-sizing:border-box}
 .crop-grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}
 .crop-grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.8);box-shadow:0 0 0 1px rgba(0,0,0,.4);pointer-events:none}

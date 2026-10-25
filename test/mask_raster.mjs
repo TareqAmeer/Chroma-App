@@ -229,8 +229,9 @@ async function main() {
       ck('CHR-275 touch contact shows the brush ring in erase state without prior motion',touchBrushCursor.classList.contains('on')&&touchBrushCursor.classList.contains('erase'));
       pointer('pointerup',false,'touch');
       ck('CHR-275 touch pointer erases through visible toggle',m.px.some(v=>v<200));
-      eraseButton.click();
-      ck('CHR-275 on-screen erase returns accessible state and cursor to paint',eraseButton.getAttribute('aria-pressed')==='false'&&!eraseButton.classList.contains('on')&&!touchBrushCursor.classList.contains('erase'));
+      eraseButton.click(); // slot swap re-renders the panel (slider values), so re-query the live button
+      const eraseButton2=document.getElementById('btn-msk-erase');
+      ck('CHR-275 on-screen erase returns accessible state and cursor to paint',eraseButton2.getAttribute('aria-pressed')==='false'&&!eraseButton2.classList.contains('on')&&document.getElementById('btn-msk-paint').getAttribute('aria-pressed')==='true'&&!touchBrushCursor.classList.contains('erase'));
       m.px.fill(200);mskPaintErase=true;mskRebuild();
       const rebuiltEraseButton=document.getElementById('btn-msk-erase');
       ck('CHR-275 rebuilt erase button retains current pressed state',rebuiltEraseButton.getAttribute('aria-pressed')==='true');

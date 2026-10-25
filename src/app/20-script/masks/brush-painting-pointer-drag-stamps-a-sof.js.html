@@ -47,7 +47,7 @@ function mskBrushNudge(what,d){
   if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();
 }
 
-function mskPaintEndStroke(){if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
+function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
   mskPaintMode=!mskPaintMode;
@@ -56,10 +56,10 @@ function mskPaintToggle(){
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();}
-  mskTeethGuideSync();
+  mskTeethGuideSync();mskPaintErase_sync();
 }
 function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
-  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();}
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();mskPaintErase_sync();}
 function mskTeethGuideSync(){
   const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
   let guide=document.getElementById('msk-teeth-guide');
@@ -72,13 +72,29 @@ function mskTeethGuideSync(){
   }
   guide.textContent='Paint enamel only · use Erase around lips and gums';
 }
-function mskPaintErase_sync(){const b=document.getElementById('btn-msk-erase');if(b){b.classList.toggle('on',mskPaintErase);b.setAttribute('aria-pressed',String(mskPaintErase));}const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',!!(mskPaintErase||mskBrushEraseHeld));}
-function mskPaintErase_toggle(){mskPaintErase=!mskPaintErase;mskPaintErase_sync();}
+// Single source of truth for the brush mode: exactly one of Paint / Erase is active while painting
+// (derived from mskPaintMode + mskPaintErase + the held-modifier temporary erase). Buttons, ARIA and cursor all read it.
+function mskBrushModeActive(){return !mskPaintMode?'':((mskPaintErase||mskBrushEraseHeld)?'erase':'paint');}
+function mskPaintErase_sync(){const mode=mskBrushModeActive();
+  const p=document.getElementById('btn-msk-paint'),b=document.getElementById('btn-msk-erase');
+  if(p){const on=mode==='paint';p.classList.toggle('on',on);p.classList.toggle('bsec',on);p.classList.toggle('bgh',!on);p.setAttribute('aria-pressed',String(on));const t=p.lastChild;if(t&&t.nodeType===3)t.textContent=on?' Painting':' Paint';}
+  if(b){const on=mode==='erase';b.classList.toggle('on',on);b.classList.toggle('bsec',on);b.classList.toggle('bgh',!on);b.setAttribute('aria-pressed',String(on));}
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',mode==='erase');}
+function mskPaintErase_toggle(){mskBrushSlotSelect(mskPaintMode&&mskPaintErase?mskBrushSlot:'E');}
+function mskPaintButton(){if(mskPaintMode&&mskPaintErase)mskBrushSlotSelect(mskBrushSlot);else mskPaintToggle();}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
   const src=fxWork||fxImg;if(!src||!FX.cv)return null;
   if(!fxPointerToPhotoNorm(e))return null; // on the frame/matte, not the photo
   return fxPointerToPhotoNorm(e,true);
+}
+// Per-stroke coverage: stamps combine by MAX inside one stroke (no flow build-up dots where stamps overlap);
+// the stroke result is composed against the pixels as they were when the stroke began.
+let _mskSS=null;
+function mskPaintSeg(m,a,b,erase){
+  const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(m.mtW,m.mtH)),sp=Math.max(0.5,rad*0.12);
+  const dist=a?Math.hypot((b.nx-a.nx)*m.mtW,(b.ny-a.ny)*m.mtH):0,n=a?Math.max(1,Math.ceil(dist/sp)):1;
+  for(let i=1;i<=n;i++){const t=a?i/n:1;mskPaintAt(m,a?a.nx+(b.nx-a.nx)*t:b.nx,a?a.ny+(b.ny-a.ny)*t:b.ny,erase);}
 }
 function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // The ONE in-place raster mutation in the app, so the ONE place copy-on-write has to fire.
@@ -87,6 +103,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // stroke sample until the next push. Painting therefore costs one clone per undo step, not
   // one per pointermove.
   const px=mskPxForWrite(m);
+  let ss=null;
+  if(_mskStroke===m){if(!_mskSS||_mskSS.px!==px||_mskSS.erase!==erase)_mskSS={px,erase,base:px.slice(),cover:new Float32Array(px.length)};ss=_mskSS;}
   const w=m.mtW,h=m.mtH,cx=nx*w,cy=ny*h;
   const rad=Math.max(2,(mskBrushSize/100)*0.25*Math.max(w,h));
   const flow=Math.max(0,Math.min(1,mskBrushFlow/100));
@@ -120,6 +138,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     const soft=(1-edge*edge*(3-2*edge))*sim,add=flow*soft*255,idx=y*w+x,cur=px[idx];
     // Density bounds the paint/erase coverage. Never weaken existing stronger coverage
     // simply because the newly selected density is lower. Defaults preserve prior pixels.
+    if(ss){const v=flow*soft;if(v>ss.cover[idx]){ss.cover[idx]=v;const b0=ss.base[idx],d=v*255;
+      px[idx]=erase?Math.min(b0,Math.max(255*(1-density),b0-d)):Math.max(b0,Math.min(255*density,b0+d));}continue;}
     px[idx]=erase?Math.min(cur,Math.max(255*(1-density),cur-add)):Math.max(cur,Math.min(255*density,cur+add));
   }
   _mskTexDirty=true;
@@ -135,10 +155,11 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   // box, so it tracks size/zoom without needing exact 1:1 buffer-to-screen pixel mapping.
   const cursorEl=document.getElementById('msk-brush-cursor');
   let lastBrushPointer=null;
-  const clearTransientErase=()=>{lastBrushPointer=null;mskBrushEraseHeld=false;if(cursorEl)cursorEl.classList.remove('erase');};
-  window.chromasmithBrushEraseHeld=on=>{mskBrushEraseHeld=!!on;if(lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:mskBrushEraseHeld});};
+  const clearTransientErase=()=>{lastBrushPointer=null;mskBrushEraseHeld=false;mskPaintErase_sync();if(cursorEl)cursorEl.classList.remove('erase');};
+  window.chromasmithBrushEraseHeld=on=>{mskBrushEraseHeld=!!on;mskPaintErase_sync();if(lastBrushPointer)updateBrushCursor({...lastBrushPointer,altKey:mskBrushEraseHeld});};
   _mskBrushTransientReset=clearTransientErase;
   window.addEventListener('blur',mskPaintTransientReset);
+  window.addEventListener('focus',()=>{if(mskBrushEraseHeld)clearTransientErase();}); // a stuck held-erase modifier can never survive a focus change
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')mskPaintTransientReset();});
   function updateBrushCursor(e){
     if(!cursorEl)return;
@@ -192,9 +213,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
       const er=mskPaintErase||mskBrushEraseHeld;
       // Shift-click: straight line from the end of the previous stroke on this mask (Lightroom)
       if(e.shiftKey&&_mskLastPt&&_mskLastPt.m===m){
-        const dx=p.nx-_mskLastPt.nx,dy=p.ny-_mskLastPt.ny,step=Math.max(1,Math.ceil(Math.hypot(dx*m.mtW,dy*m.mtH)/Math.max(2,(mskBrushSize/100)*0.25*Math.max(m.mtW,m.mtH)*0.35)));
-        for(let i=1;i<=step;i++)mskPaintAt(m,_mskLastPt.nx+dx*i/step,_mskLastPt.ny+dy*i/step,er);
-      }else mskPaintAt(m,p.nx,p.ny,er);
+        mskPaintSeg(m,_mskLastPt,p,er);
+      }else mskPaintSeg(m,null,p,er);
       _mskLastPt={m,nx:p.nx,ny:p.ny};
     }
     queueRender();
@@ -202,7 +222,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   fxCanvasOn('pointermove',e=>{
     if(!mskPaintMode||!_mskStroke)return;
     e.preventDefault();e.stopPropagation();
-    const p=_mskPointToUV(e);if(p){mskPaintAt(_mskStroke,p.nx,p.ny,mskPaintErase||mskBrushEraseHeld);_mskLastPt={m:_mskStroke,nx:p.nx,ny:p.ny};}
+    const er=mskPaintErase||mskBrushEraseHeld,evs=(e.getCoalescedEvents&&e.getCoalescedEvents())||[];
+    for(const ev of (evs.length?evs:[e])){const p=_mskPointToUV(ev);if(p){const prev=_mskLastPt&&_mskLastPt.m===_mskStroke?_mskLastPt:null;mskPaintSeg(_mskStroke,prev,p,er);_mskLastPt={m:_mskStroke,nx:p.nx,ny:p.ny};}}
     queueRender();
   });
   const end=e=>{if(!_mskStroke)return;if(e.type==='pointercancel')clearTransientErase();mskPaintEndStroke();};

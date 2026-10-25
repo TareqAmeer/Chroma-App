@@ -20,14 +20,14 @@ const MSK_SELVIEW_MODE_NUM={colorbw:0,color:1,wob:2,imgbw:3,imgblack:4,imgwhite:
 function mskReadSelViewPrefs(){
   try{
     const p=JSON.parse(localStorage.getItem(MSK_SELVIEW_PREF_KEY)||'{}');
-    const mig={legacy:'colorbw',photo:'color',bw:'wob'};const st=mig[p.style]||p.style;return {style:MSK_SELVIEW_STYLES.includes(st)?st:'color',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
+    const mig={legacy:'color',photo:'color',bw:'wob'};let st=mig[p.style]||p.style;if(st==='colorbw'&&p.v!==2)st='color'; /* pre-v2 colorbw was a silent B&W default, not a choice */return {style:MSK_SELVIEW_STYLES.includes(st)?st:'color',color:/^#[\da-f]{6}$/i.test(p.color||'')?p.color.toLowerCase():MSK_SELVIEW_DEFAULT_COLOR,always:p.always===true};
   }catch(_){return {style:'color',color:MSK_SELVIEW_DEFAULT_COLOR,always:false};}
 }
 const _mskSelViewPrefs=mskReadSelViewPrefs();
 let mskSelViewStyle=_mskSelViewPrefs.style;
 let mskSelViewColor=_mskSelViewPrefs.color;
 let mskAlwaysShowSelection=_mskSelViewPrefs.always;
-function mskSaveSelViewPrefs(){try{localStorage.setItem(MSK_SELVIEW_PREF_KEY,JSON.stringify({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));}catch(_){} }
+function mskSaveSelViewPrefs(){try{localStorage.setItem(MSK_SELVIEW_PREF_KEY,JSON.stringify({v:2,style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));}catch(_){} }
 function mskSelViewRgb(){
   if(mskSelViewColor===MSK_SELVIEW_DEFAULT_COLOR)return [1,.15,.15];
   return [1,3,5].map(i=>parseInt(mskSelViewColor.slice(i,i+2),16)/255);
@@ -70,7 +70,10 @@ function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskOverl
 // Local Adjustments section being on and a mask being selected; preview render options carry a
 // private token so export/tile callers cannot activate this path with recipe data.
 function mskShowSelIdx(){
-  if((mskPreviewMode!=='select'&&!mskPaintMode)||mskSel<0||!fxState.masks[mskSel])return -1; // painting shows the selection even when it is set to Off, like Lightroom
+  // The overlay obeys ONE switch (mskPreviewMode, toggled by O / the Show selection menu). Painting, adding
+  // and erasing never turn it on or change its style behind the user's back; a B&W view only exists when
+  // the user picks a B&W style.
+  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   return mskSel;
