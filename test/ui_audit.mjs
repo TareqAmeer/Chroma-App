@@ -416,7 +416,10 @@ function auditInPage({ minTap, minTapInline, inlineSel, edgeSel, minFont, minCon
   // ── 5. CONTRAST — WCAG 2.1 relative luminance against the nearest opaque painted ancestor.
   const srgb = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const lum = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
-  const parse = (s) => { const m = (s || '').match(/[\d.]+/g); return m ? m.slice(0, 4).map(Number) : null; };
+  const parse = (s) => { const m = (s || '').match(/[\d.]+/g); if (!m) return null; const v = m.slice(0, 4).map(Number);
+    // color-mix() tokens compute to "color(srgb 0.9 0.9 0.8 / 0.5)": channels are 0-1, not 0-255 (button system tokens use them)
+    if (/^\s*color\(\s*srgb/.test(s)) for (let i = 0; i < 3; i++) v[i] = Math.round(v[i] * 255);
+    return v; };
   // Walks up to the nearest ancestor that actually paints an opaque background. Returns null if
   // it hits a gradient/image first: `background-image` does not surface as a computed colour, so
   // guessing would produce a false failure — the primary Export button is black-on-amber via
