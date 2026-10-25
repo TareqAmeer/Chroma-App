@@ -579,6 +579,10 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-create-wrap[hidden],.msk-view-opts[hidden]{display:none}
 .msk-viewbar{display:flex;align-items:center;gap:var(--sp-2)}
 .msk-viewbar>.fx-row{flex:1 1 auto;margin:0}
+.msk-viewbar>.fx-row{flex-wrap:nowrap;min-width:0;gap:var(--sp-2)}
+.msk-viewbar>.fx-row .fx-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msk-viewbar>.fx-row input[type=color]{flex:0 0 32px;width:32px;min-width:0;padding:0}
+.msk-viewbar>.fx-row .db-btn{width:28px;height:28px}
 .msk-view-more{margin-left:auto;flex:0 0 auto}
 .msk-view-more.on{color:var(--acc)}
 .msk-view-opts{padding:var(--sp-1) 0 var(--sp-2);border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);margin:var(--sp-1) 0}
@@ -7392,7 +7396,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025K';
+const BUILD='1.1025L';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as

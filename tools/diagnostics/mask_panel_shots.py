@@ -9,7 +9,9 @@ OUT, TAG = sys.argv[1], sys.argv[2]
 SCEN = sys.argv[3:] or ['empty', 'brush', 'radial', 'linear', 'ai', 'skin', 'color']
 os.makedirs(OUT, exist_ok=True)
 
-def ev(code, to=30):
+def ev(code, to=30, raw=False):
+    # the app's eval hook takes ONE expression: wrap statements in an IIFE (a bare 'a;b;1' fails with a Function syntax error)
+    if not raw: code = '(()=>{' + code.rstrip(';') + ';return 1})()'
     r = subprocess.run([sys.executable, os.path.join(HERE, 'app_control.py'), 'run', '--timeout', str(to), '--code', code], capture_output=True, text=True)
     try: return json.loads(r.stdout)['result']
     except Exception: print('eval failed', r.stdout, r.stderr); return None
@@ -26,20 +28,20 @@ SETUP = {
  'skin': "fxState.masks.length=0;mskAdd('skin');mskSel=0;Object.assign(fxState.masks[0],{crOn:true,crSamples:[{rgb:[200,150,120],h:0.6,s:0.05,v:0.7},{rgb:[180,130,100],h:0.62,s:0.06,v:0.6}]});",
  'color': "fxState.masks.length=0;mskAdd('color');mskSel=0;",
 }
-saved = ev("JSON.stringify([localStorage.getItem('cs_panelw'),localStorage.getItem('chromasmith_msk_groups2'),localStorage.getItem('csThemeEditor'),document.body.classList.contains('light')])")
+saved = ev("JSON.stringify([localStorage.getItem('cs_panelw'),localStorage.getItem('chromasmith_msk_groups2'),localStorage.getItem('csThemeEditor'),document.body.classList.contains('light')])", raw=True)
 saved = json.loads(saved)
-ev("fxSection('local');document.getElementById('tg-local').classList.add('on');1")
+ev("fxSection('local');document.getElementById('tg-local').classList.add('on')")
 wid = winid()
 try:
     for theme in ('dark', 'light'):
-        ev("document.body.classList.toggle('light',%s);1" % ('true' if theme == 'light' else 'false'))
+        ev("document.body.classList.toggle('light',%s)" % ('true' if theme == 'light' else 'false'))
         for wname, w in (('min', 220), ('default', 320), ('max', 440)):
-            ev("document.body.style.setProperty('--panel-w-user','%dpx');window.dispatchEvent(new Event('resize'));1" % w)
+            ev("document.body.style.setProperty('--panel-w-user','%dpx');window.dispatchEvent(new Event('resize'))" % w)
             for sc in SCEN:
-                ev("localStorage.removeItem('chromasmith_msk_groups2');if(typeof mskGroupsResetDefaults==='function')mskGroupsResetDefaults();else Object.assign(_mskGroupOpen,{selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false});%smskRebuild();1" % SETUP[sc])
+                ev("localStorage.removeItem('chromasmith_msk_groups2');if(typeof mskGroupsResetDefaults==='function')mskGroupsResetDefaults();else Object.assign(_mskGroupOpen,{selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false});%smskRebuild()" % SETUP[sc])
                 time.sleep(0.4)
                 for pos in ('top', 'bottom'):
-                    ev("(()=>{const c=document.getElementById('local-ctl');const sp=_mskScrollParent(c);if(sp)sp.scrollTop=%s;return 1})()" % ('0' if pos == 'top' else '1e6'))
+                    ev("(()=>{const c=document.getElementById('local-ctl');const sp=_mskScrollParent(c);if(sp)sp.scrollTop=%s;return 1})()" % ('0' if pos == 'top' else '1e6'), raw=True)
                     time.sleep(0.25)
                     f = os.path.join(OUT, f"{TAG}_{sc}_{theme}_{wname}_{pos}.png")
                     subprocess.run(['screencapture', '-l', wid, '-o', f])
