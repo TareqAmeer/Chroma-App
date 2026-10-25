@@ -11330,6 +11330,14 @@
   // (no navigation for QL_SHARPEN_DWELL_MS) is the larger, higher-quality tier decoded and swapped in.
   // Rapid navigation / key-repeat never reaches it, so culling speed is unchanged.
   const QL_SHARPEN_DWELL_MS = 300;
+  const QL_AUTODEVELOP_DWELL_MS = 500, QL_DEVELOPED_LONG = 2560; // the developed-RAW review proxy is 2560px on the long edge
+  // Target long edge for the sharpen tier: 2x the viewer's long edge in CSS px (= 1x device px on a 2x screen, 2x on a 1x screen), 1600..5120.
+  function qlTargetLongEdge() {
+    const img = document.getElementById('lib-ql-img');
+    const r = img ? img.getBoundingClientRect() : null;
+    const long = Math.max(r ? r.width : 0, r ? r.height : 0) || Math.max(window.innerWidth, window.innerHeight);
+    return Math.min(5120, Math.max(1600, Math.round(2 * long)));
+  }
   let qlSharpenTimer = 0;
   function qlScheduleSharpen(path, generation) {
     clearTimeout(qlSharpenTimer);
@@ -11337,7 +11345,8 @@
       const stale = () => !quicklook.active || quicklook.path !== path || generation !== quicklook.generation;
       if (stale() || quicklook.editedUrl) return;
       try {
-        const bytes = await invoke('get_quicklook_preview_hq', { path });
+        const target = qlTargetLongEdge();
+        const bytes = await invoke('get_quicklook_preview_hq', { path, longEdge: target });
         if (stale() || quicklook.editedUrl) return;
         const img = document.getElementById('lib-ql-img');
         const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
@@ -11346,6 +11355,21 @@
         img.src = url;
         img.dataset.previewSource = (img.dataset.previewSource || 'image') + '+sharp';
         if (old) setTimeout(() => URL.revokeObjectURL(old), 400);
+        // A RAW's camera JPEG is never upscaled, so on a big screen it can fall well short of the target. Measure what we got and,
+        // if it is clearly too small, develop the RAW instead (its 2560px proxy is the best tier we have) once the user keeps dwelling.
+        if (RAW_EXT_RE.test(path)) {
+          const probe = new Image();
+          probe.onload = () => {
+            const got = Math.max(probe.naturalWidth, probe.naturalHeight);
+            quicklook.embeddedLong = got;
+            if (!quicklook.baseNote.includes('RAW development')) quicklook.baseNote = ' · camera preview ' + got + 'px — D to develop';
+            qlCaptionSync(path);
+            if (stale() || got >= target * 0.9 || got * 1.2 >= QL_DEVELOPED_LONG) return;
+            let off = false; try { off = localStorage.getItem('chromasmithQuickLookAutoDevelop') === '0'; } catch (_) {}
+            if (!off) setTimeout(() => { if (!stale() && !quicklook.editedUrl) showQuickLook(path, true); }, QL_AUTODEVELOP_DWELL_MS);
+          };
+          probe.src = url;
+        }
       } catch (_) { /* keep the instant tier */ }
     }, QL_SHARPEN_DWELL_MS);
   }

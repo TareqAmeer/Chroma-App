@@ -1543,9 +1543,24 @@ pub fn get_thumbnail_large(path: String) -> Result<tauri::ipc::Response, String>
 }
 
 const QUICKLOOK_HQ_LONG_EDGE: u32 = 3200;
+/// Quick Look's sharpen tier. `long_edge` is the size the UI wants (about 2x the viewer's long edge in device px; clamped to
+/// 1600..=5120, default 3200). A RAW only ever has its embedded JPEG here, which is never upscaled, so the result can be smaller
+/// than asked: the UI reads the real size off the image and escalates to the developed RAW when it falls short.
+/// Cached on disk once per (file, size) with the usual mtime+size validity sidecar, so revisiting a photo costs a file read.
 #[tauri::command(async)]
-pub fn get_quicklook_preview_hq(path: String) -> Result<tauri::ipc::Response, String> {
-    quicklook_preview_bytes_q(&path, QUICKLOOK_HQ_LONG_EDGE, 92, true).map(tauri::ipc::Response::new)
+pub fn get_quicklook_preview_hq(path: String, long_edge: Option<u32>) -> Result<tauri::ipc::Response, String> {
+    let le = long_edge.unwrap_or(QUICKLOOK_HQ_LONG_EDGE).clamp(1600, 5120);
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {path}: {e}"))?;
+    let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let size = meta.len();
+    let tag = format!("hq{le}");
+    let cache_path = cache_dir().join(format!("{:016x}.jpg", fnv1a(&[&path, THUMB_RENDER_VER, &tag])));
+    if let Some(bytes) = read_cache_if_current(&cache_path, mtime, size) {
+        return Ok(tauri::ipc::Response::new(bytes));
+    }
+    let bytes = quicklook_preview_bytes_q(&path, le, 92, true)?;
+    write_cache_atomic(&cache_path, &bytes, mtime, size);
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[tauri::command(async)]
