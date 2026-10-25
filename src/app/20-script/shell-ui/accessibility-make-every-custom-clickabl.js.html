@@ -165,6 +165,15 @@ csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('
 const _mskKeyOn=()=>{const ff=document.getElementById('ff-local');return !!(ff&&ff.offsetParent!==null);};
 csShortcutRegister('editor.mask-panel',()=>{if(!fxImages.length||typeof fxSection!=='function')return false;fxSection('local');});
 csShortcutRegister('editor.mask-overlay-style',()=>{if(!_mskKeyOn())return false;const i=MSK_SELVIEW_STYLES.indexOf(mskSelViewStyle);mskSetSelViewStyle(MSK_SELVIEW_STYLES[(i+1)%MSK_SELVIEW_STYLES.length]);});
+const _mskAddKey=t=>{if(!fxImages.length||typeof fxSection!=='function'||fxState.masks.length>=MSK_MAX)return false;fxSection('local');mskAdd(t);};
+csShortcutRegister('editor.mask-add-radial',()=>_mskAddKey('radial'));csShortcutRegister('editor.mask-add-linear',()=>_mskAddKey('linear'));csShortcutRegister('editor.mask-add-brush',()=>_mskAddKey('brush'));
+const _mskKeyHas=()=>_mskKeyOn()&&!(typeof healMode!=='undefined'&&healMode)&&!(typeof cropMode!=='undefined'&&cropMode)&&!!fxState.masks[mskSel];
+const _mskDeleteKey=()=>{if(!_mskKeyHas())return false;mskDelete();};
+csShortcutRegister('editor.mask-delete',_mskDeleteKey);csShortcutRegister('editor.mask-delete-alt',_mskDeleteKey);
+csShortcutRegister('editor.mask-duplicate',()=>{if(!_mskKeyHas())return false;mskDuplicate(false);});
+csShortcutRegister('editor.mask-invert',()=>{if(!_mskKeyHas())return false;mskInvert();});
+const _mskStep=d=>{if(!_mskKeyOn()||fxState.masks.length<2)return false;const n=Math.max(0,Math.min(fxState.masks.length-1,mskSel+d));if(n===mskSel)return;mskSel=n;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
+csShortcutRegister('editor.mask-prev',()=>_mskStep(-1));csShortcutRegister('editor.mask-next',()=>_mskStep(1));
 csShortcutRegister('editor.mask-pins',()=>{if(!_mskKeyOn())return false;mskPinsToggle(!mskShowPins);});
 csShortcutRegister('editor.mask-brush',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskPaintToggle();});
 csShortcutRegister('editor.mask-brush-erase',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskBrushSlotSelect(mskPaintErase?mskBrushPrevSlot:'E');});

@@ -7350,7 +7350,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025E';
+const BUILD='1.1025F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15321,6 +15321,7 @@ const csShortcutDefs=[
   ['editor.copy','Copy edit settings','Edit','editor,library','CmdOrCtrl+Shift+C'],['editor.paste','Paste edit settings','Edit','editor,library','CmdOrCtrl+Shift+V'],
   ['editor.rotate-left','Rotate left','Photo','editor','CmdOrCtrl+BracketLeft'],['editor.rotate-right','Rotate right','Photo','editor','CmdOrCtrl+BracketRight'],
   ['editor.zoom-in','Zoom in','View','editor','CmdOrCtrl+Plus'],['editor.zoom-out','Zoom out','View','editor','CmdOrCtrl+Minus'],['editor.zoom-fit','Zoom to fit','View','editor','CmdOrCtrl+0'],['editor.zoom-100','Zoom to 100%','View','editor','CmdOrCtrl+1'],['editor.split','Toggle before / after split','View','editor','CmdOrCtrl+Backslash'],['editor.histogram','Toggle histogram','View','editor','CmdOrCtrl+H'],['editor.focus-mode','Focus mode (hide panels and bars)','View','editor','Shift+F'],
+  ['editor.mask-add-radial','Masks: new Radial mask','Tools','editor','Shift+R'],['editor.mask-add-linear','Masks: new Linear mask','Tools','editor','Shift+L'],['editor.mask-add-brush','Masks: new Brush mask','Tools','editor','Shift+B'],['editor.mask-delete','Masks: delete selected mask','Tools','editor','Backspace'],['editor.mask-delete-alt','Masks: delete selected mask (forward Delete)','Tools','editor','Delete'],['editor.mask-duplicate','Masks: duplicate selected mask','Tools','editor','CmdOrCtrl+D'],['editor.mask-invert','Masks: invert selected mask','Tools','editor','I'],['editor.mask-prev','Masks: select previous mask','Tools','editor','ArrowUp'],['editor.mask-next','Masks: select next mask','Tools','editor','ArrowDown'],
   ['editor.search','Command palette','Help','editor','CmdOrCtrl+K'],['editor.shortcuts','Keyboard shortcuts guide','Help','editor','CmdOrCtrl+Slash'],['editor.settings','Settings','Help','editor','CmdOrCtrl+Comma'],
   ['editor.save-session','Save session','File','editor',null],['editor.load-session','Load session','File','editor',null],['editor.reset-edit','Reset edit','Photo','editor',null],['editor.flip-h','Flip horizontally','Photo','editor',null],['editor.flip-v','Flip vertically','Photo','editor',null],['editor.auto-enhance','Auto enhance','Photo','editor',null],['editor.wb-eyedrop','White balance eyedropper','Photo','editor',null],['editor.reshuffle-artifacts','Reshuffle film artifacts','Photo','editor',null],['editor.next-tool','Next tool section','Tools','editor',null],['editor.previous-tool','Previous tool section','Tools','editor',null],['editor.guide','Open guide','Help','editor',null],['editor.whatsnew',"What's new",'Help','editor',null],['editor.tour','Welcome tour','Help','editor',null],['library.expand','Toggle expanded Library','View','library',null],
   ['editor.compare','Hold to compare before / after','View','editor','Space'],['editor.compare-previous','Hold to compare to previous step','View','editor','Shift+Space'],['editor.next','Next photo','Photo','editor','ArrowRight'],['editor.previous','Previous photo','Photo','editor','ArrowLeft'],
@@ -19311,8 +19312,9 @@ function mskAddMenu(ev,composeOp){
   ev.stopPropagation();
   if(!composeOp)_mskPendingCompose=null;
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
-  const item=(label,ic,type,action)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
-    +icon(ic,15)+'<span>'+label+'</span></button>';
+  const _kbd=id=>{try{const b=window.chromasmithShortcutRegistry&&csShortcutBinding(id);return b?'<kbd style="margin-left:auto;opacity:.6;font:inherit;font-size:11px">'+csShortcutLabel(b)+'</kbd>':'';}catch(_){return '';}};
+  const item=(label,ic,type,action,sc)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
+    +icon(ic,15)+'<span>'+label+'</span>'+(sc?_kbd(sc):'')+'</button>';
   const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
   // ⚠️ Was gated on `body.deskx` — a LAYOUT class toggled purely by window WIDTH (a media query,
   // see the listener a few hundred lines up), unrelated to whether the on-device SAM/faceparse
@@ -19327,7 +19329,7 @@ function mskAddMenu(ev,composeOp){
   const cmpTxt={add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[composeOp];
   const html='<div class="msk-more-hd">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
     +hd('Shape')
-    +item('Radial','local','radial')+item('Linear','linearGrad','linear')
+    +item('Radial','local','radial',null,'editor.mask-add-radial')+item('Linear','linearGrad','linear',null,'editor.mask-add-linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
     +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Teeth Matte','brush','', 'mskAddEmbeddedTeethWhitening()'):'')
@@ -19335,7 +19337,7 @@ function mskAddMenu(ev,composeOp){
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Skin Matte','brush','', "mskAddEmbeddedPortraitMatte('skin')"):'')
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Glasses Matte','brush','', "mskAddEmbeddedPortraitMatte('glasses')"):'')
     +(desktop&&window.CS_PLATFORM&&window.CS_PLATFORM.os==='macos'?item('Embedded Sky Matte','brush','', "mskAddEmbeddedPortraitMatte('sky')"):'')
-    +item('Brush','brush','brush')+item('Sky','sky','sky')
+    +item('Brush','brush','brush',null,'editor.mask-add-brush')+item('Sky','sky','sky')
     +(desktop?'<div class="msk-more-sep"></div>'+hd('AI')
       +item('Skin','wand','skin')+item('Coat','wand','coat')
       +item('Select Subject','wand','ai')
@@ -32803,6 +32805,15 @@ csShortcutRegister('editor.mask-overlay',()=>{const ff=document.getElementById('
 const _mskKeyOn=()=>{const ff=document.getElementById('ff-local');return !!(ff&&ff.offsetParent!==null);};
 csShortcutRegister('editor.mask-panel',()=>{if(!fxImages.length||typeof fxSection!=='function')return false;fxSection('local');});
 csShortcutRegister('editor.mask-overlay-style',()=>{if(!_mskKeyOn())return false;const i=MSK_SELVIEW_STYLES.indexOf(mskSelViewStyle);mskSetSelViewStyle(MSK_SELVIEW_STYLES[(i+1)%MSK_SELVIEW_STYLES.length]);});
+const _mskAddKey=t=>{if(!fxImages.length||typeof fxSection!=='function'||fxState.masks.length>=MSK_MAX)return false;fxSection('local');mskAdd(t);};
+csShortcutRegister('editor.mask-add-radial',()=>_mskAddKey('radial'));csShortcutRegister('editor.mask-add-linear',()=>_mskAddKey('linear'));csShortcutRegister('editor.mask-add-brush',()=>_mskAddKey('brush'));
+const _mskKeyHas=()=>_mskKeyOn()&&!(typeof healMode!=='undefined'&&healMode)&&!(typeof cropMode!=='undefined'&&cropMode)&&!!fxState.masks[mskSel];
+const _mskDeleteKey=()=>{if(!_mskKeyHas())return false;mskDelete();};
+csShortcutRegister('editor.mask-delete',_mskDeleteKey);csShortcutRegister('editor.mask-delete-alt',_mskDeleteKey);
+csShortcutRegister('editor.mask-duplicate',()=>{if(!_mskKeyHas())return false;mskDuplicate(false);});
+csShortcutRegister('editor.mask-invert',()=>{if(!_mskKeyHas())return false;mskInvert();});
+const _mskStep=d=>{if(!_mskKeyOn()||fxState.masks.length<2)return false;const n=Math.max(0,Math.min(fxState.masks.length-1,mskSel+d));if(n===mskSel)return;mskSel=n;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
+csShortcutRegister('editor.mask-prev',()=>_mskStep(-1));csShortcutRegister('editor.mask-next',()=>_mskStep(1));
 csShortcutRegister('editor.mask-pins',()=>{if(!_mskKeyOn())return false;mskPinsToggle(!mskShowPins);});
 csShortcutRegister('editor.mask-brush',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskPaintToggle();});
 csShortcutRegister('editor.mask-brush-erase',()=>{const m=fxState.masks[mskSel];if(!_mskKeyOn()||!m||m.type!=='brush')return false;mskBrushSlotSelect(mskPaintErase?mskBrushPrevSlot:'E');});
