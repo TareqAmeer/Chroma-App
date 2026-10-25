@@ -11,10 +11,13 @@ import { openMaskPage } from './lib_mask_probe.mjs';
 const base = JSON.parse(await readFile(new URL('./baselines/mask_sidebar_inventory_chromium.json', import.meta.url), 'utf8'));
 const scanSrc = await readFile(new URL('./lib_mask_panel_scan.js', import.meta.url), 'utf8');
 // Deliberate renames only (old identity -> new identity). Anything else missing is a lost control.
-const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-create' };
-// The brush-type tool header already carries Invert (btn-msk-tool-invert); the duplicate in the combine row folded away.
-const ALT = { 'button|Invert|mskInvert': ['button|Invert|btn-msk-tool-invert'] };
+const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-create', 'button|Invert|btn-msk-tool-invert': 'button|Invert|btn-msk-invert' };
+// Button system (2026-10-25): exactly ONE Invert button per mask, in the combine row for every mask type (btn-msk-invert).
+// The brush tool header's second Invert (btn-msk-tool-invert) and the row mini-control folded into it.
+const ALT = { 'button|Invert|mskInvert': ['button|Invert|btn-msk-invert'] };
 const TILE = /^button\|(Auto Subject|Subject|Objects|Sky|Landscape|Background|Skin|Brush|Linear|Radial|Color|Luminance|Depth|Water|Vegetation|Mountains|Buildings|Ground)\|(mskAdd\w*|mskLandscapeToggle)$/;
+// Deliberately removed (button system, 2026-10-25): the per-row Invert mini control duplicated the single Invert button.
+const REMOVED = new Set(['list-row|button|msk-li-ctl.msk-li-act|Invert']);
 const norm = (id) => RENAMED[id] || id;
 const { page, errors, close } = await openMaskPage();
 const fails = [];
@@ -30,6 +33,7 @@ try {
     for (const [id0, info] of Object.entries(st.controls)) {
       const id = norm(id0);
       const c = byId.get(id) || (ALT[id] || []).map((a) => byId.get(a)).find(Boolean);
+      if (REMOVED.has(id0)) continue;
       if (TILE.test(id0) && state !== 'none') { tiles++; continue; }   // create tiles: verified through the dropdown below
       if (!c) { fails.push(`${state}: LOST ${id0} (${info.ctx})`); continue; }
       checked++;

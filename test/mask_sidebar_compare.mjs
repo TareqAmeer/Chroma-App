@@ -6,11 +6,11 @@ import { readFile } from 'node:fs/promises';
 const raw = JSON.parse(await readFile(process.argv[2], 'utf8'));
 const scan = JSON.parse(raw.result ?? JSON.stringify(raw));
 const base = JSON.parse(await readFile(new URL('./baselines/mask_sidebar_inventory.json', import.meta.url), 'utf8'));
-const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-create' };
+const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-create', 'button|Invert|btn-msk-tool-invert': 'button|Invert|btn-msk-invert' };
 const TILE = /^button\|(Auto Subject|Subject|Objects|Sky|Landscape|Background|Skin|Brush|Linear|Radial|Color|Luminance|Depth|Water|Vegetation|Mountains|Buildings|Ground)\|(mskAdd\w*|mskLandscapeToggle)$/;
 // Transient-state artefacts of the baseline run, not controls: the AI busy overlay's Cancel (exists only while a model runs)
 // and the Pick button's label while the eyedropper was left armed ("Picking - shift-click to add" is the armed form of "Pick manually").
-const TRANSIENT = [/\|mskAiBusyCancel$/];
+const TRANSIENT = [/\|mskAiBusyCancel$/, /^list-row\|button\|msk-li-ctl\.msk-li-act\|Invert$/];
 const ARMED = { 'button|Picking — shift-click to add|btn-msk-cr-eye': 'button|Pick manually|btn-msk-cr-eye' };
 const fails = []; let checked = 0, tiles = 0; const ids = new Set();
 for (const [state, st] of Object.entries(base.states)) {
@@ -20,7 +20,7 @@ for (const [state, st] of Object.entries(base.states)) {
     ids.add(id0);
     if (TRANSIENT.some((r) => r.test(id0))) continue;
     if (TILE.test(id0) && state !== 'none') { tiles++; continue; }
-    const c = by.get(RENAMED[id0] || id0) || by.get(ARMED[id0] || '') || by.get(id0.replace('Pick manually', 'Picking — shift-click to add')) || (id0 === 'button|Invert|mskInvert' ? by.get('button|Invert|btn-msk-tool-invert') : null);
+    const c = by.get(RENAMED[id0] || id0) || by.get(ARMED[id0] || '') || by.get(id0.replace('Pick manually', 'Picking — shift-click to add')) || (id0 === 'button|Invert|mskInvert' ? by.get('button|Invert|btn-msk-invert') : null);
     if (!c) { fails.push(`${state}: LOST ${id0}`); continue; }
     checked++;
     if (info.visibleByDefault && !c.vis) fails.push(`${state}: ${id0} present but not visible after expanding every disclosure`);

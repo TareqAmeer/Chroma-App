@@ -71,12 +71,13 @@ try{
     mskAdd('radial');
     const n=fxState.masks[2];
     const depth=document.querySelectorAll('#local-list > button')[2].dataset.depth;
-    rows[0].querySelectorAll('.msk-li-act')[3].click();
-    return {acts,count,hdr,sel:mskSel,op:n.composeOp,operand:n.operandId,depth,inv:fxState.masks[0].invert};
+    // Button system: Invert lives in exactly one place (the combine row's #btn-msk-invert), not as a 4th mini control on every row.
+    mskSel=0;mskRebuild();document.getElementById('btn-msk-invert').click();
+    return {acts,count,hdr,sel:mskSel,op:n.composeOp,operand:n.operandId,depth,inv:fxState.masks[0].invert,invPressed:document.getElementById('btn-msk-invert').getAttribute('aria-pressed')};
   });
-  assert.deepEqual(rowAct.acts,['Add to','Subtract from','Intersect with','Invert']);
+  assert.deepEqual(rowAct.acts,['Add to','Subtract from','Intersect with']);
   assert.equal(rowAct.count,'2 of '+8+' masks');assert.match(rowAct.hdr,/Subtract from/);
-  assert.equal(rowAct.op,'subtract');assert.equal(rowAct.operand,'a');assert.equal(rowAct.depth,'1');assert.equal(rowAct.inv,true);
+  assert.equal(rowAct.op,'subtract');assert.equal(rowAct.operand,'a');assert.equal(rowAct.depth,'1');assert.equal(rowAct.inv,true);assert.equal(rowAct.invPressed,'true');
   assert.deepEqual(g.tiles,['sky','brush','linear','radial','color','luminance']);
   assert.deepEqual(g.rowBtns,['+ Add','\u2212 Subtract','\u2229 Intersect','Invert']);
   assert.match(g.hdr,/Subtract from/);

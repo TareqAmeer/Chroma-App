@@ -166,14 +166,16 @@ function _mskRebuildInner(){
     const opKey=m.isExclude?'erase':(m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':''));
     const opTxt={add:'+ Add',subtract:'− Sub',intersect:'∩ Int',erase:'Erase'}[opKey];
     if(opTxt){const c=document.createElement('span');c.className='msk-tag msk-op-chip';c.dataset.op=opKey;c.textContent=opTxt;b.appendChild(c);}
-    const mkCtl=(cls,txt,on,aria,fn)=>{
-      const s=document.createElement('span');s.className='msk-li-ctl '+cls+(on?' on':'');s.textContent=txt;
+    const mkCtl=(cls,txt,on,aria,fn,iconName)=>{
+      const s=document.createElement('span');s.className='msk-li-ctl '+cls+(on?' on':'');
+      if(iconName&&typeof icon==='function')s.innerHTML=icon(iconName,14);else s.textContent=txt;
       s.setAttribute('role','button');s.tabIndex=0;s.setAttribute('aria-pressed',String(!!on));s.setAttribute('aria-label',aria);s.title=aria;
       const go=(e)=>{e.preventDefault();e.stopPropagation();const keep=mskSel;mskSel=i;fn();mskSel=keep;mskRebuild();};
       s.onclick=go;s.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' ')go(e);};
       s.draggable=false;b.appendChild(s);
     };
-    mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute);
+    // Eye = visible, struck-through eye = muted. The struck-through eye stays visible on every row (an off state must be seen); the quiet "on" eye only shows on hover/selection.
+    mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute,m.muted?'eyeOff':'eye');
     mkCtl('msk-li-solo','S',mskSolo===i,(mskSolo===i?'Stop soloing ':'Solo ')+(m.name||mskAutoLabel(m,i)),mskToggleSolo);
     // Row actions (Add / Subtract / Intersect / Invert): shown on hover/focus/selection. Each selects
     // this row's mask then opens the create menu, so the new component attaches to THIS mask.
@@ -187,12 +189,11 @@ function _mskRebuildInner(){
     act('+','Add to',(e)=>{mskComposeMenu(e,'add');});
     act('\u2212','Subtract from',(e)=>{mskComposeMenu(e,'subtract');});
     act('\u2229','Intersect with',(e)=>{mskComposeMenu(e,'intersect');});
-    act('\u21C5','Invert',()=>{mskInvert();mskRebuild();});
     // Component depth: how many operand links lead from this mask to a mask with no composition.
     let depth=0,cur=m;const seenIds=new Set();
     while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
-    if(m.muted)b.style.opacity='0.45';
+    if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
     b.oncontextmenu=(e)=>mskRowContext(e,i);
@@ -246,11 +247,14 @@ function _mskRebuildInner(){
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
   // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
   // of any type already composed with this one. Existing ⋯ → Compose stays for composing two masks that exist.
+  // One Invert control per mask (exactly one source of truth: m.invert). The brush tool header used to carry a second
+  // Invert button and each list row a third (the double-arrow mini control); both are gone. Square indicator, not a circle.
   const composeRow='<div class="btn-row msk-compose-row" role="group" aria-label="Combine with another mask">'
+    +'<span class="msk-compose-ops">'
     +'<button class="btn bgh" onclick="mskComposeMenu(event,\'add\')" title="Add another mask to this selection">+ Add</button>'
     +'<button class="btn bgh" onclick="mskComposeMenu(event,\'subtract\')" title="Subtract another mask from this selection">\u2212 Subtract</button>'
-    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button>'
-    +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)">Invert</button></div>';
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button></span>'
+    +'<button class="btn bgh msk-invert" id="btn-msk-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)"><span class="msk-sq" aria-hidden="true"></span><span>Invert</span></button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
   {
@@ -318,8 +322,7 @@ function _mskRebuildInner(){
         +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
     const _bm=mskBrushModeActive();
-    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span>'
-      +'<button class="btn '+(m.invert?'bsec':'bgh')+'" id="btn-msk-tool-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
+    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span></div>';
     shape+='<div class="btn-row" role="group" aria-label="Brush mode">'
       +'<button class="btn '+(_bm==='paint'?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintButton()" aria-pressed="'+String(_bm==='paint')+'" title="Paint into this mask on the preview">'+icon('brush',14)+(_bm==='paint'?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(_bm==='erase'?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(_bm==='erase')+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'

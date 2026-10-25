@@ -142,4 +142,32 @@
   window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};
   if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
 })();
+</script><script>
+/* ── Button system: keyboard-focus tooltip for icon-only buttons ──
+   Native title tooltips only appear on mouse hover. Bare icon buttons (design/explorations/button-balance-vote.html, rule 4) must
+   show their name on keyboard focus too. Mouse focus is excluded via :focus-visible, so this never doubles the native tooltip. */
+(function(){
+  var tip=null,cur=null;
+  function nameOf(el){return el.getAttribute('aria-label')||el.getAttribute('title')||'';}
+  function iconOnly(el){var t=(el.textContent||'').replace(/\s+/g,'');return t.length<=1&&!el.querySelector('input,select');}
+  function hide(){if(tip&&tip.parentNode)tip.parentNode.removeChild(tip);tip=null;cur=null;}
+  function show(el){
+    var n=nameOf(el);if(!n)return;hide();cur=el;
+    tip=document.createElement('div');tip.id='bs-tip';tip.setAttribute('role','tooltip');tip.setAttribute('aria-hidden','true');tip.textContent=n.length>90?n.slice(0,88)+'…':n;
+    document.body.appendChild(tip);
+    var r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+    var x=Math.max(6,Math.min(innerWidth-w-6,r.left+r.width/2-w/2));
+    var y=r.bottom+6;if(y+h>innerHeight-6)y=Math.max(6,r.top-h-6);
+    tip.style.left=x+'px';tip.style.top=y+'px';
+  }
+  document.addEventListener('focusin',function(e){
+    var el=e.target&&e.target.closest?e.target.closest('button,[role=button]'):null;
+    if(!el||!iconOnly(el)){hide();return;}
+    var vis=false;try{vis=el.matches(':focus-visible');}catch(x){}
+    if(vis)show(el);else hide();
+  },true);
+  document.addEventListener('focusout',function(e){if(cur&&e.target===cur)hide();},true);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&tip)hide();},true);
+  window.addEventListener('scroll',hide,true);
+})();
 </script>

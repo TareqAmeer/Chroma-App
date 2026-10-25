@@ -326,7 +326,7 @@ function askTextModal(title,msg,defVal){
       // fell through to a hardcoded grey that missed the real text colour and ignored the light
       // theme entirely. Same reason --sans replaces --mono here — this dialog names masks and
       // Styles now, not just OAuth client IDs, and --mono is for numerals (see :root).
-      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:0;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-ask-title" style="font-weight:600;margin-bottom:6px"></div>'+
         '<div id="fx-ask-msg" style="font-size:12px;color:var(--mut);white-space:pre-wrap;margin-bottom:10px"></div>'+
         '<input id="fx-ask-input" type="text" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--sur2);color:inherit;font-family:var(--sans);font-size:13px">'+
@@ -367,7 +367,7 @@ function confirmModal(msg,okLabel){
     let dlg=document.getElementById('fx-confirm-modal');
     if(!dlg){
       dlg=document.createElement('dialog');dlg.id='fx-confirm-modal';
-      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:0;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-confirm-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'+
         '<div style="display:flex;gap:8px;justify-content:flex-end">'+
         '<button type="button" id="fx-confirm-cancel" class="btn bgh">Cancel</button>'+
@@ -376,6 +376,8 @@ function confirmModal(msg,okLabel){
     }
     dlg.querySelector('#fx-confirm-msg').textContent=msg;
     dlg.querySelector('#fx-confirm-ok').textContent=okLabel||'OK';
+    // Destructive confirms (Delete, Reset, Trash...) are the one place a filled danger button is allowed.
+    dlg.querySelector('#fx-confirm-ok').classList.toggle('bdng',/^(delete|remove|reset|discard|trash|erase|clear|replace)/i.test(okLabel||''));
     const finish=v=>{dlg.close();res(v)};
     dlg.querySelector('#fx-confirm-ok').onclick=()=>finish(true);
     dlg.querySelector('#fx-confirm-cancel').onclick=()=>finish(false);

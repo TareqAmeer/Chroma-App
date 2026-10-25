@@ -220,7 +220,9 @@ const ICONS={
  lens:'<path d="M3 21 21 3M3 21l18-9M3 21l9-18M3 21h18"/>',
  borders:'<rect x="3" y="3" width="18" height="18"/><path d="M12 5l7 7-7 7-7-7Z"/>',
  canvas:'<rect x="3" y="5" width="18" height="14"/><rect x="8.5" y="8" width="7" height="8"/><path d="M3 5l5.5 3M21 5l-5.5 3M3 19l5.5-3M21 19l-5.5-3"/>',
- export:'<path d="M3 9h10M3 9v12h12V11M9 15 21 3M14 3h7v7"/>',
+ // Export = an arrow leaving the app up and out of an open tray (the standard "export / upload" mark). The old glyph was a box
+ // with a corner arrow, which reads as "open in a new window".
+ export:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v6h16v-6"/>',
  // Every-tool rail glyphs (Settings → View → Every tool in the bar).
  wm:'<rect x="3" y="4" width="18" height="16"/><path d="M10 12l1.5 5 1.5-3.5 1.5 3.5 1.5-5M3 9h6"/>',
  share:'<rect x="16" y="3" width="5" height="5"/><rect x="3" y="9.5" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><path d="M8 11l8-4.5M8 13l8 4.5"/>',
@@ -234,7 +236,9 @@ const ICONS={
  // a sharper, more legible corner and arrowhead at the sizes the deskbar actually renders it.
  undo:'<path d="M9 14 4 9l5-5M4 9h12v10h-4"/>',
  redo:'<path d="M15 14l5-5-5-5M20 9H8v10h4"/>',
- enableAll:'<path d="M9 4l1.5 4.5L15 10l-4.5 1.5L9 16l-1.5-4.5L3 10l4.5-1.5ZM18 14v6M15 17h6"/>',
+ // All FX = "effects": one big four-point sparkle with two small ones (the standard effects mark). The old glyph had a plus,
+ // which read as "add".
+ enableAll:'<path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8ZM19 3v4M17 5h4M19 15v6M16 18h6"/>',
  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
  moon:'<path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10Z"/>',
  log:'<path d="M4 6h16M4 12h16M4 18h10M16 20l4-4"/>',

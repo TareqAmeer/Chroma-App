@@ -177,6 +177,19 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --k-variants-photo-hover:offset;
   --k-variants-slider-reset-dot:moved;
   --k-variants-bar-swap:slide;
+  --bs-shade:color-mix(in srgb,var(--k-color-ink) 8%,transparent);
+  --bs-shade-2:color-mix(in srgb,var(--k-color-ink) 14%,transparent);
+  --bs-shade-3:color-mix(in srgb,var(--k-color-ink) 22%,transparent);
+  --bs-edge:color-mix(in srgb,var(--k-color-ink) 52%,transparent);
+  --bs-hair:color-mix(in srgb,var(--k-color-ink) 13%,transparent);
+  --bs-danger:color-mix(in srgb,var(--k-color-accent-a) 60%,var(--k-color-ink));
+  --bs-on-acc:#111111;
+  --bs-gap:8px;
+  --bs-gap-tight:4px;
+  --bs-rule:2px;
+  --bs-hit:28px;
+  --bs-hit-touch:44px;
+  --bs-icon:16px;
   --k-variants-top-bar-slider-width:62px/* TOKENS:ROOT:END */}
 /* CHR-265: one global preference drives the same spacing contract in Editor and Library.
    Comfortable is the default; Compact changes gaps only, never control or touch target sizes. */
@@ -1967,7 +1980,7 @@ body.light{
   --k-variants-bar-swap:slide;
   --k-variants-top-bar-slider-width:62px;
   /* Re-resolve var(--k-*)-based tokens against the light set */
-  --glass-bg:var(--k-color-bg);--tint-1:color-mix(in srgb,var(--k-color-accent-a) 8%,transparent);--tint-2:color-mix(in srgb,var(--k-color-accent-a) 12%,transparent);--tint-3:color-mix(in srgb,var(--k-color-accent-a) 18%,transparent);--tint-4:color-mix(in srgb,var(--k-color-accent-a) 25%,transparent);--tint-5:color-mix(in srgb,var(--k-color-accent-a) 35%,transparent);--tint-6:color-mix(in srgb,var(--k-color-accent-a) 45%,transparent);
+  --glass-bg:var(--k-color-bg);--tint-1:color-mix(in srgb,var(--k-color-accent-a) 8%,transparent);--tint-2:color-mix(in srgb,var(--k-color-accent-a) 12%,transparent);--tint-3:color-mix(in srgb,var(--k-color-accent-a) 18%,transparent);--tint-4:color-mix(in srgb,var(--k-color-accent-a) 25%,transparent);--tint-5:color-mix(in srgb,var(--k-color-accent-a) 35%,transparent);--tint-6:color-mix(in srgb,var(--k-color-accent-a) 45%,transparent);--bs-shade:color-mix(in srgb,var(--k-color-ink) 8%,transparent);--bs-shade-2:color-mix(in srgb,var(--k-color-ink) 14%,transparent);--bs-shade-3:color-mix(in srgb,var(--k-color-ink) 22%,transparent);--bs-edge:color-mix(in srgb,var(--k-color-ink) 52%,transparent);--bs-hair:color-mix(in srgb,var(--k-color-ink) 13%,transparent);--bs-danger:#870f13;--bs-on-acc:#111111;--bs-gap:8px;--bs-gap-tight:4px;--bs-rule:2px;--bs-hit:28px;--bs-hit-touch:44px;--bs-icon:16px;
 /* TOKENS:BODYLIGHT:END */
 }
 body.light #status-cap{background:#000}
@@ -3131,6 +3144,138 @@ body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:n
 .exp-plain-b span{color:var(--k-color-muted,#8d8b85);font-size:12px}
 .exp-plain-b.on{border-color:var(--k-color-ink,#f2f0ea);box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
 #fx-swipe-hud{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.72);color:#fff;font:600 14px var(--sans);padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre}#fx-swipe-hud.on{opacity:1}.fx-hist-row.on{box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
+/* BUTTON-SYSTEM:START — docs/plans/button-system.md (user vote 2026-10-25). Square corners, tokens --bs-* from design/tokens.json */
+/* shared states */
+body.sk2 :is(.fx-db,.db-btn,.zc-ic,.fx-rail-btn,.fx-ctrl-chev,#sk2-sub button,.msk-group-eye,.msk-li-ctl,.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.btn,.fx-select,.seg>button,.fx-info-i,.msk-invert):focus-visible,body.sk2 #lib-overlay :is(.lib-btn,.lib-chip,.lib-status-chip,.lib-zoom-btn,.lib-seg>button):focus-visible{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+/* 24 Disabled: same shape, 40% opacity (a reason goes in the tooltip/title where cheap) */
+body.sk2 :is(.btn,.fx-db,.db-btn,.zc-ic,.seg>button,.fx-select,.msk-group-eye):disabled,body.sk2 #lib-overlay :is(.lib-btn,.lib-chip,.lib-zoom-btn):disabled,body.sk2 .btn[aria-disabled=true]{opacity:.4!important;cursor:not-allowed!important}
+/* 1 + 26 Icon-only buttons (top bar, panel/view toggles, rotate/flip, hide-all eye): BARE. Hover fill, pressed = fill + accent rule, hit area >= 28px */
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon) :is(.fx-db-ic,svg){color:inherit!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):active{background:var(--bs-shade-3)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):is([aria-pressed=true],.on,.active,.bsec){background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #lib-overlay .lib-zoom-btn{min-width:24px;min-height:24px}
+/* 2 Primary action (Export): filled accent, #111 label */
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export){background:var(--k-color-accent-a)!important;border:1px solid var(--k-color-accent-a)!important;color:var(--bs-on-acc)!important;font-weight:500!important}
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export) :is(.fx-db-ic,svg,.fx-db-lb,.lbl){color:var(--bs-on-acc)!important}
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export):not(:disabled):hover{background:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important;border-color:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important}
+/* 25 Tool rail: BARE, hover fill, active = fill + 3px accent bar (replaces the square marker and the label underline) */
+body.sk2 #fx-toolrail .fx-rail-btn{background:transparent!important;border:0!important;min-height:var(--bs-hit);transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #fx-toolrail .fx-rail-btn::before{display:none!important}
+body.sk2 #fx-toolrail .fx-rail-btn::after,body.sk2 #fx-toolrail .fx-rail-btn.on::after,body.sk2 #fx-toolrail .fx-rail-btn .fx-rail-lb::after,body.sk2 #fx-toolrail .fx-rail-btn .fx-rail-lb[data-ab]::after{content:none!important;display:none!important}
+body.sk2 #fx-toolrail .fx-rail-btn:hover{background:var(--bs-shade)!important}
+body.sk2 #fx-toolrail .fx-rail-btn.on{background:var(--bs-shade-2)!important;box-shadow:inset 3px 0 0 var(--k-color-accent-a)!important;color:var(--k-color-ink)!important}
+body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.on):not(.edited) .fx-rail-lb{color:var(--k-color-ink)}
+/* 4 Library toolbar triggers (Date taken, Filters, All FX): BARE, hover fill, open/active = fill + accent rule */
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms)}
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg):is(.active,.on,[aria-expanded=true],[aria-pressed=true]){background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-pill :is(svg,.lbl){color:inherit!important}
+/* 5 Library search field: HAIRLINE outline */
+body.sk2 #lib-overlay .lib-search-wrap{border:1px solid var(--bs-hair)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-height:30px;padding:0 10px}
+body.sk2 #lib-overlay .lib-search-wrap:hover{border-color:var(--bs-edge)!important}
+body.sk2 #lib-overlay .lib-search-wrap:focus-within{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+body.sk2 #lib-overlay .lib-search-wrap input#lib-search{border:0!important;box-shadow:none!important;background:transparent!important;outline:0!important}
+/* 6 Library filter chips: BARE; selected = fill + accent rule. Nothing that changes size (border, padding, weight, tick) differs between states, so neighbours never move */
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-height:var(--bs-hit);height:var(--bs-hit);min-width:var(--bs-hit);padding:0 10px;font-weight:500!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip,.lib-pill,.lib-btn-icon)::before,body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip,.lib-pill,.lib-btn-icon)::after{display:none!important}
+body.sk2 #lib-overlay .lib-chip.lib-iconchip{width:var(--bs-hit);padding:0}
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay :is(.lib-chip.lib-sel,.lib-status-chip.on,.lib-status-chip[aria-pressed=true]),body.sk2 #lib-overlay :is(.lib-chip.lib-sel,.lib-status-chip.on):hover{background:var(--bs-shade-3)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+/* 7 View and size: SHADED track, ink-filled active. Hover on the active item keeps the same fill and text (never light on light) */
+body.sk2 #lib-overlay .lib-seg{display:inline-flex;gap:var(--bs-gap-tight);padding:2px;background:var(--bs-shade)!important;border:0!important;border-radius:0!important;overflow:visible}
+body.sk2 #lib-overlay .lib-seg::before,body.sk2 #lib-overlay .lib-seg::after{display:none!important}
+body.sk2 #lib-overlay .lib-seg>button{background:transparent!important;border:0!important;border-radius:0!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);box-shadow:none!important}
+body.sk2 #lib-overlay .lib-seg>button:not(.on):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-seg>button.on,body.sk2 #lib-overlay .lib-seg>button.on:hover,body.sk2 #lib-overlay .lib-seg>button.on:focus-visible{background:var(--k-color-ink)!important;color:var(--k-color-bg)!important}
+/* 8 Section header Reset + collapse chevron: BARE. Reset only shows when the section has changed (same gate as before: .fx-row.fx-mod / heal / hsl / curve edits). Its space is always reserved (visibility, not display) so the header never jumps */
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped){display:inline-flex!important;align-items:center;justify-content:center;visibility:hidden;min-height:var(--bs-hit);padding:0 8px!important;font-size:var(--fs-1);color:var(--k-color-muted)!important;background:transparent!important;border:0!important;border-radius:0!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2.fx-deskb:not(.mobile-fx) .fx-ctrl-title-reset-sep{display:inline-block!important;visibility:hidden}
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl:has(.fx-row.fx-mod),.fx-ctrl.fx-has-heal,.fx-ctrl.fx-has-hsledit,.fx-ctrl.fx-has-curveedit)>.fx-ctrl-title :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep){visibility:visible}
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2.fx-deskb:not(.mobile-fx) .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode :is(.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep){display:none!important}
+body.sk2:not(.mobile-fx) .fx-ctrl-chev{min-width:var(--bs-hit);min-height:var(--bs-hit);align-items:center;justify-content:center;margin:0 -4px 0 -6px;color:var(--k-color-muted);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2:not(.mobile-fx) .fx-ctrl-chev:hover{background:var(--bs-shade-2);color:var(--k-color-ink)}
+/* 10 Secondary text actions (Crop, Save as new version, Download .xmp, Replace, Auto level...): SHADED tiles, 2 columns, 4px apart */
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"]):has(>.btn:is(.bgh,.bsec,.fx-btn-primary)){display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--bs-gap-tight)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"]):has(>.btn:is(.bgh,.bsec,.fx-btn-primary):only-child){grid-template-columns:minmax(0,1fr)}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec){width:100%!important;justify-content:flex-start!important;min-height:var(--bs-hit)!important;height:auto!important;padding:4px 10px!important;background:var(--bs-shade)!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;text-align:left;white-space:normal}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):not(:disabled):active{background:var(--bs-shade-3)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):is(.on,[aria-pressed=true]){background:var(--bs-shade-3)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+/* 11 + 13 + 14 + 20 One-of-N groups (mode pairs, Add/Subtract/Intersect, Paint/Erase, export scope, chip lists): SHADED track, active = accent rule, no outlines anywhere */
+body.sk2 :is(.fx-panel .seg,.msk-prevmode-seg,.fx-panel .btn-row.chip-tap,.fx-panel #curve-chips,.fx-panel #curve-mode-chips,.msk-compose-ops,.fx-panel [aria-label="Brush mode"],.sk2x-opts,#fx-export-scope-row .btn-row,#adj-scope-row){background:var(--bs-shade)!important;padding:2px!important;gap:2px!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)::before,body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)::after{display:none!important}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn){background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-height:var(--bs-hit)!important;height:auto!important;font-weight:400!important;padding:4px 10px!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):is(.on,[aria-pressed=true],.bsec),body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):is(.on,[aria-pressed=true],.bsec):hover{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg){display:flex!important;flex-wrap:nowrap!important;width:100%!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)>button{flex:1 1 0!important;width:auto!important;text-align:center}
+body.sk2 .fx-panel [aria-label="Brush mode"]{display:flex!important;flex-wrap:nowrap!important}
+body.sk2 .fx-panel [aria-label="Brush mode"]>.btn{flex:1 1 0!important;width:auto!important;justify-content:center}
+/* 21 Section tabs: BARE, hover fill, active = fill + accent rule */
+body.sk2 #sk2-sub button{background:transparent!important;border:0!important;border-radius:0!important;padding:2px 5px!important;min-height:var(--bs-hit)!important;color:var(--k-color-muted)!important;box-shadow:none!important;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #sk2-sub button:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #sk2-sub button.on,body.sk2 #sk2-sub button[aria-selected=true],body.sk2 #sk2-sub button.on:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #sk2-sub{gap:4px 4px!important}
+/* 22 Menu / select triggers: HAIRLINE outline */
+body.sk2 :is(select.fx-select,.fx-panel select){border:1px solid var(--bs-hair)!important;border-radius:0!important;background-color:transparent!important;box-shadow:none!important;min-height:var(--bs-hit)}
+body.sk2 :is(select.fx-select,.fx-panel select):hover{border-color:var(--bs-edge)!important}
+/* 23 Text links: always underlined */
+body.sk2 :is(.msk-ai-update,.ni-guide,#cs-save-state button,.lib-lr-signout){text-decoration:underline!important;text-underline-offset:3px;background:transparent!important;border:0!important;color:var(--k-color-ink)!important;cursor:pointer}
+/* 12 Create New Mask: SHADED tile (menu trigger, chevron right) */
+body.sk2 #btn-msk-create{background:var(--bs-shade)!important;border:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;justify-content:flex-start!important;gap:8px;min-height:var(--bs-hit);font-weight:500!important}
+body.sk2 #btn-msk-create:hover{background:var(--bs-shade-2)!important}
+body.sk2 #btn-msk-create[aria-expanded=true]{background:var(--bs-shade-3)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #btn-msk-create .msk-create-chev{margin-left:auto}
+/* 15 Invert: ONE toggle per mask (btn-msk-invert), BARE, square on/off indicator */
+body.sk2 .msk-compose-row{display:flex!important;align-items:center;gap:var(--bs-gap)!important;flex-wrap:wrap}
+body.sk2 .msk-compose-ops{display:flex!important;flex:1 1 auto;min-width:0}
+body.sk2 .msk-compose-ops>.btn{flex:1 1 auto}
+body.sk2 .msk-invert{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;display:inline-flex!important;align-items:center;gap:8px;min-height:var(--bs-hit);padding:0 10px!important;cursor:pointer;width:auto!important;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 .msk-invert:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 .msk-invert .msk-sq{width:12px;height:12px;flex:none;border:1px solid var(--bs-edge);background:transparent}
+body.sk2 .msk-invert[aria-pressed=true]{color:var(--k-color-ink)!important;background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 .msk-invert[aria-pressed=true] .msk-sq{background:var(--k-color-ink);border-color:var(--k-color-ink);box-shadow:inset 0 0 0 2px var(--k-color-bg)}
+/* 16 Mask list rows: row selected = fill + accent bar; mini controls are bare 24px+ buttons revealed on hover/focus/selection; an OFF (muted) eye stays visible with its slash */
+body.sk2 #local-list>.btn{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;min-height:44px;color:var(--k-color-ink)!important;cursor:pointer}
+body.sk2 #local-list>.btn:hover{background:var(--bs-shade)!important}
+body.sk2 #local-list>.btn.bsec{background:var(--bs-shade)!important;box-shadow:inset 2px 0 0 var(--k-color-accent-a)!important}
+body.sk2 .msk-li-ctl{display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;padding:0 4px;border:0!important;border-radius:0!important;background:transparent!important;color:var(--k-color-muted);font-size:12px;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms),opacity var(--k-motion-hover,120ms)}
+body.sk2 .msk-li-ctl:hover,body.sk2 .msk-li-ctl:focus-visible{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 .msk-li-ctl.on{color:var(--k-color-ink)!important;background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #local-list>.btn:not(:hover):not(:focus-within):not(.bsec) .msk-li-ctl:not(.on){opacity:0}
+body.sk2 #local-list>.btn.msk-row-muted>:not(.msk-li-mute){opacity:.45}
+body.sk2 .msk-group-eye{background:transparent!important;border:0!important;border-radius:0!important;color:var(--k-color-ink);min-width:var(--bs-hit);min-height:var(--bs-hit)}
+body.sk2 .msk-group-eye:hover{background:var(--bs-shade-2)!important}
+body.sk2 .msk-group-eye.off{color:var(--k-color-ink);opacity:1;background:var(--bs-shade)!important}
+/* 17 Overlay switch + checkboxes: SHADED, no outline; on = ink fill */
+body.sk2 input[type=checkbox][role=switch]{-webkit-appearance:none;appearance:none;position:relative;width:36px!important;height:20px!important;margin:0;padding:0;border:0!important;border-radius:0!important;background:var(--bs-shade-2)!important;cursor:pointer;flex:none;transition:background var(--k-motion-hover,120ms)}
+body.sk2 input[type=checkbox][role=switch]::before{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;background:var(--k-color-ink);transition:transform var(--k-motion-hover,120ms)}
+body.sk2 input[type=checkbox][role=switch]:checked{background:var(--k-color-ink)!important}
+body.sk2 input[type=checkbox][role=switch]:checked::before{transform:translateX(16px);background:var(--k-color-bg)}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]){-webkit-appearance:none;appearance:none;position:relative;width:18px!important;height:18px!important;margin:0;padding:0;border:0!important;border-radius:0!important;background:var(--bs-shade-2)!important;cursor:pointer;flex:none;transition:background var(--k-motion-hover,120ms)}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]):checked{background:var(--k-color-ink)!important}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]):checked::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid var(--k-color-bg);border-width:0 2px 2px 0;transform:rotate(40deg)}
+body.sk2 input[type=checkbox]:is([role=switch],.fx-panel *):hover:not(:disabled){outline:1px solid var(--bs-edge);outline-offset:0}
+body.sk2 input[type=checkbox]:focus-visible{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+body.sk2 input[type=checkbox]:disabled{opacity:.4;cursor:not-allowed}
+/* 18 Dialog footers: Cancel BARE, primary filled accent (#111 label); dialogs are square with a strong edge */
+body.sk2 dialog{border-radius:0!important;border:1px solid var(--bs-edge)!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bgh,.btn:not(.bpri,.bsec,.bdng,.fx-btn-primary)){background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;min-height:var(--bs-hit);padding:0 14px!important;cursor:pointer}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bgh,.btn:not(.bpri,.bsec,.bdng,.fx-btn-primary)):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bpri,.btn.fx-btn-primary){background:var(--k-color-accent-a)!important;border:1px solid var(--k-color-accent-a)!important;border-radius:0!important;box-shadow:none!important;color:var(--bs-on-acc)!important;min-height:var(--bs-hit);padding:0 14px!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bpri,.btn.fx-btn-primary):not(:disabled):hover{background:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important}
+/* 2b Primary buttons inside panels/dialogs: accent fill, #111 label (Create New Mask is a shaded tile, see 12) */
+body.sk2 .btn.bpri:not(#btn-msk-create){background:var(--k-color-accent-a)!important;border-color:var(--k-color-accent-a)!important;color:var(--bs-on-acc)!important}
+/* 19 Destructive (Delete, Clear all, Reset all): DANGER BARE text, quiet at rest and always labelled; a filled danger button only on the confirm step */
+body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng){background:transparent!important;color:var(--bs-danger)!important}
+body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng):not(:disabled):hover{background:color-mix(in srgb,var(--bs-danger) 14%,transparent)!important}
+body.sk2 dialog .btn.bdng:is(.bpri,#fx-confirm-ok){background:var(--bs-danger)!important;border-color:var(--bs-danger)!important;color:var(--k-color-bg)!important}
+/* keyboard-focus tooltip (see the script in 21-script.js.html) */
+#bs-tip{position:fixed;z-index:2147483000;background:var(--k-color-ink);color:var(--k-color-bg);font:12px/1.3 var(--sans);padding:4px 8px;pointer-events:none;max-width:260px;white-space:normal}
+/* BUTTON-SYSTEM:END */
 </style>
 </head>
 <body>

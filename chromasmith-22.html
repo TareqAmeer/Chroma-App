@@ -220,6 +220,19 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   --k-variants-photo-hover:offset;
   --k-variants-slider-reset-dot:moved;
   --k-variants-bar-swap:slide;
+  --bs-shade:color-mix(in srgb,var(--k-color-ink) 8%,transparent);
+  --bs-shade-2:color-mix(in srgb,var(--k-color-ink) 14%,transparent);
+  --bs-shade-3:color-mix(in srgb,var(--k-color-ink) 22%,transparent);
+  --bs-edge:color-mix(in srgb,var(--k-color-ink) 52%,transparent);
+  --bs-hair:color-mix(in srgb,var(--k-color-ink) 13%,transparent);
+  --bs-danger:color-mix(in srgb,var(--k-color-accent-a) 60%,var(--k-color-ink));
+  --bs-on-acc:#111111;
+  --bs-gap:8px;
+  --bs-gap-tight:4px;
+  --bs-rule:2px;
+  --bs-hit:28px;
+  --bs-hit-touch:44px;
+  --bs-icon:16px;
   --k-variants-top-bar-slider-width:62px/* TOKENS:ROOT:END */}
 /* CHR-265: one global preference drives the same spacing contract in Editor and Library.
    Comfortable is the default; Compact changes gaps only, never control or touch target sizes. */
@@ -2010,7 +2023,7 @@ body.light{
   --k-variants-bar-swap:slide;
   --k-variants-top-bar-slider-width:62px;
   /* Re-resolve var(--k-*)-based tokens against the light set */
-  --glass-bg:var(--k-color-bg);--tint-1:color-mix(in srgb,var(--k-color-accent-a) 8%,transparent);--tint-2:color-mix(in srgb,var(--k-color-accent-a) 12%,transparent);--tint-3:color-mix(in srgb,var(--k-color-accent-a) 18%,transparent);--tint-4:color-mix(in srgb,var(--k-color-accent-a) 25%,transparent);--tint-5:color-mix(in srgb,var(--k-color-accent-a) 35%,transparent);--tint-6:color-mix(in srgb,var(--k-color-accent-a) 45%,transparent);
+  --glass-bg:var(--k-color-bg);--tint-1:color-mix(in srgb,var(--k-color-accent-a) 8%,transparent);--tint-2:color-mix(in srgb,var(--k-color-accent-a) 12%,transparent);--tint-3:color-mix(in srgb,var(--k-color-accent-a) 18%,transparent);--tint-4:color-mix(in srgb,var(--k-color-accent-a) 25%,transparent);--tint-5:color-mix(in srgb,var(--k-color-accent-a) 35%,transparent);--tint-6:color-mix(in srgb,var(--k-color-accent-a) 45%,transparent);--bs-shade:color-mix(in srgb,var(--k-color-ink) 8%,transparent);--bs-shade-2:color-mix(in srgb,var(--k-color-ink) 14%,transparent);--bs-shade-3:color-mix(in srgb,var(--k-color-ink) 22%,transparent);--bs-edge:color-mix(in srgb,var(--k-color-ink) 52%,transparent);--bs-hair:color-mix(in srgb,var(--k-color-ink) 13%,transparent);--bs-danger:#870f13;--bs-on-acc:#111111;--bs-gap:8px;--bs-gap-tight:4px;--bs-rule:2px;--bs-hit:28px;--bs-hit-touch:44px;--bs-icon:16px;
 /* TOKENS:BODYLIGHT:END */
 }
 body.light #status-cap{background:#000}
@@ -3174,6 +3187,138 @@ body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:n
 .exp-plain-b span{color:var(--k-color-muted,#8d8b85);font-size:12px}
 .exp-plain-b.on{border-color:var(--k-color-ink,#f2f0ea);box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
 #fx-swipe-hud{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.72);color:#fff;font:600 14px var(--sans);padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre}#fx-swipe-hud.on{opacity:1}.fx-hist-row.on{box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
+/* BUTTON-SYSTEM:START — docs/plans/button-system.md (user vote 2026-10-25). Square corners, tokens --bs-* from design/tokens.json */
+/* shared states */
+body.sk2 :is(.fx-db,.db-btn,.zc-ic,.fx-rail-btn,.fx-ctrl-chev,#sk2-sub button,.msk-group-eye,.msk-li-ctl,.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.btn,.fx-select,.seg>button,.fx-info-i,.msk-invert):focus-visible,body.sk2 #lib-overlay :is(.lib-btn,.lib-chip,.lib-status-chip,.lib-zoom-btn,.lib-seg>button):focus-visible{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+/* 24 Disabled: same shape, 40% opacity (a reason goes in the tooltip/title where cheap) */
+body.sk2 :is(.btn,.fx-db,.db-btn,.zc-ic,.seg>button,.fx-select,.msk-group-eye):disabled,body.sk2 #lib-overlay :is(.lib-btn,.lib-chip,.lib-zoom-btn):disabled,body.sk2 .btn[aria-disabled=true]{opacity:.4!important;cursor:not-allowed!important}
+/* 1 + 26 Icon-only buttons (top bar, panel/view toggles, rotate/flip, hide-all eye): BARE. Hover fill, pressed = fill + accent rule, hit area >= 28px */
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon) :is(.fx-db-ic,svg){color:inherit!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):active{background:var(--bs-shade-3)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):is([aria-pressed=true],.on,.active,.bsec){background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #lib-overlay .lib-zoom-btn{min-width:24px;min-height:24px}
+/* 2 Primary action (Export): filled accent, #111 label */
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export){background:var(--k-color-accent-a)!important;border:1px solid var(--k-color-accent-a)!important;color:var(--bs-on-acc)!important;font-weight:500!important}
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export) :is(.fx-db-ic,svg,.fx-db-lb,.lbl){color:var(--bs-on-acc)!important}
+body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export):not(:disabled):hover{background:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important;border-color:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important}
+/* 25 Tool rail: BARE, hover fill, active = fill + 3px accent bar (replaces the square marker and the label underline) */
+body.sk2 #fx-toolrail .fx-rail-btn{background:transparent!important;border:0!important;min-height:var(--bs-hit);transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #fx-toolrail .fx-rail-btn::before{display:none!important}
+body.sk2 #fx-toolrail .fx-rail-btn::after,body.sk2 #fx-toolrail .fx-rail-btn.on::after,body.sk2 #fx-toolrail .fx-rail-btn .fx-rail-lb::after,body.sk2 #fx-toolrail .fx-rail-btn .fx-rail-lb[data-ab]::after{content:none!important;display:none!important}
+body.sk2 #fx-toolrail .fx-rail-btn:hover{background:var(--bs-shade)!important}
+body.sk2 #fx-toolrail .fx-rail-btn.on{background:var(--bs-shade-2)!important;box-shadow:inset 3px 0 0 var(--k-color-accent-a)!important;color:var(--k-color-ink)!important}
+body.sk2 #fx-toolrail .fx-rail-btn.enabled:not(.on):not(.edited) .fx-rail-lb{color:var(--k-color-ink)}
+/* 4 Library toolbar triggers (Date taken, Filters, All FX): BARE, hover fill, open/active = fill + accent rule */
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms)}
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 :is(#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg):is(.active,.on,[aria-expanded=true],[aria-pressed=true]){background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-pill :is(svg,.lbl){color:inherit!important}
+/* 5 Library search field: HAIRLINE outline */
+body.sk2 #lib-overlay .lib-search-wrap{border:1px solid var(--bs-hair)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-height:30px;padding:0 10px}
+body.sk2 #lib-overlay .lib-search-wrap:hover{border-color:var(--bs-edge)!important}
+body.sk2 #lib-overlay .lib-search-wrap:focus-within{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+body.sk2 #lib-overlay .lib-search-wrap input#lib-search{border:0!important;box-shadow:none!important;background:transparent!important;outline:0!important}
+/* 6 Library filter chips: BARE; selected = fill + accent rule. Nothing that changes size (border, padding, weight, tick) differs between states, so neighbours never move */
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-height:var(--bs-hit);height:var(--bs-hit);min-width:var(--bs-hit);padding:0 10px;font-weight:500!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip,.lib-pill,.lib-btn-icon)::before,body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip,.lib-pill,.lib-btn-icon)::after{display:none!important}
+body.sk2 #lib-overlay .lib-chip.lib-iconchip{width:var(--bs-hit);padding:0}
+body.sk2 #lib-overlay :is(.lib-chip,.lib-status-chip):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay :is(.lib-chip.lib-sel,.lib-status-chip.on,.lib-status-chip[aria-pressed=true]),body.sk2 #lib-overlay :is(.lib-chip.lib-sel,.lib-status-chip.on):hover{background:var(--bs-shade-3)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+/* 7 View and size: SHADED track, ink-filled active. Hover on the active item keeps the same fill and text (never light on light) */
+body.sk2 #lib-overlay .lib-seg{display:inline-flex;gap:var(--bs-gap-tight);padding:2px;background:var(--bs-shade)!important;border:0!important;border-radius:0!important;overflow:visible}
+body.sk2 #lib-overlay .lib-seg::before,body.sk2 #lib-overlay .lib-seg::after{display:none!important}
+body.sk2 #lib-overlay .lib-seg>button{background:transparent!important;border:0!important;border-radius:0!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);box-shadow:none!important}
+body.sk2 #lib-overlay .lib-seg>button:not(.on):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #lib-overlay .lib-seg>button.on,body.sk2 #lib-overlay .lib-seg>button.on:hover,body.sk2 #lib-overlay .lib-seg>button.on:focus-visible{background:var(--k-color-ink)!important;color:var(--k-color-bg)!important}
+/* 8 Section header Reset + collapse chevron: BARE. Reset only shows when the section has changed (same gate as before: .fx-row.fx-mod / heal / hsl / curve edits). Its space is always reserved (visibility, not display) so the header never jumps */
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped){display:inline-flex!important;align-items:center;justify-content:center;visibility:hidden;min-height:var(--bs-hit);padding:0 8px!important;font-size:var(--fs-1);color:var(--k-color-muted)!important;background:transparent!important;border:0!important;border-radius:0!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2.fx-deskb:not(.mobile-fx) .fx-ctrl-title-reset-sep{display:inline-block!important;visibility:hidden}
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl:has(.fx-row.fx-mod),.fx-ctrl.fx-has-heal,.fx-ctrl.fx-has-hsledit,.fx-ctrl.fx-has-curveedit)>.fx-ctrl-title :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep){visibility:visible}
+body.sk2.fx-deskb:not(.mobile-fx) :is(.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2.fx-deskb:not(.mobile-fx) .fx-ctrl[data-fxsec="curves"].fx-curve-param-mode :is(.fx-ctrl-title-reset-scoped,.fx-ctrl-title-reset-sep){display:none!important}
+body.sk2:not(.mobile-fx) .fx-ctrl-chev{min-width:var(--bs-hit);min-height:var(--bs-hit);align-items:center;justify-content:center;margin:0 -4px 0 -6px;color:var(--k-color-muted);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2:not(.mobile-fx) .fx-ctrl-chev:hover{background:var(--bs-shade-2);color:var(--k-color-ink)}
+/* 10 Secondary text actions (Crop, Save as new version, Download .xmp, Replace, Auto level...): SHADED tiles, 2 columns, 4px apart */
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"]):has(>.btn:is(.bgh,.bsec,.fx-btn-primary)){display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--bs-gap-tight)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"]):has(>.btn:is(.bgh,.bsec,.fx-btn-primary):only-child){grid-template-columns:minmax(0,1fr)}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec){width:100%!important;justify-content:flex-start!important;min-height:var(--bs-hit)!important;height:auto!important;padding:4px 10px!important;background:var(--bs-shade)!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;text-align:left;white-space:normal}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):not(:disabled):active{background:var(--bs-shade-3)!important}
+body.sk2 .fx-panel .btn-row:not(.chip-tap,#adj-scope-row,.sk2x-opts,.msk-compose-row,.msk-compose-ops,.msk-createbar,#local-list,#curve-chips,#curve-mode-chips,#cv-ar-chips,#cv-bg-swatches,.crop-orient,[aria-label="Brush mode"])>.btn:is(.bgh,.bsec):is(.on,[aria-pressed=true]){background:var(--bs-shade-3)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+/* 11 + 13 + 14 + 20 One-of-N groups (mode pairs, Add/Subtract/Intersect, Paint/Erase, export scope, chip lists): SHADED track, active = accent rule, no outlines anywhere */
+body.sk2 :is(.fx-panel .seg,.msk-prevmode-seg,.fx-panel .btn-row.chip-tap,.fx-panel #curve-chips,.fx-panel #curve-mode-chips,.msk-compose-ops,.fx-panel [aria-label="Brush mode"],.sk2x-opts,#fx-export-scope-row .btn-row,#adj-scope-row){background:var(--bs-shade)!important;padding:2px!important;gap:2px!important;border:0!important;border-radius:0!important;box-shadow:none!important;overflow:visible!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)::before,body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)::after{display:none!important}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn){background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-height:var(--bs-hit)!important;height:auto!important;font-weight:400!important;padding:4px 10px!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):is(.on,[aria-pressed=true],.bsec),body.sk2 :is(.fx-panel .seg>button,.msk-prevmode-seg>button,.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn,.msk-compose-ops>.btn,.fx-panel [aria-label="Brush mode"]>.btn,.sk2x-opts>.btn,#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn):is(.on,[aria-pressed=true],.bsec):hover{background:transparent!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg){display:flex!important;flex-wrap:nowrap!important;width:100%!important}
+body.sk2 .fx-panel :is(.seg,.msk-prevmode-seg)>button{flex:1 1 0!important;width:auto!important;text-align:center}
+body.sk2 .fx-panel [aria-label="Brush mode"]{display:flex!important;flex-wrap:nowrap!important}
+body.sk2 .fx-panel [aria-label="Brush mode"]>.btn{flex:1 1 0!important;width:auto!important;justify-content:center}
+/* 21 Section tabs: BARE, hover fill, active = fill + accent rule */
+body.sk2 #sk2-sub button{background:transparent!important;border:0!important;border-radius:0!important;padding:2px 5px!important;min-height:var(--bs-hit)!important;color:var(--k-color-muted)!important;box-shadow:none!important;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 #sk2-sub button:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 #sk2-sub button.on,body.sk2 #sk2-sub button[aria-selected=true],body.sk2 #sk2-sub button.on:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #sk2-sub{gap:4px 4px!important}
+/* 22 Menu / select triggers: HAIRLINE outline */
+body.sk2 :is(select.fx-select,.fx-panel select){border:1px solid var(--bs-hair)!important;border-radius:0!important;background-color:transparent!important;box-shadow:none!important;min-height:var(--bs-hit)}
+body.sk2 :is(select.fx-select,.fx-panel select):hover{border-color:var(--bs-edge)!important}
+/* 23 Text links: always underlined */
+body.sk2 :is(.msk-ai-update,.ni-guide,#cs-save-state button,.lib-lr-signout){text-decoration:underline!important;text-underline-offset:3px;background:transparent!important;border:0!important;color:var(--k-color-ink)!important;cursor:pointer}
+/* 12 Create New Mask: SHADED tile (menu trigger, chevron right) */
+body.sk2 #btn-msk-create{background:var(--bs-shade)!important;border:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;justify-content:flex-start!important;gap:8px;min-height:var(--bs-hit);font-weight:500!important}
+body.sk2 #btn-msk-create:hover{background:var(--bs-shade-2)!important}
+body.sk2 #btn-msk-create[aria-expanded=true]{background:var(--bs-shade-3)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #btn-msk-create .msk-create-chev{margin-left:auto}
+/* 15 Invert: ONE toggle per mask (btn-msk-invert), BARE, square on/off indicator */
+body.sk2 .msk-compose-row{display:flex!important;align-items:center;gap:var(--bs-gap)!important;flex-wrap:wrap}
+body.sk2 .msk-compose-ops{display:flex!important;flex:1 1 auto;min-width:0}
+body.sk2 .msk-compose-ops>.btn{flex:1 1 auto}
+body.sk2 .msk-invert{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;display:inline-flex!important;align-items:center;gap:8px;min-height:var(--bs-hit);padding:0 10px!important;cursor:pointer;width:auto!important;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 .msk-invert:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 .msk-invert .msk-sq{width:12px;height:12px;flex:none;border:1px solid var(--bs-edge);background:transparent}
+body.sk2 .msk-invert[aria-pressed=true]{color:var(--k-color-ink)!important;background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 .msk-invert[aria-pressed=true] .msk-sq{background:var(--k-color-ink);border-color:var(--k-color-ink);box-shadow:inset 0 0 0 2px var(--k-color-bg)}
+/* 16 Mask list rows: row selected = fill + accent bar; mini controls are bare 24px+ buttons revealed on hover/focus/selection; an OFF (muted) eye stays visible with its slash */
+body.sk2 #local-list>.btn{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;min-height:44px;color:var(--k-color-ink)!important;cursor:pointer}
+body.sk2 #local-list>.btn:hover{background:var(--bs-shade)!important}
+body.sk2 #local-list>.btn.bsec{background:var(--bs-shade)!important;box-shadow:inset 2px 0 0 var(--k-color-accent-a)!important}
+body.sk2 .msk-li-ctl{display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;padding:0 4px;border:0!important;border-radius:0!important;background:transparent!important;color:var(--k-color-muted);font-size:12px;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms),opacity var(--k-motion-hover,120ms)}
+body.sk2 .msk-li-ctl:hover,body.sk2 .msk-li-ctl:focus-visible{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 .msk-li-ctl.on{color:var(--k-color-ink)!important;background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 #local-list>.btn:not(:hover):not(:focus-within):not(.bsec) .msk-li-ctl:not(.on){opacity:0}
+body.sk2 #local-list>.btn.msk-row-muted>:not(.msk-li-mute){opacity:.45}
+body.sk2 .msk-group-eye{background:transparent!important;border:0!important;border-radius:0!important;color:var(--k-color-ink);min-width:var(--bs-hit);min-height:var(--bs-hit)}
+body.sk2 .msk-group-eye:hover{background:var(--bs-shade-2)!important}
+body.sk2 .msk-group-eye.off{color:var(--k-color-ink);opacity:1;background:var(--bs-shade)!important}
+/* 17 Overlay switch + checkboxes: SHADED, no outline; on = ink fill */
+body.sk2 input[type=checkbox][role=switch]{-webkit-appearance:none;appearance:none;position:relative;width:36px!important;height:20px!important;margin:0;padding:0;border:0!important;border-radius:0!important;background:var(--bs-shade-2)!important;cursor:pointer;flex:none;transition:background var(--k-motion-hover,120ms)}
+body.sk2 input[type=checkbox][role=switch]::before{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;background:var(--k-color-ink);transition:transform var(--k-motion-hover,120ms)}
+body.sk2 input[type=checkbox][role=switch]:checked{background:var(--k-color-ink)!important}
+body.sk2 input[type=checkbox][role=switch]:checked::before{transform:translateX(16px);background:var(--k-color-bg)}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]){-webkit-appearance:none;appearance:none;position:relative;width:18px!important;height:18px!important;margin:0;padding:0;border:0!important;border-radius:0!important;background:var(--bs-shade-2)!important;cursor:pointer;flex:none;transition:background var(--k-motion-hover,120ms)}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]):checked{background:var(--k-color-ink)!important}
+body.sk2 .fx-panel input[type=checkbox]:not([role=switch]):checked::after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid var(--k-color-bg);border-width:0 2px 2px 0;transform:rotate(40deg)}
+body.sk2 input[type=checkbox]:is([role=switch],.fx-panel *):hover:not(:disabled){outline:1px solid var(--bs-edge);outline-offset:0}
+body.sk2 input[type=checkbox]:focus-visible{outline:2px solid var(--k-color-accent-a)!important;outline-offset:2px!important}
+body.sk2 input[type=checkbox]:disabled{opacity:.4;cursor:not-allowed}
+/* 18 Dialog footers: Cancel BARE, primary filled accent (#111 label); dialogs are square with a strong edge */
+body.sk2 dialog{border-radius:0!important;border:1px solid var(--bs-edge)!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bgh,.btn:not(.bpri,.bsec,.bdng,.fx-btn-primary)){background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;min-height:var(--bs-hit);padding:0 14px!important;cursor:pointer}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bgh,.btn:not(.bpri,.bsec,.bdng,.fx-btn-primary)):not(:disabled):hover{background:var(--bs-shade-2)!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bpri,.btn.fx-btn-primary){background:var(--k-color-accent-a)!important;border:1px solid var(--k-color-accent-a)!important;border-radius:0!important;box-shadow:none!important;color:var(--bs-on-acc)!important;min-height:var(--bs-hit);padding:0 14px!important}
+body.sk2 :is(#fx-confirm-modal,#fx-ask-modal,dialog) :is(.btn.bpri,.btn.fx-btn-primary):not(:disabled):hover{background:color-mix(in srgb,var(--k-color-accent-a) 84%,#fff)!important}
+/* 2b Primary buttons inside panels/dialogs: accent fill, #111 label (Create New Mask is a shaded tile, see 12) */
+body.sk2 .btn.bpri:not(#btn-msk-create){background:var(--k-color-accent-a)!important;border-color:var(--k-color-accent-a)!important;color:var(--bs-on-acc)!important}
+/* 19 Destructive (Delete, Clear all, Reset all): DANGER BARE text, quiet at rest and always labelled; a filled danger button only on the confirm step */
+body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng){background:transparent!important;color:var(--bs-danger)!important}
+body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng):not(:disabled):hover{background:color-mix(in srgb,var(--bs-danger) 14%,transparent)!important}
+body.sk2 dialog .btn.bdng:is(.bpri,#fx-confirm-ok){background:var(--bs-danger)!important;border-color:var(--bs-danger)!important;color:var(--k-color-bg)!important}
+/* keyboard-focus tooltip (see the script in 21-script.js.html) */
+#bs-tip{position:fixed;z-index:2147483000;background:var(--k-color-ink);color:var(--k-color-bg);font:12px/1.3 var(--sans);padding:4px 8px;pointer-events:none;max-width:260px;white-space:normal}
+/* BUTTON-SYSTEM:END */
 </style>
 </head>
 <body>
@@ -7396,7 +7541,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025L';
+const BUILD='1.1025M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -20516,14 +20661,16 @@ function _mskRebuildInner(){
     const opKey=m.isExclude?'erase':(m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':''));
     const opTxt={add:'+ Add',subtract:'− Sub',intersect:'∩ Int',erase:'Erase'}[opKey];
     if(opTxt){const c=document.createElement('span');c.className='msk-tag msk-op-chip';c.dataset.op=opKey;c.textContent=opTxt;b.appendChild(c);}
-    const mkCtl=(cls,txt,on,aria,fn)=>{
-      const s=document.createElement('span');s.className='msk-li-ctl '+cls+(on?' on':'');s.textContent=txt;
+    const mkCtl=(cls,txt,on,aria,fn,iconName)=>{
+      const s=document.createElement('span');s.className='msk-li-ctl '+cls+(on?' on':'');
+      if(iconName&&typeof icon==='function')s.innerHTML=icon(iconName,14);else s.textContent=txt;
       s.setAttribute('role','button');s.tabIndex=0;s.setAttribute('aria-pressed',String(!!on));s.setAttribute('aria-label',aria);s.title=aria;
       const go=(e)=>{e.preventDefault();e.stopPropagation();const keep=mskSel;mskSel=i;fn();mskSel=keep;mskRebuild();};
       s.onclick=go;s.onkeydown=(e)=>{if(e.key==='Enter'||e.key===' ')go(e);};
       s.draggable=false;b.appendChild(s);
     };
-    mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute);
+    // Eye = visible, struck-through eye = muted. The struck-through eye stays visible on every row (an off state must be seen); the quiet "on" eye only shows on hover/selection.
+    mkCtl('msk-li-mute','M',m.muted,(m.muted?'Unmute ':'Mute ')+(m.name||mskAutoLabel(m,i)),mskToggleMute,m.muted?'eyeOff':'eye');
     mkCtl('msk-li-solo','S',mskSolo===i,(mskSolo===i?'Stop soloing ':'Solo ')+(m.name||mskAutoLabel(m,i)),mskToggleSolo);
     // Row actions (Add / Subtract / Intersect / Invert): shown on hover/focus/selection. Each selects
     // this row's mask then opens the create menu, so the new component attaches to THIS mask.
@@ -20537,12 +20684,11 @@ function _mskRebuildInner(){
     act('+','Add to',(e)=>{mskComposeMenu(e,'add');});
     act('\u2212','Subtract from',(e)=>{mskComposeMenu(e,'subtract');});
     act('\u2229','Intersect with',(e)=>{mskComposeMenu(e,'intersect');});
-    act('\u21C5','Invert',()=>{mskInvert();mskRebuild();});
     // Component depth: how many operand links lead from this mask to a mask with no composition.
     let depth=0,cur=m;const seenIds=new Set();
     while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
-    if(m.muted)b.style.opacity='0.45';
+    if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
     b.oncontextmenu=(e)=>mskRowContext(e,i);
@@ -20596,11 +20742,14 @@ function _mskRebuildInner(){
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
   // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
   // of any type already composed with this one. Existing ⋯ → Compose stays for composing two masks that exist.
+  // One Invert control per mask (exactly one source of truth: m.invert). The brush tool header used to carry a second
+  // Invert button and each list row a third (the double-arrow mini control); both are gone. Square indicator, not a circle.
   const composeRow='<div class="btn-row msk-compose-row" role="group" aria-label="Combine with another mask">'
+    +'<span class="msk-compose-ops">'
     +'<button class="btn bgh" onclick="mskComposeMenu(event,\'add\')" title="Add another mask to this selection">+ Add</button>'
     +'<button class="btn bgh" onclick="mskComposeMenu(event,\'subtract\')" title="Subtract another mask from this selection">\u2212 Subtract</button>'
-    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button>'
-    +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)">Invert</button></div>';
+    +'<button class="btn bgh" onclick="mskComposeMenu(event,\'intersect\')" title="Keep only where this and another mask overlap">\u2229 Intersect</button></span>'
+    +'<button class="btn bgh msk-invert" id="btn-msk-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)"><span class="msk-sq" aria-hidden="true"></span><span>Invert</span></button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
   {
@@ -20668,8 +20817,7 @@ function _mskRebuildInner(){
         +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
     const _bm=mskBrushModeActive();
-    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span>'
-      +'<button class="btn '+(m.invert?'bsec':'bgh')+'" id="btn-msk-tool-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
+    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span></div>';
     shape+='<div class="btn-row" role="group" aria-label="Brush mode">'
       +'<button class="btn '+(_bm==='paint'?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintButton()" aria-pressed="'+String(_bm==='paint')+'" title="Paint into this mask on the preview">'+icon('brush',14)+(_bm==='paint'?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(_bm==='erase'?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(_bm==='erase')+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
@@ -29909,7 +30057,7 @@ function askTextModal(title,msg,defVal){
       // fell through to a hardcoded grey that missed the real text colour and ignored the light
       // theme entirely. Same reason --sans replaces --mono here — this dialog names masks and
       // Styles now, not just OAuth client IDs, and --mono is for numerals (see :root).
-      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:0;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-ask-title" style="font-weight:600;margin-bottom:6px"></div>'+
         '<div id="fx-ask-msg" style="font-size:12px;color:var(--mut);white-space:pre-wrap;margin-bottom:10px"></div>'+
         '<input id="fx-ask-input" type="text" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bdr);border-radius:6px;background:var(--sur2);color:inherit;font-family:var(--sans);font-size:13px">'+
@@ -29950,7 +30098,7 @@ function confirmModal(msg,okLabel){
     let dlg=document.getElementById('fx-confirm-modal');
     if(!dlg){
       dlg=document.createElement('dialog');dlg.id='fx-confirm-modal';
-      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
+      dlg.style.cssText='position:fixed;inset:0;margin:auto;border:1px solid var(--bdr);border-radius:0;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font-family:var(--sans);box-shadow:var(--lift-2)';
       dlg.innerHTML='<div id="fx-confirm-msg" style="font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:14px"></div>'+
         '<div style="display:flex;gap:8px;justify-content:flex-end">'+
         '<button type="button" id="fx-confirm-cancel" class="btn bgh">Cancel</button>'+
@@ -29959,6 +30107,8 @@ function confirmModal(msg,okLabel){
     }
     dlg.querySelector('#fx-confirm-msg').textContent=msg;
     dlg.querySelector('#fx-confirm-ok').textContent=okLabel||'OK';
+    // Destructive confirms (Delete, Reset, Trash...) are the one place a filled danger button is allowed.
+    dlg.querySelector('#fx-confirm-ok').classList.toggle('bdng',/^(delete|remove|reset|discard|trash|erase|clear|replace)/i.test(okLabel||''));
     const finish=v=>{dlg.close();res(v)};
     dlg.querySelector('#fx-confirm-ok').onclick=()=>finish(true);
     dlg.querySelector('#fx-confirm-cancel').onclick=()=>finish(false);
@@ -31296,7 +31446,9 @@ const ICONS={
  lens:'<path d="M3 21 21 3M3 21l18-9M3 21l9-18M3 21h18"/>',
  borders:'<rect x="3" y="3" width="18" height="18"/><path d="M12 5l7 7-7 7-7-7Z"/>',
  canvas:'<rect x="3" y="5" width="18" height="14"/><rect x="8.5" y="8" width="7" height="8"/><path d="M3 5l5.5 3M21 5l-5.5 3M3 19l5.5-3M21 19l-5.5-3"/>',
- export:'<path d="M3 9h10M3 9v12h12V11M9 15 21 3M14 3h7v7"/>',
+ // Export = an arrow leaving the app up and out of an open tray (the standard "export / upload" mark). The old glyph was a box
+ // with a corner arrow, which reads as "open in a new window".
+ export:'<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 14v6h16v-6"/>',
  // Every-tool rail glyphs (Settings → View → Every tool in the bar).
  wm:'<rect x="3" y="4" width="18" height="16"/><path d="M10 12l1.5 5 1.5-3.5 1.5 3.5 1.5-5M3 9h6"/>',
  share:'<rect x="16" y="3" width="5" height="5"/><rect x="3" y="9.5" width="5" height="5"/><rect x="16" y="16" width="5" height="5"/><path d="M8 11l8-4.5M8 13l8 4.5"/>',
@@ -31310,7 +31462,9 @@ const ICONS={
  // a sharper, more legible corner and arrowhead at the sizes the deskbar actually renders it.
  undo:'<path d="M9 14 4 9l5-5M4 9h12v10h-4"/>',
  redo:'<path d="M15 14l5-5-5-5M20 9H8v10h4"/>',
- enableAll:'<path d="M9 4l1.5 4.5L15 10l-4.5 1.5L9 16l-1.5-4.5L3 10l4.5-1.5ZM18 14v6M15 17h6"/>',
+ // All FX = "effects": one big four-point sparkle with two small ones (the standard effects mark). The old glyph had a plus,
+ // which read as "add".
+ enableAll:'<path d="M10 3l1.8 5.2L17 10l-5.2 1.8L10 17l-1.8-5.2L3 10l5.2-1.8ZM19 3v4M17 5h4M19 15v6M16 18h6"/>',
  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
  moon:'<path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10Z"/>',
  log:'<path d="M4 6h16M4 12h16M4 18h10M16 20l4-4"/>',
@@ -34313,7 +34467,36 @@ if(/[?&]catalog=1/.test(location.search)){
   window.Kinetic={snap,bezier,attachSwitch,attachRoll,syncTheme};
   if(document.body)boot();else document.addEventListener('DOMContentLoaded',boot);
 })();
+</script><script>
+/* ── Button system: keyboard-focus tooltip for icon-only buttons ──
+   Native title tooltips only appear on mouse hover. Bare icon buttons (design/explorations/button-balance-vote.html, rule 4) must
+   show their name on keyboard focus too. Mouse focus is excluded via :focus-visible, so this never doubles the native tooltip. */
+(function(){
+  var tip=null,cur=null;
+  function nameOf(el){return el.getAttribute('aria-label')||el.getAttribute('title')||'';}
+  function iconOnly(el){var t=(el.textContent||'').replace(/\s+/g,'');return t.length<=1&&!el.querySelector('input,select');}
+  function hide(){if(tip&&tip.parentNode)tip.parentNode.removeChild(tip);tip=null;cur=null;}
+  function show(el){
+    var n=nameOf(el);if(!n)return;hide();cur=el;
+    tip=document.createElement('div');tip.id='bs-tip';tip.setAttribute('role','tooltip');tip.setAttribute('aria-hidden','true');tip.textContent=n.length>90?n.slice(0,88)+'…':n;
+    document.body.appendChild(tip);
+    var r=el.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+    var x=Math.max(6,Math.min(innerWidth-w-6,r.left+r.width/2-w/2));
+    var y=r.bottom+6;if(y+h>innerHeight-6)y=Math.max(6,r.top-h-6);
+    tip.style.left=x+'px';tip.style.top=y+'px';
+  }
+  document.addEventListener('focusin',function(e){
+    var el=e.target&&e.target.closest?e.target.closest('button,[role=button]'):null;
+    if(!el||!iconOnly(el)){hide();return;}
+    var vis=false;try{vis=el.matches(':focus-visible');}catch(x){}
+    if(vis)show(el);else hide();
+  },true);
+  document.addEventListener('focusout',function(e){if(cur&&e.target===cur)hide();},true);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&tip)hide();},true);
+  window.addEventListener('scroll',hide,true);
+})();
 </script>
+
 <div id="cs-rotate" role="alert"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20"/><path d="M11 18h2"/></svg>Rotate your phone upright</div>
 <script>
 /* Touch slider detent + tick, and double-tap a slider's label to reset it. */
