@@ -135,7 +135,9 @@ async function stylePreviewCancel(){
   const p=_stylePreview;if(!p)return;_stylePreview=null;++p.generation;
   try{if(p.pending)await p.pending.catch(()=>{});await applyUISnapshot(_clone(p.base));if(p.item){p.item.adjustOverride=p.adjustOverride;p.item.geom=_clone(p.geom);p.item.heal=_clone(p.heal);}fxScheduleRender();}
   catch(e){log('Could not restore style preview: '+e.message,'err');}
-  finally{clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;_fxHistLocked=p.historyLocked;}
+  finally{clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;_fxHistLocked=p.historyLocked;
+    // The cancel drops preview-induced pushes, but a REAL edit (e.g. a look pick) made while the preview was open must still persist: re-schedule when the restored state differs from the history head.
+    try{const cur=fxHistory[fxHistIdx];if(cur&&JSON.stringify(getUISnapshot({skipRaster:true}))!==cur.j)_fxHistPushTimer=setTimeout(fxHistoryPush,400);}catch(e){}}
 }
 async function stylePreviewStart(name){
   const s=stylesList().find(x=>x.name===name);if(!s)return;

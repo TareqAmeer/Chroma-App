@@ -7346,7 +7346,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025X';
+const BUILD='1.1025Y';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21820,6 +21820,9 @@ function _fxFinishGeometryBatchTargets(captured,epoch){
 async function _fxHistoryTransition(from,to){
   await _fxHistoryRestore(to);
   if(from===to)return;
+  // Undo/redo/jump restore under _fxHistLocked, and the debounced push that follows dedupes against the (already current) head, so nothing ever reached
+  // the sidecar: undo then close the Editor reopened the pre-undo state. Persist the restored state explicitly.
+  try{if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(getUISnapshot());if(typeof sessionAutosave==='function')sessionAutosave();}catch(e){}
   let geometryChanged=false;
   if(to>from){
     for(let edge=from+1;edge<=to;edge++)if(_fxApplyGeometryBatchEdge(fxHistory[edge],true))geometryChanged=true;
@@ -23454,7 +23457,9 @@ async function stylePreviewCancel(){
   const p=_stylePreview;if(!p)return;_stylePreview=null;++p.generation;
   try{if(p.pending)await p.pending.catch(()=>{});await applyUISnapshot(_clone(p.base));if(p.item){p.item.adjustOverride=p.adjustOverride;p.item.geom=_clone(p.geom);p.item.heal=_clone(p.heal);}fxScheduleRender();}
   catch(e){log('Could not restore style preview: '+e.message,'err');}
-  finally{clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;_fxHistLocked=p.historyLocked;}
+  finally{clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;_fxHistLocked=p.historyLocked;
+    // The cancel drops preview-induced pushes, but a REAL edit (e.g. a look pick) made while the preview was open must still persist: re-schedule when the restored state differs from the history head.
+    try{const cur=fxHistory[fxHistIdx];if(cur&&JSON.stringify(getUISnapshot({skipRaster:true}))!==cur.j)_fxHistPushTimer=setTimeout(fxHistoryPush,400);}catch(e){}}
 }
 async function stylePreviewStart(name){
   const s=stylesList().find(x=>x.name===name);if(!s)return;
