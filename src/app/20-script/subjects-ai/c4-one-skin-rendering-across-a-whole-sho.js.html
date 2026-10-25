@@ -131,7 +131,7 @@ function mskRebuild(){
   if(_mskPaintResume&&m&&m.type==='brush'&&!mskPaintMode){const r=_mskPaintResume;_mskPaintResume=null;mskPaintErase=r.erase;mskPaintToggle();}
 }
 function _mskRowSame(o,n){
-  if(o.outerHTML!==n.outerHTML)return false;
+  if(o.outerHTML.replace(' msk-hover','')!==n.outerHTML)return false;
   const a=o.querySelector('canvas'),b=n.querySelector('canvas');
   if(!a||!b)return !a&&!b;
   try{return a.toDataURL()===b.toDataURL();}catch(_){return false;}

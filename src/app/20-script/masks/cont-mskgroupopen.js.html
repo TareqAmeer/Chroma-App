@@ -49,7 +49,9 @@ function mskAddMenu(ev,composeOp){
   if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   const cmpTxt={add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[composeOp];
   const html='<div class="msk-more-hd">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
-    +hd('Shape')
+    +hd('One click')
+    +(desktop?item('Subject','wand','', 'mskAddSubjectMatte()'):'')+item('Sky','sky','sky')+(desktop?item('Background','wand','', 'mskAddBackground()'):'')
+    +'<div class="msk-more-sep"></div>'+hd('Shape')
     +item('Radial','local','radial',null,'editor.mask-add-radial')+item('Linear','linearGrad','linear',null,'editor.mask-add-linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
     +item('Teeth Whitening (manual)','brush','', 'mskAddTeethWhitening()')

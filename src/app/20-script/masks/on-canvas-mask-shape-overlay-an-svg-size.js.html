@@ -70,6 +70,7 @@ function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskSaveS
   mskUpdateSelViewControls();
   if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Hold backslash: peek the matte (white on black) regardless of the overlay switch/style; release restores both.
+let mskHoverIdx=-1; // mask index under the pointer (list row or pin) - see mskHover in edit-pins
 let mskHideAll=false; // eye icon in the Masks header: show the photo without ANY mask adjustments. Session-only, preview-only (export ignores it).
 function mskHideAllToggle(){mskHideAll=!mskHideAll;mskHideAllSync();if(typeof fxUpdate==='function')fxUpdate();}
 function mskHideAllSync(){const b=document.getElementById('btn-msk-hideall');if(!b)return;b.setAttribute('aria-pressed',String(mskHideAll));b.classList.toggle('bsec',mskHideAll);b.classList.toggle('bgh',!mskHideAll);b.title=mskHideAll?'Masks hidden in the preview (export is unaffected). Click to show them again':'Hide all masks in the preview (does not change the edit or the export)';b.innerHTML=(typeof icon==='function'?icon(mskHideAll?'eyeOff':'eye',14):'');}
@@ -89,9 +90,11 @@ function mskShowSelIdx(){
   // The overlay obeys ONE switch (mskPreviewMode, toggled by O / the Show selection menu). Painting, adding
   // and erasing never turn it on or change its style behind the user's back; a B&W view only exists when
   // the user picks a B&W style.
-  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
+  // Hovering a mask's row (or pin) temporarily tints THAT mask, even with the overlay switched off; moving away restores.
+  if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskHoverIdx;
+  if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   return mskSel;
 }
 // Width the EXPORT of the current photo renders at (working copy width x its full-res factor): the preview emulates the export's

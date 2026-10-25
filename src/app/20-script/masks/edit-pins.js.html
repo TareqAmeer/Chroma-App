@@ -30,7 +30,7 @@ function mskPinSync(){
   const r=layer.getBoundingClientRect(),sc=layer.offsetWidth?r.width/layer.offsetWidth:1;
   layer.style.setProperty('--pin-s',String(sc>0?1/sc:1));
   layer.innerHTML=masks.map((m,i)=>{const a=mskPinAnchor(m,i);
-    return '<div class="msk-pin'+(i===mskSel?' sel':'')+(m.muted?' muted':'')+'" data-i="'+i+'" style="left:'+(Math.max(0,Math.min(1,a[0]))*100)+'%;top:'+(Math.max(0,Math.min(1,a[1]))*100)+'%" title="'+String(m.name||mskAutoLabel(m,i)).replace(/[<>&"]/g,'')+'">'+(i+1)+'</div>';}).join('');
+    return '<div class="msk-pin'+(i===mskHoverIdx?' hov':'')+(i===mskSel?' sel':'')+(m.muted?' muted':'')+'" data-i="'+i+'" style="left:'+(Math.max(0,Math.min(1,a[0]))*100)+'%;top:'+(Math.max(0,Math.min(1,a[1]))*100)+'%" title="'+String(m.name||mskAutoLabel(m,i)).replace(/[<>&"]/g,'')+'">'+(i+1)+'</div>';}).join('');
   layer.classList.add('on');
   layer.querySelectorAll('.msk-pin').forEach(el=>el.addEventListener('pointerdown',mskPinDown));
 }
@@ -206,3 +206,24 @@ function getUISnapshot(opts){
   s.demosaicAlgo=window.chromasmithDemosaicAlgo||''; // same decode-time-baked reasoning as rawNr above
   return s;
 }
+// Two-way hover link between a mask's list row and its pin on the photo: hovering either tints that mask on the canvas
+// (a temporary selection view, preview only) and highlights the other. Rows/pins are never mutated beyond a class.
+let _mskHoverT=0;
+function mskHover(i){
+  if(i===mskHoverIdx)return;
+  mskHoverIdx=i;
+  const rows=document.getElementById('local-list')?[...document.getElementById('local-list').children]:[];
+  rows.forEach((r,k)=>r.classList.toggle('msk-hover',k===i));
+  document.querySelectorAll('#msk-pin-layer .msk-pin').forEach(p=>p.classList.toggle('hov',+p.dataset.i===i));
+  clearTimeout(_mskHoverT);
+  _mskHoverT=setTimeout(()=>{if(typeof mskShowSelIdx==='function'&&typeof renderPreview==='function'&&!mskPaintMode&&!_pinDrag)renderPreview();},i<0?30:90);
+}
+document.addEventListener('mouseover',e=>{
+  const t=e.target&&e.target.closest?e.target:null;if(!t)return;
+  const pin=t.closest('.msk-pin');if(pin){mskHover(+pin.dataset.i);return;}
+  const row=t.closest('#local-list>*');
+  if(row){mskHover([...row.parentElement.children].indexOf(row));return;}
+  if(mskHoverIdx>=0)mskHover(-1);
+});
+document.addEventListener('mouseleave',()=>mskHover(-1));
+window.addEventListener('blur',()=>mskHover(-1));
