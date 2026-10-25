@@ -122,7 +122,7 @@ def ensure_app_running():
                             'stop it first (this tool needs to know its own automation token).')
     token = secrets.token_urlsafe(24)
     _write_json(_automation_path('enable'), {'token': token})
-    subprocess.Popen(['open', '-n', '--env', 'CS_DIAG_RAW_STAGES=1', find_process.REAL_APP_PATH],
+    subprocess.Popen(['open', '-n', '--env', 'CS_DIAG_RAW_STAGES=1', *[x for k in ('CS_CATALOG_DIR',) if os.environ.get(k) for x in ('--env', f'{k}={os.environ[k]}')], find_process.REAL_APP_PATH],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         time.sleep(0.2)
