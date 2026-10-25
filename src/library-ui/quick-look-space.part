@@ -188,7 +188,7 @@
             if (!quicklook.baseNote.includes('RAW development')) quicklook.baseNote = ' · camera preview ' + got + 'px — D to develop';
             qlCaptionSync(path);
             if (stale() || got >= target * 0.9 || got * 1.2 >= QL_DEVELOPED_LONG) return;
-            let off = false; try { off = localStorage.getItem('chromasmithQuickLookAutoDevelop') === '0'; } catch (_) {}
+            let off = true; try { off = localStorage.getItem('chromasmithQuickLookAutoDevelop') !== '1'; } catch (_) {} // opt-IN: the developed render is far darker/flatter than the camera JPEG (measured, see perf-quality-progress run 3)
             if (!off) setTimeout(() => { if (!stale() && !quicklook.editedUrl) showQuickLook(path, true); }, QL_AUTODEVELOP_DWELL_MS);
           };
           probe.src = url;
