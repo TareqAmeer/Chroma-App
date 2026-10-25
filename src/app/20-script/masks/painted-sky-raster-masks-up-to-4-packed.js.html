@@ -64,6 +64,11 @@ function _mskThumb(m){
   if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(1,1,PW-2,PH-2);}
   return cv;
 }
+// Refresh ONE row's thumbnail in place (stroke end / pin drag end) — no list rebuild, so selection, hover and scroll survive.
+function mskThumbRefresh(i){
+  const m=fxState.masks[i],row=document.getElementById('local-list')&&document.getElementById('local-list').children[i];
+  const old=row&&row.querySelector('canvas');if(m&&old)old.replaceWith(_mskThumb(m));
+}
 // MAXD is the STORED raster-mask resolution (brush/sky/AI edges get finer as this rises). It is
 // deliberately higher than EdgeSAM/SAM2's own 1024 internal working resolution (samInputDims) —
 // the model's input size is a separate concern from how crisp the saved mask looks at export.

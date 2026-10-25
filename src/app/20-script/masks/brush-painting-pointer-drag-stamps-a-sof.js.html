@@ -47,7 +47,7 @@ function mskBrushNudge(what,d){
   if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();
 }
 
-function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
+function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;if(typeof mskThumbRefresh==='function')mskThumbRefresh(mskSel);renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
   mskPaintMode=!mskPaintMode;

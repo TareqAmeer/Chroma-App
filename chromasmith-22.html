@@ -7349,7 +7349,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025B';
+const BUILD='1.1025C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18593,6 +18593,11 @@ function _mskThumb(m){
   if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(1,1,PW-2,PH-2);}
   return cv;
 }
+// Refresh ONE row's thumbnail in place (stroke end / pin drag end) — no list rebuild, so selection, hover and scroll survive.
+function mskThumbRefresh(i){
+  const m=fxState.masks[i],row=document.getElementById('local-list')&&document.getElementById('local-list').children[i];
+  const old=row&&row.querySelector('canvas');if(m&&old)old.replaceWith(_mskThumb(m));
+}
 // MAXD is the STORED raster-mask resolution (brush/sky/AI edges get finer as this rises). It is
 // deliberately higher than EdgeSAM/SAM2's own 1024 internal working resolution (samInputDims) —
 // the model's input size is a separate concern from how crisp the saved mask looks at export.
@@ -18965,7 +18970,7 @@ function mskBrushNudge(what,d){
   if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();
 }
 
-function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;renderPreview();fxHistoryPush();}
+function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;if(typeof mskThumbRefresh==='function')mskThumbRefresh(mskSel);renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
   mskPaintMode=!mskPaintMode;
