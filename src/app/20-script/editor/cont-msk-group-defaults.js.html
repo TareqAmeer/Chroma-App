@@ -9,9 +9,11 @@ function mskGroupToggle(k){
 }
 // Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
 // Selection collapsed wants it collapsed for the next mask too.
-function _mskGroup(key,label,body,note,count){
+function _mskGroup(key,label,body,note,count,eye){
   const open=_mskGroupOpen[key]!==false;
-  return '<div class="msk-group'+(open?' open':'')+'" data-grp="'+key+'">'
+  const off=eye&&eye.off;
+  return '<div class="msk-group'+(open?' open':'')+(eye?' has-eye':'')+(off?' grp-off':'')+'" data-grp="'+key+'">'
+    +(eye?'<button type="button" class="msk-group-eye'+(off?' off':'')+'" aria-pressed="'+String(!!off)+'" aria-label="'+(off?'Turn on ':'Turn off ')+label+' adjustments for this mask" title="'+(off?'Turn on ':'Turn off ')+label+' (values are kept)" onclick="mskGroupEye(\''+key+'\')">'+icon(off?'eyeOff':'eye',14)+'</button>':'')
     +'<button class="msk-group-hd" id="msk-ghd-'+key+'" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'" aria-controls="msk-gbd-'+key+'">'
     +'<span class="msk-group-chev">'+icon('chevron',14)+'</span><span>'+label+'</span>'
     +(note?'<span class="msk-group-note">'+note+'</span>':'')
@@ -29,6 +31,26 @@ function _mskMore(key,label,body,count){
     +'<span class="msk-group-chev'+(open?' msk-adv-open':'')+'">'+icon('chevron',12)+'</span> '+label
     +(count?'<span class="msk-group-count" role="img" aria-label="'+count+' active">'+count+'</span>':'')+'</button>'
     +(open?'<div class="msk-more-bd" id="msk-gbd-'+key+'" role="group" aria-labelledby="msk-ghd-'+key+'">'+body+'</div>':'')+'</div>';
+}
+// Group eye: a mask's m.grpOffCsv ("adjust,adjColor") names adjustment groups that are switched off WITHOUT losing their values.
+// The renderer zeroes those keys while it packs the uniforms and restores them right after (a string, so history snapshots never alias).
+const MSK_GROUP_KEYS={adjust:['exp','con','hi','sh','wh','bl'],adjColor:['temp','tint','vibrance','sat','hue','colAmt'],adjEffects:['tex','clarity','dehaze'],adjDetail:['sharp','sharpMask','nr']};
+function _mskGrpOffApply(MK){
+  const saved=[];
+  for(const m of MK){
+    if(!m||!m.grpOffCsv)continue;
+    for(const g of m.grpOffCsv.split(',')){
+      (MSK_GROUP_KEYS[g]||[]).forEach(k=>{if(m[k]){saved.push([m,k,m[k]]);m[k]=0;}});
+      if(g==='adjust'&&m.crv){saved.push([m,'crv',m.crv]);m.crv=null;}
+    }
+  }
+  return ()=>{for(let i=saved.length-1;i>=0;i--){const[m,k,v]=saved[i];m[k]=v;}};
+}
+function mskGroupIsOff(m,key){return !!(m&&m.grpOffCsv&&m.grpOffCsv.split(',').includes(key));}
+function mskGroupEye(key){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const set=new Set((m.grpOffCsv||'').split(',').filter(Boolean));set.has(key)?set.delete(key):set.add(key);
+  m.grpOffCsv=[...set].join(',');mskRebuild();fxUpdate();fxHistoryPush();
 }
 function _mskNonDefault(m,keys){let n=0;keys.forEach(k=>{const v=m[k];if(typeof v==='number'&&Math.abs(v)>1e-6)n++;});return n;}
 // Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
@@ -234,63 +256,3 @@ function _mskCompositionCandidateCheck(masks,activeId,op,operandId){
 }
 // Accessible operation + stable-ID operand picker. Native select controls provide keyboard
 // navigation; option labels are assigned as text, so user mask names never enter HTML markup.
-let _mskCompositionMenuClose=null;
-function mskCompositionMenu(ev){
-  if(ev&&ev.stopPropagation)ev.stopPropagation();
-  const anchor=ev&&ev.currentTarget&&ev.currentTarget.getBoundingClientRect?ev.currentTarget.getBoundingClientRect():{left:100,bottom:100};
-  if(_mskCompositionMenuClose)_mskCompositionMenuClose(false);
-  document.querySelectorAll('.msk-more-menu').forEach(n=>n.remove());
-  const masks=_mskEnsureIds(fxState.masks),active=masks[mskSel];if(!active)return;
-  const sourceMasks=fxState.masks;
-  const currentPlan=_mskCompositionPlan(masks);
-  const menu=document.createElement('div');menu.className='msk-more-menu msk-compose-menu';
-  menu.setAttribute('role','dialog');menu.setAttribute('aria-modal','false');menu.setAttribute('aria-label','Compose mask selection');
-  const heading=document.createElement('div');heading.className='msk-more-hd';heading.textContent='Compose selected mask with';menu.appendChild(heading);
-  if(active.composeOp&&!currentPlan.valid[mskSel]){
-    const repair=document.createElement('div');repair.className='msk-compose-status';repair.setAttribute('role','alert');
-    repair.textContent='This selection is disabled. Choose a valid operation and another mask to replace its broken operand.';menu.appendChild(repair);
-  }
-  const field=(id,labelText)=>{const wrap=document.createElement('div');wrap.className='msk-compose-field';const label=document.createElement('label');label.htmlFor=id;label.textContent=labelText;wrap.appendChild(label);return wrap;};
-  const op=document.createElement('select');op.id='msk-compose-operation';op.setAttribute('aria-label','Composition operation');
-  [['add','Add'],['subtract','Subtract'],['intersect','Intersect']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;op.appendChild(o);});
-  op.value=['add','subtract','intersect'].includes(active.composeOp)?active.composeOp:'add';
-  const opField=field(op.id,'Operation');opField.appendChild(op);menu.appendChild(opField);
-  const operand=document.createElement('select');operand.id='msk-compose-operand';operand.setAttribute('aria-label','Other mask');
-  const others=masks.map((m,i)=>({m,i})).filter(x=>x.i!==mskSel);
-  others.forEach(({m,i})=>{const o=document.createElement('option');o.value=m.id;
-    o.textContent=(m.name||mskAutoLabel(m,i))+' · '+(m.origin||m.type||'mask')+' · '+(i+1);operand.appendChild(o);});
-  if(others.some(x=>x.m.id===active.operandId))operand.value=active.operandId;
-  const operandField=field(operand.id,'Other mask');operandField.appendChild(operand);menu.appendChild(operandField);
-  const status=document.createElement('div');status.className='msk-compose-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');menu.appendChild(status);
-  const apply=document.createElement('button');apply.type='button';apply.className='msk-compose-apply';apply.textContent='Apply composition';menu.appendChild(apply);
-  const check=()=>{
-    const live=fxState.masks;
-    if(live!==sourceMasks||live[mskSel]!==active)return{valid:false,reason:'stale'};
-    return _mskCompositionCandidateCheck(_mskEnsureIds(live),active.id,op.value,operand.value);
-  };
-  const update=()=>{const result=check();apply.disabled=!result.valid;
-    status.textContent=result.valid?'The other mask stays attached by ID when masks are reordered.':
-      result.reason==='cycle'?'This would create a composition cycle. Choose a different mask.':
-      result.reason==='dependency'?'That mask depends on an invalid or cyclic selection. Repair it first.':
-      result.reason==='stale'?'The photo or selected mask changed. Close this chooser and reopen it.':
-      result.reason==='self'?'Choose another mask.':'A valid other mask is required.';
-  };
-  op.addEventListener('change',update);operand.addEventListener('change',update);
-  const close=(restoreFocus=false)=>{menu.remove();document.removeEventListener('mousedown',outside,true);document.removeEventListener('keydown',escape,true);
-    if(_mskCompositionMenuClose===close)_mskCompositionMenuClose=null;
-    if(restoreFocus){const trigger=document.querySelector('#local-ctl .msk-more');if(trigger)trigger.focus();}
-  };
-  _mskCompositionMenuClose=close;
-  const outside=e=>{if(!menu.contains(e.target)){close();}};
-  const escape=e=>{if(e.key==='Escape')close(true);};
-  apply.addEventListener('click',()=>{const result=check();if(!result.valid){update();return;}
-    if(mskSetComposition(op.value,operand.value))close(true);
-  });
-  document.body.appendChild(menu);
-  const left=Math.max(8,Math.min(anchor.left,innerWidth-menu.offsetWidth-8));
-  const top=Math.max(8,Math.min(anchor.bottom+4,innerHeight-menu.offsetHeight-8));
-  menu.style.left=left+'px';menu.style.top=top+'px';
-  update();op.focus({preventScroll:true});menu.scrollTop=0;
-  setTimeout(()=>{if(!menu.isConnected||_mskCompositionMenuClose!==close)return;
-    document.addEventListener('mousedown',outside,true);document.addEventListener('keydown',escape,true);},0);
-}

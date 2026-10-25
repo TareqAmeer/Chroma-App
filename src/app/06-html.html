@@ -512,6 +512,12 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
 .msk-group-bd{padding:2px 0 var(--sp-3)}
 /* Progressive disclosure: a count pill on a collapsed accordion header says "something in here is not default". */
+.msk-group{position:relative}
+.msk-group-eye{position:absolute;right:0;top:calc((var(--msk-group-hd-h) - 28px)/2);width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--acc);cursor:pointer;z-index:1}
+.msk-group-eye.off,.msk-group-eye:hover{color:var(--txt)}
+.msk-group-eye.off{opacity:.6}
+.msk-group.has-eye>.msk-group-hd{padding-right:32px}
+.msk-group.grp-off>.msk-group-hd{opacity:.6}
 .msk-group-count{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:var(--msk-badge-size);height:var(--msk-badge-size);padding:0 var(--sp-1);box-sizing:border-box;
   border-radius:var(--msk-badge-size);background:var(--acc);color:#fff;font-size:var(--fs-0);font-weight:600;font-family:var(--sans);letter-spacing:0}
 .msk-group-hd .msk-group-note+.msk-group-count{margin-left:var(--sp-2)}
@@ -519,6 +525,8 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-more-bd{padding:0 0 var(--sp-2)}
 .msk-more-lbl{margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-0);font-weight:600;color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em}
 .msk-adjust-sec{margin-top:var(--msk-section-gap)}
+.msk-comp-row{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-1) 0;font-size:var(--fs-2);color:var(--txt);font-family:var(--sans)}
+.msk-comp-arrow{color:var(--mut)}
 .msk-howto{margin-top:var(--msk-section-gap);padding-top:var(--sp-3);border-top:1px solid var(--bdr);font-size:var(--fs-1);line-height:1.45;color:var(--mut);font-family:var(--sans)}
 .msk-adjust-sec>.msk-group:first-child{border-top:1px solid var(--bdr)}
 .msk-createbar{align-items:stretch;gap:var(--sp-2);flex-wrap:nowrap}

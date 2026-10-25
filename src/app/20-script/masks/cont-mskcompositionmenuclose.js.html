@@ -1,0 +1,71 @@
+let _mskCompositionMenuClose=null;
+function mskCompositionMenu(ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const anchor=ev&&ev.currentTarget&&ev.currentTarget.getBoundingClientRect?ev.currentTarget.getBoundingClientRect():{left:100,bottom:100};
+  if(_mskCompositionMenuClose)_mskCompositionMenuClose(false);
+  document.querySelectorAll('.msk-more-menu').forEach(n=>n.remove());
+  const masks=_mskEnsureIds(fxState.masks),active=masks[mskSel];if(!active)return;
+  const sourceMasks=fxState.masks;
+  const currentPlan=_mskCompositionPlan(masks);
+  const menu=document.createElement('div');menu.className='msk-more-menu msk-compose-menu';
+  menu.setAttribute('role','dialog');menu.setAttribute('aria-modal','false');menu.setAttribute('aria-label','Compose mask selection');
+  const heading=document.createElement('div');heading.className='msk-more-hd';heading.textContent='Compose selected mask with';menu.appendChild(heading);
+  if(active.composeOp&&!currentPlan.valid[mskSel]){
+    const repair=document.createElement('div');repair.className='msk-compose-status';repair.setAttribute('role','alert');
+    repair.textContent='This selection is disabled. Choose a valid operation and another mask to replace its broken operand.';menu.appendChild(repair);
+  }
+  const field=(id,labelText)=>{const wrap=document.createElement('div');wrap.className='msk-compose-field';const label=document.createElement('label');label.htmlFor=id;label.textContent=labelText;wrap.appendChild(label);return wrap;};
+  const op=document.createElement('select');op.id='msk-compose-operation';op.setAttribute('aria-label','Composition operation');
+  [['add','Add'],['subtract','Subtract'],['intersect','Intersect']].forEach(([v,l])=>{const o=document.createElement('option');o.value=v;o.textContent=l;op.appendChild(o);});
+  op.value=['add','subtract','intersect'].includes(active.composeOp)?active.composeOp:'add';
+  const opField=field(op.id,'Operation');opField.appendChild(op);menu.appendChild(opField);
+  const operand=document.createElement('select');operand.id='msk-compose-operand';operand.setAttribute('aria-label','Other mask');
+  const others=masks.map((m,i)=>({m,i})).filter(x=>x.i!==mskSel);
+  others.forEach(({m,i})=>{const o=document.createElement('option');o.value=m.id;
+    o.textContent=(m.name||mskAutoLabel(m,i))+' · '+(m.origin||m.type||'mask')+' · '+(i+1);operand.appendChild(o);});
+  if(others.some(x=>x.m.id===active.operandId))operand.value=active.operandId;
+  const operandField=field(operand.id,'Other mask');operandField.appendChild(operand);menu.appendChild(operandField);
+  const status=document.createElement('div');status.className='msk-compose-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');menu.appendChild(status);
+  const apply=document.createElement('button');apply.type='button';apply.className='msk-compose-apply';apply.textContent='Apply composition';menu.appendChild(apply);
+  const check=()=>{
+    const live=fxState.masks;
+    if(live!==sourceMasks||live[mskSel]!==active)return{valid:false,reason:'stale'};
+    return _mskCompositionCandidateCheck(_mskEnsureIds(live),active.id,op.value,operand.value);
+  };
+  const update=()=>{const result=check();apply.disabled=!result.valid;
+    status.textContent=result.valid?'The other mask stays attached by ID when masks are reordered.':
+      result.reason==='cycle'?'This would create a composition cycle. Choose a different mask.':
+      result.reason==='dependency'?'That mask depends on an invalid or cyclic selection. Repair it first.':
+      result.reason==='stale'?'The photo or selected mask changed. Close this chooser and reopen it.':
+      result.reason==='self'?'Choose another mask.':'A valid other mask is required.';
+  };
+  op.addEventListener('change',update);operand.addEventListener('change',update);
+  const close=(restoreFocus=false)=>{menu.remove();document.removeEventListener('mousedown',outside,true);document.removeEventListener('keydown',escape,true);
+    if(_mskCompositionMenuClose===close)_mskCompositionMenuClose=null;
+    if(restoreFocus){const trigger=document.querySelector('#local-ctl .msk-more');if(trigger)trigger.focus();}
+  };
+  _mskCompositionMenuClose=close;
+  const outside=e=>{if(!menu.contains(e.target)){close();}};
+  const escape=e=>{if(e.key==='Escape')close(true);};
+  apply.addEventListener('click',()=>{const result=check();if(!result.valid){update();return;}
+    if(mskSetComposition(op.value,operand.value))close(true);
+  });
+  document.body.appendChild(menu);
+  const left=Math.max(8,Math.min(anchor.left,innerWidth-menu.offsetWidth-8));
+  const top=Math.max(8,Math.min(anchor.bottom+4,innerHeight-menu.offsetHeight-8));
+  menu.style.left=left+'px';menu.style.top=top+'px';
+  update();op.focus({preventScroll:true});menu.scrollTop=0;
+  setTimeout(()=>{if(!menu.isConnected||_mskCompositionMenuClose!==close)return;
+    document.addEventListener('mousedown',outside,true);document.addEventListener('keydown',escape,true);},0);
+}
+const MSK_TONE_BLEND_KEYS=['crRange','crRangeC','uH','uS','uL','preserve','tgtMode','tgtHex','tanDepth','tanWarm','tanOneWay','tanOneWayAmt'];
+function mskCopyToneMenu(ev){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const others=fxState.masks.map((o,i)=>({o,i})).filter(({o,i})=>i!==mskSel&&mskCaps(o).toneTool)
+    .map(({o,i})=>({label:o.name||('Mask '+(i+1))+' ('+(o.origin==='coat'?'Coat':'Skin')+')',fn:()=>{
+      MSK_TONE_BLEND_KEYS.forEach(k=>{m[k]=o[k]});
+      mskSrcVDebounced();mskRebuild();fxUpdate();
+      toast('Tone settings copied',true);
+    }}));
+  _subjPopup(others,ev);
+}

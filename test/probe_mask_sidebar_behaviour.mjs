@@ -28,6 +28,12 @@ try {
   // geometry sliders never reset
   await q(() => { fxState.masks[0].cx = 0.2; mskRebuild(); });
   await page.dblclick('#local-ctl .fx-row:has(input[data-k=cx]) .fx-label'); assert.equal(await q(() => fxState.masks[0].cx), 0.2);
+  // group eye: only on groups with values; turning it off keeps the values but the renderer sees zeros
+  await q(() => { fxState.masks.length = 0; mskAdd('radial'); mskSel = 0; fxState.masks[0].exp = 0.5; fxState.masks[0].tex = 10; mskRebuild(); });
+  r = await q(() => ({ eyes: [...document.querySelectorAll('#local-ctl .msk-group-eye')].map((b) => b.closest('.msk-group').dataset.grp), comp: document.querySelector('.msk-comp-row')?.textContent.replace(/\s+/g, ' ').trim(), compBeforeAdd: !!(document.querySelector('.msk-comp-row')?.nextElementSibling?.classList.contains('msk-compose-row')) }));
+  assert.deepEqual(r.eyes, ['adjust', 'adjEffects']); assert.match(r.comp, /Radial Gradient/); assert.ok(r.compBeforeAdd, 'Add/Subtract directly under the component row');
+  r = await q(() => { document.querySelector('#local-ctl [data-grp=adjust] .msk-group-eye').click(); const m = fxState.masks[0]; const kept = m.exp; let seen = null; const rs = _mskGrpOffApply([m]); seen = m.exp; rs(); return { kept, seen, after: m.exp, off: m.grpOffCsv, pressed: document.querySelector('#local-ctl [data-grp=adjust] .msk-group-eye').getAttribute('aria-pressed') }; });
+  assert.equal(r.kept, 0.5); assert.equal(r.seen, 0, 'renderer sees zero while the group is off'); assert.equal(r.after, 0.5, 'value restored'); assert.equal(r.off, 'adjust'); assert.equal(r.pressed, 'true');
   // how-to per type
   const how = await q(() => { const o = {}; for (const t of ['brush', 'linear', 'color', 'lum', 'depth', 'sky', 'ai', 'skin', 'coat']) { fxState.masks.length = 0; mskAdd(t); mskSel = 0; mskRebuild(); o[t] = !!document.querySelector('.msk-howto'); } return o; });
   assert.ok(Object.values(how).every(Boolean), JSON.stringify(how));

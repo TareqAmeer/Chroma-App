@@ -555,6 +555,12 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
 .msk-group-bd{padding:2px 0 var(--sp-3)}
 /* Progressive disclosure: a count pill on a collapsed accordion header says "something in here is not default". */
+.msk-group{position:relative}
+.msk-group-eye{position:absolute;right:0;top:calc((var(--msk-group-hd-h) - 28px)/2);width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;background:none;border:none;color:var(--acc);cursor:pointer;z-index:1}
+.msk-group-eye.off,.msk-group-eye:hover{color:var(--txt)}
+.msk-group-eye.off{opacity:.6}
+.msk-group.has-eye>.msk-group-hd{padding-right:32px}
+.msk-group.grp-off>.msk-group-hd{opacity:.6}
 .msk-group-count{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:var(--msk-badge-size);height:var(--msk-badge-size);padding:0 var(--sp-1);box-sizing:border-box;
   border-radius:var(--msk-badge-size);background:var(--acc);color:#fff;font-size:var(--fs-0);font-weight:600;font-family:var(--sans);letter-spacing:0}
 .msk-group-hd .msk-group-note+.msk-group-count{margin-left:var(--sp-2)}
@@ -562,6 +568,8 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-more-bd{padding:0 0 var(--sp-2)}
 .msk-more-lbl{margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-0);font-weight:600;color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em}
 .msk-adjust-sec{margin-top:var(--msk-section-gap)}
+.msk-comp-row{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-1) 0;font-size:var(--fs-2);color:var(--txt);font-family:var(--sans)}
+.msk-comp-arrow{color:var(--mut)}
 .msk-howto{margin-top:var(--msk-section-gap);padding-top:var(--sp-3);border-top:1px solid var(--bdr);font-size:var(--fs-1);line-height:1.45;color:var(--mut);font-family:var(--sans)}
 .msk-adjust-sec>.msk-group:first-child{border-top:1px solid var(--bdr)}
 .msk-createbar{align-items:stretch;gap:var(--sp-2);flex-wrap:nowrap}
@@ -7384,7 +7392,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025J';
+const BUILD='1.1025K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10431,7 +10439,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mL.fill(0);mO.fill(0);mTopo.fill(-1);mDep.fill(0);
     const composePlan=_mskCompositionPlan(MK);
     composePlan.order.forEach((slot,rank)=>{mTopo[rank]=slot;});
-    MK.forEach((m,i)=>{const o=i*4;
+    const _grpRestore=_mskGrpOffApply(MK);
+    try{MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;if(depthMaskSources[i])mB[o+3]=1;} // shapeless range mask; depth source is rasterized when ready
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
@@ -10491,7 +10500,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // srcV: mean value of the gated pixels, measured ONCE in JS (mskMeasureSrcV) and passed in.
       // Must be identical for preview, loupe and every export tile — re-measuring per tile would
       // make each tile converge to a different level and show as blocks.
-      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
+      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});}finally{_grpRestore();}
     if(MK.some(m=>m.type==='brush'||(m.origin==='depth'&&m.depOn)))mskBuildTex(this,MK);
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -19328,9 +19337,11 @@ function mskGroupToggle(k){
 }
 // Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
 // Selection collapsed wants it collapsed for the next mask too.
-function _mskGroup(key,label,body,note,count){
+function _mskGroup(key,label,body,note,count,eye){
   const open=_mskGroupOpen[key]!==false;
-  return '<div class="msk-group'+(open?' open':'')+'" data-grp="'+key+'">'
+  const off=eye&&eye.off;
+  return '<div class="msk-group'+(open?' open':'')+(eye?' has-eye':'')+(off?' grp-off':'')+'" data-grp="'+key+'">'
+    +(eye?'<button type="button" class="msk-group-eye'+(off?' off':'')+'" aria-pressed="'+String(!!off)+'" aria-label="'+(off?'Turn on ':'Turn off ')+label+' adjustments for this mask" title="'+(off?'Turn on ':'Turn off ')+label+' (values are kept)" onclick="mskGroupEye(\''+key+'\')">'+icon(off?'eyeOff':'eye',14)+'</button>':'')
     +'<button class="msk-group-hd" id="msk-ghd-'+key+'" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'" aria-controls="msk-gbd-'+key+'">'
     +'<span class="msk-group-chev">'+icon('chevron',14)+'</span><span>'+label+'</span>'
     +(note?'<span class="msk-group-note">'+note+'</span>':'')
@@ -19348,6 +19359,26 @@ function _mskMore(key,label,body,count){
     +'<span class="msk-group-chev'+(open?' msk-adv-open':'')+'">'+icon('chevron',12)+'</span> '+label
     +(count?'<span class="msk-group-count" role="img" aria-label="'+count+' active">'+count+'</span>':'')+'</button>'
     +(open?'<div class="msk-more-bd" id="msk-gbd-'+key+'" role="group" aria-labelledby="msk-ghd-'+key+'">'+body+'</div>':'')+'</div>';
+}
+// Group eye: a mask's m.grpOffCsv ("adjust,adjColor") names adjustment groups that are switched off WITHOUT losing their values.
+// The renderer zeroes those keys while it packs the uniforms and restores them right after (a string, so history snapshots never alias).
+const MSK_GROUP_KEYS={adjust:['exp','con','hi','sh','wh','bl'],adjColor:['temp','tint','vibrance','sat','hue','colAmt'],adjEffects:['tex','clarity','dehaze'],adjDetail:['sharp','sharpMask','nr']};
+function _mskGrpOffApply(MK){
+  const saved=[];
+  for(const m of MK){
+    if(!m||!m.grpOffCsv)continue;
+    for(const g of m.grpOffCsv.split(',')){
+      (MSK_GROUP_KEYS[g]||[]).forEach(k=>{if(m[k]){saved.push([m,k,m[k]]);m[k]=0;}});
+      if(g==='adjust'&&m.crv){saved.push([m,'crv',m.crv]);m.crv=null;}
+    }
+  }
+  return ()=>{for(let i=saved.length-1;i>=0;i--){const[m,k,v]=saved[i];m[k]=v;}};
+}
+function mskGroupIsOff(m,key){return !!(m&&m.grpOffCsv&&m.grpOffCsv.split(',').includes(key));}
+function mskGroupEye(key){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const set=new Set((m.grpOffCsv||'').split(',').filter(Boolean));set.has(key)?set.delete(key):set.add(key);
+  m.grpOffCsv=[...set].join(',');mskRebuild();fxUpdate();fxHistoryPush();
 }
 function _mskNonDefault(m,keys){let n=0;keys.forEach(k=>{const v=m[k];if(typeof v==='number'&&Math.abs(v)>1e-6)n++;});return n;}
 // Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
@@ -20568,7 +20599,12 @@ function _mskRebuildInner(){
     +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)">Invert</button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
-  h+=composeRow;   // Add / Subtract / Intersect sit directly under the selected mask, as in Lightroom
+  {
+    const kind=({sky:'Sky',ai:'Subject',skin:'Skin',coat:'Coat',color:'Color Range',lum:'Luminance Range',depth:'Depth Range',coatEye:'Eye brightness','manual-teeth':'Teeth (manual brush)'})[m.origin]||({radial:'Radial Gradient',linear:'Linear Gradient',brush:'Brush'})[m.type]||'Mask';
+    const opTxt=m.isExclude?'Erase':({add:'+ Add',subtract:'\u2212 Subtract',intersect:'\u2229 Intersect'})[m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':'')]||'';
+    h+='<div class="msk-comp-row" aria-label="Component"><span class="msk-comp-arrow" aria-hidden="true">\u21b3</span><span class="msk-comp-name">'+kind+'</span>'+(opTxt?'<span class="msk-tag">'+opTxt+'</span>':'')+'</div>';
+  }
+  h+=composeRow;   // Add / Subtract / Intersect sit directly under the selected mask's component row, as in Lightroom
   const caps=mskCaps(m);
   let shape='',shapeMore='';
   if(m.type==='radial'){
@@ -20943,7 +20979,9 @@ function _mskRebuildInner(){
     cColor=_mskNonDefault(m,['temp','tint','vibrance','sat','hue','colAmt']),
     cEffects=_mskNonDefault(m,['tex','clarity','dehaze']),cDetail=_mskNonDefault(m,['sharp','sharpMask','nr']);
   h+='<div class="msk-adjust-sec" role="group" aria-label="Adjustments">'
-    +_mskGroup('adjust','Light',lightBody,'',cLight)+_mskGroup('adjColor','Color',colorBody,'',cColor)+_mskGroup('adjEffects','Effects',effectsBody,'',cEffects)+_mskGroup('adjDetail','Detail',detailBody,'',cDetail)+'</div>';
+    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(m,g);
+      // the eye only exists while the group holds values (or is already switched off, so it can be switched back on)
+      return _mskGroup(g,lb,bd,'',c,(c||off)?{off}:null);}).join('')+'</div>';
   h+=_mskHowTo(m,caps);
   ctl.innerHTML=h;
   mskCrvInit();

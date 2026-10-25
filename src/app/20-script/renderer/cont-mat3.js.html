@@ -768,7 +768,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     mA.fill(0);mB.fill(0);mC.fill(0);mD.fill(0);mE.fill(0);mF.fill(0);mG.fill(0);mH.fill(0);mI.fill(0);mS.fill(0);mJ.fill(0);mK.fill(0);mL.fill(0);mO.fill(0);mTopo.fill(-1);mDep.fill(0);
     const composePlan=_mskCompositionPlan(MK);
     composePlan.order.forEach((slot,rank)=>{mTopo[rank]=slot;});
-    MK.forEach((m,i)=>{const o=i*4;
+    const _grpRestore=_mskGrpOffApply(MK);
+    try{MK.forEach((m,i)=>{const o=i*4;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;if(depthMaskSources[i])mB[o+3]=1;} // shapeless range mask; depth source is rasterized when ready
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
@@ -828,7 +829,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // srcV: mean value of the gated pixels, measured ONCE in JS (mskMeasureSrcV) and passed in.
       // Must be identical for preview, loupe and every export tile — re-measuring per tile would
       // make each tile converge to a different level and show as blocks.
-      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});
+      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});}finally{_grpRestore();}
     if(MK.some(m=>m.type==='brush'||(m.origin==='depth'&&m.depOn)))mskBuildTex(this,MK);
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/

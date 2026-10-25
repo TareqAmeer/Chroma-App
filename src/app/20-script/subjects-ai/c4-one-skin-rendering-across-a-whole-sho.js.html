@@ -253,7 +253,12 @@ function _mskRebuildInner(){
     +'<button class="btn '+(m.invert?'bsec':'bgh')+'" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask (I)">Invert</button></div>';
   // Declared here: the shape branches below already ask about capabilities, and `const` is not
   // hoisted — declaring it further down would be a temporal-dead-zone crash, not a style nit.
-  h+=composeRow;   // Add / Subtract / Intersect sit directly under the selected mask, as in Lightroom
+  {
+    const kind=({sky:'Sky',ai:'Subject',skin:'Skin',coat:'Coat',color:'Color Range',lum:'Luminance Range',depth:'Depth Range',coatEye:'Eye brightness','manual-teeth':'Teeth (manual brush)'})[m.origin]||({radial:'Radial Gradient',linear:'Linear Gradient',brush:'Brush'})[m.type]||'Mask';
+    const opTxt=m.isExclude?'Erase':({add:'+ Add',subtract:'\u2212 Subtract',intersect:'\u2229 Intersect'})[m.composeOp||(m.subtract?'subtract':m.intersect?'intersect':'')]||'';
+    h+='<div class="msk-comp-row" aria-label="Component"><span class="msk-comp-arrow" aria-hidden="true">\u21b3</span><span class="msk-comp-name">'+kind+'</span>'+(opTxt?'<span class="msk-tag">'+opTxt+'</span>':'')+'</div>';
+  }
+  h+=composeRow;   // Add / Subtract / Intersect sit directly under the selected mask's component row, as in Lightroom
   const caps=mskCaps(m);
   let shape='',shapeMore='';
   if(m.type==='radial'){
@@ -628,7 +633,9 @@ function _mskRebuildInner(){
     cColor=_mskNonDefault(m,['temp','tint','vibrance','sat','hue','colAmt']),
     cEffects=_mskNonDefault(m,['tex','clarity','dehaze']),cDetail=_mskNonDefault(m,['sharp','sharpMask','nr']);
   h+='<div class="msk-adjust-sec" role="group" aria-label="Adjustments">'
-    +_mskGroup('adjust','Light',lightBody,'',cLight)+_mskGroup('adjColor','Color',colorBody,'',cColor)+_mskGroup('adjEffects','Effects',effectsBody,'',cEffects)+_mskGroup('adjDetail','Detail',detailBody,'',cDetail)+'</div>';
+    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(m,g);
+      // the eye only exists while the group holds values (or is already switched off, so it can be switched back on)
+      return _mskGroup(g,lb,bd,'',c,(c||off)?{off}:null);}).join('')+'</div>';
   h+=_mskHowTo(m,caps);
   ctl.innerHTML=h;
   mskCrvInit();
