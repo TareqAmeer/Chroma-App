@@ -72,6 +72,9 @@ async function refreshLUTSelect(keep){
     +(lib.length?'<optgroup label="My library">'+lib.map(k=>`<option value="l:${k}">${k}</option>`).join('')+'</optgroup>':'');
   sel.value=keep||'';
 }
+// A look/print pick changes the recipe but (unlike a slider) never went through fxUpdate(), so no history
+// push -> chromasmithOnEdit -> sidecar write ever happened and the look was lost on Editor close.
+function _fxLookPersist(){clearTimeout(_fxHistPushTimer);_fxHistPushTimer=setTimeout(fxHistoryPush,400);}
 async function selectLUT(v,skipFxDefaults){
   setTimeout(()=>{if(typeof fxMobileCaption==='function')fxMobileCaption();},0);
   const del=document.getElementById('btn-lut-del');del.disabled=!v.startsWith('l:');
@@ -79,7 +82,7 @@ async function selectLUT(v,skipFxDefaults){
   const rowMix=document.getElementById('row-lut-mix');
   if(rowMix)rowMix.style.display=v?'flex':'none';
   try{
-    if(!v){fxState.lut=null;renderPreview();log('LUT off');return}
+    if(!v){fxState.lut=null;renderPreview();log('LUT off');if(!skipFxDefaults)_fxLookPersist();return}
     let lut;
     // presetLut(), not a fresh lutFromBytes(b64ToBytes(...)): the gallery has almost always
     // decoded this look already, and re-decoding it here paid for that twice.
@@ -107,16 +110,17 @@ async function selectLUT(v,skipFxDefaults){
     }
     if(!skipFxDefaults)_fxAmtTouched=false; // fresh look pick: allow its defaults to apply once
     renderPreview();log(`LUT applied: ${v.slice(2)}`,'ok');
+    if(!skipFxDefaults)_fxLookPersist();
     if(typeof csFirstEditLookApplied==='function')csFirstEditLookApplied();
   }catch(e){log('LUT error: '+e.message,'err')}
 }
 // Print profile (Kodak/Fuji): a 2nd 3D LUT applied AFTER the film look + halation.
-function selectPrint(v){
+function selectPrint(v,fromRestore){
   const sel=document.getElementById('sel-print');if(sel&&sel.value!==v){sel.value=v;sel._chipsRender&&sel._chipsRender();}
   try{
-    if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');if(typeof syncSectionEnabled==='function')syncSectionEnabled();return}
+    if(!v||!PRINT_PRESETS[v]){fxState.print=null;FX.setPrintLUT(null);renderPreview();log('Print profile off');if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(!fromRestore)_fxLookPersist();return}
     const lut=lutFromBytes(b64ToBytes(PRINT_PRESETS[v]));
-    FX.setPrintLUT(lut);fxState.print=v;renderPreview();log(`Print profile: ${prettyLUT(v)}`,'ok');
+    FX.setPrintLUT(lut);fxState.print=v;renderPreview();log(`Print profile: ${prettyLUT(v)}`,'ok');if(!fromRestore)_fxLookPersist();
   }catch(e){fxState.print=null;FX.setPrintLUT(null);log('Print error: '+e.message,'err')}
   if(typeof syncSectionEnabled==='function')syncSectionEnabled(); // Print on/off lights the rail's edited bar
 }

@@ -124,7 +124,7 @@ function applyUISnapshot(s,opts){
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
   let _lutPromise;
-  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){const next=String(s.selects[id]??''),changed=el.value!==next;el.value=next;el._chipsRender&&el._chipsRender();if(id==='sel-lut'&&changed)_lutPromise=selectLUT(el.value,true);if(id==='sel-print'&&changed)selectPrint(el.value);}});
+  _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){const next=String(s.selects[id]??''),changed=el.value!==next;el.value=next;el._chipsRender&&el._chipsRender();if(id==='sel-lut'&&changed)_lutPromise=selectLUT(el.value,true);if(id==='sel-print'&&changed)selectPrint(el.value,true);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});
   if(s.curves){fxState.curves=JSON.parse(JSON.stringify(s.curves));bakeCurves();drawCurveEditor();}
   if(s.curveParam)fxState.curveParam=JSON.parse(JSON.stringify(s.curveParam));

@@ -95,7 +95,7 @@ function loadSession(userTriggered){
     fxUpdate();
     // restore LUT preset selection if stored
     if(s['sel-lut'])selectLUT(s['sel-lut'],true).catch(()=>{});
-    if(s['sel-print'])selectPrint(s['sel-print']);
+    if(s['sel-print'])selectPrint(s['sel-print'],true);
     if(userTriggered)log('Session restored','ok');
   }catch(e){if(userTriggered)log('No saved session found','info');}
 }
