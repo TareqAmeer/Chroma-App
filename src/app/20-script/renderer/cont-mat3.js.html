@@ -836,11 +836,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // no-correction path never touches these buffers.
     const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
-      this._pass(this.progs.lens,this.fbs.lens,
+      this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
          lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
          texSize:[1/this.imgW,1/this.imgH],
-         aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]]);
+         aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }
     const srcAfterLens=lnsOn?'lens':'img';
     // NOISE REDUCTION: denoise into fbs.nr, then the lut pass samples that instead of imgTx.
@@ -853,11 +853,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // directly so a bigger step is a wider blur, not just sparser taps of the same size.
       const nrChromaStep=Math.max(1,sc)*(1.0+nrP.color*3.0);
       const nrChromaSig=nrChromaStep*1.2;
-      this._pass(this.progs.nr,this.fbs.nr,
+      this._stagePass('nr',
         {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,nrContrast:nrP.contrast||0,
          nrColorDetail:nrP.colorDetail||0,nrColorSmooth:nrP.colorSmooth||0,
          nrScale:sc,nrChromaStep,nrChromaSig,nrHlDesat:nrP.hlDesat||0,
-         texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
+         texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]],srcAfterLens,opts);
     }
     let lutSrc=nrOn?'nr':srcAfterLens;
     // ROADMAP.md R6 — DECONVOLUTION SHARPENING. Runs on the same "source so far" (post lens/NR,
@@ -922,7 +922,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
           if(typeof renderPreview==='function')renderPreview();}
       }).catch(()=>{if(this._shoulderPending===shoulderRawKey)this._shoulderPending=null;});
     }
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
+    const lutU={img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
@@ -965,7 +965,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]]);
+      texSize:[1/this.imgW,1/this.imgH]};
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the

@@ -218,7 +218,7 @@ function renderPreview(){
     if(typeof mskOverlaySync==='function')mskOverlaySync();
     return;
   }
-  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
+  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),lutCache:!_curIsVideo,...seedOpt}));
   const _oldFootW=_preFootW;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
@@ -237,7 +237,7 @@ function renderPreview(){
     const _splitBase=resolveSplitSnapshot(fxSplitSrc);
     renderSnapshotTo(origCv,_splitBase,pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
+    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),lutCache:!_curIsVideo,...seedOpt}));      // re-render processed into FX.cv
     _applySplitPos();
     fxBaselineValuesSync(_splitBase);
   } else {

@@ -109,6 +109,7 @@
   // The camera's embedded JPEG, requested at open start (alongside the probe/sidecar) so the
   // sharp stand-in is ready by the time showDisplayProvisional knows it needs it.
   let embeddedPrefetch = null;
+  const STILL_STANDIN_RE = /\.jpe?g$/i; // JPEG opens get the cached 1600px Quick Look preview as a sharp stage-0 stand-in (same mechanism as a RAW's embedded JPEG)
   function prefetchEmbedded(path) {
     let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
     if (off || !RAW_EXT_RE.test(path)) { embeddedPrefetch = null; return; }
@@ -171,6 +172,37 @@
         document.body.classList.remove('lib-provisional-on');
       }
       if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); } // after the fade-out
+    };
+  }
+  // JPEG stage 0: the cached Quick Look preview (disk-cached 1600px, EXIF orientation applied by the native side, or the in-memory
+  // Quick Look copy) goes up over the grid thumbnail while the full-size JPEG decodes. Stand-in only; the real render replaces it.
+  async function showStillStandIn(path) {
+    const myToken = ++provisionalToken;
+    const el = ensureProvisionalEl();
+    if (!el) return () => {};
+    try {
+      let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+      if (!off) {
+        const mem = quicklookPreviews.has(path);
+        const bytes = await quicklookPreview(path); // shares the Quick Look LRU + in-flight requests (hover/arrow prefetch land here)
+        if (myToken === provisionalToken && !imgCache.has(path)) {
+          if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
+          embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+          el.src = embeddedUrl;
+          el.style.cssText = '';
+          fitProvisionalToColumn(el);
+          el.classList.add('on');
+          document.body.classList.add('lib-provisional-on');
+          rawPerf('open-still-standin', path, { mem });
+        }
+      }
+    } catch (err) { rawPerf('open-still-standin-miss', path, { error: String(err) }); }
+    return () => {
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+      if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); }
     };
   }
   async function loadAssetImage(assetPath) {

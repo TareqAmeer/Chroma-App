@@ -131,6 +131,7 @@
     rawPerf('open-start', path);
     if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
     if (!imgCache.has(path)) prefetchEmbedded(path); else embeddedPrefetch = null;
+    if (STILL_STANDIN_RE.test(path) && !imgCache.has(path)) quicklookPreview(path).catch(() => {}); // JPEG stage-0 stand-in: request at the very start of the open
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
@@ -272,6 +273,7 @@
         hdrCompanion = comp; // a photo WITH headroom: sparse f16 overlay beside the cached frame
       }
     }
+    if (!isRaw && !cached && STILL_STANDIN_RE.test(path)) displayOverlayPromise = showStillStandIn(path);
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);

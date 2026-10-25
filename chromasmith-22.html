@@ -7346,7 +7346,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025U';
+const BUILD='1.1025V';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8265,7 +8265,36 @@ class FXR{
     if(typeof log==='function')log('Graphics context restored; preview re-rendered.','ok');
     if(typeof this.onRestored==='function')this.onRestored();
   }
+  // Lut-pass cache support: every upload into a bound texture bumps that texture's __v, so a cache key can tell "same bytes" from
+  // "re-uploaded" without hashing. Conservative: unknown writes (anything not wrapped here) are never inputs of the lut pass.
+  _hookTexVersions(){const gl=this.gl;if(!gl||gl.__csTexHook)return;gl.__csTexHook=true;
+    let au=0;const bt={},aT=gl.activeTexture.bind(gl),bT=gl.bindTexture.bind(gl);
+    gl.activeTexture=u=>{au=u-gl.TEXTURE0;return aT(u);};
+    gl.bindTexture=(t,x)=>{bt[au+':'+t]=x;return bT(t,x);};
+    const bump=(t)=>{const x=bt[au+':'+t];if(x)x.__v=(x.__v||0)+1;};
+    ['texImage2D','texImage3D','texSubImage2D','texSubImage3D','texStorage2D','texStorage3D','copyTexImage2D','copyTexSubImage2D','copyTexSubImage3D','compressedTexImage2D','compressedTexSubImage2D','compressedTexImage3D','compressedTexSubImage3D','generateMipmap'].forEach(n=>{
+      const f=gl[n];if(typeof f!=='function')return;const g=f.bind(gl);gl[n]=function(t){bump(t);return g.apply(null,arguments);};});}
+  // Stage cache (lens -> nr -> lut): a preview render that opts in (opts.lutCache) skips a stage when NOTHING it reads changed since the
+  // last time it wrote its texture: the key is the stage's complete uniform set + identity/upload-version of every texture it can sample
+  // + the previous stage's own key. Self-validating (the key lives on the output texture, set to null by any uncached write) and never
+  // used for export/tiles/offscreen targets. Typical win: only grain/halation/bloom/vignette/print/sat changed -> the lut pass (the dominant
+  // GPU cost of a settled frame) is skipped.
+  _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
+    const tx=this.txs;
+    return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+  _stagePass(name,u,b,srcName,opts,uncacheable){
+    const tx=this.txs[name];let key=null;
+    if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
+      const ss=srcName==='img'?'':(this.txs[srcName]&&this.txs[srcName]._stageSig);
+      if(srcName==='img'||ss){try{key=this._stageKey(u,name,srcName,ss);}catch(e){key=null;}}
+    }
+    if(key!==null&&tx._stageSig===key){this._lutSkips=(this._lutSkips||0)+1;(this._stageSkips||(this._stageSkips={}))[name]=((this._stageSkips||{})[name]||0)+1;return;}
+    this._pass(this.progs[name],this.fbs[name],u,b);
+    if(tx)tx._stageSig=key;
+  }
   _init(){
+    this._hookTexVersions();
     this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
     // CPU shadows let a still export copy the exact active grade textures into its own FXR.
     // These are private immutable snapshots, separate from UI state that can change mid-export.
@@ -10432,11 +10461,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // no-correction path never touches these buffers.
     const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
-      this._pass(this.progs.lens,this.fbs.lens,
+      this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
          lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
          texSize:[1/this.imgW,1/this.imgH],
-         aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]]);
+         aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }
     const srcAfterLens=lnsOn?'lens':'img';
     // NOISE REDUCTION: denoise into fbs.nr, then the lut pass samples that instead of imgTx.
@@ -10449,11 +10478,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // directly so a bigger step is a wider blur, not just sparser taps of the same size.
       const nrChromaStep=Math.max(1,sc)*(1.0+nrP.color*3.0);
       const nrChromaSig=nrChromaStep*1.2;
-      this._pass(this.progs.nr,this.fbs.nr,
+      this._stagePass('nr',
         {img:0,nrLuma:nrP.luma,nrColor:nrP.color,nrDetail:nrP.detail!=null?nrP.detail:0.5,nrContrast:nrP.contrast||0,
          nrColorDetail:nrP.colorDetail||0,nrColorSmooth:nrP.colorSmooth||0,
          nrScale:sc,nrChromaStep,nrChromaSig,nrHlDesat:nrP.hlDesat||0,
-         texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]]);
+         texSize:[1/this.imgW,1/this.imgH]},[[0,srcAfterLens,false]],srcAfterLens,opts);
     }
     let lutSrc=nrOn?'nr':srcAfterLens;
     // ROADMAP.md R6 — DECONVOLUTION SHARPENING. Runs on the same "source so far" (post lens/NR,
@@ -10518,7 +10547,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
           if(typeof renderPreview==='function')renderPreview();}
       }).catch(()=>{if(this._shoulderPending===shoulderRawKey)this._shoulderPending=null;});
     }
-    this._pass(this.progs.lut,this.fbs.lut,{img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
+    const lutU={img:0,lut3:1,useLut:P.lut?1:0,lutMix:(P.lutMix!=null?P.lutMix:1),useVlog:P.input==='vlog'?1:0,useTonemap:tonemapOn?1:0,
       useHlg:P.hlg&&P.hlg.enabled?1:0,
       hlgLw:(P.hlg&&P.hlg.lw!=null)?P.hlg.lw:400.0,
       srcFlipY:(P.video&&P.video.flipY)?1:0,srcXf:FXR.rotXf((P.video&&P.video.rotation)||0),
@@ -10561,7 +10590,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
-      texSize:[1/this.imgW,1/this.imgH]},[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]]);
+      texSize:[1/this.imgW,1/this.imgH]};
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -25259,7 +25289,7 @@ function renderPreview(){
     if(typeof mskOverlaySync==='function')mskOverlaySync();
     return;
   }
-  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));
+  if(fxComparePreviousSnapshot===null&&!fxSplit)FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),lutCache:!_curIsVideo,...seedOpt}));
   const _oldFootW=_preFootW;
   FX.cv.style.display='block';FX.cv.style.width=cw+'px';FX.cv.style.height=ch+'px'; // pin CSS size; backing store is dpr-scaled
   // The centring offset AND the pan are derived from this footprint — re-fit at any zoom (it used
@@ -25278,7 +25308,7 @@ function renderPreview(){
     const _splitBase=resolveSplitSnapshot(fxSplitSrc);
     renderSnapshotTo(origCv,_splitBase,pw,ph); // B1 primitive — default fxSplitSrc='orig' keeps this byte-identical to the old hardcoded origP render
     origCv.style.display='block';origCv.style.width=cw+'px';origCv.style.height=ch+'px';
-    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),...seedOpt}));      // re-render processed into FX.cv
+    FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:gs,gamutWarn:fxClipCode(),lutCache:!_curIsVideo,...seedOpt}));      // re-render processed into FX.cv
     _applySplitPos();
     fxBaselineValuesSync(_splitBase);
   } else {

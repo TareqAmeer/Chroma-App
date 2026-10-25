@@ -7,6 +7,16 @@
   // cap shared across navigations. Holding an arrow replaces the queue per target but never
   // cancels in-flight requests, so they still land in the cache for the frames that follow.
   const QL_PREFETCH_CONCURRENCY = 2;
+  // Hover warm-up for the JPEG stage-0 stand-in: a card the pointer rests on for 120ms gets its 1600px Quick Look preview fetched into the
+  // Quick Look LRU, so the click that follows finds it in memory and the stand-in is sharp at first paint (see showStillStandIn).
+  let gridHoverWarmTimer = 0;
+  document.addEventListener('pointerover', (e) => {
+    clearTimeout(gridHoverWarmTimer);
+    const card = e.target && e.target.closest ? e.target.closest('#lib-grid .lib-card') : null;
+    const p = card && card.dataset.path;
+    if (!p || !STILL_STANDIN_RE.test(p) || quicklookPreviews.has(p) || quicklookRequests.has(p) || openBusy) return;
+    gridHoverWarmTimer = setTimeout(() => { if (!openBusy && !quicklook.active) quicklookPreview(p).catch(() => {}); }, 120);
+  }, { passive: true });
   function qlPrefetchWindow(path) {
     const nav = libraryNavigationOrder(), shown = nav.entries;
     const index = nav.index.get(path) ?? -1;

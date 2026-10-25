@@ -43,7 +43,36 @@ class FXR{
     if(typeof log==='function')log('Graphics context restored; preview re-rendered.','ok');
     if(typeof this.onRestored==='function')this.onRestored();
   }
+  // Lut-pass cache support: every upload into a bound texture bumps that texture's __v, so a cache key can tell "same bytes" from
+  // "re-uploaded" without hashing. Conservative: unknown writes (anything not wrapped here) are never inputs of the lut pass.
+  _hookTexVersions(){const gl=this.gl;if(!gl||gl.__csTexHook)return;gl.__csTexHook=true;
+    let au=0;const bt={},aT=gl.activeTexture.bind(gl),bT=gl.bindTexture.bind(gl);
+    gl.activeTexture=u=>{au=u-gl.TEXTURE0;return aT(u);};
+    gl.bindTexture=(t,x)=>{bt[au+':'+t]=x;return bT(t,x);};
+    const bump=(t)=>{const x=bt[au+':'+t];if(x)x.__v=(x.__v||0)+1;};
+    ['texImage2D','texImage3D','texSubImage2D','texSubImage3D','texStorage2D','texStorage3D','copyTexImage2D','copyTexSubImage2D','copyTexSubImage3D','compressedTexImage2D','compressedTexSubImage2D','compressedTexImage3D','compressedTexSubImage3D','generateMipmap'].forEach(n=>{
+      const f=gl[n];if(typeof f!=='function')return;const g=f.bind(gl);gl[n]=function(t){bump(t);return g.apply(null,arguments);};});}
+  // Stage cache (lens -> nr -> lut): a preview render that opts in (opts.lutCache) skips a stage when NOTHING it reads changed since the
+  // last time it wrote its texture: the key is the stage's complete uniform set + identity/upload-version of every texture it can sample
+  // + the previous stage's own key. Self-validating (the key lives on the output texture, set to null by any uncached write) and never
+  // used for export/tiles/offscreen targets. Typical win: only grain/halation/bloom/vignette/print/sat changed -> the lut pass (the dominant
+  // GPU cost of a settled frame) is skipped.
+  _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
+    const tx=this.txs;
+    return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+  _stagePass(name,u,b,srcName,opts,uncacheable){
+    const tx=this.txs[name];let key=null;
+    if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
+      const ss=srcName==='img'?'':(this.txs[srcName]&&this.txs[srcName]._stageSig);
+      if(srcName==='img'||ss){try{key=this._stageKey(u,name,srcName,ss);}catch(e){key=null;}}
+    }
+    if(key!==null&&tx._stageSig===key){this._lutSkips=(this._lutSkips||0)+1;(this._stageSkips||(this._stageSkips={}))[name]=((this._stageSkips||{})[name]||0)+1;return;}
+    this._pass(this.progs[name],this.fbs[name],u,b);
+    if(tx)tx._stageSig=key;
+  }
   _init(){
+    this._hookTexVersions();
     this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
     // CPU shadows let a still export copy the exact active grade textures into its own FXR.
     // These are private immutable snapshots, separate from UI state that can change mid-export.

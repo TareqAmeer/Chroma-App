@@ -3344,6 +3344,7 @@
   // The camera's embedded JPEG, requested at open start (alongside the probe/sidecar) so the
   // sharp stand-in is ready by the time showDisplayProvisional knows it needs it.
   let embeddedPrefetch = null;
+  const STILL_STANDIN_RE = /\.jpe?g$/i; // JPEG opens get the cached 1600px Quick Look preview as a sharp stage-0 stand-in (same mechanism as a RAW's embedded JPEG)
   function prefetchEmbedded(path) {
     let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
     if (off || !RAW_EXT_RE.test(path)) { embeddedPrefetch = null; return; }
@@ -3406,6 +3407,37 @@
         document.body.classList.remove('lib-provisional-on');
       }
       if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); } // after the fade-out
+    };
+  }
+  // JPEG stage 0: the cached Quick Look preview (disk-cached 1600px, EXIF orientation applied by the native side, or the in-memory
+  // Quick Look copy) goes up over the grid thumbnail while the full-size JPEG decodes. Stand-in only; the real render replaces it.
+  async function showStillStandIn(path) {
+    const myToken = ++provisionalToken;
+    const el = ensureProvisionalEl();
+    if (!el) return () => {};
+    try {
+      let off = false; try { off = localStorage.getItem('chromasmithEditorInstantPreview') === '0'; } catch (_) {}
+      if (!off) {
+        const mem = quicklookPreviews.has(path);
+        const bytes = await quicklookPreview(path); // shares the Quick Look LRU + in-flight requests (hover/arrow prefetch land here)
+        if (myToken === provisionalToken && !imgCache.has(path)) {
+          if (embeddedUrl) URL.revokeObjectURL(embeddedUrl);
+          embeddedUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+          el.src = embeddedUrl;
+          el.style.cssText = '';
+          fitProvisionalToColumn(el);
+          el.classList.add('on');
+          document.body.classList.add('lib-provisional-on');
+          rawPerf('open-still-standin', path, { mem });
+        }
+      }
+    } catch (err) { rawPerf('open-still-standin-miss', path, { error: String(err) }); }
+    return () => {
+      if (myToken === provisionalToken) {
+        el.classList.remove('on');
+        document.body.classList.remove('lib-provisional-on');
+      }
+      if (embeddedUrl && myToken === provisionalToken) { const u = embeddedUrl; embeddedUrl = ''; setTimeout(() => URL.revokeObjectURL(u), 400); }
     };
   }
   async function loadAssetImage(assetPath) {
@@ -5343,6 +5375,7 @@
     rawPerf('open-start', path);
     if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
     if (!imgCache.has(path)) prefetchEmbedded(path); else embeddedPrefetch = null;
+    if (STILL_STANDIN_RE.test(path) && !imgCache.has(path)) quicklookPreview(path).catch(() => {}); // JPEG stage-0 stand-in: request at the very start of the open
     window.chromasmithSourceRenderUpdate?.({ source: 'checking', render: 'checking' });
     // Opening a photo through the normal Library ends any Lightroom Edit-In session — otherwise
     // "Save to Lightroom" would stay visible and silently overwrite the WRONG file (the old
@@ -5484,6 +5517,7 @@
         hdrCompanion = comp; // a photo WITH headroom: sparse f16 overlay beside the cached frame
       }
     }
+    if (!isRaw && !cached && STILL_STANDIN_RE.test(path)) displayOverlayPromise = showStillStandIn(path);
     if (isRaw && !hdrPreview) displayPinnedKey = displayCacheKey(path, recipeKey);
     if (isRaw && !hdrPreview) {
       displayOverlayPromise = showDisplayProvisional(path, recipeKey);
@@ -11184,6 +11218,16 @@
   // cap shared across navigations. Holding an arrow replaces the queue per target but never
   // cancels in-flight requests, so they still land in the cache for the frames that follow.
   const QL_PREFETCH_CONCURRENCY = 2;
+  // Hover warm-up for the JPEG stage-0 stand-in: a card the pointer rests on for 120ms gets its 1600px Quick Look preview fetched into the
+  // Quick Look LRU, so the click that follows finds it in memory and the stand-in is sharp at first paint (see showStillStandIn).
+  let gridHoverWarmTimer = 0;
+  document.addEventListener('pointerover', (e) => {
+    clearTimeout(gridHoverWarmTimer);
+    const card = e.target && e.target.closest ? e.target.closest('#lib-grid .lib-card') : null;
+    const p = card && card.dataset.path;
+    if (!p || !STILL_STANDIN_RE.test(p) || quicklookPreviews.has(p) || quicklookRequests.has(p) || openBusy) return;
+    gridHoverWarmTimer = setTimeout(() => { if (!openBusy && !quicklook.active) quicklookPreview(p).catch(() => {}); }, 120);
+  }, { passive: true });
   function qlPrefetchWindow(path) {
     const nav = libraryNavigationOrder(), shown = nav.entries;
     const index = nav.index.get(path) ?? -1;
