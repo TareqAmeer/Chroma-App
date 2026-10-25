@@ -79,6 +79,8 @@ function mskPaintErase_sync(){const mode=mskBrushModeActive();
   const p=document.getElementById('btn-msk-paint'),b=document.getElementById('btn-msk-erase');
   if(p){const on=mode==='paint';p.classList.toggle('on',on);p.classList.toggle('bsec',on);p.classList.toggle('bgh',!on);p.setAttribute('aria-pressed',String(on));const t=p.lastChild;if(t&&t.nodeType===3)t.textContent=on?' Painting':' Paint';}
   if(b){const on=mode==='erase';b.classList.toggle('on',on);b.classList.toggle('bsec',on);b.classList.toggle('bgh',!on);b.setAttribute('aria-pressed',String(on));}
+  const tt=document.getElementById('msk-tool-title');if(tt)tt.textContent=mode==='erase'?'Eraser':'Brush';
+  const dl=document.getElementById('msk-density-label');if(dl)dl.textContent=mode==='erase'?'Density (erase floor)':'Density';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',mode==='erase');}
 function mskPaintErase_toggle(){mskBrushSlotSelect(mskPaintMode&&mskPaintErase?mskBrushSlot:'E');}
 function mskPaintButton(){if(mskPaintMode&&mskPaintErase)mskBrushSlotSelect(mskBrushSlot);else mskPaintToggle();}

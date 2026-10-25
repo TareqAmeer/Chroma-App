@@ -40,6 +40,7 @@ function mskUpdateSelViewControls(){
   const rowDisp=(id,v)=>{const r=document.getElementById(id);if(r)r.style.display=v?'':'none';};
   rowDisp('msk-selview-style-row',hasSelection);
   rowDisp('msk-overlay-row',hasSelection);
+  mskHideAllSync();
   const ov=document.getElementById('ck-msk-overlay');if(ov)ov.checked=on;
   rowDisp('msk-selview-opacity-row',hasSelection&&colored);
   rowDisp('msk-selview-outline-row',hasSelection&&on);
@@ -69,6 +70,9 @@ function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskSaveS
   mskUpdateSelViewControls();
   if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Hold backslash: peek the matte (white on black) regardless of the overlay switch/style; release restores both.
+let mskHideAll=false; // eye icon in the Masks header: show the photo without ANY mask adjustments. Session-only, preview-only (export ignores it).
+function mskHideAllToggle(){mskHideAll=!mskHideAll;mskHideAllSync();if(typeof fxUpdate==='function')fxUpdate();}
+function mskHideAllSync(){const b=document.getElementById('btn-msk-hideall');if(!b)return;b.setAttribute('aria-pressed',String(mskHideAll));b.classList.toggle('bsec',mskHideAll);b.classList.toggle('bgh',!mskHideAll);b.title=mskHideAll?'Masks hidden in the preview (export is unaffected). Click to show them again':'Hide all masks in the preview (does not change the edit or the export)';b.innerHTML=(typeof icon==='function'?icon(mskHideAll?'eyeOff':'eye',14):'');}
 let _mskPeek=null;
 function mskPeek(on){
   if(on){if(_mskPeek||mskSel<0||!fxState.masks[mskSel])return;_mskPeek={pm:mskPreviewMode,st:mskSelViewStyle};mskSelViewStyle='wob';mskPreviewMode='select';}
@@ -94,7 +98,7 @@ function mskShowSelIdx(){
 // capped glow kernels relative to this (see render()'s capK).
 function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
-  return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
+  return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom

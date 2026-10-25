@@ -4334,6 +4334,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
                they still appear in exactly the same contexts (including ?deskx=1 for testing). -->
           <div class="btn-row">
             <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
+            <button class="btn bgh" id="btn-msk-hideall" aria-pressed="false" aria-label="Hide all masks" onclick="mskHideAllToggle()"></button>
           </div>
           <div id="msk-ai-busy" class="msk-ai-busy" role="status" aria-live="polite"></div>
           <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
@@ -7349,7 +7350,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025C';
+const BUILD='1.1025D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10422,7 +10423,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
       // costs nothing new in the shader.
       const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&i!==mskSolo&&!m.isExclude);
-      mE[o+3]=(m.muted||soloedOut)?0:(m.amount!=null?m.amount:100)/100;
+      const hiddenAll=!!(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.hideMasks); // eye icon: preview-only, never in an export
+      mE[o+3]=(m.muted||soloedOut||hiddenAll)?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
@@ -19002,6 +19004,8 @@ function mskPaintErase_sync(){const mode=mskBrushModeActive();
   const p=document.getElementById('btn-msk-paint'),b=document.getElementById('btn-msk-erase');
   if(p){const on=mode==='paint';p.classList.toggle('on',on);p.classList.toggle('bsec',on);p.classList.toggle('bgh',!on);p.setAttribute('aria-pressed',String(on));const t=p.lastChild;if(t&&t.nodeType===3)t.textContent=on?' Painting':' Paint';}
   if(b){const on=mode==='erase';b.classList.toggle('on',on);b.classList.toggle('bsec',on);b.classList.toggle('bgh',!on);b.setAttribute('aria-pressed',String(on));}
+  const tt=document.getElementById('msk-tool-title');if(tt)tt.textContent=mode==='erase'?'Eraser':'Brush';
+  const dl=document.getElementById('msk-density-label');if(dl)dl.textContent=mode==='erase'?'Density (erase floor)':'Density';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',mode==='erase');}
 function mskPaintErase_toggle(){mskBrushSlotSelect(mskPaintMode&&mskPaintErase?mskBrushSlot:'E');}
 function mskPaintButton(){if(mskPaintMode&&mskPaintErase)mskBrushSlotSelect(mskBrushSlot);else mskPaintToggle();}
@@ -20459,6 +20463,8 @@ function mskRebuild(){
         +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
     const _bm=mskBrushModeActive();
+    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span>'
+      +'<button class="btn '+(m.invert?'bsec':'bgh')+'" id="btn-msk-tool-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
     shape+='<div class="btn-row" role="group" aria-label="Brush mode">'
       +'<button class="btn '+(_bm==='paint'?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintButton()" aria-pressed="'+String(_bm==='paint')+'" title="Paint into this mask on the preview">'+icon('brush',14)+(_bm==='paint'?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(_bm==='erase'?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(_bm==='erase')+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
@@ -20466,7 +20472,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" data-msk-brush-slider="feather" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row" title="Paint only pixels similar in colour to where the stroke starts, so the brush stops at edges"><div class="fx-label">Auto mask</div><input type="checkbox" '+(mskBrushAuto?'checked ':'')+'onchange="mskBrushAuto=this.checked"></div>'
-      +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
+      +'<div class="fx-row" title="Caps how strongly a stroke paints; while erasing it is the floor the stroke erases down to (100 erases fully)"><div class="fx-label" id="msk-density-label">'+(_bm==='erase'?'Density (erase floor)':'Density')+'</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskFixupBar(m)+mskRefineControls(m)
        +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
       +(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
@@ -20948,6 +20954,7 @@ function mskUpdateSelViewControls(){
   const rowDisp=(id,v)=>{const r=document.getElementById(id);if(r)r.style.display=v?'':'none';};
   rowDisp('msk-selview-style-row',hasSelection);
   rowDisp('msk-overlay-row',hasSelection);
+  mskHideAllSync();
   const ov=document.getElementById('ck-msk-overlay');if(ov)ov.checked=on;
   rowDisp('msk-selview-opacity-row',hasSelection&&colored);
   rowDisp('msk-selview-outline-row',hasSelection&&on);
@@ -20977,6 +20984,9 @@ function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskSaveS
   mskUpdateSelViewControls();
   if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Hold backslash: peek the matte (white on black) regardless of the overlay switch/style; release restores both.
+let mskHideAll=false; // eye icon in the Masks header: show the photo without ANY mask adjustments. Session-only, preview-only (export ignores it).
+function mskHideAllToggle(){mskHideAll=!mskHideAll;mskHideAllSync();if(typeof fxUpdate==='function')fxUpdate();}
+function mskHideAllSync(){const b=document.getElementById('btn-msk-hideall');if(!b)return;b.setAttribute('aria-pressed',String(mskHideAll));b.classList.toggle('bsec',mskHideAll);b.classList.toggle('bgh',!mskHideAll);b.title=mskHideAll?'Masks hidden in the preview (export is unaffected). Click to show them again':'Hide all masks in the preview (does not change the edit or the export)';b.innerHTML=(typeof icon==='function'?icon(mskHideAll?'eyeOff':'eye',14):'');}
 let _mskPeek=null;
 function mskPeek(on){
   if(on){if(_mskPeek||mskSel<0||!fxState.masks[mskSel])return;_mskPeek={pm:mskPreviewMode,st:mskSelViewStyle};mskSelViewStyle='wob';mskPreviewMode='select';}
@@ -21002,7 +21012,7 @@ function mskShowSelIdx(){
 // capped glow kernels relative to this (see render()'s capK).
 function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
-  return {...extra,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
+  return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom

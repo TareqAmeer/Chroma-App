@@ -794,7 +794,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
       // costs nothing new in the shader.
       const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&i!==mskSolo&&!m.isExclude);
-      mE[o+3]=(m.muted||soloedOut)?0:(m.amount!=null?m.amount:100)/100;
+      const hiddenAll=!!(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.hideMasks); // eye icon: preview-only, never in an export
+      mE[o+3]=(m.muted||soloedOut||hiddenAll)?0:(m.amount!=null?m.amount:100)/100;
       mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
       mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself

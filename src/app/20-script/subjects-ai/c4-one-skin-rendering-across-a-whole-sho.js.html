@@ -289,6 +289,8 @@ function mskRebuild(){
         +(_samLastError?'<div style="font-size:10px;color:var(--err);font-family:var(--mono);margin-top:4px">⚠ '+_samLastError.replace(/</g,'&lt;')+'</div>':'');
     }
     const _bm=mskBrushModeActive();
+    shape+='<div class="msk-tool-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 2px"><span id="msk-tool-title" style="font-weight:600">'+(_bm==='erase'?'Eraser':'Brush')+'</span>'
+      +'<button class="btn '+(m.invert?'bsec':'bgh')+'" id="btn-msk-tool-invert" aria-pressed="'+String(!!m.invert)+'" onclick="mskInvert()" title="Invert this mask">Invert</button></div>';
     shape+='<div class="btn-row" role="group" aria-label="Brush mode">'
       +'<button class="btn '+(_bm==='paint'?'bsec':'bgh')+'" id="btn-msk-paint" onclick="mskPaintButton()" aria-pressed="'+String(_bm==='paint')+'" title="Paint into this mask on the preview">'+icon('brush',14)+(_bm==='paint'?' Painting':' Paint')+'</button>'
       +'<button class="btn '+(_bm==='erase'?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" aria-pressed="'+String(_bm==='erase')+'" title="Erase instead of add; hold Alt/Option while painting for temporary erase">'+icon('eraser',14)+' Erase</button></div>'
@@ -296,7 +298,7 @@ function mskRebuild(){
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" data-msk-brush-slider="feather" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row" title="Paint only pixels similar in colour to where the stroke starts, so the brush stops at edges"><div class="fx-label">Auto mask</div><input type="checkbox" '+(mskBrushAuto?'checked ':'')+'onchange="mskBrushAuto=this.checked"></div>'
-      +'<div class="fx-row"><div class="fx-label">Density</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
+      +'<div class="fx-row" title="Caps how strongly a stroke paints; while erasing it is the floor the stroke erases down to (100 erases fully)"><div class="fx-label" id="msk-density-label">'+(_bm==='erase'?'Density (erase floor)':'Density')+'</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>'
          +mskFixupBar(m)+mskRefineControls(m)
        +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
       +(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
