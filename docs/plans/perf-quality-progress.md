@@ -91,3 +91,26 @@ Real-app numbers: 6240x4160 JPG, retina dpr 2, halation+bloom on, borders on, gr
 BLOCKERS (package 2):
 - Fit sharpness stays at 0.75 of the export (x3 -> 0.81, x4 -> 0.87). Closing it fully means rendering the Fit view from source resolution each time (about 4x the GPU work per Fit update). Your call: default x2 (now), x3, or x4.
 - Auto-develop in Quick Look changes the colour rendering from the camera JPEG to our development once the user lingers (only when the camera JPEG is small for the screen). Say if you want it off by default.
+
+
+## Run 3 (2026-10-25): experiments + red-check fixes
+Real app = installed build 1.1025F via `app_control.py run`, 6240x4160 JPG, retina dpr 2, All FX on + borders, Full res off.
+
+| # | experiment | before -> after | verdict |
+|---|---|---|---|
+| 1 | Fit render multiplier `__fxFitMul` 2/3/4 (settle = renderPreview + readPixels at the settled, float+dither quality; draft = slider-drag frame) | settle median 2x ~250-280 ms, 3x ~760 ms (first 1.7 s), 4x ~1.7 s; draft frames (drag) are ~100 ms at every setting because drags already render a screen-res draft and `__fxFitMul` only applies when settled | KEPT 2x, no change. 3x/4x blow the ~250 ms settle budget 3-7x for +0.06/+0.12 sharpness; an "adaptive 3-4x when settled" is the same settle cost, so rejected. Box/mip pre-pass NOT tried (a Lanczos shrink was already measured worse, 0.58 vs 0.75) |
+| 2 | Grain parity at Fit, grain on (residual std of grain-on minus grain-off, both shrunk to the same 1264 px display size) | export 0.711, preview 1.459 (2.05x) in the real app; Chromium flat-grey probe 1.48x -> 1.12x. Cause: `grFreq` used the PREVIEW render width, so the cell grid was 2.5x coarser than the export's | KEPT, commit d94a3435 (`grFreq` uses `opts.truncRefW` = export width; new `test/probe_grain_parity.mjs`). Export path untouched (goldens match). 100/200/500% crops already had `w/uvSx` = export width. Real-app re-measure needs the rebuild at the end of this run (see below) |
+| 3 | Pass-cost attribution by toggling FX | all-on at Fit: draft ~100 ms, settle 250-430 ms (grain on adds ~150 ms at settle). Per-toggle runs timed out in the automation bridge (a toggle click kicks heavy re-renders), so no per-pass table | NOT DONE: no stage cache exists (FXR re-runs lut/emit/blur/comp every render); caching the lut stage or reduced-res glow needs a pixel-parity-gated change of the renderer and was not attempted without per-pass numbers |
+| 4 | Open latency | not measured this run | NOT DONE |
+| 5 | Culling loop bench | `culling_bench.py` against ~/Pictures and a 12-file /tmp folder: `chromasmithOpenFolder` did not return in 600 s both times (the app starts on the real 57k library and its background indexing/cache_raw_decode is running). No sandbox-catalog launch mode exists in the app/tools, so no 5k-photo library or 500-photo RSS walk | NOT DONE. See BLOCKERS |
+| 6 | Auto-develop default for Quick Look | not measured (needs the culling bench or a RAW pair loaded in Quick Look) | NOT DONE; default stays ON |
+
+Red checks fixed this run (each verified):
+- ui:test `--z-raised`: token added to design/tokens.json AND tools/scripts/token-layout.json (the generator only emits vars listed in the layout file); `tokens:check` green. ui:test passes (one TAP flake seen once, 0 on rerun).
+- library_perf DOM budget: pre-existing for 250+ commits (same probe on a 2026-10-11 checkout: 8601 at n=200, 6518 at n=1000; now 8644 / 6561). Nodes are ~3.4k bundled Editor/Guide/Collage panels + the grid itself; virtualisation intact (n=1000 == n=5000). Budgets re-baselined 8000/6000 -> 8900/6800 with that evidence in the test.
+- lint:src: keyword-tree.part 4301 -> 4300 (dropped a blank line in a catalog.rs test), src/app/06-html.html 3101 -> 3099 (merged two CSS rule lines). lint:ai: selective paste used a raw origin==='ai'; now mskIsAI(m). `src/app/18-script/` was a stale untracked copy: `fxEnsureFullQuality` lives in `src/app/20-script/editor/crisp-view-webkit.js.html`, nothing unique lost, deleted.
+- mask:test (stale since two earlier commits): mask groups are collapsed by default now, tests queried sliders inside closed groups (opened them first); tiled-export invariance check compared two exports with different random dither seeds (pinned Math.random).
+
+BLOCKERS (run 3):
+- Experiments 4-6 need a sandbox launch (own catalog + library root) so benches do not start on the real 57k-photo library; the app has no such switch. Say if you want one added (env var for the data dir), then the culling/open/RSS benches can run.
+- Fit sharpness decision stands: x2 (0.75). x3 costs ~3x settle time.
