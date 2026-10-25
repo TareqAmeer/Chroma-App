@@ -50,7 +50,7 @@ try {
 
     let m = { type: 'radial', cx: 0.5, cy: 0.5, rx: 0.43, ry: 0.48, feather: 0.5,
       id: 'dehaze-mask', amount: 100, dehaze: 0, ..._mskAdjustDefaults(), ..._mskSkinDefaults() };
-    fxState.masks = [m]; fxImages[fxCurIdx].masks = fxState.masks; mskSel = 0; _mskTexDirty = true; mskRebuild();
+    fxState.masks = [m]; fxImages[fxCurIdx].masks = fxState.masks; mskSel = 0; _mskTexDirty = true; _mskGroupOpen.adjEffects = true; _mskGroupOpen.adjDetail = true; mskRebuild(); // groups are collapsed by default
     const localToggle = document.getElementById('tg-local');
     if (localToggle && !localToggle.classList.contains('on')) toggleFX('local');
     mskRebuild(); fxHistoryPush();

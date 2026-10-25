@@ -346,6 +346,7 @@ async function main() {
       // ── CHR-249: mask-local Sharpen is separate from Texture and follows mask coverage ──
       fxState.masks.length=0;mskSel=-1;mskAdd('radial');
       const sharpMask=fxState.masks[0];Object.assign(sharpMask,{cx:.5,cy:.5,rx:.42,ry:.42,rot:0,feather:.05,sharp:0,tex:0});
+      _mskGroupOpen.adjDetail=true;mskRebuild(); // Detail group is collapsed by default now; the sliders only exist while it is open
       _mskTexDirty=true;
       ck('CHR-249 mask panel exposes a distinct Sharpen slider',!!document.querySelector('[data-k="sharp"]'));
       ck('CHR-249 mask panel exposes independent Sharpen Mask protection',!!document.querySelector('[data-k="sharpMask"]'));
@@ -494,7 +495,7 @@ async function main() {
       const exportSource=document.createElement('canvas');exportSource.width=128;exportSource.height=96;
       exportSource.getContext('2d').drawImage(fxImages[fxCurIdx].img,0,0,128,96);
       const originalTileSizer=fxExportTileSize;fxExportTileSize=()=>128;
-      const exportHash=async()=>{const outCanvas=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
+      const exportHash=async()=>{Math.random=(()=>{let q=777;return()=>(q=(q*16807)%2147483647)/2147483647;})(); /* tiled export draws its dither seed from Math.random: pin it so two exports are comparable */ const outCanvas=await renderTiled(getFXParams(),exportSource,128,96,()=>{},FX);
         const px=outCanvas.getContext('2d').getImageData(0,0,128,96).data;return digest(px);};
       const tiledSubtractHash=await exportHash();
       updateWork(); // restore the preview source clobbered by the tiled export above (see the note in the isolated block)

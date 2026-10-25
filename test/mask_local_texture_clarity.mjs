@@ -47,7 +47,7 @@ try {
 
     const m = { type: 'radial', cx: 0.5, cy: 0.5, rx: 0.42, ry: 0.44, rot: 0, feather: 0.02,
       id: 'texture-clarity-mask', amount: 100, tex: 0, clarity: 0, ..._mskAdjustDefaults(), ..._mskSkinDefaults() };
-    fxState.masks = [m]; fxImages[fxCurIdx].masks = fxState.masks; mskSel = 0; _mskTexDirty = true; mskRebuild();
+    fxState.masks = [m]; fxImages[fxCurIdx].masks = fxState.masks; mskSel = 0; _mskTexDirty = true; _mskGroupOpen.adjEffects = true; _mskGroupOpen.adjDetail = true; mskRebuild(); // groups are collapsed by default
     const localToggle = document.getElementById('tg-local');
     if (localToggle && !localToggle.classList.contains('on')) toggleFX('local');
     const labels = [...document.querySelectorAll('#local-ctl .fx-row .fx-label')].map(e => e.textContent.trim());
