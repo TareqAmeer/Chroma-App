@@ -9,7 +9,7 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/jav
 export async function openMaskPage({ width = 1400, height = 1000 } = {}) {
   const server = createServer(async (req, res) => {
     try { const fp = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
-      const data = await readFile(fp);
+      const data = await readFile(process.env.CHROMASMITH_HTML && fp === path.join(ROOT, 'chromasmith-22.html') ? process.env.CHROMASMITH_HTML : fp);
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin'); res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
       res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream' }); res.end(data);
     } catch { res.writeHead(404); res.end('nf'); } });

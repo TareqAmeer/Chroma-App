@@ -1,0 +1,11 @@
+const MSK_TONE_BLEND_KEYS=['crRange','crRangeC','uH','uS','uL','preserve','tgtMode','tgtHex','tanDepth','tanWarm','tanOneWay','tanOneWayAmt'];
+function mskCopyToneMenu(ev){
+  const m=fxState.masks[mskSel];if(!m)return;
+  const others=fxState.masks.map((o,i)=>({o,i})).filter(({o,i})=>i!==mskSel&&mskCaps(o).toneTool)
+    .map(({o,i})=>({label:o.name||('Mask '+(i+1))+' ('+(o.origin==='coat'?'Coat':'Skin')+')',fn:()=>{
+      MSK_TONE_BLEND_KEYS.forEach(k=>{m[k]=o[k]});
+      mskSrcVDebounced();mskRebuild();fxUpdate();
+      toast('Tone settings copied',true);
+    }}));
+  _subjPopup(others,ev);
+}

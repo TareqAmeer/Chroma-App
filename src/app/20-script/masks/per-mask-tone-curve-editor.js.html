@@ -31,7 +31,7 @@ function mskCrvInit(){
     if(drag<0)return;drag=-1;_fxHistLocked=false;
     const m=fxState.masks[mskSel];
     if(m&&m.crv&&m.crv.length===2&&m.crv[0][1]===0&&m.crv[1][1]===1)m.crv=null; // untouched = no curve
-    mskCrvDraw();if(moved){fxUpdate();fxHistoryPush();}
+    mskCrvDraw();mskAmountSync();if(moved){fxUpdate();fxHistoryPush();}
   };
   cv.onpointerup=end;cv.onpointercancel=end;
   cv.ondblclick=e=>{

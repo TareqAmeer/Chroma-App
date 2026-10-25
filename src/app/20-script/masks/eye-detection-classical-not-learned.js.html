@@ -217,10 +217,30 @@ function mskSkinCoverage(m){
 }
 function _mskRow(label,k,val,min,max,sc,flip,title){
   const sv=Math.round(flip?(1-val)*100:val/sc);
-  return '<div class="fx-row"'+(title?' title="'+title.replace(/"/g,'&quot;')+'"':'')+'><div class="fx-label">'+label+'</div>'
+  return '<div class="fx-row"'+(title?' title="'+title.replace(/"/g,'&quot;')+'"':'')+'><div class="fx-label"'+(/^(cx|cy|rx|ry|x0|y0|x1|y1)$/.test(k)?'':' title="Double-click to reset"')+'>'+label+'</div>'
     +'<input class="fx-slider" type="range" min="'+min+'" max="'+max+'" value="'+sv+'" data-k="'+k+'" data-sc="'+sc+'" data-fl="'+(flip?1:0)+'" oninput="mskSlide(this)">'
     +'<div class="fx-val">'+sv+'</div></div>';
 }
+// Double-click a slider's label (or press Backspace/Delete on the focused slider) to put it back to its default.
+const MSK_SLIDER_DEF={amount:100,preserve:70,crRange:35,crRangeC:35,depLo:0,depHi:1,lumLo:0,lumHi:1,feather:0.5};
+const MSK_SLIDER_GEOM=new Set(['cx','cy','rx','ry','x0','y0','x1','y1']);   // shape position: not an "adjustment", never reset this way
+function mskResetSlider(el){
+  const m=fxState.masks[mskSel],k=el&&el.dataset&&el.dataset.k;if(!m||!k||MSK_SLIDER_GEOM.has(k))return false;
+  const def=MSK_SLIDER_DEF[k]!=null?MSK_SLIDER_DEF[k]:0,cur=m[k]==null?def:m[k];
+  if(Math.abs(cur-def)<1e-9)return false;
+  m[k]=def;if(m.origin==='depth'&&(k==='depLo'||k==='depHi'))delete m._refineCache;
+  if(k==='crRange'||k==='crRangeC')mskSrcVDebounced();
+  mskRebuild();fxUpdate();fxHistoryPush();return true;
+}
+function _mskWireReset(ctl){
+  if(!ctl||ctl._rstWired)return;ctl._rstWired=true;
+  ctl.addEventListener('dblclick',e=>{const lb=e.target.closest&&e.target.closest('.fx-label');if(!lb)return;const row=lb.closest('.fx-row'),sl=row&&row.querySelector('input[type=range][data-k]');if(sl){e.preventDefault();mskResetSlider(sl);}});
+  ctl.addEventListener('keydown',e=>{if((e.key==='Backspace'||e.key==='Delete')&&e.target.matches&&e.target.matches('input[type=range][data-k]')&&mskResetSlider(e.target)){e.preventDefault();e.stopPropagation();}});
+}
+// Amount scales the finished adjustment, so with nothing adjusted yet it is a dead control: disabled (not hidden) until the mask has one.
+const _MSK_AMOUNT_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colAmt','tex','clarity','dehaze','sharp','nr','uH','uS','uL','tanDepth','tanWarm','tanOneWayAmt'];
+function mskHasAdjustment(m){return !!m&&(_mskNonDefault(m,_MSK_AMOUNT_KEYS)>0||!!(m.crv&&m.crv.length));}
+function mskAmountSync(){const m=fxState.masks[mskSel],el=document.querySelector('#local-ctl input[data-k="amount"]');if(!el||!m)return;const off=!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100);el.disabled=off;el.title=off?'Amount scales this mask\'s adjustments - it turns on once the mask has one':'';}
 function mskSlide(el){
   const m=fxState.masks[mskSel];if(!m)return;
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
@@ -230,6 +250,7 @@ function mskSlide(el){
   // Widening/narrowing the colour gate changes WHICH pixels are selected, so the mean value that
   // "preserve modeling" anchors to has to be re-measured (debounced — it reads back the canvas).
   if(el.dataset.k==='crRange'||el.dataset.k==='crRangeC')mskSrcVDebounced();
+  mskAmountSync();
   fxUpdate();
 }
 // hue(0-360)+sat(0-1) at a fixed 50% lightness -> #rrggbb, for the native <input type="color"> picker.

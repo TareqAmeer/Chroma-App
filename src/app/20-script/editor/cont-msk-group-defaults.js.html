@@ -1,20 +1,36 @@
-let _mskGroupOpen={selection:true,adjust:true,adjColor:true,adjEffects:false,adjDetail:false,skin:true,coattone:false};
-try{const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
+const _MSK_GROUP_DEFAULTS={selection:true,selMore:false,adjust:false,adjColor:false,adjEffects:false,adjDetail:false,skin:true,coattone:false,skinAdv:false,eyepos:false,viewOpts:false};
+let _mskGroupOpen=Object.assign({},_MSK_GROUP_DEFAULTS);
+try{localStorage.removeItem('chromasmith_msk_groups');const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups2')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
+function mskGroupsResetDefaults(){Object.keys(_mskGroupOpen).forEach(k=>delete _mskGroupOpen[k]);Object.assign(_mskGroupOpen,_MSK_GROUP_DEFAULTS);try{localStorage.removeItem('chromasmith_msk_groups2');}catch(e){}}
 function mskGroupToggle(k){
   _mskGroupOpen[k]=!_mskGroupOpen[k];
-  try{localStorage.setItem('chromasmith_msk_groups',JSON.stringify(_mskGroupOpen));}catch(e){}
+  try{localStorage.setItem('chromasmith_msk_groups2',JSON.stringify(_mskGroupOpen));}catch(e){}
   mskRebuild();
 }
 // Collapsible section. Open/closed is remembered per GROUP, not per mask — a user who works with
 // Selection collapsed wants it collapsed for the next mask too.
-function _mskGroup(key,label,body,note){
+function _mskGroup(key,label,body,note,count){
   const open=_mskGroupOpen[key]!==false;
-  return '<div class="msk-group'+(open?' open':'')+'">'
-    +'<button class="msk-group-hd" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'">'
+  return '<div class="msk-group'+(open?' open':'')+'" data-grp="'+key+'">'
+    +'<button class="msk-group-hd" id="msk-ghd-'+key+'" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'" aria-controls="msk-gbd-'+key+'">'
     +'<span class="msk-group-chev">'+icon('chevron',14)+'</span><span>'+label+'</span>'
-    +(note?'<span class="msk-group-note">'+note+'</span>':'')+'</button>'
-    +(open?'<div class="msk-group-bd">'+body+'</div>':'')+'</div>';
+    +(note?'<span class="msk-group-note">'+note+'</span>':'')
+    +(count?'<span class="msk-group-count" title="'+count+' adjusted in this group" role="img" aria-label="'+count+' adjusted">'+count+'</span>':'')+'</button>'
+    +(open?'<div class="msk-group-bd" id="msk-gbd-'+key+'" role="group" aria-labelledby="msk-ghd-'+key+'">'+body+'</div>':'')+'</div>';
 }
+// Secondary options of the selected mask type, folded under one "More" row inside its section
+// (refine, spill, range gates, AI re-run extras, combine). Not a second accordion level of its own:
+// same chevron, same persistence, but styled as a quiet text row so the section keeps ONE visual level.
+function _mskMore(key,label,body,count){
+  if(!body)return '';
+  const open=_mskGroupOpen[key]===true;
+  return '<div class="msk-more-sec'+(open?' open':'')+'" data-grp="'+key+'">'
+    +'<button class="msk-adv-hd" id="msk-ghd-'+key+'" onclick="mskGroupToggle(\''+key+'\')" aria-expanded="'+open+'" aria-controls="msk-gbd-'+key+'">'
+    +'<span class="msk-group-chev'+(open?' msk-adv-open':'')+'">'+icon('chevron',12)+'</span> '+label
+    +(count?'<span class="msk-group-count" role="img" aria-label="'+count+' active">'+count+'</span>':'')+'</button>'
+    +(open?'<div class="msk-more-bd" id="msk-gbd-'+key+'" role="group" aria-labelledby="msk-ghd-'+key+'">'+body+'</div>':'')+'</div>';
+}
+function _mskNonDefault(m,keys){let n=0;keys.forEach(k=>{const v=m[k];if(typeof v==='number'&&Math.abs(v)>1e-6)n++;});return n;}
 // Rare, destructive or ordering operations. They still matter (order drives "Subtract prev"), but
 // they are not what you touch while grading, so they no longer cost three rows of panel height.
 // "+ Mask" — replaces a row of up to 8 peer buttons (CLAUDE.md called this out by name: "Nine
@@ -34,9 +50,9 @@ function mskAddMenu(ev,composeOp){
   if(!composeOp)_mskPendingCompose=null;
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
   const _kbd=id=>{try{const b=window.chromasmithShortcutRegistry&&csShortcutBinding(id);return b?'<kbd style="margin-left:auto;opacity:.6;font:inherit;font-size:11px">'+csShortcutLabel(b)+'</kbd>':'';}catch(_){return '';}};
-  const item=(label,ic,type,action,sc)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
+  const item=(label,ic,type,action,sc)=>'<button class="msk-more-it" role="menuitem" tabindex="-1" data-kind="'+String(label).toLowerCase().replace(/[^a-z0-9]+/g,'-')+'" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+(action||"mskAdd('"+type+"')")+'">'
     +icon(ic,15)+'<span>'+label+'</span>'+(sc?_kbd(sc):'')+'</button>';
-  const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
+  const hd=(label)=>'<div class="msk-more-hd" role="presentation">'+label+'</div>';
   // ⚠️ Was gated on `body.deskx` — a LAYOUT class toggled purely by window WIDTH (a media query,
   // see the listener a few hundred lines up), unrelated to whether the on-device SAM/faceparse
   // models this section actually needs are even available. The desktop app just gained window-
@@ -48,7 +64,9 @@ function mskAddMenu(ev,composeOp){
   const desktop=!!window.__TAURI__;
   if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   const cmpTxt={add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[composeOp];
-  const html='<div class="msk-more-hd">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
+  const _sc=(typeof _mskSceneOf==='function'&&desktop)?_mskSceneOf(curItem()):null;
+  const detected=(_sc&&_sc.state==='done'&&_sc.list&&_sc.list.length)?_sc.list:[];
+  const html='<div class="msk-more-hd" role="presentation">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
     +hd('One click')
     +(desktop?item('Subject','wand','', 'mskAddSubjectMatte()'):'')+item('Sky','sky','sky')+(desktop?item('Background','wand','', 'mskAddBackground()'):'')
     +'<div class="msk-more-sep"></div>'+hd('Shape')
@@ -65,18 +83,51 @@ function mskAddMenu(ev,composeOp){
       +item('Skin','wand','skin')+item('Coat','wand','coat')
       +item('Select Subject','wand','ai')
       +item('Auto Subject (matte)','wand','', 'mskAddSubjectMatte()')
-      +item('Select Background','wand','', 'mskAddBackground()'):'')
+      +item('Select Background','wand','', 'mskAddBackground()')
+      +item('Objects','wand','', 'mskAddObjects()')
+      +(_mskLandscapeAvail===true?LANDSCAPE_GROUPS.map(c=>item('Landscape: '+c[1],'wand','', "mskAddLandscape('"+c[0]+"')")).join(''):''):'')
+    +(detected.length?'<div class="msk-more-sep"></div>'+hd('Detected in this photo')+detected.map(c=>item(String(c.label).replace(/[<>&"]/g,''),'wand','', "mskSceneAdd('"+String(c.id).replace(/[^\w-]/g,'')+"')")).join(''):'')
     +'<div class="msk-more-sep"></div>'+hd('Range')
     +item('Color Range','eyedropper','color')+item('Luminance Range','sun','lum')
     // Depth Range needs a real per-photo depth map (vendor/depth's ONNX model, main.rs's
     // depth_run) — desktop-only, same gate as Skin/Coat/AI Select above, not a layout check.
-    +(desktop?item('Depth Range','focus','depth'):'');
-  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+    +(desktop?item('Depth Range','focus','depth'):'')
+    // People (per-part choice + "separate masks") and the full tile grid stay one click away.
+    +(!composeOp?'<div class="msk-more-sep"></div>'+item(_mskCreateExpanded?'Hide the mask type tiles':'Show all mask types (tiles, people)','local','', 'mskCreateExpandToggle()'):'');
+  const d=document.createElement('div');d.className='msk-more-menu msk-add-menu';d.setAttribute('role','menu');d.setAttribute('aria-label','Create new mask');d.innerHTML=html;
   document.body.appendChild(d);
-  const r=ev.currentTarget.getBoundingClientRect();
+  const trig=ev.currentTarget||null;
+  _mskMenuA11y(d,trig,()=>{_mskPendingCompose=null;});
+  const r=(trig||ev.target).getBoundingClientRect();
   _mskPlaceMenu(d,r);
-  setTimeout(()=>document.addEventListener('click',function c(){d.remove();_mskPendingCompose=null;document.removeEventListener('click',c);},{once:true}),0);
+  const first=d.querySelector('.msk-more-it:not(:disabled)');if(first)first.focus({preventScroll:true});
 }
+// Menu-button pattern shared by the create menu: trigger carries aria-haspopup/aria-expanded, items are
+// roving-tabindex menuitems (Arrow keys / Home / End), Esc or Tab closes and returns focus to the trigger,
+// a click on an item or outside closes it.
+function _mskMenuA11y(d,trig,onClose){
+  if(trig&&trig!==document.body&&trig.setAttribute){if(!trig.hasAttribute('aria-haspopup'))trig.setAttribute('aria-haspopup','menu');trig.setAttribute('aria-expanded','true');}
+  let done=false;
+  const close=(refocus)=>{if(done)return;done=true;d.remove();document.removeEventListener('click',outside,true);if(trig&&trig!==document.body&&trig.setAttribute)trig.setAttribute('aria-expanded','false');if(onClose)onClose();if(refocus&&trig&&trig.focus&&trig.isConnected)try{trig.focus({preventScroll:true});}catch(_){}};
+  const outside=(e)=>{if(!d.contains(e.target)&&e.target!==trig)close(false);};
+  setTimeout(()=>document.addEventListener('click',outside,true),0);
+  d.addEventListener('click',(e)=>{if(e.target.closest('.msk-more-it'))setTimeout(()=>close(false),0);});
+  d.addEventListener('keydown',(e)=>{
+    const its=[...d.querySelectorAll('.msk-more-it:not(:disabled)')];const i=its.indexOf(document.activeElement);
+    if(e.key==='ArrowDown'){e.preventDefault();its[(i+1)%its.length].focus();}
+    else if(e.key==='ArrowUp'){e.preventDefault();its[(i<=0?its.length:i)-1].focus();}
+    else if(e.key==='Home'){e.preventDefault();its[0].focus();}
+    else if(e.key==='End'){e.preventDefault();its[its.length-1].focus();}
+    else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(true);}
+    else if(e.key==='Tab'){close(true);}
+  });
+  d._close=close;
+}
+// The expanded tile grid / Detected chips / People list: shown while there is no mask (the empty state) or
+// when the menu's "Show all mask types" asked for it; folded into the create menu otherwise.
+let _mskCreateExpanded=false;
+function mskCreateExpandToggle(){_mskCreateExpanded=!_mskCreateExpanded;mskCreateWrapSync();}
+function mskCreateWrapSync(){const w=document.getElementById('msk-create-wrap');if(!w)return;w.hidden=!(fxState.masks.length===0||_mskCreateExpanded);}
 // Places a mask dropdown beside its trigger and keeps it on screen: it opens below the trigger when
 // that fits, otherwise on whichever side has more room, and gets its own scroll (max-height) when even
 // that side is too short — so a long menu like the mask settings one can always be scrolled.
@@ -99,13 +150,14 @@ function mskMoreMenu(ev){
   const item=(label,ic,fn,on,dis,danger)=>'<button class="msk-more-it'+(on?' on':'')+(danger?' danger':'')+'"'
     +(dis?' disabled':'')+' onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());'+fn+'">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
+  const _nEmpty=mskEmptyIndexes().length;
   const otherToneMasks=mskCaps(m).toneTool?fxState.masks.filter((o,i)=>i!==mskSel&&mskCaps(o).toneTool):[];
   const html=item('Move up','undo','mskMove(-1)',false,mskSel<1)
     +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
     +item('Rename…','rename','mskRename()')
     +item('Reset adjustments','undo','mskResetAdjust()')
     +item('Duplicate','copy','mskDuplicate(false)')
-    +item('Duplicate inverted','compare','mskDuplicate(true)')
+    +item('Duplicate and Invert','compare','mskDuplicate(true)')
     // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another
     // Skin or Coat mask on this SAME photo — e.g. a group shot with one Skin mask per person,
     // where person B's mask should start from person A's already-dialed-in look. Deliberately
@@ -123,15 +175,38 @@ function mskMoreMenu(ev){
     +(mskSel>0&&m.composeOp!=='add'?item('Add previous mask','local','mskToggleAdd()'):'')
     +(mskSel>0&&m.composeOp!=='subtract'?item('Subtract previous mask','scissors','mskSetComposition(\'subtract\')'):'')
     +(mskSel>0&&m.composeOp!=='intersect'?item('Intersect with previous mask','eyedropper','mskSetComposition(\'intersect\')'):'')
+    +'<button type="button" class="msk-more-it" onclick="mskComposeMenu(event,\'intersect\')">'+icon('eyedropper',15)+'<span>Intersect with…</span></button>'
     +item(m.invert?'Un-invert':'Invert','compare','mskInvert()',m.invert)
+    +item('Copy mask settings','copy','mskSettingsCopy()')
+    +item('Paste mask settings','copy','mskSettingsPaste()',false,!_mskSettingsClip)
     +'<div class="msk-more-sep"></div>'
-    +item('Delete mask','trash','mskDelete()',false,false,true);
-  const d=document.createElement('div');d.className='msk-more-menu';d.innerHTML=html;
+    +item('Delete mask','trash','mskDelete()',false,false,true)
+    +item('Delete empty masks'+(_nEmpty?' ('+_nEmpty+')':''),'trash','mskDeleteEmpty()',false,!_nEmpty,false)
+    +item('Delete all masks','trash','mskDeleteAll()',false,false,true);
+  const d=document.createElement('div');d.className='msk-more-menu';d.setAttribute('role','menu');d.setAttribute('aria-label','Mask actions');d.innerHTML=html;
+  d.querySelectorAll('.msk-more-it').forEach(b=>{b.setAttribute('role','menuitem');b.tabIndex=-1;});
   document.body.appendChild(d);
-  const r=ev.currentTarget.getBoundingClientRect();
-  _mskPlaceMenu(d,r);
-  setTimeout(()=>document.addEventListener('click',function c(){d.remove();document.removeEventListener('click',c);},{once:true}),0);
+  const trig=ev.currentTarget||null;
+  _mskMenuA11y(d,trig,null);
+  const rr=ev.rect||((trig||ev.target).getBoundingClientRect());
+  _mskPlaceMenu(d,rr);
+  const first=d.querySelector('.msk-more-it:not(:disabled)');if(first)first.focus({preventScroll:true});
 }
+// Row context menu (right-click on a mask row): selects that mask, then opens the same menu as its "..." button.
+function mskRowContext(ev,i){
+  ev.preventDefault();ev.stopPropagation();
+  if(mskSel!==i){mskSel=i;mskRebuild();}
+  mskMoreMenu({stopPropagation(){},currentTarget:null,target:document.body,rect:{left:ev.clientX,right:ev.clientX,top:ev.clientY,bottom:ev.clientY,width:0,height:0}});
+}
+// Copy / paste of a mask's ADJUSTMENT settings (sliders, curve, colour) between masks - never the selection itself.
+const _MSK_ADJ_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colHue','colSat','colAmt','tex','clarity','dehaze','sharp','sharpMask','nr'];
+let _mskSettingsClip=null;
+function mskSettingsCopy(){const m=fxState.masks[mskSel];if(!m)return;_mskSettingsClip={k:{},crv:m.crv?JSON.parse(JSON.stringify(m.crv)):null};_MSK_ADJ_KEYS.forEach(k=>{_mskSettingsClip.k[k]=m[k]||0;});toast('Mask settings copied',true);}
+function mskSettingsPaste(){const m=fxState.masks[mskSel];if(!m||!_mskSettingsClip)return;Object.assign(m,_mskSettingsClip.k);m.crv=_mskSettingsClip.crv?JSON.parse(JSON.stringify(_mskSettingsClip.crv)):null;mskRebuild();fxUpdate();fxHistoryPush();}
+// Housekeeping: a raster mask nothing was ever painted/selected into, and that is not part of a composition, selects nothing.
+function mskEmptyIndexes(){return fxState.masks.map((m,i)=>(mskIsEmptyRaster(m)&&!fxState.masks.some(o=>o.operandId&&o.operandId===m.id))?i:-1).filter(i=>i>=0);}
+function mskDeleteEmpty(){const idx=mskEmptyIndexes();if(!idx.length)return;mskPaintStop();for(let j=idx.length-1;j>=0;j--)fxState.masks.splice(idx[j],1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;mskRebuild();fxUpdate();fxHistoryPush();toast(idx.length+' empty mask'+(idx.length>1?'s':'')+' deleted (undo restores)',true);}
+function mskDeleteAll(){if(!fxState.masks.length)return;mskPaintStop();const n=fxState.masks.length;fxState.masks.length=0;mskSel=-1;mskSolo=null;_mskTexDirty=true;mskRebuild();fxUpdate();fxHistoryPush();toast(n+' mask'+(n>1?'s':'')+' deleted (undo restores)',true);}
 // Validate a proposed operand against a private copy so an invalid or cyclic choice never
 // changes the live selection. The planner also rejects targets whose own dependency chain is
 // missing/cyclic, which keeps a repaired mask from inheriting another disabled selection.
@@ -218,15 +293,4 @@ function mskCompositionMenu(ev){
   update();op.focus({preventScroll:true});menu.scrollTop=0;
   setTimeout(()=>{if(!menu.isConnected||_mskCompositionMenuClose!==close)return;
     document.addEventListener('mousedown',outside,true);document.addEventListener('keydown',escape,true);},0);
-}
-const MSK_TONE_BLEND_KEYS=['crRange','crRangeC','uH','uS','uL','preserve','tgtMode','tgtHex','tanDepth','tanWarm','tanOneWay','tanOneWayAmt'];
-function mskCopyToneMenu(ev){
-  const m=fxState.masks[mskSel];if(!m)return;
-  const others=fxState.masks.map((o,i)=>({o,i})).filter(({o,i})=>i!==mskSel&&mskCaps(o).toneTool)
-    .map(({o,i})=>({label:o.name||('Mask '+(i+1))+' ('+(o.origin==='coat'?'Coat':'Skin')+')',fn:()=>{
-      MSK_TONE_BLEND_KEYS.forEach(k=>{m[k]=o[k]});
-      mskSrcVDebounced();mskRebuild();fxUpdate();
-      toast('Tone settings copied',true);
-    }}));
-  _subjPopup(others,ev);
 }

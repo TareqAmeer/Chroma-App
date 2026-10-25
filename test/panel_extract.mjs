@@ -218,7 +218,7 @@ if ((!ONLY_SECTION || ONLY_SECTION === 'local') && inventory.local) {
     window.__panelExtractFxUpdate = window.fxUpdate;
     window.fxUpdate = () => {};
   });
-  const addButton = page.getByRole('button', { name: '+ Mask', exact: true });
+  const addButton = page.getByRole('button', { name: 'Create New Mask' });
   await addButton.click();
   const maskTypes = await page.locator('.msk-more-menu .msk-more-it').evaluateAll((buttons) => buttons.map((b) => ({
     label: b.textContent.trim().replace(/\s+/g, ' '),

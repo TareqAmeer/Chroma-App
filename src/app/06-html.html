@@ -487,7 +487,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .seg>button:hover{color:var(--txt)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
-.msk-rowbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.msk-rowbar{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
 .msk-rowbar-nm{flex:1 1 38%;min-width:0;font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
 .msk-layout-toggle{min-height:28px;padding:var(--sp-1) var(--sp-2);white-space:nowrap;font-size:var(--fs-1)}
@@ -503,14 +503,34 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
    and no layout shift on toggle. */
 .msk-group{border-top:1px solid var(--bdr);margin-top:var(--sp-2)}
 .msk-group:first-of-type{border-top:none;margin-top:0}
-.msk-group-hd{display:flex;align-items:center;gap:6px;width:100%;min-height:30px;padding:6px 0;background:none;border:none;
+.msk-group-hd{display:flex;align-items:center;gap:6px;width:100%;min-height:var(--msk-group-hd-h);padding:6px 0;background:none;border:none;
   cursor:pointer;color:var(--mut);font-family:var(--sans);font-size:var(--fs-1);font-weight:600;
   letter-spacing:0;text-align:left}
 .msk-group-hd:hover{color:var(--txt)}
 .msk-group-chev{display:inline-flex;transform:rotate(-90deg);transition:transform var(--dur-1) var(--ease)}
-.msk-group.open .msk-group-chev{transform:rotate(0)}
+.msk-group.open>.msk-group-hd .msk-group-chev{transform:rotate(0)}
 .msk-group-note{margin-left:auto;font-size:var(--fs-0);letter-spacing:0;text-transform:none;color:var(--acc)}
 .msk-group-bd{padding:2px 0 var(--sp-3)}
+/* Progressive disclosure: a count pill on a collapsed accordion header says "something in here is not default". */
+.msk-group-count{margin-left:auto;display:inline-flex;align-items:center;justify-content:center;min-width:var(--msk-badge-size);height:var(--msk-badge-size);padding:0 var(--sp-1);box-sizing:border-box;
+  border-radius:var(--msk-badge-size);background:var(--acc);color:#fff;font-size:var(--fs-0);font-weight:600;font-family:var(--sans);letter-spacing:0}
+.msk-group-hd .msk-group-note+.msk-group-count{margin-left:var(--sp-2)}
+.msk-more-sec{margin-top:var(--sp-2)}
+.msk-more-bd{padding:0 0 var(--sp-2)}
+.msk-more-lbl{margin:var(--sp-3) 0 var(--sp-1);font-size:var(--fs-0);font-weight:600;color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em}
+.msk-adjust-sec{margin-top:var(--msk-section-gap)}
+.msk-howto{margin-top:var(--msk-section-gap);padding-top:var(--sp-3);border-top:1px solid var(--bdr);font-size:var(--fs-1);line-height:1.45;color:var(--mut);font-family:var(--sans)}
+.msk-adjust-sec>.msk-group:first-child{border-top:1px solid var(--bdr)}
+.msk-createbar{align-items:stretch;gap:var(--sp-2);flex-wrap:nowrap}
+.msk-create-btn{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:var(--sp-2);min-height:var(--msk-group-hd-h);font-size:var(--fs-2)}
+.msk-create-plus{font-size:var(--fs-4,16px);line-height:1;font-weight:400}
+.msk-create-chev{width:0;height:0;border:4px solid transparent;border-top-color:currentColor;border-bottom:0;margin-left:var(--sp-1)}
+.msk-create-wrap[hidden],.msk-view-opts[hidden]{display:none}
+.msk-viewbar{display:flex;align-items:center;gap:var(--sp-2)}
+.msk-viewbar>.fx-row{flex:1 1 auto;margin:0}
+.msk-view-more{margin-left:auto;flex:0 0 auto}
+.msk-view-more.on{color:var(--acc)}
+.msk-view-opts{padding:var(--sp-1) 0 var(--sp-2);border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);margin:var(--sp-1) 0}
 .msk-depth-preview-dialog{width:min(920px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);padding:0;overflow:auto;
   color:var(--txt);background:var(--sur);border:1px solid var(--bdr);border-radius:12px;box-shadow:var(--lift-2)}
 .msk-depth-preview-dialog::backdrop{background:rgba(0,0,0,.72)}
@@ -539,7 +559,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-presets{gap:var(--sp-1)}
 .msk-preset{flex:1 1 calc(50% - var(--sp-1));min-width:0;justify-content:center;font-size:var(--fs-1);padding:var(--sp-2) 6px}
 .msk-seg{width:100%;margin:var(--sp-1) 0 var(--sp-2)}
-.msk-adv-hd{display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;color:var(--mut);
+.msk-adv-hd{display:flex;align-items:center;gap:6px;width:100%;text-align:left;background:none;border:none;cursor:pointer;color:var(--mut);
   font-family:var(--sans);font-size:var(--fs-1);font-weight:600;padding:var(--sp-2) 0 var(--sp-1);min-height:28px}
 .msk-adv-hd:hover{color:var(--txt)}
 /* .msk-adv-hd reuses .msk-group-chev (rotate(-90deg) by default) outside a .msk-group.open
@@ -556,6 +576,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .msk-more-it:disabled{opacity:var(--op-2);cursor:default}
 .msk-more-it.on{color:var(--acc)}
 .msk-more-it.danger{color:var(--err)}
+.msk-chk{display:inline-block;width:15px;text-align:center;flex:0 0 auto}
 .msk-more-sep{height:1px;background:var(--bdr);margin:4px 6px}
 /* "+ Mask" menu group headers — same menu, same rows (.msk-more-it), just labelled sections
    (Shape / Paint / AI / Range) instead of one flat list of 8 peers. */

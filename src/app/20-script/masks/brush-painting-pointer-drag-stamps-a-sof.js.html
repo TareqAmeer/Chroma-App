@@ -351,3 +351,8 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
 // depth/Eye brightness stay the obvious, open-by-default thing; the older flow is still there,
 // one click under Advanced, for anyone who wants the Capture One-style convergence tool instead.
 // Skin masks are UNCHANGED — that flow is still the primary, open-by-default tool there.
+// Progressive disclosure (Lightroom convention): only the selected mask's own tool section is open.
+// The four adjustment families (Light/Color/Effects/Detail), the per-type secondary options ("More")
+// and the overlay/view options start COLLAPSED; a group with non-default values shows a count pill.
+// The persisted choice changed meaning (Light + Color used to default open), so it lives under a NEW
+// key and the legacy one is deleted rather than letting stale state override the new defaults.

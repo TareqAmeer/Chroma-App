@@ -522,19 +522,29 @@
                existed to show them — mskAddMenu checks `body.deskx` itself to decide whether the
                Skin/AI Select ENTRIES belong in the menu, the same condition that rule used, so
                they still appear in exactly the same contexts (including ?deskx=1 for testing). -->
-          <div class="btn-row">
-            <button class="btn bgh" onclick="mskAddMenu(event)">+ Mask</button>
+          <!-- ONE create button. With no mask yet (or after "Show all mask types" in its menu) the full tile
+               grid below stays expanded; as soon as a mask exists the grid, Detected chips and People list fold
+               into this button's dropdown (mskAddMenu holds every type the grid has). -->
+          <div class="btn-row msk-createbar" id="msk-createbar">
+            <button class="btn bpri msk-create-btn" id="btn-msk-create" aria-haspopup="menu" aria-expanded="false" onclick="mskAddMenu(event)"><span class="msk-create-plus" aria-hidden="true">+</span><span>Create New Mask</span><span class="msk-create-chev" aria-hidden="true"></span></button>
             <button class="btn bgh" id="btn-msk-hideall" aria-pressed="false" aria-label="Hide all masks" onclick="mskHideAllToggle()"></button>
           </div>
           <div id="msk-ai-busy" class="msk-ai-busy" role="status" aria-live="polite"></div>
-          <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
-          <div id="msk-people" class="msk-people" role="group" aria-label="People in this photo"></div>
-          <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
+          <div id="msk-create-wrap" class="msk-create-wrap">
+            <div id="msk-scene" class="msk-scene" role="group" aria-label="Detected in this photo"></div>
+            <div id="msk-people" class="msk-people" role="group" aria-label="People in this photo"></div>
+            <div id="msk-create-grid" class="msk-create-grid" role="group" aria-label="Create new mask"></div>
+          </div>
+          <div class="msk-viewbar" id="msk-viewbar">
           <div class="fx-row" id="msk-overlay-row" style="display:none">
             <div class="fx-label">Show overlay</div>
             <input type="checkbox" id="ck-msk-overlay" role="switch" aria-label="Show mask overlay (O). Hold backslash to peek the matte" title="Show mask overlay (O). Hold \\ to peek the matte" onchange="mskSetPreviewMode(this.checked?'select':'off')">
             <input type="color" id="msk-selview-color" value="#ff2626" aria-label="Overlay colour" title="Overlay colour" onchange="mskSelViewColorInput(this.value)">
+            <button type="button" class="db-btn msk-overlay-menu-btn" id="btn-msk-overlay-menu" aria-haspopup="menu" aria-expanded="false" aria-label="Overlay modes" title="Overlay modes: colour overlay, image on B&amp;W / black / white, white on black" onclick="mskOverlayMenu(event)"></button>
           </div>
+          <button type="button" class="db-btn msk-view-more" id="btn-msk-view-opts" aria-expanded="false" aria-controls="msk-view-opts" aria-label="More overlay options" title="Overlay opacity, style, edge only, spotlight, edit pins" onclick="mskViewOptsToggle()"></button>
+          </div>
+          <div id="msk-view-opts" class="msk-view-opts" role="group" aria-label="Overlay and view options" hidden>
           <div class="fx-row" id="msk-selview-style-row" style="display:none">
             <div class="fx-label">Overlay style</div>
             <select class="fx-select" id="msk-selview-style" aria-label="Selection display mode" onchange="mskSetSelViewStyle(this.value)">
@@ -555,6 +565,7 @@
           </div>
           <div class="fx-row"><div class="fx-label">Show edit pins</div>
             <input type="checkbox" id="ck-msk-pins" checked onchange="mskPinsToggle(this.checked)">
+          </div>
           </div>
           <div class="msk-count" id="msk-count" aria-live="polite"></div>
           <button class="btn bgh" id="msk-update-all" style="display:none;align-self:flex-start" onclick="mskAiUpdateAll()" title="Re-evaluate every stale or failed AI mask on this photo">Update all AI masks</button>

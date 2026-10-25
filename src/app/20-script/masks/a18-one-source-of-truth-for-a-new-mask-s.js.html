@@ -95,6 +95,7 @@ function mskAdd(type,configure){
   if(pc&&fxState.masks.some(x=>x.id===pc.operandId)){m.composeOp=pc.op;m.operandId=pc.operandId;m.compositionMigrated=true;m.subtract=pc.op==='subtract';m.intersect=pc.op==='intersect';}
   const tg=document.getElementById('tg-local');if(tg&&!tg.classList.contains('on'))toggleFX('local');
   if(typeof hapt==='function')hapt();
+  if(mskOverlayForNew&&mskPreviewMode!=='select')mskPreviewMode='select',mskSaveSelViewPrefs();
   mskRebuild();fxUpdate();
   if(type==='ai'){_samLastError=null;samEnsureEncoded();mskAiTapToggle(true);}
   if(type==='skin'){

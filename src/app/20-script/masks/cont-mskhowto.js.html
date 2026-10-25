@@ -1,3 +1,16 @@
+function _mskHowTo(m,caps){
+  let t='';
+  if(m.origin==='coat'||m.origin==='skin')t='Scribble over the '+(m.origin==='coat'?'coat':'person')+' on the photo to select it, then sample tones and set the target under Skin tone.';
+  else if(mskIsAI(m))t='Scribble or drag a rectangle around the object on the photo (Alt/Option-drag excludes an area), then Paint to refine.';
+  else if(m.origin==='sky')t='The sky is detected for you. Paint or Erase on the photo to correct it; Re-detect sky is under More.';
+  else if(m.origin==='color')t='Pick, then click the colour on the photo; Shift-click adds more samples. Hue range widens or narrows the match.';
+  else if(m.origin==='lum')t='Pick tones on the photo, or move Lum floor and ceiling to choose the brightness band.';
+  else if(m.origin==='depth')t='Turn on Depth range, then move the floor and ceiling to choose a near / far band.';
+  else if(m.type==='radial')t='Drag the pin to move this mask and the handles on the photo to resize it. Feather softens the edge.';
+  else if(m.type==='linear')t='Drag the two end handles on the photo; the effect fades from Start to End. Feather sets the transition.';
+  else if(m.type==='brush')t='Paint on the photo to add to this mask. Hold Alt/Option to erase; Paint and Erase switch the tool.';
+  return t?'<div class="msk-howto" role="note">'+t+'</div>':'';
+}
 function mskClearComposition(){
   const m=fxState.masks[mskSel];if(!m)return;
   m.composeOp='';m.operandId='';m.subtract=false;m.intersect=false;m.compositionMigrated=true;
