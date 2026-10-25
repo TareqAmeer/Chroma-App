@@ -45,7 +45,11 @@ for (const pct of PCTS) {
      const u0=Math.max(1,Math.round((sx-ph.x)/ph.w*624)),v0=Math.max(1,Math.round((sy-ph.y)/ph.h*416));let e=0,n=0;for(let v=v0;v<Math.min(415,v0+uh);v++)for(let u=u0;u<Math.min(623,u0+uw);u++){e+=G[v*624+u];n++}
      if(n&&e/n>bestE){bestE=e/n;cx=Math.round(sx);cy=Math.round(sy)}}}
    {const W=${JSON.stringify(process.env.WIN||'')};if(W){const q=W.split(',').map(Number);cx=q[0];cy=q[1];}}
-   return {ph,cx,cy,cw,ch,bw:el.width,bcss:b.width,info:document.getElementById('fx-info').textContent,zoom:fxZoom,crop:typeof _fxCropShown!=='undefined'&&_fxCropShown}})()`);
+   // colour continuity: mean RGB of the whole on-screen canvas (backing store, not the screenshot: no display-profile conversion), photo area only
+   let rgb=null;try{const sm=document.createElement('canvas');sm.width=96;sm.height=64;const g=sm.getContext('2d',{willReadFrequently:true});
+     if(onBd&&M)g.drawImage(el,M.offX,M.offY,M.w,M.h,0,0,96,64);else g.drawImage(el,0,0,96,64);
+     const d=g.getImageData(0,0,96,64).data;const m=[0,0,0];for(let i=0;i<d.length;i+=4){m[0]+=d[i];m[1]+=d[i+1];m[2]+=d[i+2];}rgb=m.map(v=>+(v/(96*64)).toFixed(2));}catch(e){}
+   return {rgb,ph,cx,cy,cw,ch,bw:el.width,bcss:b.width,info:document.getElementById('fx-info').textContent,zoom:fxZoom,crop:typeof _fxCropShown!=='undefined'&&_fxCropShown}})()`);
   console.log("geo", JSON.stringify(geo)); const S = 2, full = SCR + '/_parity_full.png', crop = SCR + '/_parity_crop.png';
   execFileSync('screencapture', ['-l', winId(), '-o', full]);
   execFileSync('sips', ['-c', String(geo.ch * S), String(geo.cw * S), '--cropOffset', String(geo.cy * S), String(geo.cx * S), full, '--out', crop], { stdio: 'ignore' });
@@ -63,6 +67,6 @@ for (const pct of PCTS) {
    const oc=document.createElement('canvas');oc.width=WA;oc.height=HA;oc.getContext('2d').drawImage(ec,PAD+bx,PAD+by,WA,HA,0,0,WA,HA);
    return {exportCrop:oc.toDataURL('image/png').slice(22),meanAbsDiff:+best.toFixed(2),shift:[bx,by],hfPreview:+(hA/n2).toFixed(2),hfExport:+(hB/n2).toFixed(2),hfRatio:+(hA/hB).toFixed(3)}})()`, 300);
   if (m.exportCrop) { writeFileSync(SCR + '/parity_export_' + (pct || 'fit') + '.png', Buffer.from(m.exportCrop, 'base64')); execFileSync('cp', [crop, SCR + '/parity_preview_' + (pct || 'fit') + '.png']); delete m.exportCrop; }
-  const row = { win:[geo.cx,geo.cy], pct: pct || 'fit', ...m, bw: geo.bw, bcss: Math.round(geo.bcss), crop: geo.crop, info: geo.info };
+  const row = { rgb: geo.rgb, win:[geo.cx,geo.cy], pct: pct || 'fit', ...m, bw: geo.bw, bcss: Math.round(geo.bcss), crop: geo.crop, info: geo.info };
   rows.push(row); console.log(JSON.stringify(row));
 }

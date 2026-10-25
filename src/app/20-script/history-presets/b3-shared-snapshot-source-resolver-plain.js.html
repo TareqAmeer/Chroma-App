@@ -132,13 +132,14 @@ function renderPreview(){
   // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
   if(!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1&&cw>0&&ch>0&&!_curIsVideoDraft()){
     const dd=window.devicePixelRatio||1,zf=Math.max(fxZoom,0.25);
-    let pwT=cw*zf*2*dd;
+    const mul=window.__fxFitMul||2; // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
+    let pwT=cw*zf*mul*dd;
     try{
       const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
       if(_previewComposition&&bordersOnly){
         const pw0=Math.max(2,Math.round(pwT)),ph0=Math.round(pw0*ch/cw),bz=borderLayerSizes(Pq,pw0),inset=2*(bz.b1t+bz.b2t);
         const Wc0=pw0+inset,Hc0=ph0+inset,cssDisp=Math.min(maxW,maxH*Wc0/Hc0,Wc0)*zf;
-        pwT=pw0*(2*dd*cssDisp)/Wc0;
+        pwT=pw0*(mul*dd*cssDisp)/Wc0;
       }
     }catch(e){}
     dpr=Math.min(pwT/cw,iw/cw,ih/ch);

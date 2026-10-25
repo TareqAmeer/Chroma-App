@@ -83,6 +83,7 @@ FXR.CAL={
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
+FX.onRestored=()=>{try{if(typeof fxInvalidateTiles==='function')fxInvalidateTiles();const w=fxWork||fxImg;if(w)FX.setImage(w);renderPreview();}catch(e){console.error(e);}};
 // Video still renders through FX itself, so it retains the narrow texture-update queue needed
 // to keep an in-flight video grade coherent. Still exports never enter this lock: they render on
 // FXExport and leave the preview fully interactive.

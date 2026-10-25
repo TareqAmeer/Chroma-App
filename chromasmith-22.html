@@ -7348,7 +7348,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025G';
+const BUILD='1.1025H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8239,12 +8239,35 @@ class FXR{
     this.ok=!!this.gl;if(!this.ok)return;
     // A browser may later discard a high-performance context to conserve power. Persist Auto
     // for the next renderer creation instead of repeatedly asking for a context that just lost.
-    this.cv.addEventListener('webglcontextlost',()=>{
+    this.cv.addEventListener('webglcontextlost',e=>{
+      // preventDefault is what asks the browser to fire webglcontextrestored later (without it a lost context stays dead).
+      try{e.preventDefault();}catch(_){}
+      this._lost=true;
       if(gpuPreference()==='high-performance'){
         try{localStorage.setItem(GPU_PREF_KEY,'default');}catch(e){}
         if(typeof log==='function')log('GPU context was lost; reverting the next launch to Auto.','warn');
       }
     });
+    this.cv.addEventListener('webglcontextrestored',()=>{try{this._restoreContext();}catch(err){console.error('GL context restore failed',err);if(typeof log==='function')log('Graphics context restore failed: '+(err&&err.message||err),'warn');}});
+    this._init();
+  }
+  // Every GL object dies with the context. Rebuild this instance in place (other code holds the const FX): drop all own state except
+  // the canvas and the render counter, recompile, then re-upload what only the renderer knows about (grade textures from their CPU
+  // shadows, the source image). The page then re-renders (onRestored).
+  _restoreContext(){
+    const cv=this.cv,snap={_lutSnapshot:this._lutSnapshot,_printLutSnapshot:this._printLutSnapshot,_hslSnapshot:this._hslSnapshot,
+      _curveSnapshot:this._curveSnapshot,_stockShoulderSnapshot:this._stockShoulderSnapshot},img=this._lastSetImg,rc=(this._rc||0)+1000,cb=this.onRestored,gone=this._lostLog;
+    for(const k of Object.keys(this))if(k!=='cv')delete this[k];
+    this.cv=cv;this.gl=cv.getContext('webgl2',gpuContextOptions());this.ok=!!this.gl;
+    if(!this.ok)throw new Error('no WebGL2 context after restore');
+    this._rc=rc;this.onRestored=cb;this._lost=false;
+    this._init();
+    this.resetTextureSnapshotFrom(snap);
+    if(img)this.setImage(img);
+    if(typeof log==='function')log('Graphics context restored; preview re-rendered.','ok');
+    if(typeof this.onRestored==='function')this.onRestored();
+  }
+  _init(){
     this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
     // CPU shadows let a still export copy the exact active grade textures into its own FXR.
     // These are private immutable snapshots, separate from UI state that can change mid-export.
@@ -9930,7 +9953,7 @@ void main(){
   }
   // Free every parked (idle) buffer — e.g. before a big export or when the photo closes.
   releaseBufferPool(){this._bufTrim(0);}
-  setImage(img){const gl=this.gl;
+  setImage(img){const gl=this.gl;if(this.cv&&this.cv.id==='fx-canvas')this._lastSetImg=img; // only the on-screen renderer keeps it (for context restore); export renderers must not pin big canvases
     // A real image change while a working texture is parked (pushTempImage whose render threw
     // before popTempImage): the parked frame is stale now — free it rather than restore it later.
     if(this._parkedImg&&!this._pushingTemp){const pt=this._parkedImg.tx;if(pt&&pt!==this.vidTx&&pt!==this.imgTx)gl.deleteTexture(pt);this._parkedImg=null;}
@@ -10830,6 +10853,7 @@ FXR.CAL={
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
+FX.onRestored=()=>{try{if(typeof fxInvalidateTiles==='function')fxInvalidateTiles();const w=fxWork||fxImg;if(w)FX.setImage(w);renderPreview();}catch(e){console.error(e);}};
 // Video still renders through FX itself, so it retains the narrow texture-update queue needed
 // to keep an in-flight video grade coherent. Still exports never enter this lock: they render on
 // FXExport and leave the preview fully interactive.
@@ -25145,13 +25169,14 @@ function renderPreview(){
   // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
   if(!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1&&cw>0&&ch>0&&!_curIsVideoDraft()){
     const dd=window.devicePixelRatio||1,zf=Math.max(fxZoom,0.25);
-    let pwT=cw*zf*2*dd;
+    const mul=window.__fxFitMul||2; // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
+    let pwT=cw*zf*mul*dd;
     try{
       const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
       if(_previewComposition&&bordersOnly){
         const pw0=Math.max(2,Math.round(pwT)),ph0=Math.round(pw0*ch/cw),bz=borderLayerSizes(Pq,pw0),inset=2*(bz.b1t+bz.b2t);
         const Wc0=pw0+inset,Hc0=ph0+inset,cssDisp=Math.min(maxW,maxH*Wc0/Hc0,Wc0)*zf;
-        pwT=pw0*(2*dd*cssDisp)/Wc0;
+        pwT=pw0*(mul*dd*cssDisp)/Wc0;
       }
     }catch(e){}
     dpr=Math.min(pwT/cw,iw/cw,ih/ch);

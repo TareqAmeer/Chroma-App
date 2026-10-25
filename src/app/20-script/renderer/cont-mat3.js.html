@@ -355,7 +355,7 @@ void main(){
   }
   // Free every parked (idle) buffer — e.g. before a big export or when the photo closes.
   releaseBufferPool(){this._bufTrim(0);}
-  setImage(img){const gl=this.gl;
+  setImage(img){const gl=this.gl;if(this.cv&&this.cv.id==='fx-canvas')this._lastSetImg=img; // only the on-screen renderer keeps it (for context restore); export renderers must not pin big canvases
     // A real image change while a working texture is parked (pushTempImage whose render threw
     // before popTempImage): the parked frame is stale now — free it rather than restore it later.
     if(this._parkedImg&&!this._pushingTemp){const pt=this._parkedImg.tx;if(pt&&pt!==this.vidTx&&pt!==this.imgTx)gl.deleteTexture(pt);this._parkedImg=null;}

@@ -15,12 +15,35 @@ class FXR{
     this.ok=!!this.gl;if(!this.ok)return;
     // A browser may later discard a high-performance context to conserve power. Persist Auto
     // for the next renderer creation instead of repeatedly asking for a context that just lost.
-    this.cv.addEventListener('webglcontextlost',()=>{
+    this.cv.addEventListener('webglcontextlost',e=>{
+      // preventDefault is what asks the browser to fire webglcontextrestored later (without it a lost context stays dead).
+      try{e.preventDefault();}catch(_){}
+      this._lost=true;
       if(gpuPreference()==='high-performance'){
         try{localStorage.setItem(GPU_PREF_KEY,'default');}catch(e){}
         if(typeof log==='function')log('GPU context was lost; reverting the next launch to Auto.','warn');
       }
     });
+    this.cv.addEventListener('webglcontextrestored',()=>{try{this._restoreContext();}catch(err){console.error('GL context restore failed',err);if(typeof log==='function')log('Graphics context restore failed: '+(err&&err.message||err),'warn');}});
+    this._init();
+  }
+  // Every GL object dies with the context. Rebuild this instance in place (other code holds the const FX): drop all own state except
+  // the canvas and the render counter, recompile, then re-upload what only the renderer knows about (grade textures from their CPU
+  // shadows, the source image). The page then re-renders (onRestored).
+  _restoreContext(){
+    const cv=this.cv,snap={_lutSnapshot:this._lutSnapshot,_printLutSnapshot:this._printLutSnapshot,_hslSnapshot:this._hslSnapshot,
+      _curveSnapshot:this._curveSnapshot,_stockShoulderSnapshot:this._stockShoulderSnapshot},img=this._lastSetImg,rc=(this._rc||0)+1000,cb=this.onRestored,gone=this._lostLog;
+    for(const k of Object.keys(this))if(k!=='cv')delete this[k];
+    this.cv=cv;this.gl=cv.getContext('webgl2',gpuContextOptions());this.ok=!!this.gl;
+    if(!this.ok)throw new Error('no WebGL2 context after restore');
+    this._rc=rc;this.onRestored=cb;this._lost=false;
+    this._init();
+    this.resetTextureSnapshotFrom(snap);
+    if(img)this.setImage(img);
+    if(typeof log==='function')log('Graphics context restored; preview re-rendered.','ok');
+    if(typeof this.onRestored==='function')this.onRestored();
+  }
+  _init(){
     this.progs={};this.fbs={};this.txs={};this.imgTx=null;this.lutTx=null;this.w=0;this.h=0;
     // CPU shadows let a still export copy the exact active grade textures into its own FXR.
     // These are private immutable snapshots, separate from UI state that can change mid-export.
