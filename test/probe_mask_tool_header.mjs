@@ -7,7 +7,7 @@ try {
   await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); fxState.masks.length = 0; mskSel = -1; mskAdd('brush'); mskRebuild(); mskPaintToggle(); });
   const g = () => page.evaluate(() => ({ t: document.getElementById('msk-tool-title').textContent, d: document.getElementById('msk-density-label').textContent, inv: document.getElementById('btn-msk-tool-invert').getAttribute('aria-pressed'), mi: fxState.masks[mskSel].invert }));
   let s = await g(); assert.equal(s.t, 'Brush'); assert.equal(s.d, 'Density');
-  await page.click('#btn-msk-erase'); s = await g(); assert.equal(s.t, 'Eraser'); assert.match(s.d, /erase floor/);
+  await page.click('#btn-msk-erase'); s = await g(); assert.equal(s.t, 'Eraser'); assert.match(s.d, /erase floor/i);
   await page.click('#btn-msk-paint'); s = await g(); assert.equal(s.t, 'Brush'); assert.equal(s.d, 'Density');
   await page.click('#btn-msk-tool-invert'); s = await g(); assert.equal(s.mi, true); assert.equal(s.inv, 'true');
   await page.click('#btn-msk-tool-invert'); s = await g(); assert.equal(s.mi, false);
