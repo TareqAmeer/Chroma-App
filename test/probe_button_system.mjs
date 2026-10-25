@@ -30,6 +30,37 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined,
   args: ['--use-gl=swiftshader', '--use-angle=swiftshader', '--disable-gpu-sandbox', '--disable-dev-shm-usage', '--enable-unsafe-swiftshader'] });
 
+// Vote class -> selector(s) that implement it (docs/plans/button-system.md). A control matching none is reported as "not in the vote".
+const CLASSMAP = [
+  [1, 'Editor top-bar icon buttons (bare)', '.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close'],
+  [2, 'Primary action (Export)', '#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export,.sk2x-btn,.btn.bpri'],
+  [3, 'Workspace switch (left as is)', '#cs-brand-tog,#cs-brand-tog>button'],
+  [4, 'Library toolbar triggers', '#lib-overlay .lib-pill,.fx-db.js-allfx,.fx-db.js-allfx-cfg'],
+  [5, 'Library search field', '#lib-search'],
+  [6, 'Library filter chips', '#lib-overlay .lib-chip,#lib-overlay .lib-status-chip'],
+  [7, 'View and size', '#lib-overlay .lib-seg>button'],
+  [8, 'Section header Reset + chevron', '.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.fx-ctrl-chev'],
+  [9, 'Slider value / per-slider reset (left as is)', '.fx-slider,.fx-val,.fx-slider-reset,.k-roll'],
+  [10, 'Secondary text actions (shaded tiles)', '.fx-panel .btn-row>.btn.bgh,.fx-panel .btn-row>.btn.bsec,.fx-panel .btn-row>.btn.fx-btn-primary'],
+  [11, 'Mode segmented controls', '.fx-panel .seg>button,.msk-prevmode-seg>button'],
+  [12, 'Create New Mask', '#btn-msk-create'],
+  [13, 'Add / Subtract / Intersect', '.msk-compose-ops>.btn'],
+  [14, 'Paint / Erase', '.fx-panel [aria-label="Brush mode"]>.btn'],
+  [15, 'Invert', '.msk-invert'],
+  [16, 'Mask row eye and "..." menu', '.msk-li-ctl,.msk-group-eye,.msk-more,#local-list>.btn'],
+  [17, 'Overlay switch and checkboxes', 'input[type=checkbox]'],
+  [18, 'Dialog footer OK/Cancel', 'dialog .btn'],
+  [19, 'Destructive', '.btn.bdng,.btn[onclick*="Delete" i],.btn[onclick*="Clear" i]'],
+  [20, 'Export scope', '#fx-export-scope-row .btn-row>.btn,#adj-scope-row>.btn,.sk2x-opts>.btn'],
+  [21, 'Section tabs', '#sk2-sub button'],
+  [22, 'Menu / select triggers', 'select,.k-fsel>button'],
+  [23, 'Text links', '.msk-ai-update,.ni-guide,#cs-save-state button,.lib-lr-signout,.ni-hint a,.sk2x-proof-toggle'],
+  [25, 'Tool rail icon buttons', '.fx-rail-btn'],
+  [26, 'Panel and view toggles', '.db-btn,.btn.msk-layout-toggle'],
+  [0, 'Chip lists (one-of-N, shaded track)', '.fx-panel .chip-tap>.btn,.fx-panel #curve-chips>.btn,.fx-panel #curve-mode-chips>.btn'],
+  [0, 'Section on/off switch (.fx-toggle, left as is)', '.fx-toggle'],
+];
+
 // ---- in-page scanner ----------------------------------------------------------------------------------------------------
 const SCAN = `(opts) => {
   const MIN_GAP = opts.minGap, MIN_HIT = 24, MIN_INLINE = 18;
@@ -52,7 +83,9 @@ const SCAN = `(opts) => {
     if (r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) return false;
     return true; });
   const label = (el) => (el.id ? '#'+el.id : '') + '.' + [...el.classList].slice(0,3).join('.') + '[' + ((el.textContent||el.getAttribute('aria-label')||el.title||'').trim().replace(/\\s+/g,' ').slice(0,16)) + ']';
-  const out = { touch: [], hit: [], name: [], text: [], n: all.length };
+  const out = { touch: [], hit: [], name: [], text: [], n: all.length, inv: [] };
+  const sigOf = (el) => (el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + '.' + [...el.classList].filter((c) => !/^(on|active|lib-sel|enabled|edited|k-)/.test(c)).slice(0, 3).join('.')).replace(/\\.$/, '');
+  for (const el of all) { const m = []; (opts.map || []).forEach(([no, name, sel]) => { try { if (el.matches(sel)) m.push(no + ':' + name); } catch (e) {} }); out.inv.push([sigOf(el), m.join(' + ') || '-']); }
   // TOUCH
   const bx = all.map((el) => ({ el, r: el.getBoundingClientRect(), bw: borders(el) })).filter((x) => x.bw.any);
   for (let i = 0; i < bx.length; i++) for (let j = i+1; j < bx.length; j++) {
@@ -94,7 +127,9 @@ const SCAN = `(opts) => {
 const SCANFN = eval(SCAN); // only ever executed inside the page
 const fails = []; const note = (k, v) => { fails.push(k + ': ' + v); };
 const summary = [];
+const INV = new Map(); // signature -> [classes, count, first scan]
 function fold(tag, res) {
+  for (const [sig, cls] of res.inv || []) { const e = INV.get(sig + ' | ' + cls); if (e) e[0]++; else INV.set(sig + ' | ' + cls, [1, tag]); }
   summary.push(`${tag}: ${res.n} controls, touch ${res.touch.length}, hit ${res.hit.length}, name ${res.name.length}, text ${res.text.length}`);
   const uniq = (rows) => [...new Set(rows.map((r) => r.join(' | ')))];
   uniq(res.touch).forEach((r) => note('TOUCH ' + tag, r));
@@ -116,7 +151,7 @@ await page.waitForFunction(() => typeof fxWork !== 'undefined' && !!fxWork && !!
 await page.evaluate(() => { document.querySelector('[data-tour-action="close"]')?.click(); document.getElementById('cs-modal-ov')?.remove(); });
 // the mobile-only phone-* strips come from mobile/mobile-ui.css, which a plain Chromium page does not load; the desktop shell hides them
 await page.addStyleTag({ content: '[class^="phone-"],[id^="phone-"],.phone-actions{display:none!important}' });
-const scanEditor = async (tag) => fold(tag, await page.evaluate(SCANFN, { minGap: 8 }));
+const scanEditor = async (tag) => fold(tag, await page.evaluate(SCANFN, { minGap: 8, map: CLASSMAP }));
 for (const theme of ['dark', 'light']) {
   await page.evaluate((t) => document.body.classList.toggle('light', t === 'light'), theme);
   await page.waitForTimeout(450); // colour transitions (120ms) must finish before contrast is read
@@ -141,7 +176,7 @@ for (const theme of ['dark', 'light']) {
 // ---- checker self-test: the TOUCH scan must flag flush/3px outlined neighbours and accept an 8px gap or a shared collapsed divider
 {
   const mk = (gap, collapse) => `<div id="bs-selftest" style="position:fixed;left:20px;top:20px;display:flex;gap:${gap}px;background:#222;z-index:99999"><button style="all:unset;box-sizing:border-box;width:60px;height:30px;border:1px solid #fff">A</button><button style="all:unset;box-sizing:border-box;width:60px;height:30px;border:1px solid #fff;${collapse ? 'margin-left:-1px' : ''}">B</button></div>`;
-  const run = async (html) => { await page.evaluate((h) => { document.getElementById('bs-selftest')?.remove(); document.body.insertAdjacentHTML('beforeend', h); }, html); return (await page.evaluate(SCANFN, { minGap: 8, root: '#bs-selftest' })).touch.length; };
+  const run = async (html) => { await page.evaluate((h) => { document.getElementById('bs-selftest')?.remove(); document.body.insertAdjacentHTML('beforeend', h); }, html); return (await page.evaluate(SCANFN, { minGap: 8, map: CLASSMAP, root: '#bs-selftest' })).touch.length; };
   if (!(await run(mk(0, false)))) note('SELFTEST', 'flush outlined neighbours were not flagged');
   if (!(await run(mk(3, false)))) note('SELFTEST', '3px gap outlined neighbours were not flagged');
   if (await run(mk(8, false))) note('SELFTEST', '8px gap outlined neighbours were flagged');
@@ -185,7 +220,7 @@ for (const theme of ['dark', 'light']) {
   for (const [msg, ok] of [['Save as new version?', 'Save'], ['Delete version 3?\nThis cannot be undone.', 'Delete']]) {
     await page.evaluate(([m, o]) => { window.__cp = confirmModal(m, o); }, [msg, ok]);
     await page.waitForTimeout(150);
-    const res = await page.evaluate(SCANFN, { minGap: 8, root: '#fx-confirm-modal' });
+    const res = await page.evaluate(SCANFN, { minGap: 8, map: CLASSMAP, root: '#fx-confirm-modal' });
     fold(`dialog ${theme} ${ok}`, res);
     const st = await page.evaluate(() => { const g = (id) => { const e = document.getElementById(id), c = getComputedStyle(e); return { bg: c.backgroundColor, bd: c.borderTopWidth, col: c.color, rad: c.borderRadius }; }; return { ok: g('fx-confirm-ok'), cancel: g('fx-confirm-cancel'), dlg: getComputedStyle(document.getElementById('fx-confirm-modal')).borderRadius }; });
     if (st.cancel.bg !== 'rgba(0, 0, 0, 0)' || st.cancel.bd !== '0px') note('DIALOG', `${theme} ${ok}: Cancel is not bare (${JSON.stringify(st.cancel)})`);
@@ -200,6 +235,17 @@ for (const theme of ['dark', 'light']) {
   const ex = await page.evaluate(() => { const b = document.getElementById('btn-export-db'); const c = getComputedStyle(b); return { color: c.color, bg: c.backgroundColor, svg: b.querySelector('svg')?.innerHTML || '' }; });
   if (ex.color !== 'rgb(17, 17, 17)') note('EXPORT', `label colour ${ex.color}, want #111`);
   if (!/M12 16V4/.test(ex.svg)) note('EXPORT', 'Export icon is not the export (arrow out of tray) glyph');
+}
+// ---- export sheet (size/format tracks + primary Export button)
+for (const theme of ['dark', 'light']) {
+  await page.evaluate((t) => document.body.classList.toggle('light', t === 'light'), theme);
+  await page.evaluate(() => { try { sk2ExportOpen(); } catch (e) {} });
+  await page.waitForTimeout(800);
+  fold(`export sheet ${theme}`, await page.evaluate(SCANFN, { minGap: 8, map: CLASSMAP, root: '#sk2-export' }));
+  const c = await page.evaluate(() => { const b = document.querySelector('#sk2-export .sk2x-btn'); return b ? getComputedStyle(b).color : null; });
+  if (c !== 'rgb(17, 17, 17)') note('EXPORT', `${theme}: export sheet button label ${c}, want #111`);
+  await page.evaluate(() => { try { sk2ExportClose(); } catch (e) {} });
+  await page.waitForTimeout(300);
 }
 // ---- editor selected-hover contrast: hover each selected item of every track/tab/rail
 for (const theme of ['dark', 'light']) {
@@ -233,10 +279,18 @@ for (const theme of ['dark', 'light']) {
   await lp.evaluate(() => { document.querySelectorAll('button').forEach((b) => { if (['Got it', 'Skip for now'].includes(b.textContent.trim())) b.click(); }); document.getElementById('lib-overlay')?.classList.add('full'); });
   await lp.waitForTimeout(600);
   await lp.addStyleTag({ content: '[class^="phone-"],[id^="phone-"]{display:none!important}' });
-  const scanLib = async (tag, root) => fold(tag, await lp.evaluate(SCANFN, { minGap: 8, root: root || '#lib-overlay' }));
+  const scanLib = async (tag, root) => fold(tag, await lp.evaluate(SCANFN, { minGap: 8, map: CLASSMAP, root: root || '#lib-overlay' }));
   await scanLib(`library ${theme} top`);
+  { // DISABLED: same shape, 40% dim, and a reason in the tooltip
+    const d = await lp.evaluate(() => { const b = document.getElementById('lib-export-btn'); const c = getComputedStyle(b); return { dis: b.disabled, op: c.opacity, title: b.title, w: b.getBoundingClientRect().width }; });
+    if (!d.dis) note('DISABLED', 'library export button is not disabled with no selection (test premise)');
+    else { if (Number(d.op) !== 0.4) note('DISABLED', `${theme}: disabled opacity ${d.op}, want 0.4`); if (!/select/i.test(d.title)) note('DISABLED', `${theme}: disabled export has no reason in its tooltip ("${d.title}")`); if (!(d.w > 40)) note('DISABLED', 'disabled export lost its shape'); }
+  }
   await lp.evaluate(() => document.querySelector('#lib-filters-btn').click()); await lp.waitForTimeout(350);
   await scanLib(`library ${theme} filters`);
+  await lp.evaluate(() => document.querySelector('#lib-more-filters')?.click()); await lp.waitForTimeout(400);
+  await scanLib(`library ${theme} filters panel`);
+  await lp.evaluate(() => document.querySelector('#lib-filters-panel-close')?.click()); await lp.waitForTimeout(200);
   // CHIPS: selecting each chip must not move or resize any chip
   const chipIdx = await lp.evaluate(() => [...document.querySelectorAll('#lib-filter-row .lib-chip')].filter((c) => c.getBoundingClientRect().width > 0).map((c, i) => [c, i]).filter(([c]) => c.dataset.fgrp).map(([, i]) => i));
   for (const i of chipIdx) {
@@ -280,6 +334,7 @@ for (const theme of ['dark', 'light']) {
   await lp.close();
 }
 await browser.close(); server.close();
+if (process.argv.includes('--inventory')) { const rows = [...INV.entries()].map(([k, [n, t]]) => { const [sig, cls] = k.split(' | '); return { sig, cls, n, t }; }).sort((a, b) => (a.cls === '-') - (b.cls === '-') || a.cls.localeCompare(b.cls) || a.sig.localeCompare(b.sig)); console.log(JSON.stringify(rows)); process.exit(0); }
 if (JSON_OUT) console.log(JSON.stringify({ summary, fails }, null, 1));
 else { console.log(summary.join('\n')); }
 if (fails.length) { console.error('\nFAIL ' + fails.length + '\n  ' + fails.slice(0, 120).join('\n  ')); process.exit(1); }

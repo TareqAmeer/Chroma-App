@@ -3151,11 +3151,11 @@ body.sk2 :is(.fx-db,.db-btn,.zc-ic,.fx-rail-btn,.fx-ctrl-chev,#sk2-sub button,.m
 /* 24 Disabled: same shape, 40% opacity (a reason goes in the tooltip/title where cheap) */
 body.sk2 :is(.btn,.fx-db,.db-btn,.zc-ic,.seg>button,.fx-select,.msk-group-eye):disabled,body.sk2 #lib-overlay :is(.lib-btn,.lib-chip,.lib-zoom-btn):disabled,body.sk2 .btn[aria-disabled=true]{opacity:.4!important;cursor:not-allowed!important}
 /* 1 + 26 Icon-only buttons (top bar, panel/view toggles, rotate/flip, hide-all eye): BARE. Hover fill, pressed = fill + accent rule, hit area >= 28px */
-body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
-body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon) :is(.fx-db-ic,svg){color:inherit!important}
-body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
-body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):not(:disabled):active{background:var(--bs-shade-3)!important}
-body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon):is([aria-pressed=true],.on,.active,.bsec){background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close){background:transparent!important;border:1px solid transparent!important;border-radius:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-width:var(--bs-hit);min-height:var(--bs-hit);cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close) :is(.fx-db-ic,svg){color:inherit!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close):not(:disabled):hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close):not(:disabled):active{background:var(--bs-shade-3)!important}
+body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,#lib-overlay .lib-btn-icon,#lib-overlay .lib-zoom-btn,#btn-msk-hideall,.crop-orient>.btn,.fx-panel .btn-row>.btn-icon,.sk2x-close):is([aria-pressed=true],.on,.active,.bsec){background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
 body.sk2 #lib-overlay .lib-zoom-btn{min-width:24px;min-height:24px}
 /* 2 Primary action (Export): filled accent, #111 label */
 body.sk2 :is(#btn-export-db,.fx-db-pri,#lib-overlay .lib-btn-export){background:var(--k-color-accent-a)!important;border:1px solid var(--k-color-accent-a)!important;color:var(--bs-on-acc)!important;font-weight:500!important}
@@ -3223,8 +3223,13 @@ body.sk2 #sk2-sub{gap:4px 4px!important}
 /* 22 Menu / select triggers: HAIRLINE outline */
 body.sk2 :is(select.fx-select,.fx-panel select){border:1px solid var(--bs-hair)!important;border-radius:0!important;background-color:transparent!important;box-shadow:none!important;min-height:var(--bs-hit)}
 body.sk2 :is(select.fx-select,.fx-panel select):hover{border-color:var(--bs-edge)!important}
+body.sk2 #lib-overlay :is(.k-fsel>button,select){border:1px solid var(--bs-hair)!important;border-radius:0!important;background-color:transparent!important;min-height:var(--bs-hit)}
+body.sk2 #lib-overlay :is(.k-fsel>button,select):hover{border-color:var(--bs-edge)!important}
+body.sk2 #lib-overlay #lib-filters-panel{gap:var(--bs-gap)!important}
+body.sk2 #lib-overlay #lib-subfolders-wrap{min-height:var(--bs-hit);display:flex;align-items:center;gap:8px}
 /* 23 Text links: always underlined */
-body.sk2 :is(.msk-ai-update,.ni-guide,#cs-save-state button,.lib-lr-signout,.ni-hint a){text-decoration:underline!important;text-underline-offset:3px;background:transparent!important;border:0!important;color:var(--k-color-ink)!important;cursor:pointer}
+body.sk2 :is(.msk-ai-update,.ni-guide,#cs-save-state button,.lib-lr-signout,.ni-hint a,.sk2x-proof-toggle){text-decoration:underline!important;text-underline-offset:3px;background:transparent!important;border:0!important;color:var(--k-color-ink)!important;cursor:pointer}
+body.sk2 .sk2x-proof-toggle{min-height:var(--bs-hit);padding:0 6px}
 /* 12 Create New Mask: SHADED tile (menu trigger, chevron right) */
 body.sk2 #btn-msk-create{background:var(--bs-shade)!important;border:0!important;box-shadow:none!important;color:var(--k-color-ink)!important;justify-content:flex-start!important;gap:8px;min-height:var(--bs-hit);font-weight:500!important}
 body.sk2 #btn-msk-create:hover{background:var(--bs-shade-2)!important}
@@ -3246,10 +3251,15 @@ body.sk2 #local-list>.btn.bsec{background:var(--bs-shade)!important;box-shadow:i
 body.sk2 .msk-li-ctl{display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;padding:0 4px;border:0!important;border-radius:0!important;background:transparent!important;color:var(--bs-muted);font-size:12px;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms),opacity var(--k-motion-hover,120ms)}
 body.sk2 .msk-li-ctl:hover,body.sk2 .msk-li-ctl:focus-visible{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
 body.sk2 .msk-li-ctl.on{color:var(--k-color-ink)!important;background:var(--bs-shade-2)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
+body.sk2 .msk-li-ctl.msk-li-mute.on{box-shadow:none!important}
+/* Compact (slider layout) is a bare toggle */
+body.sk2 .btn.msk-layout-toggle{background:transparent!important;border:0!important;box-shadow:none!important;color:var(--k-color-muted)!important;min-height:var(--bs-hit);padding:0 10px!important;cursor:pointer;transition:background var(--k-motion-hover,120ms),color var(--k-motion-hover,120ms)}
+body.sk2 .btn.msk-layout-toggle:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important}
+body.sk2 .btn.msk-layout-toggle[aria-pressed=true]{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
 body.sk2 #local-list>.btn:not(:hover):not(:focus-within):not(.bsec) .msk-li-ctl:not(.on){opacity:0}
 body.sk2 #local-list>.btn.msk-row-muted>:not(.msk-li-mute){opacity:.45}
-body.sk2 .msk-group-eye{background:transparent!important;border:0!important;border-radius:0!important;color:var(--k-color-ink);min-width:var(--bs-hit);min-height:var(--bs-hit)}
-body.sk2 .msk-group-eye:hover{background:var(--bs-shade-2)!important}
+body.sk2 .msk-group-eye{background:transparent!important;border:0!important;border-radius:0!important;color:var(--bs-muted);min-width:var(--bs-hit);min-height:var(--bs-hit)}
+body.sk2 .msk-group-eye:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)}
 body.sk2 .msk-group-eye.off{color:var(--k-color-ink);opacity:1;background:var(--bs-shade)!important}
 /* 17 Overlay switch + checkboxes: SHADED, no outline; on = ink fill */
 body.sk2 input[type=checkbox][role=switch]{-webkit-appearance:none;appearance:none;position:relative;width:36px!important;height:20px!important;margin:0;padding:0;border:0!important;border-radius:0!important;background:var(--bs-shade-2)!important;cursor:pointer;flex:none;transition:background var(--k-motion-hover,120ms)}
@@ -3274,6 +3284,8 @@ body.sk2 .btn.bpri:not(#btn-msk-create){background:var(--k-color-accent-a)!impor
 body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng){background:transparent!important;color:var(--bs-danger)!important}
 body.sk2 .fx-panel .btn-row>.btn:is([onclick*="Delete" i],[onclick*="Clear" i],.bdng):not(:disabled):hover{background:color-mix(in srgb,var(--bs-danger) 14%,transparent)!important}
 body.sk2 dialog .btn.bdng:is(.bpri,#fx-confirm-ok){background:var(--bs-danger)!important;border-color:var(--bs-danger)!important;color:var(--k-color-bg)!important}
+/* touch builds: 44px hit areas (tokens --bs-hit-touch) */
+@media (pointer:coarse){body.sk2 :is(.fx-db-icon,.db-btn,.zc-ic,.fx-rail-btn,#sk2-sub button,.msk-group-eye,.msk-li-ctl,.fx-ctrl-chev,.fx-ctrl-title-reset,.fx-ctrl-title-reset-scoped,.seg>button,.chip-tap>.btn,.msk-compose-ops>.btn,.msk-invert,.btn.msk-layout-toggle,#btn-msk-create){min-width:var(--bs-hit-touch)!important;min-height:var(--bs-hit-touch)!important}body.sk2 .fx-panel .btn-row>.btn:is(.bgh,.bsec){min-height:var(--bs-hit-touch)!important}body.sk2 #lib-overlay :is(.lib-chip,.lib-pill,.lib-seg>button,.lib-btn-icon){min-height:var(--bs-hit-touch)!important}}
 /* keyboard-focus tooltip (see the script in 21-script.js.html) */
 #bs-tip{position:fixed;z-index:2147483000;background:var(--k-color-ink);color:var(--k-color-bg);font:12px/1.3 var(--sans);padding:4px 8px;pointer-events:none;max-width:260px;white-space:normal}
 /* hit areas: widen the clickable box without changing the look */

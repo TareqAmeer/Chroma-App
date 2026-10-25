@@ -169,5 +169,19 @@
   document.addEventListener('focusout',function(e){if(cur&&e.target===cur)hide();},true);
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&tip)hide();},true);
   window.addEventListener('scroll',hide,true);
+  /* Disabled controls keep their shape (40% dim) and say why: data-why replaces the title while disabled, the original returns when enabled. */
+  function syncWhy(el){
+    var why=el.getAttribute('data-why');if(!why)return;
+    if(!el.hasAttribute('data-title0'))el.setAttribute('data-title0',el.getAttribute('title')||'');
+    if(el.disabled)el.setAttribute('title',why+(el.getAttribute('data-title0')?' ('+el.getAttribute('data-title0')+')':''));
+    else{var t=el.getAttribute('data-title0');if(t)el.setAttribute('title',t);else el.removeAttribute('title');}
+  }
+  function scanWhy(root){(root.querySelectorAll?root.querySelectorAll('[data-why]'):[]).forEach(syncWhy);}
+  function bootWhy(){scanWhy(document);
+    new MutationObserver(function(ms){ms.forEach(function(m){
+      if(m.type==='attributes'){if(m.target.hasAttribute&&m.target.hasAttribute('data-why'))syncWhy(m.target);}
+      else m.addedNodes.forEach(function(n){if(n.nodeType===1){if(n.hasAttribute('data-why'))syncWhy(n);scanWhy(n);}});});})
+      .observe(document.body,{attributes:true,attributeFilter:['disabled'],childList:true,subtree:true});}
+  if(document.body)bootWhy();else document.addEventListener('DOMContentLoaded',bootWhy);
 })();
 </script>

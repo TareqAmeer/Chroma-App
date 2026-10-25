@@ -137,8 +137,8 @@
            own .undogrp (Editor (Developer) View.dc.html:41-43): one outer border, square inner
            corners, a hairline divider between the two. -->
       <div class="fx-undogrp">
-        <button class="fx-db fx-db-icon" id="btn-undo-db" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
-        <button class="fx-db fx-db-icon" id="btn-redo-db" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
+        <button class="fx-db fx-db-icon" id="btn-undo-db" data-why="Nothing to undo" onclick="fxUndoBtnClick(event)" onmousedown="fxUndoMousedown(event)" onmouseup="fxUndoMouseup()" onmouseleave="fxUndoMouseup()" title="Undo (⌘Z) · hold for edit history · shift-click to reset"><span class="fx-db-ic" id="db-undo"></span></button>
+        <button class="fx-db fx-db-icon" id="btn-redo-db" data-why="Nothing to redo" onclick="fxRedo()" title="Redo (⌘Y)"><span class="fx-db-ic" id="db-redo"></span></button>
       </div>
       <div style="position:relative;display:inline-flex" id="db-history-wrap">
         <button class="fx-db fx-db-icon" id="btn-export-history" onclick="fxToggleTimelinePopover()" title="Edit history and exported versions" aria-label="Edit history and exported versions" style="display:none"><span class="fx-db-ic" id="db-history"></span></button>
@@ -245,7 +245,7 @@
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" id="btn-lut-save" disabled onclick="saveLUTToLibrary()" title="Library is stored in this browser only (Safari may purge it after ~7 days unused)">Save to library…</button>
-          <button class="btn bgh" id="btn-lut-del" disabled onclick="deleteLUTFromLibrary()">Delete</button>
+          <button class="btn bgh" id="btn-lut-del" data-why="Select a saved look first" disabled onclick="deleteLUTFromLibrary()">Delete</button>
         </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="downloadLutChart()" title="Replicate any Lightroom preset: download this chart, apply the preset to it in Lightroom, export (sRGB, full size), drop the export on the LUT zone above">LUT chart</button>
