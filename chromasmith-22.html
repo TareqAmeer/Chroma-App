@@ -141,7 +141,7 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:transparent!important}
   /* Stacking-order scale (T-z): named tiers instead of ad-hoc literals, same discipline as
      Material Design's z-index groups and Ant Design's preset stack — see design/tokens.json
      zIndex for the full audit and per-tier rationale. */
-  --z-raise:1;--z-sticky:10;--z-float:30;--z-dropdown:50;--z-fixed:1500;--z-overlay:3000;--z-menu:5000;--z-system:9999;--z-modal:20000;--z-splash:99999;
+  --z-raise:1;--z-raised:5;--z-sticky:10;--z-float:30;--z-dropdown:50;--z-fixed:1500;--z-overlay:3000;--z-menu:5000;--z-system:9999;--z-modal:20000;--z-splash:99999;
   /* State-layer / translucency ramp (T-op): audited from 13 raw opacity literals — see
      design/tokens.json opacity for the full audit, per-step role and the disabled-state
      consolidation note. */
@@ -3136,9 +3136,7 @@ body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:n
 .exp-plain-b{display:flex;align-items:baseline;gap:6px;text-align:left;border:1px solid var(--bdr);border-radius:0;background:none;color:var(--k-color-ink,#f2f0ea);font:13px var(--sans);padding:9px 10px;cursor:pointer}
 .exp-plain-b span{color:var(--k-color-muted,#8d8b85);font-size:12px}
 .exp-plain-b.on{border-color:var(--k-color-ink,#f2f0ea);box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
-#fx-swipe-hud{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.72);color:#fff;font:600 14px var(--sans);padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre}
-#fx-swipe-hud.on{opacity:1}
-.fx-hist-row.on{box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
+#fx-swipe-hud{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 64px);transform:translateX(-50%);z-index:60;background:rgba(0,0,0,.72);color:#fff;font:600 14px var(--sans);padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre}#fx-swipe-hud.on{opacity:1}.fx-hist-row.on{box-shadow:inset 3px 0 0 var(--k-color-accent-a,#ff3b1f)}
 </style>
 </head>
 <body>
@@ -7348,7 +7346,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025H';
+const BUILD='1.1025I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -21481,7 +21479,7 @@ function pasteEditSelectiveApply(base,src,checkedKeys){
     (c.extra||[]).forEach(k=>{if(has('extra',k)&&src[k]!==undefined)base[k]=JSON.parse(JSON.stringify(src[k]));});
   });
   // Pasted AI/sky masks carry the SOURCE photo's pixels: flag them stale so the panel offers Update.
-  if(Array.isArray(base.masks)&&(chosen.has('masks')||chosen.has('extra:masks')))base.masks.forEach(m=>{if(m&&(m.origin==='sky'||m.origin==='ai'||m.ai))m.aiState='stale';});
+  if(Array.isArray(base.masks)&&(chosen.has('masks')||chosen.has('extra:masks')))base.masks.forEach(m=>{if(m&&(m.origin==='sky'||mskIsAI(m)))m.aiState='stale';});
   return base;
 }
 window.chromasmithMergeSelectiveRecipe=(base,src,keys)=>pasteEditSelectiveApply(JSON.parse(JSON.stringify(base||_fxPristineDefault||{})),src,keys);

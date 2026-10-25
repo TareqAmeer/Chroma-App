@@ -14560,7 +14560,6 @@ mod tests {
         // Collision: renaming a.jpg to the existing b.jpg's name must be flagged.
         let (rows, _) = rename_plan(&conn, &[a_path.clone()], "b", 1).unwrap();
         assert!(rows.iter().any(|r| r.collision), "target that already exists must be a collision");
-
         let (rows, photos) = rename_plan(&conn, &[a_path.clone(), b_path.clone()], "shot_{seq}", 1).unwrap();
         assert!(rows.iter().all(|r| !r.collision));
         rename_apply_run(&mut conn, &photos, rows).unwrap();
