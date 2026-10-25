@@ -50,6 +50,7 @@ function mskBrushNudge(what,d){
 function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;if(typeof mskThumbRefresh==='function')mskThumbRefresh(mskSel);renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
+  _mskPaintResume=null;
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   else mskPaintTransientReset();
@@ -58,7 +59,7 @@ function mskPaintToggle(){
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();}
   mskTeethGuideSync();mskPaintErase_sync();
 }
-function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
+function mskPaintStop(){_mskPaintResume=null;mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();mskPaintErase_sync();}
 function mskTeethGuideSync(){
   const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');

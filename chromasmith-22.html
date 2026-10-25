@@ -7350,7 +7350,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1025D';
+const BUILD='1.1025E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -18975,6 +18975,7 @@ function mskBrushNudge(what,d){
 function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;if(typeof mskThumbRefresh==='function')mskThumbRefresh(mskSel);renderPreview();fxHistoryPush();}
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
+  _mskPaintResume=null;
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   else mskPaintTransientReset();
@@ -18983,7 +18984,7 @@ function mskPaintToggle(){
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();}
   mskTeethGuideSync();mskPaintErase_sync();
 }
-function mskPaintStop(){mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
+function mskPaintStop(){_mskPaintResume=null;mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();mskPaintErase_sync();}
 function mskTeethGuideSync(){
   const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
@@ -20290,11 +20291,31 @@ function mskCreateGridSync(){
     lr.querySelectorAll('button').forEach(b=>{b.disabled=full;});
   }else if(lr)lr.remove();
 }
+// mskRebuild keeps what the user was doing: the panel's scroll position and the focused control survive the
+// control-panel re-render, mask rows are patched in place (an unchanged row node is never replaced, so hover/focus
+// stay put), and paint mode that was auto-stopped by visiting a non-brush mask resumes on return to a brush mask.
+let _mskPaintResume=null;
+function _mskScrollParent(el){for(let p=el&&el.parentElement;p;p=p.parentElement){const o=getComputedStyle(p).overflowY;if((o==='auto'||o==='scroll')&&p.scrollHeight>p.clientHeight)return p;}return null;}
 function mskRebuild(){
+  const ctl=document.getElementById('local-ctl'),sp=_mskScrollParent(ctl),top=sp?sp.scrollTop:0;
+  const ae=document.activeElement,aid=(ae&&ae.id&&ctl&&ctl.contains(ae))?ae.id:null;
+  _mskRebuildInner();
+  if(sp&&sp.scrollTop!==top)sp.scrollTop=top;
+  if(aid){const n=document.getElementById(aid);if(n&&n!==document.activeElement&&n.focus)try{n.focus({preventScroll:true});}catch(_){}}
+  const m=fxState.masks[mskSel];
+  if(_mskPaintResume&&m&&m.type==='brush'&&!mskPaintMode){const r=_mskPaintResume;_mskPaintResume=null;mskPaintErase=r.erase;mskPaintToggle();}
+}
+function _mskRowSame(o,n){
+  if(o.outerHTML!==n.outerHTML)return false;
+  const a=o.querySelector('canvas'),b=n.querySelector('canvas');
+  if(!a||!b)return !a&&!b;
+  try{return a.toDataURL()===b.toDataURL();}catch(_){return false;}
+}
+function _mskRebuildInner(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;mskCreateGridSync();list.innerHTML='';{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}{const ua=document.getElementById('msk-update-all');if(ua)ua.style.display=fxState.masks.some(m=>m.aiState&&mskAiCanUpdate(m))?'':'none';}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;mskCreateGridSync();{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}{const ua=document.getElementById('msk-update-all');if(ua)ua.style.display=fxState.masks.some(m=>m.aiState&&mskAiCanUpdate(m))?'':'none';}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
-  if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush')mskPaintStop();
+  if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush'){const was=mskPaintMode;mskPaintStop();if(was){_mskPaintResume={erase:mskPaintErase};if(typeof log==='function')log('Paint stopped on this mask type — it resumes when you select a brush mask again');}}
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
@@ -20358,8 +20379,10 @@ function mskRebuild(){
     b.ondragend=()=>{b.classList.remove('msk-dragging');};
     b.ondragover=(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';};
     b.ondrop=(e)=>{e.preventDefault();const from=parseInt(e.dataTransfer.getData('text/plain'),10);if(!isNaN(from))mskReorder(from,i);};
-    list.appendChild(b);
+    const prev=list.children[i];
+    if(!prev)list.appendChild(b);else if(!_mskRowSame(prev,b))prev.replaceWith(b);
   });
+  while(list.children.length>fxState.masks.length)list.lastElementChild.remove();
   // Static transfer remains explicit. AI rasters are photo-specific; offer semantic re-evaluation
   // only for prompted SAM and sky, and report unsupported face-derived selections per target.
   const hasAiRaster=fxState.masks.some(m=>mskIsAI(m)||m.origin==='sky');
