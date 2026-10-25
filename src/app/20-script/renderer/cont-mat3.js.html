@@ -1061,7 +1061,9 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      // uvScale so a tile/loupe (which renders a sub-region) keeps the SAME global cell grid.
      const uvSx=(opts&&opts.uvScale)?opts.uvScale[0]:1;
      const cellPx=fmt.cellPx*sizeMul;
-     const grFreq=(w/uvSx)/Math.max(cellPx,0.5);
+     // Preview: the cell grid is defined against the EXPORT width (opts.truncRefW), not this render's, so a Fit preview shows the
+     // export's grain (same cell grid, same seed => same pattern) instead of clumps 2.5x coarser/stronger once shrunk to the screen.
+     const grFreq=((opts&&opts.truncRefW>0)?opts.truncRefW:(w/uvSx))/Math.max(cellPx,0.5);
      gl.uniform1f(ul('grA'),grA);
      gl.uniform1f(ul('grFreq'),grFreq);
      gl.uniform3f(ul('grK'),G.kR,G.kG,G.kB);
