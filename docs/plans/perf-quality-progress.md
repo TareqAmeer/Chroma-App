@@ -114,3 +114,7 @@ Red checks fixed this run (each verified):
 BLOCKERS (run 3):
 - Experiments 4-6 need a sandbox launch (own catalog + library root) so benches do not start on the real 57k-photo library; the app has no such switch. Say if you want one added (env var for the data dir), then the culling/open/RSS benches can run.
 - Fit sharpness decision stands: x2 (0.75). x3 costs ~3x settle time.
+
+### Run 3 addendum: pan-settle regression (perf:test pan_settle_ms 8 -> 205 ms, introduced by 04d500ba)
+Cause: settled previews got float intermediates (RGBA16F) but drag/pan draft frames stayed 8-bit, so every draft<->settled switch hit `_initBufs`'s "hdrIntermediate changed" reallocation of the whole buffer chain (hash `w,h,gs,hdr` key). Bisected: 04d500ba~1 = 8 ms, 04d500ba = 205 ms; forcing 8-bit settles gave 9 ms (and GPU buffers 79/254 MB vs 147/366 MB).
+Experiment: draft frames use the same float chain as settled frames (removed the `_fxPreviewInteracting` exclusion in `mskPreviewRenderOptions`). Result in perf:test: pan_settle 205 -> 9 ms, drag_frame 20 ms, drag_buf_allocs 0, first_1to1 679 -> 367 ms, GPU buffers 156 MB fit / 266 MB zoomed (was 147/366), tile err 0.234 (<=3), RESULT PASS. Real app (build 1.1025F, 26MP, Fit, All FX): draft frame 61 ms 8-bit vs 62 ms float (no cost). KEPT. Also: float vs 8-bit settled 100% render in the real app 311 -> 350 ms (+12%), truncation emulation costs ~0.

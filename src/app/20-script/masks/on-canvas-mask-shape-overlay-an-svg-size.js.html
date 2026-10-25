@@ -84,7 +84,7 @@ function mskPreviewRenderOptions(extra={}){
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
-    ...(_fxPreviewInteracting||(extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};
+    ...((extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};
 }
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
