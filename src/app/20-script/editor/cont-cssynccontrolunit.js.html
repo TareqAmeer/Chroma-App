@@ -1,3 +1,18 @@
+function csSyncControlUnit(input){
+  if(!input||!CS_CONTROL_UNIT_SPECS[input.id])return;
+  const row=input.closest('.fx-row,.vrow,.fx-row')||input.parentElement;
+  const outId=input.id==='fx-zoom-slider'?'fx-zoom-pct':input.id.startsWith('sl-')?'vl-'+input.id.slice(3):input.id+'-v';
+  const output=document.getElementById(outId)||(row&&row.querySelector('.fx-val'));
+  const formatted=csFormatControlUnit(input.id,input.value,output?output.textContent:input.value);
+  if(output&&output.textContent!==formatted)output.textContent=formatted;
+  const unit=(typeof CS_CONTROL_UNIT_SPECS[input.id]==='string'?CS_CONTROL_UNIT_SPECS[input.id]:CS_CONTROL_UNIT_SPECS[input.id].unit).trim();
+  const labelNode=row&&(row.querySelector('.fx-label')||row.querySelector('.vlb'));
+  let label=input.id==='fx-zoom-slider'?'Zoom':labelNode?labelNode.textContent.replace(/\s+/g,' ').trim():input.getAttribute('aria-label')||input.title||input.id;
+  label=label.replace(/\bi\s*$/,'').trim();
+  const name=label?`${label} (${unit})`:input.id;
+  if(input.getAttribute('aria-label')!==name)input.setAttribute('aria-label',name);
+  if(input.getAttribute('aria-valuetext')!==formatted)input.setAttribute('aria-valuetext',formatted);
+}
 function csSyncControlUnitTree(root){
   if(root&&root.matches&&root.matches('input[type="range"]'))csSyncControlUnit(root);
   if(root&&root.querySelectorAll)root.querySelectorAll('input[type="range"]').forEach(csSyncControlUnit);
@@ -239,13 +254,3 @@ function clRenderTray(){
     tray.appendChild(t);
   });
 }
-function clRemovePhoto(i){
-  const selectedPhoto=CL.freeItems[CL.freeSel]?.photo;
-  clRevokePhoto(CL.photos[i]);CL.photos.splice(i,1);
-  CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
-  CL.freeItems=CL.freeItems.filter(a=>a.photo!==i).map(a=>({...a,photo:a.photo>i?a.photo-1:a.photo}));
-  CL.freeSel=selectedPhoto==null||selectedPhoto===i?-1:CL.freeItems.findIndex(a=>a.photo===(selectedPhoto>i?selectedPhoto-1:selectedPhoto));
-  clPhotosChanged();
-}
-// CHR-215: one place decides where the title band goes and how big text is, in units of the
-// frame's short side — so the on-screen frame and the exported file always match.

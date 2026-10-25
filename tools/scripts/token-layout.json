@@ -306,6 +306,21 @@
       "hadSemi": true
     },
     {
+      "var": "--msk-group-hd-h",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--msk-section-gap",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
+      "var": "--msk-badge-size",
+      "pre": "",
+      "hadSemi": true
+    },
+    {
       "var": "--scrim-b1",
       "pre": "\n  /* Neutral scrim/overlay ramp (T-scrim): a short fixed alpha scale for shadows, dimming\n     scrims and translucent chrome, same idea as Material Design elevation levels or Carbon's\n     layer/overlay tokens — components snap to the nearest step instead of inventing their own\n     alpha. Always the same value in both themes, so no body.light override exists for these. */\n  ",
       "hadSemi": true

@@ -1,3 +1,13 @@
+function clRemovePhoto(i){
+  const selectedPhoto=CL.freeItems[CL.freeSel]?.photo;
+  clRevokePhoto(CL.photos[i]);CL.photos.splice(i,1);
+  CL.assign=CL.assign.map(a=>a==null?null:(a===i?null:(a>i?a-1:a)));
+  CL.freeItems=CL.freeItems.filter(a=>a.photo!==i).map(a=>({...a,photo:a.photo>i?a.photo-1:a.photo}));
+  CL.freeSel=selectedPhoto==null||selectedPhoto===i?-1:CL.freeItems.findIndex(a=>a.photo===(selectedPhoto>i?selectedPhoto-1:selectedPhoto));
+  clPhotosChanged();
+}
+// CHR-215: one place decides where the title band goes and how big text is, in units of the
+// frame's short side — so the on-screen frame and the exported file always match.
 function clTextGeom(W,H){
   const base=Math.min(W,H),outer=CL.outer/1000*base;
   const tPx=CL.title.trim()?CL.titleSize/1000*base:0,band=tPx?tPx*1.9:0;
@@ -241,15 +251,3 @@ function clPresetDims(v){const m=/^(px|in):(\d+)x(\d+)$/.exec(v||'');if(!m)retur
   if(m[1]==='px')return{w,h,px:true};const k=CL.dpi||300;let W=Math.round(w*k),H=Math.round(h*k),cap=1;
   const big=Math.max(W,H);if(big>CL_MAX_PX){cap=CL_MAX_PX/big;W=Math.round(W*cap);H=Math.round(H*cap);}
   return{w:W,h:H,inW:w,inH:h,capped:cap<1,px:false};}
-function clTargetSize(){
-  const pd=clPresetDims(CL.preset);if(pd)return{W:pd.w,H:pd.h};
-  const long=+document.getElementById('cl-res').value,ar=CL.aspect[1]/CL.aspect[2];
-  return ar>=1?{W:long,H:Math.round(long/ar)}:{H:long,W:Math.round(long*ar)};
-}
-function clSyncPresetNote(){
-  const note=document.getElementById('cl-preset-note'),dpiRow=document.getElementById('cl-dpi-row'),resRow=document.getElementById('cl-res-row');
-  const pd=clPresetDims(CL.preset);
-  if(dpiRow)dpiRow.style.display=pd&&!pd.px?'flex':'none';if(resRow)resRow.style.display=pd?'none':'flex';
-  if(note){note.style.display=pd?'block':'none';
-    if(pd)note.textContent=pd.px?`Exports exactly ${pd.w} x ${pd.h} px.`:`${pd.inW} x ${pd.inH} in at ${CL.dpi} dpi = ${pd.w} x ${pd.h} px${pd.capped?' (limited to '+CL_MAX_PX+' px on the long side)':''}.`;}
-}

@@ -1,3 +1,15 @@
+function clTargetSize(){
+  const pd=clPresetDims(CL.preset);if(pd)return{W:pd.w,H:pd.h};
+  const long=+document.getElementById('cl-res').value,ar=CL.aspect[1]/CL.aspect[2];
+  return ar>=1?{W:long,H:Math.round(long/ar)}:{H:long,W:Math.round(long*ar)};
+}
+function clSyncPresetNote(){
+  const note=document.getElementById('cl-preset-note'),dpiRow=document.getElementById('cl-dpi-row'),resRow=document.getElementById('cl-res-row');
+  const pd=clPresetDims(CL.preset);
+  if(dpiRow)dpiRow.style.display=pd&&!pd.px?'flex':'none';if(resRow)resRow.style.display=pd?'none':'flex';
+  if(note){note.style.display=pd?'block':'none';
+    if(pd)note.textContent=pd.px?`Exports exactly ${pd.w} x ${pd.h} px.`:`${pd.inW} x ${pd.inH} in at ${CL.dpi} dpi = ${pd.w} x ${pd.h} px${pd.capped?' (limited to '+CL_MAX_PX+' px on the long side)':''}.`;}
+}
 function clSetPreset(v){
   CL.preset=v||'';const m=/^(?:px|in):(\d+)x(\d+)$/.exec(CL.preset);
   if(m){const w=+m[1],h=+m[2];let a=CL_ASPECTS.find(x=>Math.abs(x[1]/x[2]-w/h)<1e-3);if(!a)a=[w+':'+h,w,h];CL.aspect=a;
@@ -245,23 +257,3 @@ function _catLongText(el){
 // `:hover` with `:hover` replaced by `.is-cat-hover`, and append those clones into one injected
 // sheet — the same "force pseudo-state" approach devtools use, done in plain CSSOM so it works
 // inside this catalog's own iframe with no extra tooling.
-let _catHoverSheet=null;
-function _catEnsureHoverSheet(){
-  if(_catHoverSheet)return _catHoverSheet;
-  const style=document.createElement('style');
-  style.id='cat-hover-shim';
-  document.head.appendChild(style);
-  const sheet=style.sheet;
-  for(const s of Array.from(document.styleSheets)){
-    if(s.ownerNode===style)continue;
-    let rules;
-    try{rules=s.cssRules;}catch(e){continue;} // cross-origin sheet — skip, never happens here
-    for(const r of Array.from(rules||[])){
-      if(!r.selectorText||!r.selectorText.includes(':hover'))continue;
-      const sel=r.selectorText.split(',').map(p=>p.trim().replace(/:hover\b/g,'.is-cat-hover')).join(', ');
-      try{sheet.insertRule(sel+'{'+r.style.cssText+'}',sheet.cssRules.length);}catch(e){}
-    }
-  }
-  _catHoverSheet=sheet;
-  return sheet;
-}

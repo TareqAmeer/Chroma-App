@@ -1,3 +1,23 @@
+let _catHoverSheet=null;
+function _catEnsureHoverSheet(){
+  if(_catHoverSheet)return _catHoverSheet;
+  const style=document.createElement('style');
+  style.id='cat-hover-shim';
+  document.head.appendChild(style);
+  const sheet=style.sheet;
+  for(const s of Array.from(document.styleSheets)){
+    if(s.ownerNode===style)continue;
+    let rules;
+    try{rules=s.cssRules;}catch(e){continue;} // cross-origin sheet — skip, never happens here
+    for(const r of Array.from(rules||[])){
+      if(!r.selectorText||!r.selectorText.includes(':hover'))continue;
+      const sel=r.selectorText.split(',').map(p=>p.trim().replace(/:hover\b/g,'.is-cat-hover')).join(', ');
+      try{sheet.insertRule(sel+'{'+r.style.cssText+'}',sheet.cssRules.length);}catch(e){}
+    }
+  }
+  _catHoverSheet=sheet;
+  return sheet;
+}
 function _catState(clone,state){
   // Applied to the CLONE, never the live app node.
   if(state==='hover'){

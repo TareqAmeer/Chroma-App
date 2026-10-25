@@ -250,18 +250,3 @@ function csTypedToRaw(id,n){
   if(raw.scale!=null)n=n/raw.scale;
   return n;
 }
-function csSyncControlUnit(input){
-  if(!input||!CS_CONTROL_UNIT_SPECS[input.id])return;
-  const row=input.closest('.fx-row,.vrow,.fx-row')||input.parentElement;
-  const outId=input.id==='fx-zoom-slider'?'fx-zoom-pct':input.id.startsWith('sl-')?'vl-'+input.id.slice(3):input.id+'-v';
-  const output=document.getElementById(outId)||(row&&row.querySelector('.fx-val'));
-  const formatted=csFormatControlUnit(input.id,input.value,output?output.textContent:input.value);
-  if(output&&output.textContent!==formatted)output.textContent=formatted;
-  const unit=(typeof CS_CONTROL_UNIT_SPECS[input.id]==='string'?CS_CONTROL_UNIT_SPECS[input.id]:CS_CONTROL_UNIT_SPECS[input.id].unit).trim();
-  const labelNode=row&&(row.querySelector('.fx-label')||row.querySelector('.vlb'));
-  let label=input.id==='fx-zoom-slider'?'Zoom':labelNode?labelNode.textContent.replace(/\s+/g,' ').trim():input.getAttribute('aria-label')||input.title||input.id;
-  label=label.replace(/\bi\s*$/,'').trim();
-  const name=label?`${label} (${unit})`:input.id;
-  if(input.getAttribute('aria-label')!==name)input.setAttribute('aria-label',name);
-  if(input.getAttribute('aria-valuetext')!==formatted)input.setAttribute('aria-valuetext',formatted);
-}
