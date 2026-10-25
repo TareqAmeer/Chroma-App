@@ -9896,7 +9896,12 @@ fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
         // once. Found live during this port's Windows test run (docs/windows-port.md G6): with
         // the old code every local-volume lookup here failed, e.g. "not in the catalog" errors on
         // a photo the very same test had just scanned.
-        let Ok(rel) = Path::new(path).strip_prefix(Path::new(last_path.as_str())) else { continue };
+        // macOS: the boot volume's statfs mount point is "/System/Volumes/Data", but local rel_paths are stored relative to "/"
+        // (walk_root/add_root_run strip_prefix(mount_point) falls through for /Users/... and /private/var/...), so a plain
+        // strip_prefix(last_path) never matched and every local lookup said "not in the catalog".
+        let base = if *_is_local && cfg!(unix) { "/" } else { last_path.as_str() };
+        let norm = path.strip_prefix("/System/Volumes/Data").unwrap_or(path);
+        let Ok(rel) = Path::new(norm).strip_prefix(Path::new(base)) else { continue };
         // Canonical `/` separator, same as walk_root/add_root_run — `rel_path` is stored that
         // way regardless of platform now, so the lookup key has to match it or every local-volume
         // lookup on Windows fails with "not in the catalog" for a photo just scanned.

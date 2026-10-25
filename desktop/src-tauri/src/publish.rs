@@ -762,7 +762,7 @@ mod tests {
             metadata: serde_json::json!({"rating":2}),
             ..one.clone()
         };
-        let states = sync_photos(collection, vec![updated]).unwrap();
+        let states = sync_photos(collection, vec![updated, two.clone()]).unwrap();
         assert_eq!(
             states.iter().find(|p| p.photo_id == 10).unwrap().status,
             PublishPhotoStatus::Modified
