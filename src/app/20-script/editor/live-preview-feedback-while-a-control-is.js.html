@@ -34,6 +34,14 @@ function fxCancelScheduledRender(){
   clearTimeout(fxTimer);_fxPreviewInteracting=false;
 }
 function fxScheduleRender(){
+  // Bordered/matted photo zoomed in: no separate draft frame (it cost as much as the settle); show progress at once and render once the control pauses.
+  if(typeof fxBdHeavy==='function'&&fxBdHeavy()){
+    fxRenderBusy(true);
+    if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+    clearTimeout(fxTimer);
+    fxTimer=setTimeout(()=>{_fxPreviewInteracting=false;renderPreview();},90);
+    return;
+  }
   if(!_fxRenderRAF){
     _fxPreviewInteracting=true;
     _fxRenderRAF=requestAnimationFrame(()=>{_fxRenderRAF=0;if(_fxPreviewInteracting)renderPreview();});

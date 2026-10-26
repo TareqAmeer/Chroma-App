@@ -30,7 +30,7 @@ function _fxTileHaloOut(P,iw){
 // presents them on FX.cv and returns its placement (source px), or null if tiling can't apply.
 // maxRegions caps how many missing-tile regions are rendered (a pan tick renders one; the
 // rest show the underlay until a later tick/settle).
-function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
+function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const gl=FX.gl,sq=Math.max(0.125,Math.round(sOut*8)/8);
   const T=Math.max(64,Math.round(FX_TILE_OUT/sq/8)*8);
   const hs=Math.ceil(_fxTileHaloOut(P,iw)/sq/8)*8;           // source-px halo, multiple of 8
@@ -58,7 +58,7 @@ function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
     }
   }
   // Keep each region (tiles + halo) inside the GPU limits.
-  const maxT=Math.max(1,Math.floor((maxDim-2*hs*sq)/(T*sq)));
+  const maxT=Math.max(1,Math.min(chunk||1e9,Math.floor((maxDim-2*hs*sq)/(T*sq))));
   const regions=[];
   rects.forEach(r=>{for(let c=r.c;c<=r.d;c+=maxT)for(let a=r.a;a<=r.b;a+=maxT)regions.push({a,b:Math.min(r.b,a+maxT-1),c,d:Math.min(r.d,c+maxT-1)});});
   let rendered=0;
@@ -144,7 +144,7 @@ function _fxCropGeom(iw,ih,cw,ch,off){
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
 }
-function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off){
+function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off,chunk){
   const src=fxWork;
   const zw=document.getElementById('fx-zoom-wrap');
   // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
@@ -152,7 +152,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off){
   if(!off){const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
   const g=_fxCropGeom(iw,ih,cw,ch,off);if(!g)return false;
   if(_fxTileModeOK(P,src)){
-    const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions);
+    const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions,chunk);
     if(v){_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh,off);return true;}
   }
   window.__fxCrispView=null;

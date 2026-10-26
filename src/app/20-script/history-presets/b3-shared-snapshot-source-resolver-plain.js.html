@@ -53,12 +53,34 @@ function _fxBorderCropOverlay(P,iw,ih){
   if(!bd||bd.style.display==='none'||!m||!bd.width||!fxWork)return false;
   const k=parseFloat(bd.style.width)/bd.width;if(!(k>0))return false;
   const off={fw:parseFloat(bd.style.width),fh:parseFloat(bd.style.height),ox:m.offX*k,oy:m.offY*k};
-  if(!renderFullResCrop(P,iw,ih,m.w*k,m.h*k,undefined,off))return false;
-  FX.cv.style.position='absolute';FX.cv.style.left='0';FX.cv.style.top='0';FX.cv.style.pointerEvents='none';FX.cv.style.display='block';
-  window.__fxBorderCrop=true;window.__fxCrispView=null;
+  const gen=++_fxBdGen;clearTimeout(_fxBdSlice);
+  // Tiles are rendered a couple at a time with the main thread free in between, so the view fills in sharp from the underlay and a
+  // new edit (gen change / recipe key change) abandons the rest instead of waiting behind it.
+  const step=(first)=>{
+    if(gen!==_fxBdGen)return;
+    const ok=renderFullResCrop(P,iw,ih,m.w*k,m.h*k,1,off,2);
+    if(!ok){fxRenderBusy(false);return;}
+    FX.cv.style.position='absolute';FX.cv.style.left='0';FX.cv.style.top='0';FX.cv.style.pointerEvents='none';FX.cv.style.display='block';
+    window.__fxBorderCrop=true;
+    const v=window.__fxCrispView;window.__fxCrispView=null;
+    if(v&&!v.complete){_fxBdSlice=setTimeout(()=>step(false),0);}else fxRenderBusy(false);
+  };
+  step(true);
   return true;
 }
+function _fxPreviewComposition(){const p=getFXParams();return !!(
+    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
+    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));}
+// Zoomed past Fit with Borders/frame/matte: every edit goes through the progressive sharp-tile path (no separate draft frame).
+function fxBdHeavy(){return !window.__fxNoBorderCrop&&_fxBdZoomed();}
+function _fxBdZoomed(){return !!(fxZoom>1&&fxCrispZoom()&&!fxSplit&&!fxCompare&&!fxLoupe&&fxComparePreviousSnapshot===null&&_fxPreviewComposition());}
+let _fxBdSlice=0,_fxBdGen=0;
+function fxRenderBusy(on){let el=document.getElementById('fx-render-busy');const wrap=document.getElementById('fx-wrap');
+  if(on&&wrap){if(!el){el=document.createElement('div');el.id='fx-render-busy';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.innerHTML='<span class="msk-ai-spin"></span><span>Rendering\u2026</span>';wrap.appendChild(el);}el.classList.add('on');}
+  else if(el)el.classList.remove('on');}
 function renderPreview(){
+  _fxBdGen++;clearTimeout(_fxBdSlice); // abandon any half-finished progressive tile pass
+  if(!fxBdHeavy())fxRenderBusy(false);
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
   // retire the cached 1:1 tiles and underlay (they are also keyed by a params fingerprint).
   if(!_fxViewOnlyRender)fxInvalidateTiles();
@@ -86,9 +108,7 @@ function renderPreview(){
   _fxFitBox={w:maxW,h:maxH}; // measured BEFORE this render resizes anything inside #fx-wrap (see applyPreviewBorders)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
-  const _previewComposition=(()=>{const p=getFXParams();return !!(
-    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
-    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));})();
+  const _previewComposition=_fxPreviewComposition();
   // Bordered/matted photo zoomed past Fit: render the (cheap, Fit-density) composite as an underlay and draw ONLY the visible part
   // of the photo, sharp, on top of it (see _fxBorderCropOverlay). The whole-frame render at zoom-tier density was 21MP and froze every edit.
   const _bdCropOK=!!(!window.__fxNoBorderCrop&&_previewComposition&&fxCrispZoom()&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&fxComparePreviousSnapshot===null&&!fxCompare&&!fxLoupe&&!_curIsVideoDraft()
@@ -149,7 +169,7 @@ function renderPreview(){
   // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
   if(!fxFullResPreview&&!_fxPreviewInteracting&&(fxZoom<=1||_bdCropOK)&&cw>0&&ch>0&&!_curIsVideoDraft()){
     const dd=window.devicePixelRatio||1,zf=_bdCropOK?1:Math.max(fxZoom,0.25); // bordered-crop underlay: Fit density, the sharp tile sits on top
-    const mul=_bdCropOK?1:(window.__fxFitMul||2); // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
+    const mul=_bdCropOK?0.55:(window.__fxFitMul||2); // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
     let pwT=cw*zf*mul*dd;
     try{
       const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');

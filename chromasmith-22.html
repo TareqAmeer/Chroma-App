@@ -842,6 +842,9 @@ body.msk-brushing #fx-zoom-wrap,body.msk-brushing #fx-zoom-wrap *{cursor:none!im
 #msk-ai-busy-cv{position:absolute;left:var(--sp-3);bottom:var(--sp-3);display:none;align-items:center;gap:12px;padding:8px 12px;border-radius:4px;background:var(--scrim-b5);color:#fff;font-size:var(--fs-1);z-index:var(--z-raised,5)}
 #msk-ai-busy-cv button{margin-left:var(--sp-3);color:#fff}
 #msk-ai-busy-cv.on{display:flex}
+#fx-render-busy{position:absolute;left:var(--sp-3);bottom:var(--sp-3);display:none;align-items:center;gap:8px;padding:6px 12px;border-radius:4px;background:var(--scrim-b5);color:#fff;font-size:var(--fs-1);z-index:var(--z-raised,5);pointer-events:none}
+#fx-render-busy.on{display:flex}
+#fx-render-busy .msk-ai-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:mskspin .8s linear infinite}
 #msk-ai-busy-cv .msk-ai-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:mskspin .8s linear infinite}
 @keyframes mskspin{to{transform:rotate(360deg)}}
 .msk-scene{display:none;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 6px}
@@ -7566,7 +7569,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1026C';
+const BUILD='1.1026D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14399,6 +14402,14 @@ function fxCancelScheduledRender(){
   clearTimeout(fxTimer);_fxPreviewInteracting=false;
 }
 function fxScheduleRender(){
+  // Bordered/matted photo zoomed in: no separate draft frame (it cost as much as the settle); show progress at once and render once the control pauses.
+  if(typeof fxBdHeavy==='function'&&fxBdHeavy()){
+    fxRenderBusy(true);
+    if(_fxRenderRAF){cancelAnimationFrame(_fxRenderRAF);_fxRenderRAF=0;}
+    clearTimeout(fxTimer);
+    fxTimer=setTimeout(()=>{_fxPreviewInteracting=false;renderPreview();},90);
+    return;
+  }
   if(!_fxRenderRAF){
     _fxPreviewInteracting=true;
     _fxRenderRAF=requestAnimationFrame(()=>{_fxRenderRAF=0;if(_fxPreviewInteracting)renderPreview();});
@@ -25390,7 +25401,7 @@ function _fxTileHaloOut(P,iw){
 // presents them on FX.cv and returns its placement (source px), or null if tiling can't apply.
 // maxRegions caps how many missing-tile regions are rendered (a pan tick renders one; the
 // rest show the underlay until a later tick/settle).
-function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
+function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const gl=FX.gl,sq=Math.max(0.125,Math.round(sOut*8)/8);
   const T=Math.max(64,Math.round(FX_TILE_OUT/sq/8)*8);
   const hs=Math.ceil(_fxTileHaloOut(P,iw)/sq/8)*8;           // source-px halo, multiple of 8
@@ -25418,7 +25429,7 @@ function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
     }
   }
   // Keep each region (tiles + halo) inside the GPU limits.
-  const maxT=Math.max(1,Math.floor((maxDim-2*hs*sq)/(T*sq)));
+  const maxT=Math.max(1,Math.min(chunk||1e9,Math.floor((maxDim-2*hs*sq)/(T*sq))));
   const regions=[];
   rects.forEach(r=>{for(let c=r.c;c<=r.d;c+=maxT)for(let a=r.a;a<=r.b;a+=maxT)regions.push({a,b:Math.min(r.b,a+maxT-1),c,d:Math.min(r.d,c+maxT-1)});});
   let rendered=0;
@@ -25504,7 +25515,7 @@ function _fxCropGeom(iw,ih,cw,ch,off){
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
 }
-function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off){
+function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off,chunk){
   const src=fxWork;
   const zw=document.getElementById('fx-zoom-wrap');
   // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
@@ -25512,7 +25523,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off){
   if(!off){const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
   const g=_fxCropGeom(iw,ih,cw,ch,off);if(!g)return false;
   if(_fxTileModeOK(P,src)){
-    const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions);
+    const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions,chunk);
     if(v){_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh,off);return true;}
   }
   window.__fxCrispView=null;
@@ -25682,12 +25693,34 @@ function _fxBorderCropOverlay(P,iw,ih){
   if(!bd||bd.style.display==='none'||!m||!bd.width||!fxWork)return false;
   const k=parseFloat(bd.style.width)/bd.width;if(!(k>0))return false;
   const off={fw:parseFloat(bd.style.width),fh:parseFloat(bd.style.height),ox:m.offX*k,oy:m.offY*k};
-  if(!renderFullResCrop(P,iw,ih,m.w*k,m.h*k,undefined,off))return false;
-  FX.cv.style.position='absolute';FX.cv.style.left='0';FX.cv.style.top='0';FX.cv.style.pointerEvents='none';FX.cv.style.display='block';
-  window.__fxBorderCrop=true;window.__fxCrispView=null;
+  const gen=++_fxBdGen;clearTimeout(_fxBdSlice);
+  // Tiles are rendered a couple at a time with the main thread free in between, so the view fills in sharp from the underlay and a
+  // new edit (gen change / recipe key change) abandons the rest instead of waiting behind it.
+  const step=(first)=>{
+    if(gen!==_fxBdGen)return;
+    const ok=renderFullResCrop(P,iw,ih,m.w*k,m.h*k,1,off,2);
+    if(!ok){fxRenderBusy(false);return;}
+    FX.cv.style.position='absolute';FX.cv.style.left='0';FX.cv.style.top='0';FX.cv.style.pointerEvents='none';FX.cv.style.display='block';
+    window.__fxBorderCrop=true;
+    const v=window.__fxCrispView;window.__fxCrispView=null;
+    if(v&&!v.complete){_fxBdSlice=setTimeout(()=>step(false),0);}else fxRenderBusy(false);
+  };
+  step(true);
   return true;
 }
+function _fxPreviewComposition(){const p=getFXParams();return !!(
+    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
+    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));}
+// Zoomed past Fit with Borders/frame/matte: every edit goes through the progressive sharp-tile path (no separate draft frame).
+function fxBdHeavy(){return !window.__fxNoBorderCrop&&_fxBdZoomed();}
+function _fxBdZoomed(){return !!(fxZoom>1&&fxCrispZoom()&&!fxSplit&&!fxCompare&&!fxLoupe&&fxComparePreviousSnapshot===null&&_fxPreviewComposition());}
+let _fxBdSlice=0,_fxBdGen=0;
+function fxRenderBusy(on){let el=document.getElementById('fx-render-busy');const wrap=document.getElementById('fx-wrap');
+  if(on&&wrap){if(!el){el=document.createElement('div');el.id='fx-render-busy';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.innerHTML='<span class="msk-ai-spin"></span><span>Rendering\u2026</span>';wrap.appendChild(el);}el.classList.add('on');}
+  else if(el)el.classList.remove('on');}
 function renderPreview(){
+  _fxBdGen++;clearTimeout(_fxBdSlice); // abandon any half-finished progressive tile pass
+  if(!fxBdHeavy())fxRenderBusy(false);
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
   // retire the cached 1:1 tiles and underlay (they are also keyed by a params fingerprint).
   if(!_fxViewOnlyRender)fxInvalidateTiles();
@@ -25715,9 +25748,7 @@ function renderPreview(){
   _fxFitBox={w:maxW,h:maxH}; // measured BEFORE this render resizes anything inside #fx-wrap (see applyPreviewBorders)
   const sc=Math.min(1,maxW/iw,maxH/ih);
   const cw=iw*sc|0,ch=ih*sc|0;                         // CSS (display) size — stays ~900px
-  const _previewComposition=(()=>{const p=getFXParams();return !!(
-    (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
-    p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));})();
+  const _previewComposition=_fxPreviewComposition();
   // Bordered/matted photo zoomed past Fit: render the (cheap, Fit-density) composite as an underlay and draw ONLY the visible part
   // of the photo, sharp, on top of it (see _fxBorderCropOverlay). The whole-frame render at zoom-tier density was 21MP and froze every edit.
   const _bdCropOK=!!(!window.__fxNoBorderCrop&&_previewComposition&&fxCrispZoom()&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&fxComparePreviousSnapshot===null&&!fxCompare&&!fxLoupe&&!_curIsVideoDraft()
@@ -25778,7 +25809,7 @@ function renderPreview(){
   // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
   if(!fxFullResPreview&&!_fxPreviewInteracting&&(fxZoom<=1||_bdCropOK)&&cw>0&&ch>0&&!_curIsVideoDraft()){
     const dd=window.devicePixelRatio||1,zf=_bdCropOK?1:Math.max(fxZoom,0.25); // bordered-crop underlay: Fit density, the sharp tile sits on top
-    const mul=_bdCropOK?1:(window.__fxFitMul||2); // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
+    const mul=_bdCropOK?0.55:(window.__fxFitMul||2); // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
     let pwT=cw*zf*mul*dd;
     try{
       const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
@@ -26568,7 +26599,7 @@ function applyPreviewBorders(P,pw,ph){
   // photo jumped (zoom centring and pan re-anchor were computed from a different size).
   // Box from renderPreview's start: measuring the wrap here read a height already inflated by the
   // un-bordered canvas just pinned inside it, so a new photo flashed ~5% too big for one frame.
-  {const fw=(_fxFitBox&&_fxFitBox.w)||fxWrapInner().w||bd.width,fh=(_fxFitBox&&_fxFitBox.h)||fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,1);
+  {const fw=(_fxFitBox&&_fxFitBox.w)||fxWrapInner().w||bd.width,fh=(_fxFitBox&&_fxFitBox.h)||fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,(typeof _fxBdZoomed==='function'&&_fxBdZoomed())?Infinity:1); // zoomed bordered view: the composite is a low-res underlay, so it may be scaled UP to the fit box
    bd.style.maxWidth='none';bd.style.width=Math.round(bd.width*k)+'px';bd.style.height=Math.round(bd.height*k)+'px';} // whole px: mskOverlayBox reads offsetWidth (integer)
   bd.getContext('2d').drawImage(fin,0,0);
   if(stage!==FX.cv)stage.width=stage.height=0;

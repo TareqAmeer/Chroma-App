@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
 import { openMaskPage } from './lib_mask_probe.mjs';
 const { page, errors, close } = await openMaskPage({ width: 1400, height: 1000 });
-const settle = () => page.evaluate(async () => { renderPreview(); await new Promise(r => setTimeout(r, 700)); });
+const settle = () => page.evaluate(async () => { renderPreview(); await new Promise(r => setTimeout(r, 6000)); });
 const shot = async () => PNG.sync.read(await page.locator('#fx-wrap').screenshot());
 try {
   await page.evaluate(async () => { document.getElementById('tg-borders').classList.add('on'); const t = document.getElementById('sl-b1-t'); t.value = 4; fxUpdate(); await new Promise(r => setTimeout(r, 500)); });
