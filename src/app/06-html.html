@@ -3258,6 +3258,9 @@ body.sk2 .btn.msk-layout-toggle:hover{background:var(--bs-shade-2)!important;col
 body.sk2 .btn.msk-layout-toggle[aria-pressed=true]{background:var(--bs-shade-2)!important;color:var(--k-color-ink)!important;box-shadow:inset 0 calc(var(--bs-rule)*-1) 0 var(--k-color-accent-a)!important}
 body.sk2 #local-list>.btn:not(:hover):not(:focus-within):not(.bsec) .msk-li-ctl:not(.on){opacity:0}
 body.sk2 #local-list>.btn.msk-row-muted>:not(.msk-li-mute){opacity:.45}
+/* narrow sidebar: the name truncates, the chips/controls never shrink or clip */
+#local-list>.btn>span:first-of-type:not(.msk-li-ctl):not(.msk-tag):not(.msk-ai-dot){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#local-list>.btn>:is(.msk-li-ctl,.msk-tag,.msk-ai-dot){flex:none}
 body.sk2 .msk-group-eye{background:transparent!important;border:0!important;border-radius:0!important;color:var(--bs-muted);min-width:var(--bs-hit);min-height:var(--bs-hit)}
 body.sk2 .msk-group-eye:hover{background:var(--bs-shade-2)!important;color:var(--k-color-ink)}
 body.sk2 .msk-group-eye.off{color:var(--k-color-ink);opacity:1;background:var(--bs-shade)!important}
