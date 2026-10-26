@@ -93,7 +93,8 @@ function mskSetSelViewStyle(v){
 }
 function mskSelViewColorInput(v){if(!/^#[\da-f]{6}$/i.test(v||''))return;mskSelViewColor=v.toLowerCase();mskSaveSelViewPrefs();mskUpdateSelViewControls();if(typeof renderPreview==='function')renderPreview();}
 function mskSelViewAlwaysInput(v){mskAlwaysShowSelection=!!v;mskSaveSelViewPrefs();mskUpdateSelViewControls();mskOverlaySync();if(typeof renderPreview==='function')renderPreview();}
-function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskSaveSelViewPrefs();mskOverlaySync();
+let mskOverlayUserOff=false; // set only by an explicit overlay-off (switch / O key); painting never overrides it
+function mskSetPreviewMode(v){mskPreviewMode=(v==='off')?'off':'select';mskOverlayUserOff=(v==='off');mskSaveSelViewPrefs();mskOverlaySync();
   mskUpdateSelViewControls();
   if(typeof fxUpdate==='function')fxUpdate();}   // the selection view changes the RENDER, not just the overlay
 // Hold backslash: peek the matte (white on black) regardless of the overlay switch/style; release restores both.

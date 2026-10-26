@@ -9,7 +9,7 @@ try {
   await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); mskGroupsResetDefaults(); fxState.masks.length = 0; mskSel = -1; mskAdd('radial'); mskSel = 0; mskRebuild(); });
   const q = (f) => page.evaluate(f);
   // collapsed by default, counts, persistence
-  let r = await q(() => ({ hd: [...document.querySelectorAll('#local-ctl .msk-group-hd')].map((b) => [b.textContent.trim(), b.getAttribute('aria-expanded')]), amountDisabled: document.querySelector('#local-ctl input[data-k=amount]').disabled, howto: document.querySelector('.msk-howto')?.textContent }));
+  let r = await q(() => ({ hd: [...document.querySelectorAll('#local-ctl .msk-group-hd')].map((b) => [b.textContent.trim(), b.getAttribute('aria-expanded')]), amountDisabled: document.querySelector('#local-ctl input[data-k=amount]').disabled, howto: document.querySelector('.msk-rowbar-nm')?.title }));
   assert.deepEqual(r.hd, [['Selection', 'true'], ['Light', 'false'], ['Color', 'false'], ['Effects', 'false'], ['Detail', 'false']]);
   assert.ok(r.amountDisabled, 'Amount is disabled with nothing adjusted'); assert.match(r.howto, /Drag the pin/);
   await q(() => { const m = fxState.masks[0]; m.exp = 0.4; m.hi = -0.2; m.sat = 0.1; mskRebuild(); });
@@ -35,7 +35,7 @@ try {
   r = await q(() => { document.querySelector('#local-ctl [data-grp=adjust] .msk-group-eye').click(); const m = fxState.masks[0]; const kept = m.exp; let seen = null; const rs = _mskGrpOffApply([m]); seen = m.exp; rs(); return { kept, seen, after: m.exp, off: m.grpOffCsv, pressed: document.querySelector('#local-ctl [data-grp=adjust] .msk-group-eye').getAttribute('aria-pressed') }; });
   assert.equal(r.kept, 0.5); assert.equal(r.seen, 0, 'renderer sees zero while the group is off'); assert.equal(r.after, 0.5, 'value restored'); assert.equal(r.off, 'adjust'); assert.equal(r.pressed, 'true');
   // how-to per type
-  const how = await q(() => { const o = {}; for (const t of ['brush', 'linear', 'color', 'lum', 'depth', 'sky', 'ai', 'skin', 'coat']) { fxState.masks.length = 0; mskAdd(t); mskSel = 0; mskRebuild(); o[t] = !!document.querySelector('.msk-howto'); } return o; });
+  const how = await q(() => { const o = {}; for (const t of ['brush', 'linear', 'color', 'lum', 'depth', 'sky', 'ai', 'skin', 'coat']) { fxState.masks.length = 0; mskAdd(t); mskSel = 0; mskRebuild(); o[t] = !!document.querySelector('.msk-rowbar-nm')?.title; } return o; });
   assert.ok(Object.values(how).every(Boolean), JSON.stringify(how));
   // row context menu + housekeeping
   r = await q(async () => {

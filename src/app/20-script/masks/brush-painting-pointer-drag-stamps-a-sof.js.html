@@ -57,10 +57,10 @@ function mskPaintToggle(){
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
   if(!mskPaintMode){const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();}
-  mskTeethGuideSync();mskPaintErase_sync();
+  mskTeethGuideSync();mskPaintErase_sync();mskCursorSync();
 }
 function mskPaintStop(){_mskPaintResume=null;mskPaintMode=false;mskPaintTransientReset();const b=document.getElementById('btn-msk-paint');if(b)b.classList.remove('on');if(FX.cv)FX.cv.style.cursor='';
-  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();mskPaintErase_sync();}
+  const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();mskPaintErase_sync();mskCursorSync();}
 function mskTeethGuideSync(){
   const m=fxState.masks[mskSel],wrap=document.getElementById('fx-zoom-wrap');
   let guide=document.getElementById('msk-teeth-guide');
@@ -75,7 +75,16 @@ function mskTeethGuideSync(){
 }
 // Single source of truth for the brush mode: exactly one of Paint / Erase is active while painting
 // (derived from mskPaintMode + mskPaintErase + the held-modifier temporary erase). Buttons, ARIA and cursor all read it.
-function mskBrushModeActive(){return !mskPaintMode?'':((mskPaintErase||mskBrushEraseHeld)?'erase':'paint');}
+function mskScribbleArmed(){const m=fxState.masks[mskSel];return !!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));}
+// Scribbling IS painting for an AI mask: the Painting tab reads as active so one click on Object starts the selection.
+function mskBrushModeActive(){return !mskPaintMode?(mskScribbleArmed()?'paint':''):((mskPaintErase||mskBrushEraseHeld)?'erase':'paint');}
+// While a brush-like tool is armed the round ring is the pointer everywhere on the photo (the zoom wrap's grab hand never shows),
+// and the selection overlay is switched on for the session so the user sees what they are adding/erasing.
+function mskCursorSync(){
+  const on=!!(mskPaintMode||mskScribbleArmed());
+  document.body.classList.toggle('msk-brushing',on);
+  if(on&&mskPreviewMode!=='select'&&!mskOverlayUserOff){mskPreviewMode='select';if(typeof mskOverlaySync==='function')mskOverlaySync();if(typeof mskUpdateSelViewControls==='function')mskUpdateSelViewControls();if(typeof fxUpdate==='function')fxUpdate();}
+}
 function mskPaintErase_sync(){const mode=mskBrushModeActive();
   const p=document.getElementById('btn-msk-paint'),b=document.getElementById('btn-msk-erase');
   if(p){const on=mode==='paint';p.classList.toggle('on',on);p.classList.toggle('bsec',on);p.classList.toggle('bgh',!on);p.setAttribute('aria-pressed',String(on));const t=p.lastChild;if(t&&t.nodeType===3)t.textContent=on?' Painting':' Paint';}
@@ -251,7 +260,16 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
     svg.classList.add('on');
     const pts=m.aiPoints||[];
-    svg.innerHTML=pts.map(p=>`<circle class="msk-scribble-dot" cx="${p.nx}" cy="${p.ny}" r="${mskScribbleDotR()}" fill="${p.positive?'rgba(255,90,60,.35)':'rgba(60,160,255,.35)'}" stroke="none"/>`).join('');
+    // One smooth round-capped stroke per run of nearby points (soft edge via blur), not a dot per sample: it reads as paint, like the Brush.
+    const r=+mskScribbleDotR(),runs=[];let cur=null,prev=null;
+    for(const q of pts){
+      if(!cur||cur.positive!==q.positive||Math.hypot(q.nx-prev.nx,q.ny-prev.ny)>r*3){cur={positive:q.positive,d:''};runs.push(cur);cur.d='M'+q.nx+' '+q.ny+' L'+q.nx+' '+q.ny;}
+      else cur.d+=' L'+q.nx+' '+q.ny;
+      prev=q;
+    }
+    const path=(pos)=>runs.filter(x=>x.positive===pos).map(x=>x.d).join(' ');
+    const seg=(pos,col)=>{const d=path(pos);return d?`<path class="msk-scribble-dot" d="${d}" fill="none" stroke="${col}" stroke-width="${(r*2).toFixed(4)}" stroke-linecap="round" stroke-linejoin="round" filter="url(#msk-scribble-soft)"/>`:'';};
+    svg.innerHTML=`<defs><filter id="msk-scribble-soft" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="${(r*0.35).toFixed(4)}"/></filter></defs>`+seg(true,'rgba(255,90,60,.45)')+seg(false,'rgba(60,160,255,.45)');
   }
   function _aiRenderLiveBox(a,b){
     const svg=document.getElementById('fx-mask-overlay');if(!svg)return;

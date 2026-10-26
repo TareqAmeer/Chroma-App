@@ -795,6 +795,11 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 .msk-ai-busy.on{display:flex}
 .msk-ai-busy .msk-ai-spin{width:12px;height:12px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:mskspin .8s linear infinite}
 .msk-ai-busy button{margin-left:auto}
+body.msk-brushing #fx-zoom-wrap,body.msk-brushing #fx-zoom-wrap *{cursor:none!important}
+#msk-ai-busy-cv{position:absolute;left:var(--sp-3);bottom:var(--sp-3);display:none;align-items:center;gap:12px;padding:8px 12px;border-radius:4px;background:var(--scrim-b5);color:#fff;font-size:var(--fs-1);z-index:var(--z-raised,5)}
+#msk-ai-busy-cv button{margin-left:var(--sp-3);color:#fff}
+#msk-ai-busy-cv.on{display:flex}
+#msk-ai-busy-cv .msk-ai-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:mskspin .8s linear infinite}
 @keyframes mskspin{to{transform:rotate(360deg)}}
 .msk-scene{display:none;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 6px}
 .msk-scene.on{display:flex}

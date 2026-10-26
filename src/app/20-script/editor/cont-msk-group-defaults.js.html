@@ -178,6 +178,7 @@ function mskMoreMenu(ev){
     +item('Move down','redo','mskMove(1)',false,mskSel>=fxState.masks.length-1)
     +item('Rename…','rename','mskRename()')
     +item('Reset adjustments','undo','mskResetAdjust()')
+    +item('Compact slider layout','local','mskCompactLayoutToggle()',mskCompactLayoutGet())
     +item('Duplicate','copy','mskDuplicate(false)')
     +item('Duplicate and Invert','compare','mskDuplicate(true)')
     // Copies the BLEND settings (Strength/Depth/Warmth/Preserve/target/one-way) from another

@@ -17,7 +17,8 @@ const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-c
 const ALT = { 'button|Invert|mskInvert': ['button|Invert|btn-msk-invert'] };
 const TILE = /^button\|(Auto Subject|Subject|Objects|Sky|Landscape|Background|Skin|Brush|Linear|Radial|Color|Luminance|Depth|Water|Vegetation|Mountains|Buildings|Ground)\|(mskAdd\w*|mskLandscapeToggle)$/;
 // Deliberately removed (button system, 2026-10-25): the per-row Invert mini control duplicated the single Invert button.
-const REMOVED = new Set(['list-row|button|msk-li-ctl.msk-li-act|Invert']);
+// Compact slider layout moved into the mask "..." menu (2026-10-26).
+const REMOVED = new Set(['list-row|button|msk-li-ctl.msk-li-act|Invert', 'button|Compact mask slider layout|mskCompactLayoutToggle']);
 const norm = (id) => RENAMED[id] || id;
 const { page, errors, close } = await openMaskPage();
 const fails = [];

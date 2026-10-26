@@ -44,14 +44,14 @@ function mskAiTapToggle(force){
     b.innerHTML=icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select');
   }
   if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
-  const hint=document.getElementById('msk-ai-prompt-hint');if(hint)hint.textContent=mskAiPromptMode==='box'?'Drag a rectangle around the object. This prompt uses EdgeSAM; Paint below to refine.':'Drag a rough scribble over the object (Alt/Option-drag excludes an area). Scribbles add up across strokes. Then Paint below if needed.';
+  mskCursorSync();
   if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
 }
 function mskAiBoxToggle(){
   mskAiPromptMode=mskAiPromptMode==='box'?'scribble':'box';mskAiTapMode=mskAiPromptMode==='box';
   const b=document.getElementById('btn-msk-ai-box');if(b){b.classList.toggle('bsec',mskAiPromptMode==='box');b.classList.toggle('bgh',mskAiPromptMode!=='box');b.setAttribute('aria-pressed',String(mskAiPromptMode==='box'));b.textContent=mskAiPromptMode==='box'?'Rectangle mode — drag on photo':'Rectangle select';}
   const s=document.getElementById('btn-msk-ai-tap');if(s){s.classList.toggle('bsec',mskAiPromptMode==='scribble'&&mskAiTapMode);s.classList.toggle('bgh',mskAiPromptMode!=='scribble'||!mskAiTapMode);}
-  const hint=document.getElementById('msk-ai-prompt-hint');if(hint)hint.textContent=mskAiPromptMode==='box'?'Drag a rectangle around the object. This prompt uses EdgeSAM; Paint below to refine.':'Drag a rough scribble over the object (Alt/Option-drag excludes an area). Scribbles add up across strokes. Then Paint below if needed.';
+  mskCursorSync();
   if(FX.cv)FX.cv.style.cursor=mskAiPromptMode==='box'?'crosshair':'';
 }
 // Two-tier fast/quality encode, mirroring desktop-native.js's NativeLibRawShim.refine() pattern
@@ -293,14 +293,19 @@ const _aiJobs=new Set();
 function mskAiBusy(label){
   const job={label,cancelled:false,done(){_aiJobs.delete(job);mskAiBusyRender();}};
   _aiJobs.add(job);
-  setTimeout(()=>{if(_aiJobs.has(job))mskAiBusyRender();},300);
+  setTimeout(()=>{if(_aiJobs.has(job))mskAiBusyRender();},150);
   job._t0=Date.now();
   return job;
 }
 function mskAiBusyCancel(){_aiJobs.forEach(j=>{j.cancelled=true;});_aiJobs.clear();mskAiBusyRender();if(typeof toast==='function')toast('AI selection cancelled');}
 function mskAiBusyRender(){
+  const live=[..._aiJobs].filter(j=>Date.now()-j._t0>=150);
+  // On-canvas pill: the panel strip can be scrolled out of view, which made a running selection look like a frozen page.
+  let pill=document.getElementById('msk-ai-busy-cv');const wrap=document.getElementById('fx-wrap');
+  if(live.length&&wrap){if(!pill){pill=document.createElement('div');pill.id='msk-ai-busy-cv';pill.setAttribute('role','status');pill.setAttribute('aria-live','polite');wrap.appendChild(pill);}
+    pill.innerHTML='<span class="msk-ai-spin"></span><span>'+live[live.length-1].label+'…</span><button type="button" class="btn bgh" onclick="mskAiBusyCancel()">Cancel</button>';pill.classList.add('on');}
+  else if(pill)pill.classList.remove('on');
   const el=document.getElementById('msk-ai-busy');if(!el)return;
-  const live=[..._aiJobs].filter(j=>Date.now()-j._t0>=300);
   if(!live.length){el.classList.remove('on');el.innerHTML='';return;}
   el.classList.add('on');
   el.innerHTML='<span class="msk-ai-spin"></span><span>'+live[live.length-1].label+'…</span><button class="btn bgh" onclick="mskAiBusyCancel()">Cancel</button>';
