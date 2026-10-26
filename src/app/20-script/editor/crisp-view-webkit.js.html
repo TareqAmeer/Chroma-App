@@ -26,7 +26,7 @@ function fxCrispDraw(){
   const wrap=document.getElementById('fx-wrap'),zw=document.getElementById('fx-zoom-wrap');
   const cur=typeof curItem==='function'?curItem():null;
   if(!wrap||!zw||!FX||!FX.ok||_fxPreviewInteracting||fxSplit||fxLoupe||cropMode||fxCompare||(cur&&cur.kind==='video')||
-     fxComparePreviousSnapshot!==null||zw.style.transition){fxCrispSuspend();return;}
+     fxComparePreviousSnapshot!==null||zw.style.transition||window.__fxBorderCrop){fxCrispSuspend();return;}
   const bd=document.getElementById('fx-canvas-bd');
   const src=(bd&&bd.style.display!=='none'&&bd.width)?bd:(FX.cv&&FX.cv.style.display!=='none'&&FX.cv.width?FX.cv:null);
   if(!src){fxCrispSuspend();return;}

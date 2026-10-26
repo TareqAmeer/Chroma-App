@@ -46,6 +46,18 @@ document.addEventListener('keyup',e=>{
   if(fxComparePreviousSnapshot!==null&&(e.code||'')===fxComparePreviousCode){e.preventDefault();fxComparePreviousEnd();}
 },true);
 function _curIsVideoDraft(){const c=typeof curItem==='function'?curItem():null;return !!(c&&c.kind==='video');}
+// Sharp visible-region tile of the PHOTO placed inside the bordered/matted composite (#fx-canvas-bd, kept as the coarse underlay).
+// bd handles pointer input (its _fxDisplayMap maps to the photo), so FX.cv is click-through here.
+function _fxBorderCropOverlay(P,iw,ih){
+  const bd=document.getElementById('fx-canvas-bd'),m=_fxDisplayMap;
+  if(!bd||bd.style.display==='none'||!m||!bd.width||!fxWork)return false;
+  const k=parseFloat(bd.style.width)/bd.width;if(!(k>0))return false;
+  const off={fw:parseFloat(bd.style.width),fh:parseFloat(bd.style.height),ox:m.offX*k,oy:m.offY*k};
+  if(!renderFullResCrop(P,iw,ih,m.w*k,m.h*k,undefined,off))return false;
+  FX.cv.style.position='absolute';FX.cv.style.left='0';FX.cv.style.top='0';FX.cv.style.pointerEvents='none';FX.cv.style.display='block';
+  window.__fxBorderCrop=true;window.__fxCrispView=null;
+  return true;
+}
 function renderPreview(){
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
   // retire the cached 1:1 tiles and underlay (they are also keyed by a params fingerprint).
@@ -77,6 +89,10 @@ function renderPreview(){
   const _previewComposition=(()=>{const p=getFXParams();return !!(
     (p.filmFrame&&p.filmFrame.style&&p.filmFrame.style!=='none')||
     p.bordersEnabled||(p.canvas&&p.canvas.enabled&&p.canvas.ar));})();
+  // Bordered/matted photo zoomed past Fit: render the (cheap, Fit-density) composite as an underlay and draw ONLY the visible part
+  // of the photo, sharp, on top of it (see _fxBorderCropOverlay). The whole-frame render at zoom-tier density was 21MP and froze every edit.
+  const _bdCropOK=!!(!window.__fxNoBorderCrop&&_previewComposition&&fxCrispZoom()&&!_fxPreviewInteracting&&fxZoom>1&&!fxSplit&&fxComparePreviousSnapshot===null&&!fxCompare&&!fxLoupe&&!_curIsVideoDraft()
+    &&!(document.getElementById('fx-canvas-redeye')||{style:{display:'none'}}).style.display.replace('none',''));
   // Full-res + zoomed in: visible-crop render (see renderFullResCrop). Falls through to the
   // normal full-frame path for framed/matted images, whose composition must span the whole
   // image rather than be rebuilt from only the visible source tile.
@@ -105,6 +121,7 @@ function renderPreview(){
   const _preFootW=_fxZoomFootprint().w;
   if(zw){zw.style.width='';zw.style.height='';}
   FX.cv.style.transform='';                            // clear any full-res-crop offset
+  FX.cv.style.position='';FX.cv.style.left='';FX.cv.style.top='';FX.cv.style.pointerEvents='';window.__fxBorderCrop=false; // leaving the bordered-crop overlay
   // Render the backing store at devicePixelRatio (capped at 2x in-browser so the preview is
   // crisp on HiDPI screens without costing much: 2×900=1800px is still ~1/13 of a 24MP
   // export). Native iOS GPUs handle full-res live preview comfortably, so the Capacitor
@@ -130,9 +147,9 @@ function renderPreview(){
   // Fit / zoomed-out: the compositor shrinks this buffer to its displayed size, and anything but a clean 2:1 shrink aliases or
   // softens (the old half-source rule gave 2.2-2.5x). Render so the DISPLAYED bitmap is exactly 2x its device size; for a
   // bordered composite (photo + borders, shrunk to the fit box as a whole) solve for the photo width that makes the composite 2x.
-  if(!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom<=1&&cw>0&&ch>0&&!_curIsVideoDraft()){
-    const dd=window.devicePixelRatio||1,zf=Math.max(fxZoom,0.25);
-    const mul=window.__fxFitMul||2; // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
+  if(!fxFullResPreview&&!_fxPreviewInteracting&&(fxZoom<=1||_bdCropOK)&&cw>0&&ch>0&&!_curIsVideoDraft()){
+    const dd=window.devicePixelRatio||1,zf=_bdCropOK?1:Math.max(fxZoom,0.25); // bordered-crop underlay: Fit density, the sharp tile sits on top
+    const mul=_bdCropOK?1:(window.__fxFitMul||2); // backing px per displayed device px at Fit (2 = clean 2:1 shrink)
     let pwT=cw*zf*mul*dd;
     try{
       const Pq=getFXParams(),bordersOnly=Pq.bordersEnabled&&!(Pq.canvas&&Pq.canvas.enabled&&Pq.canvas.ar)&&!(Pq.filmFrame&&Pq.filmFrame.style&&Pq.filmFrame.style!=='none');
@@ -147,7 +164,7 @@ function renderPreview(){
   if(deskx&&cw>0)dpr=Math.min(dpr,4800/cw);
   // Framed/matted photo zoomed past Fit (Full res off): the composition needs the whole frame, so the crop path is skipped and the capped
   // buffer was CSS-upscaled (4x at 200%). Raise the density in power-of-2 tiers of the zoom (few re-renders), bounded by the source and 8192px.
-  if(_previewComposition&&!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&cw>0&&ch>0){
+  if(_previewComposition&&!_bdCropOK&&!fxFullResPreview&&!_fxPreviewInteracting&&fxZoom>1&&cw>0&&ch>0){
     // Tier cap 16 (was 4): at dpr 2 a 100% view of a 26MP photo needs ~9x the Fit density, so the old cap of 4 left the
     // composite CSS-upscaled ~1.1-2x at 100-200%. Still bounded by the source's own pixels, 8192px and a 50MP budget.
     const t=Math.min(16,Math.pow(2,Math.ceil(Math.log2(fxZoom))));
@@ -214,6 +231,7 @@ function renderPreview(){
   if(_fxViewOnlyRender&&!_wasCropShown&&!fxSplit&&fxComparePreviousSnapshot===null&&!_curIsVideo&&
      _fxWholeLast.key===_wholeKey&&_fxWholeLast.rc===FX._rc&&_fxWholeLast.work===work){
     _zoomRefit(_preFootW);
+    if(_bdCropOK&&_fxBorderCropOverlay(P,iw,ih)){_fxWholeLast.rc=FX._rc;return;}
     if(fxFullResPreview)document.getElementById('fx-info').textContent=`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`;
     if(typeof mskOverlaySync==='function')mskOverlaySync();
     return;
@@ -260,6 +278,7 @@ function renderPreview(){
    if(zw){zw.style.width=onBd?bdv.style.width:cw+'px';zw.style.height=onBd?bdv.style.height:ch+'px';}}
   _zoomRefit(_oldFootW); // after the composite is sized: with borders on, IT is the footprint
   _fxWholeLast=(fxComparePreviousSnapshot===null&&!fxSplit)?{key:_wholeKey,rc:FX._rc,work}:{};
+  if(_bdCropOK&&_fxBorderCropOverlay(P,iw,ih))_fxWholeLast.rc=FX._rc;
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(_fxZoomToPct(fxZoom))}% — rendered ${pw}\u00d7${ph}`
     :`Preview ${pw}\u00d7${ph}`;

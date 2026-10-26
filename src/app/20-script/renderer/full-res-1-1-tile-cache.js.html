@@ -103,8 +103,8 @@ function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions){
   return view;
 }
 // Place the canvas holding a crisp crop of source rect (sx,sy,sw,sh) inside the cw×ch footprint.
-function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
-  const x0=sx/iw*cw,y0=sy/ih*ch;
+function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh,off){
+  const x0=sx/iw*cw+(off?off.ox:0),y0=sy/ih*ch+(off?off.oy:0);
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   FX.cv.style.width=(sw/iw*cw)+'px';FX.cv.style.height=(sh/ih*ch)+'px';
   FX.cv.style.transform=`translate(${x0}px,${y0}px)`;
@@ -112,11 +112,12 @@ function _fxPlaceCrisp(iw,ih,cw,ch,sx,sy,sw,sh){
 }
 // Visible source rect (+ an 18% pad) and the output scale for the current zoom/pan.
 const FX_CROP_MAX_PX=16e6;   // 4096x4096: also the tile-grid maxDim, so a 1:1 view of any window up to 4K stays 1:1
-function _fxCropGeom(iw,ih,cw,ch){
+// off={fw,fh,ox,oy}: the photo (cw x ch css px) sits at (ox,oy) inside a larger zoom footprint (fw x fh), i.e. a bordered/matted composite.
+function _fxCropGeom(iw,ih,cw,ch,off){
   const wrap=document.getElementById('fx-wrap');
-  const z=fxZoom;
+  const z=fxZoom,fw=off?off.fw:cw,fh=off?off.fh:ch,ox=off?off.ox:0,oy=off?off.oy:0;
   // Visible region of the canvas in canvas-CSS coords (screen = z·(x+pan) — see _applyZoom).
-  const visW=Math.min(cw,(wrap.clientWidth||cw)/z),visH=Math.min(ch,(wrap.clientHeight||ch)/z);
+  const visW=Math.min(fw,(wrap.clientWidth||fw)/z),visH=Math.min(fh,(wrap.clientHeight||fh)/z);
   // Pad (so a small pan stays on crisp pixels) shrinks before resolution does: at 1:1 on a retina window the
   // visible area alone is ~6MP, and the old fixed 18% pad + 5MP cap rendered the crop at ~0.88x then stretched it
   // (bilinear upscale = soft 100%).
@@ -125,7 +126,7 @@ function _fxCropGeom(iw,ih,cw,ch){
   while(padF>0.001&&Math.min(cw,visW*(1+2*padF))*z*sd0*Math.min(ch,visH*(1+2*padF))*z*sd0>FX_CROP_MAX_PX)padF/=2;
   if(padF<=0.001)padF=0;
   const padX=visW*padF,padY=visH*padF;
-  const tx=fxPanX+cw*(1-z)/(2*z),ty=fxPanY+ch*(1-z)/(2*z); // total translate incl. centring base
+  const tx=fxPanX+fw*(1-z)/(2*z)+ox,ty=fxPanY+fh*(1-z)/(2*z)+oy; // total translate incl. centring base (photo-local when the photo sits inside a composite)
   const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
   const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
   if(x1-x0<2||y1-y0<2)return null;
@@ -143,16 +144,16 @@ function _fxCropGeom(iw,ih,cw,ch){
   outW=Math.max(1,Math.round(outW*s));outH=Math.max(1,Math.round(outH*s));
   return{x0,y0,x1,y1,cropX,cropY,cropW,cropH,outW,outH};
 }
-function renderFullResCrop(P,iw,ih,cw,ch,maxRegions){
+function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off){
   const src=fxWork;
   const zw=document.getElementById('fx-zoom-wrap');
   // Keep the zoom surface at the full image footprint. The crisp tile is smaller and
   // translated inside it, but its layout box must not become the pan/clamp reference.
-  {const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
-  const g=_fxCropGeom(iw,ih,cw,ch);if(!g)return false;
+  if(!off){const _ow=_fxZoomFootprint().w;if(zw){zw.style.width=cw+'px';zw.style.height=ch+'px';}if(Math.abs(cw-_ow)>0.5)_zoomRefit(_ow);}
+  const g=_fxCropGeom(iw,ih,cw,ch,off);if(!g)return false;
   if(_fxTileModeOK(P,src)){
     const v=_fxRenderTiles(P,src,iw,ih,g.x0/cw*iw,g.y0/ch*ih,g.x1/cw*iw,g.y1/ch*ih,g.outW/g.cropW,maxRegions==null?Infinity:maxRegions);
-    if(v){_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh);return true;}
+    if(v){_fxPlaceCrisp(iw,ih,cw,ch,v.sx,v.sy,v.sw,v.sh,off);return true;}
   }
   window.__fxCrispView=null;
   const{cropX,cropY,cropW,cropH,outW,outH}=g;
@@ -170,7 +171,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions){
   // where that part of the full image belongs. Cleared by the normal render path.
   FX.cv.style.display='block';FX.cv.style.clipPath='';
   FX.cv.style.width=(g.x1-g.x0)+'px';FX.cv.style.height=(g.y1-g.y0)+'px';
-  FX.cv.style.transform=`translate(${g.x0}px,${g.y0}px)`;
+  FX.cv.style.transform=`translate(${g.x0+(off?off.ox:0)}px,${g.y0+(off?off.oy:0)}px)`;
   return true;
 }
 // While a pan is in progress at Full res, fill in newly exposed tiles a region at a time
