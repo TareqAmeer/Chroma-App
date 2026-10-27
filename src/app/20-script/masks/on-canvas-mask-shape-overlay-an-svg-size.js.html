@@ -10,7 +10,7 @@
 let mskPreviewMode='select'; // 'select' (selection shown in the chosen style) | 'off'
 // Selection-view display settings are global UI preferences, never photo/history state. The FX
 // renderer accepts them only with a private preview token; export and tiled render calls omit it.
-let mskSelViewOpacity=0.75;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
+let mskSelViewOpacity=0.5;   // 0.1..1.0, how strongly the selection colour mixes over the preview base
 let mskSelViewOutline=false;  // true: draw only the selection's boundary (edge-detect on w), not a filled overlay
 const MSK_SELVIEW_PREF_KEY='chromasmith.mask-selection-view.v1';
 const MSK_SELVIEW_DEFAULT_COLOR='#ff2626';
@@ -48,7 +48,8 @@ function mskOverlayMenu(ev){
     +chk('Show Overlay for New Masks',mskOverlayForNew,'mskOverlayForNewToggle()','fornew')
     +chk('Show Pins and Tools',mskShowPins,'mskPinsToggle(!mskShowPins);mskUpdateSelViewControls()','pins')
     +chk('Spotlight',mskSpotlight,'mskSpotlightToggle(!mskSpotlight);mskUpdateSelViewControls()','spotlight')
-    +chk('Edge only',mskSelViewOutline,'mskSelViewOutlineToggle(!mskSelViewOutline);mskUpdateSelViewControls()','edge');
+    +chk('Edge only',mskSelViewOutline,'mskSelViewOutlineToggle(!mskSelViewOutline);mskUpdateSelViewControls()','edge')
+    +chk('Hide Overlay While Adjusting',mskOverlayAutoHide,'mskOverlayAutoHideToggle()','autohide');
   const d=document.createElement('div');d.className='msk-more-menu msk-overlay-menu';d.setAttribute('role','menu');d.setAttribute('aria-label','Overlay modes');d.innerHTML=html;
   document.body.appendChild(d);
   const trig=ev.currentTarget||null;
@@ -56,6 +57,17 @@ function mskOverlayMenu(ev){
   _mskPlaceMenu(d,(trig||ev.target).getBoundingClientRect());
   const cur=d.querySelector('[aria-checked="true"]')||d.querySelector('.msk-more-it');if(cur)cur.focus({preventScroll:true});
 }
+// Lightroom's "Automatically toggle overlay": while an adjustment slider in the Masks panel is held,
+// the tint steps aside so the edit itself is visible; it returns on release. Per-viewer preference.
+let mskOverlayAutoHide=true,_mskAdjHeld=false;try{mskOverlayAutoHide=localStorage.getItem('chromasmith_msk_autohide')!=='0';}catch(_){}
+function mskOverlayAutoHideToggle(){mskOverlayAutoHide=!mskOverlayAutoHide;try{localStorage.setItem('chromasmith_msk_autohide',mskOverlayAutoHide?'1':'0');}catch(_){}}
+document.addEventListener('pointerdown',e=>{
+  if(!mskOverlayAutoHide||mskPreviewMode!=='select')return;
+  const t=e.target;if(!t||!t.closest||!t.matches('input[type=range]')||!t.closest('#ff-local')||t.hasAttribute('data-msk-brush-slider')||t.id==='sl-msk-selview-opacity')return;
+  _mskAdjHeld=true;if(typeof renderPreview==='function')renderPreview();
+  const up=()=>{document.removeEventListener('pointerup',up,true);document.removeEventListener('pointercancel',up,true);_mskAdjHeld=false;if(typeof renderPreview==='function')renderPreview();};
+  document.addEventListener('pointerup',up,true);document.addEventListener('pointercancel',up,true);
+},true);
 function mskOverlayForNewToggle(){mskOverlayForNew=!mskOverlayForNew;mskSaveSelViewPrefs();}
 function mskViewOptsToggle(){_mskGroupOpen.viewOpts=!_mskGroupOpen.viewOpts;try{localStorage.setItem('chromasmith_msk_groups2',JSON.stringify(_mskGroupOpen));}catch(e){}mskViewOptsSync();}
 function mskViewOptsSync(){const b=document.getElementById('btn-msk-view-opts'),o=document.getElementById('msk-view-opts');if(!b||!o)return;if(!b.firstChild)b.innerHTML=icon('chevron',14);const om=document.getElementById('btn-msk-overlay-menu');if(om&&!om.firstChild)om.innerHTML=icon('more',16);const open=_mskGroupOpen.viewOpts===true;b.setAttribute('aria-expanded',String(open));o.hidden=!open;b.classList.toggle('on',open);}
@@ -123,6 +135,7 @@ function mskShowSelIdx(){
   // Hovering a mask's row (or pin) temporarily tints THAT mask, even with the overlay switched off; moving away restores.
   if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskHoverIdx;
   if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
+  if(_mskAdjHeld)return -1; // auto-hide while an adjustment slider is held
   // "Image on B&W / black / white" show the SELECTION in full colour against a flat backdrop. A mask with nothing
   // selected yet (a fresh empty brush) would turn the whole photo flat; it leaves the photo as it is instead.
   if((mskSelViewStyle==='imgbw'||mskSelViewStyle==='imgblack'||mskSelViewStyle==='imgwhite')&&mskIsEmptyRaster(fxState.masks[mskSel]))return -1;
