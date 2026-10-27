@@ -3024,8 +3024,9 @@ body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{display:inline!impor
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-name{max-width:100%;font-size:12px;color:var(--k-color-ink)}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #db-title-status{max-width:100%;font-size:11px;color:var(--k-color-muted);font-variant-numeric:tabular-nums}
 body.sk2.deskx #fx-deskbar #fx-deskbar-title #cs-source-render-state{max-width:100%;margin-left:0}
-/* Top-bar declutter: these readouts/buttons are hidden on desktop (markup + JS kept intact). */
-#fx-batch-scope,#cs-save-state,#cs-source-render-state,#btn-second-display,#sk2-act-jobs{display:none!important}
+/* Top-bar declutter: these readouts/buttons are hidden on desktop (markup + JS kept intact).
+   A failed save stays visible (with its Retry), or the edit would be lost silently. */
+#fx-batch-scope,#cs-save-state:not(.err),#cs-source-render-state,#btn-second-display,#sk2-act-jobs{display:none!important}
 /* Gallery/studio switch in the logo's colours: vermilion front slab, ink behind it — black on
    paper in the gallery, white on charcoal in the studio. */
 body.sk2 #cs-brand-tog::after{background:var(--k-color-ink)!important}
