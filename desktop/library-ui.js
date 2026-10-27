@@ -4147,6 +4147,7 @@
   /// rowH/cols leave it pointing at a different photo. The anchor is a fractional ITEM index so it
   /// survives a column-count change too.
   let _virtRO = null, _virtAnchor = null, _virtRmTimer = 0;
+  let _virtAnchorTop = 0;
   function virtRemeasure() {
     const gridEl = document.getElementById('lib-grid');
     const old = state._virtMetrics;
@@ -4155,7 +4156,7 @@
     // Capture the anchor ONCE per resize burst, from the still-committed old metrics, before any
     // relayout/clamping moves scrollTop; commit only after layout settles (transient mid-layout
     // measurements, e.g. one giant row while thumbnails re-flow, are not real geometry).
-    if (_virtAnchor == null) _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols;
+    if (_virtAnchor == null) { _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols; _virtAnchorTop = scroller.scrollTop; }
     clearTimeout(_virtRmTimer);
     // Card HEIGHT is not measurable right after the width changes (thumbnails size themselves a
     // beat later: freshly laid-out cards read 40px against a real 279px), but the column count
@@ -4163,9 +4164,20 @@
     // even while thumbs are unloaded).
     _virtRmTimer = setTimeout(() => {
       const g = document.getElementById('lib-grid');
-      const anchor = _virtAnchor; _virtAnchor = null;
+      let anchor = _virtAnchor; _virtAnchor = null;
       const o = state._virtMetrics;
       if (!g || !state._virtOn || !o) return;
+      // The user scrolled during the 80ms settle window: a relayout can only CLAMP scrollTop down to
+      // the end, so an unclamped position that moved since the capture is the user's — anchor to it,
+      // or the timer snaps them back to where the burst started (seen while thumbnails load).
+      const maxTop = scroller.scrollHeight - scroller.clientHeight;
+      let seen = null; // the card the user is looking at now, and its offset from the viewport top
+      if (Math.abs(scroller.scrollTop - _virtAnchorTop) > 1 && scroller.scrollTop < maxTop - 1) {
+        const vt = scroller.getBoundingClientRect().top;
+        const card = [...g.querySelectorAll('.lib-card[data-path]')].find((c) => c.getBoundingClientRect().bottom > vt);
+        if (card) seen = { path: card.dataset.path, off: card.getBoundingClientRect().top - vt };
+        anchor = Math.max(0, scroller.scrollTop - g.offsetTop) / o.rowH * o.cols;
+      }
       const raw = virtMetrics(g);
       if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
       // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
@@ -4182,6 +4194,15 @@
       scroller.scrollTop = g.offsetTop + anchor / fresh.cols * fresh.rowH;
       state._virtRange = null;
       virtUpdate(true);
+      if (seen) { // exact: put that same card back at the same offset
+        const idx = (state._virtAll || []).findIndex((e) => e.path === seen.path);
+        if (idx >= 0) {
+          scroller.scrollTop = g.offsetTop + Math.floor(idx / fresh.cols) * fresh.rowH - seen.off;
+          state._virtRange = null; virtUpdate(true);
+          const card = g.querySelector(`.lib-card[data-path="${CSS.escape(seen.path)}"]`);
+          if (card) { scroller.scrollTop += card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - seen.off; virtUpdate(false); }
+        }
+      }
     }, 80);
   }
 
@@ -11903,8 +11924,8 @@
     if (!sc || !sc.edited || !sc.recipe) return;
     const key = epKey(job.path, sc.recipe);
     if (!job.force) {
-      if (ep.known.has(key)) { epThumbRepaint(job.path); return; }
-      try { await invoke('get_edit_preview', { key }); ep.known.add(key); epThumbRepaint(job.path); return; } catch (_) {}
+      if (ep.known.has(key)) { epThumbMiss.delete(key); epThumbRepaint(job.path); return; }
+      try { await invoke('get_edit_preview', { key }); ep.known.add(key); epThumbMiss.delete(key); epThumbRepaint(job.path); return; } catch (_) {}
     }
     job.fresh = true;
     const source = await quicklookPreview(job.path);
@@ -11915,7 +11936,10 @@
     if (!again || again.recipe !== sc.recipe) { epEnqueue(job.path); return; } // edited again mid-render: drop this result
     await invoke('put_edit_preview', jpeg, { headers: { 'x-key': key } });
     ep.known.add(key);
-    epThumbs.delete(job.path);
+    epThumbMiss.delete(key);
+    const grid = await epPutGrid(key, jpeg).catch(() => null);
+    if (grid) { const old = epThumbs.get(job.path); if (old) URL.revokeObjectURL(old.url); epThumbs.delete(job.path); epThumbStore(job.path, key, URL.createObjectURL(grid)); }
+    else epThumbs.delete(job.path);
     epThumbRepaint(job.path);
     if (quicklook.active && quicklook.path === job.path) qlEditedRefresh(job.path);
   }
@@ -11977,15 +12001,34 @@
     epThumbPaint(img, have.url);
     return true;
   }
-  async function epThumbUrl(bytes) {
+  // Grid-size copy of a stored edited render, kept in the same native store under its own key, so
+  // a card reads ~30KB instead of fetching and shrinking the ~1600px Quick Look render every time.
+  const epGridKey = (key) => epHash('grid480\0' + key);
+  async function epShrink(bytes) {
     const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
     const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     if (bmp.close) bmp.close();
-    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
-    return blob ? URL.createObjectURL(blob) : null;
+    return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+  }
+  async function epPutGrid(key, bigBytes) {
+    const blob = await epShrink(bigBytes);
+    if (!blob) return null;
+    invoke('put_edit_preview', new Uint8Array(await blob.arrayBuffer()), { headers: { 'x-key': epGridKey(key) } }).catch(() => {});
+    epThumbMiss.delete(key);
+    return blob;
+  }
+  // Bounded fetches: a fast scroll over hundreds of edited photos must not fire hundreds of
+  // concurrent IPC reads; cards that scrolled away before their turn are skipped.
+  const EP_THUMB_PAR = 4;
+  let epThumbActive = 0; const epThumbWait = [];
+  const epThumbMiss = new Set(); // render keys with no stored render yet (cleared when one lands)
+  async function epThumbSlot(fn) {
+    if (epThumbActive >= EP_THUMB_PAR) await new Promise((r) => epThumbWait.push(r));
+    epThumbActive++;
+    try { return await fn(); } finally { epThumbActive--; const next = epThumbWait.shift(); if (next) next(); }
   }
   function epThumbStore(path, key, url) {
     const prev = epThumbs.get(path);
@@ -12004,10 +12047,17 @@
     const key = epKey(path, sc.recipe);
     const have = epThumbs.get(path);
     if (have && have.key === key) { epThumbPaint(img, have.url); return; }
-    let bytes = null;
-    try { bytes = await invoke('get_edit_preview', { key }); } catch (_) {}
-    if (!bytes) { if (render && path !== state.openedPath) epEnqueue(path); return; }
-    const url = await epThumbUrl(bytes).catch(() => null);
+    if (epThumbMiss.has(key)) { if (render && path !== state.openedPath) epEnqueue(path); return; }
+    const url = await epThumbSlot(async () => {
+      if (!img.isConnected) return null;
+      try { const small = await invoke('get_edit_preview', { key: epGridKey(key) }); if (small) return URL.createObjectURL(new Blob([small], { type: 'image/jpeg' })); } catch (_) {}
+      let big = null;
+      try { big = await invoke('get_edit_preview', { key }); } catch (_) {}
+      if (!big) return '';
+      const blob = await epPutGrid(key, big).catch(() => null); // older render without a grid copy: make one once
+      return blob ? URL.createObjectURL(blob) : null;
+    });
+    if (url === '') { epThumbMiss.add(key); if (render && path !== state.openedPath) epEnqueue(path); return; }
     if (!url) return;
     const now = state.sidecars.get(path);
     if (!now || !now.edited || now.recipe !== sc.recipe) { URL.revokeObjectURL(url); return; } // edited/reset meanwhile
@@ -12037,7 +12087,7 @@
     let edited = 0;
     for (const p of paths) {
       const have = epThumbs.get(p);
-      if (have) { epThumbs.delete(p); URL.revokeObjectURL(have.url); }
+      if (have) { epThumbs.delete(p); URL.revokeObjectURL(have.url); epThumbMiss.delete(have.key); }
       const img = epCardImg(p);
       if (img) epThumbReloadOriginal(img);
       const sc = state.sidecars.get(p);

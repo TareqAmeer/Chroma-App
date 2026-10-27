@@ -84,8 +84,8 @@
     if (!sc || !sc.edited || !sc.recipe) return;
     const key = epKey(job.path, sc.recipe);
     if (!job.force) {
-      if (ep.known.has(key)) { epThumbRepaint(job.path); return; }
-      try { await invoke('get_edit_preview', { key }); ep.known.add(key); epThumbRepaint(job.path); return; } catch (_) {}
+      if (ep.known.has(key)) { epThumbMiss.delete(key); epThumbRepaint(job.path); return; }
+      try { await invoke('get_edit_preview', { key }); ep.known.add(key); epThumbMiss.delete(key); epThumbRepaint(job.path); return; } catch (_) {}
     }
     job.fresh = true;
     const source = await quicklookPreview(job.path);
@@ -96,7 +96,10 @@
     if (!again || again.recipe !== sc.recipe) { epEnqueue(job.path); return; } // edited again mid-render: drop this result
     await invoke('put_edit_preview', jpeg, { headers: { 'x-key': key } });
     ep.known.add(key);
-    epThumbs.delete(job.path);
+    epThumbMiss.delete(key);
+    const grid = await epPutGrid(key, jpeg).catch(() => null);
+    if (grid) { const old = epThumbs.get(job.path); if (old) URL.revokeObjectURL(old.url); epThumbs.delete(job.path); epThumbStore(job.path, key, URL.createObjectURL(grid)); }
+    else epThumbs.delete(job.path);
     epThumbRepaint(job.path);
     if (quicklook.active && quicklook.path === job.path) qlEditedRefresh(job.path);
   }

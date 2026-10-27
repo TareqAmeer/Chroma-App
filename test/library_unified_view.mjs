@@ -35,7 +35,9 @@ try {
     throw new Error(`default Gallery view changed unexpectedly: ${JSON.stringify(initial)}`);
   }
 
-  await page.locator('#lib-expand').evaluate((el) => el.click());
+  // The app opens straight into the full Gallery on launch, so Escape above may or may not have
+  // run before that; only press Expand when the Gallery isn't already full-window.
+  await page.locator('#lib-expand').evaluate((el) => { if (!document.getElementById('lib-overlay').classList.contains('full')) el.click(); });
   await page.waitForFunction(() => document.getElementById('lib-overlay').classList.contains('full'));
   await page.evaluate(() => window.__libToggleUnifiedView(true));
   await page.waitForFunction(() => document.body.classList.contains('lib-unified-view'));

@@ -70,7 +70,7 @@ try {
   await page.evaluate(() => { window.__libEditedThumbsForget(); window.__libRenderGrid(); });
   await page.waitForFunction((ps) => ps.every((p) => window.__img(p) && window.__img(p).dataset.editedThumb), paths, { timeout: 30000 });
   await idle();
-  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), storedNow, 'stored renders reused after a fresh launch');
+  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), storedNow, 'stored renders reused after a fresh launch (no new renders or grid copies)');
   console.log('fresh launch: edited looks come back from the stored renders');
 
   // 3. Refresh thumbnails forces a new render even though one is stored.
@@ -78,7 +78,9 @@ try {
   await page.evaluate((ps) => { window.__libtestEditPreviews.clear(); window.__libRefreshThumbs(ps); }, paths);
   await idle();
   await page.waitForFunction((ps) => ps.every((p) => window.__img(p) && window.__img(p).dataset.editedThumb), paths, { timeout: 30000 });
-  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), 3, 'refresh re-rendered every edited photo');
+  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), 6, 'refresh re-rendered every edited photo (render + grid copy each)');
+  const gridBytes = await page.evaluate(() => [...window.__libtestEditPreviews.values()].map((b) => b.byteLength || b.length).sort((a, b) => a - b));
+  console.log('stored sizes (bytes):', gridBytes.join(', '));
   console.log(`refresh: re-rendered 3 edited looks (${storedBefore} were stored before)`);
 
   // 4. A new edit replaces the card's look; reset puts the original back.

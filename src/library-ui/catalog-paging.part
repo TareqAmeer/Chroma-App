@@ -276,6 +276,7 @@
   /// rowH/cols leave it pointing at a different photo. The anchor is a fractional ITEM index so it
   /// survives a column-count change too.
   let _virtRO = null, _virtAnchor = null, _virtRmTimer = 0;
+  let _virtAnchorTop = 0;
   function virtRemeasure() {
     const gridEl = document.getElementById('lib-grid');
     const old = state._virtMetrics;
@@ -284,7 +285,7 @@
     // Capture the anchor ONCE per resize burst, from the still-committed old metrics, before any
     // relayout/clamping moves scrollTop; commit only after layout settles (transient mid-layout
     // measurements, e.g. one giant row while thumbnails re-flow, are not real geometry).
-    if (_virtAnchor == null) _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols;
+    if (_virtAnchor == null) { _virtAnchor = Math.max(0, scroller.scrollTop - gridEl.offsetTop) / old.rowH * old.cols; _virtAnchorTop = scroller.scrollTop; }
     clearTimeout(_virtRmTimer);
     // Card HEIGHT is not measurable right after the width changes (thumbnails size themselves a
     // beat later: freshly laid-out cards read 40px against a real 279px), but the column count
@@ -292,9 +293,20 @@
     // even while thumbs are unloaded).
     _virtRmTimer = setTimeout(() => {
       const g = document.getElementById('lib-grid');
-      const anchor = _virtAnchor; _virtAnchor = null;
+      let anchor = _virtAnchor; _virtAnchor = null;
       const o = state._virtMetrics;
       if (!g || !state._virtOn || !o) return;
+      // The user scrolled during the 80ms settle window: a relayout can only CLAMP scrollTop down to
+      // the end, so an unclamped position that moved since the capture is the user's — anchor to it,
+      // or the timer snaps them back to where the burst started (seen while thumbnails load).
+      const maxTop = scroller.scrollHeight - scroller.clientHeight;
+      let seen = null; // the card the user is looking at now, and its offset from the viewport top
+      if (Math.abs(scroller.scrollTop - _virtAnchorTop) > 1 && scroller.scrollTop < maxTop - 1) {
+        const vt = scroller.getBoundingClientRect().top;
+        const card = [...g.querySelectorAll('.lib-card[data-path]')].find((c) => c.getBoundingClientRect().bottom > vt);
+        if (card) seen = { path: card.dataset.path, off: card.getBoundingClientRect().top - vt };
+        anchor = Math.max(0, scroller.scrollTop - g.offsetTop) / o.rowH * o.cols;
+      }
       const raw = virtMetrics(g);
       if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
       // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
@@ -311,6 +323,15 @@
       scroller.scrollTop = g.offsetTop + anchor / fresh.cols * fresh.rowH;
       state._virtRange = null;
       virtUpdate(true);
+      if (seen) { // exact: put that same card back at the same offset
+        const idx = (state._virtAll || []).findIndex((e) => e.path === seen.path);
+        if (idx >= 0) {
+          scroller.scrollTop = g.offsetTop + Math.floor(idx / fresh.cols) * fresh.rowH - seen.off;
+          state._virtRange = null; virtUpdate(true);
+          const card = g.querySelector(`.lib-card[data-path="${CSS.escape(seen.path)}"]`);
+          if (card) { scroller.scrollTop += card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - seen.off; virtUpdate(false); }
+        }
+      }
     }, 80);
   }
 

@@ -1,8 +1,8 @@
 // Library edited-look preview queue (Quick Look): a hidden render-only app instance renders each
 // edited photo's saved recipe, results are stored via put_edit_preview and shown by Space.
 // Verifies: batch of 20 completes sequentially, cache entries written, warm Space is instant, a
-// changed recipe re-renders with a "rendering edit..." indicator, badges update live, output is
-// byte-identical to the Editor's own render of the same recipe, the render instance cannot write
+// changed recipe re-renders with a "rendering edit..." indicator, badges update live, output
+// matches the Editor's own render (to dither noise) of the same recipe, the render instance cannot write
 // storage or disturb the Editor, and memory does not grow across batches.
 //   node test/edit_preview_queue.mjs            (SwiftShader, headless)
 //   GPU=1 node test/edit_preview_queue.mjs      (headed, real GPU)
@@ -192,8 +192,20 @@ try {
       const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9));
       const u = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s);
     }, { png: pd.png, snap: pd.snap });
-    assert.equal(libB64, edB64, `${pd.path}: render-instance output is byte-identical to the Editor's render`);
-    console.log(`parity ${pd.path}: IDENTICAL (${Math.round(libB64.length * 0.75)} bytes)`);
+    // Still renders end with a random-seeded half-LSB TPDF dither (fxStillQualityOpts), so two
+    // renders of the same recipe are no longer byte-identical even inside one instance. Compare
+    // pixels instead: dither noise only, no shift in any channel.
+    const d = await ed.evaluate(async ({ a, b }) => {
+      const dec = async (s) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); const bm = await createImageBitmap(new Blob([u])); const c = new OffscreenCanvas(bm.width, bm.height); const g = c.getContext('2d'); g.drawImage(bm, 0, 0); return { w: bm.width, h: bm.height, d: g.getImageData(0, 0, bm.width, bm.height).data }; };
+      const A = await dec(a), B = await dec(b);
+      if (A.w !== B.w || A.h !== B.h) return { size: `${A.w}x${A.h} vs ${B.w}x${B.h}` };
+      let abs = 0; const sg = [0, 0, 0]; const n = A.d.length / 4;
+      for (let i = 0; i < A.d.length; i += 4) for (let k = 0; k < 3; k++) { const v = A.d[i + k] - B.d[i + k]; abs += Math.abs(v); sg[k] += v; }
+      return { mean: abs / n / 3, bias: Math.max(...sg.map((x) => Math.abs(x / n))) };
+    }, { a: libB64, b: edB64 });
+    assert.ok(!d.size, `${pd.path}: same size as the Editor's render (${d.size})`);
+    assert.ok(d.mean < 0.6 && d.bias < 0.1, `${pd.path}: render-instance output matches the Editor's render (mean diff ${d.mean.toFixed(3)}, bias ${d.bias.toFixed(3)})`);
+    console.log(`parity ${pd.path}: ${libB64 === edB64 ? 'IDENTICAL' : `matches (dither noise only: mean ${d.mean.toFixed(3)}, bias ${d.bias.toFixed(3)})`}`);
   }
   await ed.close();
   console.log('PASS: edited-look preview queue, cache, Space, isolation and Editor parity.');

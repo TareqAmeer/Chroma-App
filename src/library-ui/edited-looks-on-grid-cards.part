@@ -27,15 +27,34 @@
     epThumbPaint(img, have.url);
     return true;
   }
-  async function epThumbUrl(bytes) {
+  // Grid-size copy of a stored edited render, kept in the same native store under its own key, so
+  // a card reads ~30KB instead of fetching and shrinking the ~1600px Quick Look render every time.
+  const epGridKey = (key) => epHash('grid480\0' + key);
+  async function epShrink(bytes) {
     const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
     const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
     c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     if (bmp.close) bmp.close();
-    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
-    return blob ? URL.createObjectURL(blob) : null;
+    return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+  }
+  async function epPutGrid(key, bigBytes) {
+    const blob = await epShrink(bigBytes);
+    if (!blob) return null;
+    invoke('put_edit_preview', new Uint8Array(await blob.arrayBuffer()), { headers: { 'x-key': epGridKey(key) } }).catch(() => {});
+    epThumbMiss.delete(key);
+    return blob;
+  }
+  // Bounded fetches: a fast scroll over hundreds of edited photos must not fire hundreds of
+  // concurrent IPC reads; cards that scrolled away before their turn are skipped.
+  const EP_THUMB_PAR = 4;
+  let epThumbActive = 0; const epThumbWait = [];
+  const epThumbMiss = new Set(); // render keys with no stored render yet (cleared when one lands)
+  async function epThumbSlot(fn) {
+    if (epThumbActive >= EP_THUMB_PAR) await new Promise((r) => epThumbWait.push(r));
+    epThumbActive++;
+    try { return await fn(); } finally { epThumbActive--; const next = epThumbWait.shift(); if (next) next(); }
   }
   function epThumbStore(path, key, url) {
     const prev = epThumbs.get(path);
@@ -54,10 +73,17 @@
     const key = epKey(path, sc.recipe);
     const have = epThumbs.get(path);
     if (have && have.key === key) { epThumbPaint(img, have.url); return; }
-    let bytes = null;
-    try { bytes = await invoke('get_edit_preview', { key }); } catch (_) {}
-    if (!bytes) { if (render && path !== state.openedPath) epEnqueue(path); return; }
-    const url = await epThumbUrl(bytes).catch(() => null);
+    if (epThumbMiss.has(key)) { if (render && path !== state.openedPath) epEnqueue(path); return; }
+    const url = await epThumbSlot(async () => {
+      if (!img.isConnected) return null;
+      try { const small = await invoke('get_edit_preview', { key: epGridKey(key) }); if (small) return URL.createObjectURL(new Blob([small], { type: 'image/jpeg' })); } catch (_) {}
+      let big = null;
+      try { big = await invoke('get_edit_preview', { key }); } catch (_) {}
+      if (!big) return '';
+      const blob = await epPutGrid(key, big).catch(() => null); // older render without a grid copy: make one once
+      return blob ? URL.createObjectURL(blob) : null;
+    });
+    if (url === '') { epThumbMiss.add(key); if (render && path !== state.openedPath) epEnqueue(path); return; }
     if (!url) return;
     const now = state.sidecars.get(path);
     if (!now || !now.edited || now.recipe !== sc.recipe) { URL.revokeObjectURL(url); return; } // edited/reset meanwhile
@@ -87,7 +113,7 @@
     let edited = 0;
     for (const p of paths) {
       const have = epThumbs.get(p);
-      if (have) { epThumbs.delete(p); URL.revokeObjectURL(have.url); }
+      if (have) { epThumbs.delete(p); URL.revokeObjectURL(have.url); epThumbMiss.delete(have.key); }
       const img = epCardImg(p);
       if (img) epThumbReloadOriginal(img);
       const sc = state.sidecars.get(p);
