@@ -84,7 +84,7 @@ try {
   await idle();
   const batchMs = Date.now() - t0;
   const stored = await page.evaluate(() => window.__libtestEditPreviews.size);
-  assert.equal(stored, 20, 'all 20 edited previews stored');
+  assert.equal(stored, 40, 'all 20 edited previews stored, each with its 480px grid copy');
   const rss1 = rssMB();
   const heapA = await page.evaluate(() => performance.memory && performance.memory.usedJSHeapSize);
   console.log(`batch of 20: ${batchMs} ms total (${Math.round(batchMs / 20)} ms/photo incl. first-boot of render instance); stored=${stored}; RSS ${rss0.toFixed(0)} -> ${rss1.toFixed(0)} MB`);
@@ -97,7 +97,7 @@ try {
   const rss2 = rssMB();
   const heapB = await page.evaluate(() => performance.memory && performance.memory.usedJSHeapSize);
   console.log(`second batch of 17 (new recipes): ${Date.now() - t1} ms; RSS ${rss1.toFixed(0)} -> ${rss2.toFixed(0)} MB; main JS heap ${(heapA / 1048576).toFixed(0)} -> ${(heapB / 1048576).toFixed(0)} MB`);
-  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), 37, 'new recipes get new cache keys');
+  assert.equal(await page.evaluate(() => window.__libtestEditPreviews.size), 74, 'new recipes get new cache keys (render + grid copy)');
   assert.ok(rss2 - rss1 < 250, `render instance memory plateaus (grew ${(rss2 - rss1).toFixed(0)} MB)`);
 
   // re-enqueue unchanged recipes -> no re-render (cache hit by key)
