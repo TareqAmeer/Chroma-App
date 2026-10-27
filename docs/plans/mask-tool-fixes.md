@@ -229,3 +229,11 @@ Done means a scan of the running app, not this list:
 | 2 Overlay | The overlay is composited after every mask and the curve, over the finished colour, in all six styles plus edge-only; auto-hides while an Adjust slider is held (overlay "…" menu, on by default); opacity 0.5 | Export goldens unchanged |
 | 3 Accuracy | No colour matting on AI results; SAM 2.1 staleness is checked against the photo item (RAW img swaps were discarding every SAM 2.1 encode); SAM 2.1 starts whenever EdgeSAM is already encoded; Rectangle uses SAM 2.1 (`sam2_box`, Rust) once ready; manual Paint/Erase is re-applied on top of each new AI result | **Farthest-point sampling rejected:** on your real scribble it picks the stray background points first (IoU 0.00–0.03 against 0.96 for the current even spacing). Even spacing kept. |
 | 4 Performance | Brush strokes use the shared interactive render tier (cheap frames plus one settle) instead of a full render every frame; no synchronous full render on stroke release or Clear prompts; the ~1.8 s matting per scribble is gone | Not done: slider-to-frame is bound by the full render cost (~160 ms at 26 MP; it already coalesces per frame, and the "two renders" are the designed interim plus settle). Refine edges is still on the main thread. Dirty-rectangle texture upload isn't done. All three are follow-ups. |
+
+### Live re-audit on the rebuilt app (BUILD 1.1027G)
+- Tool exclusivity: 192 clicks over all 24 click orders, never more than one tool pressed. Both AI mask entry points open on Scribble.
+- Erase on an AI mask after Scribble: zero AI calls; coverage .505 → .368.
+- Overlay with Exposure +50: the adjusted photo shows under the tint in every style. Hides while a slider is held.
+- SAM 2.1 now loads on the RAW photo. Your 257-point dog scribble re-run with `sam2_points`: **IoU 0.949, spill 5.1 % (was 52 %), missed 1.3 %**. Rectangle uses `sam2_box`, 100 % inside the box.
+- Stroke release 518–798 → 40 ms. Clear prompts 715–776 → 55 ms. Slider 160–191 → 121–159 ms.
+- Brush stroke frame time **unverified**: the machine was at load 250–330 from other processes during the run. Re-measure when idle.
