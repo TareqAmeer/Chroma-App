@@ -1,6 +1,6 @@
 let _cpuWorker,_cpuJobSeq=0;
 const _cpuJobs=new Map();
-function _cpuFns(){return{bakeDcpLUT,unsharpRGBA};} // the only functions the worker exposes
+function _cpuFns(){return{bakeDcpLUT,unsharpRGBA,_mskGuidedFilter,_boxFilterJS};} // the only functions the worker exposes
 function _cpuGetWorker(){
   if(_cpuWorker!==undefined)return _cpuWorker;      // null = permanently unavailable
   _cpuWorker=null;

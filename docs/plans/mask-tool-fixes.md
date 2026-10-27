@@ -237,3 +237,16 @@ Done means a scan of the running app, not this list:
 - SAM 2.1 now loads on the RAW photo. Your 257-point dog scribble re-run with `sam2_points`: **IoU 0.949, spill 5.1 % (was 52 %), missed 1.3 %**. Rectangle uses `sam2_box`, 100 % inside the box.
 - Stroke release 518–798 → 40 ms. Clear prompts 715–776 → 55 ms. Slider 160–191 → 121–159 ms.
 - Brush stroke frame time **unverified**: the machine was at load 250–330 from other processes during the run. Re-measure when idle.
+
+### Speed follow-up (2026-10-27, idle machine, load 3–7, Intel Iris Plus 645)
+Measured live in the desktop app on the RAW dog photo (one AI mask, borders on, preview 1622×2436).
+
+| | Before | After | What changed |
+|---|---|---|---|
+| Brush stroke, per frame | 172 ms (p90 203) | **95 ms** (p90 104) | Only the rows a dab touched are re-uploaded (`_mskPaintBand`); full and band uploads compared byte-for-byte: 0 differences |
+| Slider drag, per frame | 174 ms | **~105 ms** | Mask textures are no longer rebuilt on every render when nothing changed (per-renderer signature in `mskBuildTex`, ~22 ms each); desktop drafts render at 1 backing px per CSS px (the border composite went 90 → 30 ms) |
+| Refine edges | 841 ms frozen | **3 ms** on screen, ~0.6 s in the background | Guided filter runs on the pixel worker (`_mskGuidedFilter` via `_cpuRun`); the result is dropped if the mask changed meanwhile |
+
+What's left: a draft frame is still ~60 ms of GPU work that barely depends on output size. The
+main pass samples the 24 MP source texture (sharpen taps, mask gate), which is slow on this Intel GPU.
+The next step would be a reduced-resolution source copy for draft frames only.

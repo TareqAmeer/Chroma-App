@@ -163,7 +163,11 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
       px[idx]=erase?Math.min(b0,Math.max(255*(1-density),b0-d)):Math.max(b0,Math.min(255*density,b0+d));}continue;}
     px[idx]=erase?Math.min(cur,Math.max(255*(1-density),cur-add)):Math.max(cur,Math.min(255*density,cur+add));
   }
-  _mskTexDirty=true;
+  // Not _mskTexDirty: the live renderer re-uploads only this rectangle (see mskBuildTex).
+  _mskPaintVer++;
+  const R=_mskPaintRect;
+  if(R&&R.m===m&&R.px===px){R.x0=Math.min(R.x0,x0);R.y0=Math.min(R.y0,y0);R.x1=Math.max(R.x1,x1);R.y1=Math.max(R.y1,y1);}
+  else _mskPaintRect=R?{bad:true}:{m,px,x0,y0,x1,y1};
 }
 (function initMaskPaint(){
   const cv=document.getElementById('fx-canvas');if(!cv)return;

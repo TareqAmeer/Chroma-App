@@ -73,9 +73,31 @@ function mskDepthCoverageSource(renderer,m,w,h){
   return source;
 }
 let _mskTexBufs=null;
+// Every render used to re-interleave and re-upload both mask textures (~2x11MB at 2048px), even
+// when nothing about the masks had changed: ~20-30ms per slider frame. Each renderer now keeps a
+// signature of what its textures hold and skips the rebuild when it still matches. m.px is only
+// mutated in place by mskPaintAt, which sets _mskTexDirty; that flag bumps a version every
+// renderer sees (it used to be cleared by whichever renderer happened to build first).
+// Brush dabs bump _mskPaintVer and grow _mskPaintRect instead; the live renderer (FX) then
+// re-uploads only that band of rows rather than both full textures on every pointermove.
+let _mskTexVer=0,_mskPxSeq=0,_mskPaintVer=0,_mskPaintRect=null;const _mskPxIds=new WeakMap();
+function _mskTexSig(renderer,masks,w,h){
+  if(_mskTexDirty){_mskTexVer++;_mskTexDirty=false;_mskPaintRect={bad:true};}
+  const id=o=>{if(!o||typeof o!=='object')return 0;let v=_mskPxIds.get(o);if(!v){v=++_mskPxSeq;_mskPxIds.set(o,v);}return v;};
+  const ds=renderer._depthSnapshot;
+  let s=w+'x'+h+'|'+_mskTexVer+'|'+id(ds&&ds.data)+':'+(ds&&ds.version||0);
+  for(const m of masks.slice(0,MSK_MAX))s+='|'+m.type+':'+id(m.px)+':'+(m.mtW|0)+'x'+(m.mtH|0)+':'+(Number(m.refineFeather)||0)+':'+(Number(m.refineEdge)||0)
+    +':'+(m.invert?1:0)+':'+(m.origin||'')+':'+(m.depOn?1:0)+':'+(m.depLo!=null?m.depLo:'')+':'+(m.depHi!=null?m.depHi:'');
+  return s;
+}
 function mskBuildTex(renderer=FX,masks=fxState.masks){
   const ref=renderer._maskReferenceSize;
   const{w,h}=mskTexDims(renderer===FX?undefined:(ref&&ref.w||renderer.imgW),renderer===FX?undefined:(ref&&ref.h||renderer.imgH));
+  const sig=_mskTexSig(renderer,masks,w,h);
+  if(renderer.maskTx&&renderer.maskTx2&&renderer._mskTexSig===sig){
+    if(renderer._mskPaintVer===_mskPaintVer)return;
+    if(renderer===FX&&_mskTexBufs&&_mskTexBufs.owner===FX&&_mskTexBufs.w===w&&_mskTexBufs.h===h&&_mskPaintBand(renderer,masks,w,h)){renderer._mskPaintVer=_mskPaintVer;_mskPaintRect=null;return;}
+  }
   // Two w*h*4 staging buffers at 2048px are ~16MB each — reallocating both on every rebuild (a
   // brush stroke rebuilds constantly) churned 32MB per stroke sample. Cache and reuse; only
   // reallocate when the mask resolution itself changes, i.e. on a photo swap.
@@ -94,6 +116,26 @@ function mskBuildTex(renderer=FX,masks=fxState.masks){
   renderer.setMaskTex(buf,w,h);
   renderer.setMaskTex2(buf2,w,h);
   _mskTexDirty=false;
+  renderer._mskTexSig=_mskTexSig(renderer,masks,w,h); // after the build: mskEnsureDims may have swapped m.px
+  renderer._mskPaintVer=_mskPaintVer;_mskTexBufs.owner=renderer; // staging buffers now mirror THIS renderer's textures
+  if(renderer===FX)_mskPaintRect=null;
+}
+// Re-interleave and upload only the rows a brush stroke touched. Returns false (caller does a
+// full rebuild) unless exactly one unrefined brush mask was painted since FX's last upload.
+function _mskPaintBand(renderer,masks,w,h){
+  const R=_mskPaintRect;if(!R||R.bad)return false;
+  const i=masks.slice(0,MSK_MAX).indexOf(R.m);
+  if(i<0||R.m.px!==R.px||R.m.type!=='brush'||R.m.mtW!==w||R.m.mtH!==h)return false;
+  if((Number(R.m.refineFeather)||0)||(Number(R.m.refineEdge)||0))return false;
+  const y0=Math.max(0,R.y0),y1=Math.min(h-1,R.y1),x0=Math.max(0,R.x0),x1=Math.min(w-1,R.x1);if(y1<y0||x1<x0)return true;
+  const dst=i<4?_mskTexBufs.buf:_mskTexBufs.buf2,ch=i<4?i:i-4,px=R.px;
+  for(let y=y0;y<=y1;y++){const r=y*w;for(let x=x0;x<=x1;x++)dst[(r+x)*4+ch]=px[r+x];}
+  const gl=renderer.gl,bh=y1-y0+1;
+  gl.bindTexture(gl.TEXTURE_2D,i<4?renderer.maskTx:renderer.maskTx2);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true); // same flip as setMaskTex: image row y lands on texture row h-1-y
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,h-y0-bh,w,bh,gl.RGBA,gl.UNSIGNED_BYTE,dst.subarray(y0*w*4,(y1+1)*w*4));
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  return true;
 }
 // The authored mask remains in m.px. Feather and Edge always derive a cached effective
 // selection from that source, so slider movement never compounds edge changes into the mask.
@@ -182,7 +224,7 @@ function mskFixupBar(m){
 }
 function mskFixup(kind){
   const m=fxState.masks[mskSel];if(!m||!mskRefinementSupported(m))return;
-  if(kind==='refine'){fxHistoryPush();mskRefineEdges(m);fxUpdate();return;}
+  if(kind==='refine'){fxHistoryPush();mskRefineEdges(m).then(ok=>{if(ok)fxUpdate();});return;}
   if(kind==='spill'){fxHistoryPush();m.refineEdge=Math.max(-100,(Number(m.refineEdge)||0)-12);delete m._refineCache;_mskTexDirty=true;mskRebuild();fxUpdate();return;}
   if(kind==='add'){mskPaintErase=false;mskPaintErase_sync();if(!mskPaintMode)mskPaintToggle();else mskRebuild();}
 }
@@ -201,13 +243,30 @@ function mskRefinementReset(){
   mskRefinementSourceReset(m);_mskTexDirty=true;
   fxHistoryPush();mskRebuild();fxUpdate();
 }
+// The guided filter runs on the pixel worker (_cpuRun): six full-res box filters were ~0.8 s of
+// frozen UI per click. The result only lands if the mask was not edited while it ran.
+const _mskRefineJobs=new WeakMap();
 function mskRefineEdges(m){
-  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return;
-  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;if(!img)return;
+  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return Promise.resolve(false);
+  if(_mskRefineJobs.has(m))return _mskRefineJobs.get(m);
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;if(!img)return Promise.resolve(false);
   mskEnsureDims(m);
-  const w=m.mtW,h=m.mtH,d=mskSourceData(w,h,img);if(!d)return;
+  const w=m.mtW,h=m.mtH,d=mskSourceData(w,h,img);if(!d)return Promise.resolve(false);
+  const srcPx=m.px,dc=new Uint8ClampedArray(d),pc=new Uint8ClampedArray(srcPx); // copies: the photo cache and the live mask stay readable here
+  const job=_cpuRun('_mskGuidedFilter',[dc,pc,w,h],[dc.buffer,pc.buffer]).then(out=>{
+    if(m.px!==srcPx||m.mtW!==w||m.mtH!==h)return false;
+    m.px=out;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
+    if(typeof fxHistoryPush==='function')fxHistoryPush();
+    return true;
+  }).catch(e=>{console.warn('Refine edges failed',e);return false;}).finally(()=>_mskRefineJobs.delete(m));
+  _mskRefineJobs.set(m,job);
+  return job;
+}
+// Pure guided filter (photo luminance guides the mask), radius 8. Runs inside the pixel worker,
+// so it may only call other worker-exposed functions (_boxFilterJS).
+function _mskGuidedFilter(d,px,w,h){
   const I=new Float32Array(w*h),P=new Float32Array(w*h);
-  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(m.px[j]||0)/255;}
+  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(px[j]||0)/255;}
   const R=8,EPS=1e-4;
   const meanI=_boxFilterJS(I,w,h,R),meanP=_boxFilterJS(P,w,h,R),IP=new Float32Array(w*h),II=new Float32Array(w*h);
   for(let j=0;j<w*h;j++){IP[j]=I[j]*P[j];II[j]=I[j]*I[j];}
@@ -215,8 +274,7 @@ function mskRefineEdges(m){
   for(let j=0;j<w*h;j++){const varI=corrII[j]-meanI[j]*meanI[j],covIP=corrIP[j]-meanI[j]*meanP[j];a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];}
   const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R),out=new Uint8ClampedArray(w*h);
   for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
-  m.px=out;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
-  if(typeof fxHistoryPush==='function')fxHistoryPush();
+  return out;
 }
 // Box filter via a per-row then per-column RUNNING SUM — genuinely O(w*h) regardless of radius,
 // which is what keeps the guided filter below responsive at mskTexDims (2048px) resolution.

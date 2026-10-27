@@ -193,6 +193,9 @@ function renderPreview(){
   // Phones: a mid-drag draft only needs ~1.5x (2.25 vs 9 Mpx at dpr 3 on a 900px preview); the settle frame
   // (_fxPreviewInteracting false) restores the full dpr above. Desktop / non-constrained devices untouched.
   if(_fxPreviewInteracting&&!deskx&&!_curIsVideoDraft()&&isMemoryConstrained())dpr=Math.min(dpr,1.5);
+  // Desktop: the mid-drag draft renders at 1 backing px per CSS px (a quarter of the pixels at dpr 2). Both the
+  // grade and the bordered composite scale with pixel count; the 180ms settle frame restores full density.
+  if(_fxPreviewInteracting&&deskx&&!_curIsVideoDraft()&&!window.__fxNoDraftScale)dpr=Math.min(dpr,1);
   // Full-res preview: the dpr/4800px caps above exist to bound GPU cost for the DEFAULT preview;
   // when the user explicitly opts into Full res, honor it at every zoom level (still clamped to
   // the source's own resolution). Framed/matted previews stay on this whole-frame path so their

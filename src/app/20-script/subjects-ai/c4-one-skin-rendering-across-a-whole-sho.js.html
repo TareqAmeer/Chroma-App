@@ -329,7 +329,7 @@ function _mskRebuildInner(){
       +'<div class="fx-row" title="Caps how strongly a stroke paints; while erasing it is the floor the stroke erases down to (100 erases fully)"><div class="fx-label" id="msk-density-label">'+(_bm==='erase'?'Erase floor':'Density')+'</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>';
       shapeMore+=mskFixupBar(m)+mskRefineControls(m)
        +'<div class="btn-row">'+(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
-      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>';
+      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']).then(ok=>{if(ok)fxUpdate();})" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>';
       shape+='<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button></div>'
 ;
   }
