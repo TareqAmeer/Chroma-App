@@ -218,3 +218,14 @@ Done means a scan of the running app, not this list:
   in the real desktop app (screenshot).
 - All Phase 4 budgets pass in `perf:test`.
 - Fresh-context gap review before closing.
+
+---
+
+## Status after implementation (2026-10-27)
+
+| Phase | Shipped | Deviations from the plan, with the reason |
+|---|---|---|
+| 1 Tool state | One exclusive tool set (`mskToolActive`/`mskToolSync`); arming Scribble/Rectangle turns the brush off and vice versa; pointer handlers refuse a scribble while the brush is on; Objects opens on Scribble; `mskAiTapToggle(true)` always means Scribble (a leftover Rectangle mode no longer leaks into new AI masks); Erase shares the active slot's settings; default size 8 | Clicking Erase again returns to Paint instead of turning the brush off. That's the existing CHR-275 behaviour, and `mask_raster.mjs` asserts it. |
+| 2 Overlay | The overlay is composited after every mask and the curve, over the finished colour, in all six styles plus edge-only; auto-hides while an Adjust slider is held (overlay "…" menu, on by default); opacity 0.5 | Export goldens unchanged |
+| 3 Accuracy | No colour matting on AI results; SAM 2.1 staleness is checked against the photo item (RAW img swaps were discarding every SAM 2.1 encode); SAM 2.1 starts whenever EdgeSAM is already encoded; Rectangle uses SAM 2.1 (`sam2_box`, Rust) once ready; manual Paint/Erase is re-applied on top of each new AI result | **Farthest-point sampling rejected:** on your real scribble it picks the stray background points first (IoU 0.00–0.03 against 0.96 for the current even spacing). Even spacing kept. |
+| 4 Performance | Brush strokes use the shared interactive render tier (cheap frames plus one settle) instead of a full render every frame; no synchronous full render on stroke release or Clear prompts; the ~1.8 s matting per scribble is gone | Not done: slider-to-frame is bound by the full render cost (~160 ms at 26 MP; it already coalesces per frame, and the "two renders" are the designed interim plus settle). Refine edges is still on the main thread. Dirty-rectangle texture upload isn't done. All three are follow-ups. |
