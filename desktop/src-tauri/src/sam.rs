@@ -840,17 +840,40 @@ pub fn sam2_decode_points(
     if points.is_empty() {
         return Err("SAM2 decode: no points given".into());
     }
+    let prompts: Vec<((f32, f32), f32)> = points
+        .iter()
+        .map(|&(x, y, positive)| ((x, y), if positive { 1.0 } else { 0.0 }))
+        .collect();
+    sam2_decode_prompt(embed, &prompts)
+}
+
+/// SAM 2.1 rectangle prompt: corner labels 2 (top-left) and 3 (bottom-right), the same convention
+/// as EdgeSAM's decode_box. Measured on the reference dog photo: IoU 0.974 vs EdgeSAM's 0.946
+/// (docs/plans/mask-tool-fixes.md F4).
+pub fn sam2_decode_box(embed: &Sam2Embedding, x1: f32, y1: f32, x2: f32, y2: f32) -> Result<Vec<u8>, String> {
+    if ![x1, y1, x2, y2].iter().all(|v| v.is_finite()) {
+        return Err("SAM2 box decode: coordinates must be finite".into());
+    }
+    let (left, right) = (x1.min(x2).clamp(0.0, 1.0), x1.max(x2).clamp(0.0, 1.0));
+    let (top, bottom) = (y1.min(y2).clamp(0.0, 1.0), y1.max(y2).clamp(0.0, 1.0));
+    if right - left < 1e-6 || bottom - top < 1e-6 {
+        return Err("SAM2 box decode: drag a rectangle with nonzero width and height".into());
+    }
+    sam2_decode_prompt(embed, &[((left, top), 2.0), ((right, bottom), 3.0)])
+}
+
+fn sam2_decode_prompt(embed: &Sam2Embedding, prompts: &[((f32, f32), f32)]) -> Result<Vec<u8>, String> {
     // Point coords live in the DIRECT-1024-square-resize pixel space: (x/orig_w, y/orig_h)*1024
     // — independent x/y scale factors, since the encoder resize distorts aspect ratio rather
     // than preserving it (see Meta's SAM2Transforms.transform_coords).
-    let mut coords = Vec::with_capacity(points.len() * 2);
-    let mut labels = Vec::with_capacity(points.len());
-    for &(nx, ny, positive) in points {
+    let mut coords = Vec::with_capacity(prompts.len() * 2);
+    let mut labels = Vec::with_capacity(prompts.len());
+    for &((nx, ny), label) in prompts {
         coords.push(nx.clamp(0.0, 1.0) * SAM_SIZE as f32);
         coords.push(ny.clamp(0.0, 1.0) * SAM_SIZE as f32);
-        labels.push(if positive { 1.0 } else { 0.0 });
+        labels.push(label);
     }
-    let n = points.len() as i64;
+    let n = prompts.len() as i64;
 
     let sess = sam2_decoder()?;
     let mut outputs = run_session(

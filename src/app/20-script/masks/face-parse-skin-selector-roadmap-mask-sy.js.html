@@ -47,6 +47,7 @@ async function mskFaceSelectSkin(){
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
   m.aiPoints=[];delete m.aiBox;const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
+  if(m._aiBase)m._aiBase=null; // nothing to carry manual edits over from
   delete m._subjPending;   // a fresh scribble replaces whatever Find result was pending confirmation
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }

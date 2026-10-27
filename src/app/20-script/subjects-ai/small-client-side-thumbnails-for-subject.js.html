@@ -137,7 +137,8 @@ async function _subjRecordSighting(name,m,confirmed){
 /// and subjApplyLowConf's "use it anyway" path, so the two can't drift on what "applying a Find"
 /// actually does.
 function _subjInstallFindResult(m,s,header,mask){
-  m.px=Uint8ClampedArray.from(_samRefineMask(mask,header.width,header.height));
+  m.px=Uint8ClampedArray.from(mask); // model edge only — see samRunPoints on why no colour matting
+  if(m._aiBase)m._aiBase=null;
   m.mtW=header.width;m.mtH=header.height;
   // The scribble points that produced any PREVIOUS selection no longer describe this raster —
   // leaving them would make the next stroke resubmit a contradictory point set and appear to

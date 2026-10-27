@@ -551,6 +551,24 @@ fn sam_points(token: String, points: Vec<SamPointIn>) -> Result<tauri::ipc::Resp
 /// Runs an EdgeSAM rectangle-prompt query against the EdgeSAM cache. Rectangle labels are not
 /// part of the verified SAM2 contract, so this command intentionally never uses SAM2_EMBED.
 #[tauri::command(async)]
+/// SAM 2.1 rectangle prompt against the SAM2_EMBED cache — same framed response as sam_box.
+fn sam2_box(token: String, rect: SamBoxIn) -> Result<tauri::ipc::Response, String> {
+    let guard = SAM2_EMBED.lock().unwrap();
+    let cache = guard.as_ref().ok_or("sam2_box: no photo encoded yet — call sam2_encode first")?;
+    if cache.token != token {
+        return Err("sam2_box: the encoded photo has changed — re-encode before selecting".into());
+    }
+    let mask = sam::sam2_decode_box(&cache.embedding, rect.x1, rect.y1, rect.x2, rect.y2)?;
+    let header = SamPointResult { width: cache.embedding.orig_w, height: cache.embedding.orig_h };
+    let header_bytes = serde_json::to_vec(&header).map_err(|e| format!("sam2_box header: {e}"))?;
+    let mut out = Vec::with_capacity(4 + header_bytes.len() + mask.len());
+    out.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.extend_from_slice(&mask);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+#[tauri::command(async)]
 fn sam_box(token: String, rect: SamBoxIn) -> Result<tauri::ipc::Response, String> {
     let guard = SAM_EMBED.lock().unwrap();
     let cache = guard.as_ref().ok_or("sam_box: no photo encoded yet — call sam_encode first")?;
@@ -3655,6 +3673,7 @@ fn main() {
             catalog::clear_root_cache,
             sam2_encode,
             sam2_points,
+            sam2_box,
             faceparse_run,
             depth_run,
             landscape_run,

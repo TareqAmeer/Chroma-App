@@ -71,11 +71,11 @@ function _mskMigrate(m){
 const _MSK_AI_PROVENANCE_VERSION=1,_MSK_AI_PROMPT_SCHEMA_VERSION=1,_MSK_SKY_SEED_VERSION='sky-grid-v1';
 function _mskNormalizeAIProvenance(p){
   if(!p||typeof p!=='object'||p.schemaVersion!==_MSK_AI_PROVENANCE_VERSION)return null;
-  const backend=['sam_points','sam2_points','sam_box'].includes(p.backend)?p.backend:null;
+  const backend=['sam_points','sam2_points','sam_box','sam2_box'].includes(p.backend)?p.backend:null;
   const modelId=p.modelId==='edge-sam'||p.modelId==='sam2-hiera-tiny'?p.modelId:null;
   const source=p.sourceLocation&&p.sourceLocation.kind==='path'&&typeof p.sourceLocation.value==='string'?{kind:'path',value:p.sourceLocation.value}:null;
   return{schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:p.promptSchemaVersion===_MSK_AI_PROMPT_SCHEMA_VERSION?_MSK_AI_PROMPT_SCHEMA_VERSION:null,
-    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
+    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(['sam2_points','sam2_box'].includes(backend)&&modelId==='sam2-hiera-tiny'))?modelId:null,
     modelVersion:null,artifactDigest:null,sourceLocation:source,skySeedAlgorithmVersion:p.skySeedAlgorithmVersion===_MSK_SKY_SEED_VERSION?_MSK_SKY_SEED_VERSION:null,
     recordedAt:typeof p.recordedAt==='string'?p.recordedAt:null};
 }
@@ -83,7 +83,7 @@ function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
-    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
+    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':['sam2_points','sam2_box'].includes(backend)?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
     modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
     skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
 }

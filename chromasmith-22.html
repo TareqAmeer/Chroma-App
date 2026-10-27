@@ -7569,7 +7569,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1027D';
+const BUILD='1.1027E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16580,11 +16580,11 @@ function _mskMigrate(m){
 const _MSK_AI_PROVENANCE_VERSION=1,_MSK_AI_PROMPT_SCHEMA_VERSION=1,_MSK_SKY_SEED_VERSION='sky-grid-v1';
 function _mskNormalizeAIProvenance(p){
   if(!p||typeof p!=='object'||p.schemaVersion!==_MSK_AI_PROVENANCE_VERSION)return null;
-  const backend=['sam_points','sam2_points','sam_box'].includes(p.backend)?p.backend:null;
+  const backend=['sam_points','sam2_points','sam_box','sam2_box'].includes(p.backend)?p.backend:null;
   const modelId=p.modelId==='edge-sam'||p.modelId==='sam2-hiera-tiny'?p.modelId:null;
   const source=p.sourceLocation&&p.sourceLocation.kind==='path'&&typeof p.sourceLocation.value==='string'?{kind:'path',value:p.sourceLocation.value}:null;
   return{schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:p.promptSchemaVersion===_MSK_AI_PROMPT_SCHEMA_VERSION?_MSK_AI_PROMPT_SCHEMA_VERSION:null,
-    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(backend==='sam2_points'&&modelId==='sam2-hiera-tiny'))?modelId:null,
+    backend,modelId:modelId&&((['sam_points','sam_box'].includes(backend)&&modelId==='edge-sam')||(['sam2_points','sam2_box'].includes(backend)&&modelId==='sam2-hiera-tiny'))?modelId:null,
     modelVersion:null,artifactDigest:null,sourceLocation:source,skySeedAlgorithmVersion:p.skySeedAlgorithmVersion===_MSK_SKY_SEED_VERSION?_MSK_SKY_SEED_VERSION:null,
     recordedAt:typeof p.recordedAt==='string'?p.recordedAt:null};
 }
@@ -16592,7 +16592,7 @@ function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
-    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':backend==='sam2_points'?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
+    backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':['sam2_points','sam2_box'].includes(backend)?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
     modelVersion:null,artifactDigest:null,sourceLocation:sourcePath?{kind:'path',value:sourcePath}:null,
     skySeedAlgorithmVersion:skySeed?_MSK_SKY_SEED_VERSION:null,recordedAt:new Date().toISOString()};
 }
@@ -17084,25 +17084,37 @@ function _mskAiToolApply(){
 // never awaited by the UI — samRunPoints() below just checks which token is ready at query time
 // and prefers SAM 2.1 once it lands. No user-visible mode toggle, same as the RAW refine.
 let _sam2Token=null,_sam2Encoding=false;
+// The photo an embedding belongs to is the library ITEM, not its current img object: a RAW photo swaps
+// it.img for a sharper decode (half -> full tier, NR) while the encode runs, which made the old
+// "same img object?" check discard every SAM 2.1 encode on RAW files, so scribbles never used it.
+// Photo switches call samInvalidate(), so item identity is the right staleness test.
+function _samCurOwner(){return (typeof curItem==='function'&&curItem())||fxWork||fxImg;}
+function _samRgb(img){const{w,h}=samInputDims();const d=mskSourceData(w,h,img);const rgb=new Uint8Array(w*h*3);
+  for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}return {rgb,w,h};}
 async function samEnsureEncoded(opts={}){
-  const wantsSam2=opts.preferredBackend==='sam2_points';
-  if(!window.__TAURI__||_samEncoding||(wantsSam2?_sam2Token:_samToken))return;
+  const wantsSam2=/^sam2_/.test(opts.preferredBackend||'');
+  if(!window.__TAURI__)return;
+  // EdgeSAM already encoded but SAM 2.1 never landed (failed, or an earlier caller skipped it): start it now.
+  if(!wantsSam2&&_samToken&&!_sam2Token&&!_sam2Encoding&&!_samEncoding&&!opts.noBackgroundRefine){
+    const img0=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+    if(img0){const r=_samRgb(img0);samEnsureEncoded2(img0,r.rgb,r.w,r.h);}
+    return;
+  }
+  if(_samEncoding||(wantsSam2?_sam2Token:_samToken))return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
+  const owner=_samCurOwner();
   _samEncoding=true;
   const endActivity=opts.silent?()=>{}:fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
   if(!opts.silent&&typeof toast==='function')toast('Preparing AI Select…',true);
   try{
-    const{w,h}=samInputDims();
-    const d=mskSourceData(w,h,img);
-    const rgb=new Uint8Array(w*h*3);
-    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const{rgb,w,h}=_samRgb(img);
     const token='sam-'+Date.now()+'-'+Math.random().toString(36).slice(2);
     if(!wantsSam2&&!_samToken)await _samFramedInvoke('sam_encode',{token,width:w,height:h},rgb);
     // The user may have switched photos while this awaited (a filmstrip click, an arrow key) —
     // re-check identity before caching the token, or a slow encode of the OUTGOING photo would
     // land after the switch and get used for the new one.
-    const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
+    const stillCurrent=_samCurOwner()===owner;
     if(stillCurrent){
       if(!wantsSam2&&!_samToken)_samToken=token;
       if(wantsSam2)await samEnsureEncoded2(img,rgb,w,h,{silent:true,noUpgrade:true,throwOnError:true});
@@ -17119,7 +17131,7 @@ async function samEnsureEncoded(opts={}){
 async function samEnsureEncoded2(img,rgb,w,h,opts={}){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
   _sam2Encoding=true;
-  const item=typeof curItem==='function'?curItem():null;
+  const item=typeof curItem==='function'?curItem():null,owner=_samCurOwner();
   const endActivity=opts.silent?()=>{}:fxPhotoActivity(item&&item.img===img?item:null,'Improving AI Select…');
   if(!opts.silent&&fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild(); // show the spinner
   try{
@@ -17127,8 +17139,7 @@ async function samEnsureEncoded2(img,rgb,w,h,opts={}){
     await _samFramedInvoke('sam2_encode',{token,width:w,height:h},rgb);
     // Same stale-completion guard as samEnsureEncoded — this encode can take a while, plenty of
     // time for the user to have moved on to a different photo before it lands.
-    const stillCurrent=((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg)===img;
-    if(!stillCurrent)return;
+    if(_samCurOwner()!==owner)return;
     _sam2Token=token;
     // Silently upgrade the current mask in place if it already has a scribble — matches the RAW
     // refine's "gets better without asking" UX rather than requiring a fresh stroke.
@@ -17348,25 +17359,28 @@ async function samRunPoints(m,opts={}){
     await samEnsureEncoded({silent:!!opts.silent,noBackgroundRefine:!!opts.detached,preferredBackend:opts.preferredBackend,throwOnError:!!opts.preferredBackend});
     // A semantic-copy candidate is detached from live masks. If another encode was already
     // underway, wait for this photo's token instead of treating the in-flight flag as ready.
-    if(opts.detached&&(_samEncoding||opts.preferredBackend==='sam2_points'&&_sam2Encoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)){
+    if(opts.detached&&(_samEncoding||/^sam2_/.test(opts.preferredBackend||'')&&_sam2Encoding)&&!(/^sam2_/.test(opts.preferredBackend||'')?_sam2Token:_samToken)){
       const deadline=Date.now()+30000;
-      while((_samEncoding||opts.preferredBackend==='sam2_points'&&_sam2Encoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+      while((_samEncoding||/^sam2_/.test(opts.preferredBackend||'')&&_sam2Encoding)&&!(/^sam2_/.test(opts.preferredBackend||'')?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
     }
-    if(opts.detached&&opts.preferredBackend&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&!_samEncoding){
+    if(opts.detached&&opts.preferredBackend&&!(/^sam2_/.test(opts.preferredBackend||'')?_sam2Token:_samToken)&&!_samEncoding){
       await samEnsureEncoded({silent:true,noBackgroundRefine:true,preferredBackend:opts.preferredBackend,throwOnError:true});
       const deadline=Date.now()+30000;
-      while((opts.preferredBackend==='sam2_points'?_sam2Encoding:_samEncoding)&&!(opts.preferredBackend==='sam2_points'?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+      while((/^sam2_/.test(opts.preferredBackend||'')?_sam2Encoding:_samEncoding)&&!(/^sam2_/.test(opts.preferredBackend||'')?_sam2Token:_samToken)&&curItem()===item&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
     }
     if(opts.expectedItem&&curItem()!==opts.expectedItem)return{ok:false,error:'Photo changed during mask recomputation'};
-    const requiredSam2=opts.preferredBackend==='sam2_points';
+    const requiredSam2=/^sam2_/.test(opts.preferredBackend||'');
     if(requiredSam2?!_sam2Token:!_samToken){
       const msg=opts.preferredBackend?'The saved '+(requiredSam2?'SAM 2.1':'EdgeSAM')+' backend is unavailable for this photo':'AI Select is not ready yet — try again in a moment';
       if(!opts.silent){toast(msg);_samLastError=msg;mskRebuild();}return{ok:false,error:msg};
     }
     const points=hasPoints?samSubsamplePoints(m.aiPoints).map(p=>({x:p.nx,y:p.ny,positive:p.positive})):null;
-    const useSam2=!aiBox&&(opts.preferredBackend==='sam2_points'||(!opts.preferredBackend&&!!_sam2Token));
-    const cmd=aiBox?'sam_box':(useSam2?'sam2_points':'sam_points');
-    const payload=aiBox?{token:_samToken,rect:{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}}:{token:useSam2?_sam2Token:_samToken,points};
+    // SAM 2.1 for scribbles AND rectangles once its encode has landed (measured clearly more accurate, F4);
+    // a saved recipe that names a backend keeps it.
+    const useSam2=opts.preferredBackend?/^sam2_/.test(opts.preferredBackend):!!_sam2Token;
+    const cmd=aiBox?(useSam2?'sam2_box':'sam_box'):(useSam2?'sam2_points':'sam_points');
+    const rect=aiBox?{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}:null;
+    const payload=aiBox?{token:useSam2?_sam2Token:_samToken,rect}:{token:useSam2?_sam2Token:_samToken,points};
     const buf=await window.__TAURI__.core.invoke(cmd,payload);
     if(job&&job.cancelled)return{ok:false,error:'Cancelled',cancelled:true};
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
@@ -17379,15 +17393,23 @@ async function samRunPoints(m,opts={}){
       const msg='AI Select: mask size mismatch — try scribbling again';
       if(!opts.silent){log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();}return{ok:false,error:msg};
     }
-    const refined=_samRefineMask(mask,header.width,header.height);
+    // The model's own soft edge, NOT _samRefineMask's colour matting: measured on a dark dog against a dark wall,
+    // matting grew the selection from 6.6% to 54.6% outside the subject and cost ~1.8 s per scribble
+    // (docs/plans/mask-tool-fixes.md F2). Edge snapping stays available on demand via Refine edges.
+    const refined=mask;
     const resolvedMask=m.aiSelectionMode==='background'?_samComplementSubjectMask(refined):refined;
     if(!resolvedMask){
       const msg='AI Background could not be created because the subject mask is empty or covers the entire photo';
       if(!opts.silent){log(msg,'warn');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();}
       return{ok:false,error:msg};
     }
-    m.px=Uint8ClampedArray.from(resolvedMask);m.mtW=header.width;m.mtH=header.height;
-    _mskRecordAIProvenance(m,item,aiBox?'sam_box':(useSam2?'sam2_points':'sam_points'),m.origin==='sky');
+    // Manual Paint/Erase on an AI mask survives the next scribble: the brush's net change since the last AI
+    // result (px - _aiBase) is re-applied on top of the new result instead of being overwritten.
+    const _base=m._aiBase,_prev=m.px,_out=Uint8ClampedArray.from(resolvedMask);
+    if(_base&&_prev&&_base.length===_prev.length&&_prev.length===_out.length){for(let i=0;i<_out.length;i++){const d=_prev[i]-_base[i];if(d)_out[i]=_out[i]+d;}}
+    Object.defineProperty(m,'_aiBase',{value:Uint8ClampedArray.from(resolvedMask),writable:true,enumerable:false,configurable:true});
+    m.px=_out;m.mtW=header.width;m.mtH=header.height;
+    _mskRecordAIProvenance(m,item,cmd,m.origin==='sky');
     if(opts.detached){m.refineFeather=detachedRefinement.feather;m.refineEdge=detachedRefinement.edge;}
     else{m.refineFeather=0;m.refineEdge=0;}
     delete m._refineCache;
@@ -17661,7 +17683,8 @@ async function _subjRecordSighting(name,m,confirmed){
 /// and subjApplyLowConf's "use it anyway" path, so the two can't drift on what "applying a Find"
 /// actually does.
 function _subjInstallFindResult(m,s,header,mask){
-  m.px=Uint8ClampedArray.from(_samRefineMask(mask,header.width,header.height));
+  m.px=Uint8ClampedArray.from(mask); // model edge only — see samRunPoints on why no colour matting
+  if(m._aiBase)m._aiBase=null;
   m.mtW=header.width;m.mtH=header.height;
   // The scribble points that produced any PREVIOUS selection no longer describe this raster —
   // leaving them would make the next stroke resubmit a contradictory point set and appear to
@@ -18410,6 +18433,7 @@ async function mskFaceSelectSkin(){
 function mskAiPointsClear(){
   const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
   m.aiPoints=[];delete m.aiBox;const{w,h}=samInputDims();m.px=new Uint8ClampedArray(w*h);m.mtW=w;m.mtH=h;
+  if(m._aiBase)m._aiBase=null; // nothing to carry manual edits over from
   delete m._subjPending;   // a fresh scribble replaces whatever Find result was pending confirmation
   _mskTexDirty=true;_samLastError=null;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
 }
@@ -18585,10 +18609,10 @@ function _mskPortableIsUnsupported(m){
 function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
-  const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';
+  const savedModel=/^sam2_/.test(savedBackend||'')?'SAM 2.1':'EdgeSAM',savedIsBox=savedBackend==='sam_box'||savedBackend==='sam2_box';
   const hasBox=!!(m&&m.aiBox&&_samNormalizeBox(m.aiBox));
-  if(savedBackend==='sam_box'&&!hasBox)return{ok:false,error:'Saved EdgeSAM box provenance cannot be replayed because this mask has no valid rectangle prompt'};
-  if(hasBox&&savedBackend&&savedBackend!=='sam_box')return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
+  if(savedIsBox&&!hasBox)return{ok:false,error:'Saved '+savedModel+' box provenance cannot be replayed because this mask has no valid rectangle prompt'};
+  if(hasBox&&savedBackend&&!savedIsBox)return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
   if(m.origin==='sky'){
     if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
     const refinement={feather:m.refineFeather,edge:m.refineEdge};

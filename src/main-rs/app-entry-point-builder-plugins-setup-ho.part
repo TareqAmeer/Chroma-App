@@ -406,6 +406,7 @@ fn main() {
             catalog::clear_root_cache,
             sam2_encode,
             sam2_points,
+            sam2_box,
             faceparse_run,
             depth_run,
             landscape_run,

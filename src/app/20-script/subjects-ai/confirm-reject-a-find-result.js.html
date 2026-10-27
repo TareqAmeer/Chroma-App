@@ -170,10 +170,10 @@ function _mskPortableIsUnsupported(m){
 function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
-  const savedModel=savedBackend==='sam2_points'?'SAM 2.1':'EdgeSAM';
+  const savedModel=/^sam2_/.test(savedBackend||'')?'SAM 2.1':'EdgeSAM',savedIsBox=savedBackend==='sam_box'||savedBackend==='sam2_box';
   const hasBox=!!(m&&m.aiBox&&_samNormalizeBox(m.aiBox));
-  if(savedBackend==='sam_box'&&!hasBox)return{ok:false,error:'Saved EdgeSAM box provenance cannot be replayed because this mask has no valid rectangle prompt'};
-  if(hasBox&&savedBackend&&savedBackend!=='sam_box')return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
+  if(savedIsBox&&!hasBox)return{ok:false,error:'Saved '+savedModel+' box provenance cannot be replayed because this mask has no valid rectangle prompt'};
+  if(hasBox&&savedBackend&&!savedIsBox)return{ok:false,error:'This rectangle prompt is incompatible with the saved '+savedModel+' model intent'};
   if(m.origin==='sky'){
     if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before sky mask recomputation'};
     const refinement={feather:m.refineFeather,edge:m.refineEdge};
