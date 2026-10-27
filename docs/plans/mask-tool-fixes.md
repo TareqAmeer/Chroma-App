@@ -247,6 +247,10 @@ Measured live in the desktop app on the RAW dog photo (one AI mask, borders on, 
 | Slider drag, per frame | 174 ms | **~105 ms** | Mask textures are no longer rebuilt on every render when nothing changed (per-renderer signature in `mskBuildTex`, ~22 ms each); desktop drafts render at 1 backing px per CSS px (the border composite went 90 → 30 ms) |
 | Refine edges | 841 ms frozen | **3 ms** on screen, ~0.6 s in the background | Guided filter runs on the pixel worker (`_mskGuidedFilter` via `_cpuRun`); the result is dropped if the mask changed meanwhile |
 
-What's left: a draft frame is still ~60 ms of GPU work that barely depends on output size. The
-main pass samples the 24 MP source texture (sharpen taps, mask gate), which is slow on this Intel GPU.
-The next step would be a reduced-resolution source copy for draft frames only.
+**Reduced-resolution draft source: tried and dropped.** A 1000×1500 GPU-halved copy of the 24 MP
+source (built in 28 ms) rendered a 469×704 draft in 32 ms against 33 ms from the full source. The
+earlier "~60 ms fixed cost" was mostly the per-render mask texture upload, which the signature cache
+had already removed. The copy also shifted the sharpened draft by a mean of 4.7 levels (max 88), so
+the frame would visibly change when it settles. It isn't worth that. Per slider frame now:
+bordered composite ~30 ms (drawImage of the WebGL canvas waits for the GPU), render ~16 ms JS plus GPU,
+overlay and zoom refit ~6 ms.
