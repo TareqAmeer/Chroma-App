@@ -101,7 +101,7 @@ function mskPaintErase_sync(){const mode=mskBrushModeActive(),tool=mskToolActive
   const tt=document.getElementById('msk-tool-title');if(tt)tt.textContent=mode==='erase'?'Eraser':'Brush';
   const dl=document.getElementById('msk-density-label');if(dl)dl.textContent=mode==='erase'?'Erase floor':'Density';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',mode==='erase');}
-function mskPaintErase_toggle(){if(mskPaintMode&&mskPaintErase)mskPaintStop();else mskBrushSlotSelect('E');}
+function mskPaintErase_toggle(){mskBrushSlotSelect(mskPaintMode&&mskPaintErase?mskBrushSlot:'E');} // Erase is a brush mode: clicking it again returns to Paint (CHR-275)
 function mskPaintButton(){if(mskPaintMode&&!mskPaintErase)mskPaintStop();else mskBrushSlotSelect(mskBrushSlot);}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
