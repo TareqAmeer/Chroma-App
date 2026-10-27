@@ -7569,7 +7569,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1027B';
+const BUILD='1.1027C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17059,34 +17059,24 @@ function _samFramedInvoke(cmd,jsonObj,payload){
   return window.__TAURI__.core.invoke(cmd,framed);
 }
 function mskAiTapToggle(force){
-  if(force!==undefined)mskAiTapMode=force;
+  if(force!==undefined){mskAiTapMode=force;if(force)mskAiPromptMode='scribble';}
   else if(mskAiPromptMode==='scribble'&&mskAiTapMode)mskAiTapMode=false;
   else{mskAiPromptMode='scribble';mskAiTapMode=true;}
-  // ⚠️ The button had TWO competing representations of "armed" and they drifted apart, which is
-  // what made it appear stuck: mskRebuild renders it with bsec/bgh plus a "✓" label, while this
-  // function only ever flipped a different class ('on') and never re-rendered. Clicking it changed
-  // mskAiTapMode but left the bsec class and the ✓ from the last rebuild, so the button kept
-  // showing armed no matter the real state. Drive every visual from mskAiTapMode here — and do it
-  // WITHOUT calling mskRebuild, which itself calls back into this function.
-  if(FX.cv&&mskAiPromptMode==='scribble')FX.cv.style.cursor=mskAiTapMode?'none':(mskPaintMode?'none':''); // the round ring replaces the pointer
-  const b=document.getElementById('btn-msk-ai-tap');
-  if(b){
-    b.classList.toggle('on',mskAiTapMode);
-    b.classList.toggle('bsec',mskAiTapMode);
-    b.classList.toggle('bgh',!mskAiTapMode);
-    b.setAttribute('aria-pressed',String(mskAiTapMode&&mskAiPromptMode==='scribble'));
-    b.innerHTML=icon('wand',14)+(mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select');
-  }
-  if(FX.cv)FX.cv.style.cursor=mskAiTapMode?'crosshair':'';
-  mskCursorSync();
-  if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
+  _mskAiToolApply();
 }
 function mskAiBoxToggle(){
-  mskAiPromptMode=mskAiPromptMode==='box'?'scribble':'box';mskAiTapMode=mskAiPromptMode==='box';
-  const b=document.getElementById('btn-msk-ai-box');if(b){b.classList.toggle('bsec',mskAiPromptMode==='box');b.classList.toggle('bgh',mskAiPromptMode!=='box');b.setAttribute('aria-pressed',String(mskAiPromptMode==='box'));b.textContent=mskAiPromptMode==='box'?'Rectangle mode — drag on photo':'Rectangle select';}
-  const s=document.getElementById('btn-msk-ai-tap');if(s){s.classList.toggle('bsec',mskAiPromptMode==='scribble'&&mskAiTapMode);s.classList.toggle('bgh',mskAiPromptMode!=='scribble'||!mskAiTapMode);}
-  mskCursorSync();
-  if(FX.cv)FX.cv.style.cursor=mskAiPromptMode==='box'?'crosshair':'';
+  if(mskAiTapMode&&mskAiPromptMode==='box'){mskAiTapMode=false;mskAiPromptMode='scribble';}
+  else{mskAiPromptMode='box';mskAiTapMode=true;}
+  _mskAiToolApply();
+}
+// Shared tail of the two AI prompt tools. All button visuals come from mskToolSync (one renderer for
+// Scribble/Rectangle/Paint/Erase), never from per-function class flips that drift apart. Arming either
+// prompt tool turns the brush off: a stroke must never be both an erase and a scribble.
+function _mskAiToolApply(){
+  if(mskAiTapMode&&mskPaintMode)_mskBrushOffQuiet();
+  if(FX.cv)FX.cv.style.cursor=!mskAiTapMode?'':(mskAiPromptMode==='box'?'crosshair':'none'); // scribble: the round ring is the pointer
+  mskCursorSync();mskToolSync();
+  if(!mskAiTapMode){_aiStroke=null;_aiStrokeLast=null;_aiStrokeAdded=false;}  // never leave a stroke open
 }
 // Two-tier fast/quality encode, mirroring desktop-native.js's NativeLibRawShim.refine() pattern
 // for RAW decode: EdgeSAM (fast, ~1s) is awaited so the first scribble has SOMETHING to query
@@ -19161,19 +19151,19 @@ function _skySeedPoints(m){
 // ── Brush painting: pointer-drag stamps a soft circular falloff into the selected brush
 // mask's pixel array. Coordinates are mapped CSS→canvas→normalized image fraction the same
 // way wbEyedropperClick does, then scaled into the mask's own (independent) resolution.
-let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=25,mskBrushFlow=60,mskBrushFeather=100,mskBrushDensity=100,_mskStroke=null,mskBrushAuto=false;
+let mskPaintMode=false,mskPaintErase=false,mskBrushEraseHeld=false,mskBrushSize=8,mskBrushFlow=60,mskBrushFeather=100,mskBrushDensity=100,_mskStroke=null,mskBrushAuto=false;
 let _mskBrushTransientReset=()=>{},_mskLastPt=null;
 // Brush slots (Lightroom A / B / Erase): each remembers its own size, flow, feather and density.
 // Selecting a slot saves the live values into the old slot and loads the new one; E is the erase slot.
-const _mskBrushSlots={A:{size:25,flow:60,feather:100,density:100},B:{size:60,flow:100,feather:60,density:100},E:{size:25,flow:100,feather:60,density:100}};
+// Erase shares the active slot's settings (A or B): switching Paint <-> Erase never changes size, flow, feather or density.
+const _mskBrushSlots={A:{size:8,flow:60,feather:100,density:100},B:{size:60,flow:100,feather:60,density:100}};
 let mskBrushSlot='A',mskBrushPrevSlot='A';
 function mskBrushSlotSelect(slot){
-  if(!_mskBrushSlots[slot])return;
-  const cur=mskPaintErase?'E':mskBrushSlot;
-  Object.assign(_mskBrushSlots[cur],{size:mskBrushSize,flow:mskBrushFlow,feather:mskBrushFeather,density:mskBrushDensity});
+  if(slot!=='E'&&!_mskBrushSlots[slot])return;
+  Object.assign(_mskBrushSlots[mskBrushSlot],{size:mskBrushSize,flow:mskBrushFlow,feather:mskBrushFeather,density:mskBrushDensity});
   if(slot==='E'){mskBrushPrevSlot=mskBrushSlot;mskPaintErase=true;}
   else{mskBrushSlot=slot;mskPaintErase=false;}
-  const v=_mskBrushSlots[slot];mskBrushSize=v.size;mskBrushFlow=v.flow;mskBrushFeather=v.feather;mskBrushDensity=v.density;
+  const v=_mskBrushSlots[mskBrushSlot];mskBrushSize=v.size;mskBrushFlow=v.flow;mskBrushFeather=v.feather;mskBrushDensity=v.density;
   if(!mskPaintMode)mskPaintToggle();
   mskPaintErase_sync();if(typeof mskRebuild==='function')mskRebuild();
 }
@@ -19212,6 +19202,7 @@ function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();
 function mskPaintToggle(){
   _mskPaintResume=null;
   mskPaintMode=!mskPaintMode;
+  if(mskPaintMode&&mskAiTapMode){mskAiTapMode=false;mskAiPromptMode='scribble';}
   if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   else mskPaintTransientReset();
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
@@ -19236,8 +19227,13 @@ function mskTeethGuideSync(){
 // Single source of truth for the brush mode: exactly one of Paint / Erase is active while painting
 // (derived from mskPaintMode + mskPaintErase + the held-modifier temporary erase). Buttons, ARIA and cursor all read it.
 function mskScribbleArmed(){const m=fxState.masks[mskSel];return !!(mskAiTapMode&&mskAiPromptMode==='scribble'&&m&&mskIsAI(m));}
-// Scribbling IS painting for an AI mask: the Painting tab reads as active so one click on Object starts the selection.
-function mskBrushModeActive(){return !mskPaintMode?(mskScribbleArmed()?'paint':''):((mskPaintErase||mskBrushEraseHeld)?'erase':'paint');}
+// Brush mode only: Scribble/Rectangle are separate tools with their own buttons (see mskToolSync).
+function mskBrushModeActive(){return !mskPaintMode?'':((mskPaintErase||mskBrushEraseHeld)?'erase':'paint');}
+// The four mask tools (Scribble, Rectangle, Paint, Erase) are ONE exclusive set. mskToolActive() derives the
+// single active tool from state; mskToolSync() is the only place that paints all four buttons from it.
+function mskToolActive(){if(mskPaintMode)return (mskPaintErase||mskBrushEraseHeld)?'erase':'paint';if(mskAiTapMode)return mskAiPromptMode==='box'?'box':'scribble';return '';}
+function _mskBrushOffQuiet(){_mskPaintResume=null;mskPaintMode=false;mskPaintTransientReset();const c=document.getElementById('msk-brush-cursor');if(c)c.classList.remove('on');mskSpotlightHide();mskTeethGuideSync();}
+function mskToolSync(){mskPaintErase_sync();}
 // While a brush-like tool is armed the round ring is the pointer everywhere on the photo (the zoom wrap's grab hand never shows),
 // and the selection overlay is switched on for the session so the user sees what they are adding/erasing.
 function mskCursorSync(){
@@ -19245,15 +19241,18 @@ function mskCursorSync(){
   document.body.classList.toggle('msk-brushing',on);
   if(on&&mskPreviewMode!=='select'&&!mskOverlayUserOff){mskPreviewMode='select';if(typeof mskOverlaySync==='function')mskOverlaySync();if(typeof mskUpdateSelViewControls==='function')mskUpdateSelViewControls();if(typeof fxUpdate==='function')fxUpdate();}
 }
-function mskPaintErase_sync(){const mode=mskBrushModeActive();
+function mskPaintErase_sync(){const mode=mskBrushModeActive(),tool=mskToolActive();
+  const sb=document.getElementById('btn-msk-ai-tap'),bb=document.getElementById('btn-msk-ai-box');
+  if(sb){const on=tool==='scribble';sb.classList.toggle('on',on);sb.classList.toggle('bsec',on);sb.classList.toggle('bgh',!on);sb.setAttribute('aria-pressed',String(on));sb.innerHTML=icon('wand',14)+' Scribble';}
+  if(bb){const on=tool==='box';bb.classList.toggle('bsec',on);bb.classList.toggle('bgh',!on);bb.setAttribute('aria-pressed',String(on));bb.textContent='Rectangle';}
   const p=document.getElementById('btn-msk-paint'),b=document.getElementById('btn-msk-erase');
   if(p){const on=mode==='paint';p.classList.toggle('on',on);p.classList.toggle('bsec',on);p.classList.toggle('bgh',!on);p.setAttribute('aria-pressed',String(on));const t=p.lastChild;if(t&&t.nodeType===3)t.textContent=on?' Painting':' Paint';}
   if(b){const on=mode==='erase';b.classList.toggle('on',on);b.classList.toggle('bsec',on);b.classList.toggle('bgh',!on);b.setAttribute('aria-pressed',String(on));}
   const tt=document.getElementById('msk-tool-title');if(tt)tt.textContent=mode==='erase'?'Eraser':'Brush';
   const dl=document.getElementById('msk-density-label');if(dl)dl.textContent=mode==='erase'?'Erase floor':'Density';
   const c=document.getElementById('msk-brush-cursor');if(c)c.classList.toggle('erase',mode==='erase');}
-function mskPaintErase_toggle(){mskBrushSlotSelect(mskPaintMode&&mskPaintErase?mskBrushSlot:'E');}
-function mskPaintButton(){if(mskPaintMode&&mskPaintErase)mskBrushSlotSelect(mskBrushSlot);else mskPaintToggle();}
+function mskPaintErase_toggle(){if(mskPaintMode&&mskPaintErase)mskPaintStop();else mskBrushSlotSelect('E');}
+function mskPaintButton(){if(mskPaintMode&&!mskPaintErase)mskPaintStop();else mskBrushSlotSelect(mskBrushSlot);}
 function mskPaintClear(){const m=fxState.masks[mskSel];if(!m||m.type!=='brush')return;m.px=new Uint8ClampedArray(m.mtW*m.mtH);_mskTexDirty=true;fxUpdate();}
 function _mskPointToUV(e){ // → {nx,ny} normalized 0..1, TOP-origin (matches m.px row-major convention)
   const src=fxWork||fxImg;if(!src||!FX.cv)return null;
@@ -19439,7 +19438,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
     svg.innerHTML=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(255,90,60,.12)" stroke="#ff5a3c" stroke-width="0.0025" vector-effect="non-scaling-stroke"/>`;
   }
   fxCanvasOn('pointerdown',e=>{
-    if(mskAiPromptMode!=='box'||!mskAiTapMode)return;
+    if(mskAiPromptMode!=='box'||!mskAiTapMode||mskPaintMode)return;
     const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
     e.preventDefault();e.stopPropagation();try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
     const p=_mskPointToUV(e);if(p)_aiBoxDrag={mask:m,item:curItem(),start:p,end:p,previous:m.aiBox?Object.assign({},m.aiBox):null};
@@ -19455,7 +19454,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
   };
   fxCanvasOn('pointerup',aiBoxEnd);fxCanvasOn('pointercancel',aiBoxEnd);fxCanvasOn('lostpointercapture',aiBoxEnd);
   fxCanvasOn('pointerdown',e=>{
-    if(!mskAiTapMode||mskAiPromptMode!=='scribble')return;
+    if(!mskAiTapMode||mskAiPromptMode!=='scribble'||mskPaintMode)return; // never both a brush stroke and a scribble
     const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
     e.preventDefault();e.stopPropagation();
     try{e.currentTarget.setPointerCapture(e.pointerId)}catch(_){}
@@ -20849,8 +20848,8 @@ function _mskRebuildInner(){
   }else{ // brush / sky / AI raster mask
     if(mskIsAI(m)){
       shape+='<div class="btn-row">'
-        +'<button class="btn '+(mskAiPromptMode==='scribble'&&mskAiTapMode?'bsec':'bgh')+'" id="btn-msk-ai-tap" aria-pressed="'+String(mskAiPromptMode==='scribble'&&mskAiTapMode)+'" onclick="mskAiTapToggle()" title="Drag a rough scribble over the object to select it. Alt/Option-drag to exclude an area.">'+icon('wand',14)+(mskAiPromptMode==='scribble'&&mskAiTapMode?' Scribbling — drag on the photo':' Scribble to select')+'</button>'
-        +'<button class="btn '+(mskAiPromptMode==='box'?'bsec':'bgh')+'" id="btn-msk-ai-box" aria-pressed="'+String(mskAiPromptMode==='box')+'" onclick="mskAiBoxToggle()" title="Drag a rectangle around the object for a fast EdgeSAM selection">'+(mskAiPromptMode==='box'?'Rectangle mode — drag on photo':'Rectangle select')+'</button>'
+        +'<button class="btn '+(mskToolActive()==='scribble'?'bsec':'bgh')+'" id="btn-msk-ai-tap" aria-pressed="'+String(mskToolActive()==='scribble')+'" onclick="mskAiTapToggle()" title="Scribble over the object to select it — drag on the photo. Alt/Option-drag to exclude an area.">'+icon('wand',14)+' Scribble</button>'
+        +'<button class="btn '+(mskToolActive()==='box'?'bsec':'bgh')+'" id="btn-msk-ai-box" aria-pressed="'+String(mskToolActive()==='box')+'" onclick="mskAiBoxToggle()" title="Drag a rectangle around the object on the photo">Rectangle</button>'
         +'<button class="btn bgh" onclick="mskAiPointsClear()" title="Clear all saved AI prompts and start over">Clear prompts</button></div>';
       shapeMore+=(caps.skinTools?'<div class="btn-row" style="margin-top:4px"><button class="btn bgh" onclick="mskFaceAutoExclude()" title="Finds lips, eyes/brows, glasses and hair inside this selection and excludes them automatically — no brushing needed. Re-run after adjusting the scribble.">'+icon('scissors',14)+(_faceparseRunning?' Finding features…':' Auto-exclude face features')+'</button>'
           +'<button class="btn bgh" onclick="mskFaceSelectSkin()" title="Adds a NEW mask selecting only face-parsed skin within this selection (cheeks/forehead/neck) — a supplementary, face-crop-scoped alternative to this Skin mask\'s own colour-range gate, not a replacement for it.">'+icon('wand',14)+(_faceparseRunning?' Finding skin…':' Add Skin (Face Parse)')+'</button></div>'
@@ -21784,12 +21783,12 @@ async function mskPersonCreate(id){
   }catch(e){const msg='Person mask failed \u2014 '+(e&&e.message||e);log(msg,'err');toast(msg);}
   finally{_mskPeople.busy=false;mskPeopleRender();}
 }
-// Objects: new AI mask with the rectangle (EdgeSAM box) prompt armed; scribble stays one click away in the panel.
+// Objects: new AI mask with Scribble armed (Lightroom's Select Objects also starts on its brush); Rectangle is one click away.
 function mskAddObjects(){
   const m=mskAdd('ai');if(!m)return;
-  if(mskAiPromptMode!=='box')mskAiBoxToggle();else mskAiTapToggle(true);
+  mskPaintErase=false;mskAiTapToggle(true);
   mskRebuild();
-  log('Drag a rectangle around the object — or switch to Scribble in the panel','info');
+  log('Scribble over the object — or switch to Rectangle in the panel','info');
 }
 
 // ── Edit pins ───────────────────────────────────────────────────────────────────────────────────

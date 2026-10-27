@@ -51,10 +51,10 @@ async function mskPersonCreate(id){
   }catch(e){const msg='Person mask failed \u2014 '+(e&&e.message||e);log(msg,'err');toast(msg);}
   finally{_mskPeople.busy=false;mskPeopleRender();}
 }
-// Objects: new AI mask with the rectangle (EdgeSAM box) prompt armed; scribble stays one click away in the panel.
+// Objects: new AI mask with Scribble armed (Lightroom's Select Objects also starts on its brush); Rectangle is one click away.
 function mskAddObjects(){
   const m=mskAdd('ai');if(!m)return;
-  if(mskAiPromptMode!=='box')mskAiBoxToggle();else mskAiTapToggle(true);
+  mskPaintErase=false;mskAiTapToggle(true);
   mskRebuild();
-  log('Drag a rectangle around the object — or switch to Scribble in the panel','info');
+  log('Scribble over the object — or switch to Rectangle in the panel','info');
 }
