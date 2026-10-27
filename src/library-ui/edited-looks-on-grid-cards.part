@@ -1,0 +1,105 @@
+  // ── Edited looks on grid cards ─────────────────────────────────────────────────────────────
+  // The disk thumbnail is always the unedited camera image. For an edited photo the card swaps in
+  // a 480px copy of the saved edited render above (same store Quick Look uses), so batch-edited
+  // photos update once their render lands and every edited photo keeps its look after a restart.
+  // A missing render is queued in the background. The photo open in the Editor keeps its live
+  // canvas thumb (refreshCardThumbFromCanvas), which is newer than any stored render.
+  const epThumbs = new Map(); // path -> { key, url }
+  function epCardImg(path) {
+    const card = overlay.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
+    return card && card.querySelector('.lib-thumb-wrap img');
+  }
+  function epThumbEligible(path, img) {
+    const card = img && img.closest('.lib-card');
+    if (!card || card.dataset.path !== path) return false; // stacks show their export; filmstrip/dialogs aren't cards
+    const sc = state.sidecars.get(path);
+    return sc ? !!(sc.edited && sc.recipe !== '') : !!card.querySelector('.lib-edited-badge');
+  }
+  function epThumbPaint(img, url) {
+    if (!img || !img.isConnected) return;
+    img.src = url; img.classList.add('loaded');
+    img.dataset.canvasThumb = '1'; img.dataset.editedThumb = '1'; img.style.transform = '';
+  }
+  function epThumbPaintCached(path, img) {
+    const have = epThumbs.get(path), sc = state.sidecars.get(path);
+    if (!have || !sc || !sc.edited || !sc.recipe || !epThumbEligible(path, img)) return false;
+    if (have.key !== epKey(path, sc.recipe)) return false;
+    epThumbPaint(img, have.url);
+    return true;
+  }
+  async function epThumbUrl(bytes) {
+    const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+    const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    if (bmp.close) bmp.close();
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+    return blob ? URL.createObjectURL(blob) : null;
+  }
+  function epThumbStore(path, key, url) {
+    const prev = epThumbs.get(path);
+    if (prev && prev.url !== url) URL.revokeObjectURL(prev.url);
+    epThumbs.delete(path); epThumbs.set(path, { key, url });
+    while (epThumbs.size > 1500) { // oldest first; a card still showing one keeps its decoded pixels
+      const [p0, v0] = epThumbs.entries().next().value;
+      epThumbs.delete(p0); URL.revokeObjectURL(v0.url);
+    }
+  }
+  async function epThumbApply(path, img, { render = true } = {}) {
+    if (!path || !img || !epThumbEligible(path, img)) return;
+    if (path === state.openedPath && img.dataset.canvasThumb && !img.dataset.editedThumb) return;
+    const sc = await getSidecar(path);
+    if (!sc || !sc.edited || !sc.recipe) return;
+    const key = epKey(path, sc.recipe);
+    const have = epThumbs.get(path);
+    if (have && have.key === key) { epThumbPaint(img, have.url); return; }
+    let bytes = null;
+    try { bytes = await invoke('get_edit_preview', { key }); } catch (_) {}
+    if (!bytes) { if (render && path !== state.openedPath) epEnqueue(path); return; }
+    const url = await epThumbUrl(bytes).catch(() => null);
+    if (!url) return;
+    const now = state.sidecars.get(path);
+    if (!now || !now.edited || now.recipe !== sc.recipe) { URL.revokeObjectURL(url); return; } // edited/reset meanwhile
+    epThumbStore(path, key, url);
+    if (path === state.openedPath && img.dataset.canvasThumb && !img.dataset.editedThumb) return;
+    epThumbPaint(img, url);
+  }
+  function epThumbRepaint(path) { const img = epCardImg(path); if (img) epThumbApply(path, img, { render: false }).catch(() => {}); }
+  function epThumbReloadOriginal(img) {
+    if (!img || !img._thumbArgs) return;
+    delete img.dataset.editedThumb; delete img.dataset.canvasThumb;
+    const [p, isVideo, mtime] = img._thumbArgs;
+    thumbCacheInvalidate(p);
+    loadThumb(p, img, isVideo, mtime);
+    const path = img.closest('.lib-card')?.dataset.path;
+    if (path === p) applyThumbGeom(img, path);
+  }
+  function epThumbRevert(path) {
+    const have = epThumbs.get(path);
+    if (have) { epThumbs.delete(path); URL.revokeObjectURL(have.url); }
+    const img = epCardImg(path);
+    if (img && img.dataset.canvasThumb) epThumbReloadOriginal(img);
+  }
+  // Context menu ▸ Edit ▸ Refresh thumbnail(s): reload the original from disk and re-render the
+  // edited look from the current saved edit, even when a stored render already exists.
+  function libRefreshThumbs(paths) {
+    let edited = 0;
+    for (const p of paths) {
+      const have = epThumbs.get(p);
+      if (have) { epThumbs.delete(p); URL.revokeObjectURL(have.url); }
+      const img = epCardImg(p);
+      if (img) epThumbReloadOriginal(img);
+      const sc = state.sidecars.get(p);
+      if (sc && sc.edited && sc.recipe) {
+        edited++;
+        if (p === state.openedPath && typeof refreshCardThumbFromCanvas === 'function') refreshCardThumbFromCanvas(p);
+        else epEnqueue(p, { force: true, priority: paths.length <= 20 });
+      }
+    }
+    toast(edited ? `Refreshing ${paths.length} thumbnail${paths.length === 1 ? '' : 's'} — edited looks re-render in the background` : `Refreshed ${paths.length} thumbnail${paths.length === 1 ? '' : 's'}`);
+  }
+  window.__libRefreshThumbs = libRefreshThumbs;
+  window.__libEditedThumbsForget = () => { epThumbs.forEach((v) => URL.revokeObjectURL(v.url)); epThumbs.clear(); }; // test hook: simulates a fresh app launch
+  window.__libEditPreviewEnqueue = epEnqueue; window.__libEditPreviewTeardown = epTeardown; window.__libEditPreviewKey = epKey;
+  window.__libEditPreviewDebug = () => ({ queue: ep.queue.map((j) => j.path), running: ep.running, current: ep.current && ep.current.path, known: ep.known.size, frame: !!ep.frame });

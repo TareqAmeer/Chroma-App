@@ -53,7 +53,7 @@
       markCardEdited(p);
       const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
       const img = card && card.querySelector('.lib-thumb-wrap img');
-      if (img) { delete img.dataset.canvasThumb; applyThumbGeom(img, p); }
+      if (img && !img.dataset.editedThumb) { delete img.dataset.canvasThumb; applyThumbGeom(img, p); }
     }));
   }
   // Disk thumbnails are the unedited camera image, so a stored rotation/flip is shown with a CSS
@@ -90,6 +90,7 @@
       const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(p)}"]`);
       const badge = card && card.querySelector('.lib-edited-badge');
       if (badge) badge.remove();
+      epThumbRevert(p);
       if (p === state.openedPath) { openInEditor(p); }
     }));
     libMetaUndo.push([{ kind: 'reset', paths: [...paths] }]);
@@ -105,7 +106,7 @@
         updated = await invoke('undo_reset_edit', { path: p });
         state.sidecars.set(p, updated);
       } catch (e) { sidecarWriteFailed(p, cur, e); return; }
-      if (updated.edited) markCardEdited(p);
+      if (updated.edited) { markCardEdited(p); const im = epCardImg(p); if (im) epThumbApply(p, im).catch(() => {}); }
       if (p === state.openedPath) { openInEditor(p); }
     }));
     toast(restorable.length > 1 ? `Restored ${restorable.length} photos' edits` : 'Restored the edit');
@@ -570,6 +571,8 @@
       undoResetItem.style.opacity = '.4';
       undoResetItem.style.pointerEvents = 'none';
     }
+    verMenu.subSep();
+    verMenu.subItem(`Refresh thumbnail${n > 1 ? 's' : ''}`, () => libRefreshThumbs(paths));
 
     // ── Merge into ▸ — HDR/focus/astro/panorama/collage (ROADMAP R12/R13). Each writes an
     // ordinary new PNG next to the first selected photo (merge.rs's merge_output_path) and

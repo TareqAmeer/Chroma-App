@@ -43,7 +43,7 @@
   let _thumbLargeActive = 0;
   function upgradeLargeThumb(job) {
     const el = job.imgEl;
-    if (!el || !el.isConnected || job.isVideo) return;
+    if (!el || !el.isConnected || job.isVideo || el.dataset.canvasThumb) return;
     const need = (el.clientWidth || 0) * (window.devicePixelRatio || 1);
     if (need <= 380 || _thumbLargeActive >= 3) return;
     const lkey = job.key + '|512';
@@ -53,7 +53,7 @@
     invoke('get_thumbnail_large', { path: job.path }).then((buf) => {
       const url = thumbCacheGet(lkey) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
       if (!_thumbCache.has(lkey)) thumbCachePut(lkey, url);
-      if (el.isConnected) el.src = url;
+      if (el.isConnected && !el.dataset.canvasThumb) el.src = url;
     }).catch(() => {}).finally(() => { _thumbLargeActive--; });
   }
   function requestThumbnail(path, key) {
@@ -171,12 +171,13 @@
         .then((buf) => {
           const url = thumbCacheGet(job.key) || URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
           if (!_thumbCache.has(job.key)) thumbCachePut(job.key, url);
-          if (job.imgEl.isConnected) {
+          if (job.imgEl.isConnected && !job.imgEl.dataset.editedThumb) {
             job.imgEl.src = url;
             job.imgEl.classList.add('loaded');
           }
           if (job._fastUrl) { URL.revokeObjectURL(job._fastUrl); job._fastUrl = null; }
           upgradeLargeThumb(job);
+          epThumbApply(job.path, job.imgEl).catch(() => {});
         })
         .catch((err) => {
           console.warn('get_thumbnail failed for', job.path, err);
@@ -303,12 +304,17 @@
   }
   function loadThumb(path, imgEl, isVideo, mtime) {
     const key = path + '@' + (mtime || 0);
+    imgEl._thumbArgs = [path, isVideo, mtime]; // lets Refresh thumbnail / Reset edit reload the original
+    if (imgEl.dataset.editedThumb) { delete imgEl.dataset.editedThumb; delete imgEl.dataset.canvasThumb; }
+    // Edited photos show their saved look (see "Edited looks on grid cards"), not the camera image.
+    try { if (epThumbPaintCached(path, imgEl)) return; } catch (_) { /* edited-look section not initialised yet */ }
     // Already decoded and still retained — paint it synchronously and skip the pool entirely.
     // This is what stops a scroll that re-mounts a row from re-fetching every card in it.
     const hit = thumbCacheGet(key);
     if (hit) {
       imgEl.src = hit;
       imgEl.classList.add('loaded');
+      epThumbApply(path, imgEl).catch(() => {});
       return;
     }
     const queuedJob = { path, key, imgEl, isVideo: !!isVideo, visible: false, gen: _thumbGen };
