@@ -1,177 +1,220 @@
-# Mask tool fixes — research + plan (2026-10-27)
+# Mask tool fixes — research, measurements and plan (2026-10-27, rev 2)
 
-Reported on the "Dog 2" AI mask (screenshots in the session):
+Reported on the "Dog 2" AI mask (photo `__TM6636.RW2`):
 
 1. With the overlay on, the mask's adjustments (Exposure +50) don't show on the photo.
-2. AI selection spills far past the dog (door, bushes, pavement) — from Select Subject *and* from manual scribbles.
-3. Objects starts in Rectangle mode, a rectangle drag appears to do nothing, Scribble + Rectangle can both look selected, and Paint sits beside them unselected.
-4. Paint and Erase should share the same brush settings.
+2. AI selection spills far past the dog (door, bushes, pavement), from Select Subject and from manual scribbles.
+3. Objects starts in Rectangle mode, a rectangle appears to do nothing, Scribble + Rectangle both look selected, and Paint sits beside them unselected.
+4. Paint and Erase should share brush settings.
 5. Default brush size should be 8 (currently 25).
 6. Erase does nothing and makes the controls laggy.
+7. Check that the models pick up the whole dog, tail included, across lighting and backgrounds, and whether offline training (on the gaming PC) would help.
+
+Everything below was measured, not guessed, unless marked **unverified**. Evidence came from three
+sources: (a) a live audit of every Masks-panel control in the running desktop app (built on the
+`test/lib_mask_panel_scan.js` scanner: 102 controls on an AI mask), (b) an offline harness running
+the app's own ONNX models with identical preprocessing on your real scribble (257 points) plus
+29 library photos, and (c) a web review of EdgeSAM, SAM 2 and Lightroom behaviour.
 
 ---
 
-## 1. Overlay hides the adjustments — cause confirmed
+## Findings
 
-In the `comp` shader's mask loop (`chromasmith-22.html` ~L9310), when the loop reaches the
-mask being shown it paints the overlay over `c.rgb` and then **`return`s**. `c.rgb` is the
-colour *before* that mask's adjustment, and the `return` also skips every later mask and every
-stage after the loop. So every overlay style (colour, colour-on-B&W, image-on-B&W/black/white,
-white-on-black) shows the photo as if the mask had no effect. Screenshot 1 (image-on-B&W) shows
-the dog unbrightened for the same reason.
+### F1 · Overlay hides the edit (confirmed by reading canvas pixels)
+In every overlay style, including edge-only, the selected mask's area shows the unadjusted photo:
+pixel value ~29 with the overlay on, against 255 with it off. Cause: the `comp` shader
+(~L9310) paints the overlay over the pre-adjustment colour and then `return`s, which skips this
+mask's adjustments, every later mask, and every later stage. Painting and scribbling switch the
+overlay on automatically, so while you work on a mask you never see what it does.
 
-It's worse than it sounds because painting/scribbling switches the overlay on automatically
-(`mskCursorSync`), so while you work on a mask you never see what it does.
+### F2 · The spill comes from our edge clean-up, not the AI model (measured)
+On your real scribble, scored against a checked reference outline of the brown dog:
 
-How Lightroom does it: the overlay is a translucent tint *over the edited image*, and
-"Auto toggle overlay" hides it while a slider is being dragged and brings it back afterwards.
+| Stage | Selected outside the dog (% of dog area) | Missed |
+|---|---|---|
+| EdgeSAM raw output (what the model returns) | **6.6 %** | 2.3 % |
+| …after the soft-edge step (`logit_to_soft_alpha`) | 6.6 % | 2.1 % |
+| …after `_samMatteCore` edge matting = **what the app shows** | **54.6 %** (weighted 22.5 %) | 4.7 % |
+| The mask actually stored in the app | 52.4 % (weighted 21.7 %) | 1.7 % |
 
-**Fix**
-- In the loop, store the shown mask's coverage (`selW`) instead of returning. Keep applying this
-  mask's adjustment and all later masks/stages.
-- Composite the overlay once, at the very end of `comp`, over the final colour. "Image on B&W /
-  black / white" then show the *adjusted* photo inside the selection.
-- Auto-hide while any slider in the selected mask's Adjust group is being dragged (pointerdown →
-  pointerup), restore after. Add an "Auto-hide overlay while adjusting" option in the overlay
-  "…" menu, on by default.
-- Lower the default overlay opacity from 0.75 to 0.5 so the adjustment reads through it.
-- Follow the `shader-edit` skill (no backticks in GLSL comments, no reserved names like
-  `half`), then run `node test/export_harness.mjs` and watch for `GLSL compile error`. Export
-  never sets `showSel`, so goldens must not change. If they do, that's a regression.
+The matting step's colour model can't tell a dark dog from a dark wall, window or bushes, so it
+pushes the selection out into everything nearby. It is also slow: about 0.45 s at 0.7 MP in Node,
+which is about 1.8 s on the main thread at the app's 1365×2048 mask size, on every scribble.
 
-## 2. AI selection spills past the subject — likely causes (to be proved by measurement)
+### F3 · Big brush = stray prompts = wrong selections (measured)
+The AI only sees points along the centre of the stroke. People aim the ring at the dog, so with
+a large ring the centre wanders onto the background. Your scribble: 87 of 257 points (34 %)
+landed off the dog. In a simulated test with 6 photos × 3 scribbles each:
 
-How a selection gets made now: the scribble is sampled into points (≤6 positive + ≤6 negative,
-`samSubsamplePoints`) → `sam_points` (EdgeSAM) or `sam2_points` (SAM 2.1 once it has loaded) →
-the decoder returns several candidate masks → **we keep the one with the highest score** →
-upsample → edge matting (`_samMatteCore`).
+| Brush | Off-subject points | EdgeSAM (current) mean IoU / worst | SAM 2.1 mean IoU / worst |
+|---|---|---|---|
+| 25 (today) | 39 % | 0.57 / **0.00** (selected half the photo) | 0.70 / **0.00** |
+| 8 (proposed) | 19 % | 0.85 / 0.47 | **0.95 / 0.79** |
 
-Problems found, most likely cause first:
+IoU is overlap with the true dog outline; 1.0 is perfect.
 
-a. **Wrong candidate choice for multi-point prompts.** Meta's own SAM guidance: multi-mask
-   output is for *ambiguous* prompts like a single click. For several points (any scribble) or a
-   box, the single-mask output is the better result. EdgeSAM always returns 4 channels
-   (channel 0 = single-mask output, 1–3 = multi-mask). We take the argmax over all 4. With a
-   dark dog against dark bushes, the top-scoring candidate is usually the big "dog plus
-   everything around it" mask. SAM 2.1 returns 3 multi-mask channels and we take the argmax the
-   same way.
-b. **Possibly missing padding point.** Meta's SAM ONNX decoder expects an extra `(0,0)` point
-   with label `-1` when no box is given. Without it, point-only prompts get noticeably worse.
-   Need to check against EdgeSAM's `predictor_onnx.py` and the SAM 2.1 export, then test both
-   ways.
-c. **Every scribble starts from scratch.** SAM's interactive loop feeds the previous result back
-   in (`mask_input`, `has_mask_input=1`), and that's what makes extra strokes *refine* the mask.
-   SAM 2.1's decoder supports this, but we always send zeros. EdgeSAM's decoder has no mask input.
-d. **The brush ring doesn't match what the model sees.** The ring suggests a painted area, but
-   SAM only gets up to 6 points along the centre line, spread evenly over the stroke. A long
-   stroke that wanders off the dog contributes a positive point on the background.
-e. **The rectangle prompt never uses SAM 2.1.** `sam_box` is EdgeSAM only.
-f. Manual Paint/Erase on an AI mask writes straight into `m.px`, and the next scribble replaces
-   `m.px` entirely, so **manual touch-ups are silently lost** whenever you scribble again.
+Rejected by measurement: building a box from the scribble's bounds. When the scribble doesn't
+reach the tail or legs, the box cuts them off (mean IoU 0.46–0.69). Feeding the previous mask back
+into SAM 2.1 (`mask_input`) gave one catastrophic result (IoU 0.04) and isn't safe without more work.
 
-**Plan (measure first, then change, one variable at a time)**
-1. Build `tools/diagnostics/sam_eval` (Rust test or a small binary under `desktop/src-tauri`)
-   that takes a photo, a saved prompt (scribble points / box) and a hand-made reference mask,
-   then reports IoU and how far the selection spills outside the subject, for each variant.
-   Test set: this dog photo plus 4–5 others (pet on a busy background, person, object on a
-   table, low-contrast subject). Reference masks drawn once with the Brush and exported.
-2. Variants to score: candidate policy (argmax-all vs channel 0 for ≥2 points or a box vs
-   stability-score pick), with/without the padding point, point count (all vs 6 vs 3 spread by
-   farthest-point sampling), SAM 2.1 with the previous mask fed back in, and scribble → box +
-   points.
-3. Ship the winning combination. Expected, to be confirmed by the numbers: channel 0 for
-   multi-point/box prompts, padding point if the export needs it, previous mask fed back to
-   SAM 2.1, and SAM 2.1 for rectangles when it's ready.
-4. Keep manual edits separate: store Paint/Erase on an AI mask as an add/subtract layer that's
-   combined with the AI result, so re-scribbling keeps them.
-5. Scribble feedback: draw the stroke at the real brush width, and sample points only from the
-   part of the stroke that stayed inside the photo.
-6. Look at Select Subject (`mskAdd('ai')` → auto) separately, through the same eval, since the
-   user saw the spill there too.
+### F4 · SAM 2.1 is clearly better, but the app isn't using it
+- With the same prompts SAM 2.1 beats EdgeSAM on every photo: IoU 0.96–0.99 against 0.92–0.95
+  on clean prompts, and it's far more forgiving of sloppy ones.
+- In the live app `_sam2Token` was false, so every scribble used EdgeSAM. SAM 2.1 is meant to
+  load in the background and take over, and it hadn't. **Cause not yet found.**
+- Rectangle mode is EdgeSAM-only by design.
+- Encode cost on this Intel Mac (CPU): EdgeSAM 0.5 s, SAM 2.1 2.6 s. Decode is ~50 ms for either.
+- Model mechanics (confirmed from EdgeSAM's source): channel 0 is the single-mask output. EdgeSAM's
+  own demo ranks point prompts by stability score and uses channel 0 for boxes. The padding
+  point (label −1) is accepted but not required. On SAM 2.1 the padding point helped slightly
+  with clean prompts and hurt slightly with sloppy ones (±0.005 IoU), so it's noise. Not a priority.
 
-## 3. Tool state in the Selection group — causes confirmed
+### F5 · Whole body and tail across your library (26 photos, visual check)
+I picked dog photos from the catalog by tag (beach, woods, river, street, park, meadow, selfie,
+black-and-white, sun-flare, water) plus random ones, and prompted each with **one click on the
+dog's head**. Both models covered the whole body in nearly all of them (contact sheets in the
+session scratchpad). Differences:
+- SAM 2.1 got tails the current pipeline missed (black-and-white beach dog), and gave crisp edges
+  where the current result is blobby.
+- The current pipeline added halos into water reflections and grass.
 
-- `mskAddObjects()` (L21788) deliberately arms **Rectangle** first. Change it to arm **Scribble**
-  (Lightroom's Select Objects also starts on Brush select). Update the log text to match.
-- `mskAiTapToggle()` switches to scribble but never redraws the Rectangle button, so both stay
-  highlighted. `mskAiBoxToggle()` redraws Scribble but not Paint/Erase. Paint/Erase are synced
-  by a third function (`mskPaintErase_sync`), and `mskBrushModeActive()` treats scribble as
-  "paint", so the Paint button's look depends on which function ran last.
-- Rectangle "does nothing": not reproduced yet. Suspects: the zoom/pan grab handler takes
-  pointerdown before the box handler (box mode doesn't set the `msk-brushing` body class that
-  scribble/paint use), or the box result only arrives after the EdgeSAM encode, with no
-  feedback. **Reproduce live first** (`chromasmith-debugger` subagent, per CLAUDE.md rule 3)
-  before fixing.
+Neither model needs retraining to find a dog's whole body. The failures the user sees are prompt
+noise (F3) and post-processing (F2).
 
-**Fix**
-- Replace `mskAiTapMode` / `mskAiPromptMode` / `mskPaintMode` / `mskPaintErase` with one
-  state, `mskTool ∈ {null, 'scribble', 'box', 'paint', 'erase'}`, and one
-  `mskToolSync()` that sets the class, `aria-pressed`, label, cursor, ring and
-  `msk-brushing` for **all four** buttons. Every toggle and shortcut goes through it.
-- Layout on an AI mask: one row of tools, only one active at a time —
-  **Select:** Scribble · Rectangle  **Refine:** Paint · Erase — then Clear prompts. Labels stay
-  short ("Scribble", "Rectangle"). The "drag on the photo" hint moves to the on-canvas hint.
-- Run `node tools/scripts/app-uses.mjs mskAiTapMode --all` (and the same for the other three
-  variables) before the refactor, so no caller is missed.
+### F6 · Live audit of all 102 AI-mask controls
+| Area | Result |
+|---|---|
+| Tool exclusivity | **FAIL**: Paint/Erase can be on alongside Scribble/Rectangle. About half of click sequences end with two tools on. Scribble-after-Rectangle leaves both pressed. Erase state leaks between masks. |
+| Rectangle prompt | Works: 1.1–1.3 s, 99 % of the selection inside the box. The "does nothing" report is most likely the tool-state bug (another tool still armed) plus no feedback during the 1 s+ wait. |
+| Erase, AI mask, Scribble armed | **FAIL**: the stroke adds 27 positive points, runs the AI (1.9 s), and the selection *grows* 73k → 96k px. This is exactly the "erase does nothing / laggy" report. |
+| Erase with Rectangle armed, or on a plain brush mask | PASS |
+| Brush stroke at 26 MP | **SLOW**: ~7 fps while painting (mean frame 137 ms, worst 1.3 s). Pointer release 0.5–0.8 s (`renderPreview` 398 ms + history). |
+| Adjust slider → render | **SLOW**: 160–190 ms per input, and it **renders twice** per input. `mskRebuild` 51–64 ms. |
+| Refine edges / Clear prompts | **SLOW**: 1.06 s / 0.72–0.78 s blocking the UI |
+| Scribble select | 1.5–1.9 s end to end, of which ~50 ms is the model. The rest is IPC + upsample + matting (F2). |
+| Overlay switch/style/opacity/outline/spotlight/pins, invert, amount, feather, mute, solo, hide-all, add/subtract/intersect, duplicate (+inverted), delete, clear paint, auto-mask | PASS |
+| Paint/Erase settings | Separate Erase slot (size 25, flow 100, feather 60). Clicking Paint again turns the brush off; clicking Erase again switches to Paint (inconsistent). |
+| Not exercised | Luminance floor/ceiling, Update all AI masks, Remember subject, Import, Rename, colour/depth pickers. Covered in Phase 4. |
 
-## 4. Paint and Erase share brush settings
-
-`_mskBrushSlots` keeps a separate `E` slot (size 25, flow 100, feather 60), so switching to
-Erase swaps size, flow and feather. Change: Erase uses the **active** brush slot's settings
-(A or B). Drop slot `E` and its save/restore in `mskBrushSlotSelect`. (Lightroom keeps separate
-Erase settings; this deliberately differs, at the user's request.)
-
-## 5. Default brush size 8
-
-`mskBrushSize=25` (L19164) and slot A `size:25` → 8. Slot B (the alternate large brush) stays at
-60. The AI scribble ring uses the same size, so it gets thinner too, which also helps 2d.
-
-## 6. Erase does nothing on an AI mask, and makes the controls laggy
-
-Suspected causes, to be confirmed with a live repro first:
-
-- **Two tools run at once.** Choosing Erase (`mskBrushSlotSelect('E')`) turns paint mode on but
-  doesn't disarm Scribble. The paint and scribble pointer handlers sit on the same canvas, and
-  `stopPropagation` doesn't stop other listeners on the same element. So one erase stroke
-  erases pixels **and** adds scribble points. On release, `samRunPoints` replaces the whole
-  raster with a fresh AI result, which undoes the erase and runs the model on every stroke
-  (the lag). The single `mskTool` state from #3 fixes this by construction.
-- **Full-resolution raster.** AI masks are stored at the encoded photo's full size (Brush masks
-  use a small raster). Each stroke clones the raster (copy-on-write), takes a `px.slice()`
-  baseline, allocates a same-size `Float32Array` cover buffer, and re-uploads the whole texture
-  every frame. On a 24 MP photo that's roughly 150 MB of allocation per stroke. Fix: keep the
-  manual add/subtract layer from 2f at Brush-mask resolution, upload only the dirty rectangle
-  (`texSubImage2D`), and reuse the stroke buffers instead of reallocating them.
-- **Composed masks.** "Dog 2" shows a Subject component with Add/Subtract/Intersect. If erase
-  writes to the parent while the visible coverage comes from the component, nothing changes.
-  Check which raster the stroke writes to when the mask has components.
-
-Done means: erase visibly removes the selection on AI, Brush and composed masks, triggers no AI
-call, and a 10-second continuous erase on a 24 MP photo keeps pointer-to-paint latency inside
-the `perf:test` brush budget.
+### F7 · Prior art
+- **Lightroom Select Objects:** Brush and Rectangle modes; Brush is recommended for busy
+  backgrounds. "Automatically toggle overlay" hides the tint while adjusting.
+- **Unverified from Adobe's own docs:** Lightroom's default mode, overlay opacity, and whether
+  Erase has separate settings. You asked for shared Erase settings, so that's what we'll do.
+- **ScribblePrompt (MIT 2024):** reports that SAM handles raw scribbles poorly. That supports
+  thinning the stroke into a few well-spread points.
+- **WebGL:** upload only the changed rectangle (`texSubImage2D`) once per frame, into a texture
+  that was fully initialised first.
 
 ---
 
-## Order of work
-1. #3 tool state + #4 + #5 + the "two tools at once" part of #6 (UI only, quick, makes everything else testable).
-2. #1 overlay compositing + auto-hide (shader, run the export harness).
-3. #2 eval harness → measure → ship the winner → keep manual edits separate (also fixes the erase speed in #6).
-4. One full gate run at the end (`npm test`, background), plus a live check in the desktop app
-   on the dog photo.
+## Plan
+
+### Phase 1 — Tool state, Erase, brush defaults (UI only; fixes #3, #4, #5, #6-correctness)
+- One state variable, `mskTool ∈ {null,'scribble','box','paint','erase'}`, and one `mskToolSync()`
+  that drives all four buttons (class, `aria-pressed`, label), the cursor/ring and
+  `msk-brushing`. Delete the competing setters in `mskAiTapToggle`/`mskAiBoxToggle`/
+  `mskPaintToggle`/`mskPaintErase_sync`. Run `node tools/scripts/app-uses.mjs <name> --all` for each
+  old variable first.
+- Pointer handlers dispatch on `mskTool` only, so a stroke can never be both erase and scribble.
+- Objects opens on Scribble. Clicking the active tool turns it off, the same for every tool.
+- Erase uses the active slot's size/flow/feather/density (drop slot `E`). Default size 8 (slot A
+  and the starting value). Slot B stays 60.
+- Show the on-canvas busy pill immediately for a Rectangle drag (it waits 150 ms today).
+
+### Phase 2 — Overlay shows the edit (#1)
+- In the shader, record the shown mask's coverage instead of `return`ing. Composite the overlay
+  once at the end of `comp`, over the final colour, in every style.
+- Auto-hide the overlay while an Adjust slider is held (option in the overlay "…" menu, on by
+  default). Default opacity 0.75 → 0.5.
+- Follow the `shader-edit` skill. Run `node test/export_harness.mjs` (export never sets `showSel`,
+  so goldens must not move).
+
+### Phase 3 — Selection accuracy (#2, #7)
+Do these in order, re-running the harness after each step and keeping a step only if it improves
+the numbers:
+1. **Stop the matting spill.** Turn `_samMatteCore` off by default for AI selections and keep the
+   model's own soft edge. If fur edges then look worse, bring matting back only inside a thin band
+   (≤ 2 % of the image size) around the model's boundary, never more than a few pixels outward.
+   Expected result: spill drops from ~52 % to ~7 % on the dog (F2).
+2. **Use SAM 2.1 for scribbles.** Find out why `_sam2Token` stays empty in the live app and fix
+   it. Start the SAM 2.1 encode as soon as an AI mask is created (2.6 s on CPU, in the background).
+   Use EdgeSAM only until SAM 2.1 is ready.
+3. **Cleaner prompts.** Thin the stroke into ≤ 6 points spread by farthest-point sampling (not
+   evenly spaced along the stroke). Drop points from the last ~10 % of each stroke, where people
+   overshoot. Brush size 8 comes from Phase 1.
+4. **Rectangle on SAM 2.1** once it's ready (box IoU 0.974 against EdgeSAM 0.946 on the dog).
+5. **Manual edits survive re-scribbling:** store Paint/Erase on AI masks as a separate add/subtract
+   layer combined with the AI result.
+6. **Offline training: deferred.** F5 shows the models already find whole dogs. If the harness
+   still shows systematic misses after steps 1–5 (fur edges, tails on dark backgrounds), the
+   gaming-PC route is:
+   - fine-tune SAM 2.1-tiny's mask decoder (Apache-2.0, unlike EdgeSAM's non-commercial licence)
+     with Meta's training code on a CUDA GPU with 12 GB or more (Windows via WSL2);
+   - data: Oxford-IIIT Pet (CC BY-SA), COCO dogs, and ~200 of your own photos auto-labelled with
+     SAM 2.1-large, then hand-corrected;
+   - export to ONNX and drop it in as `vendor/sam2/decoder.onnx`;
+   - accept it only if the held-out library set improves. That's a few days of work.
+   - A cheaper alternative to try first: the larger SAM 2.1-small/base+ models, no training.
+     Measure their encode time on this Mac before considering them.
+
+### Phase 4 — Performance (#6-lag, F6)
+Budgets added to `npm run perf:test` (26 MP photo, this Intel Mac):
+
+| Operation | Today | Budget | Approach |
+|---|---|---|---|
+| Adjust slider → frame | 160–190 ms, 2 renders | ≤ 50 ms, 1 render | coalesce input to one render per frame; skip `mskRebuild` on slider input |
+| Brush stroke frame | 137 ms mean, 1.3 s worst | ≤ 33 ms mean | upload only the dirty rectangle with `texSubImage2D`; reuse stroke buffers (no per-stroke `slice()` / `Float32Array`); render the preview at the screen's resolution while painting |
+| Pointer release | 0.5–0.8 s | ≤ 100 ms | defer the thumbnail and history push to idle time; skip the extra full `renderPreview` |
+| Scribble → mask | 1.5–1.9 s | ≤ 0.6 s | no matting (Phase 3.1); return the mask at mask resolution from Rust in one resize |
+| Refine edges / Clear prompts | 1.06 s / 0.75 s | ≤ 150 ms UI block | move the work to the pixel worker (built via `toString` per §2); Clear prompts shouldn't re-run anything |
+
+---
+
+## Testing — every tool, accuracy and speed
+
+**Accuracy harness (new, `tools/sam_eval/`):** the Python + ONNX scripts used for F2–F5, which
+run the shipped models with identical preprocessing plus the app's own JS matting (extracted
+like `test/unit/extract.mjs`).
+- Labelled set: the dog photo plus 5 library photos with checked outlines (husky with tail, dark
+  dog on a sofa, cockapoo on a train, two dogs on grass, tiny distant dog). Add 10 more covering
+  night, backlight, black-and-white, water, and black dogs on dark ground.
+- Images and outlines stay out of git (your photos). Scripts and score tables are committed.
+- Gate for any change to prompts, models or post-processing: mean IoU not worse, worst IoU not
+  worse, spill on the dog photo ≤ 10 %.
+
+**Tool audit (repeatable):** the live audit becomes a script driven by
+`tools/diagnostics/app_control.py` and `test/lib_mask_panel_scan.js`, in the same order as F6.
+For every control the scanner lists on every mask type it records expected → actual →
+pass/fail/slow, with timings. It takes a snapshot first and restores it afterwards. Run it once at
+the end of each phase (not after every edit).
+
+**Existing gates** at the end only (in the background): `npm run mask:test`, `perf:test`,
+`node test/export_harness.mjs`, `editor:gates`, plus `test/probe_mask_brush_ux.mjs` and
+`test/mask_box_prompt_ui.mjs`.
+
+## Working efficiently
+- Measure offline first. The harness answers "does this change improve selection" in seconds
+  without rebuilding the desktop app. Only finished changes go to the live app.
+- One desktop rebuild per phase, then the tool audit, then the gates in the background.
+- Low-cost subagents (haiku/sonnet) for mechanical work: porting the audit to a script, labelling
+  more reference outlines, running the gates. Keep design and shader work in the main session. At
+  most two large agents at a time.
+- Phases 1 and 2 touch different code (UI state vs shader) and can run in parallel sessions.
+  Phase 3 depends on Phase 1 (brush size) and needs the harness. Phase 4 comes last because
+  Phase 3.1 removes the biggest cost.
 
 ## Completeness check
 Done means a scan of the running app, not this list:
-- **Tool exclusivity:** for every mask type that renders tool buttons (scan
-  `#ff-local [id^="btn-msk-"][aria-pressed]` after creating each type from the Create New Mask
-  menu, including Objects, Subject, Brush, Skin, Sky), click every tool in turn and assert that
-  exactly one button has `aria-pressed="true"` and the canvas cursor/ring matches it.
-  Objects must open with Scribble pressed.
-- **Overlay:** for every value in `MSK_SELVIEW_STYLES` × outline on/off × every mask type,
-  render with Exposure +50 and assert that the pixels inside the selection differ from the
-  same render with Exposure 0 (the adjustment shows through). Export goldens unchanged.
-- **Brush:** switch Paint → Erase → Paint (A and B slots) and assert size/flow/feather never
-  change. A fresh session starts at size 8.
-- **AI quality:** eval IoU on the test set improves over the current baseline on every photo,
-  and the dog photo shows no selection on the door or bushes. Checked in the real desktop app,
-  not only the harness.
-- Fresh-context gap review of the finished change before closing.
+- The tool audit script covers **every control `lib_mask_panel_scan.js` reports for every mask
+  type** in the Create New Mask menu, default and expanded. Any control without a verdict fails the run.
+- Tool exclusivity: on every mask type, every click order over every tool button leaves exactly
+  one `aria-pressed="true"`, matching `mskTool`. Objects opens on Scribble.
+- Erase on AI, brush and composed masks lowers coverage under the stroke and makes zero AI calls.
+- Overlay: for every `MSK_SELVIEW_STYLES` value × outline on/off, the pixels inside the selection
+  with Exposure +50 differ from Exposure 0. Export goldens unchanged.
+- Brush: Paint ↔ Erase never changes size/flow/feather/density. A fresh session starts at size 8.
+- Accuracy harness gate passes. The dog photo shows no selection on the door, window or bushes
+  in the real desktop app (screenshot).
+- All Phase 4 budgets pass in `perf:test`.
+- Fresh-context gap review before closing.
