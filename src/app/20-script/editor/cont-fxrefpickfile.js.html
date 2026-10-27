@@ -246,7 +246,7 @@ function renderLoupe(){
   const loupeOps=(P.redEyeOps||[]).map(o=>({...o,x:(o.x*fw-ox)/cropW,y:(o.y*fh-oy)/cropH,rx:o.rx*fw/cropW,ry:o.ry*fh/cropH}));
   drawRedEyePreview({...P,redEyeOps:loupeOps});
   const orig=document.getElementById('fx-canvas-orig');if(orig){orig.style.display='none';orig.style.clipPath='';}
-  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+  const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';_fxBdLayeredOff();
   document.getElementById('fx-no-img').style.display='none';
   document.getElementById('fx-info').textContent=`1:1 — native ${Math.round(cropW*kF)}×${Math.round(cropH*kF)}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;

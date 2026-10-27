@@ -1,23 +1,98 @@
-function bordersAny(P,b1t,b2t){return!!(b1t||b2t||(P.bordersEnabled&&((P.b1.type==='film'&&P.b1.thickness>0)||(P.b2.type==='film'&&P.b2.thickness>0))));}
-function filmLayerSize(P,L,w){return P.bordersEnabled&&L.type==='film'?Math.round(w*L.thickness/100):0;}
-function frameShuffle(){fxState.frameShuffle=Math.random()*100;fxUpdate();}
-/// After a restore: show the film rows for film layers, and remember a Source choice whose
-/// option list has not arrived yet (it fills from the manifest).
-function _borderUISync(){
-  for(const k of ['b1','b2']){const t=document.getElementById('sel-'+k+'-type');if(!t)continue;
-    const film=t.value==='film';document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
-    if(film)filmEdgeManifest();}
+// ── Layered border preview ─────────────────────────────────────────────────────────────────
+// Compositing the border used to COPY the finished WebGL frame into a 2D canvas on every render:
+// on WebKit that read-back cost ~33ms per drag frame and ~170ms per settled frame, while drawing
+// the border itself took 2-18ms. The preview now stacks three layers instead, so the photo never
+// leaves the GPU:
+//   #fx-canvas-bd      (back)  bands, grain, matte — same element, size and _fxDisplayMap as before,
+//                              so pointer mapping, zoom, overlays and fxLiveFit are unchanged
+//   #fx-canvas         (live)  absolutely positioned over the photo rect, in % so it follows resizes
+//   #fx-canvas-bdfront (front) film edges, film plate, glow; transparent elsewhere
+// Layers are redrawn only when the border settings, size or photo change. Two effects read the
+// photo's own pixels (blurred-photo matte without a picked background, film-edge glow): those are
+// rebuilt from a read-back on settled frames only, and held still while dragging.
+// Export and video still use the single-canvas path (drawBorderLayers without a mode).
+let _fxBdLayerKey='',_fxBdLayerGen=0,_fxBdLayerRc=0;
+function _fxBdFront(create){
+  let f=document.getElementById('fx-canvas-bdfront');
+  if(!f&&create){f=document.createElement('canvas');f.id='fx-canvas-bdfront';f.setAttribute('aria-hidden','true');
+    f.style.cssText='display:none;position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:1';
+    document.getElementById('fx-zoom-wrap').appendChild(f);}
+  return f;
 }
-function borderTypeChanged(){
-  for(const k of ['b1','b2']){const film=(document.getElementById('sel-'+k+'-type')||{}).value==='film';
-    document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
-    if(film)filmEdgeManifest();}
-  fxUpdate();
+let _fxBdLivePos=null;
+// Live photo canvas over the photo rect of #fx-canvas-bd, in % of #fx-zoom-wrap (pinned to bd's size),
+// so fxLiveFit and window resizes keep it aligned without a re-render.
+function _fxBdPlaceLive(){
+  const p=_fxBdLivePos;if(!p)return;const st=FX.cv.style;
+  st.position='absolute';st.left=p[0]+'%';st.top=p[1]+'%';st.width=p[2]+'%';st.height=p[3]+'%';
+  st.pointerEvents='none';st.display='block';  // pointers land on #fx-canvas-bd, which maps them via _fxDisplayMap
 }
-// Bug C fix: borders were only drawn at export. Draw them in the preview too (onto a 2D
-// overlay canvas) so the toggle/colours/thickness are actually visible while editing.
-// Extended for the CANVAS matte: borders first, then canvasCompose around the result.
-function applyPreviewBorders(P,pw,ph){
+function _fxBdLayeredOff(){window.__fxBdLayered=false;_fxBdLayerKey='';const f=_fxBdFront(false);if(f)f.style.display='none';}
+function _fxBdSizeToFit(bd){
+  const fw=(_fxFitBox&&_fxFitBox.w)||fxWrapInner().w||bd.width,fh=(_fxFitBox&&_fxFitBox.h)||fxPreviewMaxH()||bd.height,k=Math.min(fw/bd.width,fh/bd.height,(typeof _fxBdZoomed==='function'&&_fxBdZoomed())?Infinity:1);
+  bd.style.maxWidth='none';bd.style.width=Math.round(bd.width*k)+'px';bd.style.height=Math.round(bd.height*k)+'px';
+}
+function _fxBorderLayered(P,pw,ph,bd,b1t,b2t){
+  const inset=b1t+b2t,tw=pw+2*inset,th=ph+2*inset,CV=P.canvas,cvOn=!!(CV&&CV.enabled&&CV.ar),zoom=cvOn?(CV.zoom||1):1;
+  const outW=cvOn?Math.round(tw/th>CV.ar?tw:th*CV.ar):tw,outH=cvOn?Math.round(tw/th>CV.ar?tw/CV.ar:th):th;
+  const sx=(outW-tw*zoom)/2,sy=(outH-th*zoom)/2;          // where canvasCompose puts the bordered stage
+  const film=L=>P.bordersEnabled&&L&&L.type==='film'&&L.thickness>0;
+  const frameOn=!!(P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none');
+  const needsPhoto=(cvOn&&CV.blur&&!CV.bgImg)||(film(P.b1)&&P.b1.glow>0)||(film(P.b2)&&P.b2.glow>0);
+  const seed=borderSeed(fxImages[fxCurIdx],P);
+  const bgId=CV&&CV.bgImg?(CV.bgImg._csId||(CV.bgImg._csId=++_fxBdLayerGen)):0;
+  const rcPart=needsPhoto?(_fxPreviewInteracting&&_fxBdLayerRc?_fxBdLayerRc:FX._rc):0; // photo-dependent layers hold still mid-drag
+  const key=JSON.stringify([pw,ph,P.bordersEnabled,P.b1,P.b2,P.filmFrame,cvOn&&{...CV,bgImg:bgId},seed,rcPart]);
+  const wasLayered=window.__fxBdLayered;
+  if(key!==_fxBdLayerKey||!wasLayered||bd.width!==outW||bd.height!==outH){
+    const src=needsPhoto?FX.cv:{width:pw,height:ph,_stub:true};
+    // back
+    const stage=document.createElement('canvas');stage.width=tw;stage.height=th;
+    drawBorderLayers(stage.getContext('2d'),src,P,b1t,b2t,seed,'back');
+    const fin=canvasCompose(stage,CV);
+    bd.width=outW;bd.height=outH;bd.getContext('2d').drawImage(fin,0,0);
+    if(fin!==stage)fin.width=fin.height=0;
+    // front
+    let complete=true,frontOn=false;
+    if(film(P.b1)||film(P.b2)||frameOn){
+      const fs=document.createElement('canvas');fs.width=tw;fs.height=th;
+      complete=drawBorderLayers(fs.getContext('2d'),src,P,b1t,b2t,seed,'front')!==false;
+      const framed=filmFrameCompose(fs,P.filmFrame);
+      if(frameOn&&framed===fs)complete=false;               // plate still decoding
+      const f=_fxBdFront(true);f.width=outW;f.height=outH;const fx=f.getContext('2d');fx.clearRect(0,0,outW,outH);
+      fx.drawImage(framed,sx,sy,tw*zoom,th*zoom);
+      if(framed!==fs)framed.width=framed.height=0;fs.width=fs.height=0;
+      frontOn=true;
+    }
+    stage.width=stage.height=0;
+    const f=_fxBdFront(false);if(f)f.style.display=frontOn?'block':'none';
+    _fxBdLayerKey=complete?key:'';_fxBdLayerRc=rcPart;                         // incomplete: rebuild when the strip/plate lands
+    _fxBdLayerGen++;
+  }
+  _fxBdSizeToFit(bd);
+  const px=sx+inset*zoom,py=sy+inset*zoom,pwz=pw*zoom,phz=ph*zoom;
+  _fxBdLivePos=[px/outW*100,py/outH*100,pwz/outW*100,phz/outH*100];
+  _fxBdPlaceLive();
+  const redEyeCv=document.getElementById('fx-canvas-redeye');if(redEyeCv)redEyeCv.style.display='none';
+  bd.style.display='block';
+  window.__fxBdLayered=true;
+  _fxDisplayMap={el:bd,offX:Math.round(px),offY:Math.round(py),w:pwz,h:phz};
+  fxPlacePhotoOverlays();
+}
+// One canvas holding exactly what the preview shows (the Library thumbnail and anything else that
+// needs the bordered picture as pixels). Layered: back + live photo + front, cached per render.
+let _fxSnapCache=null;
+function fxPreviewSnapshotCanvas(){
+  const bd=document.getElementById('fx-canvas-bd');
+  if(!(bd&&bd.style.display!=='none'&&bd.width&&bd.height))return FX&&FX.cv;
+  if(!window.__fxBdLayered||!_fxDisplayMap)return bd;
+  const k=FX._rc+'|'+_fxBdLayerGen;if(_fxSnapCache&&_fxSnapCache.k===k)return _fxSnapCache.cv;
+  const c=document.createElement('canvas');c.width=bd.width;c.height=bd.height;const x=c.getContext('2d');
+  x.drawImage(bd,0,0);const m=_fxDisplayMap;x.drawImage(FX.cv,m.offX,m.offY,m.w,m.h);
+  const f=_fxBdFront(false);if(f&&f.style.display!=='none')x.drawImage(f,0,0);
+  _fxSnapCache={k,cv:c};return c;
+}
+function applyPreviewBorders(P,pw,ph,layered){
   // Appended into #fx-zoom-wrap (NOT the outer #fx-wrap) — that's the element _applyZoom()
   // actually applies scale()/translate() to. Appending to #fx-wrap put this canvas outside
   // the zoomed subtree entirely, so zoom worked (fxZoom/readout updated) but had zero visual
@@ -28,8 +103,11 @@ function applyPreviewBorders(P,pw,ph){
   const cvOn=P.canvas&&P.canvas.enabled&&P.canvas.ar;
   const frameOn=P.filmFrame&&P.filmFrame.style&&P.filmFrame.style!=='none';
   const bAny=bordersAny(P,b1t,b2t);
-  if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;fxPlacePhotoOverlays();return;}
+  if(!bAny&&!cvOn&&!frameOn){_fxBdLayeredOff();if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;fxPlacePhotoOverlays();return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);_fxCvListeners.forEach(([t,f,o])=>bd.addEventListener(t,f,o));}
+  {const re=document.getElementById('fx-canvas-redeye');
+   if(layered&&!window.__fxNoBdLayers&&!(re&&re.style.display!=='none')&&!fxSplit&&fxComparePreviousSnapshot===null&&!_curIsVideoDraft()){_fxBorderLayered(P,pw,ph,bd,b1t,b2t);return;}}
+  _fxBdLayeredOff();
   // stage 1: bordered image (or the bare render when borders are off)
   const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
   let stage=baseStage;

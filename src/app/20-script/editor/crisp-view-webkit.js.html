@@ -16,6 +16,7 @@ function _fxCrispEnabled(){
 function fxCrispSuspend(){
   const cv=document.getElementById('fx-canvas-crisp');if(cv)cv.style.display='none';
   const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.opacity='';if(FX&&FX.cv)FX.cv.style.opacity='';
+  const bf=document.getElementById('fx-canvas-bdfront');if(bf)bf.style.opacity='';
   _fxCrispOn=false;
 }
 function fxCrispSchedule(){
@@ -38,21 +39,27 @@ function fxCrispDraw(){
   const W=Math.max(1,Math.round(box.width*d)),H=Math.max(1,Math.round(box.height*d));
   if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
   cv.style.display='block';
-  const org=cv.getBoundingClientRect(),r=src.getBoundingClientRect();
-  if(!r.width||!r.height)return;
-  const bw=src.width,bh=src.height;
-  let dx=Math.round((r.left-org.left)*d),dy=Math.round((r.top-org.top)*d),dw=Math.max(1,Math.round(r.width*d)),dh=Math.max(1,Math.round(r.height*d));
-  // Within 1% of one backing px per device px (CSS sizes are rounded to whole px) is a 1:1 view: copy exact pixels, no resample.
-  if(Math.abs(dw/bw-1)<0.01&&Math.abs(dh/bh-1)<0.01){dw=bw;dh=bh;}
-  const x0=Math.max(0,dx),y0=Math.max(0,dy),x1=Math.min(W,dx+dw),y1=Math.min(H,dy+dh);
-  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
-  if(x1>x0&&y1>y0){
-    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality=dw<bw?'high':'low';
-    const from=src,sx=(x0-dx)*bw/dw,sy=(y0-dy)*bh/dh,sw=(x1-x0)*bw/dw,sh=(y1-y0)*bh/dh;
-    ctx.drawImage(from,sx,sy,sw,sh,x0,y0,x1-x0,y1-y0);
+  const org=cv.getBoundingClientRect(),ctx=cv.getContext('2d');
+  // Layered borders (see _fxBorderLayered): copy back, live photo and front, each from its own rect.
+  const front=document.getElementById('fx-canvas-bdfront');
+  const layers=(src===bd&&window.__fxBdLayered)?[bd,FX.cv].concat(front&&front.style.display!=='none'?[front]:[]):[src];
+  if(!src.getBoundingClientRect().width)return;
+  ctx.clearRect(0,0,W,H);
+  for(const el of layers){
+    const r=el.getBoundingClientRect();if(!r.width||!r.height||!el.width||!el.height)continue;
+    const bw=el.width,bh=el.height;
+    let dx=Math.round((r.left-org.left)*d),dy=Math.round((r.top-org.top)*d),dw=Math.max(1,Math.round(r.width*d)),dh=Math.max(1,Math.round(r.height*d));
+    // Within 1% of one backing px per device px (CSS sizes are rounded to whole px) is a 1:1 view: copy exact pixels, no resample.
+    if(Math.abs(dw/bw-1)<0.01&&Math.abs(dh/bh-1)<0.01){dw=bw;dh=bh;}
+    const x0=Math.max(0,dx),y0=Math.max(0,dy),x1=Math.min(W,dx+dw),y1=Math.min(H,dy+dh);
+    if(x1>x0&&y1>y0){
+      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality=dw<bw?'high':'low';
+      const sx=(x0-dx)*bw/dw,sy=(y0-dy)*bh/dh,sw=(x1-x0)*bw/dw,sh=(y1-y0)*bh/dh;
+      ctx.drawImage(el,sx,sy,sw,sh,x0,y0,x1-x0,y1-y0);
+    }
   }
-  // Only the active image canvas goes transparent; the other (hidden) one is left alone.
-  src.style.opacity='0';const other=src===bd?FX.cv:bd;if(other)other.style.opacity='';
+  // Only the active image canvases go transparent; a hidden one is left alone.
+  for(const el of [bd,FX.cv,front])if(el)el.style.opacity=layers.includes(el)?'0':'';
   _fxCrispOn=true;
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
@@ -75,7 +82,9 @@ const FX_ZOOM_MAX_PCT=1600;
 function _fxTrueZoomK(){
   // Null-safe on purpose: this runs from _updateZoomReadout during a photo open, when the editor canvas /
   // zoom wrapper may not be in the DOM yet (the desktop open path) — a throw here aborts the whole open.
-  const zw=document.getElementById('fx-zoom-wrap'),cv=document.getElementById('fx-canvas');
+  const zw=document.getElementById('fx-zoom-wrap');let cv=document.getElementById('fx-canvas');
+  // Layered borders: #fx-canvas is sized in % of the wrap, so measure the composite (#fx-canvas-bd) instead.
+  {const bd=document.getElementById('fx-canvas-bd');if(window.__fxBdLayered&&bd&&bd.style.display!=='none'&&parseFloat(bd.style.width))cv=bd;}
   let w=parseFloat(zw&&zw.style.width)||parseFloat(cv&&cv.style.width)||(cv&&cv.clientWidth)||0;
   // Borders/matte: the pinned wrap is the composite; the PHOTO's width inside it is what 100% means.
   if(_fxDisplayMap&&w){const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none'&&bd.width)w=w*_fxDisplayMap.w/bd.width;}

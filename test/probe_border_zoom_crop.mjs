@@ -24,7 +24,9 @@ try {
     assert.ok(mad < 6, 'tile misaligned or wrong colours: ' + mad);
   }
   await page.evaluate(() => { fxZoom = 1; _applyZoom(false, true); window.__fxNoBorderCrop = false; }); await settle();
-  assert.ok(await page.evaluate(() => !window.__fxBorderCrop && FX.cv.style.position === '' && FX.cv.style.pointerEvents === ''), 'overlay cleared at Fit');
+  assert.ok(await page.evaluate(() => !window.__fxBorderCrop && (window.__fxBdLayered
+    ? FX.cv.style.position === 'absolute' && FX.cv.style.pointerEvents === 'none' && FX.cv.style.width.endsWith('%') // layered border preview: live photo sits over the border canvas
+    : FX.cv.style.position === '' && FX.cv.style.pointerEvents === '')), 'overlay cleared at Fit');
   assert.deepEqual(errors.filter(e => !/favicon/.test(e)), []);
   console.log('probe_border_zoom_crop: PASS');
 } finally { await close(); }

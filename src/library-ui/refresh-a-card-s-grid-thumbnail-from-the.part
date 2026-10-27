@@ -16,7 +16,9 @@
     // active (#fx-canvas gets display:none) — grabbing #fx-canvas unconditionally silently
     // dropped borders/canvas-matte edits from the library thumbnail. Use whichever is visible.
     const bd = document.getElementById('fx-canvas-bd');
-    const cv = (bd && bd.style.display !== 'none' && bd.width && bd.height) ? bd : document.getElementById('fx-canvas');
+    // Layered borders keep the photo on its own canvas: fxPreviewSnapshotCanvas stacks the layers.
+    const cv = typeof window.fxPreviewSnapshotCanvas === 'function' ? window.fxPreviewSnapshotCanvas()
+      : ((bd && bd.style.display !== 'none' && bd.width && bd.height) ? bd : document.getElementById('fx-canvas'));
     if (!card || !cv || !cv.width || !cv.height) return;
     const img = card.querySelector('img');
     if (!img) return;

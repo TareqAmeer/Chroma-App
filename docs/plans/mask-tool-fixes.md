@@ -254,3 +254,22 @@ had already removed. The copy also shifted the sharpened draft by a mean of 4.7 
 the frame would visibly change when it settles. It isn't worth that. Per slider frame now:
 bordered composite ~30 ms (drawImage of the WebGL canvas waits for the GPU), render ~16 ms JS plus GPU,
 overlay and zoom refit ~6 ms.
+
+### Layered border preview (2026-10-27)
+The border preview no longer copies the finished photo out of the GPU. `#fx-canvas-bd` now holds
+only the back layer (bands, grain, matte), `#fx-canvas` sits over the photo rect (sized in % of the
+zoom wrap), and `#fx-canvas-bdfront` holds film edges, film plates and glow. The layers redraw only
+when border settings, size or photo change. Export and video keep the single-canvas path.
+The zoomed-in bordered view (sharp tiles over an underlay), red-eye preview, split/compare and
+video drafts also stay on it.
+
+| Live desktop app, RAW dog photo, borders on | Old (copy) | Layered |
+|---|---|---|
+| Slider drag, per frame (median / p90) | 43 / 47 ms | **28 / 30 ms** |
+| Settled render | 187–201 ms | **148 ms** |
+| Same frame, layered view vs old composite | | 0 levels difference |
+| Film-edge border split into back + front vs one canvas | | 0 levels difference |
+
+Probes: `probe_border_zoom_crop` (assertion updated for the layered structure), `probe_mask_zoom_align`,
+`probe_geom_border_tools`, `zoom_edge_cases` and `ui:test` pass. `probe_preview_export_parity` gives the same
+numbers as before this change (it already failed at 200 % and 500 %). `probe_preview_px` fails the same way as before.

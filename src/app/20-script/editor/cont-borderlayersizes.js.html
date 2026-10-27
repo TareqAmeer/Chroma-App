@@ -1,0 +1,23 @@
+function borderLayerSizes(P,w){
+  const t=L=>P.bordersEnabled&&L.type!=='film'?Math.round(w*L.thickness/100):0;
+  return{b1t:t(P.b1),b2t:t(P.b2)};
+}
+function bordersAny(P,b1t,b2t){return!!(b1t||b2t||(P.bordersEnabled&&((P.b1.type==='film'&&P.b1.thickness>0)||(P.b2.type==='film'&&P.b2.thickness>0))));}
+function filmLayerSize(P,L,w){return P.bordersEnabled&&L.type==='film'?Math.round(w*L.thickness/100):0;}
+function frameShuffle(){fxState.frameShuffle=Math.random()*100;fxUpdate();}
+/// After a restore: show the film rows for film layers, and remember a Source choice whose
+/// option list has not arrived yet (it fills from the manifest).
+function _borderUISync(){
+  for(const k of ['b1','b2']){const t=document.getElementById('sel-'+k+'-type');if(!t)continue;
+    const film=t.value==='film';document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+}
+function borderTypeChanged(){
+  for(const k of ['b1','b2']){const film=(document.getElementById('sel-'+k+'-type')||{}).value==='film';
+    document.querySelectorAll('[data-film-row="'+k+'"]').forEach(r=>r.hidden=!film);
+    if(film)filmEdgeManifest();}
+  fxUpdate();
+}
+// Bug C fix: borders were only drawn at export. Draw them in the preview too (onto a 2D
+// overlay canvas) so the toggle/colours/thickness are actually visible while editing.
+// Extended for the CANVAS matte: borders first, then canvasCompose around the result.

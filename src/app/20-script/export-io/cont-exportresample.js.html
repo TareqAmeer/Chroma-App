@@ -226,28 +226,31 @@ function borderSeed(it,P){
 }
 /// Draws `src` with both border layers into ctx `x` (size src + 2*(b1t+b2t)). Shared by preview,
 /// still export and video so they can never disagree.
-function drawBorderLayers(x,src,P,b1t,b2t,seed){
+// mode (preview layers only, see _fxBorderLayered): 'back' = bands + grain, no film, and the photo
+// is drawn only when src is real ({width,height,_stub:true} leaves its area to the live canvas);
+// 'front' = film layers only, on a transparent canvas. Omitted = everything (export, video).
+// Returns false when a film strip had not decoded yet (the caller re-renders when it lands).
+function drawBorderLayers(x,src,P,b1t,b2t,seed,mode){
   const sw=src.width,sh=src.height,tw=sw+2*(b1t+b2t),th=sh+2*(b1t+b2t);
-  const L1=P.b1,L2=P.b2;
+  const L1=P.b1,L2=P.b2,back=mode!=='front',front=mode!=='back';let complete=true;
   // b1t/b2t are PLAIN bands only (film layers add no canvas — see borderLayerSizes)
+  if(back){
   x.fillStyle=L2.color;x.fillRect(0,0,tw,th);
   x.fillStyle=L1.color;x.fillRect(b2t,b2t,tw-2*b2t,th-2*b2t);
-  x.drawImage(src,b1t+b2t,b1t+b2t,sw,sh);
+  if(!src._stub)x.drawImage(src,b1t+b2t,b1t+b2t,sw,sh);
+  }
   const R=_filmRng(Math.floor(seed*7919e3));
-  if(b1t>0&&L1.grain>0){x.save();x.beginPath();x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.rect(b1t+b2t,b1t+b2t,sw,sh);x.clip('evenodd');_layerGrain(x,tw,th,L1.grain,R,'overlay');x.restore();}
-  if(b2t>0&&L2.grain>0){x.save();x.beginPath();x.rect(0,0,tw,th);x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.clip('evenodd');_layerGrain(x,tw,th,L2.grain,R,'overlay');x.restore();}
+  if(back&&b1t>0&&L1.grain>0){x.save();x.beginPath();x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.rect(b1t+b2t,b1t+b2t,sw,sh);x.clip('evenodd');_layerGrain(x,tw,th,L1.grain,R,'overlay');x.restore();}
+  if(back&&b2t>0&&L2.grain>0){x.save();x.beginPath();x.rect(0,0,tw,th);x.rect(b2t,b2t,tw-2*b2t,th-2*b2t);x.clip('evenodd');_layerGrain(x,tw,th,L2.grain,R,'overlay');x.restore();}
   // Film layers are laid ONTO the picture: inner over the photo, outer over photo + inner band.
   // Position slides the frame in (+) or out (-) by up to its own width; the canvas clips it.
   const film=(L,rx,ry,rw,rh,sd)=>{const t=filmLayerSize(P,L,sw);if(!t)return;
     const off=Math.round(t*(L.pos||0)/100),X=rx+off,Y=ry+off,W=rw-2*off,H=rh-2*off;if(W<4*t||H<4*t)return;
-    const ring=_filmRing(W,H,t,L,sd);if(!ring)return;
+    const ring=_filmRing(W,H,t,L,sd);if(!ring){complete=false;return;}
     x.save();x.beginPath();x.rect(rx,ry,rw,rh);x.clip();x.drawImage(ring,X,Y);
-    if(L.glow>0){x.translate(X,Y);_filmGlow(x,ring,src,b1t+b2t-X,b1t+b2t-Y,sw,sh,L.glow);}
+    if(L.glow>0&&!src._stub){x.translate(X,Y);_filmGlow(x,ring,src,b1t+b2t-X,b1t+b2t-Y,sw,sh,L.glow);}
     x.restore();};
-  if(L1.type==='film')film(L1,b1t+b2t,b1t+b2t,sw,sh,seed);
-  if(L2.type==='film')film(L2,b2t,b2t,tw-2*b2t,th-2*b2t,seed+0.5);
-}
-function borderLayerSizes(P,w){
-  const t=L=>P.bordersEnabled&&L.type!=='film'?Math.round(w*L.thickness/100):0;
-  return{b1t:t(P.b1),b2t:t(P.b2)};
+  if(front&&L1.type==='film')film(L1,b1t+b2t,b1t+b2t,sw,sh,seed);
+  if(front&&L2.type==='film')film(L2,b2t,b2t,tw-2*b2t,th-2*b2t,seed+0.5);
+  return complete;
 }

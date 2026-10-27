@@ -36,7 +36,7 @@ function cropEnter(){
    if(!saved&&bw0&&bh0){cc.style.maxWidth='none';cc.style.maxHeight='none';cc.style.width=Math.round(bw0)+'px';cc.style.height=Math.round(bh0)+'px';}
    else{cc.style.maxWidth='100%';cc.style.maxHeight='70vh';cc.style.width='';cc.style.height='auto';}
    if(zw){zw.dataset.cropHid='1';zw.style.display='none';}}
-  FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';
+  FX.cv.style.display='none';const bd=document.getElementById('fx-canvas-bd');if(bd)bd.style.display='none';_fxBdLayeredOff();
   cropN=saved?{...saved}:cropDefaultForAR();
   ov.innerHTML='<div class="crop-rect" id="crop-rect">'+cropGridLinesHtml()+'<div class="crop-h nw" data-c="nw"></div><div class="crop-h ne" data-c="ne"></div><div class="crop-h sw" data-c="sw"></div><div class="crop-h se" data-c="se"></div></div>';
   ov.classList.add('on');ov.onpointerdown=cropDown;
