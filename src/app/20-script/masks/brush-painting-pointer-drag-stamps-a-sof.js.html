@@ -47,7 +47,7 @@ function mskBrushNudge(what,d){
   if(typeof mskSpotlightRefresh==='function')mskSpotlightRefresh();
 }
 
-function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;if(typeof mskThumbRefresh==='function')mskThumbRefresh(mskSel);renderPreview();fxHistoryPush();}
+function mskPaintEndStroke(){_mskSS=null;if(!_mskStroke)return;if('_amRef' in _mskStroke){_mskStroke._amRef=null;_mskStroke._amData=null;}_mskStroke=null;fxHistoryPush();fxScheduleRender();const si=mskSel;setTimeout(()=>{if(typeof mskThumbRefresh==='function')mskThumbRefresh(si);},0);} // no synchronous full render on release (was 0.4 s): the stroke's settle frame already lands
 function mskPaintTransientReset(){_mskBrushTransientReset();mskPaintEndStroke();}
 function mskPaintToggle(){
   _mskPaintResume=null;
@@ -168,7 +168,9 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
 (function initMaskPaint(){
   const cv=document.getElementById('fx-canvas');if(!cv)return;
   let renderQueued=false;
-  const queueRender=()=>{if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;renderPreview();if(typeof mskOverlaySync==='function')mskOverlaySync();});};
+  // Strokes use the shared interactive tier (cheap per-frame renders, one full-quality settle 180 ms after the
+  // last move) instead of a full-quality render every frame — measured ~7 fps on a 26 MP photo before.
+  const queueRender=()=>{fxScheduleRender();if(renderQueued)return;renderQueued=true;requestAnimationFrame(()=>{renderQueued=false;if(typeof mskOverlaySync==='function')mskOverlaySync();});};
   // Live brush cursor: a ring at the photo's actual painted radius, following the pointer
   // whenever Paint is armed — independent of whether a stroke is currently down, so you can see
   // the brush size BEFORE clicking, not just while dragging. Diameter mirrors mskPaintAt's own
