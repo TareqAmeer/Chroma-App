@@ -7575,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028G';
+const BUILD='1.1028H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -17565,7 +17565,14 @@ async function samRunPoints(m,opts={}){
     let refined=mask;
     // Detected people/animals: the matting model's hair/fur alpha inside SAM's edge band (item 14), then the
     // clean-up + photo-guided upsample every one-shot AI raster gets (items 25/26).
-    if(m.aiEdge&&!opts.detached){const e=await _mskEdgeMatte(item,refined,header.width,header.height,m.aiEdge);if(e)refined=e;}
+    // The matte costs seconds the first time on a photo, so the selection lands at once with SAM's edge and the
+    // hair/fur edge follows in place when the matte is ready (only if the mask was not changed meanwhile).
+    let edgeLater=false;
+    if(m.aiEdge&&!opts.detached){
+      const model=await mskMatteModelFor(m.aiEdge),{w:aw,h:ah}=samInputDims(),cached=model&&item&&item._matte&&item._matte[model+'|'+aw+'x'+ah];
+      if(cached||opts.edgeNow){const e=await _mskEdgeMatte(item,refined,header.width,header.height,m.aiEdge);if(e)refined=e;}
+      else if(model&&aiBox)edgeLater={px:Uint8ClampedArray.from(refined),mtW:header.width,mtH:header.height,backend:cmd};
+    }
     // Every SAM result is stored at the mask texture size, edge snapped to the photo (item 25) — except an older mask
     // still holding a model-size raster with manual Paint/Erase on it, whose brush delta must keep matching sizes.
     const T=mskTexDims(),legacy=m.px&&m.px.length&&m.px.length!==T.w*T.h&&m._aiBase;
@@ -17597,6 +17604,10 @@ async function samRunPoints(m,opts={}){
     // just actively scribbling, rather than silently jumping to the newly-inserted Eyes mask.
     if(!opts.detached&&m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);mskSel=fxState.masks.indexOf(m);}
     if(!opts.detached){if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
+    if(edgeLater){const stored=m.px;
+      mskMatteModelFor(m.aiEdge).then(md=>_mskMatteFor(item,md)).then(()=>{
+        if(curItem()===item&&fxState.masks.includes(m)&&m.px===stored&&_samNormalizeBox(m.aiBox))return samRunPoints(m,{silent:true,precomputed:edgeLater,edgeNow:true});
+      }).catch(e=>log('Edge matting skipped — '+(e&&e.message||e),'warn'));}
     return{ok:true,width:header.width,height:header.height};
   }catch(e){
     const msg='AI Select failed — '+(e&&e.message||e);

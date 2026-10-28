@@ -99,6 +99,11 @@ Added during the work:
     small dog chip (1459 px → 8) in the real app.
 38. A click right after opening a photo waits for the in-flight SAM encode instead of failing "not ready yet".
 
+39. Detected-chip clicks land at once with SAM's edge; the hair/fur matte edge replaces it in place a few seconds
+    later (first matte on a photo took 5–10 s in the real app before the chip appeared).
+- Real app (labelled set, after the fixes): Detected chip IoU 0.86–0.98 (was 0.00 before the matte gate), single
+  click 0.92–0.99, Auto Subject 0.86–0.98 on single-subject photos.
+
 ## Completeness check
 - Mask entry points come from the running app: the create grid (`#msk-create-grid .msk-tile` → data-kind), the Detected
   row (`#msk-scene .msk-chip`), and the Landscape row (`#msk-landscape-row button`). `test/mask_detect_objects.mjs` scans
