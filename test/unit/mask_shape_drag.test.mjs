@@ -54,3 +54,9 @@ test('true-shape: no aspect falls back to the old maths', () => {
   const d = { which: 'move', px: .55, py: .5, m0: R };
   assert.equal(JSON.stringify(dragAR('radial', d, .65, .6, 1000, 500)), JSON.stringify(drag('radial', d, .65, .6, 1000, 500)));
 });
+test('linear draw with Shift snaps to straight down/up or across on screen', () => {
+  const a = drag('linear', { which: 'draw', px: .5, py: .8, m0: Lm }, .53, .3, 1000, 500, true);
+  near(a.x1, .5); near(a.y1, .3);
+  const b = drag('linear', { which: 'draw', px: .2, py: .5, m0: Lm }, .6, .55, 1000, 500, true);
+  near(b.y1, .5); near(b.x1, .6);
+});

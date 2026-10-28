@@ -802,6 +802,8 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile �
 .msk-handle{fill:#fff;stroke:#000;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
 .msk-handle.rot{fill:var(--acc,#e8a33d);cursor:alias}
 .msk-handle:active{cursor:grabbing}
+.msk-handle{transform-box:fill-box;transform-origin:center;transition:transform .12s}
+.msk-handle:hover,.msk-handle:active{transform:scale(1.3)}
 .msk-handle.center{fill:#ff9b42}
 /* Deliberately NOT an accent fill any more — .seg's raised-surface indicator carries it. Amber
    is reserved for the primary action, active navigation and "you changed this"; using it for
@@ -7570,7 +7572,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028D';
+const BUILD='1.1028E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16750,7 +16752,13 @@ function mskAdd(type,configure){
     m={type:'none',origin:type,..._mskAdjustDefaults()};
   }
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
+  else if(type==='radial'){
+    // A circle on screen (ry scaled by the photo's aspect), with Lightroom's default Feather of 50:
+    // a flat middle and a soft edge, so the shape reads as a shape. (0.5 = Feather 100 started
+    // the falloff at the very centre, so the default looked like a faint vignette.)
+    const ar=mskPhotoAR(),r=0.25*Math.min(1,1/ar);
+    m={type:'radial',cx:0.5,cy:0.5,rx:r,ry:Math.min(0.45,r*ar),rot:0,feather:0.25,ar,..._mskAdjustDefaults()};
+  }
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
   else if(type==='sky'){ // sky: brush-type raster mask. The colour/position heuristic shows at once;
     // mskSkyUpgrade then swaps in the finished raster (desktop Landscape model, else the heuristic)
@@ -16816,6 +16824,8 @@ function mskAdd(type,configure){
   }
   // Radial/Linear: like Lightroom, the next drag on the photo draws the shape (a click keeps the default).
   if((type==='radial'||type==='linear')&&typeof mskDrawArm==='function'){mskDrawArm(m);log('Drag on the photo to draw the '+(type==='radial'?'radial (Shift: circle)':'linear gradient')+', or click to place it. Esc keeps it as is.','info');}
+  // Brush: like Lightroom's K, a new brush mask is ready to paint straight away.
+  if(type==='brush'&&m.origin==='paint'&&typeof configure!=='function'&&typeof mskBrushSlotSelect==='function'){mskBrushSlotSelect(mskBrushSlot);log('Paint on the photo. Hold Alt to erase; [ and ] change the size.','info');}
   if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
   if(type==='depth'){
@@ -19355,7 +19365,10 @@ function mskSpotlightUpdate(x,y,r){
   const el=document.getElementById('msk-spotlight');if(!el)return;
   // #msk-spotlight lives in #fx-wrap (outside the zoom transform) and x,y are #fx-wrap-relative,
   // so the box must be the photo's SCREEN rect in #fx-wrap coords, not the zoom-wrap-local box.
-  const pr=mskSpotlight&&typeof fxPhotoClientRect==='function'?fxPhotoClientRect():null,wrap=document.getElementById('fx-wrap');
+  // Only while the mask overlay is off: greying the photo outside the brush also greys the overlay,
+  // which hid every stroke already painted (Lightroom keeps the painted area visible as you paint).
+  const ovOn=typeof mskPreviewMode!=='undefined'&&mskPreviewMode==='select';
+  const pr=mskSpotlight&&!ovOn&&typeof fxPhotoClientRect==='function'?fxPhotoClientRect():null,wrap=document.getElementById('fx-wrap');
   if(!pr||!wrap){el.classList.remove('on');return;}
   const wr=wrap.getBoundingClientRect(),box={left:pr.left-wr.left,top:pr.top-wr.top,width:pr.width,height:pr.height};
   el.style.left=box.left+'px';el.style.top=box.top+'px';el.style.width=box.width+'px';el.style.height=box.height+'px';
@@ -19717,7 +19730,7 @@ function mskPaintAt(m,nx,ny,erase=mskPaintErase){
 // and the overlay/view options start COLLAPSED; a group with non-default values shows a count pill.
 // The persisted choice changed meaning (Light + Color used to default open), so it lives under a NEW
 // key and the legacy one is deleted rather than letting stale state override the new defaults.
-const _MSK_GROUP_DEFAULTS={selection:true,selMore:false,adjust:false,adjColor:false,adjEffects:false,adjDetail:false,skin:true,coattone:false,skinAdv:false,eyepos:false,viewOpts:false};
+const _MSK_GROUP_DEFAULTS={selection:true,selMore:false,adjust:true,adjColor:false,adjEffects:false,adjDetail:false,skin:true,coattone:false,skinAdv:false,eyepos:false,viewOpts:false};
 let _mskGroupOpen=Object.assign({},_MSK_GROUP_DEFAULTS);
 try{localStorage.removeItem('chromasmith_msk_groups');const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups2')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
 function mskGroupsResetDefaults(){Object.keys(_mskGroupOpen).forEach(k=>delete _mskGroupOpen[k]);Object.assign(_mskGroupOpen,_MSK_GROUP_DEFAULTS);try{localStorage.removeItem('chromasmith_msk_groups2');}catch(e){}}
@@ -21701,6 +21714,8 @@ function mskPreviewRenderOptions(extra={}){
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
     ...((extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};
 }
+// Lightroom-style curved double-arrow for the rotate zones (the CSS 'alias' arrow reads as "make shortcut").
+const MSK_ROT_CURSOR="url('data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15a8 8 0 0 1 14 0" stroke="#000" stroke-width="4"/><path d="M3 11l2 4 4-2M21 11l-2 4-4-2" stroke="#000" stroke-width="4"/><path d="M5 15a8 8 0 0 1 14 0" stroke="#fff" stroke-width="1.6"/><path d="M3 11l2 4 4-2M21 11l-2 4-4-2" stroke="#fff" stroke-width="1.6"/></g></svg>')+"') 12 12, alias"; // single quotes: it is written into a style="" attribute
 function mskOverlayBox(){
   // The overlays now live INSIDE #fx-zoom-wrap as siblings of #fx-canvas (not #fx-wrap), so
   // they ride the same CSS transform as the canvas by construction — no getBoundingClientRect
@@ -21789,10 +21804,13 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
   // handles sat mirrored away from the effect. Y() flips once; mskHandlePos flips the pointer back.
   const W=box.width,H=box.height,Y=y=>((1-y)*H).toFixed(1),P=(x,y)=>(x*W).toFixed(1)+','+Y(y);
   svg.setAttribute('viewBox','0 0 '+W+' '+H);
-  const line='stroke="#fff" fill="none" style="stroke-width:1.5px" pointer-events="none"';
-  const dash='stroke="#fff" fill="none" style="stroke-width:1px;stroke-dasharray:5 4;opacity:.75" pointer-events="none"';
-  const hit=(d,h,cur,wid)=>`<path d="${d}" data-h="${h}" fill="${wid?'none':'transparent'}" stroke="transparent" style="stroke-width:${wid||0}px;cursor:${cur}" pointer-events="${wid?'stroke':'fill'}"/>`;
-  const knob=(x,y,h,r,fill,cur,title)=>`<circle class="msk-handle" data-h="${h}" cx="${(x*W).toFixed(1)}" cy="${Y(y)}" r="${r}" style="fill:${fill};stroke:#000;stroke-width:1px;cursor:${cur}"><title>${title}</title></circle>`;
+  // The overlay rides the canvas zoom transform, so at 300% everything drawn here would be 3x as
+  // big. z undoes it (the zoom wrap's only scale is fxZoom): handles, lines and grab zones keep one on-screen size at any zoom, as in Lightroom.
+  const z=1/(typeof fxZoom==='number'&&fxZoom>0?fxZoom:1),u=v=>(v*z).toFixed(2); // fxZoom, not the live rect: a smooth zoom is mid-transition here
+  const line=`stroke="#fff" fill="none" style="stroke-width:${u(1.5)}px;filter:drop-shadow(0 0 ${u(1)}px rgba(0,0,0,.7))" pointer-events="none"`;
+  const dash=`stroke="#fff" fill="none" style="stroke-width:${u(1)}px;stroke-dasharray:${u(5)} ${u(4)};opacity:.75" pointer-events="none"`;
+  const hit=(d,h,cur,wid)=>`<path d="${d}" data-h="${h}" fill="${wid?'none':'transparent'}" stroke="transparent" style="stroke-width:${wid?u(wid):0}px;cursor:${cur}" pointer-events="${wid?'stroke':'fill'}"/>`;
+  const knob=(x,y,h,r,fill,cur,title)=>`<circle class="msk-handle" data-h="${h}" cx="${(x*W).toFixed(1)}" cy="${Y(y)}" r="${u(r)}" style="fill:${fill};stroke:#000;stroke-width:1px;cursor:${cur}"><title>${title}</title></circle>`;
   let html='';
   if(m.type==='radial'){
     const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),a=m.ar>0?m.ar:1;
@@ -21803,8 +21821,8 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
     const ring=(rrx,rry)=>{const N=64,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;const q=rp(rrx*Math.cos(a),rry*Math.sin(a));pts.push(P(q[0],q[1]));}return 'M'+pts.join('L')+'Z';};
     // Falloff starts at t=max(1-2*feather,0) of the radius (mskShapeWeight): that inner ring is the feather.
     const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
-    const pad=14/Math.max(1,Math.min(W,H)); // rotate zone: a band just outside the edge, as in Lightroom
-    html+=hit(ring(rx+pad,ry+pad),'rot','alias',22)+hit(ring(rx,ry),'move','move');
+    const pad=14*z/Math.max(1,Math.min(W,H)); // rotate zone: a band just outside the edge, as in Lightroom
+    html+=hit(ring(rx+pad,ry+pad),'rot',MSK_ROT_CURSOR,22)+hit(ring(rx,ry),'move','move');
     html+=`<path d="${ring(rx,ry)}" ${line}/><path d="${ring(rx*ft,ry*ft)}" ${dash}/>`;
     const fr=Math.max(ft,.4),fq=rp(rx*fr*Math.SQRT1_2,-ry*fr*Math.SQRT1_2); // kept clear of the centre pin
     html+=knob(fq[0],fq[1],'f',5,'#bbb','nesw-resize','Feather');
@@ -21816,7 +21834,7 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
     // for true-shape masks, a = aspect; stretched 0..1 for old ones, a = 1).
     const L=4,ex=dy/a,ey=-dx*a,seg=(px,py)=>'M'+P(px+ex*L,py+ey*L)+'L'+P(px-ex*L,py-ey*L);
     const mx=(x0+x1)/2,my=(y0+y1)/2;
-    html+=hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot','alias',18);
+    html+=hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot',MSK_ROT_CURSOR,18);
     html+=`<path d="${seg(x0,y0)}" ${line}/><path d="${seg(mx,my)}" ${dash}/><path d="${seg(x1,y1)}" ${line}/>`;
     html+=knob(x0,y0,'p0',4.5,'#fff','grab','Full-effect edge')+knob(x1,y1,'p1',4.5,'#888','grab','No-effect edge');
     html+=knob(mx,my,'lmove',7,'var(--acc,#ff9b42)','move','Move (drag the middle line to rotate)');
@@ -22145,7 +22163,10 @@ function _mskShapeDrag(type,d,px,py,W,H,shift,bx=1){
     return{};
   }
   // linear
-  if(k==='draw')return{x0:d.px,y0:d.py,x1:px,y1:py};
+  if(k==='draw'){ // Shift: straight up/down or across, judged on screen
+    if(shift){if(Math.abs((px-d.px)*W)>Math.abs((py-d.py)*H))py=d.py;else px=d.px;}
+    return{x0:d.px,y0:d.py,x1:px,y1:py};
+  }
   if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,bx)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
   if(k==='lrot'){
     const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2;

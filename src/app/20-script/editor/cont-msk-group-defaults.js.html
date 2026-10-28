@@ -1,4 +1,4 @@
-const _MSK_GROUP_DEFAULTS={selection:true,selMore:false,adjust:false,adjColor:false,adjEffects:false,adjDetail:false,skin:true,coattone:false,skinAdv:false,eyepos:false,viewOpts:false};
+const _MSK_GROUP_DEFAULTS={selection:true,selMore:false,adjust:true,adjColor:false,adjEffects:false,adjDetail:false,skin:true,coattone:false,skinAdv:false,eyepos:false,viewOpts:false};
 let _mskGroupOpen=Object.assign({},_MSK_GROUP_DEFAULTS);
 try{localStorage.removeItem('chromasmith_msk_groups');const g=JSON.parse(localStorage.getItem('chromasmith_msk_groups2')||'null');if(g)Object.assign(_mskGroupOpen,g);}catch(e){}
 function mskGroupsResetDefaults(){Object.keys(_mskGroupOpen).forEach(k=>delete _mskGroupOpen[k]);Object.assign(_mskGroupOpen,_MSK_GROUP_DEFAULTS);try{localStorage.removeItem('chromasmith_msk_groups2');}catch(e){}}

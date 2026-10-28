@@ -27,6 +27,9 @@ try{
     // stub box so no photo is needed
     window.mskOverlayBox=()=>({left:10,top:20,width:400,height:300});
     mskBrushSize=40;mskBrushFeather=50;
+    // overlay on: no spotlight, it would grey out the strokes already painted
+    mskPreviewMode='select';mskSpotlightUpdate(210,170,100);out.withOverlay=sp.classList.contains('on');
+    mskPreviewMode='off';
     mskSpotlightUpdate(210,170,100);
     out.on=sp.classList.contains('on');
     out.ro=sp.style.getPropertyValue('--ro');out.ri=sp.style.getPropertyValue('--ri');
@@ -39,7 +42,7 @@ try{
     out.dotR=mskScribbleDotR();
     return out;
   });
-  assert.ok(r.exists);assert.equal(r.on,true);
+  assert.ok(r.exists);assert.equal(r.on,true);assert.equal(r.withOverlay,false);
   assert.equal(r.ro,'100px');assert.equal(r.ri,'50px');assert.equal(r.sx,'200px');
   assert.match(r.filter,/grayscale/);assert.equal(r.pe,'none');
   assert.equal(r.offHidden,true);assert.equal(r.stored,'0');assert.equal(r.hidden,true);

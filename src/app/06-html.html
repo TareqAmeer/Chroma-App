@@ -759,6 +759,8 @@ body.mobile-fx .look-cat-hdr{display:none} /* horizontal-scroll rail on mobile â
 .msk-handle{fill:#fff;stroke:#000;stroke-width:.0015;vector-effect:non-scaling-stroke;cursor:grab;pointer-events:auto}
 .msk-handle.rot{fill:var(--acc,#e8a33d);cursor:alias}
 .msk-handle:active{cursor:grabbing}
+.msk-handle{transform-box:fill-box;transform-origin:center;transition:transform .12s}
+.msk-handle:hover,.msk-handle:active{transform:scale(1.3)}
 .msk-handle.center{fill:#ff9b42}
 /* Deliberately NOT an accent fill any more â€” .seg's raised-surface indicator carries it. Amber
    is reserved for the primary action, active navigation and "you changed this"; using it for

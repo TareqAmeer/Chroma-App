@@ -41,7 +41,13 @@ function mskAdd(type,configure){
     m={type:'none',origin:type,..._mskAdjustDefaults()};
   }
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
+  else if(type==='radial'){
+    // A circle on screen (ry scaled by the photo's aspect), with Lightroom's default Feather of 50:
+    // a flat middle and a soft edge, so the shape reads as a shape. (0.5 = Feather 100 started
+    // the falloff at the very centre, so the default looked like a faint vignette.)
+    const ar=mskPhotoAR(),r=0.25*Math.min(1,1/ar);
+    m={type:'radial',cx:0.5,cy:0.5,rx:r,ry:Math.min(0.45,r*ar),rot:0,feather:0.25,ar,..._mskAdjustDefaults()};
+  }
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
   else if(type==='sky'){ // sky: brush-type raster mask. The colour/position heuristic shows at once;
     // mskSkyUpgrade then swaps in the finished raster (desktop Landscape model, else the heuristic)
@@ -107,6 +113,8 @@ function mskAdd(type,configure){
   }
   // Radial/Linear: like Lightroom, the next drag on the photo draws the shape (a click keeps the default).
   if((type==='radial'||type==='linear')&&typeof mskDrawArm==='function'){mskDrawArm(m);log('Drag on the photo to draw the '+(type==='radial'?'radial (Shift: circle)':'linear gradient')+', or click to place it. Esc keeps it as is.','info');}
+  // Brush: like Lightroom's K, a new brush mask is ready to paint straight away.
+  if(type==='brush'&&m.origin==='paint'&&typeof configure!=='function'&&typeof mskBrushSlotSelect==='function'){mskBrushSlotSelect(mskBrushSlot);log('Paint on the photo. Hold Alt to erase; [ and ] change the size.','info');}
   if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
   if(type==='depth'){

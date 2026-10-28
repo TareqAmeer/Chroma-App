@@ -163,7 +163,10 @@ function _mskShapeDrag(type,d,px,py,W,H,shift,bx=1){
     return{};
   }
   // linear
-  if(k==='draw')return{x0:d.px,y0:d.py,x1:px,y1:py};
+  if(k==='draw'){ // Shift: straight up/down or across, judged on screen
+    if(shift){if(Math.abs((px-d.px)*W)>Math.abs((py-d.py)*H))py=d.py;else px=d.px;}
+    return{x0:d.px,y0:d.py,x1:px,y1:py};
+  }
   if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,bx)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
   if(k==='lrot'){
     const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2;

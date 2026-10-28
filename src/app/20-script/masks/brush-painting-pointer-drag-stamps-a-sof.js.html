@@ -27,7 +27,10 @@ function mskSpotlightUpdate(x,y,r){
   const el=document.getElementById('msk-spotlight');if(!el)return;
   // #msk-spotlight lives in #fx-wrap (outside the zoom transform) and x,y are #fx-wrap-relative,
   // so the box must be the photo's SCREEN rect in #fx-wrap coords, not the zoom-wrap-local box.
-  const pr=mskSpotlight&&typeof fxPhotoClientRect==='function'?fxPhotoClientRect():null,wrap=document.getElementById('fx-wrap');
+  // Only while the mask overlay is off: greying the photo outside the brush also greys the overlay,
+  // which hid every stroke already painted (Lightroom keeps the painted area visible as you paint).
+  const ovOn=typeof mskPreviewMode!=='undefined'&&mskPreviewMode==='select';
+  const pr=mskSpotlight&&!ovOn&&typeof fxPhotoClientRect==='function'?fxPhotoClientRect():null,wrap=document.getElementById('fx-wrap');
   if(!pr||!wrap){el.classList.remove('on');return;}
   const wr=wrap.getBoundingClientRect(),box={left:pr.left-wr.left,top:pr.top-wr.top,width:pr.width,height:pr.height};
   el.style.left=box.left+'px';el.style.top=box.top+'px';el.style.width=box.width+'px';el.style.height=box.height+'px';
