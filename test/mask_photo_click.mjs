@@ -20,7 +20,8 @@ try{
   const r=await page.evaluate(()=>{
     const make=(id,x)=>({id,name:id,type:'radial',cx:.5,cy:.5,rx:.1,ry:.1,feather:.5,compositionMigrated:true,crSamples:[],invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,sat:0,hue:0,hi:0,sh:0,...x});
     fxState.masks=[make('a',{cx:.2,cy:.2}),make('b',{cx:.8,cy:.8})];
-    return[mskHitTest(.2,.2),mskHitTest(.8,.8),mskHitTest(.5,.5)];
+    // hit-test takes a TOP-DOWN photo point; shape cy is stored bottom-up (cy .2 sits at screen y .8)
+    return[mskHitTest(.2,.8),mskHitTest(.8,.2),mskHitTest(.5,.5)];
   });
   assert.deepEqual(r,[0,1,-1]);
   const a=await page.evaluate(()=>{mskSel=0;mskPhotoClick({target:document.body,clientX:0,clientY:0});return mskSel;});

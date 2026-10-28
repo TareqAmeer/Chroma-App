@@ -4,8 +4,9 @@ function mskPinsToggle(v){mskShowPins=!!v;try{localStorage.setItem('chromasmith_
 // Anchor of a mask in 0..1 image space: shape centre for radial/linear, weighted centroid of the painted
 // or AI raster (cached per raster), else a staggered spot near the middle for shapeless range masks.
 function mskPinAnchor(m,i){
-  if(m.type==='radial')return[m.cx,m.cy];
-  if(m.type==='linear')return[(m.x0+m.x1)/2,(m.y0+m.y1)/2];
+  // Shape coords are stored bottom-up (see the overlay's Y()); pins and rasters are top-down.
+  if(m.type==='radial')return[m.cx,1-m.cy];
+  if(m.type==='linear')return[(m.x0+m.x1)/2,1-(m.y0+m.y1)/2];
   if(m.px&&m.mtW&&m.mtH&&m.px.length){
     if(m._pinFor===m.px&&m._pin)return m._pin;
     let sx=0,sy=0,sw=0;const w=m.mtW,h=m.mtH,st=Math.max(1,Math.round(Math.max(w,h)/256));
@@ -44,7 +45,7 @@ function mskPinDown(e){
   _fxHistLocked=true;
   const mv=ev=>{
     const d=_pinDrag;if(!d)return;
-    const dx=(ev.clientX-d.px)/d.r.width,dy=(ev.clientY-d.py)/d.r.height;
+    const dx=(ev.clientX-d.px)/d.r.width,dy=-(ev.clientY-d.py)/d.r.height; // shape y is bottom-up
     if(Math.abs(ev.clientX-d.px)+Math.abs(ev.clientY-d.py)>3)d.moved=true;if(!d.moved)return;
     const c=v=>Math.max(0,Math.min(1,v));
     if(d.m.type==='radial'){d.m.cx=c(d.start.cx+dx);d.m.cy=c(d.start.cy+dy);}
@@ -67,12 +68,12 @@ function mskHitTest(nx,ny){
   for(let i=ms.length-1;i>=0;i--){
     const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
     if(m.type==='radial'){
-      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=nx-m.cx,dy=ny-m.cy;
+      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=nx-m.cx,dy=(1-ny)-m.cy; // shape y is bottom-up
       const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
       if((lx/Math.max(.01,m.rx))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
     }else if(m.type==='linear'){
       const ax=m.x1-m.x0,ay=m.y1-m.y0,L=ax*ax+ay*ay;
-      if(L>0){const t=((nx-m.x0)*ax+(ny-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
+      if(L>0){const t=((nx-m.x0)*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
     }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
       const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
       if(m.px[y*m.mtW+x]>64)return i;
@@ -97,49 +98,91 @@ function mskPhotoClick(e){
   document.addEventListener('pointerup',e=>{const d=dn;dn=null;if(d&&Math.abs(e.clientX-d.x)+Math.abs(e.clientY-d.y)<=4)mskPhotoClick(e);},true);
 })();
 let _mskDrag=null;
+// Set by mskAdd for a new Radial/Linear: the next drag on the photo draws it (Lightroom's flow).
+// A plain click instead keeps the default size, centred on the click. Cleared once used, or when
+// another mask is selected (the overlay drops it).
+let _mskDrawFor=null;
+function mskDrawArm(m){_mskDrawFor=m;mskOverlaySync();}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_mskDrawFor){_mskDrawFor=null;mskOverlaySync();}});
 function mskHandleDown(e){
+  if(e.button!==0)return;
   e.stopPropagation();e.preventDefault();
-  const svg=document.getElementById('fx-mask-overlay');
-  _mskDrag={which:e.target.dataset.h,svg};
-  // Lock history for the drag: every pointermove calls fxUpdate → fxHistoryPush, which was
-  // recording an undo snapshot per mouse-movement (each including a full JSON of the masks) —
-  // one drag could flood all 20 history slots with intermediate positions. mskHandleUp pushes
-  // exactly one snapshot on release instead (same pattern fxUndo/fxRedo use).
+  const svg=document.getElementById('fx-mask-overlay'),m=fxState.masks[mskSel];if(!m)return;
+  const[px,py]=mskHandlePos(e);
+  // Snapshot of the shape at grab time: moves and rotations apply as deltas from it, so grabbing
+  // off-centre never makes the shape jump to the pointer.
+  _mskDrag={which:e.currentTarget.dataset.h,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
+  if(_mskDrag.which==='draw'){_mskDrawFor=null;_mskDrag.draw=true;}
+  // Lock history for the drag: mskHandleUp pushes exactly one undo snapshot on release.
   _fxHistLocked=true;
   svg.setPointerCapture(e.pointerId);
   svg.addEventListener('pointermove',mskHandleMove);
   svg.addEventListener('pointerup',mskHandleUp);
+  svg.addEventListener('pointercancel',mskHandleUp);
 }
 function mskHandlePos(e){
   const r=document.getElementById('fx-mask-overlay').getBoundingClientRect();
-  return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height];
+  return[(e.clientX-r.left)/r.width,1-(e.clientY-r.top)/r.height,r.width,r.height]; // y bottom-up, like the stored shape
+}
+// Pure: the new shape fields for one drag step. d = _mskDrag, (px,py) pointer in 0..1 photo
+// coords, W/H the photo's on-screen size (rotations and circles are judged in screen pixels).
+function _mskShapeDrag(type,d,px,py,W,H,shift){
+  const o=d.m0,k=d.which,ddx=px-d.px,ddy=py-d.py,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+  if(type==='radial'){
+    if(k==='draw'){
+      let rx=Math.abs(px-d.px),ry=Math.abs(py-d.py);
+      if(shift){const r=Math.max(rx*W,ry*H);rx=r/W;ry=r/H;}  // Shift: a true circle on screen
+      return{cx:d.px,cy:d.py,rx:Math.max(0.01,rx),ry:Math.max(0.01,ry),rot:0};
+    }
+    if(k==='move'||k==='c')return{cx:cl(o.cx+ddx,0,1),cy:cl(o.cy+ddy,0,1)};
+    if(k==='rot'){const a0=Math.atan2((d.py-o.cy)*H,(d.px-o.cx)*W),a1=Math.atan2((py-o.cy)*H,(px-o.cx)*W);return{rot:o.rot+(a1-a0)};}
+    const cr=Math.cos(o.rot),sr=Math.sin(o.rot),qx=px-o.cx,qy=py-o.cy,lx=Math.abs(qx*cr+qy*sr),ly=Math.abs(-qx*sr+qy*cr);
+    if(k==='f'){ // relative: the knob may sit off the inner ring (kept clear of the centre pin), so no jump on grab
+      const tn=(x,y)=>{const a=x-o.cx,b=y-o.cy;return Math.hypot((a*cr+b*sr)/Math.max(o.rx,1e-4),(-a*sr+b*cr)/Math.max(o.ry,1e-4));};
+      const ft0=Math.max(1-2*(o.feather!=null?o.feather:0.5),0),ft=cl(ft0+tn(px,py)-tn(d.px,d.py),0,1);
+      return{feather:cl((1-ft)/2,0,0.5)};
+    }
+    if(k==='rx'){const rx=Math.max(0.01,lx);return shift?{rx,ry:Math.max(0.01,o.ry*rx/Math.max(o.rx,1e-4))}:{rx};}
+    if(k==='ry'){const ry=Math.max(0.01,ly);return shift?{ry,rx:Math.max(0.01,o.rx*ry/Math.max(o.ry,1e-4))}:{ry};}
+    return{};
+  }
+  // linear
+  if(k==='draw')return{x0:d.px,y0:d.py,x1:px,y1:py};
+  if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,1)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
+  if(k==='lrot'){
+    const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2;
+    const a=Math.atan2((py-my)*H,(px-mx)*W)-Math.atan2((d.py-my)*H,(d.px-mx)*W),c=Math.cos(a),s=Math.sin(a);
+    const hx=(o.x1-o.x0)/2*W,hy=(o.y1-o.y0)/2*H,rx=(hx*c-hy*s)/W,ry=(hx*s+hy*c)/H;   // rotate on screen, not in stretched 0..1 space
+    return{x0:mx-rx,y0:my-ry,x1:mx+rx,y1:my+ry};
+  }
+  if(k==='p0'||k==='p1'){
+    // An edge line slides along the gradient's own direction only, so dragging it changes the
+    // transition width without tilting it; the other edge stays put. Never crosses the other edge.
+    const ax=o.x1-o.x0,ay=o.y1-o.y0,L=Math.hypot(ax,ay)||1e-4,ux=ax/L,uy=ay/L;
+    if(k==='p1'){const t=Math.max(0.005,(px-o.x0)*ux+(py-o.y0)*uy);return{x1:o.x0+ux*t,y1:o.y0+uy*t};}
+    const t=Math.max(0.005,(o.x1-px)*ux+(o.y1-py)*uy);return{x0:o.x1-ux*t,y0:o.y1-uy*t};
+  }
+  return{};
 }
 function mskHandleMove(e){
   if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
-  const[px,py]=mskHandlePos(e);
-  if(m.type==='radial'){
-    if(_mskDrag.which==='c'){m.cx=Math.max(0,Math.min(1,px));m.cy=Math.max(0,Math.min(1,py));}
-    else if(_mskDrag.which==='rot'){m.rot=Math.atan2(py-m.cy,px-m.cx);}
-    else if(_mskDrag.which==='rx'||_mskDrag.which==='ry'){
-      // project the pointer delta into the ellipse's own (rotated) axes — must match the
-      // shader's rotation convention (mskShapeWeight) so dragging rx/ry after a rotation
-      // resizes along the visually-rotated axis, not the raw image axis.
-      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),ddx=px-m.cx,ddy=py-m.cy;
-      const lx=ddx*cr+ddy*sr,ly=-ddx*sr+ddy*cr;
-      if(_mskDrag.which==='rx')m.rx=Math.max(0.01,Math.abs(lx));
-      else m.ry=Math.max(0.01,Math.abs(ly));
-    }
-  }else{
-    if(_mskDrag.which==='p0'){m.x0=Math.max(0,Math.min(1,px));m.y0=Math.max(0,Math.min(1,py));}
-    else{m.x1=Math.max(0,Math.min(1,px));m.y1=Math.max(0,Math.min(1,py));}
-  }
+  const[px,py,W,H]=mskHandlePos(e);
+  Object.assign(m,_mskShapeDrag(m.type,_mskDrag,px,py,W,H,e.shiftKey));
+  _mskDrag.moved=true;
   mskOverlaySync();fxUpdate();
 }
 function mskHandleUp(e){
   if(!_mskDrag)return;
-  const svg=_mskDrag.svg;svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);
-  _mskDrag=null;_fxHistLocked=false;mskRebuild();fxHistoryPush();
+  const d=_mskDrag,svg=d.svg,m=fxState.masks[mskSel];
+  svg.removeEventListener('pointermove',mskHandleMove);svg.removeEventListener('pointerup',mskHandleUp);svg.removeEventListener('pointercancel',mskHandleUp);
+  // A click (no drag) in draw mode keeps the default shape, moved to where you clicked.
+  if(d.draw&&m&&!_mskDrawMoved(d,e)){
+    if(m.type==='radial'){m.cx=d.px;m.cy=d.py;}
+    else{const hx=(d.m0.x1-d.m0.x0)/2,hy=(d.m0.y1-d.m0.y0)/2;m.x0=d.px-hx;m.y0=d.py-hy;m.x1=d.px+hx;m.y1=d.py+hy;}
+  }else if(d.draw&&m&&m.type==='radial'&&(m.rx<0.02||m.ry<0.02)){m.rx=Math.max(m.rx,0.02);m.ry=Math.max(m.ry,0.02);}
+  _mskDrag=null;_fxHistLocked=false;mskOverlaySync();mskRebuild();fxUpdate();fxHistoryPush();
 }
+function _mskDrawMoved(d,e){const[px,py,W,H]=mskHandlePos(e);return Math.hypot((px-d.px)*W,(py-d.py)*H)>4;}
 window.addEventListener('resize',()=>{if(typeof mskOverlaySync==='function')mskOverlaySync();});
 
 // ══ UNDO / REDO ═══════════════════════════════════════════════════════════════

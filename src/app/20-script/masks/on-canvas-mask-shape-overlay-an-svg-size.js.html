@@ -238,57 +238,47 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
   const box=mskOverlayBox();if(!box){svg.classList.remove('on');return;}
   svg.style.left=box.left+'px';svg.style.top=box.top+'px';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
   svg.classList.add('on');
-  const isolate=false;
-  let shapeD='',handles='';
-  let featherLayer='';
+  // Lightroom-style shape controls, drawn in screen pixels (viewBox = the photo box) so handles stay
+  // round and the same size on any aspect. Mask coords stay 0..1 and the geometry matches the shader
+  // (mskShapeWeight works in 0..1 photo space). Every element with data-h is draggable (mskHandleDown).
+  // ⚠️ Radial/linear coords are stored BOTTOM-UP (y=0 is the photo's bottom; the shader, thumbnails
+  // and eye detection all read them that way). This overlay used to draw them top-down, so the
+  // handles sat mirrored away from the effect. Y() flips once; mskHandlePos flips the pointer back.
+  const W=box.width,H=box.height,Y=y=>((1-y)*H).toFixed(1),P=(x,y)=>(x*W).toFixed(1)+','+Y(y);
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  const line='stroke="#fff" fill="none" style="stroke-width:1.5px" pointer-events="none"';
+  const dash='stroke="#fff" fill="none" style="stroke-width:1px;stroke-dasharray:5 4;opacity:.75" pointer-events="none"';
+  const hit=(d,h,cur,wid)=>`<path d="${d}" data-h="${h}" fill="${wid?'none':'transparent'}" stroke="transparent" style="stroke-width:${wid||0}px;cursor:${cur}" pointer-events="${wid?'stroke':'fill'}"/>`;
+  const knob=(x,y,h,r,fill,cur,title)=>`<circle class="msk-handle" data-h="${h}" cx="${(x*W).toFixed(1)}" cy="${Y(y)}" r="${r}" style="fill:${fill};stroke:#000;stroke-width:1px;cursor:${cur}"><title>${title}</title></circle>`;
+  let html='';
   if(m.type==='radial'){
     const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot);
-    // rotate a point (dx,dy) in the ellipse's own axes into image space around (cx,cy) —
-    // must be the inverse of the shader's mskShapeWeight rotation (which rotates gm-A.xy BY
-    // -rot into ellipse axes), so a positive rot here visually matches the shader's fill.
+    // rotate a point (dx,dy) in the ellipse's own axes into image space around (cx,cy): the inverse
+    // of the shader's rotation (it rotates gm-A.xy BY -rot into ellipse axes).
     const rp=(dx,dy)=>[cx+dx*cr-dy*sr,cy+dx*sr+dy*cr];
-    const ring=(rrx,rry)=>{const N=48,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;pts.push(rp(rrx*Math.cos(a),rry*Math.sin(a)).join(','));}return 'M'+pts.join('L')+'Z';};
-    // ellipse approximated as a 48-point polygon (SVG <ellipse> can't be combined with an
-    // evenodd hole in one path element the way a polygon can for the isolate dim layer).
-    shapeD=ring(rx,ry);
-    const rxH=rp(rx,0),ryH=rp(0,ry),rotH=rp(rx*1.18,0); // rotation handle sits just past the rx handle
-    handles=`<circle class="msk-handle center" data-h="c" cx="${cx}" cy="${cy}" r="0.012"/>`+
-      `<circle class="msk-handle" data-h="rx" cx="${rxH[0]}" cy="${rxH[1]}" r="0.01"/>`+
-      `<circle class="msk-handle" data-h="ry" cx="${ryH[0]}" cy="${ryH[1]}" r="0.01"/>`+
-      `<line x1="${cx}" y1="${cy}" x2="${rotH[0]}" y2="${rotH[1]}" stroke="#fff" stroke-width="0.0012" opacity=".5" vector-effect="non-scaling-stroke"/>`+
-      `<circle class="msk-handle rot" data-h="rot" cx="${rotH[0]}" cy="${rotH[1]}" r="0.011"/>`;
-    // Feather ring: the shader's falloff starts at t = max(1-2*feather, 0) of the outer radius
-    // (mskShapeWeight) and reaches full effect at t=1 — draw that inner bound as a dashed
-    // ellipse so the feather amount is actually visible, not just a number on a slider.
-    // Always draw the feather ring (even at ft≈0, where it just coincides with the outer edge)
-    // so the feather control has visible on-canvas feedback at any slider position — it used to
-    // be gated off exactly at the default feather value (0.5 → ft=0), which read as "missing".
+    const ring=(rrx,rry)=>{const N=64,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;const q=rp(rrx*Math.cos(a),rry*Math.sin(a));pts.push(P(q[0],q[1]));}return 'M'+pts.join('L')+'Z';};
+    // Falloff starts at t=max(1-2*feather,0) of the radius (mskShapeWeight): that inner ring is the feather.
     const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
-    featherLayer=`<path class="msk-feather" d="${ring(rx*ft,ry*ft)}"/>`;
-    // 50%-coverage guide ring (Capture One-style inner/mid/outer read): smoothstep(ft,1,t) is
-    // symmetric around its midpoint, so the falloff crosses ~0.5 at t=(ft+1)/2.
-    const ft50=(ft+1)/2;
-    featherLayer+=`<path class="msk-feather-50" d="${ring(rx*ft50,ry*ft50)}"/>`;
-  }else{ // linear: represent the "full effect" half as a band from p0 back-extended, cut at p1
-    const{x0,y0,x1,y1,feather}=m;
-    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1e-4,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
-    // Lightroom idiom: three parallel guide lines (full-effect edge, midline, zero-effect edge)
-    // spanning a fixed on-screen width, clipped to the photo box below — not a flooding band.
-    const G=0.35; // half-length of each guide line, in the 0..1 image box
-    const mid=[(x0+x1)/2,(y0+y1)/2];
-    const line=(cx0,cy0)=>`M${cx0-nx*G},${cy0-ny*G} L${cx0+nx*G},${cy0+ny*G}`;
-    handles=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="#fff" stroke-width="0.003" vector-effect="non-scaling-stroke"/>`+
-      `<path class="msk-feather" d="${line(x0,y0)}"/>`+
-      `<path class="msk-feather msk-feather-mid" d="${line(mid[0],mid[1])}"/>`+
-      `<path class="msk-feather" d="${line(x1,y1)}"/>`+
-      `<circle class="msk-handle" data-h="p0" cx="${x0}" cy="${y0}" r="0.012"/>`+
-      `<circle class="msk-handle" data-h="p1" cx="${x1}" cy="${y1}" r="0.012"/>`;
-    const H=5; // far enough to cover the 0..1 photo box from any guide-line position
-    const sideA=[x0+nx*H,y0+ny*H],sideB=[x0-nx*H,y0-ny*H];
-    shapeD=`M${sideA[0]},${sideA[1]} L${sideB[0]},${sideB[1]} L${sideB[0]-ux*H},${sideB[1]-uy*H} L${sideA[0]-ux*H},${sideA[1]-uy*H} Z`;
+    const pad=14/Math.max(1,Math.min(W,H)); // rotate zone: a band just outside the edge, as in Lightroom
+    html+=hit(ring(rx+pad,ry+pad),'rot','alias',22)+hit(ring(rx,ry),'move','move');
+    html+=`<path d="${ring(rx,ry)}" ${line}/><path d="${ring(rx*ft,ry*ft)}" ${dash}/>`;
+    const fr=Math.max(ft,.4),fq=rp(rx*fr*Math.SQRT1_2,-ry*fr*Math.SQRT1_2); // kept clear of the centre pin
+    html+=knob(fq[0],fq[1],'f',5,'#bbb','nesw-resize','Feather');
+    for(const[s,h]of[[1,'rx'],[-1,'rx'],[1,'ry'],[-1,'ry']]){const q=h==='rx'?rp(rx*s,0):rp(0,ry*s);html+=knob(q[0],q[1],h,5.5,'#fff','pointer','Resize (Shift keeps the shape)');}
+    html+=knob(cx,cy,'move',7,'var(--acc,#ff9b42)','move','Move');
+  }else{ // linear
+    const{x0,y0,x1,y1}=m,dx=x1-x0,dy=y1-y0;
+    // The shader's iso-lines are perpendicular to p0->p1 in 0..1 photo space; direction (-dy,dx) there.
+    const L=4,seg=(px,py)=>'M'+P(px+dy*L,py-dx*L)+'L'+P(px-dy*L,py+dx*L);
+    const mx=(x0+x1)/2,my=(y0+y1)/2;
+    html+=hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot','alias',18);
+    html+=`<path d="${seg(x0,y0)}" ${line}/><path d="${seg(mx,my)}" ${dash}/><path d="${seg(x1,y1)}" ${line}/>`;
+    html+=knob(x0,y0,'p0',4.5,'#fff','grab','Full-effect edge')+knob(x1,y1,'p1',4.5,'#888','grab','No-effect edge');
+    html+=knob(mx,my,'lmove',7,'var(--acc,#ff9b42)','move','Move (drag the middle line to rotate)');
   }
-  const dimLayer=isolate?`<path class="msk-dim" fill-rule="evenodd" d="M-1,-1H2V2H-1Z ${shapeD}"/>`:'';
-  const shapeLayer=`<path class="msk-shape" d="${shapeD}"/>`;
-  svg.innerHTML=dimLayer+shapeLayer+featherLayer+handles;
-  svg.querySelectorAll('.msk-handle').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
+  // Draw-to-create: right after Add Radial/Linear, a drag on the photo places and sizes the shape.
+  if(_mskDrawFor===m)html+=`<rect x="0" y="0" width="${W}" height="${H}" data-h="draw" fill="transparent" style="cursor:crosshair" pointer-events="all"/>`;
+  else _mskDrawFor=null;
+  svg.innerHTML=html;
+  svg.querySelectorAll('[data-h]').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }

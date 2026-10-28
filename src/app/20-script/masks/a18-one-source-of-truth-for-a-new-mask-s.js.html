@@ -105,6 +105,8 @@ function mskAdd(type,configure){
     _samLastError=null;samEnsureEncoded();mskAiTapToggle(true);
     log('Scribble over the coat to select it. Once selected, an eye-brightness mask is added automatically \u2014 drag it onto the eye(s) and use the two Strength sliders below.','info');
   }
+  // Radial/Linear: like Lightroom, the next drag on the photo draws the shape (a click keeps the default).
+  if((type==='radial'||type==='linear')&&typeof mskDrawArm==='function'){mskDrawArm(m);log('Drag on the photo to draw the '+(type==='radial'?'radial (Shift: circle)':'linear gradient')+', or click to place it. Esc keeps it as is.','info');}
   if(type==='color'){mskCrEyedropper(true);log('Click the color you want to select — this mask has no shape, the color range IS the selection','info');}
   if(type==='lum'){mskSetPreviewMode('select');log('Set the Lum floor/ceiling below to pick a brightness band — Selection view is on so you can see it','info');}
   if(type==='depth'){
