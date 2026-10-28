@@ -46,6 +46,14 @@ function mergeExportSidecarXmp(recipeXml,sidecarXml,keepGps){
     const a=node.getAttributeNodeNS&&node.getAttributeNodeNS('http://ns.adobe.com/tiff/1.0/','Orientation');
     if(a)a.value='1';
   }
+  // The Library's own edit state (full recipe, version history, reset snapshot) describes how to
+  // re-render the original. The export's pixels already carry it, and it alone can exceed JPEG's
+  // 64KB metadata segment, so it stays in the sidecar only.
+  const csNs='http://chromasmith.app/ns/1.0/',editState=/^(Recipe|LastResetRecipe|Versions|ActiveVersion|Edited|LastResetEdited)$/;
+  for(const node of [...rdf.getElementsByTagName('*')]){
+    if(node.namespaceURI===csNs&&editState.test(node.localName)){node.remove();continue;}
+    for(const attr of [...node.attributes])if(attr.namespaceURI===csNs&&editState.test(attr.localName))node.removeAttributeNode(attr);
+  }
   if(!keepGps){
     for(const node of [...rdf.getElementsByTagName('*')]){
       if(/^GPS/i.test(node.localName)){node.remove();continue;}
@@ -53,6 +61,52 @@ function mergeExportSidecarXmp(recipeXml,sidecarXml,keepGps){
     }
   }
   return new XMLSerializer().serializeToString(target);
+}
+function _app1(sig,parts){
+  const s=new TextEncoder().encode(sig),len=2+s.length+parts.reduce((n,p)=>n+p.length,0);
+  const seg=new Uint8Array(2+len);seg[0]=0xFF;seg[1]=0xE1;seg[2]=(len>>8)&0xFF;seg[3]=len&0xFF;
+  let o=4;seg.set(s,o);o+=s.length;for(const p of parts){seg.set(p,o);o+=p.length;}
+  return seg;
+}
+// MD5 (RFC 1321) — only for the Extended XMP GUID, which the XMP spec defines as MD5 of the extension.
+function _md5Hex(bytes){
+  const K=new Uint32Array(64),S=[7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
+  for(let i=0;i<64;i++)K[i]=Math.floor(Math.abs(Math.sin(i+1))*4294967296)>>>0;
+  const n=bytes.length,padLen=((n+8>>>6)+1)*64,m=new Uint8Array(padLen);
+  m.set(bytes);m[n]=0x80;const dv=new DataView(m.buffer);
+  dv.setUint32(padLen-8,(n*8)>>>0,true);dv.setUint32(padLen-4,Math.floor(n/536870912),true);
+  let a0=0x67452301,b0=0xefcdab89,c0=0x98badcfe,d0=0x10325476;
+  for(let off=0;off<padLen;off+=64){
+    let A=a0,B=b0,C=c0,D=d0;
+    for(let i=0;i<64;i++){
+      let F,g;const r=i>>4;
+      if(r===0){F=(B&C)|(~B&D);g=i;}else if(r===1){F=(D&B)|(~D&C);g=(5*i+1)&15;}
+      else if(r===2){F=B^C^D;g=(3*i+5)&15;}else{F=C^(B|~D);g=(7*i)&15;}
+      F=(F+A+K[i]+dv.getUint32(off+g*4,true))>>>0;A=D;D=C;C=B;
+      const s=S[(r<<2)|(i&3)];B=(B+((F<<s)|(F>>>(32-s))))>>>0;
+    }
+    a0=(a0+A)>>>0;b0=(b0+B)>>>0;c0=(c0+C)>>>0;d0=(d0+D)>>>0;
+  }
+  let hex='';for(const w of [a0,b0,c0,d0])for(let i=0;i<4;i++)hex+=((w>>>(i*8))&255).toString(16).padStart(2,'0');
+  return hex.toUpperCase();
+}
+// One APP1 holds at most ~64KB. Larger packets use Adobe's Extended XMP (XMP spec part 3, 1.1.3.1):
+// a small standard packet that names the extension by GUID, plus the full packet split across
+// "xmp/extension" APP1 segments. Lightroom, Photoshop and exiftool reassemble it.
+function jpegXmpSegments(xml,lookName,printProfile){
+  const enc=new TextEncoder(),stdSig='http://ns.adobe.com/xap/1.0/\0',xmp=enc.encode(xml);
+  if(2+stdSig.length+xmp.length<=65535)return [_app1(stdSig,[xmp])];
+  const guid=_md5Hex(xmp),note=`\n   <xmpNote:HasExtendedXMP>${guid}</xmpNote:HasExtendedXMP>`;
+  const std=buildRecipeXmp(lookName,printProfile)
+    .replace('xmlns:cs="http://chromasmith.app/xmp/1.0/">','xmlns:cs="http://chromasmith.app/xmp/1.0/" xmlns:xmpNote="http://ns.adobe.com/xmp/note/">')
+    .replace('</cs:Software>','</cs:Software>'+note);
+  const segs=[_app1(stdSig,[enc.encode(std)])],extSig='http://ns.adobe.com/xmp/extension/\0',CHUNK=65400;
+  for(let off=0;off<xmp.length;off+=CHUNK){
+    const hdr=new Uint8Array(40);hdr.set(enc.encode(guid),0);
+    const dv=new DataView(hdr.buffer);dv.setUint32(32,xmp.length);dv.setUint32(36,off);
+    segs.push(_app1(extSig,[hdr,xmp.subarray(off,off+CHUNK)]));
+  }
+  return segs;
 }
 function injectRecipeXmp(out,ext,lookName,printProfile,sidecarXml,keepGps=true){
   const xml=mergeExportSidecarXmp(buildRecipeXmp(lookName,printProfile),sidecarXml,keepGps);
@@ -69,15 +123,13 @@ function injectRecipeXmp(out,ext,lookName,printProfile,sidecarXml,keepGps=true){
       const chunk=pngChunk('iTXt',data);
       return pngSpliceAfterIHDR(out,chunk);
     }else{ // JPEG: separate APP1 segment from Exif's, identified by its own signature
-      const sig=new TextEncoder().encode('http://ns.adobe.com/xap/1.0/\0');
-      const segLen=2+sig.length+xmp.length; // length field covers everything after the FF E1 marker
-      if(segLen>65535)throw Error('Source XMP exceeds JPEG metadata segment size');
-      const seg=new Uint8Array(2+segLen);
-      seg[0]=0xFF;seg[1]=0xE1;seg[2]=(segLen>>8)&0xFF;seg[3]=segLen&0xFF;
-      seg.set(sig,4);seg.set(xmp,4+sig.length);
+      const segs=jpegXmpSegments(xml,lookName,printProfile);
+      const total=segs.reduce((n,s)=>n+s.length,0);
       // insert right after SOI, before whatever metadata injectMetadata already spliced in
-      const res=new Uint8Array(out.length+seg.length);
-      res.set(out.subarray(0,2),0);res.set(seg,2);res.set(out.subarray(2),2+seg.length);
+      const res=new Uint8Array(out.length+total);
+      res.set(out.subarray(0,2),0);let o=2;
+      for(const s of segs){res.set(s,o);o+=s.length;}
+      res.set(out.subarray(2),o);
       return res;
     }
   }catch(e){if(sidecarXml)throw e;return out}
