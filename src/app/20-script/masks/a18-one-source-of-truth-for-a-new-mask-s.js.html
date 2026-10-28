@@ -133,46 +133,93 @@ function mskAdd(type,configure){
 // click mask (docs/masking-model-bench.md). The result is an ordinary AI raster mask, so Feather/Edge,
 // Add/Subtract and the brush all work on it. Model choice: localStorage 'chromasmithMatteModel'
 // ('modnet'|'isnet'), falling back to whatever is installed.
-async function mskAddSubjectMatte(){
+async function mskAddSubjectMatte(opt={}){
   if(!window.__TAURI__){toast('Auto Subject needs the desktop app','warn');return null;}
   const it=(typeof curItem==='function')?curItem():null,img=it&&it.img;
   if(!img){toast('Open a photo first','warn');return null;}
-  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks \u2014 delete one first','warn');return null;}
-  let models=[];
-  try{models=await window.__TAURI__.core.invoke('matte_models');}catch(e){models=[];}
-  if(!models.length){toast('Auto Subject model is not installed','warn');return null;}
-  let want='modnet';try{want=localStorage.getItem('chromasmithMatteModel')||'modnet';}catch(e){}
-  const model=models.includes(want)?want:models[0];
-  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name='Auto Subject';mask.aiSelectionMode='matte';});
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return null;}
+  if(!(await mskMatteModels()).length){toast('Auto Subject model is not installed','warn');return null;}
+  const bg=!!opt.background,label=bg?'Background':'Auto Subject';
+  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name=label;mask.aiSelectionMode=bg?'matte-bg':'matte';});
   if(!m)return null;
-  const endActivity=(typeof fxPhotoActivity==='function')?fxPhotoActivity(it,'Selecting subject\u2026'):()=>{};
+  const endActivity=(typeof fxPhotoActivity==='function')?fxPhotoActivity(it,bg?'Selecting background…':'Selecting subject…'):()=>{};
   try{
-    const{w,h}=samInputDims();
-    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-    const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
-    const d=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);
-    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-    const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
-    const dv=new DataView(buf),hlen=dv.getUint32(0,true);
-    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-    const body=new Uint8Array(buf,4+hlen);
-    if(header.width!==w||header.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
+    // What is the subject? The detector (cached per photo) decides the matting model (item 15) and the name (16):
+    // MODNet is a portrait model and mattes a dog poorly; ISNet is general-object.
+    try{await mskSceneEnsure();}catch(_){}
+    const sc=_mskSceneOf(it),dets=(sc&&sc.state==='done'?sc.list:[]).filter(c=>c.box);
+    const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+    const main=dets.filter(c=>c.group!=='objects').sort((x,y)=>area(y)-area(x))[0]||dets.sort((x,y)=>area(y)-area(x))[0];
+    const kind=main&&main.group==='people'?'people':'other';
+    const model=await mskMatteModelFor(kind);
+    const mt=await _mskMatteFor(it,model);
+    if(!mt)throw new Error('matte unavailable');
     if(!fxState.masks.includes(m))return null;   // deleted while the model ran
-    m.px=Uint8ClampedArray.from(body);m.mtW=w;m.mtH=h;m.name='Auto Subject';
+    let n=0;for(let i=0;i<mt.px.length;i++)if(mt.px[i]>127)n++;
+    const cover=n/mt.px.length;
+    if(cover<0.005||cover>0.98){toast(cover<0.005?'No clear subject stands out in this photo':'The whole photo reads as the subject — try Subject or Objects','warn');throw new Error('no distinct subject');}
+    const src=bg?Uint8ClampedArray.from(mt.px,v=>255-v):mt.px;
+    const f=_mskFinishAiRaster(src,mt.w,mt.h,{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
+    if(!bg&&main&&dets.filter(c=>c.group===main.group).length===1)m.name=main.label.replace(/ \d+$/,'');
     _mskTexDirty=true;_mskRecordAIProvenance(m,it,'matte:'+model,false);
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    log('Auto Subject failed: '+(e&&e.message||e),'error');toast('Auto Subject failed \u2014 see log','warn');
+    if(!/no distinct subject/.test(String(e&&e.message))){log(label+' failed: '+(e&&e.message||e),'error');toast(label+' failed — see log','warn');}
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{endActivity();}
 }
 
+// Foreground (item 18): the nearest depth layer. Otsu splits the photo's depth histogram into near and far; the
+// mask ramps over a few depth levels around the split, then is snapped to the photo's edges (fast guided upsample).
+async function mskAddForeground(){
+  if(!window.__TAURI__){toast('Foreground needs the desktop app','warn');return null;}
+  const it=curItem(),img=it&&it.img;if(!img){toast('Open a photo first','warn');return null;}
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return null;}
+  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name='Foreground';mask.aiSelectionMode='foreground';});
+  if(!m)return null;
+  const job=mskAiBusy('Finding the foreground');
+  try{
+    const dm=await fxEnsureDepthMap();
+    if(job.cancelled)throw new Error('Cancelled');
+    if(!dm)throw new Error('depth estimate unavailable');
+    if(!fxState.masks.includes(m))return null;
+    const px=mskForegroundFromDepth(dm.data,dm.w,dm.h);
+    if(!px){toast('Nothing in front stands out from the background','warn');throw new Error('flat depth');}
+    const f=_mskFinishAiRaster(px,dm.w,dm.h,{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
+    _mskTexDirty=true;_mskRecordAIProvenance(m,it,'depth:foreground',true);
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    return m;
+  }catch(e){
+    if(!/flat depth|Cancelled/.test(String(e&&e.message))){log('Foreground failed: '+(e&&e.message||e),'error');toast('Foreground failed — see log','warn');}
+    const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
+    return null;
+  }finally{job.done();}
+}
+// Pure: depth (0=far, 255=near) -> soft foreground alpha, or null when the photo has no clear near layer.
+function mskForegroundFromDepth(d,w,h){
+  const hist=new Array(256).fill(0);for(let i=0;i<d.length;i++)hist[d[i]]++;
+  const t=mskOtsu(hist);
+  let nN=0,sN=0,sF=0;for(let i=0;i<256;i++){if(i>t){nN+=hist[i];sN+=i*hist[i];}else sF+=i*hist[i];}
+  const N=d.length,nF=N-nN;
+  if(!nN||!nF)return null;
+  const gap=sN/nN-sF/nF,cover=nN/N;
+  if(gap<25||cover<0.02||cover>0.85)return null;   // near and far are not distinct, or "near" is everything
+  const ramp=Math.max(4,gap*0.15),out=new Uint8ClampedArray(N);
+  for(let i=0;i<N;i++){const v=(d[i]-(t-ramp/2))/ramp;out[i]=Math.max(0,Math.min(1,v))*255;}
+  return out;
+}
+
 // Lightroom-style background selection reuses the saved subject prompt and complements its
 // successful soft mask. Until the first non-empty result arrives this remains an empty AI mask.
-function mskAddBackground(){
+// Lightroom's Select Background is one click (item 17): the complement of Auto Subject's matte when a matting
+// model is installed. Without one it falls back to the AI mask whose subject the user scribbles, as before.
+async function mskAddBackground(){
+  if(window.__TAURI__&&(await mskMatteModels()).length){const m=await mskAddSubjectMatte({background:true});if(m)return m;}
   const m=mskAdd('ai',mask=>{mask.aiSelectionMode='background';mask.name='Background';});
   if(m)log('Scribble or draw a rectangle over the subject. The background is selected after AI Select succeeds.','info');
   return m;

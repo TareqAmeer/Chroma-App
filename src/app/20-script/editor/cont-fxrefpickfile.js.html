@@ -235,7 +235,7 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:FW/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(fw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';

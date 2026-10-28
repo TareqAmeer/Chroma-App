@@ -103,8 +103,8 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','skin','depth'];
-  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
+  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','foreground','skin','depth'];
+  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Foreground','mskForeground','mskAddForeground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
     ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','mskDepth',"mskAdd('depth')",desktop]];
   g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile'+(AI_KINDS.includes(t[0].toLowerCase())?' ai':'')+'" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask'+(AI_KINDS.includes(t[0].toLowerCase())?' (AI)':''))+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
@@ -113,7 +113,9 @@ function mskCreateGridSync(){
   if(desktop&&_mskLandscapeAvail===true){
     if(!lr){lr=document.createElement('div');lr.id='msk-landscape-row';lr.style.cssText='display:none;flex-wrap:wrap;gap:6px;margin:6px 0';g.insertAdjacentElement('afterend',lr);
       lr.innerHTML=LANDSCAPE_GROUPS.map(c=>'<button type="button" class="btn bgh" data-landscape="'+c[0]+'" onclick="mskAddLandscape(\''+c[0]+'\')">'+c[1]+'</button>').join('');}
-    lr.querySelectorAll('button').forEach(b=>{b.disabled=full;});
+    lr.querySelectorAll('button').forEach(b=>{b.disabled=full;
+      // Hover previews the category like a Detected chip (one landscape pass per photo, shared with Sky).
+      b.onmouseenter=b.onfocus=()=>mskLandscapePreview(b.dataset.landscape);b.onmouseleave=b.onblur=mskScenePreviewClear;});
   }else if(lr)lr.remove();
 }
 // mskRebuild keeps what the user was doing: the panel's scroll position and the focused control survive the

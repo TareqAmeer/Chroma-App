@@ -856,6 +856,9 @@ body.msk-brushing #fx-zoom-wrap,body.msk-brushing #fx-zoom-wrap *{cursor:none!im
 .msk-person{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--bdr);border-radius:6px;font-size:var(--fs-1)}
 .msk-person-parts{display:flex;flex-wrap:wrap;gap:4px 10px;flex:1 1 100%;color:var(--mut)}
 .msk-people-sep{font-size:var(--fs-1);color:var(--mut)}
+.msk-scene-grp{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;margin-right:6px}
+.msk-scene-note{font-size:var(--fs-1);color:var(--mut)}
+.msk-scene .msk-ai-spin{width:10px;height:10px;border:2px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:mskspin .8s linear infinite}
 .msk-scene-hd{font-size:var(--fs-0);color:var(--mut);font-family:var(--sans);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
 .msk-chip{border:1px solid var(--bdr);background:var(--tint-1,transparent);color:var(--txt);border-radius:999px;padding:3px 10px;font:inherit;font-size:var(--fs-1);cursor:pointer}
 .msk-chip:hover{border-color:var(--acc);color:var(--acc)}
@@ -7572,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028E';
+const BUILD='1.1028F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10560,7 +10563,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
     // Preview only: emulate the export's kernel truncation at this render's scale (see the blur passes). opts.truncRefW = the
     // width the export will render at; the tap cap shrinks by sc / (truncRefW/REF) (per reduced-res texel: / gs). 0 = no emulation.
-    const capK=(opts&&opts.truncRefW>0&&sc<opts.truncRefW/REF)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0;
+    const capK=(opts&&opts.truncRefW>0)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0; // >=1 => the shader's plain 64-tap cap
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
@@ -10922,7 +10925,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      // Preview: the cell grid is defined against the EXPORT width (opts.truncRefW), not this render's, so a Fit preview shows the
      // export's grain (same cell grid, same seed => same pattern) instead of clumps 2.5x coarser/stronger once shrunk to the screen.
      const grFreq=((opts&&opts.truncRefW>0)?opts.truncRefW:(w/uvSx))/Math.max(cellPx,0.5);
-     gl.uniform1f(ul('grA'),grA);
+     // A render coarser than the export (Fit, or zoomed between Fit and 1:1) point-samples several grain cells per pixel, which keeps
+     // their FULL amplitude, while the export viewed at that size averages them — so Fit showed grain ~2.3x stronger than the
+     // export does at the same size. Attenuate by (export px per render px)^-0.8 — fitted at two Fit widths (3x: 0.42, 5x: 0.27) so Fit matches a box-downsampled export (test/zoom_effect_parity.mjs).
+     const grDown=(opts&&opts.truncRefW>0)?opts.truncRefW/Math.max(1,w/uvSx):1,grAtt=grDown>1?Math.pow(grDown,-((typeof window!=='undefined'&&window.__grAttP!=null)?window.__grAttP:0.8)):1;
+     gl.uniform1f(ul('grA'),grA*grAtt);
      gl.uniform1f(ul('grFreq'),grFreq);
      gl.uniform3f(ul('grK'),G.kR,G.kG,G.kB);
      gl.uniform1f(ul('grPowG'),G.powG);
@@ -16844,46 +16851,93 @@ function mskAdd(type,configure){
 // click mask (docs/masking-model-bench.md). The result is an ordinary AI raster mask, so Feather/Edge,
 // Add/Subtract and the brush all work on it. Model choice: localStorage 'chromasmithMatteModel'
 // ('modnet'|'isnet'), falling back to whatever is installed.
-async function mskAddSubjectMatte(){
+async function mskAddSubjectMatte(opt={}){
   if(!window.__TAURI__){toast('Auto Subject needs the desktop app','warn');return null;}
   const it=(typeof curItem==='function')?curItem():null,img=it&&it.img;
   if(!img){toast('Open a photo first','warn');return null;}
-  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks \u2014 delete one first','warn');return null;}
-  let models=[];
-  try{models=await window.__TAURI__.core.invoke('matte_models');}catch(e){models=[];}
-  if(!models.length){toast('Auto Subject model is not installed','warn');return null;}
-  let want='modnet';try{want=localStorage.getItem('chromasmithMatteModel')||'modnet';}catch(e){}
-  const model=models.includes(want)?want:models[0];
-  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name='Auto Subject';mask.aiSelectionMode='matte';});
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return null;}
+  if(!(await mskMatteModels()).length){toast('Auto Subject model is not installed','warn');return null;}
+  const bg=!!opt.background,label=bg?'Background':'Auto Subject';
+  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name=label;mask.aiSelectionMode=bg?'matte-bg':'matte';});
   if(!m)return null;
-  const endActivity=(typeof fxPhotoActivity==='function')?fxPhotoActivity(it,'Selecting subject\u2026'):()=>{};
+  const endActivity=(typeof fxPhotoActivity==='function')?fxPhotoActivity(it,bg?'Selecting background…':'Selecting subject…'):()=>{};
   try{
-    const{w,h}=samInputDims();
-    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
-    const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
-    const d=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);
-    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-    const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
-    const dv=new DataView(buf),hlen=dv.getUint32(0,true);
-    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-    const body=new Uint8Array(buf,4+hlen);
-    if(header.width!==w||header.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
+    // What is the subject? The detector (cached per photo) decides the matting model (item 15) and the name (16):
+    // MODNet is a portrait model and mattes a dog poorly; ISNet is general-object.
+    try{await mskSceneEnsure();}catch(_){}
+    const sc=_mskSceneOf(it),dets=(sc&&sc.state==='done'?sc.list:[]).filter(c=>c.box);
+    const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+    const main=dets.filter(c=>c.group!=='objects').sort((x,y)=>area(y)-area(x))[0]||dets.sort((x,y)=>area(y)-area(x))[0];
+    const kind=main&&main.group==='people'?'people':'other';
+    const model=await mskMatteModelFor(kind);
+    const mt=await _mskMatteFor(it,model);
+    if(!mt)throw new Error('matte unavailable');
     if(!fxState.masks.includes(m))return null;   // deleted while the model ran
-    m.px=Uint8ClampedArray.from(body);m.mtW=w;m.mtH=h;m.name='Auto Subject';
+    let n=0;for(let i=0;i<mt.px.length;i++)if(mt.px[i]>127)n++;
+    const cover=n/mt.px.length;
+    if(cover<0.005||cover>0.98){toast(cover<0.005?'No clear subject stands out in this photo':'The whole photo reads as the subject — try Subject or Objects','warn');throw new Error('no distinct subject');}
+    const src=bg?Uint8ClampedArray.from(mt.px,v=>255-v):mt.px;
+    const f=_mskFinishAiRaster(src,mt.w,mt.h,{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
+    if(!bg&&main&&dets.filter(c=>c.group===main.group).length===1)m.name=main.label.replace(/ \d+$/,'');
     _mskTexDirty=true;_mskRecordAIProvenance(m,it,'matte:'+model,false);
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    log('Auto Subject failed: '+(e&&e.message||e),'error');toast('Auto Subject failed \u2014 see log','warn');
+    if(!/no distinct subject/.test(String(e&&e.message))){log(label+' failed: '+(e&&e.message||e),'error');toast(label+' failed — see log','warn');}
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{endActivity();}
 }
 
+// Foreground (item 18): the nearest depth layer. Otsu splits the photo's depth histogram into near and far; the
+// mask ramps over a few depth levels around the split, then is snapped to the photo's edges (fast guided upsample).
+async function mskAddForeground(){
+  if(!window.__TAURI__){toast('Foreground needs the desktop app','warn');return null;}
+  const it=curItem(),img=it&&it.img;if(!img){toast('Open a photo first','warn');return null;}
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return null;}
+  const m=mskAdd('brush',mask=>{mask.origin='ai';mask.ai=true;mask.name='Foreground';mask.aiSelectionMode='foreground';});
+  if(!m)return null;
+  const job=mskAiBusy('Finding the foreground');
+  try{
+    const dm=await fxEnsureDepthMap();
+    if(job.cancelled)throw new Error('Cancelled');
+    if(!dm)throw new Error('depth estimate unavailable');
+    if(!fxState.masks.includes(m))return null;
+    const px=mskForegroundFromDepth(dm.data,dm.w,dm.h);
+    if(!px){toast('Nothing in front stands out from the background','warn');throw new Error('flat depth');}
+    const f=_mskFinishAiRaster(px,dm.w,dm.h,{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
+    _mskTexDirty=true;_mskRecordAIProvenance(m,it,'depth:foreground',true);
+    mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
+    return m;
+  }catch(e){
+    if(!/flat depth|Cancelled/.test(String(e&&e.message))){log('Foreground failed: '+(e&&e.message||e),'error');toast('Foreground failed — see log','warn');}
+    const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
+    return null;
+  }finally{job.done();}
+}
+// Pure: depth (0=far, 255=near) -> soft foreground alpha, or null when the photo has no clear near layer.
+function mskForegroundFromDepth(d,w,h){
+  const hist=new Array(256).fill(0);for(let i=0;i<d.length;i++)hist[d[i]]++;
+  const t=mskOtsu(hist);
+  let nN=0,sN=0,sF=0;for(let i=0;i<256;i++){if(i>t){nN+=hist[i];sN+=i*hist[i];}else sF+=i*hist[i];}
+  const N=d.length,nF=N-nN;
+  if(!nN||!nF)return null;
+  const gap=sN/nN-sF/nF,cover=nN/N;
+  if(gap<25||cover<0.02||cover>0.85)return null;   // near and far are not distinct, or "near" is everything
+  const ramp=Math.max(4,gap*0.15),out=new Uint8ClampedArray(N);
+  for(let i=0;i<N;i++){const v=(d[i]-(t-ramp/2))/ramp;out[i]=Math.max(0,Math.min(1,v))*255;}
+  return out;
+}
+
 // Lightroom-style background selection reuses the saved subject prompt and complements its
 // successful soft mask. Until the first non-empty result arrives this remains an empty AI mask.
-function mskAddBackground(){
+// Lightroom's Select Background is one click (item 17): the complement of Auto Subject's matte when a matting
+// model is installed. Without one it falls back to the AI mask whose subject the user scribbles, as before.
+async function mskAddBackground(){
+  if(window.__TAURI__&&(await mskMatteModels()).length){const m=await mskAddSubjectMatte({background:true});if(m)return m;}
   const m=mskAdd('ai',mask=>{mask.aiSelectionMode='background';mask.name='Background';});
   if(m)log('Scribble or draw a rectangle over the subject. The background is selected after AI Select succeeds.','info');
   return m;
@@ -17060,18 +17114,34 @@ function mskLandscapeToggle(){
 // One landscape inference per photo at samInputDims, cached non-enumerable on the item.
 async function _mskLandscapeResult(it,img){
   const{w,h}=samInputDims();
-  let lc=it._landscape;
+  const lc=it._landscape;
   if(lc&&lc.w===w&&lc.h===h)return lc;
-  const d=mskSourceData(w,h,img),rgb=new Uint8Array(w*h*3);
-  for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-  const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
-  const hlen=new DataView(buf).getUint32(0,true);
-  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-  const body=new Uint8Array(buf,4+hlen);
-  if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
-  lc={w,h,groups:header.groups,body};
-  Object.defineProperty(it,'_landscape',{value:lc,writable:true,enumerable:false,configurable:true});
-  return lc;
+  // One inference per photo even when Detected, Sky and a Landscape chip ask at once.
+  if(it._landscapeP&&it._landscapeP.w===w&&it._landscapeP.h===h)return it._landscapeP.p;
+  const p=(async()=>{
+    const rgb=mskAiRgb(img,w,h);if(!rgb)throw new Error('photo pixels unavailable');
+    const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
+    const hlen=new DataView(buf).getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
+    const r={w,h,groups:header.groups,body};
+    Object.defineProperty(it,'_landscape',{value:r,writable:true,enumerable:false,configurable:true});
+    return r;
+  })();
+  Object.defineProperty(it,'_landscapeP',{value:{w,h,p},writable:true,enumerable:false,configurable:true});
+  try{return await p;}finally{if(it._landscapeP&&it._landscapeP.p===p)it._landscapeP=null;}
+}
+let _lsPrev=null;
+async function mskLandscapePreview(cat){
+  const it=curItem(),img=it&&it.img;if(!img||!(await mskLandscapeProbe()))return;
+  _lsPrev=cat;
+  try{const lc=await _mskLandscapeResult(it,img),gi=lc.groups.indexOf(cat);
+    if(gi<0||_lsPrev!==cat||curItem()!==it)return;
+    const box=mskOverlayBox();if(!box)return;
+    _scenePrevId='ls:'+cat;
+    mskPaintOverlaySync({type:'brush',px:lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),mtW:lc.w,mtH:lc.h},box,false);
+  }catch(e){log('Landscape preview: '+(e&&e.message||e),'warn');}
 }
 async function mskAddLandscape(cat){
   const label=(LANDSCAPE_GROUPS.find(g=>g[0]===cat)||[])[1];
@@ -17088,7 +17158,12 @@ async function mskAddLandscape(cat){
     if(job.cancelled)throw new Error('Cancelled');
     const gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
     if(!fxState.masks.includes(m))return null;
-    m.px=Uint8ClampedArray.from(lc.body.subarray(gi*w*h,(gi+1)*w*h));m.mtW=w;m.mtH=h;
+    // Same treatment as Sky (item 23): the 576 px model's soft edge is re-read from the photo's colours in a band
+    // around it, then cleaned and snapped to the full-res photo (24). Sky also drops low isolated blobs.
+    const raw=lc.body.subarray(gi*w*h,(gi+1)*w*h),rgba=mskSourceData(w,h,img);
+    const matted=rgba?_skyMatte(raw,w,h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);
+    const f=_mskFinishAiRaster(matted,w,h,cat==='sky'?{sky:true}:{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
     let n=0;for(let i=0;i<m.px.length;i++)if(m.px[i]>127)n++;
     _mskTexDirty=true;_mskRecordAIProvenance(m,it,'landscape:'+cat,false);
     if(!n)toast('No '+label.toLowerCase()+' found in this photo','warn');
@@ -17451,16 +17526,23 @@ async function samRunPoints(m,opts={}){
     // a saved recipe that names a backend keeps it.
     const useSam2=opts.preferredBackend?/^sam2_/.test(opts.preferredBackend):!!_sam2Token;
     const cmd=aiBox?(useSam2?'sam2_box':'sam_box'):(useSam2?'sam2_points':'sam_points');
-    const rect=aiBox?{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}:null;
-    const payload=aiBox?{token:useSam2?_sam2Token:_samToken,rect}:{token:useSam2?_sam2Token:_samToken,points};
-    const buf=await window.__TAURI__.core.invoke(cmd,payload);
+    let header,mask;
+    const pre=opts.precomputed;
+    if(pre&&aiBox&&pre.backend===cmd&&pre.px&&pre.px.length===pre.mtW*pre.mtH){
+      // A detected-chip hover already ran this exact box on this backend (mskSceneAdd): same answer, no second inference.
+      header={width:pre.mtW,height:pre.mtH};mask=pre.px;
+    }else{
+      const rect=aiBox?{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}:null;
+      const payload=aiBox?{token:useSam2?_sam2Token:_samToken,rect}:{token:useSam2?_sam2Token:_samToken,points};
+      const buf=await window.__TAURI__.core.invoke(cmd,payload);
+      // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
+      const dv=new DataView(buf);
+      const hlen=dv.getUint32(0,true);
+      header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+      mask=new Uint8Array(buf,4+hlen);
+    }
     if(job&&job.cancelled)return{ok:false,error:'Cancelled',cancelled:true};
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
-    // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
-    const dv=new DataView(buf);
-    const hlen=dv.getUint32(0,true);
-    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-    const mask=new Uint8Array(buf,4+hlen);
     if(mask.length!==header.width*header.height){
       const msg='AI Select: mask size mismatch — try scribbling again';
       if(!opts.silent){log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();}return{ok:false,error:msg};
@@ -17468,7 +17550,14 @@ async function samRunPoints(m,opts={}){
     // The model's own soft edge, NOT _samRefineMask's colour matting: measured on a dark dog against a dark wall,
     // matting grew the selection from 6.6% to 54.6% outside the subject and cost ~1.8 s per scribble
     // (docs/plans/mask-tool-fixes.md F2). Edge snapping stays available on demand via Refine edges.
-    const refined=mask;
+    let refined=mask;
+    // Detected people/animals: the matting model's hair/fur alpha inside SAM's edge band (item 14), then the
+    // clean-up + photo-guided upsample every one-shot AI raster gets (items 25/26).
+    if(m.aiEdge&&!opts.detached){const e=await _mskEdgeMatte(item,refined,header.width,header.height,m.aiEdge);if(e)refined=e;}
+    // Every SAM result is stored at the mask texture size, edge snapped to the photo (item 25) — except an older mask
+    // still holding a model-size raster with manual Paint/Erase on it, whose brush delta must keep matching sizes.
+    const T=mskTexDims(),legacy=m.px&&m.px.length&&m.px.length!==T.w*T.h&&m._aiBase;
+    if(m.aiUpsample!==false&&!legacy){const f=_mskFinishAiRaster(refined,header.width,header.height,{specks:true});refined=f.px;header={width:f.w,height:f.h};}
     const resolvedMask=m.aiSelectionMode==='background'?_samComplementSubjectMask(refined):refined;
     if(!resolvedMask){
       const msg='AI Background could not be created because the subject mask is empty or covers the entire photo';
@@ -18674,11 +18763,40 @@ async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=
 }
 // A plain point/box-prompted segmentation mask (not Skin, which is AI but has no prompts to replay).
 function mskIsPromptedSAM(m){return !!m&&m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||!!_samNormalizeBox(m.aiBox));}
+// One-shot AI masks that re-run from scratch on another photo, Lightroom-style (no prompts to replay):
+// Auto Subject, one-click Background, Foreground and the Landscape categories.
+const MSK_REEVAL_MODES=['matte','matte-bg','foreground','landscape'];
+function _mskIsOneShotAI(m){return !!m&&m.origin==='ai'&&MSK_REEVAL_MODES.includes(m.aiSelectionMode);}
 function _mskPortableIsUnsupported(m){
-  if(m.origin==='sky')return false;
+  if(m.origin==='sky'||_mskIsOneShotAI(m))return false;
   return mskIsAI(m)&&!mskIsPromptedSAM(m);
 }
-function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m)||_mskIsOneShotAI(m);}
+// Recomputes a one-shot AI mask's raster on the CURRENT photo with the same model it was made with.
+async function _mskOneShotRaster(m,item){
+  // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
+  const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  if(mode==='matte'||mode==='matte-bg'){
+    const saved=(be.match(/^matte:(\w+)/)||[])[1],ms=await mskMatteModels();
+    const model=saved&&ms.includes(saved)?saved:await mskMatteModelFor('other');if(!model)throw new Error('No matting model installed');
+    const mt=await _mskMatteFor(item,model);if(!mt)throw new Error('Matting unavailable for this photo');
+    const src=mode==='matte-bg'?Uint8ClampedArray.from(mt.px,v=>255-v):mt.px;
+    return{..._mskFinishAiRaster(src,mt.w,mt.h,{specks:true}),backend:'matte:'+model};
+  }
+  if(mode==='foreground'){
+    const dm=await fxEnsureDepthMap();if(!dm)throw new Error('Depth estimate unavailable for this photo');
+    const px=mskForegroundFromDepth(dm.data,dm.w,dm.h);if(!px)throw new Error('No distinct foreground in this photo');
+    return{..._mskFinishAiRaster(px,dm.w,dm.h,{specks:true}),backend:'depth:foreground'};
+  }
+  if(mode==='landscape'){
+    const cat=(be.match(/^landscape:(\w+)/)||[])[1];if(!cat)throw new Error('Unknown landscape category');
+    const lc=await _mskLandscapeResult(item,item.img),gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
+    const raw=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),rgba=mskSourceData(lc.w,lc.h,item.img);
+    const matted=rgba?_skyMatte(raw,lc.w,lc.h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);
+    return{..._mskFinishAiRaster(matted,lc.w,lc.h,cat==='sky'?{sky:true}:{specks:true}),backend:'landscape:'+cat};
+  }
+  throw new Error('Not a one-shot AI mask');
+}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
   const savedModel=/^sam2_/.test(savedBackend||'')?'SAM 2.1':'EdgeSAM',savedIsBox=savedBackend==='sam_box'||savedBackend==='sam2_box';
@@ -18696,6 +18814,15 @@ async function _mskPortableReevaluate(m,target){
     _mskRecordAIProvenance(m,target.item,null,true);
     const upgraded=await mskSkyUpgrade(m,{detached:true,item:target.item});
     return upgraded?{ok:true}:{ok:true,warning:'Sky heuristic regenerated for target; edge clean-up unavailable'};
+  }
+  if(_mskIsOneShotAI(m)){
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before mask recomputation'};
+    try{
+      const r=await _mskOneShotRaster(m,target&&target.item||curItem());
+      if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed during mask recomputation'};
+      m.px=r.px;m.mtW=r.w;m.mtH=r.h;delete m._refineCache;_mskRecordAIProvenance(m,target&&target.item||curItem(),r.backend,false);
+      return{ok:true};
+    }catch(e){return{ok:false,error:String(e&&e.message||e)};}
   }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
@@ -18927,12 +19054,15 @@ let _mskSrcCache=null;
 function mskSourceData(w,h,img){
   img=img||((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg);
   if(!img||!w||!h)return null;
-  if(_mskSrcCache&&_mskSrcCache.img===img&&_mskSrcCache.w===w&&_mskSrcCache.h===h)return _mskSrcCache.data;
+  // Two entries: AI work alternates between the model size (samInputDims) and the mask size (mskTexDims), and a
+  // single slot redrew + read back the photo on every switch (item 27).
+  const C=Array.isArray(_mskSrcCache)?_mskSrcCache:[];
+  const hit=C.find(e=>e.img===img&&e.w===w&&e.h===h);if(hit){if(C[0]!==hit){C.splice(C.indexOf(hit),1);C.unshift(hit);}return hit.data;}
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
   const cx=cv.getContext('2d',{willReadFrequently:true});
   cx.drawImage(img,0,0,w,h);
   const data=cx.getImageData(0,0,w,h).data;
-  _mskSrcCache={img,w,h,data};
+  C.unshift({img,w,h,data});C.length=Math.min(C.length,2);_mskSrcCache=C;
   return data;
 }
 // Painting/refining changes the MASK, never the photo, so the cache only has to drop when the
@@ -19315,8 +19445,9 @@ async function _skyBuild(item){
   }
   const d=mskSourceData(w,h,img);if(!d)return null;
   if(!prob)prob=_skyHeuristic(d,w,h);
-  const matte=_skyMatte(prob,w,h,d,band),T=mskTexDims();
-  return{px:_skyResample(matte,w,h,T.w,T.h),w:T.w,h:T.h,backend};
+  // matte the skyline band, drop windows/reflections and fill cloud pinholes, then snap to the full-res photo.
+  const matte=_skyMatte(prob,w,h,d,band);
+  return{..._mskFinishAiRaster(matte,w,h,{sky:true}),backend};
 }
 // Swaps a sky mask's instant heuristic raster for the finished one. Lands only if the mask was not
 // edited and the photo did not change meanwhile. detached: the caller handles render and history.
@@ -19822,7 +19953,7 @@ function mskAddMenu(ev,composeOp){
   const detected=(_sc&&_sc.state==='done'&&_sc.list&&_sc.list.length)?_sc.list:[];
   const html='<div class="msk-more-hd" role="presentation">'+(cmpTxt&&fxState.masks[mskSel]?cmpTxt+' \u201c'+String(fxState.masks[mskSel].name||mskAutoLabel(fxState.masks[mskSel],mskSel)).replace(/[<>&]/g,'')+'\u201d':fxState.masks.length+' / '+MSK_MAX+' masks')+'</div>'
     +hd('One click')
-    +(desktop?item('Subject','wand','', 'mskAddSubjectMatte()'):'')+item('Sky','sky','sky')+(desktop?item('Background','wand','', 'mskAddBackground()'):'')
+    +(desktop?item('Subject','wand','', 'mskAddSubjectMatte()'):'')+item('Sky','sky','sky')+(desktop?item('Background','wand','', 'mskAddBackground()')+item('Foreground','mskForeground','', 'mskAddForeground()'):'')
     +'<div class="msk-more-sep"></div>'+hd('Shape')
     +item('Radial','local','radial',null,'editor.mask-add-radial')+item('Linear','linearGrad','linear',null,'editor.mask-add-linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
@@ -20854,8 +20985,8 @@ function fxUpdateClipInfoUI(){
 function mskCreateGridSync(){
   const g=document.getElementById('msk-create-grid');if(!g)return;
   const desktop=!!window.__TAURI__,full=fxState.masks.length>=MSK_MAX;
-  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','skin','depth'];
-  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
+  const AI_KINDS=['auto subject','subject','objects','sky','landscape','background','foreground','skin','depth'];
+  const T=[['Auto Subject','mskAuto','mskAddSubjectMatte()',desktop],['Subject','mskSubject',"mskAdd('ai')",desktop],['Objects','mskObjects','mskAddObjects()',desktop],['Sky','mskSky',"mskAdd('sky')",true],['Landscape','mskLandscape','mskLandscapeToggle()',desktop&&_mskLandscapeAvail===true],['Background','mskBackground','mskAddBackground()',desktop],['Foreground','mskForeground','mskAddForeground()',desktop],['Skin','mskSkin',"mskAdd('skin')",desktop],
     ['Brush','brush',"mskAdd('brush')",true],['Linear','linearGrad',"mskAdd('linear')",true],['Radial','local',"mskAdd('radial')",true],
     ['Color','eyedropper',"mskAdd('color')",true],['Luminance','sun',"mskAdd('lum')",true],['Depth','mskDepth',"mskAdd('depth')",desktop]];
   g.innerHTML=T.filter(t=>t[3]).map(t=>'<button type="button" class="msk-tile'+(AI_KINDS.includes(t[0].toLowerCase())?' ai':'')+'" data-kind="'+t[0].toLowerCase()+'"'+(full?' disabled':'')+' onclick="'+t[2]+'" title="'+(full?'Maximum '+MSK_MAX+' masks':'New '+t[0]+' mask'+(AI_KINDS.includes(t[0].toLowerCase())?' (AI)':''))+'">'+icon(t[1],18)+'<span>'+t[0]+'</span></button>').join('');
@@ -20864,7 +20995,9 @@ function mskCreateGridSync(){
   if(desktop&&_mskLandscapeAvail===true){
     if(!lr){lr=document.createElement('div');lr.id='msk-landscape-row';lr.style.cssText='display:none;flex-wrap:wrap;gap:6px;margin:6px 0';g.insertAdjacentElement('afterend',lr);
       lr.innerHTML=LANDSCAPE_GROUPS.map(c=>'<button type="button" class="btn bgh" data-landscape="'+c[0]+'" onclick="mskAddLandscape(\''+c[0]+'\')">'+c[1]+'</button>').join('');}
-    lr.querySelectorAll('button').forEach(b=>{b.disabled=full;});
+    lr.querySelectorAll('button').forEach(b=>{b.disabled=full;
+      // Hover previews the category like a Detected chip (one landscape pass per photo, shared with Sky).
+      b.onmouseenter=b.onfocus=()=>mskLandscapePreview(b.dataset.landscape);b.onmouseleave=b.onblur=mskScenePreviewClear;});
   }else if(lr)lr.remove();
 }
 // mskRebuild keeps what the user was doing: the panel's scroll position and the focused control survive the
@@ -21845,72 +21978,296 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
   svg.innerHTML=html;
   svg.querySelectorAll('[data-h]').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }
-// ── Auto-detect: people / pets / sky, with hover preview ────────────────────────────────────────
-// When the Masks panel is up on a desktop build, RT-DETR (native scene_detect) lists the people and
-// animals in the photo as chips ("Person 1", "Dog"). Hovering a chip previews the selection (EdgeSAM,
-// box prompt) as a red tint on the photo before anything is committed; clicking adds it as an AI mask.
+// ── Detection list + raster clean-up helpers (docs/plans/mask-accuracy-pass.md) ────────────────
+// COCO-80 display names in RT-DETR class order (the checkpoint's id2label), grouped the way Lightroom's
+// Objects/People lists read: People, Animals, everything else is an Object.
+const MSK_COCO=['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign',
+  'parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie',
+  'suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle',
+  'wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake',
+  'chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven',
+  'toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+const MSK_ANIMALS=new Set(['bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe']);
+function mskDetGroup(label){return label==='person'?'people':MSK_ANIMALS.has(label)?'animals':'objects';}
+function mskDetName(label){
+  const fix={tv:'TV','cell phone':'Phone','dining table':'Table','sports ball':'Ball','potted plant':'Plant','hair drier':'Hair dryer'};
+  const s=fix[label]||String(label||'object');return s.charAt(0).toUpperCase()+s.slice(1);
+}
+// Detector output → chip list. Per-group confidence (people/animals are what most photos are about and
+// RT-DETR scores partly-occluded pets low), a minimum size (a 20 px cup in the background is noise as a mask),
+// one chip per thing (the same dog boxed as dog and cat keeps the better label), at most `cap` chips, people
+// then animals then objects, each group left to right with numbers only when a name repeats.
+function mskSceneList(dets,opt={}){
+  const thr={people:opt.people??0.45,animals:opt.animals??0.45,objects:opt.objects??0.55},minA=opt.minArea??0.0025,cap=opt.cap??12;
+  const area=d=>Math.max(0,d.x1-d.x0)*Math.max(0,d.y1-d.y0);
+  const ok=(dets||[]).filter(d=>d&&Number.isFinite(d.score)&&d.score>=thr[mskDetGroup(d.label)]&&area(d)>=minA).sort((a,b)=>b.score-a.score);
+  const kept=[];
+  for(const d of ok){
+    const g=mskDetGroup(d.label);
+    const dup=kept.some(k=>{if(mskDetGroup(k.label)!==g)return false;
+      const iw=Math.max(0,Math.min(k.x1,d.x1)-Math.max(k.x0,d.x0)),ih=Math.max(0,Math.min(k.y1,d.y1)-Math.max(k.y0,d.y0));
+      const inter=iw*ih,sm=Math.min(area(k),area(d));
+      return sm>0&&(k.label===d.label?inter/sm>=0.8:inter/(area(k)+area(d)-inter)>=0.7);});
+    if(!dup)kept.push(d);
+  }
+  const order={people:0,animals:1,objects:2};
+  // Keep the most confident `cap`, then lay them out by group and left-to-right.
+  const top=kept.slice(0,cap).sort((a,b)=>order[mskDetGroup(a.label)]-order[mskDetGroup(b.label)]||(a.x0+a.x1)-(b.x0+b.x1));
+  const count={},seen={};top.forEach(d=>{count[d.label]=(count[d.label]||0)+1;});
+  return top.map(d=>{const n=seen[d.label]=(seen[d.label]||0)+1,g=mskDetGroup(d.label);
+    return{id:d.label.replace(/\s+/g,'_')+(n-1),label:mskDetName(d.label)+(count[d.label]>1?' '+n:''),kind:d.label,group:g,score:d.score,
+      box:{x0:d.x0,y0:d.y0,x1:d.x1,y1:d.y1}};});
+}
+// Otsu (1979): the threshold that maximises between-class variance of a 256-bin histogram.
+function mskOtsu(hist){
+  let tot=0,sum=0;for(let i=0;i<256;i++){tot+=hist[i];sum+=i*hist[i];}
+  if(!tot)return 128;
+  // A flat optimum (empty bins between two peaks) is resolved to its middle, not its first bin.
+  let wB=0,sB=0,best=-1,t0=128,t1=128;
+  for(let i=0;i<256;i++){wB+=hist[i];if(!wB)continue;const wF=tot-wB;if(!wF)break;sB+=i*hist[i];
+    const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);
+    if(v>best*(1+1e-9)){best=v;t0=t1=i;}else if(v>=best*(1-1e-9))t1=i;}
+  return Math.round((t0+t1)/2);
+}
+// 4-connected components of (px>thr). Returns {lab:Int32Array (0 = background), n, area[], minY[], maxY[], sumY[], border[]}.
+function mskComponents(px,w,h,thr=127){
+  const lab=new Int32Array(w*h),stack=new Int32Array(w*h),area=[0],minY=[0],maxY=[0],sumY=[0],border=[0];let n=0;
+  for(let s=0;s<w*h;s++){
+    if(lab[s]||px[s]<=thr)continue;
+    n++;let sp=0,a=0,y0=h,y1=0,sy=0,b=0;stack[sp++]=s;lab[s]=n;
+    while(sp){const p=stack[--sp],x=p%w,y=(p-x)/w;a++;sy+=y;if(y<y0)y0=y;if(y>y1)y1=y;if(x===0||y===0||x===w-1||y===h-1)b=1;
+      if(x>0&&!lab[p-1]&&px[p-1]>thr){lab[p-1]=n;stack[sp++]=p-1;}
+      if(x<w-1&&!lab[p+1]&&px[p+1]>thr){lab[p+1]=n;stack[sp++]=p+1;}
+      if(y>0&&!lab[p-w]&&px[p-w]>thr){lab[p-w]=n;stack[sp++]=p-w;}
+      if(y<h-1&&!lab[p+w]&&px[p+w]>thr){lab[p+w]=n;stack[sp++]=p+w;}}
+    area.push(a);minY.push(y0);maxY.push(y1);sumY.push(sy);border.push(b);
+  }
+  return{lab,n,area,minY,maxY,sumY,border};
+}
+// Removes selected specks smaller than minFrac of the frame and fills unselected pinholes smaller than holeFrac
+// that do not touch the frame edge. Soft edges of the kept parts are untouched. In place; returns px.
+function mskCleanSpecks(px,w,h,minFrac=0.0002,holeFrac=0.0002){
+  const N=w*h,minA=Math.max(1,Math.round(N*minFrac)),holeA=Math.round(N*holeFrac);
+  const c=mskComponents(px,w,h,127);
+  // Never the largest piece: a deliberately tiny selection (a distant bird) must survive.
+  let big=0;for(let l=1;l<=c.n;l++)if(!big||c.area[l]>c.area[big])big=l;
+  for(let i=0;i<N;i++){const l=c.lab[i];if(l&&l!==big&&c.area[l]<minA)px[i]=0;}
+  // speck fringe: soft pixels (1..127) whose only selected neighbours were removed fade with them
+  if(holeA>0){
+    const inv=new Uint8Array(N);for(let i=0;i<N;i++)inv[i]=px[i]<128?255:0;
+    const hc=mskComponents(inv,w,h,127);
+    for(let i=0;i<N;i++){const l=hc.lab[i];if(l&&!hc.border[l]&&hc.area[l]<holeA)px[i]=255;}
+  }
+  return px;
+}
+// Sky clean-up (after Liba et al. 2020): sky is one big region at the top. Isolated sky-coloured blobs that sit
+// entirely below the main sky's centre and are small next to it (windows, puddles, reflections, a white car)
+// are dropped; holes fully inside the sky smaller than holeFrac of the frame (a mis-scored cloud) are filled.
+function mskSkyCleanup(px,w,h,opt={}){
+  const N=w*h,c=mskComponents(px,w,h,127);if(!c.n)return px;
+  let main=1;for(let l=2;l<=c.n;l++)if(c.area[l]>c.area[main])main=l;
+  const mainCy=c.sumY[main]/c.area[main],rel=opt.rel??0.04;
+  const drop=new Uint8Array(c.n+1);
+  for(let l=1;l<=c.n;l++)if(l!==main&&c.minY[l]>mainCy&&c.area[l]<c.area[main]*rel)drop[l]=1;
+  for(let i=0;i<N;i++)if(drop[c.lab[i]])px[i]=0;
+  // soft fringe around a dropped blob: clear soft pixels not adjacent to a kept selected pixel
+  for(let i=0;i<N;i++)if(px[i]&&px[i]<128){const x=i%w;let keep=false;
+    for(const j of [i-1,i+1,i-w,i+w]){if(j<0||j>=N||(j===i-1&&x===0)||(j===i+1&&x===w-1))continue;if(px[j]>=128){keep=true;break;}}
+    if(!keep)px[i]=0;}
+  return mskCleanSpecks(px,w,h,0,opt.holeFrac??0.002);
+}
+// Joint upsampling with the FAST guided filter (He & Sun 2015, arXiv:1505.00996): the linear coefficients a,b are
+// fitted at the mask's own resolution against a box-downsampled copy of the photo, bilinearly upsampled, then
+// applied to the FULL-res luminance (q = a*I + b). Edges land on the photo's edges at full resolution, interiors stay
+// solid, and nothing spills past the soft band (unlike colour matting — docs/plans/mask-tool-fixes.md F2).
+function _mskBilinear(src,sw,sh,W,H){
+  const out=new Float32Array(W*H);
+  for(let y=0;y<H;y++){const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/H-0.5)),y0=fy|0,y1=Math.min(sh-1,y0+1),ty=fy-y0;
+    for(let x=0;x<W;x++){const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/W-0.5)),x0=fx|0,x1=Math.min(sw-1,x0+1),tx=fx-x0;
+      const a=src[y0*sw+x0]+(src[y0*sw+x1]-src[y0*sw+x0])*tx,b=src[y1*sw+x0]+(src[y1*sw+x1]-src[y1*sw+x0])*tx;out[y*W+x]=a+(b-a)*ty;}}
+  return out;
+}
+function mskGuidedUpsample(src,sw,sh,W,H,rgba,opt={}){
+  const N=W*H,n=sw*sh,out=new Uint8ClampedArray(N);
+  const p=new Float32Array(n);for(let i=0;i<n;i++)p[i]=src[i]/255;
+  if(!rgba||rgba.length!==N*4||(sw>=W&&sh>=H)){const u=_mskBilinear(p,sw,sh,W,H);for(let i=0;i<N;i++)out[i]=u[i]*255;return out;}
+  // box-downsample the guide's luminance to the mask grid
+  const g=new Float32Array(n),cnt=new Float32Array(n),lx=new Int32Array(W);
+  for(let x=0;x<W;x++)lx[x]=Math.min(sw-1,(x*sw/W)|0);
+  for(let y=0;y<H;y++){const row=Math.min(sh-1,(y*sh/H)|0)*sw;for(let x=0,j=y*W*4;x<W;x++,j+=4){const k=row+lx[x];g[k]+=0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2];cnt[k]++;}}
+  for(let i=0;i<n;i++)g[i]=cnt[i]?g[i]/cnt[i]/255:0;
+  const r=Math.max(1,Math.round(opt.r??1)),eps=opt.eps??1e-3;
+  const mI=_boxFilterMean(g,sw,sh,r),mP=_boxFilterMean(p,sw,sh,r),II=new Float32Array(n),IP=new Float32Array(n);
+  for(let i=0;i<n;i++){II[i]=g[i]*g[i];IP[i]=g[i]*p[i];}
+  const mII=_boxFilterMean(II,sw,sh,r),mIP=_boxFilterMean(IP,sw,sh,r),A=new Float32Array(n),B=new Float32Array(n);
+  for(let i=0;i<n;i++){const v=mII[i]-mI[i]*mI[i],c=mIP[i]-mI[i]*mP[i];A[i]=c/(v+eps);B[i]=mP[i]-A[i]*mI[i];}
+  const mA=_boxFilterMean(A,sw,sh,r),mB=_boxFilterMean(B,sw,sh,r);
+  // Only where the low-res mask is uncertain (within r+1 cells of its edge) — solid areas stay exactly as the model said.
+  const hard=new Uint8Array(n),inv=new Uint8Array(n);for(let i=0;i<n;i++){hard[i]=src[i]>127?255:0;inv[i]=hard[i]?0:255;}
+  const nb=_samDilateBinary(inv,sw,sh,r+1),nf=_samDilateBinary(hard,sw,sh,r+1),bandL=new Float32Array(n);
+  for(let i=0;i<n;i++)bandL[i]=((src[i]>8&&src[i]<247)||(nb[i]&&nf[i]))?1:0;
+  // One pass: bilinear weights once per pixel, the guided fit only inside the band.
+  const fxs=new Float32Array(W),x0s=new Int32Array(W),x1s=new Int32Array(W);
+  for(let x=0;x<W;x++){const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/W-0.5));x0s[x]=fx|0;x1s[x]=Math.min(sw-1,x0s[x]+1);fxs[x]=fx-x0s[x];}
+  for(let y=0;y<H;y++){const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/H-0.5)),y0=fy|0,y1=Math.min(sh-1,y0+1),ty=fy-y0,r0=y0*sw,r1=y1*sw;
+    for(let x=0;x<W;x++){const a0=r0+x0s[x],a1=r0+x1s[x],b0=r1+x0s[x],b1=r1+x1s[x],tx=fxs[x];
+      const lerp=T=>{const t=T[a0]+(T[a1]-T[a0])*tx,b=T[b0]+(T[b1]-T[b0])*tx;return t+(b-t)*ty;};
+      const u=lerp(p),i=y*W+x,t=(bandL[a0]||bandL[a1]||bandL[b0]||bandL[b1])?lerp(bandL):0;
+      if(t>0){const j=i*4,I=(0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2])/255,q=Math.max(0,Math.min(1,lerp(mA)*I+lerp(mB)));out[i]=(q*t+u*(1-t))*255;}
+      else out[i]=u*255;}}
+  return out;
+}
+// Matting-model alpha inside the SAM mask's uncertain edge band only: SAM decides WHICH thing, the matte decides
+// how its hair/fur edge falls. band px is measured at mask resolution; outside the band SAM's value stands.
+function mskMatteInBand(sam,matte,w,h,band){
+  const N=w*h,hard=new Uint8Array(N),inv=new Uint8Array(N);for(let i=0;i<N;i++){hard[i]=sam[i]>127?255:0;inv[i]=hard[i]?0:255;}
+  const nearOut=_samDilateBinary(inv,w,h,band),nearIn=_samDilateBinary(hard,w,h,band),out=Uint8ClampedArray.from(sam);
+  for(let i=0;i<N;i++)if(nearOut[i]&&nearIn[i])out[i]=matte[i];
+  return out;
+}
+// Every one-shot AI raster (chips, Auto Subject, Background, Foreground, Landscape, Sky) ends here: speck/pinhole
+// clean-up (item 26), optional sky clean-up (21/22), then the fast-guided-filter upsample to the mask texture size
+// against the photo (24/25). Returns {px,w,h}.
+function _mskFinishAiRaster(px,w,h,opt={}){
+  let a=Uint8ClampedArray.from(px);
+  if(opt.sky)mskSkyCleanup(a,w,h);
+  else if(opt.specks)mskCleanSpecks(a,w,h);
+  const T=mskTexDims();
+  if(T.w<=w&&T.h<=h)return{px:a,w,h};
+  const rgba=mskSourceData(T.w,T.h);
+  return{px:mskGuidedUpsample(a,w,h,T.w,T.h,rgba),w:T.w,h:T.h};
+}
+// One matte per photo and model at AI resolution (non-enumerable on the item, never saved).
+async function _mskMatteFor(item,model){
+  const img=item&&item.img;if(!img||!window.__TAURI__)return null;
+  const{w,h}=samInputDims(),key=model+'|'+w+'x'+h;
+  const c=item._matte||(Object.defineProperty(item,'_matte',{value:{},writable:true,configurable:true,enumerable:false}),item._matte);
+  if(c[key])return c[key];
+  const rgb=mskAiRgb(img,w,h);if(!rgb)return null;
+  const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
+  const dv=new DataView(buf),hlen=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+  const body=new Uint8Array(buf,4+hlen);
+  if(hd.width!==w||hd.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
+  return c[key]={px:Uint8ClampedArray.from(body),w,h};
+}
+let _mskMatteModels=null;
+async function mskMatteModels(){
+  if(_mskMatteModels)return _mskMatteModels;
+  try{_mskMatteModels=await window.__TAURI__.core.invoke('matte_models');}catch(e){_mskMatteModels=[];}
+  return _mskMatteModels||[];
+}
+// MODNet is a portrait (people) matting model; ISNet (DIS) is general-object. Pick by what the subject is.
+async function mskMatteModelFor(kind){
+  const ms=await mskMatteModels();if(!ms.length)return null;
+  let want=null;try{want=localStorage.getItem('chromasmithMatteModel');}catch(_){}
+  if(want&&ms.includes(want))return want;
+  if(kind==='people')return ms.includes('modnet')?'modnet':ms[0];
+  return ms.includes('isnet')?'isnet':ms[0];
+}
+async function _mskEdgeMatte(item,sam,w,h,kind){
+  try{
+    const model=await mskMatteModelFor(kind);if(!model)return null;
+    const mt=await _mskMatteFor(item,model);if(!mt||mt.w!==w||mt.h!==h)return null;
+    // band ~1% of the long side: wide enough for hair and fur, too narrow to reach a neighbouring subject.
+    return mskMatteInBand(sam,mt.px,w,h,Math.max(3,Math.round(Math.max(w,h)*0.01)));
+  }catch(e){log('Edge matting skipped — '+(e&&e.message||e),'warn');return null;}
+}
+// ── Auto-detect: people / animals / objects / sky, with hover preview ─────────────────────────────
+// When the Masks panel is up on a desktop build, RT-DETR (native scene_detect, all 80 COCO classes) lists what is
+// in the photo as chips grouped People / Animals / Objects / Sky (mskSceneList). Hovering a chip previews the
+// selection (SAM 2.1 box once its encode is ready — IoU 0.979 vs EdgeSAM's 0.922 on the labelled dog set — else
+// EdgeSAM) as a red tint; clicking adds it as an AI mask, reusing the previewed raster when the backend matches.
 // Detection runs once per photo (cached, non-enumerable on the item so sessions never serialise it).
 function _mskSceneOf(item){return item&&item._scene;}
-async function mskSceneEnsure(){
+// One RGB8 copy of the photo at AI resolution, shared by scene_detect, landscape, matting and SAM (item 27).
+function mskAiRgb(img,w,h){
+  const d=mskSourceData(w,h,img);if(!d)return null;
+  const c=img&&img._csAiRgb;if(c&&c.w===w&&c.h===h&&c.src===d)return c.rgb;
+  const rgb=new Uint8Array(w*h*3);for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  if(img&&typeof img==='object')try{Object.defineProperty(img,'_csAiRgb',{value:{w,h,src:d,rgb},writable:true,configurable:true,enumerable:false});}catch(_){}
+  return rgb;
+}
+async function mskSceneEnsure(opt={}){
   if(!window.__TAURI__)return;
-  const item=curItem();if(!item||item.kind==='video'||item._scene)return;
-  const sc={state:'running',list:[],masks:{}};
+  const item=curItem();if(!item||item.kind==='video')return;
+  if(item._scene&&!(opt.retry&&item._scene.state==='error'))return;
+  const sc={state:'running',list:[],masks:new Map()};
   Object.defineProperty(item,'_scene',{value:sc,writable:true,enumerable:false,configurable:true});
   mskSceneRender();
-  const img=item.img||fxWork||fxImg;if(!img){sc.state='error';return;}
+  const img=item.img||fxWork||fxImg;if(!img){sc.state='error';mskSceneRender();return;}
   try{
     const{w,h}=samInputDims();
-    const d=mskSourceData(w,h,img);
-    const rgb=new Uint8Array(w*h*3);
-    for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+    const rgb=mskAiRgb(img,w,h);if(!rgb)throw new Error('photo pixels unavailable');
     const job=mskAiBusy('Detecting people and objects');
     let dets;try{dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);}finally{job.done();}
     if(curItem()!==item)return;
     if(job.cancelled){sc.state='error';mskSceneRender();return;}
-    const byLabel={};
-    (dets||[]).filter(x=>x.score>=0.5).forEach(x=>{(byLabel[x.label]=byLabel[x.label]||[]).push(x);});
-    const names={person:'Person',bird:'Bird',cat:'Cat',dog:'Dog',horse:'Horse'};
-    Object.keys(byLabel).forEach(label=>{
-      const arr=byLabel[label].sort((a,b)=>(a.x0+a.x1)-(b.x0+b.x1)); // left to right
-      arr.forEach((x,i)=>sc.list.push({id:label+i,label:names[label]+(arr.length>1?' '+(i+1):''),kind:label,box:{x0:x.x0,y0:x.y0,x1:x.x1,y1:x.y1}}));
-    });
-    // Sky: reuse the heuristic's score raster; offer the chip only when it covers a real part of the frame.
-    try{const t={type:'brush',origin:'sky'};mskGenerateSky(t);
-      if(t.px&&t.px.length){let n=0;for(let i=0;i<t.px.length;i+=4)if(t.px[i]>128)n++;if(n*4/t.px.length>0.08)sc.list.push({id:'sky',label:'Sky',kind:'sky'});}}catch(_){}
+    sc.list=mskSceneList(dets);
+    // Sky: the landscape model's sky when installed (the same raster Sky commits to), else the heuristic.
+    try{const sky=await _mskSkyCandidate(item,img);if(curItem()!==item)return;
+      if(sky&&sky.cover>0.06){sc.list.push({id:'sky',label:'Sky',kind:'sky',group:'sky'});_mskSceneCache(sc,'sky',sky.mask);}}catch(_){}
     sc.state='done';
-  }catch(e){sc.state='error';log('Auto-detect: '+(e&&e.message||e),'warn');}
+    // Pre-warm (item 28): start the SAM encodes now so the first hover/click is instant.
+    if(sc.list.some(c=>c.box))samEnsureEncoded({silent:true});
+  }catch(e){sc.state='error';sc.error=String(e&&e.message||e);log('Auto-detect: '+sc.error,'warn');}
   mskSceneRender();
 }
+// Bounded LRU of preview rasters (item 29): a busy photo cannot pin dozens of full-size masks.
+function _mskSceneCache(sc,id,v){
+  if(!(sc.masks instanceof Map))sc.masks=new Map(Object.entries(sc.masks||{}));
+  if(v===undefined){const x=sc.masks.get(id);if(x){sc.masks.delete(id);sc.masks.set(id,x);}return x;}
+  sc.masks.delete(id);sc.masks.set(id,v);while(sc.masks.size>8)sc.masks.delete(sc.masks.keys().next().value);return v;
+}
+async function _mskSkyCandidate(item,img){
+  let px=null,w=0,h=0;
+  if(await mskLandscapeProbe()){try{const lc=await _mskLandscapeResult(item,img),gi=lc.groups.indexOf('sky');if(gi>=0){px=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h);w=lc.w;h=lc.h;}}catch(_){}}
+  if(!px){const t={type:'brush',origin:'sky'};mskGenerateSky(t);if(!t.px)return null;px=t.px;w=t.mtW;h=t.mtH;}
+  let n=0;for(let i=0;i<px.length;i++)if(px[i]>128)n++;
+  return{cover:n/px.length,mask:{type:'brush',px:Uint8ClampedArray.from(px),mtW:w,mtH:h}};
+}
 function mskSceneRender(){_mskSceneRenderChips();mskPeopleRender();}
+const MSK_SCENE_GROUPS=[['people','People'],['animals','Animals'],['objects','Objects'],['sky','Sky']];
 function _mskSceneRenderChips(){
   const el=document.getElementById('msk-scene');if(!el)return;
   const sc=_mskSceneOf(window.__TAURI__&&curItem());
-  if(!sc||sc.state==='error'||(sc.state==='done'&&!sc.list.length)){el.classList.remove('on');el.innerHTML='';el._sig='';return;}
+  if(!sc||(sc.state==='done'&&!sc.list.length)){el.classList.remove('on');el.innerHTML='';el._sig='';return;}
   const sig=sc.state+'|'+sc.list.map(c=>c.id).join(',');
   if(el._sig===sig&&el.classList.contains('on'))return; // unchanged: keep the chips (and any hover) alive
   el._sig=sig;
   el.classList.add('on');
-  el.innerHTML='<span class="msk-scene-hd">'+(sc.state==='running'?'Detecting…':'Detected')+'</span>'
-    +sc.list.map(c=>'<button class="msk-chip" data-id="'+c.id+'" title="Hover to preview, click to add as a mask">'+c.label+'</button>').join('');
-  el.querySelectorAll('.msk-chip').forEach(b=>{
+  if(sc.state==='running'){el.innerHTML='<span class="msk-scene-hd">Detecting</span><span class="msk-ai-spin" aria-hidden="true"></span><span class="msk-scene-note" role="status">Looking for people, animals and objects…</span>';return;}
+  if(sc.state==='error'){el.innerHTML='<span class="msk-scene-hd">Detected</span><span class="msk-scene-note">Detection failed.</span><button type="button" class="msk-chip" data-retry="1">Retry</button>';
+    el.querySelector('[data-retry]').onclick=()=>mskSceneEnsure({retry:true});return;}
+  el.innerHTML=MSK_SCENE_GROUPS.map(([g,name])=>{const cs=sc.list.filter(c=>(c.group||(c.kind==='sky'?'sky':mskDetGroup(c.kind)))===g);if(!cs.length)return'';
+      return'<span class="msk-scene-grp" role="group" aria-label="'+name+'"><span class="msk-scene-hd">'+name+(cs.length>1&&g!=='sky'?' '+cs.length:'')+'</span>'
+        +cs.map(c=>'<button type="button" class="msk-chip" data-id="'+c.id+'" aria-label="'+c.label+' — hover to preview, click to add as a mask" title="Hover to preview, click to add as a mask">'+c.label+'</button>').join('')+'</span>';}).join('');
+  const chips=[...el.querySelectorAll('.msk-chip')];
+  chips.forEach((b,i)=>{
     b.onmouseenter=()=>mskScenePreview(b.dataset.id);b.onmouseleave=mskScenePreviewClear;
     b.onfocus=b.onmouseenter;b.onblur=mskScenePreviewClear;
     b.onclick=()=>mskSceneAdd(b.dataset.id);
+    // Arrow keys move between chips (item 31); Enter/Space click as usual.
+    b.onkeydown=e=>{const d=e.key==='ArrowRight'||e.key==='ArrowDown'?1:e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:0;
+      if(!d)return;e.preventDefault();chips[(i+d+chips.length)%chips.length].focus();};
   });
 }
 let _scenePrevId=null;
-function mskScenePreviewClear(){_scenePrevId=null;const cv=document.getElementById('msk-paint-overlay');if(cv)cv.classList.remove('on');}
-async function _mskSceneMask(c){ // preview raster for one candidate, cached
+function mskScenePreviewClear(){_scenePrevId=null;_lsPrev=null;const cv=document.getElementById('msk-paint-overlay');if(cv)cv.classList.remove('on');}
+// The backend a box prompt would use right now (SAM 2.1 once its encode landed, same rule as samRunPoints).
+function _mskSceneBackend(){return _sam2Token?'sam2_box':'sam_box';}
+async function _mskSceneMask(c){ // preview raster for one candidate, cached per backend
   const item=curItem(),sc=item&&item._scene;if(!sc)return null;
-  if(sc.masks[c.id])return sc.masks[c.id];
-  if(c.kind==='sky'){const t={type:'brush',origin:'sky'};mskGenerateSky(t);return sc.masks[c.id]=t;}
-  await samEnsureEncoded({silent:true,noBackgroundRefine:true});
-  if(!_samToken||curItem()!==item)return null;
+  if(c.kind==='sky')return _mskSceneCache(sc,'sky')||null;
+  const be0=_mskSceneBackend(),hit=_mskSceneCache(sc,c.id);
+  if(hit&&hit.backend===be0)return hit;
+  await samEnsureEncoded({silent:true});
+  const be=_mskSceneBackend(),tok=be==='sam2_box'?_sam2Token:_samToken;
+  if(!tok||curItem()!==item)return null;
   const box=_samNormalizeBox(c.box);if(!box)return null;
-  const buf=await window.__TAURI__.core.invoke('sam_box',{token:_samToken,rect:{x1:box.x0,y1:box.y0,x2:box.x1,y2:box.y1}});
+  const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:box.x0,y1:box.y0,x2:box.x1,y2:box.y1}});
   const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
   const px=new Uint8ClampedArray(new Uint8Array(buf,4+hl).slice());
-  return sc.masks[c.id]={type:'brush',px,mtW:hd.width,mtH:hd.height};
+  return _mskSceneCache(sc,c.id,{type:'brush',px,mtW:hd.width,mtH:hd.height,backend:be});
 }
 async function mskScenePreview(id){
   const sc=_mskSceneOf(curItem());if(!sc)return;
@@ -21924,16 +22281,19 @@ async function mskScenePreview(id){
   }catch(e){log('Preview: '+(e&&e.message||e),'warn');}
 }
 async function mskSceneAdd(id){
-  const sc=_mskSceneOf(curItem());if(!sc)return;
+  const item=curItem(),sc=_mskSceneOf(item);if(!sc)return;
   const c=sc.list.find(x=>x.id===id);if(!c)return;
   mskScenePreviewClear();
   if(c.kind==='sky'){const m=mskAdd('sky');if(m){m.name='Sky';mskRebuild();}return;}
   const box=_samNormalizeBox(c.box);if(!box)return;
-  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;});
+  // People and animals get the matting model's hair/fur edge inside SAM's edge band (item 14).
+  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
   if(!m)return;
   mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
   mskRebuild();
-  const r=await samRunPoints(m);
+  // Item 13: the hover preview already ran this exact prompt on this backend — reuse it instead of a second inference.
+  const pre=_mskSceneCache(sc,c.id);
+  const r=await samRunPoints(m,pre&&pre.backend===_mskSceneBackend()?{precomputed:pre}:{});
   if(r&&r.ok===false&&!r.cancelled&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
   mskRebuild();fxUpdate();fxHistoryPush();
 }
@@ -25529,7 +25889,7 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:FW/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(fw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -25676,6 +26036,11 @@ function _fxTileModeOK(P,src){
   return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
     ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
 }
+// Glow/blur scale for a zoomed crop rendered at `sq` output px per working-image px. Halation, bloom and skin blurs are sized
+// against the WHOLE image's width in the render's own pixels (Fit uses w/REF), so a crop must pass iw*sq, not iw: with iw the halo
+// was sq times too narrow when zoomed past 1:1 (weaker zoomed in than zoomed out) and too wide between Fit and 1:1. Past 1:1 the
+// glow buffers run at working-image density (glowScale=sq), so the blur taps and their 64-tap cap match the export exactly.
+function fxZoomGlowOpts(iw,sq){return{glowScale:Math.max(1,sq),scOverride:iw*sq/FXR.CAL.refWidth};}
 // Halo in OUTPUT px — renderTiled's rule (the render blurs in output px at scOverride=iw/REF).
 function _fxTileHaloOut(P,iw){
   const REF=FXR.CAL.refWidth,sc=iw/REF,H=FXR.CAL.halation,B=FXR.CAL.bloom;
@@ -25690,7 +26055,7 @@ function _fxTileHaloOut(P,iw){
 function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const gl=FX.gl,sq=Math.max(0.125,Math.round(sOut*8)/8);
   const T=Math.max(64,Math.round(FX_TILE_OUT/sq/8)*8);
-  const hs=Math.ceil(_fxTileHaloOut(P,iw)/sq/8)*8;           // source-px halo, multiple of 8
+  const hs=Math.ceil(_fxTileHaloOut(P,iw*sq)/sq/8)*8;        // source-px halo, multiple of 8 (glow sized at iw*sq output px)
   const nI=Math.ceil(iw/T),nJ=Math.ceil(ih/T);
   const i0=Math.max(0,Math.floor(sx0/T)),j0=Math.max(0,Math.floor(sy0/T));
   const i1=Math.min(nI-1,Math.ceil(sx1/T)-1),j1=Math.min(nJ-1,Math.ceil(sy1/T)-1);
@@ -25699,7 +26064,7 @@ function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const maxDim=Math.min(4096,gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
   if(X(i1+1)-X(i0)>maxDim||Y(j1+1)-Y(j0)>maxDim)return null;
   const REF=FXR.CAL.refWidth;
-  const opt=mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode()});
+  const opt=mskPreviewRenderOptions({...fxZoomGlowOpts(iw,sq),seed:fxLoupeSeed,gamutWarn:fxClipCode()});
   const key=[_fxRecipeKey(P),iw,ih,sq,T,fxLoupeSeed,fxCompare?1:0,JSON.stringify(opt)].join('|');
   if(key!==_fxTiles.key){_fxTilesClear();_fxTiles.key=key;}
   const map=_fxTiles.map,tk=(i,j)=>i+','+j;
@@ -25783,7 +26148,10 @@ function _fxCropGeom(iw,ih,cw,ch,off){
   while(padF>0.001&&Math.min(cw,visW*(1+2*padF))*z*sd0*Math.min(ch,visH*(1+2*padF))*z*sd0>FX_CROP_MAX_PX)padF/=2;
   if(padF<=0.001)padF=0;
   const padX=visW*padF,padY=visH*padF;
-  const tx=fxPanX+fw*(1-z)/(2*z)+ox,ty=fxPanY+fh*(1-z)/(2*z)+oy; // total translate incl. centring base (photo-local when the photo sits inside a composite)
+  // #fx-wrap flex-centres #fx-zoom-wrap, so its untransformed box starts (offsetLeft,offsetTop) into the wrap: screen = off + z·(x+translate).
+  // Leaving that out shifted the crop right/down by off/z — a photo narrower than the cell (portrait) left a soft strip at the view's left edge.
+  const zw=document.getElementById('fx-zoom-wrap'),zl=zw&&zw.offsetParent===wrap?zw.offsetLeft/z:0,zt=zw&&zw.offsetParent===wrap?zw.offsetTop/z:0;
+  const tx=fxPanX+fw*(1-z)/(2*z)+ox+zl,ty=fxPanY+fh*(1-z)/(2*z)+oy+zt; // total translate incl. centring base + layout offset (photo-local when the photo sits inside a composite)
   const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
   const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
   if(x1-x0<2||y1-y0<2)return null;
@@ -25820,7 +26188,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off,chunk){
     FX.pushTempImage(crop);
   }
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(iw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
   if(!FX.popTempImage())FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region
@@ -32007,6 +32375,7 @@ const ICONS={
  mskBackground:'<rect x="3" y="3" width="18" height="18"/><circle cx="12" cy="12" r="4.5"/><path d="M3 3l5 5M21 3l-5 5M3 21l5-5M21 21l-5-5"/>',
  mskSkin:'<circle cx="12" cy="12" r="8"/><path d="M8 14c1 2 2.5 3 4 3s3-1 4-3M9 10h.01M15 10h.01"/>',
  mskDepth:'<path d="M3 18h18M5 14h14M7 10h10M9 6h6"/>',
+ mskForeground:'<path d="M3 19h18M3 13h4M17 13h4"/><circle cx="12" cy="8" r="3"/><path d="M7 19c0-3 2.2-5 5-5s5 2 5 5"/>',
  wand:'<path d="M3 21 14 10M17 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1Z"/>',
  scissors:'<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8 8l12 12M8 16 20 4"/>',
  eye:'<path d="M2 12l10-6 10 6-10 6Z"/><circle cx="12" cy="12" r="2.5"/>',

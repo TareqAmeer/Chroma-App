@@ -705,7 +705,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const REF=C.refWidth, sc=(opts&&opts.scOverride)||(w/REF);
     // Preview only: emulate the export's kernel truncation at this render's scale (see the blur passes). opts.truncRefW = the
     // width the export will render at; the tap cap shrinks by sc / (truncRefW/REF) (per reduced-res texel: / gs). 0 = no emulation.
-    const capK=(opts&&opts.truncRefW>0&&sc<opts.truncRefW/REF)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0;
+    const capK=(opts&&opts.truncRefW>0)?Math.max(0.02,sc/(opts.truncRefW/REF)/gs):0; // >=1 => the shader's plain 64-tap cap
     const H=C.halation, B=C.bloom;
     // sliders: Amount scales gain; Radius scales sigma; (bloom) Threshold sets thr.
     const dbg=P.debug||0;
@@ -1067,7 +1067,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
      // Preview: the cell grid is defined against the EXPORT width (opts.truncRefW), not this render's, so a Fit preview shows the
      // export's grain (same cell grid, same seed => same pattern) instead of clumps 2.5x coarser/stronger once shrunk to the screen.
      const grFreq=((opts&&opts.truncRefW>0)?opts.truncRefW:(w/uvSx))/Math.max(cellPx,0.5);
-     gl.uniform1f(ul('grA'),grA);
+     // A render coarser than the export (Fit, or zoomed between Fit and 1:1) point-samples several grain cells per pixel, which keeps
+     // their FULL amplitude, while the export viewed at that size averages them — so Fit showed grain ~2.3x stronger than the
+     // export does at the same size. Attenuate by (export px per render px)^-0.8 — fitted at two Fit widths (3x: 0.42, 5x: 0.27) so Fit matches a box-downsampled export (test/zoom_effect_parity.mjs).
+     const grDown=(opts&&opts.truncRefW>0)?opts.truncRefW/Math.max(1,w/uvSx):1,grAtt=grDown>1?Math.pow(grDown,-((typeof window!=='undefined'&&window.__grAttP!=null)?window.__grAttP:0.8)):1;
+     gl.uniform1f(ul('grA'),grA*grAtt);
      gl.uniform1f(ul('grFreq'),grFreq);
      gl.uniform3f(ul('grK'),G.kR,G.kG,G.kB);
      gl.uniform1f(ul('grPowG'),G.powG);

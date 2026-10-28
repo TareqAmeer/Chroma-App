@@ -19,6 +19,11 @@ function _fxTileModeOK(P,src){
   return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
     ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
 }
+// Glow/blur scale for a zoomed crop rendered at `sq` output px per working-image px. Halation, bloom and skin blurs are sized
+// against the WHOLE image's width in the render's own pixels (Fit uses w/REF), so a crop must pass iw*sq, not iw: with iw the halo
+// was sq times too narrow when zoomed past 1:1 (weaker zoomed in than zoomed out) and too wide between Fit and 1:1. Past 1:1 the
+// glow buffers run at working-image density (glowScale=sq), so the blur taps and their 64-tap cap match the export exactly.
+function fxZoomGlowOpts(iw,sq){return{glowScale:Math.max(1,sq),scOverride:iw*sq/FXR.CAL.refWidth};}
 // Halo in OUTPUT px — renderTiled's rule (the render blurs in output px at scOverride=iw/REF).
 function _fxTileHaloOut(P,iw){
   const REF=FXR.CAL.refWidth,sc=iw/REF,H=FXR.CAL.halation,B=FXR.CAL.bloom;
@@ -33,7 +38,7 @@ function _fxTileHaloOut(P,iw){
 function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const gl=FX.gl,sq=Math.max(0.125,Math.round(sOut*8)/8);
   const T=Math.max(64,Math.round(FX_TILE_OUT/sq/8)*8);
-  const hs=Math.ceil(_fxTileHaloOut(P,iw)/sq/8)*8;           // source-px halo, multiple of 8
+  const hs=Math.ceil(_fxTileHaloOut(P,iw*sq)/sq/8)*8;        // source-px halo, multiple of 8 (glow sized at iw*sq output px)
   const nI=Math.ceil(iw/T),nJ=Math.ceil(ih/T);
   const i0=Math.max(0,Math.floor(sx0/T)),j0=Math.max(0,Math.floor(sy0/T));
   const i1=Math.min(nI-1,Math.ceil(sx1/T)-1),j1=Math.min(nJ-1,Math.ceil(sy1/T)-1);
@@ -42,7 +47,7 @@ function _fxRenderTiles(P,src,iw,ih,sx0,sy0,sx1,sy1,sOut,maxRegions,chunk){
   const maxDim=Math.min(4096,gl.getParameter(gl.MAX_TEXTURE_SIZE),gl.getParameter(gl.MAX_VIEWPORT_DIMS)[0]);
   if(X(i1+1)-X(i0)>maxDim||Y(j1+1)-Y(j0)>maxDim)return null;
   const REF=FXR.CAL.refWidth;
-  const opt=mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode()});
+  const opt=mskPreviewRenderOptions({...fxZoomGlowOpts(iw,sq),seed:fxLoupeSeed,gamutWarn:fxClipCode()});
   const key=[_fxRecipeKey(P),iw,ih,sq,T,fxLoupeSeed,fxCompare?1:0,JSON.stringify(opt)].join('|');
   if(key!==_fxTiles.key){_fxTilesClear();_fxTiles.key=key;}
   const map=_fxTiles.map,tk=(i,j)=>i+','+j;
@@ -126,7 +131,10 @@ function _fxCropGeom(iw,ih,cw,ch,off){
   while(padF>0.001&&Math.min(cw,visW*(1+2*padF))*z*sd0*Math.min(ch,visH*(1+2*padF))*z*sd0>FX_CROP_MAX_PX)padF/=2;
   if(padF<=0.001)padF=0;
   const padX=visW*padF,padY=visH*padF;
-  const tx=fxPanX+fw*(1-z)/(2*z)+ox,ty=fxPanY+fh*(1-z)/(2*z)+oy; // total translate incl. centring base (photo-local when the photo sits inside a composite)
+  // #fx-wrap flex-centres #fx-zoom-wrap, so its untransformed box starts (offsetLeft,offsetTop) into the wrap: screen = off + z·(x+translate).
+  // Leaving that out shifted the crop right/down by off/z — a photo narrower than the cell (portrait) left a soft strip at the view's left edge.
+  const zw=document.getElementById('fx-zoom-wrap'),zl=zw&&zw.offsetParent===wrap?zw.offsetLeft/z:0,zt=zw&&zw.offsetParent===wrap?zw.offsetTop/z:0;
+  const tx=fxPanX+fw*(1-z)/(2*z)+ox+zl,ty=fxPanY+fh*(1-z)/(2*z)+oy+zt; // total translate incl. centring base + layout offset (photo-local when the photo sits inside a composite)
   const x0=Math.max(0,-tx-padX),y0=Math.max(0,-ty-padY);
   const x1=Math.min(cw,-tx+visW+padX),y1=Math.min(ch,-ty+visH+padY);
   if(x1-x0<2||y1-y0<2)return null;
@@ -163,7 +171,7 @@ function renderFullResCrop(P,iw,ih,cw,ch,maxRegions,off,chunk){
     FX.pushTempImage(crop);
   }
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({glowScale:1,scOverride:iw/REF,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(iw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[cropX/iw,(ih-(cropY+cropH))/ih],uvScale:[cropW/iw,cropH/ih]}));
   if(!FX.popTempImage())FX.setImage(fxWork);
   // The canvas element now holds ONLY the crop: shrink its CSS footprint to the crop's region

@@ -704,6 +704,39 @@ pub fn decode_box(
     decode_prompt(embed, &[((left, top), 2.0), ((right, bottom), 3.0)])
 }
 
+
+/// SAM's stability score (Kirillov et al. 2023, used by SamAutomaticMaskGenerator and EdgeSAM's own demo for
+/// point prompts): IoU of the mask thresholded at +1 and -1 logits. A candidate whose edge barely moves
+/// under that shift is a real object boundary; a part-mask hugging texture is not.
+fn stability(logits: &[f32]) -> f32 {
+    let (mut hi, mut lo) = (0u32, 0u32);
+    for &v in logits {
+        if v > 1.0 { hi += 1; }
+        if v > -1.0 { lo += 1; }
+    }
+    if lo == 0 { 0.0 } else { hi as f32 / lo as f32 }
+}
+
+/// Which decoder candidate to keep. Measured on the 7-photo labelled dog set (docs/plans/mask-accuracy-pass.md):
+/// for a SINGLE positive click the model's own score picks a part or the background far too often (SAM 2.1
+/// mean IoU 0.777, worst 0.003; EdgeSAM 0.633) while the most stable multimask candidate scores 0.963 / worst
+/// 0.922 (EdgeSAM 0.795). For boxes and multi-point scribbles the score is as good or better (SAM 2.1 multi-point
+/// 0.966 vs 0.955 stability), so they keep it. `first_multi` skips EdgeSAM's single-mask token (index 0).
+fn pick_candidate(scores: &[f32], masks: &[f32], plane: usize, single_click: bool, first_multi: usize) -> usize {
+    if single_click {
+        let mut best = (first_multi, -1.0f32);
+        for i in first_multi..scores.len() {
+            let st = stability(&masks[i * plane..(i + 1) * plane]);
+            if st > best.1 { best = (i, st); }
+        }
+        return best.0;
+    }
+    scores.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(i, _)| i).unwrap_or(0)
+}
+fn is_single_click(prompts: &[((f32, f32), f32)]) -> bool {
+    prompts.len() == 1 && prompts[0].1 == 1.0
+}
+
 fn decode_prompt(embed: &Embedding, prompts: &[((f32, f32), f32)]) -> Result<Vec<u8>, String> {
     if prompts.is_empty() {
         return Err("SAM decode: no prompts given".into());
@@ -745,14 +778,9 @@ fn decode_prompt(embed: &Embedding, prompts: &[((f32, f32), f32)]) -> Result<Vec
             masks.len()
         ));
     }
-    let best = scores
-        .iter()
-        .enumerate()
-        .max_by(|a, b| a.1.total_cmp(b.1))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    let low_res = &masks
-        [best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+    let plane = (MASK_SIZE * MASK_SIZE) as usize;
+    let best = pick_candidate(&scores, &masks, plane, is_single_click(prompts), 1);
+    let low_res = &masks[best * plane..(best + 1) * plane];
 
     // Two-stage upsample matching EdgeSAM's own postprocess_masks exactly: low-res → full padded
     // square → crop to the unpadded input region → original resolution. See the module doc
@@ -913,14 +941,9 @@ fn sam2_decode_prompt(embed: &Sam2Embedding, prompts: &[((f32, f32), f32)]) -> R
             masks.len()
         ));
     }
-    let best = iou
-        .iter()
-        .enumerate()
-        .max_by(|a, b| a.1.total_cmp(b.1))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    let low_res = &masks
-        [best * (MASK_SIZE * MASK_SIZE) as usize..(best + 1) * (MASK_SIZE * MASK_SIZE) as usize];
+    let plane = (MASK_SIZE * MASK_SIZE) as usize;
+    let best = pick_candidate(&iou, &masks, plane, is_single_click(prompts), 0);
+    let low_res = &masks[best * plane..(best + 1) * plane];
 
     // Single-stage resize is correct here (unlike decode_points' two-stage crop) — the encoder's
     // direct square resize has no padding to crop back out, so independently rescaling x/y
@@ -932,6 +955,19 @@ fn sam2_decode_prompt(embed: &Sam2Embedding, prompts: &[((f32, f32), f32)]) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn candidate_choice_rules() {
+        // two candidates: 0 scores higher but is unstable (soft logits around 0); 1 is a crisp mask
+        let plane = 4;
+        let masks = vec![0.5, -0.5, 0.2, -0.2, /* crisp */ 8.0, 8.0, -8.0, -8.0];
+        let scores = vec![0.9, 0.5];
+        assert_eq!(pick_candidate(&scores, &masks, plane, false, 0), 0, "boxes / scribbles keep the model score");
+        assert_eq!(pick_candidate(&scores, &masks, plane, true, 0), 1, "a single click keeps the stable candidate");
+        assert!(is_single_click(&[((0.5, 0.5), 1.0)]));
+        assert!(!is_single_click(&[((0.1, 0.1), 2.0), ((0.9, 0.9), 3.0)]));
+        assert!(!is_single_click(&[((0.5, 0.5), 1.0), ((0.2, 0.2), 0.0)]));
+    }
     use std::path::PathBuf;
 
     fn setup_models() {

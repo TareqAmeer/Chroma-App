@@ -1,0 +1,125 @@
+// ── Auto-detect: people / animals / objects / sky, with hover preview ─────────────────────────────
+// When the Masks panel is up on a desktop build, RT-DETR (native scene_detect, all 80 COCO classes) lists what is
+// in the photo as chips grouped People / Animals / Objects / Sky (mskSceneList). Hovering a chip previews the
+// selection (SAM 2.1 box once its encode is ready — IoU 0.979 vs EdgeSAM's 0.922 on the labelled dog set — else
+// EdgeSAM) as a red tint; clicking adds it as an AI mask, reusing the previewed raster when the backend matches.
+// Detection runs once per photo (cached, non-enumerable on the item so sessions never serialise it).
+function _mskSceneOf(item){return item&&item._scene;}
+// One RGB8 copy of the photo at AI resolution, shared by scene_detect, landscape, matting and SAM (item 27).
+function mskAiRgb(img,w,h){
+  const d=mskSourceData(w,h,img);if(!d)return null;
+  const c=img&&img._csAiRgb;if(c&&c.w===w&&c.h===h&&c.src===d)return c.rgb;
+  const rgb=new Uint8Array(w*h*3);for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  if(img&&typeof img==='object')try{Object.defineProperty(img,'_csAiRgb',{value:{w,h,src:d,rgb},writable:true,configurable:true,enumerable:false});}catch(_){}
+  return rgb;
+}
+async function mskSceneEnsure(opt={}){
+  if(!window.__TAURI__)return;
+  const item=curItem();if(!item||item.kind==='video')return;
+  if(item._scene&&!(opt.retry&&item._scene.state==='error'))return;
+  const sc={state:'running',list:[],masks:new Map()};
+  Object.defineProperty(item,'_scene',{value:sc,writable:true,enumerable:false,configurable:true});
+  mskSceneRender();
+  const img=item.img||fxWork||fxImg;if(!img){sc.state='error';mskSceneRender();return;}
+  try{
+    const{w,h}=samInputDims();
+    const rgb=mskAiRgb(img,w,h);if(!rgb)throw new Error('photo pixels unavailable');
+    const job=mskAiBusy('Detecting people and objects');
+    let dets;try{dets=await _samFramedInvoke('scene_detect',{width:w,height:h},rgb);}finally{job.done();}
+    if(curItem()!==item)return;
+    if(job.cancelled){sc.state='error';mskSceneRender();return;}
+    sc.list=mskSceneList(dets);
+    // Sky: the landscape model's sky when installed (the same raster Sky commits to), else the heuristic.
+    try{const sky=await _mskSkyCandidate(item,img);if(curItem()!==item)return;
+      if(sky&&sky.cover>0.06){sc.list.push({id:'sky',label:'Sky',kind:'sky',group:'sky'});_mskSceneCache(sc,'sky',sky.mask);}}catch(_){}
+    sc.state='done';
+    // Pre-warm (item 28): start the SAM encodes now so the first hover/click is instant.
+    if(sc.list.some(c=>c.box))samEnsureEncoded({silent:true});
+  }catch(e){sc.state='error';sc.error=String(e&&e.message||e);log('Auto-detect: '+sc.error,'warn');}
+  mskSceneRender();
+}
+// Bounded LRU of preview rasters (item 29): a busy photo cannot pin dozens of full-size masks.
+function _mskSceneCache(sc,id,v){
+  if(!(sc.masks instanceof Map))sc.masks=new Map(Object.entries(sc.masks||{}));
+  if(v===undefined){const x=sc.masks.get(id);if(x){sc.masks.delete(id);sc.masks.set(id,x);}return x;}
+  sc.masks.delete(id);sc.masks.set(id,v);while(sc.masks.size>8)sc.masks.delete(sc.masks.keys().next().value);return v;
+}
+async function _mskSkyCandidate(item,img){
+  let px=null,w=0,h=0;
+  if(await mskLandscapeProbe()){try{const lc=await _mskLandscapeResult(item,img),gi=lc.groups.indexOf('sky');if(gi>=0){px=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h);w=lc.w;h=lc.h;}}catch(_){}}
+  if(!px){const t={type:'brush',origin:'sky'};mskGenerateSky(t);if(!t.px)return null;px=t.px;w=t.mtW;h=t.mtH;}
+  let n=0;for(let i=0;i<px.length;i++)if(px[i]>128)n++;
+  return{cover:n/px.length,mask:{type:'brush',px:Uint8ClampedArray.from(px),mtW:w,mtH:h}};
+}
+function mskSceneRender(){_mskSceneRenderChips();mskPeopleRender();}
+const MSK_SCENE_GROUPS=[['people','People'],['animals','Animals'],['objects','Objects'],['sky','Sky']];
+function _mskSceneRenderChips(){
+  const el=document.getElementById('msk-scene');if(!el)return;
+  const sc=_mskSceneOf(window.__TAURI__&&curItem());
+  if(!sc||(sc.state==='done'&&!sc.list.length)){el.classList.remove('on');el.innerHTML='';el._sig='';return;}
+  const sig=sc.state+'|'+sc.list.map(c=>c.id).join(',');
+  if(el._sig===sig&&el.classList.contains('on'))return; // unchanged: keep the chips (and any hover) alive
+  el._sig=sig;
+  el.classList.add('on');
+  if(sc.state==='running'){el.innerHTML='<span class="msk-scene-hd">Detecting</span><span class="msk-ai-spin" aria-hidden="true"></span><span class="msk-scene-note" role="status">Looking for people, animals and objects…</span>';return;}
+  if(sc.state==='error'){el.innerHTML='<span class="msk-scene-hd">Detected</span><span class="msk-scene-note">Detection failed.</span><button type="button" class="msk-chip" data-retry="1">Retry</button>';
+    el.querySelector('[data-retry]').onclick=()=>mskSceneEnsure({retry:true});return;}
+  el.innerHTML=MSK_SCENE_GROUPS.map(([g,name])=>{const cs=sc.list.filter(c=>(c.group||(c.kind==='sky'?'sky':mskDetGroup(c.kind)))===g);if(!cs.length)return'';
+      return'<span class="msk-scene-grp" role="group" aria-label="'+name+'"><span class="msk-scene-hd">'+name+(cs.length>1&&g!=='sky'?' '+cs.length:'')+'</span>'
+        +cs.map(c=>'<button type="button" class="msk-chip" data-id="'+c.id+'" aria-label="'+c.label+' — hover to preview, click to add as a mask" title="Hover to preview, click to add as a mask">'+c.label+'</button>').join('')+'</span>';}).join('');
+  const chips=[...el.querySelectorAll('.msk-chip')];
+  chips.forEach((b,i)=>{
+    b.onmouseenter=()=>mskScenePreview(b.dataset.id);b.onmouseleave=mskScenePreviewClear;
+    b.onfocus=b.onmouseenter;b.onblur=mskScenePreviewClear;
+    b.onclick=()=>mskSceneAdd(b.dataset.id);
+    // Arrow keys move between chips (item 31); Enter/Space click as usual.
+    b.onkeydown=e=>{const d=e.key==='ArrowRight'||e.key==='ArrowDown'?1:e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:0;
+      if(!d)return;e.preventDefault();chips[(i+d+chips.length)%chips.length].focus();};
+  });
+}
+let _scenePrevId=null;
+function mskScenePreviewClear(){_scenePrevId=null;_lsPrev=null;const cv=document.getElementById('msk-paint-overlay');if(cv)cv.classList.remove('on');}
+// The backend a box prompt would use right now (SAM 2.1 once its encode landed, same rule as samRunPoints).
+function _mskSceneBackend(){return _sam2Token?'sam2_box':'sam_box';}
+async function _mskSceneMask(c){ // preview raster for one candidate, cached per backend
+  const item=curItem(),sc=item&&item._scene;if(!sc)return null;
+  if(c.kind==='sky')return _mskSceneCache(sc,'sky')||null;
+  const be0=_mskSceneBackend(),hit=_mskSceneCache(sc,c.id);
+  if(hit&&hit.backend===be0)return hit;
+  await samEnsureEncoded({silent:true});
+  const be=_mskSceneBackend(),tok=be==='sam2_box'?_sam2Token:_samToken;
+  if(!tok||curItem()!==item)return null;
+  const box=_samNormalizeBox(c.box);if(!box)return null;
+  const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:box.x0,y1:box.y0,x2:box.x1,y2:box.y1}});
+  const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
+  const px=new Uint8ClampedArray(new Uint8Array(buf,4+hl).slice());
+  return _mskSceneCache(sc,c.id,{type:'brush',px,mtW:hd.width,mtH:hd.height,backend:be});
+}
+async function mskScenePreview(id){
+  const sc=_mskSceneOf(curItem());if(!sc)return;
+  const c=sc.list.find(x=>x.id===id);if(!c)return;
+  _scenePrevId=id;
+  try{
+    const t=await _mskSceneMask(c);
+    if(!t||_scenePrevId!==id)return; // pointer already left, or the photo changed
+    const box=mskOverlayBox();if(!box)return;
+    mskPaintOverlaySync(t,box,false);
+  }catch(e){log('Preview: '+(e&&e.message||e),'warn');}
+}
+async function mskSceneAdd(id){
+  const item=curItem(),sc=_mskSceneOf(item);if(!sc)return;
+  const c=sc.list.find(x=>x.id===id);if(!c)return;
+  mskScenePreviewClear();
+  if(c.kind==='sky'){const m=mskAdd('sky');if(m){m.name='Sky';mskRebuild();}return;}
+  const box=_samNormalizeBox(c.box);if(!box)return;
+  // People and animals get the matting model's hair/fur edge inside SAM's edge band (item 14).
+  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
+  if(!m)return;
+  mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
+  mskRebuild();
+  // Item 13: the hover preview already ran this exact prompt on this backend — reuse it instead of a second inference.
+  const pre=_mskSceneCache(sc,c.id);
+  const r=await samRunPoints(m,pre&&pre.backend===_mskSceneBackend()?{precomputed:pre}:{});
+  if(r&&r.ok===false&&!r.cancelled&&typeof toast==='function')toast(r.error||'Could not select '+c.label);
+  mskRebuild();fxUpdate();fxHistoryPush();
+}

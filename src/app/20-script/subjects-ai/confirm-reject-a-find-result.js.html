@@ -163,11 +163,40 @@ async function _mskPersistPortableCurrent(masksToWrite,expectedMasks,targetItem=
 }
 // A plain point/box-prompted segmentation mask (not Skin, which is AI but has no prompts to replay).
 function mskIsPromptedSAM(m){return !!m&&m.origin==='ai'&&(Array.isArray(m.aiPoints)&&m.aiPoints.length>0||!!_samNormalizeBox(m.aiBox));}
+// One-shot AI masks that re-run from scratch on another photo, Lightroom-style (no prompts to replay):
+// Auto Subject, one-click Background, Foreground and the Landscape categories.
+const MSK_REEVAL_MODES=['matte','matte-bg','foreground','landscape'];
+function _mskIsOneShotAI(m){return !!m&&m.origin==='ai'&&MSK_REEVAL_MODES.includes(m.aiSelectionMode);}
 function _mskPortableIsUnsupported(m){
-  if(m.origin==='sky')return false;
+  if(m.origin==='sky'||_mskIsOneShotAI(m))return false;
   return mskIsAI(m)&&!mskIsPromptedSAM(m);
 }
-function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m);}
+function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPromptedSAM(m)||_mskIsOneShotAI(m);}
+// Recomputes a one-shot AI mask's raster on the CURRENT photo with the same model it was made with.
+async function _mskOneShotRaster(m,item){
+  // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
+  const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  if(mode==='matte'||mode==='matte-bg'){
+    const saved=(be.match(/^matte:(\w+)/)||[])[1],ms=await mskMatteModels();
+    const model=saved&&ms.includes(saved)?saved:await mskMatteModelFor('other');if(!model)throw new Error('No matting model installed');
+    const mt=await _mskMatteFor(item,model);if(!mt)throw new Error('Matting unavailable for this photo');
+    const src=mode==='matte-bg'?Uint8ClampedArray.from(mt.px,v=>255-v):mt.px;
+    return{..._mskFinishAiRaster(src,mt.w,mt.h,{specks:true}),backend:'matte:'+model};
+  }
+  if(mode==='foreground'){
+    const dm=await fxEnsureDepthMap();if(!dm)throw new Error('Depth estimate unavailable for this photo');
+    const px=mskForegroundFromDepth(dm.data,dm.w,dm.h);if(!px)throw new Error('No distinct foreground in this photo');
+    return{..._mskFinishAiRaster(px,dm.w,dm.h,{specks:true}),backend:'depth:foreground'};
+  }
+  if(mode==='landscape'){
+    const cat=(be.match(/^landscape:(\w+)/)||[])[1];if(!cat)throw new Error('Unknown landscape category');
+    const lc=await _mskLandscapeResult(item,item.img),gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
+    const raw=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),rgba=mskSourceData(lc.w,lc.h,item.img);
+    const matted=rgba?_skyMatte(raw,lc.w,lc.h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);
+    return{..._mskFinishAiRaster(matted,lc.w,lc.h,cat==='sky'?{sky:true}:{specks:true}),backend:'landscape:'+cat};
+  }
+  throw new Error('Not a one-shot AI mask');
+}
 async function _mskPortableReevaluate(m,target){
   const savedBackend=_mskNormalizeAIProvenance(m&&m.aiProvenance)?.backend||null;
   const savedModel=/^sam2_/.test(savedBackend||'')?'SAM 2.1':'EdgeSAM',savedIsBox=savedBackend==='sam_box'||savedBackend==='sam2_box';
@@ -185,6 +214,15 @@ async function _mskPortableReevaluate(m,target){
     _mskRecordAIProvenance(m,target.item,null,true);
     const upgraded=await mskSkyUpgrade(m,{detached:true,item:target.item});
     return upgraded?{ok:true}:{ok:true,warning:'Sky heuristic regenerated for target; edge clean-up unavailable'};
+  }
+  if(_mskIsOneShotAI(m)){
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before mask recomputation'};
+    try{
+      const r=await _mskOneShotRaster(m,target&&target.item||curItem());
+      if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed during mask recomputation'};
+      m.px=r.px;m.mtW=r.w;m.mtH=r.h;delete m._refineCache;_mskRecordAIProvenance(m,target&&target.item||curItem(),r.backend,false);
+      return{ok:true};
+    }catch(e){return{ok:false,error:String(e&&e.message||e)};}
   }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};

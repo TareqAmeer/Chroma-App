@@ -1,0 +1,194 @@
+// ── Detection list + raster clean-up helpers (docs/plans/mask-accuracy-pass.md) ────────────────
+// COCO-80 display names in RT-DETR class order (the checkpoint's id2label), grouped the way Lightroom's
+// Objects/People lists read: People, Animals, everything else is an Object.
+const MSK_COCO=['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign',
+  'parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie',
+  'suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle',
+  'wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake',
+  'chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven',
+  'toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+const MSK_ANIMALS=new Set(['bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe']);
+function mskDetGroup(label){return label==='person'?'people':MSK_ANIMALS.has(label)?'animals':'objects';}
+function mskDetName(label){
+  const fix={tv:'TV','cell phone':'Phone','dining table':'Table','sports ball':'Ball','potted plant':'Plant','hair drier':'Hair dryer'};
+  const s=fix[label]||String(label||'object');return s.charAt(0).toUpperCase()+s.slice(1);
+}
+// Detector output → chip list. Per-group confidence (people/animals are what most photos are about and
+// RT-DETR scores partly-occluded pets low), a minimum size (a 20 px cup in the background is noise as a mask),
+// one chip per thing (the same dog boxed as dog and cat keeps the better label), at most `cap` chips, people
+// then animals then objects, each group left to right with numbers only when a name repeats.
+function mskSceneList(dets,opt={}){
+  const thr={people:opt.people??0.45,animals:opt.animals??0.45,objects:opt.objects??0.55},minA=opt.minArea??0.0025,cap=opt.cap??12;
+  const area=d=>Math.max(0,d.x1-d.x0)*Math.max(0,d.y1-d.y0);
+  const ok=(dets||[]).filter(d=>d&&Number.isFinite(d.score)&&d.score>=thr[mskDetGroup(d.label)]&&area(d)>=minA).sort((a,b)=>b.score-a.score);
+  const kept=[];
+  for(const d of ok){
+    const g=mskDetGroup(d.label);
+    const dup=kept.some(k=>{if(mskDetGroup(k.label)!==g)return false;
+      const iw=Math.max(0,Math.min(k.x1,d.x1)-Math.max(k.x0,d.x0)),ih=Math.max(0,Math.min(k.y1,d.y1)-Math.max(k.y0,d.y0));
+      const inter=iw*ih,sm=Math.min(area(k),area(d));
+      return sm>0&&(k.label===d.label?inter/sm>=0.8:inter/(area(k)+area(d)-inter)>=0.7);});
+    if(!dup)kept.push(d);
+  }
+  const order={people:0,animals:1,objects:2};
+  // Keep the most confident `cap`, then lay them out by group and left-to-right.
+  const top=kept.slice(0,cap).sort((a,b)=>order[mskDetGroup(a.label)]-order[mskDetGroup(b.label)]||(a.x0+a.x1)-(b.x0+b.x1));
+  const count={},seen={};top.forEach(d=>{count[d.label]=(count[d.label]||0)+1;});
+  return top.map(d=>{const n=seen[d.label]=(seen[d.label]||0)+1,g=mskDetGroup(d.label);
+    return{id:d.label.replace(/\s+/g,'_')+(n-1),label:mskDetName(d.label)+(count[d.label]>1?' '+n:''),kind:d.label,group:g,score:d.score,
+      box:{x0:d.x0,y0:d.y0,x1:d.x1,y1:d.y1}};});
+}
+// Otsu (1979): the threshold that maximises between-class variance of a 256-bin histogram.
+function mskOtsu(hist){
+  let tot=0,sum=0;for(let i=0;i<256;i++){tot+=hist[i];sum+=i*hist[i];}
+  if(!tot)return 128;
+  // A flat optimum (empty bins between two peaks) is resolved to its middle, not its first bin.
+  let wB=0,sB=0,best=-1,t0=128,t1=128;
+  for(let i=0;i<256;i++){wB+=hist[i];if(!wB)continue;const wF=tot-wB;if(!wF)break;sB+=i*hist[i];
+    const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);
+    if(v>best*(1+1e-9)){best=v;t0=t1=i;}else if(v>=best*(1-1e-9))t1=i;}
+  return Math.round((t0+t1)/2);
+}
+// 4-connected components of (px>thr). Returns {lab:Int32Array (0 = background), n, area[], minY[], maxY[], sumY[], border[]}.
+function mskComponents(px,w,h,thr=127){
+  const lab=new Int32Array(w*h),stack=new Int32Array(w*h),area=[0],minY=[0],maxY=[0],sumY=[0],border=[0];let n=0;
+  for(let s=0;s<w*h;s++){
+    if(lab[s]||px[s]<=thr)continue;
+    n++;let sp=0,a=0,y0=h,y1=0,sy=0,b=0;stack[sp++]=s;lab[s]=n;
+    while(sp){const p=stack[--sp],x=p%w,y=(p-x)/w;a++;sy+=y;if(y<y0)y0=y;if(y>y1)y1=y;if(x===0||y===0||x===w-1||y===h-1)b=1;
+      if(x>0&&!lab[p-1]&&px[p-1]>thr){lab[p-1]=n;stack[sp++]=p-1;}
+      if(x<w-1&&!lab[p+1]&&px[p+1]>thr){lab[p+1]=n;stack[sp++]=p+1;}
+      if(y>0&&!lab[p-w]&&px[p-w]>thr){lab[p-w]=n;stack[sp++]=p-w;}
+      if(y<h-1&&!lab[p+w]&&px[p+w]>thr){lab[p+w]=n;stack[sp++]=p+w;}}
+    area.push(a);minY.push(y0);maxY.push(y1);sumY.push(sy);border.push(b);
+  }
+  return{lab,n,area,minY,maxY,sumY,border};
+}
+// Removes selected specks smaller than minFrac of the frame and fills unselected pinholes smaller than holeFrac
+// that do not touch the frame edge. Soft edges of the kept parts are untouched. In place; returns px.
+function mskCleanSpecks(px,w,h,minFrac=0.0002,holeFrac=0.0002){
+  const N=w*h,minA=Math.max(1,Math.round(N*minFrac)),holeA=Math.round(N*holeFrac);
+  const c=mskComponents(px,w,h,127);
+  // Never the largest piece: a deliberately tiny selection (a distant bird) must survive.
+  let big=0;for(let l=1;l<=c.n;l++)if(!big||c.area[l]>c.area[big])big=l;
+  for(let i=0;i<N;i++){const l=c.lab[i];if(l&&l!==big&&c.area[l]<minA)px[i]=0;}
+  // speck fringe: soft pixels (1..127) whose only selected neighbours were removed fade with them
+  if(holeA>0){
+    const inv=new Uint8Array(N);for(let i=0;i<N;i++)inv[i]=px[i]<128?255:0;
+    const hc=mskComponents(inv,w,h,127);
+    for(let i=0;i<N;i++){const l=hc.lab[i];if(l&&!hc.border[l]&&hc.area[l]<holeA)px[i]=255;}
+  }
+  return px;
+}
+// Sky clean-up (after Liba et al. 2020): sky is one big region at the top. Isolated sky-coloured blobs that sit
+// entirely below the main sky's centre and are small next to it (windows, puddles, reflections, a white car)
+// are dropped; holes fully inside the sky smaller than holeFrac of the frame (a mis-scored cloud) are filled.
+function mskSkyCleanup(px,w,h,opt={}){
+  const N=w*h,c=mskComponents(px,w,h,127);if(!c.n)return px;
+  let main=1;for(let l=2;l<=c.n;l++)if(c.area[l]>c.area[main])main=l;
+  const mainCy=c.sumY[main]/c.area[main],rel=opt.rel??0.04;
+  const drop=new Uint8Array(c.n+1);
+  for(let l=1;l<=c.n;l++)if(l!==main&&c.minY[l]>mainCy&&c.area[l]<c.area[main]*rel)drop[l]=1;
+  for(let i=0;i<N;i++)if(drop[c.lab[i]])px[i]=0;
+  // soft fringe around a dropped blob: clear soft pixels not adjacent to a kept selected pixel
+  for(let i=0;i<N;i++)if(px[i]&&px[i]<128){const x=i%w;let keep=false;
+    for(const j of [i-1,i+1,i-w,i+w]){if(j<0||j>=N||(j===i-1&&x===0)||(j===i+1&&x===w-1))continue;if(px[j]>=128){keep=true;break;}}
+    if(!keep)px[i]=0;}
+  return mskCleanSpecks(px,w,h,0,opt.holeFrac??0.002);
+}
+// Joint upsampling with the FAST guided filter (He & Sun 2015, arXiv:1505.00996): the linear coefficients a,b are
+// fitted at the mask's own resolution against a box-downsampled copy of the photo, bilinearly upsampled, then
+// applied to the FULL-res luminance (q = a*I + b). Edges land on the photo's edges at full resolution, interiors stay
+// solid, and nothing spills past the soft band (unlike colour matting — docs/plans/mask-tool-fixes.md F2).
+function _mskBilinear(src,sw,sh,W,H){
+  const out=new Float32Array(W*H);
+  for(let y=0;y<H;y++){const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/H-0.5)),y0=fy|0,y1=Math.min(sh-1,y0+1),ty=fy-y0;
+    for(let x=0;x<W;x++){const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/W-0.5)),x0=fx|0,x1=Math.min(sw-1,x0+1),tx=fx-x0;
+      const a=src[y0*sw+x0]+(src[y0*sw+x1]-src[y0*sw+x0])*tx,b=src[y1*sw+x0]+(src[y1*sw+x1]-src[y1*sw+x0])*tx;out[y*W+x]=a+(b-a)*ty;}}
+  return out;
+}
+function mskGuidedUpsample(src,sw,sh,W,H,rgba,opt={}){
+  const N=W*H,n=sw*sh,out=new Uint8ClampedArray(N);
+  const p=new Float32Array(n);for(let i=0;i<n;i++)p[i]=src[i]/255;
+  if(!rgba||rgba.length!==N*4||(sw>=W&&sh>=H)){const u=_mskBilinear(p,sw,sh,W,H);for(let i=0;i<N;i++)out[i]=u[i]*255;return out;}
+  // box-downsample the guide's luminance to the mask grid
+  const g=new Float32Array(n),cnt=new Float32Array(n),lx=new Int32Array(W);
+  for(let x=0;x<W;x++)lx[x]=Math.min(sw-1,(x*sw/W)|0);
+  for(let y=0;y<H;y++){const row=Math.min(sh-1,(y*sh/H)|0)*sw;for(let x=0,j=y*W*4;x<W;x++,j+=4){const k=row+lx[x];g[k]+=0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2];cnt[k]++;}}
+  for(let i=0;i<n;i++)g[i]=cnt[i]?g[i]/cnt[i]/255:0;
+  const r=Math.max(1,Math.round(opt.r??1)),eps=opt.eps??1e-3;
+  const mI=_boxFilterMean(g,sw,sh,r),mP=_boxFilterMean(p,sw,sh,r),II=new Float32Array(n),IP=new Float32Array(n);
+  for(let i=0;i<n;i++){II[i]=g[i]*g[i];IP[i]=g[i]*p[i];}
+  const mII=_boxFilterMean(II,sw,sh,r),mIP=_boxFilterMean(IP,sw,sh,r),A=new Float32Array(n),B=new Float32Array(n);
+  for(let i=0;i<n;i++){const v=mII[i]-mI[i]*mI[i],c=mIP[i]-mI[i]*mP[i];A[i]=c/(v+eps);B[i]=mP[i]-A[i]*mI[i];}
+  const mA=_boxFilterMean(A,sw,sh,r),mB=_boxFilterMean(B,sw,sh,r);
+  // Only where the low-res mask is uncertain (within r+1 cells of its edge) — solid areas stay exactly as the model said.
+  const hard=new Uint8Array(n),inv=new Uint8Array(n);for(let i=0;i<n;i++){hard[i]=src[i]>127?255:0;inv[i]=hard[i]?0:255;}
+  const nb=_samDilateBinary(inv,sw,sh,r+1),nf=_samDilateBinary(hard,sw,sh,r+1),bandL=new Float32Array(n);
+  for(let i=0;i<n;i++)bandL[i]=((src[i]>8&&src[i]<247)||(nb[i]&&nf[i]))?1:0;
+  // One pass: bilinear weights once per pixel, the guided fit only inside the band.
+  const fxs=new Float32Array(W),x0s=new Int32Array(W),x1s=new Int32Array(W);
+  for(let x=0;x<W;x++){const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/W-0.5));x0s[x]=fx|0;x1s[x]=Math.min(sw-1,x0s[x]+1);fxs[x]=fx-x0s[x];}
+  for(let y=0;y<H;y++){const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/H-0.5)),y0=fy|0,y1=Math.min(sh-1,y0+1),ty=fy-y0,r0=y0*sw,r1=y1*sw;
+    for(let x=0;x<W;x++){const a0=r0+x0s[x],a1=r0+x1s[x],b0=r1+x0s[x],b1=r1+x1s[x],tx=fxs[x];
+      const lerp=T=>{const t=T[a0]+(T[a1]-T[a0])*tx,b=T[b0]+(T[b1]-T[b0])*tx;return t+(b-t)*ty;};
+      const u=lerp(p),i=y*W+x,t=(bandL[a0]||bandL[a1]||bandL[b0]||bandL[b1])?lerp(bandL):0;
+      if(t>0){const j=i*4,I=(0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2])/255,q=Math.max(0,Math.min(1,lerp(mA)*I+lerp(mB)));out[i]=(q*t+u*(1-t))*255;}
+      else out[i]=u*255;}}
+  return out;
+}
+// Matting-model alpha inside the SAM mask's uncertain edge band only: SAM decides WHICH thing, the matte decides
+// how its hair/fur edge falls. band px is measured at mask resolution; outside the band SAM's value stands.
+function mskMatteInBand(sam,matte,w,h,band){
+  const N=w*h,hard=new Uint8Array(N),inv=new Uint8Array(N);for(let i=0;i<N;i++){hard[i]=sam[i]>127?255:0;inv[i]=hard[i]?0:255;}
+  const nearOut=_samDilateBinary(inv,w,h,band),nearIn=_samDilateBinary(hard,w,h,band),out=Uint8ClampedArray.from(sam);
+  for(let i=0;i<N;i++)if(nearOut[i]&&nearIn[i])out[i]=matte[i];
+  return out;
+}
+// Every one-shot AI raster (chips, Auto Subject, Background, Foreground, Landscape, Sky) ends here: speck/pinhole
+// clean-up (item 26), optional sky clean-up (21/22), then the fast-guided-filter upsample to the mask texture size
+// against the photo (24/25). Returns {px,w,h}.
+function _mskFinishAiRaster(px,w,h,opt={}){
+  let a=Uint8ClampedArray.from(px);
+  if(opt.sky)mskSkyCleanup(a,w,h);
+  else if(opt.specks)mskCleanSpecks(a,w,h);
+  const T=mskTexDims();
+  if(T.w<=w&&T.h<=h)return{px:a,w,h};
+  const rgba=mskSourceData(T.w,T.h);
+  return{px:mskGuidedUpsample(a,w,h,T.w,T.h,rgba),w:T.w,h:T.h};
+}
+// One matte per photo and model at AI resolution (non-enumerable on the item, never saved).
+async function _mskMatteFor(item,model){
+  const img=item&&item.img;if(!img||!window.__TAURI__)return null;
+  const{w,h}=samInputDims(),key=model+'|'+w+'x'+h;
+  const c=item._matte||(Object.defineProperty(item,'_matte',{value:{},writable:true,configurable:true,enumerable:false}),item._matte);
+  if(c[key])return c[key];
+  const rgb=mskAiRgb(img,w,h);if(!rgb)return null;
+  const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
+  const dv=new DataView(buf),hlen=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+  const body=new Uint8Array(buf,4+hlen);
+  if(hd.width!==w||hd.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
+  return c[key]={px:Uint8ClampedArray.from(body),w,h};
+}
+let _mskMatteModels=null;
+async function mskMatteModels(){
+  if(_mskMatteModels)return _mskMatteModels;
+  try{_mskMatteModels=await window.__TAURI__.core.invoke('matte_models');}catch(e){_mskMatteModels=[];}
+  return _mskMatteModels||[];
+}
+// MODNet is a portrait (people) matting model; ISNet (DIS) is general-object. Pick by what the subject is.
+async function mskMatteModelFor(kind){
+  const ms=await mskMatteModels();if(!ms.length)return null;
+  let want=null;try{want=localStorage.getItem('chromasmithMatteModel');}catch(_){}
+  if(want&&ms.includes(want))return want;
+  if(kind==='people')return ms.includes('modnet')?'modnet':ms[0];
+  return ms.includes('isnet')?'isnet':ms[0];
+}
+async function _mskEdgeMatte(item,sam,w,h,kind){
+  try{
+    const model=await mskMatteModelFor(kind);if(!model)return null;
+    const mt=await _mskMatteFor(item,model);if(!mt||mt.w!==w||mt.h!==h)return null;
+    // band ~1% of the long side: wide enough for hair and fur, too narrow to reach a neighbouring subject.
+    return mskMatteInBand(sam,mt.px,w,h,Math.max(3,Math.round(Math.max(w,h)*0.01)));
+  }catch(e){log('Edge matting skipped — '+(e&&e.message||e),'warn');return null;}
+}

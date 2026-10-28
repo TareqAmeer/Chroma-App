@@ -16,18 +16,34 @@ function mskLandscapeToggle(){
 // One landscape inference per photo at samInputDims, cached non-enumerable on the item.
 async function _mskLandscapeResult(it,img){
   const{w,h}=samInputDims();
-  let lc=it._landscape;
+  const lc=it._landscape;
   if(lc&&lc.w===w&&lc.h===h)return lc;
-  const d=mskSourceData(w,h,img),rgb=new Uint8Array(w*h*3);
-  for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-  const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
-  const hlen=new DataView(buf).getUint32(0,true);
-  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-  const body=new Uint8Array(buf,4+hlen);
-  if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
-  lc={w,h,groups:header.groups,body};
-  Object.defineProperty(it,'_landscape',{value:lc,writable:true,enumerable:false,configurable:true});
-  return lc;
+  // One inference per photo even when Detected, Sky and a Landscape chip ask at once.
+  if(it._landscapeP&&it._landscapeP.w===w&&it._landscapeP.h===h)return it._landscapeP.p;
+  const p=(async()=>{
+    const rgb=mskAiRgb(img,w,h);if(!rgb)throw new Error('photo pixels unavailable');
+    const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
+    const hlen=new DataView(buf).getUint32(0,true);
+    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
+    const r={w,h,groups:header.groups,body};
+    Object.defineProperty(it,'_landscape',{value:r,writable:true,enumerable:false,configurable:true});
+    return r;
+  })();
+  Object.defineProperty(it,'_landscapeP',{value:{w,h,p},writable:true,enumerable:false,configurable:true});
+  try{return await p;}finally{if(it._landscapeP&&it._landscapeP.p===p)it._landscapeP=null;}
+}
+let _lsPrev=null;
+async function mskLandscapePreview(cat){
+  const it=curItem(),img=it&&it.img;if(!img||!(await mskLandscapeProbe()))return;
+  _lsPrev=cat;
+  try{const lc=await _mskLandscapeResult(it,img),gi=lc.groups.indexOf(cat);
+    if(gi<0||_lsPrev!==cat||curItem()!==it)return;
+    const box=mskOverlayBox();if(!box)return;
+    _scenePrevId='ls:'+cat;
+    mskPaintOverlaySync({type:'brush',px:lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),mtW:lc.w,mtH:lc.h},box,false);
+  }catch(e){log('Landscape preview: '+(e&&e.message||e),'warn');}
 }
 async function mskAddLandscape(cat){
   const label=(LANDSCAPE_GROUPS.find(g=>g[0]===cat)||[])[1];
@@ -44,7 +60,12 @@ async function mskAddLandscape(cat){
     if(job.cancelled)throw new Error('Cancelled');
     const gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
     if(!fxState.masks.includes(m))return null;
-    m.px=Uint8ClampedArray.from(lc.body.subarray(gi*w*h,(gi+1)*w*h));m.mtW=w;m.mtH=h;
+    // Same treatment as Sky (item 23): the 576 px model's soft edge is re-read from the photo's colours in a band
+    // around it, then cleaned and snapped to the full-res photo (24). Sky also drops low isolated blobs.
+    const raw=lc.body.subarray(gi*w*h,(gi+1)*w*h),rgba=mskSourceData(w,h,img);
+    const matted=rgba?_skyMatte(raw,w,h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);
+    const f=_mskFinishAiRaster(matted,w,h,cat==='sky'?{sky:true}:{specks:true});
+    m.px=f.px;m.mtW=f.w;m.mtH=f.h;
     let n=0;for(let i=0;i<m.px.length;i++)if(m.px[i]>127)n++;
     _mskTexDirty=true;_mskRecordAIProvenance(m,it,'landscape:'+cat,false);
     if(!n)toast('No '+label.toLowerCase()+' found in this photo','warn');

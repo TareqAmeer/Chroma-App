@@ -51,6 +51,6 @@ try{
   assert.equal(r.sepLabel,'Create separate masks');
   assert.deepEqual(r.sep,['Person 1','Face skin \u00b7 Person 1','Lips \u00b7 Person 1']);
   assert.deepEqual(r.union,['Person 1 \u00b7 Face skin, Hair']);
-  assert.deepEqual(r.obj,{n:1,mode:'box',tap:true});
+  assert.deepEqual(r.obj,{n:1,mode:'scribble',tap:true}); // Objects opens on Scribble like Lightroom (docs/plans/mask-tool-fixes.md Phase 1)
   console.log('PASS people panel + objects tool');
 }finally{await browser.close();server.close();}

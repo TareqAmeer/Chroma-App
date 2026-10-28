@@ -348,16 +348,23 @@ async function samRunPoints(m,opts={}){
     // a saved recipe that names a backend keeps it.
     const useSam2=opts.preferredBackend?/^sam2_/.test(opts.preferredBackend):!!_sam2Token;
     const cmd=aiBox?(useSam2?'sam2_box':'sam_box'):(useSam2?'sam2_points':'sam_points');
-    const rect=aiBox?{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}:null;
-    const payload=aiBox?{token:useSam2?_sam2Token:_samToken,rect}:{token:useSam2?_sam2Token:_samToken,points};
-    const buf=await window.__TAURI__.core.invoke(cmd,payload);
+    let header,mask;
+    const pre=opts.precomputed;
+    if(pre&&aiBox&&pre.backend===cmd&&pre.px&&pre.px.length===pre.mtW*pre.mtH){
+      // A detected-chip hover already ran this exact box on this backend (mskSceneAdd): same answer, no second inference.
+      header={width:pre.mtW,height:pre.mtH};mask=pre.px;
+    }else{
+      const rect=aiBox?{x1:aiBox.x0,y1:aiBox.y0,x2:aiBox.x1,y2:aiBox.y1}:null;
+      const payload=aiBox?{token:useSam2?_sam2Token:_samToken,rect}:{token:useSam2?_sam2Token:_samToken,points};
+      const buf=await window.__TAURI__.core.invoke(cmd,payload);
+      // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
+      const dv=new DataView(buf);
+      const hlen=dv.getUint32(0,true);
+      header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+      mask=new Uint8Array(buf,4+hlen);
+    }
     if(job&&job.cancelled)return{ok:false,error:'Cancelled',cancelled:true};
     if(curItem()!==item||(opts.expectedItem&&curItem()!==opts.expectedItem))return{ok:false,error:'Photo changed during mask recomputation'};
-    // Response is framed: [u32 headerLen][json {width,height}][mask bytes, row-major, one per pixel]
-    const dv=new DataView(buf);
-    const hlen=dv.getUint32(0,true);
-    const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-    const mask=new Uint8Array(buf,4+hlen);
     if(mask.length!==header.width*header.height){
       const msg='AI Select: mask size mismatch — try scribbling again';
       if(!opts.silent){log(msg,'err');_samLastError=msg;if(typeof toast==='function')toast(msg);mskRebuild();}return{ok:false,error:msg};
@@ -365,7 +372,14 @@ async function samRunPoints(m,opts={}){
     // The model's own soft edge, NOT _samRefineMask's colour matting: measured on a dark dog against a dark wall,
     // matting grew the selection from 6.6% to 54.6% outside the subject and cost ~1.8 s per scribble
     // (docs/plans/mask-tool-fixes.md F2). Edge snapping stays available on demand via Refine edges.
-    const refined=mask;
+    let refined=mask;
+    // Detected people/animals: the matting model's hair/fur alpha inside SAM's edge band (item 14), then the
+    // clean-up + photo-guided upsample every one-shot AI raster gets (items 25/26).
+    if(m.aiEdge&&!opts.detached){const e=await _mskEdgeMatte(item,refined,header.width,header.height,m.aiEdge);if(e)refined=e;}
+    // Every SAM result is stored at the mask texture size, edge snapped to the photo (item 25) — except an older mask
+    // still holding a model-size raster with manual Paint/Erase on it, whose brush delta must keep matching sizes.
+    const T=mskTexDims(),legacy=m.px&&m.px.length&&m.px.length!==T.w*T.h&&m._aiBase;
+    if(m.aiUpsample!==false&&!legacy){const f=_mskFinishAiRaster(refined,header.width,header.height,{specks:true});refined=f.px;header={width:f.w,height:f.h};}
     const resolvedMask=m.aiSelectionMode==='background'?_samComplementSubjectMask(refined):refined;
     if(!resolvedMask){
       const msg='AI Background could not be created because the subject mask is empty or covers the entire photo';

@@ -70,12 +70,37 @@ pub fn detect(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
     detect_classes(rgb, w, h, &PET_CLASSES)
 }
 
-/// COCO classes the editor's mask auto-detect offers: person (id 0) plus the pet classes. Same
-/// model and thresholds as `detect`; only the class set differs, so people never leak into the
-/// pet-tagging path above.
-const SCENE_CLASSES: [(usize, &str); 5] = [(0, "person"), (14, "bird"), (15, "cat"), (16, "dog"), (17, "horse")];
+/// All 80 COCO classes in the checkpoint's `id2label` order (vendor/rtdetr/README.md), for the
+/// editor's mask auto-detect: people, animals AND objects (bench, car, chair, umbrella, ...), so
+/// the Objects list is Lightroom-like instead of people-and-pets only. The JS side groups them,
+/// names them and applies per-group confidence and size floors (mskSceneList).
+const COCO_80: [&str; 80] = [
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard",
+    "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
+    "teddy bear", "hair drier", "toothbrush",
+];
+fn scene_classes() -> &'static [(usize, &'static str)] {
+    static C: OnceLock<Vec<(usize, &'static str)>> = OnceLock::new();
+    C.get_or_init(|| COCO_80.iter().enumerate().map(|(i, n)| (i, *n)).collect())
+}
 pub fn detect_scene(rgb: &[u8], w: u32, h: u32) -> Result<Vec<PetDetection>, String> {
-    detect_classes(rgb, w, h, &SCENE_CLASSES)
+    detect_classes(rgb, w, h, scene_classes())
+}
+
+/// Duplicate boxes are only merged within one thing-type: the same species (head box + body box), or
+/// two pet species (one dog read as dog and cat). A person holding a cup, or a dog on a bench, are two
+/// things even though one box sits inside the other — merging across those dropped the smaller one.
+fn mergeable(a: &str, b: &str) -> bool {
+    a == b || (pet_class_name_by(a) && pet_class_name_by(b))
+}
+fn pet_class_name_by(name: &str) -> bool {
+    PET_CLASSES.iter().any(|(_, n)| *n == name)
 }
 
 fn detect_classes(rgb: &[u8], w: u32, h: u32, classes: &[(usize, &'static str)]) -> Result<Vec<PetDetection>, String> {
@@ -120,8 +145,8 @@ fn detect_classes(rgb: &[u8], w: u32, h: u32, classes: &[(usize, &'static str)])
     let sigmoid = |x: f32| 1.0 / (1.0 + (-x).exp());
     let mut out = Vec::new();
     for q in 0..NUM_QUERIES {
-        // argmax over the 80 classes, but only bother computing sigmoid for classes we keep —
-        // this is a fixed small set (4), so the naive scan costs nothing at 300 queries.
+        // argmax over the classes we keep (4 pets, or all 80 for the editor's scene list) — at most
+        // 300x80 sigmoids, well under a millisecond.
         let mut best: Option<(usize, f32)> = None;
         for &(class_idx, _) in classes.iter() {
             let p = sigmoid(logits[q * NUM_CLASSES + class_idx]);
@@ -151,7 +176,7 @@ fn detect_classes(rgb: &[u8], w: u32, h: u32, classes: &[(usize, &'static str)])
     // Keep the higher-scoring box whenever one mostly sits inside another.
     let mut kept: Vec<PetDetection> = Vec::with_capacity(out.len());
     for d in out {
-        if !kept.iter().any(|k| same_animal(k.x0, k.y0, k.x1, k.y1, d.x0, d.y0, d.x1, d.y1)) {
+        if !kept.iter().any(|k| mergeable(k.species, d.species) && same_animal(k.x0, k.y0, k.x1, k.y1, d.x0, d.y0, d.x1, d.y1)) {
             kept.push(d);
         }
     }
@@ -169,6 +194,17 @@ pub fn same_animal(ax0: f32, ay0: f32, ax1: f32, ay1: f32, bx0: f32, by0: f32, b
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scene_merge_rules() {
+        assert!(mergeable("dog", "dog"));
+        assert!(mergeable("dog", "cat"));
+        assert!(!mergeable("person", "cup"));
+        assert!(!mergeable("dog", "bench"));
+        assert_eq!(scene_classes().len(), 80);
+        assert_eq!(scene_classes()[16].1, "dog");
+        assert_eq!(scene_classes()[13].1, "bench");
+    }
 
     fn setup_model() {
         let dylib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(crate::platform::ort_lib_dev_path());
