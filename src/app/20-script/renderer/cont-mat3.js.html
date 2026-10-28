@@ -786,7 +786,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
-      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;
+      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
       mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would

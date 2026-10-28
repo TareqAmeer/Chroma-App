@@ -40,8 +40,8 @@ function mskAdd(type,configure){
     // per-photo relative-depth map instead of colour or luminance.
     m={type:'none',origin:type,..._mskAdjustDefaults()};
   }
-  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,..._mskAdjustDefaults()};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,..._mskAdjustDefaults()};
+  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
   else if(type==='sky'){ // sky: brush-type raster mask. The colour/position heuristic shows at once;
     // mskSkyUpgrade then swaps in the finished raster (desktop Landscape model, else the heuristic)

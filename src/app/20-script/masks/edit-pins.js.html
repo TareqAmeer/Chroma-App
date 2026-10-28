@@ -68,12 +68,12 @@ function mskHitTest(nx,ny){
   for(let i=ms.length-1;i>=0;i--){
     const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
     if(m.type==='radial'){
-      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=nx-m.cx,dy=(1-ny)-m.cy; // shape y is bottom-up
+      const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
       const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
-      if((lx/Math.max(.01,m.rx))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
+      if((lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
     }else if(m.type==='linear'){
-      const ax=m.x1-m.x0,ay=m.y1-m.y0,L=ax*ax+ay*ay;
-      if(L>0){const t=((nx-m.x0)*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
+      const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
+      if(L>0){const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
     }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
       const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
       if(m.px[y*m.mtW+x]>64)return i;
@@ -98,6 +98,21 @@ function mskPhotoClick(e){
   document.addEventListener('pointerup',e=>{const d=dn;dn=null;if(d&&Math.abs(e.clientX-d.x)+Math.abs(e.clientY-d.y)<=4)mskPhotoClick(e);},true);
 })();
 let _mskDrag=null;
+// Width/height of the photo as shown. Radial/linear masks store it as m.ar ("true shape"): the
+// shader then measures them in on-screen proportions, so rotating never skews them. Masks saved
+// without it keep the old stretched geometry, so they render exactly as before.
+function mskPhotoAR(){
+  const b=typeof mskOverlayBox==='function'&&mskOverlayBox();if(b&&b.width>0&&b.height>0)return b.width/b.height;
+  const w=(typeof fxWork!=='undefined'&&fxWork)||(typeof fxImg!=='undefined'&&fxImg);
+  return w&&w.width>0&&w.height>0?w.width/w.height:1;
+}
+// An old mask whose shape is identical in both geometries (unrotated ellipse, horizontal or
+// vertical gradient) can switch to true shape without any visible change, so later rotations stay true.
+function mskAdoptTrueShape(m){
+  if(!m||m.ar>0)return;
+  const same=m.type==='radial'?!m.rot:m.type==='linear'?(Math.abs(m.x1-m.x0)<1e-6||Math.abs(m.y1-m.y0)<1e-6):false;
+  if(same)m.ar=mskPhotoAR();
+}
 // Set by mskAdd for a new Radial/Linear: the next drag on the photo draws it (Lightroom's flow).
 // A plain click instead keeps the default size, centred on the click. Cleared once used, or when
 // another mask is selected (the overlay drops it).
@@ -109,6 +124,7 @@ function mskHandleDown(e){
   e.stopPropagation();e.preventDefault();
   const svg=document.getElementById('fx-mask-overlay'),m=fxState.masks[mskSel];if(!m)return;
   const[px,py]=mskHandlePos(e);
+  mskAdoptTrueShape(m);
   // Snapshot of the shape at grab time: moves and rotations apply as deltas from it, so grabbing
   // off-centre never makes the shape jump to the pointer.
   _mskDrag={which:e.currentTarget.dataset.h,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
@@ -126,7 +142,7 @@ function mskHandlePos(e){
 }
 // Pure: the new shape fields for one drag step. d = _mskDrag, (px,py) pointer in 0..1 photo
 // coords, W/H the photo's on-screen size (rotations and circles are judged in screen pixels).
-function _mskShapeDrag(type,d,px,py,W,H,shift){
+function _mskShapeDrag(type,d,px,py,W,H,shift,bx=1){
   const o=d.m0,k=d.which,ddx=px-d.px,ddy=py-d.py,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
   if(type==='radial'){
     if(k==='draw'){
@@ -134,7 +150,7 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
       if(shift){const r=Math.max(rx*W,ry*H);rx=r/W;ry=r/H;}  // Shift: a true circle on screen
       return{cx:d.px,cy:d.py,rx:Math.max(0.01,rx),ry:Math.max(0.01,ry),rot:0};
     }
-    if(k==='move'||k==='c')return{cx:cl(o.cx+ddx,0,1),cy:cl(o.cy+ddy,0,1)};
+    if(k==='move'||k==='c')return{cx:cl(o.cx+ddx,0,bx),cy:cl(o.cy+ddy,0,1)};
     if(k==='rot'){const a0=Math.atan2((d.py-o.cy)*H,(d.px-o.cx)*W),a1=Math.atan2((py-o.cy)*H,(px-o.cx)*W);return{rot:o.rot+(a1-a0)};}
     const cr=Math.cos(o.rot),sr=Math.sin(o.rot),qx=px-o.cx,qy=py-o.cy,lx=Math.abs(qx*cr+qy*sr),ly=Math.abs(-qx*sr+qy*cr);
     if(k==='f'){ // relative: the knob may sit off the inner ring (kept clear of the centre pin), so no jump on grab
@@ -148,7 +164,7 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
   }
   // linear
   if(k==='draw')return{x0:d.px,y0:d.py,x1:px,y1:py};
-  if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,1)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
+  if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,bx)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
   if(k==='lrot'){
     const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2;
     const a=Math.atan2((py-my)*H,(px-mx)*W)-Math.atan2((d.py-my)*H,(d.px-mx)*W),c=Math.cos(a),s=Math.sin(a);
@@ -164,10 +180,19 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
   }
   return{};
 }
+// True-shape masks: run the same maths in on-screen proportions (x scaled by the aspect, so the
+// space is square and W=H), then scale x back. Old masks keep the stretched-space maths.
+function _mskShapeDragAR(type,d,px,py,W,H,shift,a){
+  if(!(a>0))return _mskShapeDrag(type,d,px,py,W,H,shift);
+  const X=['cx','rx','x0','x1'],o=d.m0,o2={...o};X.forEach(k=>{if(o2[k]!=null)o2[k]*=a;});
+  const r=_mskShapeDrag(type,{...d,m0:o2,px:d.px*a},px*a,py,H,H,shift,a);
+  X.forEach(k=>{if(r[k]!=null)r[k]/=a;});
+  return r;
+}
 function mskHandleMove(e){
   if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
   const[px,py,W,H]=mskHandlePos(e);
-  Object.assign(m,_mskShapeDrag(m.type,_mskDrag,px,py,W,H,e.shiftKey));
+  Object.assign(m,_mskShapeDragAR(m.type,_mskDrag,px,py,W,H,e.shiftKey,m.ar));
   _mskDrag.moved=true;
   mskOverlaySync();fxUpdate();
 }

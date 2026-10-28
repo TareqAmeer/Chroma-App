@@ -58,7 +58,7 @@ function _mskThumb(m){
   }else{ // radial
     const cx=(m.cx!=null?m.cx:0.5)*PW,cy=(1-(m.cy!=null?m.cy:0.5))*PH;
     const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*PW),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*PH);
-    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
+    x.save();x.translate(cx,cy);if(m.rot)x.rotate(-m.rot); // stored rotation is counter-clockwise (y up); the canvas's is clockwise
     x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.7)';x.fill();x.restore();
   }
   if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(1,1,PW-2,PH-2);}

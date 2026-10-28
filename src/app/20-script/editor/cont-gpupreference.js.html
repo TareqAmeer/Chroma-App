@@ -215,7 +215,7 @@ uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 
                         // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
 uniform vec4 mskF[8];  // x: Color-paint target hue, y: amount, z: radial rotation, w: colour saturation gate
-uniform vec4 mskO[8];  // x: resolved composition operand slot, y: graph-valid flag
+uniform vec4 mskO[8];  // x: resolved composition operand slot, y: graph-valid flag, z: true-shape aspect (0 = legacy)
 uniform float mskTopo[8]; // mask slots in dependency-first order, packed by the CPU for bounded evaluation
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.

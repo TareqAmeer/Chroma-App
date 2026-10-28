@@ -40,3 +40,17 @@ test('linear move shifts both edges', () => {
   const r = drag('linear', { which: 'lmove', px: .5, py: .5, m0: Lm }, .6, .5, 1000, 500);
   near(r.x0, .6); near(r.x1, .6); near(r.y0, .3);
 });
+const { _mskShapeDragAR: dragAR } = load(['_mskShapeDrag', '_mskShapeDragAR']);
+test('true-shape: resizing a turned ellipse on a 2:1 photo measures on screen', () => {
+  // rx is a width fraction; turned 90deg its axis points up, so .3 of the height = .15 of the width
+  const r = dragAR('radial', { which: 'rx', px: .5, py: .6, m0: { cx: .5, cy: .5, rx: .05, ry: .1, rot: Math.PI / 2 } }, .5, .8, 1000, 500, false, 2);
+  near(r.rx, .15);
+});
+test('true-shape: move clamps x to the photo, not the scaled space', () => {
+  const r = dragAR('radial', { which: 'move', px: .5, py: .5, m0: R }, 1.4, .5, 1000, 500, false, 2);
+  near(r.cx, 1);
+});
+test('true-shape: no aspect falls back to the old maths', () => {
+  const d = { which: 'move', px: .55, py: .5, m0: R };
+  assert.equal(JSON.stringify(dragAR('radial', d, .65, .6, 1000, 500)), JSON.stringify(drag('radial', d, .65, .6, 1000, 500)));
+});

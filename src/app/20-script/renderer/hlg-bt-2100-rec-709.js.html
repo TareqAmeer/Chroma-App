@@ -283,10 +283,14 @@ vec3 basicAdjust(vec3 c){
 float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-gate/subtract
   vec4 A=mskA[i],B=mskB[i];
   float w;
+  // S: true-shape masks (mskO.z = the photo's width/height) are measured in on-screen proportions,
+  // so a rotated ellipse or diagonal gradient is not skewed on a non-square photo. 0 = the old
+  // stretched 0..1 space, kept for masks saved before. Unrotated/axis-aligned shapes match either way.
+  vec2 S=vec2(mskO[i].z>0.0?mskO[i].z:1.0,1.0);
   if(B.w>0.5){w=i<4?texture(maskTex,gm)[i]:texture(maskTex2,gm)[i-4];}      // painted/sky raster mask, packed channel i (slots 4-7 in maskTex2)
-  else if(B.x<0.5){vec2 d0=gm-A.xy;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
+  else if(B.x<0.5){vec2 d0=(gm-A.xy)*S;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
     vec2 d1=vec2(d0.x*cr+d0.y*sr,-d0.x*sr+d0.y*cr); // rotate into the ellipse's own (unrotated) axes
-    vec2 dd=d1/max(A.zw,vec2(1e-4));float t=length(dd);
+    vec2 dd=d1/max(A.zw*S,vec2(1e-4));float t=length(dd);
     // Feather = where the falloff STARTS, as a fraction of the radius: f=0 is a hard edge at the
     // ellipse boundary, f=1 is a gradient all the way from the centre. NOTE the stored value is
     // 0..0.5 (the slider maps 0-100 -> 0-0.5): the original "1.0-2.0*f" form saturated at f=0.5,
@@ -299,7 +303,7 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   // thing selecting. Invert is deliberately NOT applied here — inverting a full-frame shape gives
   // zero everywhere. For these masks it inverts the GATES instead, in the mask loop.
   else if(B.x>1.5){w=1.0;return w;}
-  else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
+  else{vec2 n=(A.zw-A.xy)*S;float t=dot((gm-A.xy)*S,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
   // Shapeless masks invert only after every gate below (including depth). A baked depth raster
   // uses the texture branch above, but keeps B.x>1.5 so the same combined-invert rule applies.
   if(B.z>0.5&&B.x<1.5)w=1.0-w;

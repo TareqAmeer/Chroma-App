@@ -7570,7 +7570,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028C';
+const BUILD='1.1028D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8661,7 +8661,7 @@ uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 
                         // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
 uniform vec4 mskF[8];  // x: Color-paint target hue, y: amount, z: radial rotation, w: colour saturation gate
-uniform vec4 mskO[8];  // x: resolved composition operand slot, y: graph-valid flag
+uniform vec4 mskO[8];  // x: resolved composition operand slot, y: graph-valid flag, z: true-shape aspect (0 = legacy)
 uniform float mskTopo[8]; // mask slots in dependency-first order, packed by the CPU for bounded evaluation
 // SKIN TONE / COLOUR RANGE (see colRangeWeight + the uniformity block in the mask loop).
 // mskG gates the mask by COLOUR (which pixels), mskH/mskI say where those pixels move TO.
@@ -9013,10 +9013,14 @@ vec3 basicAdjust(vec3 c){
 float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-gate/subtract
   vec4 A=mskA[i],B=mskB[i];
   float w;
+  // S: true-shape masks (mskO.z = the photo's width/height) are measured in on-screen proportions,
+  // so a rotated ellipse or diagonal gradient is not skewed on a non-square photo. 0 = the old
+  // stretched 0..1 space, kept for masks saved before. Unrotated/axis-aligned shapes match either way.
+  vec2 S=vec2(mskO[i].z>0.0?mskO[i].z:1.0,1.0);
   if(B.w>0.5){w=i<4?texture(maskTex,gm)[i]:texture(maskTex2,gm)[i-4];}      // painted/sky raster mask, packed channel i (slots 4-7 in maskTex2)
-  else if(B.x<0.5){vec2 d0=gm-A.xy;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
+  else if(B.x<0.5){vec2 d0=(gm-A.xy)*S;float rot=mskF[i].z;float cr=cos(rot),sr=sin(rot);
     vec2 d1=vec2(d0.x*cr+d0.y*sr,-d0.x*sr+d0.y*cr); // rotate into the ellipse's own (unrotated) axes
-    vec2 dd=d1/max(A.zw,vec2(1e-4));float t=length(dd);
+    vec2 dd=d1/max(A.zw*S,vec2(1e-4));float t=length(dd);
     // Feather = where the falloff STARTS, as a fraction of the radius: f=0 is a hard edge at the
     // ellipse boundary, f=1 is a gradient all the way from the centre. NOTE the stored value is
     // 0..0.5 (the slider maps 0-100 -> 0-0.5): the original "1.0-2.0*f" form saturated at f=0.5,
@@ -9029,7 +9033,7 @@ float mskShapeWeight(int i,vec2 gm){    // pure shape weight for mask i, no lum-
   // thing selecting. Invert is deliberately NOT applied here — inverting a full-frame shape gives
   // zero everywhere. For these masks it inverts the GATES instead, in the mask loop.
   else if(B.x>1.5){w=1.0;return w;}
-  else{vec2 n=A.zw-A.xy;float t=dot(gm-A.xy,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
+  else{vec2 n=(A.zw-A.xy)*S;float t=dot((gm-A.xy)*S,n)/max(dot(n,n),1e-6);w=1.0-smoothstep(0.0,1.0,t);}
   // Shapeless masks invert only after every gate below (including depth). A baked depth raster
   // uses the texture branch above, but keeps B.x>1.5 so the same combined-invert rule applies.
   if(B.z>0.5&&B.x<1.5)w=1.0-w;
@@ -10635,7 +10639,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
-      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;
+      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
       mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
@@ -16745,8 +16749,8 @@ function mskAdd(type,configure){
     // per-photo relative-depth map instead of colour or luminance.
     m={type:'none',origin:type,..._mskAdjustDefaults()};
   }
-  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,..._mskAdjustDefaults()};
-  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,..._mskAdjustDefaults()};
+  else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
+  else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,ar:mskPhotoAR(),..._mskAdjustDefaults()};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
   else if(type==='sky'){ // sky: brush-type raster mask. The colour/position heuristic shows at once;
     // mskSkyUpgrade then swaps in the finished raster (desktop Landscape model, else the heuristic)
@@ -18889,7 +18893,7 @@ function _mskThumb(m){
   }else{ // radial
     const cx=(m.cx!=null?m.cx:0.5)*PW,cy=(1-(m.cy!=null?m.cy:0.5))*PH;
     const rx=Math.max(1,(m.rx!=null?m.rx:0.28)*PW),ry=Math.max(1,(m.ry!=null?m.ry:0.28)*PH);
-    x.save();x.translate(cx,cy);if(m.rot)x.rotate(m.rot);
+    x.save();x.translate(cx,cy);if(m.rot)x.rotate(-m.rot); // stored rotation is counter-clockwise (y up); the canvas's is clockwise
     x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.fillStyle='rgba(255,60,60,0.7)';x.fill();x.restore();
   }
   if(m.isExclude){x.strokeStyle='#fff';x.lineWidth=2;x.strokeRect(1,1,PW-2,PH-2);}
@@ -21791,10 +21795,11 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
   const knob=(x,y,h,r,fill,cur,title)=>`<circle class="msk-handle" data-h="${h}" cx="${(x*W).toFixed(1)}" cy="${Y(y)}" r="${r}" style="fill:${fill};stroke:#000;stroke-width:1px;cursor:${cur}"><title>${title}</title></circle>`;
   let html='';
   if(m.type==='radial'){
-    const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot);
+    const{cx,cy,rx,ry,feather}=m,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),a=m.ar>0?m.ar:1;
     // rotate a point (dx,dy) in the ellipse's own axes into image space around (cx,cy): the inverse
-    // of the shader's rotation (it rotates gm-A.xy BY -rot into ellipse axes).
-    const rp=(dx,dy)=>[cx+dx*cr-dy*sr,cy+dx*sr+dy*cr];
+    // of the shader's rotation (it rotates gm-A.xy BY -rot into ellipse axes). a = the true-shape
+    // aspect (1 for old masks): x is scaled into on-screen proportions before rotating, as the shader does.
+    const rp=(dx,dy)=>{const u=dx*a;return[cx+(u*cr-dy*sr)/a,cy+u*sr+dy*cr];};
     const ring=(rrx,rry)=>{const N=64,pts=[];for(let i=0;i<N;i++){const a=i/N*2*Math.PI;const q=rp(rrx*Math.cos(a),rry*Math.sin(a));pts.push(P(q[0],q[1]));}return 'M'+pts.join('L')+'Z';};
     // Falloff starts at t=max(1-2*feather,0) of the radius (mskShapeWeight): that inner ring is the feather.
     const ft=Math.max(1-2*(feather!=null?feather:0.5),0);
@@ -21806,9 +21811,10 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
     for(const[s,h]of[[1,'rx'],[-1,'rx'],[1,'ry'],[-1,'ry']]){const q=h==='rx'?rp(rx*s,0):rp(0,ry*s);html+=knob(q[0],q[1],h,5.5,'#fff','pointer','Resize (Shift keeps the shape)');}
     html+=knob(cx,cy,'move',7,'var(--acc,#ff9b42)','move','Move');
   }else{ // linear
-    const{x0,y0,x1,y1}=m,dx=x1-x0,dy=y1-y0;
-    // The shader's iso-lines are perpendicular to p0->p1 in 0..1 photo space; direction (-dy,dx) there.
-    const L=4,seg=(px,py)=>'M'+P(px+dy*L,py-dx*L)+'L'+P(px-dy*L,py+dx*L);
+    const{x0,y0,x1,y1}=m,a=m.ar>0?m.ar:1,dx=x1-x0,dy=y1-y0;
+    // The shader's iso-lines are perpendicular to p0->p1 in its shape space (on-screen proportions
+    // for true-shape masks, a = aspect; stretched 0..1 for old ones, a = 1).
+    const L=4,ex=dy/a,ey=-dx*a,seg=(px,py)=>'M'+P(px+ex*L,py+ey*L)+'L'+P(px-ex*L,py-ey*L);
     const mx=(x0+x1)/2,my=(y0+y1)/2;
     html+=hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot','alias',18);
     html+=`<path d="${seg(x0,y0)}" ${line}/><path d="${seg(mx,my)}" ${dash}/><path d="${seg(x1,y1)}" ${line}/>`;
@@ -22044,12 +22050,12 @@ function mskHitTest(nx,ny){
   for(let i=ms.length-1;i>=0;i--){
     const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
     if(m.type==='radial'){
-      const rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=nx-m.cx,dy=(1-ny)-m.cy; // shape y is bottom-up
+      const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
       const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
-      if((lx/Math.max(.01,m.rx))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
+      if((lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
     }else if(m.type==='linear'){
-      const ax=m.x1-m.x0,ay=m.y1-m.y0,L=ax*ax+ay*ay;
-      if(L>0){const t=((nx-m.x0)*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
+      const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
+      if(L>0){const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
     }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
       const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
       if(m.px[y*m.mtW+x]>64)return i;
@@ -22074,6 +22080,21 @@ function mskPhotoClick(e){
   document.addEventListener('pointerup',e=>{const d=dn;dn=null;if(d&&Math.abs(e.clientX-d.x)+Math.abs(e.clientY-d.y)<=4)mskPhotoClick(e);},true);
 })();
 let _mskDrag=null;
+// Width/height of the photo as shown. Radial/linear masks store it as m.ar ("true shape"): the
+// shader then measures them in on-screen proportions, so rotating never skews them. Masks saved
+// without it keep the old stretched geometry, so they render exactly as before.
+function mskPhotoAR(){
+  const b=typeof mskOverlayBox==='function'&&mskOverlayBox();if(b&&b.width>0&&b.height>0)return b.width/b.height;
+  const w=(typeof fxWork!=='undefined'&&fxWork)||(typeof fxImg!=='undefined'&&fxImg);
+  return w&&w.width>0&&w.height>0?w.width/w.height:1;
+}
+// An old mask whose shape is identical in both geometries (unrotated ellipse, horizontal or
+// vertical gradient) can switch to true shape without any visible change, so later rotations stay true.
+function mskAdoptTrueShape(m){
+  if(!m||m.ar>0)return;
+  const same=m.type==='radial'?!m.rot:m.type==='linear'?(Math.abs(m.x1-m.x0)<1e-6||Math.abs(m.y1-m.y0)<1e-6):false;
+  if(same)m.ar=mskPhotoAR();
+}
 // Set by mskAdd for a new Radial/Linear: the next drag on the photo draws it (Lightroom's flow).
 // A plain click instead keeps the default size, centred on the click. Cleared once used, or when
 // another mask is selected (the overlay drops it).
@@ -22085,6 +22106,7 @@ function mskHandleDown(e){
   e.stopPropagation();e.preventDefault();
   const svg=document.getElementById('fx-mask-overlay'),m=fxState.masks[mskSel];if(!m)return;
   const[px,py]=mskHandlePos(e);
+  mskAdoptTrueShape(m);
   // Snapshot of the shape at grab time: moves and rotations apply as deltas from it, so grabbing
   // off-centre never makes the shape jump to the pointer.
   _mskDrag={which:e.currentTarget.dataset.h,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
@@ -22102,7 +22124,7 @@ function mskHandlePos(e){
 }
 // Pure: the new shape fields for one drag step. d = _mskDrag, (px,py) pointer in 0..1 photo
 // coords, W/H the photo's on-screen size (rotations and circles are judged in screen pixels).
-function _mskShapeDrag(type,d,px,py,W,H,shift){
+function _mskShapeDrag(type,d,px,py,W,H,shift,bx=1){
   const o=d.m0,k=d.which,ddx=px-d.px,ddy=py-d.py,cl=(v,a,b)=>Math.max(a,Math.min(b,v));
   if(type==='radial'){
     if(k==='draw'){
@@ -22110,7 +22132,7 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
       if(shift){const r=Math.max(rx*W,ry*H);rx=r/W;ry=r/H;}  // Shift: a true circle on screen
       return{cx:d.px,cy:d.py,rx:Math.max(0.01,rx),ry:Math.max(0.01,ry),rot:0};
     }
-    if(k==='move'||k==='c')return{cx:cl(o.cx+ddx,0,1),cy:cl(o.cy+ddy,0,1)};
+    if(k==='move'||k==='c')return{cx:cl(o.cx+ddx,0,bx),cy:cl(o.cy+ddy,0,1)};
     if(k==='rot'){const a0=Math.atan2((d.py-o.cy)*H,(d.px-o.cx)*W),a1=Math.atan2((py-o.cy)*H,(px-o.cx)*W);return{rot:o.rot+(a1-a0)};}
     const cr=Math.cos(o.rot),sr=Math.sin(o.rot),qx=px-o.cx,qy=py-o.cy,lx=Math.abs(qx*cr+qy*sr),ly=Math.abs(-qx*sr+qy*cr);
     if(k==='f'){ // relative: the knob may sit off the inner ring (kept clear of the centre pin), so no jump on grab
@@ -22124,7 +22146,7 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
   }
   // linear
   if(k==='draw')return{x0:d.px,y0:d.py,x1:px,y1:py};
-  if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,1)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
+  if(k==='lmove'){const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2,tx=cl(mx+ddx,0,bx)-mx,ty=cl(my+ddy,0,1)-my;return{x0:o.x0+tx,y0:o.y0+ty,x1:o.x1+tx,y1:o.y1+ty};}
   if(k==='lrot'){
     const mx=(o.x0+o.x1)/2,my=(o.y0+o.y1)/2;
     const a=Math.atan2((py-my)*H,(px-mx)*W)-Math.atan2((d.py-my)*H,(d.px-mx)*W),c=Math.cos(a),s=Math.sin(a);
@@ -22140,10 +22162,19 @@ function _mskShapeDrag(type,d,px,py,W,H,shift){
   }
   return{};
 }
+// True-shape masks: run the same maths in on-screen proportions (x scaled by the aspect, so the
+// space is square and W=H), then scale x back. Old masks keep the stretched-space maths.
+function _mskShapeDragAR(type,d,px,py,W,H,shift,a){
+  if(!(a>0))return _mskShapeDrag(type,d,px,py,W,H,shift);
+  const X=['cx','rx','x0','x1'],o=d.m0,o2={...o};X.forEach(k=>{if(o2[k]!=null)o2[k]*=a;});
+  const r=_mskShapeDrag(type,{...d,m0:o2,px:d.px*a},px*a,py,H,H,shift,a);
+  X.forEach(k=>{if(r[k]!=null)r[k]/=a;});
+  return r;
+}
 function mskHandleMove(e){
   if(!_mskDrag)return;const m=fxState.masks[mskSel];if(!m)return;
   const[px,py,W,H]=mskHandlePos(e);
-  Object.assign(m,_mskShapeDrag(m.type,_mskDrag,px,py,W,H,e.shiftKey));
+  Object.assign(m,_mskShapeDragAR(m.type,_mskDrag,px,py,W,H,e.shiftKey,m.ar));
   _mskDrag.moved=true;
   mskOverlaySync();fxUpdate();
 }
@@ -28212,8 +28243,10 @@ function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefau
 // Radial: a 90° turn swaps the ellipse axes (rx is width-normalised, ry height-normalised); a
 // mirror negates its rotation. Brush/AI rasters are not remapped here.
 function mskRemapForGeom(kind){
-  const f=kind==='cw'?(x,y)=>[1-y,x]:kind==='ccw'?(x,y)=>[y,1-x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
+  // Mask y is bottom-up, so a clockwise turn maps (x,y)->(y,1-x) here (top-down it would be (1-y,x)).
+  const f=kind==='cw'?(x,y)=>[y,1-x]:kind==='ccw'?(x,y)=>[1-y,x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
   (fxState.masks||[]).forEach(m=>{
+    if((kind==='cw'||kind==='ccw')&&m.ar>0)m.ar=1/m.ar; // the frame turns, so its width/height flips
     if(m.type==='radial'){
       [m.cx,m.cy]=f(m.cx,m.cy);
       if(kind==='cw'||kind==='ccw'){const t=m.rx;m.rx=m.ry;m.ry=t;}else if(m.rot)m.rot=-m.rot;
@@ -28226,11 +28259,13 @@ function mskRemapForCrop(crop){
   if(!crop)return;
   const{x,y,w,h}=crop;
   if(!(w>0)||!(h>0))return;
+  const yb=1-y-h; // the crop rect is top-down, mask y is bottom-up
   (fxState.masks||[]).forEach(m=>{
+    if(m.ar>0&&(m.type==='radial'||m.type==='linear'))m.ar*=w/h;
     if(m.type==='radial'){
-      m.cx=(m.cx-x)/w;m.cy=(m.cy-y)/h;m.rx=m.rx/w;m.ry=m.ry/h;
+      m.cx=(m.cx-x)/w;m.cy=(m.cy-yb)/h;m.rx=m.rx/w;m.ry=m.ry/h;
     }else if(m.type==='linear'){
-      m.x0=(m.x0-x)/w;m.y0=(m.y0-y)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-y)/h;
+      m.x0=(m.x0-x)/w;m.y0=(m.y0-yb)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-yb)/h;
     }
   });
 }

@@ -163,8 +163,10 @@ function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefau
 // Radial: a 90° turn swaps the ellipse axes (rx is width-normalised, ry height-normalised); a
 // mirror negates its rotation. Brush/AI rasters are not remapped here.
 function mskRemapForGeom(kind){
-  const f=kind==='cw'?(x,y)=>[1-y,x]:kind==='ccw'?(x,y)=>[y,1-x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
+  // Mask y is bottom-up, so a clockwise turn maps (x,y)->(y,1-x) here (top-down it would be (1-y,x)).
+  const f=kind==='cw'?(x,y)=>[y,1-x]:kind==='ccw'?(x,y)=>[1-y,x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
   (fxState.masks||[]).forEach(m=>{
+    if((kind==='cw'||kind==='ccw')&&m.ar>0)m.ar=1/m.ar; // the frame turns, so its width/height flips
     if(m.type==='radial'){
       [m.cx,m.cy]=f(m.cx,m.cy);
       if(kind==='cw'||kind==='ccw'){const t=m.rx;m.rx=m.ry;m.ry=t;}else if(m.rot)m.rot=-m.rot;
@@ -177,11 +179,13 @@ function mskRemapForCrop(crop){
   if(!crop)return;
   const{x,y,w,h}=crop;
   if(!(w>0)||!(h>0))return;
+  const yb=1-y-h; // the crop rect is top-down, mask y is bottom-up
   (fxState.masks||[]).forEach(m=>{
+    if(m.ar>0&&(m.type==='radial'||m.type==='linear'))m.ar*=w/h;
     if(m.type==='radial'){
-      m.cx=(m.cx-x)/w;m.cy=(m.cy-y)/h;m.rx=m.rx/w;m.ry=m.ry/h;
+      m.cx=(m.cx-x)/w;m.cy=(m.cy-yb)/h;m.rx=m.rx/w;m.ry=m.ry/h;
     }else if(m.type==='linear'){
-      m.x0=(m.x0-x)/w;m.y0=(m.y0-y)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-y)/h;
+      m.x0=(m.x0-x)/w;m.y0=(m.y0-yb)/h;m.x1=(m.x1-x)/w;m.y1=(m.y1-yb)/h;
     }
   });
 }
