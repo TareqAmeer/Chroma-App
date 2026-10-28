@@ -214,11 +214,14 @@ function _samDilateBinary(mask,w,h,r){
 // nearby confident pixels (box-filtered colour means) and read alpha off the colour itself:
 // alpha = (C-B).(F-B)/|F-B|^2. Where F and B look alike the colour cannot separate them, so that pixel
 // falls back to a small-radius guided filter of the SAM mask. Pure (takes RGBA bytes) so it unit-tests.
-function _samMatteCore(mask,w,h,rgba){
+// opt.band (px): a symmetric uncertain band of that width each side of the edge, for coarse
+// inputs such as the sky prior; without it the band is SAM's own few-px error.
+function _samMatteCore(mask,w,h,rgba,opt){
   const n=w*h,m01=new Float32Array(n),hard=new Uint8Array(n);
   for(let i=0;i<n;i++){m01[i]=mask[i]/255;hard[i]=mask[i]>127?255:0;}
   const inv=new Uint8Array(n);for(let i=0;i<n;i++)inv[i]=hard[i]?0:255;
-  const scale=Math.max(w,h)/1024,RE=Math.max(2,Math.round(5*scale)),RD=Math.max(3,Math.round(14*scale));
+  const scale=Math.max(w,h)/1024,band=opt&&opt.band;
+  const RE=band||Math.max(2,Math.round(5*scale)),RD=band||Math.max(3,Math.round(14*scale));
   const nearBg=_samDilateBinary(inv,w,h,RE),nearFg=_samDilateBinary(hard,w,h,RD);
   const fg=new Float32Array(n),bg=new Float32Array(n);
   for(let i=0;i<n;i++){fg[i]=nearBg[i]?0:1;bg[i]=nearFg[i]?0:1;}
@@ -233,7 +236,7 @@ function _samMatteCore(mask,w,h,rgba){
     }
     return{nf,nb,F,B};
   };
-  const near=stats(Math.max(4,Math.round(10*scale))),far=stats(Math.max(12,Math.round(36*scale)));
+  const near=stats(band?Math.round(band*1.5):Math.max(4,Math.round(10*scale))),far=stats(band?band*4:Math.max(12,Math.round(36*scale)));
   const gray=new Float32Array(n);
   for(let i=0;i<n;i++)gray[i]=0.2126*ch[0][i]+0.7152*ch[1][i]+0.0722*ch[2][i];
   const fallback=_guidedFilter(gray,m01,w,h,Math.max(2,Math.round(4*scale)),2e-4);

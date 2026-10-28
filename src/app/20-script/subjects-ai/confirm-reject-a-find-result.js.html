@@ -182,16 +182,9 @@ async function _mskPortableReevaluate(m,target){
     // target raster, so restore those per-mask settings before optional SAM refinement.
     m.refineFeather=refinement.feather;m.refineEdge=refinement.edge;
     if(!m.px||!m.px.length)return{ok:false,error:'Sky heuristic could not read this photo'};
-    m.aiPoints=_skySeedPoints(m);
     _mskRecordAIProvenance(m,target.item,null,true);
-    if(m.aiPoints.length){
-      const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
-      if(!result.ok&&/Photo changed/.test(result.error||''))return{ok:false,error:result.error};
-      if(!result.ok&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement is unavailable for this target ('+result.error+')'};
-      if(!result.ok)return{ok:true,warning:'Sky heuristic regenerated for target; SAM refinement unavailable ('+result.error+')'};
-    }
-    if(!m.aiPoints.length&&savedBackend)return{ok:false,error:'Saved '+savedModel+' sky refinement could not run because no stable prompt points were regenerated'};
-    return{ok:true,warning:m.aiPoints.length?'Sky selection regenerated and SAM-refined':'Sky heuristic regenerated; no stable SAM seed points'};
+    const upgraded=await mskSkyUpgrade(m,{detached:true,item:target.item});
+    return upgraded?{ok:true}:{ok:true,warning:'Sky heuristic regenerated for target; edge clean-up unavailable'};
   }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};

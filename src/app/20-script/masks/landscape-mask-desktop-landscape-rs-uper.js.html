@@ -13,6 +13,22 @@ async function mskLandscapeProbe(){
 function mskLandscapeToggle(){
   const row=document.getElementById('msk-landscape-row');if(row)row.style.display=row.style.display==='none'?'flex':'none';
 }
+// One landscape inference per photo at samInputDims, cached non-enumerable on the item.
+async function _mskLandscapeResult(it,img){
+  const{w,h}=samInputDims();
+  let lc=it._landscape;
+  if(lc&&lc.w===w&&lc.h===h)return lc;
+  const d=mskSourceData(w,h,img),rgb=new Uint8Array(w*h*3);
+  for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
+  const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
+  const hlen=new DataView(buf).getUint32(0,true);
+  const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+  const body=new Uint8Array(buf,4+hlen);
+  if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
+  lc={w,h,groups:header.groups,body};
+  Object.defineProperty(it,'_landscape',{value:lc,writable:true,enumerable:false,configurable:true});
+  return lc;
+}
 async function mskAddLandscape(cat){
   const label=(LANDSCAPE_GROUPS.find(g=>g[0]===cat)||[])[1];
   if(!label)return null;
@@ -24,19 +40,7 @@ async function mskAddLandscape(cat){
   if(!m)return null;
   const job=mskAiBusy('Finding '+label.toLowerCase());
   try{
-    const{w,h}=samInputDims();
-    let lc=it._landscape;
-    if(!lc||lc.w!==w||lc.h!==h){
-      const d=mskSourceData(w,h,img),rgb=new Uint8Array(w*h*3);
-      for(let i=0,j=0;i<w*h;i++){rgb[j++]=d[i*4];rgb[j++]=d[i*4+1];rgb[j++]=d[i*4+2];}
-      const buf=await _samFramedInvoke('landscape_run',{width:w,height:h},rgb);
-      const hlen=new DataView(buf).getUint32(0,true);
-      const header=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-      const body=new Uint8Array(buf,4+hlen);
-      if(header.width!==w||header.height!==h||body.length!==w*h*header.groups.length)throw new Error('unexpected landscape size');
-      lc={w,h,groups:header.groups,body};
-      Object.defineProperty(it,'_landscape',{value:lc,writable:true,enumerable:false,configurable:true});
-    }
+    const lc=await _mskLandscapeResult(it,img),{w,h}=lc;
     if(job.cancelled)throw new Error('Cancelled');
     const gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
     if(!fxState.masks.includes(m))return null;

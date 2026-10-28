@@ -65,14 +65,14 @@ const snap=snapshots.to({origin:'sky',aiProvenance:provenance},true);provenance.
 assert.equal(snap.aiProvenance.skySeedAlgorithmVersion,'sky-grid-v1');
 const restored=snapshots.from(snap);snap.aiProvenance.sourceLocation.value='changed-snapshot';assert.equal(restored.aiProvenance.sourceLocation.value,'photo.jpg');
 const reevaluateStart=html.indexOf('async function _mskPortableReevaluate('),reevaluateEnd=html.indexOf('\nasync function mskCopyAndReevaluate(',reevaluateStart);
-const reevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
- (m)=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[],async()=>({ok:true}),make({},()=>null,()=>{},async()=>{},false,null,null,p=>p,x=>x,false,null,()=>{},()=>{},()=>{},()=>{},()=>{},()=>{})._mskRecordAIProvenance,normalize,normalizeBox,()=>target.item);
+const reevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
+ (m)=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[],async()=>({ok:true}),make({},()=>null,()=>{},async()=>{},false,null,null,p=>p,x=>x,false,null,()=>{},()=>{},()=>{},()=>{},()=>{},()=>{})._mskRecordAIProvenance,normalize,normalizeBox,()=>target.item,async()=>false);
 const target={item:{path:'target.jpg'}},skyCandidate={origin:'sky',aiPoints:[],aiProvenance:{backend:'sam2_points'}};
 assert.equal((await reevaluate(skyCandidate,target)).ok,true);assert.equal(skyCandidate.aiProvenance.backend,null);assert.equal(skyCandidate.aiProvenance.skySeedAlgorithmVersion,'sky-grid-v1');
 const failedCandidate={origin:'ai',aiPoints:[{nx:.1,ny:.1,positive:true}],aiProvenance:{recordedAt:'before'}};
-const failedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{},()=>[],async()=>({ok:false,error:'model failed'}),()=>{},normalize,normalizeBox,()=>target.item);
+const failedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{},()=>[],async()=>({ok:false,error:'model failed'}),()=>{},normalize,normalizeBox,()=>target.item);
 assert.equal((await failedReevaluate(failedCandidate,target)).ok,false);assert.equal(failedCandidate.aiProvenance.recordedAt,'before');
-const staleReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{},()=>[],async()=>({ok:false,error:'Photo changed during mask recomputation'}),()=>{},normalize,normalizeBox,()=>({path:'different.jpg'}));
+const staleReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{},()=>[],async()=>({ok:false,error:'Photo changed during mask recomputation'}),()=>{},normalize,normalizeBox,()=>({path:'different.jpg'}));
 assert.equal((await staleReevaluate({...failedCandidate},target)).ok,false);
 const skyStart=html.indexOf('function mskGenerateSky('),skyEnd=html.indexOf('\nfunction mskSkyRedetect(',skyStart);
 const runSky=new Function('mskRefinementSourceReset','curItem','fxWork','fxImg','_mskRecordAIProvenance','_mskTexDirty',html.slice(skyStart,skyEnd)+'\nreturn mskGenerateSky;')(()=>{},()=>null,null,null,()=>{},false);
@@ -83,7 +83,7 @@ const regeneratedSky={origin:'sky',aiProvenance:{backend:'sam2_points'}};success
 assert.equal(regeneratedSky.aiProvenance.backend,null);assert.equal(regeneratedSky.aiProvenance.skySeedAlgorithmVersion,'sky-grid-v1');
 assert.deepEqual(regeneratedSky.aiProvenance.sourceLocation,{kind:'path',value:'sky-target.jpg'});
 let skyGenerationCount=0;
-const staleSkyReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{skyGenerationCount++;},()=>[],async()=>({ok:true}),recordHelpers,normalize,normalizeBox,()=>({path:'wrong-photo.jpg'}));
+const staleSkyReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{skyGenerationCount++;},()=>[],async()=>({ok:true}),recordHelpers,normalize,normalizeBox,()=>({path:'wrong-photo.jpg'}));
 assert.equal((await staleSkyReevaluate({origin:'sky',aiPoints:[]},target)).ok,false);assert.equal(skyGenerationCount,0);
 
 // CHR-247: portable re-evaluation follows the backend recorded by the source, not whichever
@@ -127,7 +127,7 @@ for(const failedBackend of ['sam_points','sam2_points']){
 // Verify the portable copy selector forwards normalized saved intent, including for sky seeds;
 // a known sky backend failure is a failed target, while unknown legacy retains heuristic fallback.
 const portableCalls=[];
-const portableReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
+const portableReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
  m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[{nx:.5,ny:.5,positive:true}],async(m,opts)=>{portableCalls.push(opts.preferredBackend);return{ok:false,error:'required model unavailable'};},recordHelpers,normalize,normalizeBox,()=>target.item);
 const knownPoint={origin:'ai',aiPoints:[{nx:.2,ny:.2,positive:true}],aiProvenance:{schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny'}};
 assert.equal((await portableReevaluate(knownPoint,target)).ok,false);assert.equal(portableCalls.pop(),'sam2_points');
@@ -136,7 +136,7 @@ assert.equal((await portableReevaluate(knownSky,target)).ok,false,'known sky bac
 const legacySky={origin:'sky',aiPoints:[],aiProvenance:null};
 const legacySkyResult=await portableReevaluate(legacySky,target);assert.equal(legacySkyResult.ok,true);assert.equal(portableCalls.pop(),null,'unknown sky keeps existing heuristic fallback behavior');
 let guardedCalls=0;
-const guardedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
+const guardedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
  m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[],async()=>{guardedCalls++;return{ok:true};},recordHelpers,normalize,normalizeBox,()=>target.item);
 const invalidSavedBox={origin:'ai',aiPoints:[{nx:.2,ny:.2,positive:true}],aiBox:{x0:.1,y0:.1,x1:.8,y1:.8},px:new Uint8Array([5]),aiProvenance:{schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',recordedAt:'saved'}};
 assert.equal((await guardedReevaluate(invalidSavedBox,target)).ok,false,'rectangle prompts cannot silently change a saved point backend');

@@ -9,9 +9,8 @@
 // quantization: 237MB -> 60MB, 97.7% pixel agreement with fp32 on test/fixtures/chr246-real/power-lines.jpg.
 // See vendor/landscape/README.md for the export recipe and licence caveats (ADE20K dataset terms).
 //
-// Output logits are [1,150,576,576] (the head upsamples to input size). We softmax per pixel at a
-// reduced 144x144 grid, sum probabilities per category group, then bilinear-upsample to the
-// caller's (w, h) — soft alpha, like faceparse.rs. ADE20K ids below are from the checkpoint's
+// Output logits are [1,150,576,576] (the head upsamples to input size). We softmax every logit
+// pixel, sum probabilities per category group, then bilinear-upsample to the caller's (w, h) — soft alpha, like faceparse.rs. ADE20K ids below are from the checkpoint's
 // own config.json id2label (printed during export), not a quoted table.
 
 use crate::sam::{bilinear_resize, create_session_from_path, input, resize_rgb8, run_session, SamSession};
@@ -20,7 +19,9 @@ use std::sync::{Mutex, OnceLock};
 
 const LS_SIZE: u32 = 576;
 const NUM_CLASSES: usize = 150;
-const GRID: usize = 144; // LS_SIZE / 4
+// Softmax at the full logit resolution. A 144 grid (every 4th pixel) was 16x cheaper but its
+// upsample showed as a stair-stepped sky line once edited; full res costs ~0.2s more per photo.
+const GRID: usize = LS_SIZE as usize;
 const MEAN: [f32; 3] = [0.485, 0.456, 0.406];
 const STD: [f32; 3] = [0.229, 0.224, 0.225];
 
@@ -85,8 +86,6 @@ pub fn parse(rgb: &[u8], w: u32, h: u32) -> Result<Vec<Vec<u8>>, String> {
     if logits.len() != NUM_CLASSES * side * side {
         return Err(format!("landscape: unexpected logits size {} (expected {NUM_CLASSES}x{side}x{side})", logits.len()));
     }
-    // Sample the logits on a GRID x GRID lattice (every 4th pixel) before softmax: 16x cheaper and
-    // the soft bilinear upsample afterwards restores smooth edges.
     let step = side / GRID;
     let mut probs: Vec<Vec<f32>> = GROUPS.iter().map(|_| vec![0f32; GRID * GRID]).collect();
     let mut exps = [0f32; NUM_CLASSES];

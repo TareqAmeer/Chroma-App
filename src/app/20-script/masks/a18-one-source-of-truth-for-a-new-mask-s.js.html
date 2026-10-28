@@ -43,16 +43,12 @@ function mskAdd(type,configure){
   else if(type==='linear')m={type:'linear',x0:0.5,y0:0.9,x1:0.5,y1:0.45,feather:0.5,..._mskAdjustDefaults()};
   else if(type==='radial')m={type:'radial',cx:0.5,cy:0.5,rx:0.28,ry:0.28,rot:0,feather:0.5,..._mskAdjustDefaults()};
   else if(type==='brush'){const{w,h}=mskTexDims();m={type:'brush',origin:'paint',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,..._mskAdjustDefaults()};}
-  else if(type==='sky'){ // sky: brush-type raster mask, seeded from a colour/position heuristic,
-    // then handed to SAM (same segmentation the AI Select tool uses) for a real object-aware
-    // boundary — the heuristic alone (row-weight + blueness) is unreliable on anything but a
-    // clean flat horizon (buildings/trees breaking the skyline, overcast, sky mid-frame, etc).
+  else if(type==='sky'){ // sky: brush-type raster mask. The colour/position heuristic shows at once;
+    // mskSkyUpgrade then swaps in the finished raster (desktop Landscape model, else the heuristic)
+    // with its edge matted to the photo, so edits don't leave a visible line along the skyline.
     m={type:'brush',origin:'sky',aiPoints:[],..._mskAdjustDefaults()};
-    mskGenerateSky(m); // instant heuristic raster — shown immediately, and doubles as the SAM seed source
-    if(window.__TAURI__){
-      m.aiPoints=_skySeedPoints(m);
-      if(m.aiPoints.length){samEnsureEncoded();samRunPoints(m);} // replaces m.px with the SAM result on success; on failure samRunPoints toasts and leaves the heuristic raster in place
-    }
+    mskGenerateSky(m);
+    setTimeout(()=>mskSkyUpgrade(m),0); // after mskAdd has put m in fxState.masks
   }else{ // AI brush-select (desktop only) — starts empty; the first scribble stroke runs the segmentation.
     const{w,h}=samInputDims();
     m={type:'brush',origin:'ai',px:new Uint8ClampedArray(w*h),mtW:w,mtH:h,aiPoints:[],..._mskAdjustDefaults()};

@@ -327,18 +327,9 @@ function _boxFilterJS(src,w,h,r){
 // mask itself, both normalized to 0..1. Bakes the result straight into m.px, so preview, loupe and
 // every export tile agree automatically — no per-frame shader cost, no renderTiled halo needed.
 function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);}
-// One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
-// and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
-// there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
-function mskGenerateSky(m){
-  // A re-detect replaces the authored source. Clear the old derived settings/cache before any
-  // early return or raster write so the newly generated source always starts at its own baseline.
-  m.aiProvenance=null;
-  mskRefinementSourceReset(m);
-  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
-  if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
-  const{w,h}=mskTexDims();
-  const d=mskSourceData(w,h,img);if(!d){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
+// Pure sky score raster (0-255) from RGBA bytes: favours the upper frame and blue-ish or bright
+// (overcast) pixels. Only a rough prior: _skyBuild mattes its edge against the photo's colours.
+function _skyHeuristic(d,w,h){
   const px=new Uint8ClampedArray(w*h);
   for(let y=0;y<h;y++){
     const rowW=1-_smoothstepJS(0.35,0.85,y/h); // strong at top, fades out by 85% down
@@ -351,28 +342,78 @@ function mskGenerateSky(m){
       px[y*w+x]=Math.max(0,Math.min(255,Math.round(score*255)));
     }
   }
+  return px;
+}
+// One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
+// and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
+// there is no in-app subject/sky segmentation model, by design (kept fully offline/small).
+function mskGenerateSky(m){
+  // A re-detect replaces the authored source. Clear the old derived settings/cache before any
+  // early return or raster write so the newly generated source always starts at its own baseline.
+  m.aiProvenance=null;
+  mskRefinementSourceReset(m);
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
+  if(!img){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
+  const{w,h}=mskTexDims();
+  const d=mskSourceData(w,h,img);if(!d){m.px=new Uint8ClampedArray(0);m.mtW=0;m.mtH=0;return;}
+  const px=_skyHeuristic(d,w,h);
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;_mskRecordAIProvenance(m,typeof curItem==='function'?curItem():null,null,true);
 }
-function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();fxHistoryPush();}
-// Turns the heuristic's per-pixel score raster (m.px, already 0-255) into a handful of
-// positive/negative point prompts for SAM: a coarse grid over the top portion of the frame
-// (where sky realistically lives) picks each cell's best-scoring pixel as a positive point if
-// it clears a confidence floor, plus a couple of negative points from the strongest LOW-score
-// pixels near the bottom of the frame so SAM has an explicit "not this" signal too.
-function _skySeedPoints(m){
-  const w=m.mtW,h=m.mtH,px=m.px;if(!w||!h||!px||!px.length)return[];
-  const pts=[];
-  const COLS=4,ROWS=3,POS_THRESH=110;
-  for(let ry=0;ry<ROWS;ry++)for(let rx=0;rx<COLS;rx++){
-    const x0=Math.floor(rx*w/COLS),x1=Math.floor((rx+1)*w/COLS);
-    const y0=Math.floor(ry*h/ROWS),y1=Math.floor((ry+1)*h/ROWS);
-    let best=-1,bx=0,by=0;
-    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const v=px[y*w+x];if(v>best){best=v;bx=x;by=y;}}
-    if(best>=POS_THRESH)pts.push({nx:(bx+0.5)/w,ny:(by+0.5)/h,positive:true});
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);mskSkyUpgrade(m);fxUpdate();fxHistoryPush();}
+// Sky edge clean-up, after Liba et al. 2020 (Google "Sky Optimization") and Zhu 2020 ("Castle in
+// the Sky"): the coarse sky probability only decides "surely sky" and "surely not"; inside a band
+// around its boundary alpha is read off the photo's own colours (_samMatteCore), so the edit
+// follows the real skyline and fur instead of a stepped or haloed line. The band is a fraction of
+// the long side: the model's boundary is a few px off, the heuristic's much more.
+function _skyMatte(prob,w,h,rgba,bandFrac){
+  return _samMatteCore(prob,w,h,rgba,{band:Math.max(3,Math.round(Math.max(w,h)*bandFrac))});
+}
+// Bilinear resample of a 0-255 raster (sky is built at samInputDims, stored at mskTexDims).
+function _skyResample(src,sw,sh,dw,dh){
+  if(sw===dw&&sh===dh)return src;
+  const out=new Uint8ClampedArray(dw*dh);
+  for(let y=0;y<dh;y++){
+    const fy=Math.max(0,Math.min(sh-1,(y+0.5)*sh/dh-0.5)),y0=fy|0,y1=Math.min(sh-1,y0+1),ty=fy-y0;
+    for(let x=0;x<dw;x++){
+      const fx=Math.max(0,Math.min(sw-1,(x+0.5)*sw/dw-0.5)),x0=fx|0,x1=Math.min(sw-1,x0+1),tx=fx-x0;
+      const a=src[y0*sw+x0]+(src[y0*sw+x1]-src[y0*sw+x0])*tx,b=src[y1*sw+x0]+(src[y1*sw+x1]-src[y1*sw+x0])*tx;
+      out[y*dw+x]=a+(b-a)*ty;
+    }
   }
-  // negative seeds: lowest-scoring pixels in the bottom third (ground/foreground, never sky)
-  const by0=Math.floor(h*2/3);let worst=256,wx=0,wy=by0;
-  for(let y=by0;y<h;y++)for(let x=0;x<w;x++){const v=px[y*w+x];if(v<worst){worst=v;wx=x;wy=y;}}
-  if(worst<40)pts.push({nx:(wx+0.5)/w,ny:(wy+0.5)/h,positive:false});
-  return pts;
+  return out;
+}
+// Finished sky raster for a photo: the desktop Landscape model's sky when installed, else the
+// heuristic, both edge-matted. Resolves to {px,w,h,backend} at mskTexDims, or null.
+async function _skyBuild(item){
+  const img=(item&&item.img)||fxWork||fxImg;if(!img)return null;
+  const{w,h}=samInputDims();
+  let prob=null,backend=null,band=0.025;
+  if(window.__TAURI__&&item&&await mskLandscapeProbe()){
+    try{
+      const lc=await _mskLandscapeResult(item,img),gi=lc.groups.indexOf('sky');
+      if(gi>=0&&lc.w===w&&lc.h===h){prob=lc.body.subarray(gi*w*h,(gi+1)*w*h);backend='landscape:sky';band=0.012;}
+    }catch(e){log('Sky: landscape model failed, using the colour heuristic — '+(e&&e.message||e),'warn');}
+  }
+  const d=mskSourceData(w,h,img);if(!d)return null;
+  if(!prob)prob=_skyHeuristic(d,w,h);
+  const matte=_skyMatte(prob,w,h,d,band),T=mskTexDims();
+  return{px:_skyResample(matte,w,h,T.w,T.h),w:T.w,h:T.h,backend};
+}
+// Swaps a sky mask's instant heuristic raster for the finished one. Lands only if the mask was not
+// edited and the photo did not change meanwhile. detached: the caller handles render and history.
+const _skyJobs=new WeakMap();
+function mskSkyUpgrade(m,opt={}){
+  if(!m||m.origin!=='sky')return Promise.resolve(false);
+  if(_skyJobs.has(m))return _skyJobs.get(m);
+  const it=opt.item||(typeof curItem==='function'?curItem():null),srcPx=m.px;
+  const job=_skyBuild(it).then(r=>{
+    if(!r||m.px!==srcPx||(typeof curItem==='function'&&curItem()!==it))return false;
+    if(!opt.detached&&!fxState.masks.includes(m))return false;
+    m.px=r.px;m.mtW=r.w;m.mtH=r.h;delete m._refineCache;_mskTexDirty=true;
+    _mskRecordAIProvenance(m,it,r.backend,!r.backend);
+    if(!opt.detached){mskRebuild();fxUpdate();fxHistoryPush();}
+    return true;
+  }).catch(e=>{log('Sky edge clean-up failed: '+(e&&e.message||e),'warn');return false;}).finally(()=>_skyJobs.delete(m));
+  _skyJobs.set(m,job);
+  return job;
 }
