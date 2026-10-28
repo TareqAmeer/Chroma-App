@@ -65,6 +65,8 @@ test('guided upsample puts a low-res edge back on the photo edge (>=8x less erro
 test('matte replaces only the edge band', () => {
   const w = 40, h = 40, sam = new Uint8ClampedArray(w * h), matte = new Uint8ClampedArray(w * h).fill(100);
   for (let y = 10; y < 30; y++) for (let x = 10; x < 30; x++) sam[y * w + x] = 255;
+  assert.equal(S.mskMatteInBand(sam, new Uint8ClampedArray(w * h), w, h, 2), null, 'a matte of something else is ignored');
+  for (let i = 0; i < w * h; i++) if (sam[i]) matte[i] = 255;
   const o = S.mskMatteInBand(sam, matte, w, h, 2);
-  assert.equal(o[20 * w + 20], 255); assert.equal(o[2 * w + 2], 0); assert.equal(o[20 * w + 10], 100); assert.equal(o[20 * w + 8], 100);
+  assert.equal(o[20 * w + 20], 255); assert.equal(o[2 * w + 2], 0); assert.equal(o[20 * w + 10], 255); assert.equal(o[20 * w + 8], 100);
 });

@@ -8,7 +8,7 @@
 // you can keep refining), and the FULL accumulated point set is resubmitted on every stroke end
 // to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
 // same convention the old tap mode used for Alt-click.
-let _samToken=null,_samEncoding=false,mskAiTapMode=false,mskAiPromptMode='scribble',_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
+let _samToken=null,_samEncoding=false,_samEncodeP=null,mskAiTapMode=false,mskAiPromptMode='scribble',_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
 // Invalidates BOTH cached SAM embeddings — must be called on every photo change (new load AND
 // filmstrip/arrow-key switching within a batch), not just _samToken alone. Missing sam2Token
 // here was the "AI Select masks a different photo" bug: samRunPoints prefers sam2Token whenever
@@ -66,11 +66,15 @@ async function samEnsureEncoded(opts={}){
     if(img0){const r=_samRgb(img0);samEnsureEncoded2(img0,r.rgb,r.w,r.h);}
     return;
   }
+  // An encode already in flight (the Masks panel pre-warms it, item 28): wait for it instead of returning with no
+  // token, which made a quick first click right after opening a photo fail with "AI Select is not ready yet".
+  if(_samEncoding&&_samEncodeP&&!wantsSam2){try{await _samEncodeP;}catch(_){}if(_samToken)return;}
   if(_samEncoding||(wantsSam2?_sam2Token:_samToken))return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
   const owner=_samCurOwner();
   _samEncoding=true;
+  let _encDone;_samEncodeP=new Promise(r=>{_encDone=r;});
   const endActivity=opts.silent?()=>{}:fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
   if(!opts.silent&&typeof toast==='function')toast('Preparing AI Select…',true);
   try{
@@ -92,7 +96,7 @@ async function samEnsureEncoded(opts={}){
     if(!opts.silent){log(msg,'err');_samLastError=msg;
       if(typeof toast==='function')toast(msg);
       if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();}
-  }finally{_samEncoding=false;endActivity();}
+  }finally{_samEncoding=false;endActivity();_encDone();}
 }
 async function samEnsureEncoded2(img,rgb,w,h,opts={}){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;

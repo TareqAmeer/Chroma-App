@@ -176,6 +176,11 @@ function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPrompted
 async function _mskOneShotRaster(m,item){
   // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
   const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  if((mode==='matte'||mode==='matte-bg')&&/^detect:/.test(be)){
+    await mskSceneEnsure({retry:true});const sc=_mskSceneOf(item),det=await _mskSubjectFromDetections(item,sc&&sc.state==='done'?sc.list:[]);
+    if(det){const src=mode==='matte-bg'?Uint8ClampedArray.from(det.px,v=>255-v):det.px;return{..._mskFinishAiRaster(src,det.w,det.h,{specks:true}),backend:'detect:'+det.backend};}
+    // no person/animal on the target photo: fall through to the matte
+  }
   if(mode==='matte'||mode==='matte-bg'){
     const saved=(be.match(/^matte:(\w+)/)||[])[1],ms=await mskMatteModels();
     const model=saved&&ms.includes(saved)?saved:await mskMatteModelFor('other');if(!model)throw new Error('No matting model installed');

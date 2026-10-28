@@ -92,6 +92,13 @@ Added during the work:
   error at every zoom. Fit grain sd was 4.3 vs 1.8 for the export viewed at Fit size (2.4×), 4.23 vs 1.14 at 960 px.
 - Guided upsample: 9× lower edge error than bilinear on a sub-pixel diagonal edge (unit test).
 
+36. Auto Subject / Background build the subject from detected people and animals (SAM 2.1 boxes + agreeing matte
+    edges); the whole-image matte is the fallback. Real app, 6 labelled dog photos: mean IoU 0.79 vs ISNet 0.61 and
+    MODNet 0.61; the small distant dog 0.95 vs ISNet 0.00.
+37. Edge matting only applies when the matte covers ≥70% of SAM's interior — a matte of a different subject erased a
+    small dog chip (1459 px → 8) in the real app.
+38. A click right after opening a photo waits for the in-flight SAM encode instead of failing "not ready yet".
+
 ## Completeness check
 - Mask entry points come from the running app: the create grid (`#msk-create-grid .msk-tile` → data-kind), the Detected
   row (`#msk-scene .msk-chip`), and the Landscape row (`#msk-landscape-row button`). `test/mask_detect_objects.mjs` scans

@@ -139,9 +139,14 @@ function mskGuidedUpsample(src,sw,sh,W,H,rgba,opt={}){
 }
 // Matting-model alpha inside the SAM mask's uncertain edge band only: SAM decides WHICH thing, the matte decides
 // how its hair/fur edge falls. band px is measured at mask resolution; outside the band SAM's value stands.
+// Only when the matte is about the SAME thing: a salient-object matte often covers a different subject (a big
+// bench, not the small dog the chip is for), and swapping its edge in erased the selection (measured: 1459 px -> 8).
+// So the matte must cover >=70% of SAM's solid interior, else SAM's own edge stands (returns null).
 function mskMatteInBand(sam,matte,w,h,band){
   const N=w*h,hard=new Uint8Array(N),inv=new Uint8Array(N);for(let i=0;i<N;i++){hard[i]=sam[i]>127?255:0;inv[i]=hard[i]?0:255;}
   const nearOut=_samDilateBinary(inv,w,h,band),nearIn=_samDilateBinary(hard,w,h,band),out=Uint8ClampedArray.from(sam);
+  let core=0,agree=0;for(let i=0;i<N;i++)if(hard[i]&&!nearOut[i]){core++;if(matte[i]>127)agree++;}
+  if(!core||agree<core*0.7)return null;
   for(let i=0;i<N;i++)if(nearOut[i]&&nearIn[i])out[i]=matte[i];
   return out;
 }
@@ -177,6 +182,32 @@ async function mskMatteModels(){
   return _mskMatteModels||[];
 }
 // MODNet is a portrait (people) matting model; ISNet (DIS) is general-object. Pick by what the subject is.
+// Subject from detections (Lightroom's Select Subject picks the main subject(s)): every person/animal whose box
+// is at least a quarter of the largest one, each segmented from its box with SAM (2.1 when ready — box IoU 0.979),
+// edges from the matting model where it agrees. Returns {px,w,h,label} or null when nothing alive was detected.
+async function _mskSubjectFromDetections(item,list){
+  const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+  const live=(list||[]).filter(c=>c.box&&(c.group==='people'||c.group==='animals')).sort((a,b)=>area(b)-area(a));
+  if(!live.length)return null;
+  const main=live.filter(c=>area(c)>=area(live[0])*0.25).slice(0,6);
+  await samEnsureEncoded({silent:true});
+  for(let i=0;i<50&&!_sam2Token&&(_sam2Encoding||_samEncoding);i++)await new Promise(r=>setTimeout(r,150));
+  if(curItem()!==item)return null;
+  const be=_sam2Token?'sam2_box':'sam_box',tok=_sam2Token||_samToken;if(!tok)return null;
+  let acc=null,w=0,h=0;
+  for(const c of main){
+    const b=_samNormalizeBox(c.box);if(!b)continue;
+    const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:b.x0,y1:b.y0,x2:b.x1,y2:b.y1}});
+    const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
+    let px=new Uint8ClampedArray(new Uint8Array(buf,4+hl));w=hd.width;h=hd.height;
+    const e=await _mskEdgeMatte(item,px,w,h,c.group);if(e)px=e;
+    if(!acc)acc=px;else for(let i=0;i<acc.length;i++)if(px[i]>acc[i])acc[i]=px[i];
+  }
+  if(!acc)return null;
+  const kinds=[...new Set(main.map(c=>c.kind))];
+  const label=main.length===1?main[0].label.replace(/ \d+$/,''):kinds.length===1?mskDetName(kinds[0])+'s':'Subjects';
+  return{px:acc,w,h,label,backend:be};
+}
 async function mskMatteModelFor(kind){
   const ms=await mskMatteModels();if(!ms.length)return null;
   let want=null;try{want=localStorage.getItem('chromasmithMatteModel');}catch(_){}

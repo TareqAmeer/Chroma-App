@@ -7575,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028F';
+const BUILD='1.1028G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16869,18 +16869,26 @@ async function mskAddSubjectMatte(opt={}){
     const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
     const main=dets.filter(c=>c.group!=='objects').sort((x,y)=>area(y)-area(x))[0]||dets.sort((x,y)=>area(y)-area(x))[0];
     const kind=main&&main.group==='people'?'people':'other';
-    const model=await mskMatteModelFor(kind);
-    const mt=await _mskMatteFor(it,model);
-    if(!mt)throw new Error('matte unavailable');
+    // Detected people/animals first: SAM from their boxes + matte edges scored mean IoU 0.79 on the labelled dog set
+    // vs 0.61 for either whole-image matte alone (ISNet missed a small dog entirely: 0.00 vs 0.95). The matte is the
+    // fallback for photos with no person or animal (a product, a building).
+    let src=null,sw=0,sh=0,backend=null;
+    const det=await _mskSubjectFromDetections(it,dets);
+    if(det){src=det.px;sw=det.w;sh=det.h;backend='detect:'+det.backend;if(!bg)m.name=det.label;}
+    else{
+      const model=await mskMatteModelFor(kind);
+      const mt=await _mskMatteFor(it,model);
+      if(!mt)throw new Error('matte unavailable');
+      src=mt.px;sw=mt.w;sh=mt.h;backend='matte:'+model;
+    }
     if(!fxState.masks.includes(m))return null;   // deleted while the model ran
-    let n=0;for(let i=0;i<mt.px.length;i++)if(mt.px[i]>127)n++;
-    const cover=n/mt.px.length;
-    if(cover<0.005||cover>0.98){toast(cover<0.005?'No clear subject stands out in this photo':'The whole photo reads as the subject — try Subject or Objects','warn');throw new Error('no distinct subject');}
-    const src=bg?Uint8ClampedArray.from(mt.px,v=>255-v):mt.px;
-    const f=_mskFinishAiRaster(src,mt.w,mt.h,{specks:true});
+    let n=0;for(let i=0;i<src.length;i++)if(src[i]>127)n++;
+    const cover=n/src.length;
+    if(cover<0.0005||cover>0.98){toast(cover<0.0005?'No clear subject stands out in this photo':'The whole photo reads as the subject — try Subject or Objects','warn');throw new Error('no distinct subject');}
+    if(bg)src=Uint8ClampedArray.from(src,v=>255-v);
+    const f=_mskFinishAiRaster(src,sw,sh,{specks:true});
     m.px=f.px;m.mtW=f.w;m.mtH=f.h;
-    if(!bg&&main&&dets.filter(c=>c.group===main.group).length===1)m.name=main.label.replace(/ \d+$/,'');
-    _mskTexDirty=true;_mskRecordAIProvenance(m,it,'matte:'+model,false);
+    _mskTexDirty=true;_mskRecordAIProvenance(m,it,backend,false);
     if(typeof hapt==='function')hapt();
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
@@ -17186,7 +17194,7 @@ async function mskAddLandscape(cat){
 // you can keep refining), and the FULL accumulated point set is resubmitted on every stroke end
 // to REPLACE the mask's raster — normal Alt/Option-drag scribbles are negative (exclude) points,
 // same convention the old tap mode used for Alt-click.
-let _samToken=null,_samEncoding=false,mskAiTapMode=false,mskAiPromptMode='scribble',_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
+let _samToken=null,_samEncoding=false,_samEncodeP=null,mskAiTapMode=false,mskAiPromptMode='scribble',_samLastError=null; // surfaced in the mask panel — see mskRebuild's AI branch
 // Invalidates BOTH cached SAM embeddings — must be called on every photo change (new load AND
 // filmstrip/arrow-key switching within a batch), not just _samToken alone. Missing sam2Token
 // here was the "AI Select masks a different photo" bug: samRunPoints prefers sam2Token whenever
@@ -17244,11 +17252,15 @@ async function samEnsureEncoded(opts={}){
     if(img0){const r=_samRgb(img0);samEnsureEncoded2(img0,r.rgb,r.w,r.h);}
     return;
   }
+  // An encode already in flight (the Masks panel pre-warms it, item 28): wait for it instead of returning with no
+  // token, which made a quick first click right after opening a photo fail with "AI Select is not ready yet".
+  if(_samEncoding&&_samEncodeP&&!wantsSam2){try{await _samEncodeP;}catch(_){}if(_samToken)return;}
   if(_samEncoding||(wantsSam2?_sam2Token:_samToken))return;
   const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
   if(!img)return;
   const owner=_samCurOwner();
   _samEncoding=true;
+  let _encDone;_samEncodeP=new Promise(r=>{_encDone=r;});
   const endActivity=opts.silent?()=>{}:fxPhotoActivity(typeof curItem==='function'?curItem():null,'Preparing AI Select…');
   if(!opts.silent&&typeof toast==='function')toast('Preparing AI Select…',true);
   try{
@@ -17270,7 +17282,7 @@ async function samEnsureEncoded(opts={}){
     if(!opts.silent){log(msg,'err');_samLastError=msg;
       if(typeof toast==='function')toast(msg);
       if(fxState.masks[mskSel]&&mskIsAI(fxState.masks[mskSel]))mskRebuild();}
-  }finally{_samEncoding=false;endActivity();}
+  }finally{_samEncoding=false;endActivity();_encDone();}
 }
 async function samEnsureEncoded2(img,rgb,w,h,opts={}){
   if(!window.__TAURI__||_sam2Token||_sam2Encoding)return;
@@ -18776,6 +18788,11 @@ function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPrompted
 async function _mskOneShotRaster(m,item){
   // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
   const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  if((mode==='matte'||mode==='matte-bg')&&/^detect:/.test(be)){
+    await mskSceneEnsure({retry:true});const sc=_mskSceneOf(item),det=await _mskSubjectFromDetections(item,sc&&sc.state==='done'?sc.list:[]);
+    if(det){const src=mode==='matte-bg'?Uint8ClampedArray.from(det.px,v=>255-v):det.px;return{..._mskFinishAiRaster(src,det.w,det.h,{specks:true}),backend:'detect:'+det.backend};}
+    // no person/animal on the target photo: fall through to the matte
+  }
   if(mode==='matte'||mode==='matte-bg'){
     const saved=(be.match(/^matte:(\w+)/)||[])[1],ms=await mskMatteModels();
     const model=saved&&ms.includes(saved)?saved:await mskMatteModelFor('other');if(!model)throw new Error('No matting model installed');
@@ -22119,9 +22136,14 @@ function mskGuidedUpsample(src,sw,sh,W,H,rgba,opt={}){
 }
 // Matting-model alpha inside the SAM mask's uncertain edge band only: SAM decides WHICH thing, the matte decides
 // how its hair/fur edge falls. band px is measured at mask resolution; outside the band SAM's value stands.
+// Only when the matte is about the SAME thing: a salient-object matte often covers a different subject (a big
+// bench, not the small dog the chip is for), and swapping its edge in erased the selection (measured: 1459 px -> 8).
+// So the matte must cover >=70% of SAM's solid interior, else SAM's own edge stands (returns null).
 function mskMatteInBand(sam,matte,w,h,band){
   const N=w*h,hard=new Uint8Array(N),inv=new Uint8Array(N);for(let i=0;i<N;i++){hard[i]=sam[i]>127?255:0;inv[i]=hard[i]?0:255;}
   const nearOut=_samDilateBinary(inv,w,h,band),nearIn=_samDilateBinary(hard,w,h,band),out=Uint8ClampedArray.from(sam);
+  let core=0,agree=0;for(let i=0;i<N;i++)if(hard[i]&&!nearOut[i]){core++;if(matte[i]>127)agree++;}
+  if(!core||agree<core*0.7)return null;
   for(let i=0;i<N;i++)if(nearOut[i]&&nearIn[i])out[i]=matte[i];
   return out;
 }
@@ -22157,6 +22179,32 @@ async function mskMatteModels(){
   return _mskMatteModels||[];
 }
 // MODNet is a portrait (people) matting model; ISNet (DIS) is general-object. Pick by what the subject is.
+// Subject from detections (Lightroom's Select Subject picks the main subject(s)): every person/animal whose box
+// is at least a quarter of the largest one, each segmented from its box with SAM (2.1 when ready — box IoU 0.979),
+// edges from the matting model where it agrees. Returns {px,w,h,label} or null when nothing alive was detected.
+async function _mskSubjectFromDetections(item,list){
+  const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+  const live=(list||[]).filter(c=>c.box&&(c.group==='people'||c.group==='animals')).sort((a,b)=>area(b)-area(a));
+  if(!live.length)return null;
+  const main=live.filter(c=>area(c)>=area(live[0])*0.25).slice(0,6);
+  await samEnsureEncoded({silent:true});
+  for(let i=0;i<50&&!_sam2Token&&(_sam2Encoding||_samEncoding);i++)await new Promise(r=>setTimeout(r,150));
+  if(curItem()!==item)return null;
+  const be=_sam2Token?'sam2_box':'sam_box',tok=_sam2Token||_samToken;if(!tok)return null;
+  let acc=null,w=0,h=0;
+  for(const c of main){
+    const b=_samNormalizeBox(c.box);if(!b)continue;
+    const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:b.x0,y1:b.y0,x2:b.x1,y2:b.y1}});
+    const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
+    let px=new Uint8ClampedArray(new Uint8Array(buf,4+hl));w=hd.width;h=hd.height;
+    const e=await _mskEdgeMatte(item,px,w,h,c.group);if(e)px=e;
+    if(!acc)acc=px;else for(let i=0;i<acc.length;i++)if(px[i]>acc[i])acc[i]=px[i];
+  }
+  if(!acc)return null;
+  const kinds=[...new Set(main.map(c=>c.kind))];
+  const label=main.length===1?main[0].label.replace(/ \d+$/,''):kinds.length===1?mskDetName(kinds[0])+'s':'Subjects';
+  return{px:acc,w,h,label,backend:be};
+}
 async function mskMatteModelFor(kind){
   const ms=await mskMatteModels();if(!ms.length)return null;
   let want=null;try{want=localStorage.getItem('chromasmithMatteModel');}catch(_){}

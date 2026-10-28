@@ -67,9 +67,9 @@ try{
     // 4. LRU of previews stays bounded
     const sc=_mskSceneOf(it);for(let i=0;i<20;i++)_mskSceneCache(sc,'x'+i,{px:new Uint8ClampedArray(1)});
     out.lru=sc.masks.size;
-    // 5. Auto Subject on a dog photo uses ISNet and is named Dog
+    // 5. Auto Subject = the detected person + dog (SAM boxes), named for what it found
     fxState.masks=[];out.matteModel=null;_mskMatteModels=null;delete it._matte;
-    const a=await mskAddSubjectMatte();out.auto={name:a&&a.name,model:out.matteModel};
+    const a=await mskAddSubjectMatte();out.auto={name:a&&a.name,backend:a&&a.aiProvenance&&a.aiProvenance.backend};
     // 6. Background is one click: the complement, no scribble needed
     const b=await mskAddBackground();
     out.bg={name:b&&b.name,type:b&&b.type,corner:b&&b.px[0],centre:b&&b.px[(b.mtH>>1)*b.mtW+(b.mtW>>1)]};
@@ -95,10 +95,10 @@ try{
   assert.equal(r.dog.w,r.dog.tex.w,'AI raster stored at mask texture size');
   assert.equal(r.dogMatte,'isnet','animals use the general matting model');
   assert.equal(r.lru,8);
-  assert.deepEqual(r.auto,{name:'Dog',model:'isnet'});
+  assert.deepEqual(r.auto,{name:'Subjects',backend:'detect:sam2_box'});
   assert.equal(r.bg.name,'Background');assert.equal(r.bg.type,'brush');assert.ok(r.bg.corner>200&&r.bg.centre<50,JSON.stringify(r.bg));
   assert.ok(r.fg&&r.fg.bottom>200&&r.fg.top<50,JSON.stringify(r.fg));
-  assert.equal(r.reFg,true,'Foreground re-runs on Update');assert.equal(r.reBg,true,'Background re-runs on Update');assert.equal(r.reCalls.matte,1);
+  assert.equal(r.reFg,true,'Foreground re-runs on Update');assert.equal(r.reBg,true,'Background re-runs on Update');assert.ok(r.reCalls.matte>=1,'Background re-ran its models');
   assert.deepEqual(r.canUpdate,[true,true,true]);
   // Completeness: a new tile must be added to this list along with a case above.
   const covered=['auto subject','subject','objects','sky','landscape','background','foreground','skin','brush','linear','radial','color','luminance','depth'];
