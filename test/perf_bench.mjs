@@ -526,7 +526,7 @@ async function largeImageBench(port) {
         crop.getContext('2d').drawImage(fxWork, sx, sy, ex - sx, ey - sy, 0, 0, ex - sx, ey - sy);
         const rw = Math.round((ex - sx) * v.s), rh = Math.round((ey - sy) * v.s);
         FX.pushTempImage(crop);
-        FX.render(P, rw, rh, mskPreviewRenderOptions({ glowScale: 1, scOverride: v.iw / FXR.CAL.refWidth, seed: v.seed, gamutWarn: fxClipCode(),
+        FX.render(P, rw, rh, mskPreviewRenderOptions({ ...(typeof fxZoomGlowOpts === 'function' ? fxZoomGlowOpts(v.iw, v.s) : { glowScale: 1, scOverride: v.iw / FXR.CAL.refWidth }), seed: v.seed, gamutWarn: fxClipCode(),
           uvOff: [sx / v.iw, (v.ih - ey) / v.ih], uvScale: [(ex - sx) / v.iw, (ey - sy) / v.ih] }));
         FX.popTempImage();
         const ref = new Uint8Array(rw * rh * 4);
