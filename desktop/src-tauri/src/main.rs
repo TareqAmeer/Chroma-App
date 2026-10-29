@@ -600,6 +600,12 @@ static SAM2_EMBED: Mutex<Option<Sam2EmbedCache>> = Mutex::new(None);
 /// Same contract as sam_encode, backed by SAM 2.1 instead of EdgeSAM — see sam.rs's
 /// sam2_encode/sam2_decode_points doc comments for why these need their own cache slot (3 cached
 /// tensors instead of 1, different preprocessing).
+/// Loads the SAM 2.1 models ahead of the first encode (Masks panel open) — see sam::warm_sam2.
+#[tauri::command(async)]
+fn sam2_warm() -> Result<(), String> {
+    sam::warm_sam2()
+}
+
 #[tauri::command(async)]
 fn sam2_encode(request: tauri::ipc::Request) -> Result<(), String> {
     let (json, payload) = parse_framed(request.body())?;
@@ -3672,6 +3678,7 @@ fn main() {
             catalog::catalog_root_cache_usage,
             catalog::clear_root_cache,
             sam2_encode,
+            sam2_warm,
             sam2_points,
             sam2_box,
             faceparse_run,

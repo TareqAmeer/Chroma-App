@@ -405,6 +405,7 @@ fn main() {
             catalog::catalog_root_cache_usage,
             catalog::clear_root_cache,
             sam2_encode,
+            sam2_warm,
             sam2_points,
             sam2_box,
             faceparse_run,

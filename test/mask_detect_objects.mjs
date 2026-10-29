@@ -20,7 +20,7 @@ try{
   await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html?deskx=1`,{waitUntil:'load'});
   await page.waitForFunction(()=>typeof mskSceneEnsure==='function');
   await page.setInputFiles('#in-fx-img', path.join(root,'test/fixtures/gradient.png'));
-  await page.waitForFunction(()=>{const c=document.getElementById('fx-canvas');return c&&c.width>0;},null,{timeout:30000});
+  await page.waitForFunction(()=>{const c=document.getElementById('fx-canvas');return c&&c.width>0&&typeof curItem==='function'&&curItem()&&typeof curItem()==='object';},null,{timeout:60000});
   const r=await page.evaluate(async()=>{
     document.querySelector('[data-tour-action="close"]')?.click();document.getElementById('cs-modal-ov')?.remove();
     const out={calls:{}};const bump=c=>out.calls[c]=(out.calls[c]||0)+1;

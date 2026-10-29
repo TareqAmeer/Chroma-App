@@ -120,19 +120,27 @@ function _mskBilinear(src,sw,sh,W,H){
       const a=src[y0*sw+x0]+(src[y0*sw+x1]-src[y0*sw+x0])*tx,b=src[y1*sw+x0]+(src[y1*sw+x1]-src[y1*sw+x0])*tx;out[y*W+x]=a+(b-a)*ty;}}
   return out;
 }
+const _mskGuideCache=new WeakMap(); // guide pixels -> shared guide terms (mskGuidedUpsample)
 function mskGuidedUpsample(src,sw,sh,W,H,rgba,opt={}){
   const N=W*H,n=sw*sh,out=new Uint8ClampedArray(N);
   const p=new Float32Array(n);for(let i=0;i<n;i++)p[i]=src[i]/255;
   if(!rgba||rgba.length!==N*4||(sw>=W&&sh>=H)){const u=_mskBilinear(p,sw,sh,W,H);for(let i=0;i<N;i++)out[i]=u[i]*255;return out;}
-  // box-downsample the guide's luminance to the mask grid
-  const g=new Float32Array(n),cnt=new Float32Array(n),lx=new Int32Array(W);
-  for(let x=0;x<W;x++)lx[x]=Math.min(sw-1,(x*sw/W)|0);
-  for(let y=0;y<H;y++){const row=Math.min(sh-1,(y*sh/H)|0)*sw;for(let x=0,j=y*W*4;x<W;x++,j+=4){const k=row+lx[x];g[k]+=0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2];cnt[k]++;}}
-  for(let i=0;i<n;i++)g[i]=cnt[i]?g[i]/cnt[i]/255:0;
   const r=Math.max(1,Math.round(opt.r??1)),eps=opt.eps??1e-3;
-  const mI=_boxFilterMean(g,sw,sh,r),mP=_boxFilterMean(p,sw,sh,r),II=new Float32Array(n),IP=new Float32Array(n);
-  for(let i=0;i<n;i++){II[i]=g[i]*g[i];IP[i]=g[i]*p[i];}
-  const mII=_boxFilterMean(II,sw,sh,r),mIP=_boxFilterMean(IP,sw,sh,r),A=new Float32Array(n),B=new Float32Array(n);
+  // The guide's side (downsampled luminance and its box means) depends only on the photo and the grid, so every
+  // mask on a photo shares it: the full-resolution pass was ~half of each 1.4-2.6 s chip click on a 24 MP RAW.
+  const gk=sw+'x'+sh+'>'+W+'x'+H+'|'+r;let gc=_mskGuideCache.get(rgba);
+  if(!gc||gc.k!==gk){
+    const g=new Float32Array(n),cnt=new Float32Array(n),lx=new Int32Array(W);
+    for(let x=0;x<W;x++)lx[x]=Math.min(sw-1,(x*sw/W)|0);
+    for(let y=0;y<H;y++){const row=Math.min(sh-1,(y*sh/H)|0)*sw;for(let x=0,j=y*W*4;x<W;x++,j+=4){const k=row+lx[x];g[k]+=0.2126*rgba[j]+0.7152*rgba[j+1]+0.0722*rgba[j+2];cnt[k]++;}}
+    for(let i=0;i<n;i++)g[i]=cnt[i]?g[i]/cnt[i]/255:0;
+    const II=new Float32Array(n);for(let i=0;i<n;i++)II[i]=g[i]*g[i];
+    gc={k:gk,g,mI:_boxFilterMean(g,sw,sh,r),mII:_boxFilterMean(II,sw,sh,r)};_mskGuideCache.set(rgba,gc);
+  }
+  const{g,mI,mII}=gc;
+  const mP=_boxFilterMean(p,sw,sh,r),IP=new Float32Array(n);
+  for(let i=0;i<n;i++)IP[i]=g[i]*p[i];
+  const mIP=_boxFilterMean(IP,sw,sh,r),A=new Float32Array(n),B=new Float32Array(n);
   for(let i=0;i<n;i++){const v=mII[i]-mI[i]*mI[i],c=mIP[i]-mI[i]*mP[i];A[i]=c/(v+eps);B[i]=mP[i]-A[i]*mI[i];}
   const mA=_boxFilterMean(A,sw,sh,r),mB=_boxFilterMean(B,sw,sh,r);
   // Only where the low-res mask is uncertain (within r+1 cells of its edge) — solid areas stay exactly as the model said.
@@ -181,12 +189,16 @@ async function _mskMatteFor(item,model){
   const{w,h}=samInputDims(),key=model+'|'+w+'x'+h;
   const c=item._matte||(Object.defineProperty(item,'_matte',{value:{},writable:true,configurable:true,enumerable:false}),item._matte);
   if(c[key])return c[key];
+  // The pre-warm and a chip click can ask at once: share the one in-flight run (a failure clears it for a retry).
+  const pk='_p|'+key;if(c[pk])return c[pk];
   const rgb=mskAiRgb(img,w,h);if(!rgb)return null;
-  const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
-  const dv=new DataView(buf),hlen=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
-  const body=new Uint8Array(buf,4+hlen);
-  if(hd.width!==w||hd.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
-  return c[key]={px:Uint8ClampedArray.from(body),w,h};
+  return c[pk]=(async()=>{try{
+    const buf=await _samFramedInvoke('matte_run',{width:w,height:h,model},rgb);
+    const dv=new DataView(buf),hlen=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hlen)));
+    const body=new Uint8Array(buf,4+hlen);
+    if(hd.width!==w||hd.height!==h||body.length!==w*h)throw new Error('unexpected matte size');
+    return c[key]={px:Uint8ClampedArray.from(body),w,h};
+  }finally{delete c[pk];}})();
 }
 let _mskMatteModels=null;
 async function mskMatteModels(){
@@ -201,6 +213,15 @@ async function mskMatteModels(){
 // Focus measure inside the middle 70% of a box (RGBA bytes, w x h): mean absolute Laplacian of luma divided by the
 // box's own mean absolute deviation, so a dark low-contrast but sharp dog is not out-scored by a bright busy patch
 // (measured on the October set: a shadowed sharp dog 1.46 vs the motion-blurred big dog 0.65). Size-independent.
+// SAM box masks sometimes spill into a neighbouring dark area or a second subject well outside the prompt box
+// (October set: a blurry dark blob next to the sharp dog). Keep only what lies inside the box grown by 12% of its
+// size per side (at least 2% of the frame), which leaves room for fur and ears the detector box clipped.
+function mskClipToBox(px,w,h,box){
+  const mx=Math.max((box.x1-box.x0)*0.12,0.02),my=Math.max((box.y1-box.y0)*0.12,0.02);
+  const x0=Math.max(0,Math.floor((box.x0-mx)*w)),x1=Math.min(w,Math.ceil((box.x1+mx)*w)),y0=Math.max(0,Math.floor((box.y0-my)*h)),y1=Math.min(h,Math.ceil((box.y1+my)*h));
+  for(let y=0;y<h;y++){const r=y*w;if(y<y0||y>=y1){px.fill(0,r,r+w);continue;}if(x0>0)px.fill(0,r,r+x0);if(x1<w)px.fill(0,r+x1,r+w);}
+  return px;
+}
 function mskBoxSharpness(d,w,h,box){
   const bx0=box.x0+(box.x1-box.x0)*0.15,bx1=box.x1-(box.x1-box.x0)*0.15,by0=box.y0+(box.y1-box.y0)*0.15,by1=box.y1-(box.y1-box.y0)*0.15;
   const x0=Math.max(1,Math.floor(bx0*w)),x1=Math.min(w-2,Math.ceil(bx1*w)),y0=Math.max(1,Math.floor(by0*h)),y1=Math.min(h-2,Math.ceil(by1*h));
@@ -215,7 +236,18 @@ function mskBoxSharpness(d,w,h,box){
 function mskFocusPick(live,sharp){
   const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
   let pool=live.slice();
-  if(Array.isArray(sharp)&&sharp.length===live.length){const mx=Math.max(...sharp);if(mx>0){const keep=live.filter((c,i)=>sharp[i]>=mx*0.5);if(keep.length)pool=keep;}}
+  if(Array.isArray(sharp)&&sharp.length===live.length){const mx=Math.max(...sharp);if(mx>0){
+    // A second subject beside the sharpest one (similar size, feet on the same line, so the same distance) stays even
+    // when motion blur or smoother fur scores it lower: two dogs running side by side (October 6650, 0.81 vs 2.15).
+    // Same kind only: the passer-by at the same distance in 6650 is not part of the subject.
+    const top=live[sharp.indexOf(mx)],ta=area(top);
+    const beside=c=>{const r=area(c)/ta;return c.kind===top.kind&&r>=0.4&&r<=2.5&&Math.abs(c.box.y1-top.box.y1)<=0.08;};
+    const keep=live.filter((c,i)=>sharp[i]>=mx*0.5||(sharp[i]>=mx*0.3&&beside(c)));if(keep.length)pool=keep;}}
+  // A subject cut off at the top, left or right edge (legs of people out of frame, a dog half outside) is rarely what
+  // the photo is about when something else sits fully in frame (October 6712). The bottom edge is not counted:
+  // close portraits of people and dogs crop there all the time (6879).
+  const cut=c=>c.box.y0<=0.01||c.box.x0<=0.01||c.box.x1>=0.99;
+  if(pool.some(c=>!cut(c)))pool=pool.filter(c=>!cut(c));
   pool.sort((a,b)=>area(b)-area(a));
   return pool.filter(c=>area(c)>=area(pool[0])*0.25);
 }
@@ -237,8 +269,8 @@ async function _mskSubjectFromDetections(item,list){
     const b=_samNormalizeBox(c.box);if(!b)continue;
     const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:b.x0,y1:b.y0,x2:b.x1,y2:b.y1}});
     const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
-    let px=new Uint8ClampedArray(new Uint8Array(buf,4+hl));w=hd.width;h=hd.height;
-    const e=await _mskEdgeMatte(item,px,w,h,c.group);if(e)px=e;
+    let px=mskClipToBox(new Uint8ClampedArray(new Uint8Array(buf,4+hl)),hd.width,hd.height,c.box);w=hd.width;h=hd.height;
+    const e=await _mskEdgeMatte(item,px,w,h,c.group);if(e)px=mskClipToBox(e,w,h,c.box);
     if(!acc)acc=px;else for(let i=0;i<acc.length;i++)if(px[i]>acc[i])acc[i]=px[i];
   }
   if(!acc)return null;

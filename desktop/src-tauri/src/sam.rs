@@ -325,6 +325,15 @@ fn sam2_encoder() -> Result<&'static Mutex<SamSession>, String> {
     .map_err(|e| e.clone())
 }
 
+/// Builds the SAM 2.1 sessions (~5 s of model parsing on the Intel dev Mac) when the Masks panel opens, so the
+/// first photo's encode starts at once instead of paying the load inside the ~24 s wait for the accurate model.
+/// Not at launch: ~150 MB that users who never mask should not carry. Same OnceLocks as the real calls.
+pub fn warm_sam2() -> Result<(), String> {
+    sam2_encoder()?;
+    sam2_decoder()?;
+    Ok(())
+}
+
 fn sam2_decoder() -> Result<&'static Mutex<SamSession>, String> {
     static S: OnceLock<Result<Mutex<SamSession>, String>> = OnceLock::new();
     S.get_or_init(|| {
@@ -1103,3 +1112,4 @@ mod tests {
         );
     }
 }
+

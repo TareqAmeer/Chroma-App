@@ -16,6 +16,8 @@ function mskAiRgb(img,w,h){
 async function mskSceneEnsure(opt={}){
   if(!window.__TAURI__)return;
   const item=curItem();if(!item||item.kind==='video')return;
+  // Load the SAM 2.1 models while detection runs (~5 s that sat inside the first accurate-mask wait); once per run.
+  if(!mskSceneEnsure._warm){mskSceneEnsure._warm=1;try{Promise.resolve(window.__TAURI__.core.invoke('sam2_warm')).catch(()=>{});}catch(_){}}
   if(item._scene&&!(opt.retry&&item._scene.state==='error'))return;
   const sc={state:'running',list:[],masks:new Map()};
   Object.defineProperty(item,'_scene',{value:sc,writable:true,enumerable:false,configurable:true});
@@ -29,14 +31,24 @@ async function mskSceneEnsure(opt={}){
     if(curItem()!==item)return;
     if(job.cancelled){sc.state='error';mskSceneRender();return;}
     sc.list=mskSceneList(dets);
+    const boxes=sc.list.some(c=>c.box);
+    if(boxes){
+      // Chips first, then the SAM encodes (item 28 pre-warm), then the Sky chip: the landscape pass used to run
+      // before the encodes and held SAM 2.1 back by ~8 s on a 24 MP RAW. The Sky mask itself never needed the chip.
+      sc.state='done';mskSceneRender();
+      setTimeout(()=>{try{if(curItem()===item){const T=mskTexDims();mskSourceData(T.w,T.h,img);}}catch(_){}},400); // edge-snap guide (1.3 s first time)
+      await samEnsureEncoded({silent:true});
+      for(let i=0;i<200&&curItem()===item&&!_sam2Token&&_sam2Encoding;i++)await new Promise(r=>setTimeout(r,100));
+      if(curItem()!==item)return;
+      // Hair/fur edge for the likely first click: the matte took ~4 s after the chip landed; run it now instead.
+      const live=sc.list.filter(c=>c.box&&(c.group==='people'||c.group==='animals'));
+      if(live.length){try{const model=await mskMatteModelFor(live[0].group);if(model&&curItem()===item)await _mskMatteFor(item,model);}catch(_){}
+        if(curItem()!==item)return;}
+    }
     // Sky: the landscape model's sky when installed (the same raster Sky commits to), else the heuristic.
     try{const sky=await _mskSkyCandidate(item,img);if(curItem()!==item)return;
       if(sky&&sky.cover>0.06){sc.list.push({id:'sky',label:'Sky',kind:'sky',group:'sky'});_mskSceneCache(sc,'sky',sky.mask);}}catch(_){}
     sc.state='done';
-    // Pre-warm (item 28): start the SAM encodes now so the first hover/click is instant.
-    if(sc.list.some(c=>c.box))samEnsureEncoded({silent:true});
-    // ...and the mask-size copy of the photo the edge snap uses (1.3 s on a 24 MP RAW the first time a chip landed).
-    if(sc.list.some(c=>c.box))setTimeout(()=>{try{if(curItem()===item){const T=mskTexDims();mskSourceData(T.w,T.h,img);}}catch(_){}},400);
   }catch(e){sc.state='error';sc.error=String(e&&e.message||e);log('Auto-detect: '+sc.error,'warn');}
   mskSceneRender();
 }
@@ -94,7 +106,7 @@ async function _mskSceneMask(c){ // preview raster for one candidate, cached per
   const box=_samNormalizeBox(c.box);if(!box)return null;
   const buf=await window.__TAURI__.core.invoke(be,{token:tok,rect:{x1:box.x0,y1:box.y0,x2:box.x1,y2:box.y1}});
   const dv=new DataView(buf),hl=dv.getUint32(0,true),hd=JSON.parse(new TextDecoder().decode(new Uint8Array(buf,4,hl)));
-  const px=new Uint8ClampedArray(new Uint8Array(buf,4+hl).slice());
+  const px=mskClipToBox(new Uint8ClampedArray(new Uint8Array(buf,4+hl).slice()),hd.width,hd.height,c.box);
   return _mskSceneCache(sc,c.id,{type:'brush',px,mtW:hd.width,mtH:hd.height,backend:be});
 }
 async function mskScenePreview(id){

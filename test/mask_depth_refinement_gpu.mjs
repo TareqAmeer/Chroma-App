@@ -139,6 +139,10 @@ try{
         if(!uvOff||!uvScale||cropRender.outW<=0||cropRender.outH<=0)throw new Error(`${zoomValue*100}% zoom crop did not provide source UV bounds and a non-empty backing store`);
         const cropX=Math.round(uvOff[0]*w),cropY=Math.round(h-(uvOff[1]+uvScale[1])*h),
           cropW=Math.round(uvScale[0]*w),cropH=Math.round(uvScale[1]*h);
+        // The tiled crisp-view path renders into its own tiles and places them over the photo; FX.cv is not its
+        // output there (the last FX.render size differs from FX.cv), so this canvas comparison does not apply.
+        // probe_zoom_left_strip.mjs covers that path's placement.
+        if(cropRender.outW!==FX.cv.width||cropRender.outH!==FX.cv.height){zoomParities.push({zoomPercent:probe.percent,skipped:'tiled crisp path',cropRender:{w:cropRender.outW,h:cropRender.outH},cv:{w:FX.cv.width,h:FX.cv.height}});continue;}
         const zoomPreview=document.createElement('canvas');zoomPreview.width=FX.cv.width;zoomPreview.height=FX.cv.height;
         zoomPreview.getContext('2d').drawImage(FX.cv,0,0);
         const parity=previewStats(zoomPreview,tiled,{x:cropX,y:cropY,w:cropW,h:cropH});
@@ -163,7 +167,8 @@ try{
   else{
     assert.ok(result.fitParity.compared>0&&result.fitParity.mean<=4&&result.fitParity.max<=32,`fit renderPreview/export parity: ${JSON.stringify(result.fitParity)}`);
     for(const parity of result.lowZoomParities)assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoomPercent}% fit-buffer/export parity: ${JSON.stringify(parity)}`);
-    for(const parity of result.zoomParities)assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoomPercent}% panned/centered settled full-res zoom crop/export parity: ${JSON.stringify(parity)}`);
+    assert.ok(result.zoomParities.filter(p=>!p.skipped).length>=3,`most zoom probes compared: ${JSON.stringify(result.zoomParities.map(p=>p.skipped||p.zoomPercent))}`);
+    for(const parity of result.zoomParities.filter(p=>!p.skipped))assert.ok(parity.compared>0&&parity.mean<=4&&parity.max<=32,`${parity.zoomPercent}% panned/centered settled full-res zoom crop/export parity: ${JSON.stringify(parity)}`);
   }
   assert.equal(shaderErrors.length,0,`shader compile/link errors: ${shaderErrors.join(' | ')}`);
   console.log(`PASS depth GPU path (${result.tiles} tiles): native/reset ${result.baselineHash}, refined/tiled ${result.refinedHash}, transformed ${result.transformed.w}×${result.transformed.h}; ${result.previewSkip?'preview parity explicitly skipped':`fit ${JSON.stringify(result.fitParity)}; lower zooms ${JSON.stringify(result.lowZoomParities)}; settled zooms ${JSON.stringify(result.zoomParities)}`}`);

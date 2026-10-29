@@ -3,7 +3,7 @@ import { load } from './extract.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 const S = load(['MSK_COCO', 'MSK_ANIMALS', 'mskDetGroup', 'mskDetName', 'mskSceneList', 'mskOtsu', 'mskComponents', 'mskCleanSpecks',
-  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', 'mskGuidedUpsample', 'mskMatteInBand', 'mskDetectRematch', 'mskBoxSharpness', 'mskFocusPick']);
+  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', '_mskGuideCache', 'mskGuidedUpsample', 'mskMatteInBand', 'mskDetectRematch', 'mskBoxSharpness', 'mskFocusPick', 'mskClipToBox']);
 const D = (label, score, x0, y0, x1, y1) => ({ label, score, x0, y0, x1, y1 });
 
 test('every COCO class gets a readable name and a group', () => {
@@ -85,10 +85,47 @@ test('detected-object masks re-match the same kind of thing on another photo', (
 test('Auto Subject keeps the in-focus subject over a bigger blurry one', () => {
   const w = 64, h = 32, d = new Uint8Array(w * h * 4);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, v = x < 32 ? 128 + 2 * Math.sin(x / 6) : ((x + y) % 2 ? 230 : 20); d[i] = d[i + 1] = d[i + 2] = v; }
-  const blurry = { box: { x0: 0, y0: 0, x1: 0.5, y1: 1 } }, sharp = { box: { x0: 0.6, y0: 0.3, x1: 0.8, y1: 0.7 } };
+  const blurry = { box: { x0: 0.02, y0: 0.02, x1: 0.5, y1: 0.98 } }, sharp = { box: { x0: 0.6, y0: 0.3, x1: 0.8, y1: 0.7 } };
   const s = [S.mskBoxSharpness(d, w, h, blurry.box), S.mskBoxSharpness(d, w, h, sharp.box)];
   assert.ok(s[1] > s[0] * 10, JSON.stringify(s));
   assert.deepEqual(S.mskFocusPick([blurry, sharp], s), [sharp], 'small sharp dog wins over big blurry one');
   assert.deepEqual(S.mskFocusPick([blurry, sharp], null), [blurry], 'no focus data: size rule (sharp box is under a quarter the size)');
   assert.deepEqual(S.mskFocusPick([blurry, sharp], [10, 9]).length, 1, 'both in focus: size rule picks among them');
+});
+
+test('box clip keeps the subject and a margin, drops spill far outside', () => {
+  const w = 100, h = 100, px = new Uint8ClampedArray(w * h).fill(255);
+  S.mskClipToBox(px, w, h, { x0: 0.4, y0: 0.4, x1: 0.6, y1: 0.6 });
+  assert.equal(px[50 * w + 50], 255); assert.equal(px[50 * w + 37], 255); // inside the 12%/2% margin
+  assert.equal(px[50 * w + 30], 0); assert.equal(px[10 * w + 50], 0); assert.equal(px[0], 0);
+});
+test('guided upsample: shared guide terms give the same result on reuse and per grid', () => {
+  const sw = 32, sh = 24, W = 128, H = 96, rgba = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const j = (y * W + x) * 4, v = x + y * 0.7 > 70 ? 230 : 30; rgba[j] = rgba[j + 1] = rgba[j + 2] = v; rgba[j + 3] = 255; }
+  const a = new Uint8ClampedArray(sw * sh), b = new Uint8ClampedArray(sw * sh);
+  for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) { a[y * sw + x] = x * 4 + y * 2.8 > 70 ? 255 : 0; b[y * sw + x] = x > 16 ? 255 : 0; }
+  const a1 = S.mskGuidedUpsample(a, sw, sh, W, H, rgba), b1 = S.mskGuidedUpsample(b, sw, sh, W, H, rgba), a2 = S.mskGuidedUpsample(a, sw, sh, W, H, rgba);
+  assert.deepEqual(a1, a2);
+  const fresh = S.mskGuidedUpsample(b, sw, sh, W, H, Uint8ClampedArray.from(rgba)); assert.deepEqual(b1, fresh);
+  const c1 = S.mskGuidedUpsample(a, 16, 12, W, H, rgba); assert.equal(c1.length, W * H); // a different grid rebuilds the terms
+});
+test('Auto Subject drops subjects cut off at the top/left/right when one sits fully in frame', () => {
+  const C = (label, x0, y0, x1, y1) => ({ label, box: { x0, y0, x1, y1 } });
+  // October 6712: legs at the top edge, a dog cut at the left, the sharp dog fully inside
+  const live = [C('Person 1', 0.08, 0, 0.25, 0.35), C('Dog 1', 0, 0.57, 0.24, 0.99), C('Dog 2', 0.41, 0.36, 0.54, 0.66)];
+  assert.deepEqual(S.mskFocusPick(live, [1.15, 1.31, 1.47]).map(c => c.label), ['Dog 2']);
+  // 6879: a close dog cropped at the bottom stays
+  const close = [C('Dog 1', 0.07, 0.32, 0.47, 1), C('Dog 2', 0.56, 0.22, 0.85, 0.96)];
+  assert.deepEqual(S.mskFocusPick(close, [0.55, 0.74]).map(c => c.label).sort(), ['Dog 1', 'Dog 2']);
+  // everything cut: keep them rather than return nothing
+  assert.equal(S.mskFocusPick([C('Person', 0, 0, 0.5, 1)], null).length, 1);
+});
+test('Auto Subject keeps a second subject beside the sharpest one', () => {
+  const C = (label, x0, y0, x1, y1) => ({ label, kind: label.split(' ')[0].toLowerCase(), box: { x0, y0, x1, y1 } });
+  // October 6650: two dogs running side by side, people at the right edge
+  const run = [C('Person 1', 0.86, 0.42, 0.95, 0.69), C('Person 2', 0.9, 0.4, 1, 0.7), C('Dog 1', 0.44, 0.59, 0.52, 0.71), C('Dog 2', 0.53, 0.58, 0.64, 0.71)];
+  assert.deepEqual(S.mskFocusPick(run, [0.72, 0.66, 2.15, 0.81]).map(c => c.label).sort(), ['Dog 1', 'Dog 2']);
+  // 6657: a statue the same size but further back (feet 0.24 higher) stays out
+  const st = [C('Dog 1', 0.15, 0.5, 0.52, 0.7), C('Dog 2', 0.34, 0.27, 0.73, 0.46)];
+  assert.deepEqual(S.mskFocusPick(st, [0.85, 0.36]).map(c => c.label), ['Dog 1']);
 });

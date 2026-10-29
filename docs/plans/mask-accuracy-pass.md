@@ -121,8 +121,26 @@ Added during the work:
   (oct contact sheets); chip click 1.5–2.7 s with the window visible (a hidden window adds ~20 s per AI call, a
   test artefact), SAM 2.1 ready ~24 s after a 24 MP RAW opens. Copy/paste 6864 -> 6865 (burst), 6879, 6669: all
   masks re-ran and matched the right dogs.
-- Known, unchanged: mask_depth_refinement_gpu's 200 % zoom parity sub-check compares the crop canvas against a
-  stretched region (fails the same way on the pre-pass code).
+
+## Second follow-up (2026-10-29 afternoon)
+47. SAM 2.1 ready 7-11 s after a 24 MP RAW opens in the Masks panel (was ~24 s): the encodes now run right after
+    detection and before the Sky chip's landscape pass, and the SAM 2.1 models load (`sam2_warm`, ~5 s) while
+    detection runs. Measured on the 12 October photos, rebuilt app, nothing else running.
+48. The hair/fur matte for the likely first chip runs in the background after the encodes; a chip click and the
+    pre-warm share one in-flight matte run.
+49. Guided upsampling caches the photo-side terms per photo and grid: chip clicks after the first on a photo take
+    0.7-1.6 s (was ~2.9 s); the first ~2.7 s.
+50. Detected-chip and Auto Subject SAM masks are clipped to the box grown by 12% (spill into a neighbouring area).
+51. Auto Subject drops subjects cut off at the top/left/right when another sits fully in frame (6712: legs and a
+    half-out dog dropped), and keeps a same-kind subject beside the sharpest one at the same distance (6650: both
+    running dogs; the motion-blurred one failed the focus test before).
+- Sky check (repeatable, no hand labels: `clear sky` = bright, smooth, not warm, connected to the top edge):
+  recall 1.00 on all 6 photos with open sky; non-sky pixels inside the mask 1-10%. Sky through leaves (6864,
+  2% of frame) is mostly textured leaf edges by this rule, so it reads as 83% "leak" - expected for a tree canopy.
+- Tests: mask_people_objects/mask_detect_objects waited only for the canvas, not the photo item (failed under load);
+  mask_depth_refinement_gpu's >=200% probes take the tiled crisp path, which FX.cv does not hold, so they are
+  skipped there (probe_zoom_left_strip covers that path). mask_sidebar_compare and mask_refinement_quality are
+  manual tools that need arguments, not gates.
 
 ## Completeness check
 - Mask entry points come from the running app: the create grid (`#msk-create-grid .msk-tile` → data-kind), the Detected
