@@ -648,16 +648,31 @@
         const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
         const privateBaseline=!!itemResolver&&!snap&&_fxPristineDefault;
         const restoreUI=(snap&&snap!=='orig')||privateBaseline;
+        // The look (sel-lut) loads asynchronously in selectLUT, so applying it through the shared
+        // Editor UI would render this photo with whatever look the Editor already held and then
+        // land the photo's look in the Editor after the restore. Resolve it here, render with it
+        // directly, and keep sel-lut out of the snapshot the shared UI applies.
+        const lookSnap=(snap&&snap!=='orig')?snap:privateBaseline?_fxPristineDefault:null;
+        let lookLut;
+        const lookSel=lookSnap&&lookSnap.selects&&Object.prototype.hasOwnProperty.call(lookSnap.selects,'sel-lut')?String(lookSnap.selects['sel-lut']||''):undefined;
+        if(lookSel!==undefined){
+          lookLut=!lookSel?null:lookSel.startsWith('p:')?await presetLut(lookSel.slice(2)):await lutLibGet(lookSel.slice(2)).then(rec=>rec?lutFromBytes(rec.data):null);
+          if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+        }
+        const withoutLook=s=>{if(lookSel===undefined)return s;const selects={...s.selects};delete selects['sel-lut'];return {...s,selects};};
         _fxHistLocked=true;
         try{
-          if(snap&&snap!=='orig')applyUISnapshot(snap);
-          else if(privateBaseline){applyUISnapshot(_fxPristineDefault,{skipRender:true});if(RAW_FILE_EXT_RE.test('.'+it.ext))applyRawDefaults();}
+          if(snap&&snap!=='orig')applyUISnapshot(withoutLook(snap));
+          else if(privateBaseline){applyUISnapshot(withoutLook(_fxPristineDefault),{skipRender:true});if(RAW_FILE_EXT_RE.test('.'+it.ext))applyRawDefaults();}
           const sourceOwnsVlog=it.exif?.photoStyle===17&&!(snap&&typeof snap==='object'&&snap.selects&&Object.prototype.hasOwnProperty.call(snap.selects,'sel-input'));
           const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams(it.adjustOverride||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
           if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
           const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
+          if(lookLut!==undefined){P.lut=lookLut;if(lookLut)renderer.setLUT(lookLut);}
           const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
-          renderer.setImage(crop);renderer.render(P,ow,oh,{glowScale:1,scOverride:iw/FXR.CAL.refWidth,uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
+          renderer.setImage(crop);// Effect scale exactly as the Editor's loupe: glow sigmas at this render's px per source px,
+          // grain cells + attenuation against the export width, so a fitted cell shows the export's grain.
+          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
           rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
           detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
         }finally{if(restoreUI)applyUISnapshot(live,{skipRender:true});if(undo)undo();_fxHistLocked=locked;}
