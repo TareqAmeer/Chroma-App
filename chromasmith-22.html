@@ -7575,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1028I';
+const BUILD='1.1029A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16608,6 +16608,9 @@ function _mskMigrate(m){
   if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  // A linear mask without finite end points (hand-written preset, truncated sidecar) took down the whole apply in
+  // createLinearGradient; give it the default gradient instead.
+  if(m.type==='linear'){const L={x0:0.5,y0:0.9,x1:0.5,y1:0.45};for(const k in L)if(!Number.isFinite(m[k]))m[k]=L[k];}
   if(m.aiProvenance!==undefined||mskIsAI(m)||m.origin==='sky')m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
   //   pxb64          — current serialized form
@@ -18852,6 +18855,16 @@ async function _mskPortableReevaluate(m,target){
       return{ok:true};
     }catch(e){return{ok:false,error:String(e&&e.message||e)};}
   }
+  if(m.aiDetect&&hasBox&&typeof mskSceneEnsure==='function'){
+    // The box was this photo's detection, not the target's: detect on the target and take the matching thing.
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before mask recomputation'};
+    await mskSceneEnsure();const it=curItem();
+    for(let i=0;i<300&&it&&it._scene&&it._scene.state==='running';i++)await new Promise(r=>setTimeout(r,100));
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed during detection'};
+    const hit=mskDetectRematch(it&&it._scene&&it._scene.list||[],m.aiDetect,m.aiBox);
+    if(!hit)return{ok:false,error:'No '+mskDetName(m.aiDetect.kind||'subject').toLowerCase()+' found in this photo'};
+    m.aiBox=_samNormalizeBox(hit.box);
+  }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
 }
@@ -18876,8 +18889,20 @@ async function mskAiUpdate(i){
   }finally{job.done();_mskAiUpdating=false;_mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
   return !m.aiState;
 }
+// Pasted / synced AI masks re-run on the photo they land on as soon as it is open (Lightroom behaviour), instead of
+// showing the source photo's selection until the user finds Update. Once per photo and mask set; a failure stays
+// visible as 'failed' with its reason and is not retried automatically.
+function _mskAutoUpdateStale(){
+  if(!window.__TAURI__||_mskAiUpdating)return;
+  const it=typeof curItem==='function'?curItem():null;if(!it||!it.img)return;
+  const stale=fxState.masks.filter(m=>m&&m.aiState==='stale'&&mskAiCanUpdate(m));if(!stale.length)return;
+  const sig=stale.map(m=>m.id).join(',');if(it._aiAutoUpd===sig)return;
+  Object.defineProperty(it,'_aiAutoUpd',{value:sig,writable:true,enumerable:false,configurable:true});
+  setTimeout(()=>{if(curItem()===it)mskAiUpdateAll({auto:true});},250);
+}
 async function mskAiUpdateAll(){
-  for(let i=0;i<fxState.masks.length;i++){const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
+  const it=curItem();
+  for(let i=0;i<fxState.masks.length;i++){if(curItem()!==it)return;const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
 }
 async function mskCopyAndReevaluate(){
   if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;
@@ -19436,7 +19461,10 @@ function mskGenerateSky(m){
   const px=_skyHeuristic(d,w,h);
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;_mskRecordAIProvenance(m,typeof curItem==='function'?curItem():null,null,true);
 }
-function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);mskSkyUpgrade(m);fxUpdate();fxHistoryPush();}
+// One undo step per re-detect: the history entry is recorded once the edge clean-up has landed (or failed),
+// not once for the heuristic and again for the clean-up.
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();
+  return Promise.resolve(mskSkyUpgrade(m,{noHistory:true})).catch(()=>false).then(ok=>{if(fxState.masks.includes(m))fxHistoryPush();return ok;});}
 // Sky edge clean-up, after Liba et al. 2020 (Google "Sky Optimization") and Zhu 2020 ("Castle in
 // the Sky"): the coarse sky probability only decides "surely sky" and "surely not"; inside a band
 // around its boundary alpha is read off the photo's own colours (_samMatteCore), so the edit
@@ -19489,7 +19517,7 @@ function mskSkyUpgrade(m,opt={}){
     if(!opt.detached&&!fxState.masks.includes(m))return false;
     m.px=r.px;m.mtW=r.w;m.mtH=r.h;delete m._refineCache;_mskTexDirty=true;
     _mskRecordAIProvenance(m,it,r.backend,!r.backend);
-    if(!opt.detached){mskRebuild();fxUpdate();fxHistoryPush();}
+    if(!opt.detached){mskRebuild();fxUpdate();if(!opt.noHistory)fxHistoryPush();}
     return true;
   }).catch(e=>{log('Sky edge clean-up failed: '+(e&&e.message||e),'warn');return false;}).finally(()=>_skyJobs.delete(m));
   _skyJobs.set(m,job);
@@ -21050,7 +21078,7 @@ function _mskRowSame(o,n){
 }
 function _mskRebuildInner(){
   const list=document.getElementById('local-list'),ctl=document.getElementById('local-ctl');
-  if(!list||!ctl)return;_mskWireReset(ctl);mskCreateGridSync();mskCreateWrapSync();{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}{const ua=document.getElementById('msk-update-all');if(ua)ua.style.display=fxState.masks.some(m=>m.aiState&&mskAiCanUpdate(m))?'':'none';}ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
+  if(!list||!ctl)return;_mskWireReset(ctl);mskCreateGridSync();mskCreateWrapSync();{const ce=document.getElementById('msk-count');if(ce){ce.textContent=fxState.masks.length+' of '+MSK_MAX+' masks';ce.classList.toggle('full',fxState.masks.length>=MSK_MAX);}}{const ua=document.getElementById('msk-update-all');if(ua)ua.style.display=fxState.masks.some(m=>m.aiState&&mskAiCanUpdate(m))?'':'none';}_mskAutoUpdateStale();ctl.classList.toggle('msk-compact',mskCompactLayoutGet());
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush'){const was=mskPaintMode;mskPaintStop();if(was){_mskPaintResume={erase:mskPaintErase};if(typeof log==='function')log('Paint stopped on this mask type — it resumes when you select a brush mask again');}}
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
@@ -21239,7 +21267,10 @@ function _mskRebuildInner(){
       +'<div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" data-msk-brush-slider="feather" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushFeather+'" oninput="mskBrushFeather=parseFloat(this.value);mskSpotlightRefresh();this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFeather+'</div></div>'
       +'<div class="fx-row" title="Paint only pixels similar in colour to where the stroke starts, so the brush stops at edges"><div class="fx-label">Auto mask</div><input type="checkbox" aria-label="Auto mask" '+(mskBrushAuto?'checked ':'')+'onchange="mskBrushAuto=this.checked"></div>'
       +'<div class="fx-row" title="Caps how strongly a stroke paints; while erasing it is the floor the stroke erases down to (100 erases fully)"><div class="fx-label" id="msk-density-label">'+(_bm==='erase'?'Erase floor':'Density')+'</div><input class="fx-slider" style="min-height:28px" type="range" min="0" max="100" value="'+mskBrushDensity+'" oninput="mskBrushDensity=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushDensity+'</div></div>';
-      shapeMore+=mskFixupBar(m)+mskRefineControls(m)
+      // Feather / Edge (grow-shrink) are the first thing people reach for on an AI or sky mask: keep them on screen,
+      // not inside the collapsed More disclosure.
+      shape+=mskRefinementSupported(m)?'<div class="msk-more-lbl">Mask edge</div>'+mskRefineControls(m):'';
+      shapeMore+=mskFixupBar(m)
        +'<div class="btn-row">'+(caps.sky?'<button class="btn bgh" onclick="mskSkyRedetect(fxState.masks['+mskSel+'])">Re-detect sky</button>':'')
       +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']).then(ok=>{if(ok)fxUpdate();})" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>';
       shape+='<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button></div>'
@@ -22046,6 +22077,19 @@ function mskSceneList(dets,opt={}){
     return{id:d.label.replace(/\s+/g,'_')+(n-1),label:mskDetName(d.label)+(count[d.label]>1?' '+n:''),kind:d.label,group:g,score:d.score,
       box:{x0:d.x0,y0:d.y0,x1:d.x1,y1:d.y1}};});
 }
+// A detected-object mask copied to another photo: find the same kind of thing there (Lightroom re-runs Objects/People per
+// photo). Same class first (same group if the class is absent: a dog scored as a cat), then the box overlapping the
+// old one most; when nothing overlaps (the subject moved) the largest one. null = nothing of that kind in the photo.
+function mskDetectRematch(list,det,oldBox){
+  if(!det||!Array.isArray(list))return null;
+  const withBox=list.filter(c=>c&&c.box);let pool=withBox.filter(c=>c.kind===det.kind);
+  if(!pool.length)pool=withBox.filter(c=>c.group===det.group&&det.group!=='objects');
+  if(!pool.length)return null;
+  const area=b=>Math.max(0,b.x1-b.x0)*Math.max(0,b.y1-b.y0);
+  const iou=(a,b)=>{if(!a||!b)return 0;const iw=Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0)),ih=Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0)),i=iw*ih,u=area(a)+area(b)-i;return u>0?i/u:0;};
+  const best=pool.map(c=>({c,o:iou(c.box,oldBox)})).sort((a,b)=>b.o-a.o||area(b.c.box)-area(a.c.box))[0];
+  return best.o>0.02?best.c:pool.slice().sort((a,b)=>area(b.box)-area(a.box))[0];
+}
 // Otsu (1979): the threshold that maximises between-class variance of a 256-bin histogram.
 function mskOtsu(hist){
   let tot=0,sum=0;for(let i=0;i<256;i++){tot+=hist[i];sum+=i*hist[i];}
@@ -22346,7 +22390,7 @@ async function mskSceneAdd(id){
   if(c.kind==='sky'){const m=mskAdd('sky');if(m){m.name='Sky';mskRebuild();}return;}
   const box=_samNormalizeBox(c.box);if(!box)return;
   // People and animals get the matting model's hair/fur edge inside SAM's edge band (item 14).
-  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
+  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;mask.aiDetect={kind:c.kind,group:c.group};if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
   if(!m)return;
   mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
   mskRebuild();
@@ -24645,7 +24689,7 @@ async function styleApply(name){
   if(curItem()!==applyItem||JSON.stringify(getUISnapshot())!==preSignature){toast('Style not applied: photo or edits changed while masks were being prepared',false);return;}
   try{const post=pasteEditSelectiveApply(JSON.parse(JSON.stringify(pre)),s.recipe,chosen);
     if(preparedMasks){post.masks=preparedMasks.map(_mskToSnap);if(maskChoice.mode==='append'&&pre.masks.length)post.toggles.local=!!pre.toggles.local;}
-    await applyUISnapshot(post);fxUpdate();log(`Style applied: ${name}`,'ok');
+    await applyUISnapshot(post);fxUpdate();clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;fxHistoryPush({label:'Style: '+name});log(`Style applied: ${name}`,'ok');  // one undo step, recorded now (not 400 ms later)
     _styleRecent(name);_presetBlend={pre,post:getUISnapshot(),keys:chosen};
     const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
   catch(e){log('Could not apply style: '+e.message,'err');}

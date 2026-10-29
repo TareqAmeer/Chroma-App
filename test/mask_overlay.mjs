@@ -59,18 +59,20 @@ try{
     fxState.masks=masks;mskSel=1;mskPreviewMode='select';
     // Let the ordinary editor state settle first; fxUpdate synchronizes slider-backed values and
     // can legitimately create one history entry if the harness changed the initial photo state.
+    // Composition fields (subtract/intersect) are filled in on the first render; settle them before the baseline push.
+    pixels(mskPreviewRenderOptions());mskRebuild();
     fxUpdate();await new Promise(r=>setTimeout(r,450));fxHistoryPush();
     const historyCountBeforePrefs=fxHistory.length,historyIndexBeforePrefs=fxHistIdx;
     const normal=pixels({});
-    mskSetSelViewStyle('legacy');
+    mskSetSelViewStyle('color');
     const legacyOpts=mskPreviewRenderOptions();
     const legacy=pixels(legacyOpts);
-    const legacyExplicit=pixels({...legacyOpts,showSelMode:0,showSelColor:[1,.15,.15]});
+    const legacyExplicit=pixels({...legacyOpts,showSelMode:1,showSelColor:[1,.15,.15]});
     mskSelViewColorInput('#13b85c');
     const greenLegacy=pixels(mskPreviewRenderOptions());
-    mskSetSelViewStyle('photo');
+    mskSetSelViewStyle('color');mskSelViewColorInput('#ff2626');
     const photo=pixels(mskPreviewRenderOptions());
-    mskSetSelViewStyle('bw');
+    mskSetSelViewStyle('wob');
     const whiteBlack=pixels(mskPreviewRenderOptions());
     await new Promise(r=>setTimeout(r,450));
     const st=stats(whiteBlack);let grayOnly=true,nonBlack=0;
@@ -88,9 +90,12 @@ try{
 
     mskSelViewAlwaysInput(true);mskPreviewMode='off';
     const alwaysOpts=mskPreviewRenderOptions();
-    check('always-show preference keeps the selected mask visible across preview modes',alwaysOpts.showSel===1&&alwaysOpts.previewOnly===MSK_PREVIEW_RENDER_TOKEN);
+    // One switch since 2026-10-20: the overlay shows only while mskPreviewMode is 'select'; the old always-show pref is inert.
+    mskPreviewMode='select';const onOpts=mskPreviewRenderOptions();
+    check('the overlay switch alone decides whether the selected mask shows',alwaysOpts.showSel===-1&&onOpts.showSel===1&&onOpts.previewOnly===MSK_PREVIEW_RENDER_TOKEN,JSON.stringify({off:alwaysOpts.showSel,on:onOpts.showSel}));
+    mskPreviewMode='off';
     const persisted=JSON.parse(localStorage.getItem('chromasmith.mask-selection-view.v1')||'{}');
-    check('mode, colour and always-show persist as UI preferences',persisted.style==='bw'&&persisted.color==='#13b85c'&&persisted.always===true);
+    check('mode, colour and always-show persist as UI preferences',persisted.style==='wob'&&persisted.color==='#ff2626'&&persisted.always===true);
     check('changing overlay preferences does not add an undo/history entry',fxHistory.length===historyCountBeforePrefs&&fxHistIdx===historyIndexBeforePrefs,
       `${historyCountBeforePrefs}/${historyIndexBeforePrefs} before, ${fxHistory.length}/${fxHistIdx} after`);
     const snapshot=typeof getUISnapshot==='function'?getUISnapshot():{};
@@ -107,7 +112,11 @@ try{
       previewOnly:MSK_PREVIEW_RENDER_TOKEN,showSel:mskShowSelIdx(),showSelMode:2,showSelColor:[0,1,0]};
     const captureCanvas=await processToCanvas(captureP,src,w,h,()=>{},renderer);
     const capturePx=new Uint8Array(captureCanvas.getContext('2d').getImageData(0,0,w,h).data);
-    check('actual processToCanvas export ignores persisted always-show and token-tainted params',hash(capturePx)===hash(normal));
+    const plainCanvas=await processToCanvas({...getFXParams(),masks:P.masks,adjust:P.adjust},src,w,h,()=>{},renderer);
+    const plainPx=new Uint8Array(plainCanvas.getContext('2d').getImageData(0,0,w,h).data);
+    let capD=0,capN=0;for(let i=0;i<plainPx.length;i++){const d=Math.abs(plainPx[i]-capturePx[i]);if(d)capN++;capD=Math.max(capD,d);}
+    let nD=0;for(let i=0;i<plainPx.length;i++)nD=Math.max(nD,Math.abs(plainPx[i]-normal[i]));
+    check('actual processToCanvas export ignores persisted always-show and token-tainted params',capD<=1,`vs clean export: max delta ${capD} over ${capN} values; clean export vs direct render ${nD}`);
     const full=pixels({}),oldTileSize=fxExportTileSize;fxExportTileSize=()=>64;
     let tileTotal=0,tileDone=0;
     const tiled=await renderTiled(P,src,w,h,(n,total)=>{tileDone=n;tileTotal=total;},renderer);fxExportTileSize=oldTileSize;
@@ -117,24 +126,25 @@ try{
     check('multi-tile export remains overlay-free while always-show preference is enabled',tileDelta<=1,`max pixel delta ${tileDelta}`);
     return{checks,glLost:renderer.gl.isContextLost()};
   });
+  // Styles (2026-10-20 rename): legacy -> 'color', bw -> 'wob' (White on Black); 'photo' folded into 'color'.
   // Check local-storage parsing after reload and that actual photo selection changes do not reset
   // the global overlay preference. The photo switch's unrelated rendering/persistence work is stubbed.
-  await page.evaluate(()=>{mskSetSelViewStyle('photo');mskSelViewColorInput('#7b28e0');mskSelViewAlwaysInput(true);});
+  await page.evaluate(()=>{mskSetSelViewStyle('imgbw');mskSelViewColorInput('#7b28e0');mskSelViewAlwaysInput(true);});
   await page.reload({waitUntil:'load'});
   const persistedReload=await page.evaluate(()=>({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));
-  result.checks.push({name:'overlay preferences survive page reload',pass:persistedReload.style==='photo'&&persistedReload.color==='#7b28e0'&&persistedReload.always===true,detail:JSON.stringify(persistedReload)});
+  result.checks.push({name:'overlay preferences survive page reload',pass:persistedReload.style==='imgbw'&&persistedReload.color==='#7b28e0'&&persistedReload.always===true,detail:JSON.stringify(persistedReload)});
   await page.evaluate(()=>localStorage.removeItem('chromasmith.mask-selection-view.v1'));
   await page.reload({waitUntil:'load'});
   const reset=await page.evaluate(()=>({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));
-  result.checks.push({name:'clearing the overlay preference restores legacy defaults',pass:reset.style==='legacy'&&reset.color==='#ff2626'&&reset.always===false,detail:JSON.stringify(reset)});
+  result.checks.push({name:'clearing the overlay preference restores legacy defaults',pass:reset.style==='color'&&reset.color==='#ff2626'&&reset.always===false,detail:JSON.stringify(reset)});
   await page.evaluate(()=>localStorage.setItem('chromasmith.mask-selection-view.v1','{"style":"unexpected","color":"nope","always":"true"}'));
   await page.reload({waitUntil:'load'});
   const invalidPrefs=await page.evaluate(()=>({style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection}));
-  result.checks.push({name:'malformed stored overlay preferences fail back to legacy defaults',pass:invalidPrefs.style==='legacy'&&invalidPrefs.color==='#ff2626'&&invalidPrefs.always===false,detail:JSON.stringify(invalidPrefs)});
+  result.checks.push({name:'malformed stored overlay preferences fail back to legacy defaults',pass:invalidPrefs.style==='color'&&invalidPrefs.color==='#ff2626'&&invalidPrefs.always===false,detail:JSON.stringify(invalidPrefs)});
   await page.evaluate(()=>localStorage.removeItem('chromasmith.mask-selection-view.v1'));
   await page.reload({waitUntil:'load'});
   const switched=await page.evaluate(()=>{
-    mskSetSelViewStyle('photo');mskSelViewColorInput('#26c9d4');mskSelViewAlwaysInput(true);
+    mskSetSelViewStyle('imgbw');mskSelViewColorInput('#26c9d4');mskSelViewAlwaysInput(true);
     fxSyncHdrOption=()=>{};fxInvalidateMaskSource=()=>{};fxPhotoActivityInvalidate=()=>{};fxSyncVideoUI=()=>{};
     secScopePersist=()=>{};samInvalidate=()=>{};mskRebuild=()=>{};updateWork=()=>{};redeyeSyncUI=()=>{};
     fxPaintSlider=()=>{};_stA2S=()=>0;applyAdjustVals=()=>{};domAdjustVals=()=>({});adjSyncScopeUI=()=>{};
@@ -147,7 +157,7 @@ try{
     return{index:fxCurIdx,style:mskSelViewStyle,color:mskSelViewColor,always:mskAlwaysShowSelection,
       activeMask:fxState.masks[0]?.id};
   });
-  result.checks.push({name:'photo switch preserves UI overlay preference and selects target mask',pass:switched.index===1&&switched.style==='photo'&&switched.color==='#26c9d4'&&switched.always===true&&switched.activeMask==='target-mask',detail:JSON.stringify(switched)});
+  result.checks.push({name:'photo switch preserves UI overlay preference and selects target mask',pass:switched.index===1&&switched.style==='imgbw'&&switched.color==='#26c9d4'&&switched.always===true&&switched.activeMask==='target-mask',detail:JSON.stringify(switched)});
   if(errors.length)throw new Error(`browser/shader errors: ${errors.join('\n')}`);
 }finally{await browser.close();server.close();}
 if(result?.skip)console.log(`SKIP: ${result.skip}`);

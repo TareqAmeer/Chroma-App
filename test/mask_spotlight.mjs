@@ -26,6 +26,7 @@ try{
     out.pref=mskSpotlight;
     // stub box so no photo is needed
     window.mskOverlayBox=()=>({left:10,top:20,width:400,height:300});
+    {const wr=document.getElementById('fx-wrap').getBoundingClientRect();window.fxPhotoClientRect=()=>({left:wr.left+10,top:wr.top+20,width:400,height:300});}  // photo screen rect, #fx-wrap-relative 10,20
     mskBrushSize=40;mskBrushFeather=50;
     // overlay on: no spotlight, it would grey out the strokes already painted
     mskPreviewMode='select';mskSpotlightUpdate(210,170,100);out.withOverlay=sp.classList.contains('on');

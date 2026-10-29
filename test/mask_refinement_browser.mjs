@@ -44,6 +44,7 @@ try {
     ]);
   }, b64);
   await page.waitForFunction(() => fxImages?.length === 2 && !!curItem()?.img);
+  // Feather / Edge sit in the open Selection group (not behind More) for AI and sky masks.
   await page.evaluate(() => { fxSection('local', true); fxHistoryPush(); mskAdd('sky'); });
   await page.waitForFunction(() => document.querySelectorAll('.msk-refine-controls input[type=range]').length === 2);
 
@@ -54,18 +55,22 @@ try {
     ck('standard layout default', !mskCompactLayoutGet() && !document.getElementById('local-ctl').classList.contains('msk-compact'));
     const sky = fxState.masks[mskSel];
     ck('sky Feather and Edge controls present', sky.origin==='sky' && document.querySelectorAll('.msk-refine-controls input[type=range]').length===2);
+    // Sky masks get an async edge clean-up (_skyBuild) after the heuristic; compare settled rasters.
+    await (_skyJobs.get(sky)||Promise.resolve());
     sky.refineFeather=65; sky.refineEdge=-45; mskRebuild(); fxHistoryPush();
     const beforeRaster=sky.px, beforePx=digest(beforeRaster), beforeAdjust=JSON.stringify(fxImages[fxCurIdx].adjustOverride||fxState.sharedAdjust||{});
-    mskSkyRedetect(sky);
-    ck('sky re-detect resets derived settings', sky.refineFeather===0 && sky.refineEdge===0);
+    const redetected=mskSkyRedetect(sky);
+    const resetNow=[sky.refineFeather,sky.refineEdge];
+    await redetected;
+    ck('sky re-detect resets derived settings', resetNow[0]===0 && resetNow[1]===0);
     ck('sky re-detect replaces source identity', sky.px!==beforeRaster && digest(sky.px)===beforePx);
     await fxUndo();
     const restored=fxState.masks[mskSel];
     if(!restored)throw new Error(`undo lost sky mask: mskSel=${mskSel}, masks=${fxState.masks.length}, hist=${fxHistIdx}/${fxHistory.length}`);
     ck('undo restores prior sky parameters and pixels', restored.refineFeather===65 && restored.refineEdge===-45 && digest(restored.px)===beforePx);
-    document.querySelector('.msk-layout-toggle').click();
-    ck('compact preference is pressed and applied', mskCompactLayoutGet() && document.getElementById('local-ctl').classList.contains('msk-compact')
-      && document.querySelector('.msk-layout-toggle').getAttribute('aria-pressed')==='true');
+    // Compact slider layout moved into the mask "..." menu (2026-10-26); toggle it the way that menu item does.
+    mskCompactLayoutToggle();
+    ck('compact preference is applied', mskCompactLayoutGet() && document.getElementById('local-ctl').classList.contains('msk-compact'));
     ck('layout toggle leaves photo adjustment values alone', JSON.stringify(fxImages[fxCurIdx].adjustOverride||fxState.sharedAdjust||{})===beforeAdjust);
     fxSelectImage(1);
     ck('layout preference survives photo switch', mskCompactLayoutGet() && document.getElementById('local-ctl').classList.contains('msk-compact'));
@@ -84,8 +89,8 @@ try {
     await page.evaluate(() => mskCompactLayoutToggle());
     const geometry = await page.evaluate(() => {
       const bar=document.querySelector('.msk-rowbar'), ctl=document.getElementById('local-ctl');
-      const panel=document.querySelector('.fx-panel'), toggle=document.querySelector('.msk-layout-toggle');
-      if(!bar||!ctl||!panel||!toggle)return {missing:true};
+      const panel=document.querySelector('.fx-panel');
+      if(!bar||!ctl||!panel)return {missing:true};
       const rect=e=>{const r=e.getBoundingClientRect();return{x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
       const children=[...bar.children].filter(e=>rect(e).width>0&&rect(e).height>0);
       const overlaps=[];
@@ -94,15 +99,14 @@ try {
         if(a.x<b.right-1&&a.right>b.x+1&&a.y<b.bottom-1&&a.bottom>b.y+1)overlaps.push([children[i].className,children[j].className]);
       }
       const sliders=[...document.querySelectorAll('.msk-refine-controls input[type=range]')].map(e=>rect(e));
-      const cr=rect(ctl),pr=rect(panel),tr=rect(toggle);
+      const cr=rect(ctl),pr=rect(panel);
       return {barWidth:bar.clientWidth,barScrollWidth:bar.scrollWidth,overlaps,sliders,
-        controlWithinPanel:cr.x>=pr.x-1&&cr.right<=pr.right+1,
-        toggleWithinBar:tr.x>=rect(bar).x-1&&tr.right<=rect(bar).right+1};
+        controlWithinPanel:cr.x>=pr.x-1&&cr.right<=pr.right+1};
     });
     assert.ok(!geometry.missing, `mask panel missing at ${width}px`);
     assert.equal(geometry.overlaps.length, 0, `mask rowbar children overlap at ${width}px`);
     assert.ok(geometry.barScrollWidth<=geometry.barWidth+1, `mask rowbar spills at ${width}px: ${JSON.stringify(geometry)}`);
-    assert.ok(geometry.controlWithinPanel && geometry.toggleWithinBar, `mask controls escape at ${width}px`);
+    assert.ok(geometry.controlWithinPanel, `mask controls escape at ${width}px`);
     assert.ok(geometry.sliders.length===2 && geometry.sliders.every(r=>r.height>=28), `refinement targets are under 28px at ${width}px`);
     result.push({name:`compact controls fit ${width}px`,pass:true,detail:`2 slider targets >=28px; no overlap/spill`});
     if(width===900){await mkdir(path.join(here,'output'),{recursive:true});await page.locator('.msk-refine-controls').screenshot({path:path.join(here,'output','mask-refinement-compact.png')});}

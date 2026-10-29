@@ -55,7 +55,7 @@ async function styleApply(name){
   if(curItem()!==applyItem||JSON.stringify(getUISnapshot())!==preSignature){toast('Style not applied: photo or edits changed while masks were being prepared',false);return;}
   try{const post=pasteEditSelectiveApply(JSON.parse(JSON.stringify(pre)),s.recipe,chosen);
     if(preparedMasks){post.masks=preparedMasks.map(_mskToSnap);if(maskChoice.mode==='append'&&pre.masks.length)post.toggles.local=!!pre.toggles.local;}
-    await applyUISnapshot(post);fxUpdate();log(`Style applied: ${name}`,'ok');
+    await applyUISnapshot(post);fxUpdate();clearTimeout(_fxHistPushTimer);_fxHistPushTimer=null;fxHistoryPush({label:'Style: '+name});log(`Style applied: ${name}`,'ok');  // one undo step, recorded now (not 400 ms later)
     _styleRecent(name);_presetBlend={pre,post:getUISnapshot(),keys:chosen};
     const r=document.getElementById('row-preset-str');if(r){r.style.display='';const sl=document.getElementById('sl-preset-str');sl.value=100;document.getElementById('vl-preset-str').textContent='100';}}
   catch(e){log('Could not apply style: '+e.message,'err');}

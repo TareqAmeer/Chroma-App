@@ -60,7 +60,7 @@ try{
     const render=(masks,showSel=-1,opts={})=>{
       const P=fxCompareParams();P.masks=masks;
       if(opts.exposure!=null)P.adjust={enabled:true,exposure:opts.exposure};
-      renderer.render(P,w,h,{glowScale:1,seed:4.25,showSel,showSelOutline:!!opts.outline,previewOnly:MSK_PREVIEW_RENDER_TOKEN});
+      renderer.render(P,w,h,{glowScale:1,seed:4.25,showSel,showSelOutline:!!opts.outline,...(opts.mode!=null?{showSelMode:opts.mode}:{}),previewOnly:MSK_PREVIEW_RENDER_TOKEN});
       return Uint8Array.from(renderer.getPixels().px);
     };
     const digest=px=>{let v=2166136261>>>0;for(let i=0;i<px.length;i++){v^=px[i];v=Math.imul(v,16777619)>>>0;}return v.toString(16);};
@@ -75,7 +75,8 @@ try{
     check('Add union produces distinct effective coverage',digest(add)!==digest(nested));
     const amountMasks=build();amountMasks[2].composeOp='add';amountMasks[2].operandId='mask-a';
     const amountZero=structuredClone(amountMasks);amountZero[2].amount=0;
-    check('Amount zero leaves composed selection coverage unchanged',digest(render(amountZero,2))===digest(render(amountMasks,2)));
+    // White-on-black (mode 2) shows coverage alone; the default colour overlay also shows the photo, which Amount changes.
+    check('Amount zero leaves composed selection coverage unchanged',digest(render(amountZero,2,{mode:2}))===digest(render(amountMasks,2,{mode:2})));
     check('Amount still scales this mask\'s own adjustment',digest(render(amountZero))!==digest(render(amountMasks)));
     const invalidMasks=build();invalidMasks[2].composeOp='subtract';invalidMasks[2].operandId='deleted-id';
     const invalid=render(invalidMasks,2);

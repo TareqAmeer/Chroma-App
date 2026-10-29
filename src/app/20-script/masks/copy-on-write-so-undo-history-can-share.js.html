@@ -33,6 +33,9 @@ function _mskMigrate(m){
   if(m&&m.tanOneWayAmt===undefined&&m.tanOneWay!==undefined)m.tanOneWayAmt=m.tanOneWay?100:0;
   const d=_mskSkinDefaults();
   for(const k in d)if(m[k]===undefined)m[k]=d[k];
+  // A linear mask without finite end points (hand-written preset, truncated sidecar) took down the whole apply in
+  // createLinearGradient; give it the default gradient instead.
+  if(m.type==='linear'){const L={x0:0.5,y0:0.9,x1:0.5,y1:0.45};for(const k in L)if(!Number.isFinite(m[k]))m[k]=L[k];}
   if(m.aiProvenance!==undefined||mskIsAI(m)||m.origin==='sky')m.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
   // Raster storage normalisation. Three shapes reach here and all must end up as one:
   //   pxb64          — current serialized form

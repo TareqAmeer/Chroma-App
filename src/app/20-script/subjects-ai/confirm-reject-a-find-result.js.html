@@ -229,6 +229,16 @@ async function _mskPortableReevaluate(m,target){
       return{ok:true};
     }catch(e){return{ok:false,error:String(e&&e.message||e)};}
   }
+  if(m.aiDetect&&hasBox&&typeof mskSceneEnsure==='function'){
+    // The box was this photo's detection, not the target's: detect on the target and take the matching thing.
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed before mask recomputation'};
+    await mskSceneEnsure();const it=curItem();
+    for(let i=0;i<300&&it&&it._scene&&it._scene.state==='running';i++)await new Promise(r=>setTimeout(r,100));
+    if(target&&target.item&&curItem()!==target.item)return{ok:false,error:'Photo changed during detection'};
+    const hit=mskDetectRematch(it&&it._scene&&it._scene.list||[],m.aiDetect,m.aiBox);
+    if(!hit)return{ok:false,error:'No '+mskDetName(m.aiDetect.kind||'subject').toLowerCase()+' found in this photo'};
+    m.aiBox=_samNormalizeBox(hit.box);
+  }
   const result=await samRunPoints(m,{detached:true,silent:true,expectedItem:target.item,preferredBackend:savedBackend});
   return result.ok?{ok:true}:{ok:false,error:result.error||'SAM did not return a target raster'};
 }
@@ -253,8 +263,20 @@ async function mskAiUpdate(i){
   }finally{job.done();_mskAiUpdating=false;_mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
   return !m.aiState;
 }
+// Pasted / synced AI masks re-run on the photo they land on as soon as it is open (Lightroom behaviour), instead of
+// showing the source photo's selection until the user finds Update. Once per photo and mask set; a failure stays
+// visible as 'failed' with its reason and is not retried automatically.
+function _mskAutoUpdateStale(){
+  if(!window.__TAURI__||_mskAiUpdating)return;
+  const it=typeof curItem==='function'?curItem():null;if(!it||!it.img)return;
+  const stale=fxState.masks.filter(m=>m&&m.aiState==='stale'&&mskAiCanUpdate(m));if(!stale.length)return;
+  const sig=stale.map(m=>m.id).join(',');if(it._aiAutoUpd===sig)return;
+  Object.defineProperty(it,'_aiAutoUpd',{value:sig,writable:true,enumerable:false,configurable:true});
+  setTimeout(()=>{if(curItem()===it)mskAiUpdateAll({auto:true});},250);
+}
 async function mskAiUpdateAll(){
-  for(let i=0;i<fxState.masks.length;i++){const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
+  const it=curItem();
+  for(let i=0;i<fxState.masks.length;i++){if(curItem()!==it)return;const m=fxState.masks[i];if(m&&m.aiState&&mskAiCanUpdate(m))await mskAiUpdate(i);}
 }
 async function mskCopyAndReevaluate(){
   if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;

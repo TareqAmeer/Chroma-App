@@ -362,7 +362,10 @@ function mskGenerateSky(m){
   const px=_skyHeuristic(d,w,h);
   m.px=px;m.mtW=w;m.mtH=h;_mskTexDirty=true;_mskRecordAIProvenance(m,typeof curItem==='function'?curItem():null,null,true);
 }
-function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);mskSkyUpgrade(m);fxUpdate();fxHistoryPush();}
+// One undo step per re-detect: the history entry is recorded once the edge clean-up has landed (or failed),
+// not once for the heuristic and again for the clean-up.
+function mskSkyRedetect(m){if(!m||m.origin!=='sky')return;mskGenerateSky(m);fxUpdate();
+  return Promise.resolve(mskSkyUpgrade(m,{noHistory:true})).catch(()=>false).then(ok=>{if(fxState.masks.includes(m))fxHistoryPush();return ok;});}
 // Sky edge clean-up, after Liba et al. 2020 (Google "Sky Optimization") and Zhu 2020 ("Castle in
 // the Sky"): the coarse sky probability only decides "surely sky" and "surely not"; inside a band
 // around its boundary alpha is read off the photo's own colours (_samMatteCore), so the edit
@@ -415,7 +418,7 @@ function mskSkyUpgrade(m,opt={}){
     if(!opt.detached&&!fxState.masks.includes(m))return false;
     m.px=r.px;m.mtW=r.w;m.mtH=r.h;delete m._refineCache;_mskTexDirty=true;
     _mskRecordAIProvenance(m,it,r.backend,!r.backend);
-    if(!opt.detached){mskRebuild();fxUpdate();fxHistoryPush();}
+    if(!opt.detached){mskRebuild();fxUpdate();if(!opt.noHistory)fxHistoryPush();}
     return true;
   }).catch(e=>{log('Sky edge clean-up failed: '+(e&&e.message||e),'warn');return false;}).finally(()=>_skyJobs.delete(m));
   _skyJobs.set(m,job);

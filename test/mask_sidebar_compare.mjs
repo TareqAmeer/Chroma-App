@@ -3,6 +3,7 @@
 // against the pre-redesign native baseline (test/baselines/mask_sidebar_inventory.json).
 // usage: node test/mask_sidebar_compare.mjs <app_control_output.json>
 import { readFile } from 'node:fs/promises';
+if (!process.argv[2]) { console.log('usage: node test/mask_sidebar_compare.mjs <app_control_output.json>  (scan taken in the real desktop app)'); process.exit(2); }
 const raw = JSON.parse(await readFile(process.argv[2], 'utf8'));
 const scan = JSON.parse(raw.result ?? JSON.stringify(raw));
 const base = JSON.parse(await readFile(new URL('./baselines/mask_sidebar_inventory.json', import.meta.url), 'utf8'));
@@ -11,7 +12,10 @@ const TILE = /^button\|(Auto Subject|Subject|Objects|Sky|Landscape|Background|Sk
 // Transient-state artefacts of the baseline run, not controls: the AI busy overlay's Cancel (exists only while a model runs)
 // and the Pick button's label while the eyedropper was left armed ("Picking - shift-click to add" is the armed form of "Pick manually").
 const TRANSIENT = [/\|mskAiBusyCancel$/, /^list-row\|button\|msk-li-ctl\.msk-li-act\|Invert$/];
-const ARMED = { 'button|Picking — shift-click to add|btn-msk-cr-eye': 'button|Pick manually|btn-msk-cr-eye' };
+const ARMED = { 'button|Picking — shift-click to add|btn-msk-cr-eye': 'button|Pick manually|btn-msk-cr-eye',
+  // Lightroom pass (2026-10-28): a new Brush mask starts armed ("Painting"); AI tool buttons got short labels.
+  'button|Paint|btn-msk-paint': 'button|Painting|btn-msk-paint', 'button|Scribbling — drag on the photo|btn-msk-ai-tap': 'button|Scribble|btn-msk-ai-tap',
+  'button|Rectangle select|btn-msk-ai-box': 'button|Rectangle|btn-msk-ai-box' };
 const fails = []; let checked = 0, tiles = 0; const ids = new Set();
 for (const [state, st] of Object.entries(base.states)) {
   const now = scan.types[state]; if (!now) { fails.push(`state ${state} not scanned`); continue; }

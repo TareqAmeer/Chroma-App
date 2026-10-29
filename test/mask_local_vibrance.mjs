@@ -50,6 +50,7 @@ try {
     fxState.masks = [m]; fxImages[fxCurIdx].masks = fxState.masks; mskSel = 0; _mskTexDirty = true; mskRebuild();
     const localToggle = document.getElementById('tg-local');
     if (localToggle && !localToggle.classList.contains('on')) toggleFX('local');
+    _mskGroupOpen.adjColor = true;   // Vibrance lives in the Color group, collapsed by default
     mskRebuild(); fxHistoryPush();
     const input = document.querySelector('#local-ctl input[data-k="vibrance"]');
     if (!input) throw new Error('local Vibrance range input was not rendered');

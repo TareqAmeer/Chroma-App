@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { openMaskPage } from './lib_mask_probe.mjs';
 const { page, close } = await openMaskPage();
 try {
-  await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); fxState.masks.length = 0; mskSel = -1; mskAdd('brush'); mskRebuild(); mskPaintToggle(); });
+  await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); fxState.masks.length = 0; mskSel = -1; mskAdd('brush'); mskRebuild(); if (!mskPaintMode) mskPaintToggle(); });
   const sig = () => page.evaluate(() => { const c = document.querySelector('#local-list canvas'); if (!c) return null; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] - d[i + 2]; return s; });
   const a = await sig(); assert.notEqual(a, null, 'no thumbnail canvas in the mask row');
   await page.evaluate(() => FX.cv.scrollIntoView({ block: 'center' }));

@@ -3,7 +3,7 @@ import { load } from './extract.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 const S = load(['MSK_COCO', 'MSK_ANIMALS', 'mskDetGroup', 'mskDetName', 'mskSceneList', 'mskOtsu', 'mskComponents', 'mskCleanSpecks',
-  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', 'mskGuidedUpsample', 'mskMatteInBand']);
+  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', 'mskGuidedUpsample', 'mskMatteInBand', 'mskDetectRematch']);
 const D = (label, score, x0, y0, x1, y1) => ({ label, score, x0, y0, x1, y1 });
 
 test('every COCO class gets a readable name and a group', () => {
@@ -69,4 +69,15 @@ test('matte replaces only the edge band', () => {
   for (let i = 0; i < w * h; i++) if (sam[i]) matte[i] = 255;
   const o = S.mskMatteInBand(sam, matte, w, h, 2);
   assert.equal(o[20 * w + 20], 255); assert.equal(o[2 * w + 2], 0); assert.equal(o[20 * w + 10], 255); assert.equal(o[20 * w + 8], 100);
+});
+
+test('detected-object masks re-match the same kind of thing on another photo', () => {
+  const C = (kind, group, x0, y0, x1, y1) => ({ kind, group, box: { x0, y0, x1, y1 } });
+  const list = [C('dog', 'animals', 0.1, 0.2, 0.3, 0.6), C('dog', 'animals', 0.6, 0.1, 0.95, 0.9), C('person', 'people', 0.4, 0, 0.6, 1), C('bench', 'objects', 0, 0.7, 1, 0.9)];
+  const det = { kind: 'dog', group: 'animals' };
+  assert.equal(S.mskDetectRematch(list, det, { x0: 0.12, y0: 0.25, x1: 0.32, y1: 0.6 }), list[0], 'the overlapping dog, not the bigger one');
+  assert.equal(S.mskDetectRematch(list, det, { x0: 0.4, y0: 0.0, x1: 0.45, y1: 0.05 }), list[1], 'no overlap: the largest dog');
+  assert.equal(S.mskDetectRematch([C('cat', 'animals', 0.2, 0.2, 0.5, 0.5)], det, { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.5 }).kind, 'cat', 'same group when the class is absent');
+  assert.equal(S.mskDetectRematch([C('chair', 'objects', 0, 0, 1, 1)], { kind: 'bench', group: 'objects' }, { x0: 0, y0: 0, x1: 1, y1: 1 }), null, 'objects never swap class');
+  assert.equal(S.mskDetectRematch([list[2]], det, list[0].box), null, 'no dog in the photo');
 });

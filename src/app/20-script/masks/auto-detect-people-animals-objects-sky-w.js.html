@@ -113,7 +113,7 @@ async function mskSceneAdd(id){
   if(c.kind==='sky'){const m=mskAdd('sky');if(m){m.name='Sky';mskRebuild();}return;}
   const box=_samNormalizeBox(c.box);if(!box)return;
   // People and animals get the matting model's hair/fur edge inside SAM's edge band (item 14).
-  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
+  const m=mskAdd('ai',mask=>{mask.name=c.label;mask.aiBox=box;mask.aiUpsample=true;mask.aiDetect={kind:c.kind,group:c.group};if(c.group==='people'||c.group==='animals')mask.aiEdge=c.group;});
   if(!m)return;
   mskAiTapToggle(false); // a detected box is the prompt; no scribble needed
   mskRebuild();

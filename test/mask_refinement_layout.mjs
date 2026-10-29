@@ -29,6 +29,8 @@ const context = {
   _pxToB64: px => Array.from(px).join(','), _pxFromB64: value => Uint8ClampedArray.from(value.split(',').map(Number)),
   _mskMigrate: mask => { if (mask.pxb64) { mask.px = Uint8ClampedArray.from(mask.pxb64.split(',').map(Number)); delete mask.pxb64; } return mask; },
   _mskNewId: () => 'mask-id',
+  // sky maths is not under test here: a fresh raster of the right size, and no model upgrade
+  _skyHeuristic: (d, w, h) => new Uint8ClampedArray(w * h).fill(200), mskSkyUpgrade: () => {},
 };
 vm.createContext(context);
 vm.runInContext(
@@ -39,8 +41,8 @@ vm.runInContext(
   extract('mskRefinedPixels', 'mskRefineEdges') +
   extract('mskRefinementSupported', 'mskRefineControls') +
   extract('mskRefinementSourceReset', 'mskRefineControls') +
-  extract('mskGenerateSky', '_skySeedPoints') +
-  extract('mskSkyRedetect', '_skySeedPoints') +
+  extract('mskGenerateSky', 'mskSkyRedetect') +
+  extract('mskSkyRedetect', '_skyMatte') +
   extract('_mskToSnap', '_mskFromSnap') +
   extract('_mskFromSnap', '_mskCloneLive'),
   context,

@@ -8,15 +8,16 @@ const { page, errors, close } = await openMaskPage();
 try {
   await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); mskGroupsResetDefaults(); fxState.masks.length = 0; mskSel = -1; mskAdd('radial'); mskSel = 0; mskRebuild(); });
   const q = (f) => page.evaluate(f);
-  // collapsed by default, counts, persistence
+  // Selection + Light open by default, counts, persistence
   let r = await q(() => ({ hd: [...document.querySelectorAll('#local-ctl .msk-group-hd')].map((b) => [b.textContent.trim(), b.getAttribute('aria-expanded')]), amountDisabled: document.querySelector('#local-ctl input[data-k=amount]').disabled, howto: document.querySelector('.msk-rowbar-nm')?.title }));
-  assert.deepEqual(r.hd, [['Selection', 'true'], ['Light', 'false'], ['Color', 'false'], ['Effects', 'false'], ['Detail', 'false']]);
+  assert.deepEqual(r.hd, [['Selection', 'true'], ['Light', 'true'], ['Color', 'false'], ['Effects', 'false'], ['Detail', 'false']]);
   assert.ok(r.amountDisabled, 'Amount is disabled with nothing adjusted'); assert.match(r.howto, /Drag the pin/);
   await q(() => { const m = fxState.masks[0]; m.exp = 0.4; m.hi = -0.2; m.sat = 0.1; mskRebuild(); });
   r = await q(() => ({ cnt: [...document.querySelectorAll('#local-ctl .msk-group-hd .msk-group-count')].map((b) => b.closest('.msk-group').dataset.grp + '=' + b.textContent), amountDisabled: document.querySelector('#local-ctl input[data-k=amount]').disabled }));
   assert.deepEqual(r.cnt, ['adjust=2', 'adjColor=1'], 'count pills only on groups holding non-default values'); assert.equal(r.amountDisabled, false, 'Amount enables once the mask has an adjustment');
   await page.click('#msk-ghd-adjust'); r = await q(() => ({ exp: document.getElementById('msk-ghd-adjust').getAttribute('aria-expanded'), stored: JSON.parse(localStorage.getItem('chromasmith_msk_groups2')).adjust, legacy: localStorage.getItem('chromasmith_msk_groups') }));
-  assert.equal(r.exp, 'true'); assert.equal(r.stored, true); assert.equal(r.legacy, null);
+  assert.equal(r.exp, 'false'); assert.equal(r.stored, false); assert.equal(r.legacy, null);  // Light opens by default, a click collapses it
+  await page.click('#msk-ghd-adjust'); assert.equal(await q(() => JSON.parse(localStorage.getItem('chromasmith_msk_groups2')).adjust), true, 'reopening persists');
   // reset by double-click on the label
   await page.dblclick('#local-ctl .fx-row:has(input[data-k=exp]) .fx-label');
   r = await q(() => ({ exp: fxState.masks[0].exp, hi: fxState.masks[0].hi, val: document.querySelector('#local-ctl input[data-k=exp]').value }));

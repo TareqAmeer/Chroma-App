@@ -58,7 +58,8 @@ try{
   const appendDefault=await page.locator('[name="style-mask-mode"][value="append"]').isChecked();
   assert.equal(appendDefault,true,'Append is the safe default');
   await page.locator('#style-mask-apply').click();
-  await page.waitForTimeout(500);
+  // applyUISnapshot is async (mask raster rebuild); wait for the apply to record its undo step
+  await page.waitForFunction(i=>fxHistIdx>i,setup.index,{timeout:15000}).catch(()=>{});
   const resultState=await page.evaluate(()=>({count:fxState.masks.length,dialog:document.getElementById('cs-modal-ov')?.innerText||'',body:document.body.innerText.slice(-700),logs:document.getElementById('log-area')?.innerText||''}));
   assert.equal(resultState.count,3,`Append should add two preset masks: ${JSON.stringify(resultState)}`);
   assert.equal(resultState.dialog,'','preset modal closes after commit');

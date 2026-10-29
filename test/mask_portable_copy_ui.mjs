@@ -63,7 +63,8 @@ try{
  assert.deepEqual(result.afterCopy.pixels,[[201,211],[202,212]]);
  assert.deepEqual(result.afterCopy.provenance,Array.from({length:2},()=>({schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',modelVersion:null,artifactDigest:null,sourceLocation:null,recordedAt:'target'})),'new target provenance survives portable commit and sidecar snapshots');
  assert.equal(result.legacyProvenance,null,'legacy prompted masks stay explicitly unknown');
- assert.deepEqual(result.backendRequests.slice(0,4),['sam_points',null,'sam_points',null],'production portable reevaluation forwards saved point-backend intent while unknown sky masks retain automatic selection');
+ // Sky re-runs through its heuristic + landscape edge (mskSkyUpgrade), not SAM; only the prompted mask asks SAM, once per target.
+assert.deepEqual(result.backendRequests.slice(0,2),['sam_points','sam_points'],'production portable reevaluation forwards saved point-backend intent; sky masks do not call SAM');
  assert.deepEqual(result.afterCopy.source,[11,12]);assert.deepEqual(result.afterCopy.refine,[20,-5,44,15]);
  assert.deepEqual(result.afterCopy.categories,[[{crop:[.1,.2]},{exposure:'8'}],[{crop:[.3,.4]},{exposure:'-4'}]]);
  assert.equal(result.afterCopy.saves,2);assert.equal(result.afterCopy.active,0);

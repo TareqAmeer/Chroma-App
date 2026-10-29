@@ -40,7 +40,7 @@ try {
   });
   assert.ok(r.btnVisible && r.haspopup === 'menu' && r.role === 'menu' && r.expanded === 'true');
   assert.deepEqual(r.modes, ['Color Overlay', 'Color Overlay on B&W', 'Image on B&W', 'Image on Black', 'Image on White', 'White on Black']);
-  assert.ok(r.checks.includes('Show Overlay for New Masks') && r.checks.length === 4, JSON.stringify(r.checks));
+  assert.ok(r.checks.includes('Show Overlay for New Masks') && r.checks.length === 5 && r.checks.includes('Spotlight') && r.checks.includes('Edge only'), JSON.stringify(r.checks));
   assert.equal(r.style, 'imgbw'); assert.equal(r.on, 'select'); assert.ok(r.menuClosed); assert.equal(r.stored.style, 'imgbw');
   assert.equal(r.emptyIdx, -1, 'empty mask + Image on B&W leaves the photo in colour');
   assert.equal(r.paintedIdx, 0, 'a painted selection shows (colour inside, B&W outside)');

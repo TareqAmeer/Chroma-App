@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { openMaskPage } from './lib_mask_probe.mjs';
 const { page, errors, close } = await openMaskPage();
 try {
-  await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); fxState.masks.length = 0; mskSel = -1; mskSetPreviewMode('select'); mskPreviewMode = 'off'; mskOverlayUserOff = false; mskAdd('brush'); mskRebuild(); });
+  await page.evaluate(() => { fxSection('local'); document.getElementById('tg-local')?.classList.add('on'); fxState.masks.length = 0; mskSel = -1; mskSetPreviewMode('select'); mskPreviewMode = 'off'; mskOverlayUserOff = false; mskAdd('brush'); mskRebuild(); if (mskPaintMode) mskPaintStop(); });
   const cur = () => page.evaluate(() => ({ cls: document.body.classList.contains('msk-brushing'), cursor: getComputedStyle(document.getElementById('fx-zoom-wrap')).cursor, pm: mskPreviewMode }));
   let s = await cur(); assert.ok(!s.cls && s.cursor === 'grab', 'idle: ' + JSON.stringify(s));
   await page.evaluate(() => mskPaintToggle()); s = await cur();

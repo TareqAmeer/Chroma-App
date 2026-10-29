@@ -14,7 +14,11 @@ const scanSrc = await readFile(new URL('./lib_mask_panel_scan.js', import.meta.u
 const RENAMED = { 'button|+ Mask|mskAddMenu': 'button|+Create New Mask|btn-msk-create', 'button|Invert|btn-msk-tool-invert': 'button|Invert|btn-msk-invert' };
 // Button system (2026-10-25): exactly ONE Invert button per mask, in the combine row for every mask type (btn-msk-invert).
 // The brush tool header's second Invert (btn-msk-tool-invert) and the row mini-control folded into it.
-const ALT = { 'button|Invert|mskInvert': ['button|Invert|btn-msk-invert'] };
+const ALT = { 'button|Invert|mskInvert': ['button|Invert|btn-msk-invert'],
+  // Lightroom pass (2026-10-28): a new Brush mask starts armed, so its button reads "Painting"; AI tool buttons got short labels.
+  'button|Paint|btn-msk-paint': ['button|Painting|btn-msk-paint'],
+  'button|Scribbling — drag on the photo|btn-msk-ai-tap': ['button|Scribble|btn-msk-ai-tap'],
+  'button|Rectangle select|btn-msk-ai-box': ['button|Rectangle|btn-msk-ai-box'] };
 const TILE = /^button\|(Auto Subject|Subject|Objects|Sky|Landscape|Background|Skin|Brush|Linear|Radial|Color|Luminance|Depth|Water|Vegetation|Mountains|Buildings|Ground)\|(mskAdd\w*|mskLandscapeToggle)$/;
 // Deliberately removed (button system, 2026-10-25): the per-row Invert mini control duplicated the single Invert button.
 // Compact slider layout moved into the mask "..." menu (2026-10-26).

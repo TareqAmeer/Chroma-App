@@ -14,6 +14,12 @@ const samEnd=html.indexOf('\n// ── Named subjects:',samStart);
 assert(helperStart>=0&&helperEnd>helperStart&&complementStart>=0&&complementEnd>complementStart&&samStart>=0&&samEnd>samStart,'production provenance, background complement, and inference helpers exist');
 const make= new Function('window','curItem','fxPhotoActivity','samEnsureEncoded','_samEncoding','_samToken','_sam2Token','samSubsamplePoints','_samRefineMask','_mskTexDirty','_samLastError','mskRebuild','fxUpdate','renderPreview','fxHistoryPush','hapt','toast','log',
  `${html.slice(helperStart,helperEnd)}\n${html.slice(complementStart,complementEnd)}\n${html.slice(samStart,samEnd)}\nreturn{samRunPoints,_samComplementSubjectMask,_mskRecordAIProvenance,_mskNormalizeAIProvenance};`);
+// Globals samRunPoints reaches that are not under test: busy pill, mask texture size, raster finishing (identity here).
+Object.assign(globalThis,{mskAiBusy:()=>({cancelled:false,done(){}}),mskTexDims:()=>({w:2,h:2}),samInputDims:()=>({w:1024,h:1024}),
+ _mskFinishAiRaster:(px,w,h)=>({px,w,h}),mskMatteModelFor:async()=>null,_mskMatteFor:async()=>null,_mskEdgeMatte:async()=>null,_samNormalizeBox:()=>null,
+ fxState:{masks:[]},mskSel:-1,
+ // one-shot AI masks (Auto Subject, Foreground, Landscape) re-run through their own path; this test covers point prompts + sky
+ _mskIsOneShotAI:()=>false,_mskOneShotRaster:async()=>null});
 function response(maskBytes=[20,40,60,80]){const body=new Uint8Array(maskBytes),header=new TextEncoder().encode(JSON.stringify({width:2,height:2})),buf=new Uint8Array(4+header.length+body.length);new DataView(buf.buffer).setUint32(0,header.length,true);buf.set(header,4);buf.set(body,4+header.length);return buf.buffer;}
 async function fixture({sam2=false,fail=false,background=false,maskBytes}={}){
  let item={path:'C:/photos/source.jpg'},active=item,command='';
@@ -40,11 +46,12 @@ const fullBackground=await fixture({background:true,maskBytes:[255,255,255,255]}
 assert.equal(fullBackground.result.ok,false);assert.deepEqual([...fullBackground.m.px],[...fullBackground.priorPixels]);
 assert.deepEqual([...fixtureHelper([0,128,255])],[255,127,0]);
 function fixtureHelper(mask){return make({},()=>null,()=>()=>{},async()=>{},false,null,null,x=>x,x=>x,false,null,()=>{},()=>{},()=>{},()=>{},()=>{},()=>{})._samComplementSubjectMask(mask);}
-const backgroundActionStart=html.indexOf('function mskAddBackground('),backgroundActionEnd=html.indexOf('\n// Teeth are not',backgroundActionStart);
+const backgroundActionStart=html.indexOf('async function mskAddBackground('),backgroundActionEnd=html.indexOf('\n// Teeth are not',backgroundActionStart);
 assert(backgroundActionStart>=0&&backgroundActionEnd>backgroundActionStart,'background menu action exists');
 let addedType='',addedMask=null;
-const addBackground=new Function('mskAdd','log',`${html.slice(backgroundActionStart,backgroundActionEnd)}\nreturn mskAddBackground;`)((type,configure)=>{addedType=type;addedMask={};configure(addedMask);return addedMask;},()=>{});
-assert.equal(addBackground(),addedMask);assert.equal(addedType,'ai');assert.equal(addedMask.aiSelectionMode,'background');assert.equal(addedMask.name,'Background');
+// Without a matting model (browser / none installed) Background falls back to the scribbled AI mask.
+const addBackground=new Function('mskAdd','log','window','mskMatteModels','mskAddSubjectMatte',`${html.slice(backgroundActionStart,backgroundActionEnd)}\nreturn mskAddBackground;`)((type,configure)=>{addedType=type;addedMask={};configure(addedMask);return addedMask;},()=>{},{},async()=>[],async()=>null);
+assert.equal(await addBackground(),addedMask);assert.equal(addedType,'ai');assert.equal(addedMask.aiSelectionMode,'background');assert.equal(addedMask.name,'Background');
 const menuStart=html.indexOf('function mskAddMenu('),menuEnd=html.indexOf('\nfunction mskMoreMenu(',menuStart),menuSource=html.slice(menuStart,menuEnd);
 assert(menuSource.includes("item('Select Subject'"));assert(menuSource.includes("item('Select Background'"));
 const staleMask={origin:'ai',aiPoints:[{nx:.2,ny:.3,positive:true}],aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam',recordedAt:'old'}};
@@ -74,7 +81,8 @@ const failedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoi
 assert.equal((await failedReevaluate(failedCandidate,target)).ok,false);assert.equal(failedCandidate.aiProvenance.recordedAt,'before');
 const staleReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(()=>{},()=>[],async()=>({ok:false,error:'Photo changed during mask recomputation'}),()=>{},normalize,normalizeBox,()=>({path:'different.jpg'}));
 assert.equal((await staleReevaluate({...failedCandidate},target)).ok,false);
-const skyStart=html.indexOf('function mskGenerateSky('),skyEnd=html.indexOf('\nfunction mskSkyRedetect(',skyStart);
+const skyStart=html.indexOf('function _skyHeuristic('),  // the sky score helper sits just above mskGenerateSky
+      skyEnd=html.indexOf('\nfunction mskSkyRedetect(',skyStart);
 const runSky=new Function('mskRefinementSourceReset','curItem','fxWork','fxImg','_mskRecordAIProvenance','_mskTexDirty',html.slice(skyStart,skyEnd)+'\nreturn mskGenerateSky;')(()=>{},()=>null,null,null,()=>{},false);
 const invalidSky={origin:'sky',aiProvenance:{backend:'sam2_points'},px:new Uint8Array([1])};runSky(invalidSky);assert.equal(invalidSky.aiProvenance,null);assert.equal(invalidSky.px.length,0);
 const recordHelpers=new Function(html.slice(normalizeStart,normalizeEnd)+'\nreturn _mskRecordAIProvenance;')();
@@ -89,9 +97,10 @@ assert.equal((await staleSkyReevaluate({origin:'sky',aiPoints:[]},target)).ok,fa
 // CHR-247: portable re-evaluation follows the backend recorded by the source, not whichever
 // model happens to have a warm token in this renderer. Exercise the production encoder and
 // command selector with tiny synthetic pixels and a controllable native IPC boundary.
-const ensureStart=html.indexOf('async function samEnsureEncoded(opts={})'),ensureEnd=html.indexOf('\n// Resubmits m.aiPoints',ensureStart);
+const ensureStart=html.indexOf('function _samCurOwner('),  // owner + RGB helpers sit just above samEnsureEncoded
+      ensureEnd=html.indexOf('\n// Resubmits m.aiPoints',ensureStart);
 const backendHarness=new Function('window','curItem','fxPhotoActivity','fxState','mskSel','mskIsAI','samInputDims','mskSourceData','_samFramedInvoke','samRunPoints','_samToken','_samEncoding','_sam2Token','_sam2Encoding','toast','log','_samLastError','mskRebuild','mskSourceReset','samSubsamplePoints','_samRefineMask','_mskTexDirty','fxUpdate','renderPreview','fxHistoryPush','hapt',
- `${html.slice(helperStart,helperEnd)}\n${html.slice(ensureStart,ensureEnd)}\n${html.slice(complementStart,complementEnd)}\n${html.slice(normalizeBoxStart,normalizeBoxEnd)}\n${html.slice(samStart,samEnd)}\nreturn{samEnsureEncoded,samEnsureEncoded2,samRunPoints};`);
+ `let _samEncodeP=null;\n${html.slice(helperStart,helperEnd)}\n${html.slice(ensureStart,ensureEnd)}\n${html.slice(complementStart,complementEnd)}\n${html.slice(normalizeBoxStart,normalizeBoxEnd)}\n${html.slice(samStart,samEnd)}\nreturn{samEnsureEncoded,samEnsureEncoded2,samRunPoints};`);
 async function backendFixture({preferredBackend=null,warmEdge=false,warmSam2=false,failEncode=null,box=false,provenance}={}){
  const item={path:'C:/photos/target.jpg',img:{target:true}},commands=[];
  let edgeToken=warmEdge?'warm-edge':null,sam2Token=warmSam2?'warm-sam2':null;
@@ -107,7 +116,7 @@ async function backendFixture({preferredBackend=null,warmEdge=false,warmSam2=fal
 const edgePreferred=await backendFixture({preferredBackend:'sam_points',warmEdge:true,warmSam2:true});
 assert.equal(edgePreferred.result.ok,true,JSON.stringify(edgePreferred));assert.deepEqual(edgePreferred.commands,['sam_points'],'saved EdgeSAM does not drift to a warm SAM 2 token');
 const edgeCold=await backendFixture({preferredBackend:'sam_points'});
-assert.equal(edgeCold.result.ok,true);assert.deepEqual(edgeCold.commands,['sam_encode','sam_points'],'saved EdgeSAM prepares its required token on a cold target');
+assert.equal(edgeCold.result.ok,true,JSON.stringify(edgeCold.result));assert.deepEqual(edgeCold.commands,['sam_encode','sam_points'],'saved EdgeSAM prepares its required token on a cold target');
 const sam2Preferred=await backendFixture({preferredBackend:'sam2_points',warmEdge:true});
 assert.equal(sam2Preferred.result.ok,true);assert.deepEqual(sam2Preferred.commands,['sam2_encode','sam2_points'],'saved SAM 2 is prepared directly without EdgeSAM encode/upgrade');
 const boxPreferred=await backendFixture({preferredBackend:'sam_box',warmEdge:true,warmSam2:true,box:true});
@@ -128,16 +137,17 @@ for(const failedBackend of ['sam_points','sam2_points']){
 // a known sky backend failure is a failed target, while unknown legacy retains heuristic fallback.
 const portableCalls=[];
 const portableReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
- m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[{nx:.5,ny:.5,positive:true}],async(m,opts)=>{portableCalls.push(opts.preferredBackend);return{ok:false,error:'required model unavailable'};},recordHelpers,normalize,normalizeBox,()=>target.item);
+ m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[{nx:.5,ny:.5,positive:true}],async(m,opts)=>{portableCalls.push(opts.preferredBackend);return{ok:false,error:'required model unavailable'};},recordHelpers,normalize,normalizeBox,()=>target.item,async()=>true);
 const knownPoint={origin:'ai',aiPoints:[{nx:.2,ny:.2,positive:true}],aiProvenance:{schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny'}};
 assert.equal((await portableReevaluate(knownPoint,target)).ok,false);assert.equal(portableCalls.pop(),'sam2_points');
 const knownSky={origin:'sky',aiPoints:[],aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam'}};
-assert.equal((await portableReevaluate(knownSky,target)).ok,false,'known sky backend cannot silently commit heuristic-only fallback');assert.equal(portableCalls.pop(),'sam_points');
+// Sky re-runs through its own heuristic + landscape-model edge (mskSkyUpgrade), never through SAM points.
+assert.equal((await portableReevaluate(knownSky,target)).ok,true,'sky recomputes on the target photo');assert.equal(portableCalls.length,0,'sky does not call SAM');
 const legacySky={origin:'sky',aiPoints:[],aiProvenance:null};
-const legacySkyResult=await portableReevaluate(legacySky,target);assert.equal(legacySkyResult.ok,true);assert.equal(portableCalls.pop(),null,'unknown sky keeps existing heuristic fallback behavior');
+const legacySkyResult=await portableReevaluate(legacySky,target);assert.equal(legacySkyResult.ok,true);assert.equal(portableCalls.length,0,'unknown sky keeps the heuristic path');
 let guardedCalls=0;
 const guardedReevaluate=new Function('mskGenerateSky','_skySeedPoints','samRunPoints','_mskRecordAIProvenance','_mskNormalizeAIProvenance','_samNormalizeBox','curItem','mskSkyUpgrade',html.slice(reevaluateStart,reevaluateEnd)+'\nreturn _mskPortableReevaluate;')(
- m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[],async()=>{guardedCalls++;return{ok:true};},recordHelpers,normalize,normalizeBox,()=>target.item);
+ m=>{m.px=new Uint8Array([1]);m.mtW=m.mtH=1;},()=>[],async()=>{guardedCalls++;return{ok:true};},recordHelpers,normalize,normalizeBox,()=>target.item,async()=>false);
 const invalidSavedBox={origin:'ai',aiPoints:[{nx:.2,ny:.2,positive:true}],aiBox:{x0:.1,y0:.1,x1:.8,y1:.8},px:new Uint8Array([5]),aiProvenance:{schemaVersion:1,backend:'sam2_points',modelId:'sam2-hiera-tiny',recordedAt:'saved'}};
 assert.equal((await guardedReevaluate(invalidSavedBox,target)).ok,false,'rectangle prompts cannot silently change a saved point backend');
 assert.deepEqual([...invalidSavedBox.px],[5]);assert.equal(invalidSavedBox.aiProvenance.recordedAt,'saved');
@@ -146,6 +156,7 @@ assert.equal((await guardedReevaluate(missingSavedBox,target)).ok,false,'saved b
 assert.deepEqual([...missingSavedBox.px],[6]);assert.equal(missingSavedBox.aiProvenance.recordedAt,'saved');
 assert.equal(guardedCalls,0,'inconsistent saved prompt/backend pairs are rejected before model work');
 const noSeedKnownSky={origin:'sky',aiPoints:[],px:new Uint8Array([8]),aiProvenance:{schemaVersion:1,backend:'sam_points',modelId:'edge-sam',recordedAt:'saved'}};
-assert.equal((await guardedReevaluate(noSeedKnownSky,target)).ok,false,'known sky backend cannot fall back when no stable seeds are regenerated');
+// No landscape model on the target: the regenerated heuristic sky is kept, with a warning (no SAM work).
+const noModelSky=await guardedReevaluate(noSeedKnownSky,target);assert.equal(noModelSky.ok,true);assert.match(noModelSky.warning||'',/edge clean-up unavailable/);
 assert.equal(guardedCalls,0);
-console.log('PASS AI provenance and Select Background: saved backend preparation/dispatch, inconsistent prompt rejection, sky fallback policy, source provenance, soft complement, and failure preservation');
+console.log('PASS AI provenance and Select Background: saved backend preparation/dispatch, inconsistent prompt rejection, sky re-run policy, source provenance, soft complement, and failure preservation');
