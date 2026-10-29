@@ -279,14 +279,23 @@ function _mskOverlaySyncCore(){if(typeof healOverlaySync==='function')try{healOv
     // for true-shape masks, a = aspect; stretched 0..1 for old ones, a = 1).
     const L=4,ex=dy/a,ey=-dx*a,seg=(px,py)=>'M'+P(px+ex*L,py+ey*L)+'L'+P(px-ex*L,py-ey*L);
     const mx=(x0+x1)/2,my=(y0+y1)/2;
-    html+=hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot',MSK_ROT_CURSOR,18);
+    // The band between the two edges grabs the whole gradient (it used to be empty, so a drag there
+    // fell through to the canvas and panned the photo instead of moving the mask).
+    const band='M'+P(x0+ex*L,y0+ey*L)+'L'+P(x0-ex*L,y0-ey*L)+'L'+P(x1-ex*L,y1-ey*L)+'L'+P(x1+ex*L,y1+ey*L)+'Z';
+    html+=hit(band,'lmove','move')+hit(seg(x0,y0),'p0','grab',18)+hit(seg(x1,y1),'p1','grab',18)+hit(seg(mx,my),'lrot',MSK_ROT_CURSOR,18);
     html+=`<path d="${seg(x0,y0)}" ${line}/><path d="${seg(mx,my)}" ${dash}/><path d="${seg(x1,y1)}" ${line}/>`;
     html+=knob(x0,y0,'p0',4.5,'#fff','grab','Full-effect edge')+knob(x1,y1,'p1',4.5,'#888','grab','No-effect edge');
     html+=knob(mx,my,'lmove',7,'var(--acc,#ff9b42)','move','Move (drag the middle line to rotate)');
   }
   // Draw-to-create: right after Add Radial/Linear, a drag on the photo places and sizes the shape.
-  if(_mskDrawFor===m)html+=`<rect x="0" y="0" width="${W}" height="${H}" data-h="draw" fill="transparent" style="cursor:crosshair" pointer-events="all"/>`;
-  else _mskDrawFor=null;
-  svg.innerHTML=html;
+  // It sits UNDER the shape's own handles, so grabbing the new shape moves/resizes it instead of
+  // redrawing it. Otherwise, while the whole photo fits the view (nothing to pan to), a drag
+  // anywhere on the photo moves the selected shape rather than sliding the photo around the canvas;
+  // zoomed in, a drag off the shape still pans.
+  const fitted=!(typeof fxZoom==='number'&&typeof FX_FIT==='number'&&fxZoom>FX_FIT*1.001);
+  let under='';
+  if(_mskDrawFor===m)under=`<rect x="0" y="0" width="${W}" height="${H}" data-h="draw" fill="transparent" style="cursor:crosshair" pointer-events="all"/>`;
+  else{_mskDrawFor=null;if(fitted)under=`<rect x="0" y="0" width="${W}" height="${H}" data-h="${m.type==='radial'?'move':'lmove'}" fill="transparent" style="cursor:move" pointer-events="all"/>`;}
+  svg.innerHTML=under+html;
   svg.querySelectorAll('[data-h]').forEach(h=>h.addEventListener('pointerdown',mskHandleDown));
 }
