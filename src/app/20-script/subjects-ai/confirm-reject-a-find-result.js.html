@@ -175,8 +175,9 @@ function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPrompted
 // Recomputes a one-shot AI mask's raster on the CURRENT photo with the same model it was made with.
 async function _mskOneShotRaster(m,item){
   // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
-  const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
-  if((mode==='matte'||mode==='matte-bg')&&/^detect:/.test(be)){
+  const be=String((m&&m.aiOneShotBackend)||(m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  // No recorded backend (saved before aiOneShotBackend): Auto Subject / Background start from the detections, as new ones do.
+  if((mode==='matte'||mode==='matte-bg')&&(!be||/^detect:/.test(be))){
     await mskSceneEnsure({retry:true});const sc=_mskSceneOf(item),det=await _mskSubjectFromDetections(item,sc&&sc.state==='done'?sc.list:[]);
     if(det){const src=mode==='matte-bg'?Uint8ClampedArray.from(det.px,v=>255-v):det.px;return{..._mskFinishAiRaster(src,det.w,det.h,{specks:true}),backend:'detect:'+det.backend};}
     // no person/animal on the target photo: fall through to the matte
@@ -194,7 +195,8 @@ async function _mskOneShotRaster(m,item){
     return{..._mskFinishAiRaster(px,dm.w,dm.h,{specks:true}),backend:'depth:foreground'};
   }
   if(mode==='landscape'){
-    const cat=(be.match(/^landscape:(\w+)/)||[])[1];if(!cat)throw new Error('Unknown landscape category');
+    // Older masks carry only their name ('Sky (Landscape)'): read the category back from it.
+    const cat=(be.match(/^landscape:(\w+)/)||[])[1]||(LANDSCAPE_GROUPS.find(g=>String(m.name||'').startsWith(g[1]+' (Landscape)'))||[])[0];if(!cat)throw new Error('Unknown landscape category');
     const lc=await _mskLandscapeResult(item,item.img),gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
     const raw=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),rgba=mskSourceData(lc.w,lc.h,item.img);
     const matted=rgba?_skyMatte(raw,lc.w,lc.h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);

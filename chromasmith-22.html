@@ -7575,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1029A';
+const BUILD='1.1029B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16659,6 +16659,9 @@ function _mskNormalizeAIProvenance(p){
 }
 function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
+  // The provenance normaliser keeps only SAM backends, so a pasted/synced one-shot mask lost which model and
+  // landscape category to re-run ('Unknown landscape category' on paste). Keep that recipe in its own field.
+  if(typeof backend==='string'&&/^(detect|matte|landscape|depth):/.test(backend))m.aiOneShotBackend=backend;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
     backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':['sam2_points','sam2_box'].includes(backend)?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,
@@ -18801,8 +18804,9 @@ function _mskPortableNeedsReevaluation(m){return m.origin==='sky'||mskIsPrompted
 // Recomputes a one-shot AI mask's raster on the CURRENT photo with the same model it was made with.
 async function _mskOneShotRaster(m,item){
   // Raw backend string: the normaliser only keeps SAM backends, but matte:/landscape: name the model to re-run.
-  const be=String((m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
-  if((mode==='matte'||mode==='matte-bg')&&/^detect:/.test(be)){
+  const be=String((m&&m.aiOneShotBackend)||(m&&m.aiProvenance&&typeof m.aiProvenance.backend==='string'&&m.aiProvenance.backend)||''),mode=m.aiSelectionMode;
+  // No recorded backend (saved before aiOneShotBackend): Auto Subject / Background start from the detections, as new ones do.
+  if((mode==='matte'||mode==='matte-bg')&&(!be||/^detect:/.test(be))){
     await mskSceneEnsure({retry:true});const sc=_mskSceneOf(item),det=await _mskSubjectFromDetections(item,sc&&sc.state==='done'?sc.list:[]);
     if(det){const src=mode==='matte-bg'?Uint8ClampedArray.from(det.px,v=>255-v):det.px;return{..._mskFinishAiRaster(src,det.w,det.h,{specks:true}),backend:'detect:'+det.backend};}
     // no person/animal on the target photo: fall through to the matte
@@ -18820,7 +18824,8 @@ async function _mskOneShotRaster(m,item){
     return{..._mskFinishAiRaster(px,dm.w,dm.h,{specks:true}),backend:'depth:foreground'};
   }
   if(mode==='landscape'){
-    const cat=(be.match(/^landscape:(\w+)/)||[])[1];if(!cat)throw new Error('Unknown landscape category');
+    // Older masks carry only their name ('Sky (Landscape)'): read the category back from it.
+    const cat=(be.match(/^landscape:(\w+)/)||[])[1]||(LANDSCAPE_GROUPS.find(g=>String(m.name||'').startsWith(g[1]+' (Landscape)'))||[])[0];if(!cat)throw new Error('Unknown landscape category');
     const lc=await _mskLandscapeResult(item,item.img),gi=lc.groups.indexOf(cat);if(gi<0)throw new Error('missing category '+cat);
     const raw=lc.body.subarray(gi*lc.w*lc.h,(gi+1)*lc.w*lc.h),rgba=mskSourceData(lc.w,lc.h,item.img);
     const matted=rgba?_skyMatte(raw,lc.w,lc.h,rgba,cat==='sky'?0.012:0.008):Uint8ClampedArray.from(raw);
@@ -19107,7 +19112,7 @@ let _mskSrcCache=null;
 function mskSourceData(w,h,img){
   img=img||((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg);
   if(!img||!w||!h)return null;
-  // Two entries: AI work alternates between the model size (samInputDims) and the mask size (mskTexDims), and a
+  // Three entries: AI work alternates between the model size (samInputDims) and the mask size (mskTexDims), and a
   // single slot redrew + read back the photo on every switch (item 27).
   const C=Array.isArray(_mskSrcCache)?_mskSrcCache:[];
   const hit=C.find(e=>e.img===img&&e.w===w&&e.h===h);if(hit){if(C[0]!==hit){C.splice(C.indexOf(hit),1);C.unshift(hit);}return hit.data;}
@@ -19115,7 +19120,7 @@ function mskSourceData(w,h,img){
   const cx=cv.getContext('2d',{willReadFrequently:true});
   cx.drawImage(img,0,0,w,h);
   const data=cx.getImageData(0,0,w,h).data;
-  C.unshift({img,w,h,data});C.length=Math.min(C.length,2);_mskSrcCache=C;
+  C.unshift({img,w,h,data});C.length=Math.min(C.length,3);_mskSrcCache=C;   // + the 512 px focus probe for Auto Subject
   return data;
 }
 // Painting/refining changes the MASK, never the photo, so the cache only has to drop when the
@@ -22237,11 +22242,36 @@ async function mskMatteModels(){
 // Subject from detections (Lightroom's Select Subject picks the main subject(s)): every person/animal whose box
 // is at least a quarter of the largest one, each segmented from its box with SAM (2.1 when ready — box IoU 0.979),
 // edges from the matting model where it agrees. Returns {px,w,h,label} or null when nothing alive was detected.
+// Focus measure inside the middle 70% of a box (RGBA bytes, w x h): mean absolute Laplacian of luma divided by the
+// box's own mean absolute deviation, so a dark low-contrast but sharp dog is not out-scored by a bright busy patch
+// (measured on the October set: a shadowed sharp dog 1.46 vs the motion-blurred big dog 0.65). Size-independent.
+function mskBoxSharpness(d,w,h,box){
+  const bx0=box.x0+(box.x1-box.x0)*0.15,bx1=box.x1-(box.x1-box.x0)*0.15,by0=box.y0+(box.y1-box.y0)*0.15,by1=box.y1-(box.y1-box.y0)*0.15;
+  const x0=Math.max(1,Math.floor(bx0*w)),x1=Math.min(w-2,Math.ceil(bx1*w)),y0=Math.max(1,Math.floor(by0*h)),y1=Math.min(h-2,Math.ceil(by1*h));
+  const L=i=>0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];let s=0,n=0,mean=0;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){mean+=L(y*w+x);n++;}
+  if(!n)return 0;mean/=n;let dev=0;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*w+x;s+=Math.abs(4*L(i)-L(i-1)-L(i+1)-L(i-w)-L(i+w));dev+=Math.abs(L(i)-mean);}
+  return (s/n)/(dev/n+4);
+}
+// Which detected people/animals make up "the subject": the in-focus ones (>=50% of the sharpest box's focus score),
+// then of those everything at least a quarter the size of the biggest. Without focus scores: size only, as before.
+function mskFocusPick(live,sharp){
+  const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+  let pool=live.slice();
+  if(Array.isArray(sharp)&&sharp.length===live.length){const mx=Math.max(...sharp);if(mx>0){const keep=live.filter((c,i)=>sharp[i]>=mx*0.5);if(keep.length)pool=keep;}}
+  pool.sort((a,b)=>area(b)-area(a));
+  return pool.filter(c=>area(c)>=area(pool[0])*0.25);
+}
 async function _mskSubjectFromDetections(item,list){
   const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
   const live=(list||[]).filter(c=>c.box&&(c.group==='people'||c.group==='animals')).sort((a,b)=>area(b)-area(a));
   if(!live.length)return null;
-  const main=live.filter(c=>area(c)>=area(live[0])*0.25).slice(0,6);
+  // Size alone picked the big out-of-focus dog brushing past the lens over the small sharp one the photo is about:
+  // weigh each box by how sharp it is (Laplacian energy inside it) and keep the in-focus ones.
+  let sharp=null;try{const W=512,H=Math.max(1,Math.round(512*((item.img&&item.img.height)||1)/((item.img&&item.img.width)||1))),d=mskSourceData(W,H,item.img||fxWork||fxImg);
+    if(d)sharp=live.map(c=>mskBoxSharpness(d,W,H,c.box));}catch(_){sharp=null;}
+  const main=mskFocusPick(live,sharp).slice(0,6);
   await samEnsureEncoded({silent:true});
   for(let i=0;i<50&&!_sam2Token&&(_sam2Encoding||_samEncoding);i++)await new Promise(r=>setTimeout(r,150));
   if(curItem()!==item)return null;
@@ -22312,6 +22342,8 @@ async function mskSceneEnsure(opt={}){
     sc.state='done';
     // Pre-warm (item 28): start the SAM encodes now so the first hover/click is instant.
     if(sc.list.some(c=>c.box))samEnsureEncoded({silent:true});
+    // ...and the mask-size copy of the photo the edge snap uses (1.3 s on a 24 MP RAW the first time a chip landed).
+    if(sc.list.some(c=>c.box))setTimeout(()=>{try{if(curItem()===item){const T=mskTexDims();mskSourceData(T.w,T.h,img);}}catch(_){}},400);
   }catch(e){sc.state='error';sc.error=String(e&&e.message||e);log('Auto-detect: '+sc.error,'warn');}
   mskSceneRender();
 }

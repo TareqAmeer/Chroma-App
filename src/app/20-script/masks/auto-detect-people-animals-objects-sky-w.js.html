@@ -35,6 +35,8 @@ async function mskSceneEnsure(opt={}){
     sc.state='done';
     // Pre-warm (item 28): start the SAM encodes now so the first hover/click is instant.
     if(sc.list.some(c=>c.box))samEnsureEncoded({silent:true});
+    // ...and the mask-size copy of the photo the edge snap uses (1.3 s on a 24 MP RAW the first time a chip landed).
+    if(sc.list.some(c=>c.box))setTimeout(()=>{try{if(curItem()===item){const T=mskTexDims();mskSourceData(T.w,T.h,img);}}catch(_){}},400);
   }catch(e){sc.state='error';sc.error=String(e&&e.message||e);log('Auto-detect: '+sc.error,'warn');}
   mskSceneRender();
 }

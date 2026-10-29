@@ -104,6 +104,26 @@ Added during the work:
 - Real app (labelled set, after the fixes): Detected chip IoU 0.86–0.98 (was 0.00 before the matte gate), single
   click 0.92–0.99, Auto Subject 0.86–0.98 on single-subject photos.
 
+## Follow-up pass (2026-10-29, real-app test on the October 2026 library photos)
+40. The 18 mask tests that were already failing now pass. Each failure was either an intentional UI change the test
+    hadn't caught up with or a real bug: Style apply with a linear mask threw (no undo step), Re-detect sky needed two
+    Undos.
+41. Feather / Edge (grow-shrink) sit in the open Selection group for AI and sky masks, not behind More.
+42. Detected-object masks remember what they are; pasted to another photo they re-detect and take the matching thing
+    (overlapping box first, else the largest) instead of reusing the source photo's box.
+43. Pasted / synced AI masks re-run automatically when the photo opens (once per photo; failures stay visible).
+44. One-shot AI masks keep their recipe (aiOneShotBackend): a pasted Sky failed with "Unknown landscape category"
+    and a pasted Auto Subject fell back to the matte (lost one of two dogs) because paste dropped the backend.
+45. Auto Subject weighs detections by focus (contrast-normalised Laplacian): a big out-of-focus dog at the frame edge
+    no longer beats the small sharp one; a statue detected as a dog dropped out.
+46. Mask-size photo copy is pre-built after detection (first chip spent 1.3 s building it on a 24 MP RAW).
+- Real app, 12 October photos, every AI mask type: chips/Auto Subject/Foreground/Sky/Buildings checked by eye
+  (oct contact sheets); chip click 1.5–2.7 s with the window visible (a hidden window adds ~20 s per AI call, a
+  test artefact), SAM 2.1 ready ~24 s after a 24 MP RAW opens. Copy/paste 6864 -> 6865 (burst), 6879, 6669: all
+  masks re-ran and matched the right dogs.
+- Known, unchanged: mask_depth_refinement_gpu's 200 % zoom parity sub-check compares the crop canvas against a
+  stretched region (fails the same way on the pre-pass code).
+
 ## Completeness check
 - Mask entry points come from the running app: the create grid (`#msk-create-grid .msk-tile` → data-kind), the Detected
   row (`#msk-scene .msk-chip`), and the Landscape row (`#msk-landscape-row button`). `test/mask_detect_objects.mjs` scans

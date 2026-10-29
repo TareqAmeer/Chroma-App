@@ -84,6 +84,9 @@ function _mskNormalizeAIProvenance(p){
 }
 function _mskRecordAIProvenance(m,item,backend,skySeed){
   if(!m||!['ai','sky'].includes(m.origin))return;
+  // The provenance normaliser keeps only SAM backends, so a pasted/synced one-shot mask lost which model and
+  // landscape category to re-run ('Unknown landscape category' on paste). Keep that recipe in its own field.
+  if(typeof backend==='string'&&/^(detect|matte|landscape|depth):/.test(backend))m.aiOneShotBackend=backend;
   const sourcePath=item&&typeof item.path==='string'&&item.path?item.path:null;
   m.aiProvenance={schemaVersion:_MSK_AI_PROVENANCE_VERSION,promptSchemaVersion:_MSK_AI_PROMPT_SCHEMA_VERSION,
     backend:backend||null,modelId:['sam_points','sam_box'].includes(backend)?'edge-sam':['sam2_points','sam2_box'].includes(backend)?'sam2-hiera-tiny':backend==='matte:modnet'?'modnet':backend==='matte:isnet'?'isnet':null,

@@ -8,7 +8,7 @@ let _mskSrcCache=null;
 function mskSourceData(w,h,img){
   img=img||((typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg);
   if(!img||!w||!h)return null;
-  // Two entries: AI work alternates between the model size (samInputDims) and the mask size (mskTexDims), and a
+  // Three entries: AI work alternates between the model size (samInputDims) and the mask size (mskTexDims), and a
   // single slot redrew + read back the photo on every switch (item 27).
   const C=Array.isArray(_mskSrcCache)?_mskSrcCache:[];
   const hit=C.find(e=>e.img===img&&e.w===w&&e.h===h);if(hit){if(C[0]!==hit){C.splice(C.indexOf(hit),1);C.unshift(hit);}return hit.data;}
@@ -16,7 +16,7 @@ function mskSourceData(w,h,img){
   const cx=cv.getContext('2d',{willReadFrequently:true});
   cx.drawImage(img,0,0,w,h);
   const data=cx.getImageData(0,0,w,h).data;
-  C.unshift({img,w,h,data});C.length=Math.min(C.length,2);_mskSrcCache=C;
+  C.unshift({img,w,h,data});C.length=Math.min(C.length,3);_mskSrcCache=C;   // + the 512 px focus probe for Auto Subject
   return data;
 }
 // Painting/refining changes the MASK, never the photo, so the cache only has to drop when the

@@ -198,11 +198,36 @@ async function mskMatteModels(){
 // Subject from detections (Lightroom's Select Subject picks the main subject(s)): every person/animal whose box
 // is at least a quarter of the largest one, each segmented from its box with SAM (2.1 when ready — box IoU 0.979),
 // edges from the matting model where it agrees. Returns {px,w,h,label} or null when nothing alive was detected.
+// Focus measure inside the middle 70% of a box (RGBA bytes, w x h): mean absolute Laplacian of luma divided by the
+// box's own mean absolute deviation, so a dark low-contrast but sharp dog is not out-scored by a bright busy patch
+// (measured on the October set: a shadowed sharp dog 1.46 vs the motion-blurred big dog 0.65). Size-independent.
+function mskBoxSharpness(d,w,h,box){
+  const bx0=box.x0+(box.x1-box.x0)*0.15,bx1=box.x1-(box.x1-box.x0)*0.15,by0=box.y0+(box.y1-box.y0)*0.15,by1=box.y1-(box.y1-box.y0)*0.15;
+  const x0=Math.max(1,Math.floor(bx0*w)),x1=Math.min(w-2,Math.ceil(bx1*w)),y0=Math.max(1,Math.floor(by0*h)),y1=Math.min(h-2,Math.ceil(by1*h));
+  const L=i=>0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];let s=0,n=0,mean=0;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){mean+=L(y*w+x);n++;}
+  if(!n)return 0;mean/=n;let dev=0;
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*w+x;s+=Math.abs(4*L(i)-L(i-1)-L(i+1)-L(i-w)-L(i+w));dev+=Math.abs(L(i)-mean);}
+  return (s/n)/(dev/n+4);
+}
+// Which detected people/animals make up "the subject": the in-focus ones (>=50% of the sharpest box's focus score),
+// then of those everything at least a quarter the size of the biggest. Without focus scores: size only, as before.
+function mskFocusPick(live,sharp){
+  const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
+  let pool=live.slice();
+  if(Array.isArray(sharp)&&sharp.length===live.length){const mx=Math.max(...sharp);if(mx>0){const keep=live.filter((c,i)=>sharp[i]>=mx*0.5);if(keep.length)pool=keep;}}
+  pool.sort((a,b)=>area(b)-area(a));
+  return pool.filter(c=>area(c)>=area(pool[0])*0.25);
+}
 async function _mskSubjectFromDetections(item,list){
   const area=c=>(c.box.x1-c.box.x0)*(c.box.y1-c.box.y0);
   const live=(list||[]).filter(c=>c.box&&(c.group==='people'||c.group==='animals')).sort((a,b)=>area(b)-area(a));
   if(!live.length)return null;
-  const main=live.filter(c=>area(c)>=area(live[0])*0.25).slice(0,6);
+  // Size alone picked the big out-of-focus dog brushing past the lens over the small sharp one the photo is about:
+  // weigh each box by how sharp it is (Laplacian energy inside it) and keep the in-focus ones.
+  let sharp=null;try{const W=512,H=Math.max(1,Math.round(512*((item.img&&item.img.height)||1)/((item.img&&item.img.width)||1))),d=mskSourceData(W,H,item.img||fxWork||fxImg);
+    if(d)sharp=live.map(c=>mskBoxSharpness(d,W,H,c.box));}catch(_){sharp=null;}
+  const main=mskFocusPick(live,sharp).slice(0,6);
   await samEnsureEncoded({silent:true});
   for(let i=0;i<50&&!_sam2Token&&(_sam2Encoding||_samEncoding);i++)await new Promise(r=>setTimeout(r,150));
   if(curItem()!==item)return null;

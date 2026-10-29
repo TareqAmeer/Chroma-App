@@ -3,7 +3,7 @@ import { load } from './extract.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 const S = load(['MSK_COCO', 'MSK_ANIMALS', 'mskDetGroup', 'mskDetName', 'mskSceneList', 'mskOtsu', 'mskComponents', 'mskCleanSpecks',
-  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', 'mskGuidedUpsample', 'mskMatteInBand', 'mskDetectRematch']);
+  'mskSkyCleanup', '_boxFilterMean', '_guidedFilter', '_samDilateBinary', '_mskBilinear', 'mskGuidedUpsample', 'mskMatteInBand', 'mskDetectRematch', 'mskBoxSharpness', 'mskFocusPick']);
 const D = (label, score, x0, y0, x1, y1) => ({ label, score, x0, y0, x1, y1 });
 
 test('every COCO class gets a readable name and a group', () => {
@@ -80,4 +80,15 @@ test('detected-object masks re-match the same kind of thing on another photo', (
   assert.equal(S.mskDetectRematch([C('cat', 'animals', 0.2, 0.2, 0.5, 0.5)], det, { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.5 }).kind, 'cat', 'same group when the class is absent');
   assert.equal(S.mskDetectRematch([C('chair', 'objects', 0, 0, 1, 1)], { kind: 'bench', group: 'objects' }, { x0: 0, y0: 0, x1: 1, y1: 1 }), null, 'objects never swap class');
   assert.equal(S.mskDetectRematch([list[2]], det, list[0].box), null, 'no dog in the photo');
+});
+
+test('Auto Subject keeps the in-focus subject over a bigger blurry one', () => {
+  const w = 64, h = 32, d = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, v = x < 32 ? 128 + 2 * Math.sin(x / 6) : ((x + y) % 2 ? 230 : 20); d[i] = d[i + 1] = d[i + 2] = v; }
+  const blurry = { box: { x0: 0, y0: 0, x1: 0.5, y1: 1 } }, sharp = { box: { x0: 0.6, y0: 0.3, x1: 0.8, y1: 0.7 } };
+  const s = [S.mskBoxSharpness(d, w, h, blurry.box), S.mskBoxSharpness(d, w, h, sharp.box)];
+  assert.ok(s[1] > s[0] * 10, JSON.stringify(s));
+  assert.deepEqual(S.mskFocusPick([blurry, sharp], s), [sharp], 'small sharp dog wins over big blurry one');
+  assert.deepEqual(S.mskFocusPick([blurry, sharp], null), [blurry], 'no focus data: size rule (sharp box is under a quarter the size)');
+  assert.deepEqual(S.mskFocusPick([blurry, sharp], [10, 9]).length, 1, 'both in focus: size rule picks among them');
 });
