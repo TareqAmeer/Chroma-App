@@ -633,8 +633,14 @@
       const sc=await getSidecar(path),meta=await getMeta(path);
       if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
       let strip=el.querySelector('.lib-detail-meta');if(!strip){strip=document.createElement('div');strip.className='lib-detail-meta';strip.style.cssText='padding:4px 8px;height:24px;box-sizing:border-box;flex:none;color:var(--mut);font-size:11px';el.appendChild(strip);}strip.hidden=!detailState.metadata;
-      let source=it.fullImg||it.img;
-      if(typeof geomCanvas==='function')source=geomCanvas({...it,img:source});
+      const snap=srcKey==='live'?(sc.recipe?snapshotFromB64(sc.recipe):null):(typeof resolveSplitSnapshot==='function'?resolveSplitSnapshot(compareSrcKeyToDescriptor(srcKey)):'orig');
+      // Per-photo pixel edits (crop/rotate/straighten, heal, erase, red-eye) live on the photo item,
+      // not the shared UI: take them from this photo's recipe so the cell frames the photo the way
+      // the Editor does, without touching the Editor's current photo.
+      const own=(k)=>srcKey==='live'&&snap&&typeof snap==='object'&&snap[k]!==undefined;
+      const rit={...it,img:it.fullImg||it.img,geom:own('geom')?(snap.geom||defGeom()):it.geom,heal:own('heal')?(snap.heal||[]):it.heal,inpaint:own('inpaint')?(snap.inpaint||[]):it.inpaint,redeye:own('redeye')?(snap.redeye||[]):it.redeye};
+      let source=rit.img;
+      if(typeof geomCanvas==='function')source=geomCanvas(rit);
       const iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
       const fit=Math.min(1,Math.max(1,wrap.clientWidth)/iw,Math.max(1,wrap.clientHeight)/ih),scale=view.scale||fit;
       const sw=Math.max(1,Math.min(iw,Math.floor(wrap.clientWidth/scale))),sh=Math.max(1,Math.min(ih,Math.floor(wrap.clientHeight/scale)));
@@ -642,11 +648,12 @@
       const dpr=Math.min(window.devicePixelRatio||1,2),pw=Math.max(1,Math.round(sw*scale*dpr)),ph=Math.max(1,Math.round(sh*scale*dpr));
       // At most viewport pixels, never a fitted canvas enlarged to simulate native detail.
       const cap=Math.min(1,Math.sqrt(1e6/(pw*ph))),ow=Math.max(1,Math.round(pw*cap)),oh=Math.max(1,Math.round(ph*cap));
-      const snap=srcKey==='live'?(sc.recipe?snapshotFromB64(sc.recipe):null):(typeof resolveSplitSnapshot==='function'?resolveSplitSnapshot(compareSrcKeyToDescriptor(srcKey)):'orig');
       const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
       if(!rendered){
         const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
-        const privateBaseline=!!itemResolver&&!snap&&_fxPristineDefault;
+        // No saved recipe: the Editor opens such a photo at the pristine defaults, not at whatever
+        // the shared UI holds (Survey/Cull seed it from the FIRST photo's recipe).
+        const privateBaseline=(!!itemResolver||srcKey==='live')&&!snap&&_fxPristineDefault;
         const restoreUI=(snap&&snap!=='orig')||privateBaseline;
         // The look (sel-lut) loads asynchronously in selectLUT, so applying it through the shared
         // Editor UI would render this photo with whatever look the Editor already held and then
@@ -659,23 +666,30 @@
           lookLut=!lookSel?null:lookSel.startsWith('p:')?await presetLut(lookSel.slice(2)):await lutLibGet(lookSel.slice(2)).then(rec=>rec?lutFromBytes(rec.data):null);
           if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
         }
-        const withoutLook=s=>{if(lookSel===undefined)return s;const selects={...s.selects};delete selects['sel-lut'];return {...s,selects};};
+        const withoutLook=s=>{const out={...s};delete out.geom;delete out.heal;delete out.inpaint;delete out.redeye;if(lookSel===undefined)return out;const selects={...s.selects};delete selects['sel-lut'];return {...out,selects};};
+        // The Library's Editor open runs applyRawDefaults() after every recipe/pristine restore;
+        // it also rewrites two sliders' defaultValue, which the live restore below does not.
+        const rawDefSl=['sl-nr-col','sl-adj-sharp'].map(id=>document.getElementById(id)).filter(Boolean),rawDefVals=rawDefSl.map(e=>e.defaultValue);
         _fxHistLocked=true;
         try{
-          if(snap&&snap!=='orig')applyUISnapshot(withoutLook(snap));
-          else if(privateBaseline){applyUISnapshot(withoutLook(_fxPristineDefault),{skipRender:true});if(RAW_FILE_EXT_RE.test('.'+it.ext))applyRawDefaults();}
+          if(snap&&snap!=='orig'){applyUISnapshot(withoutLook(snap));applyRawDefaults();}
+          else if(privateBaseline){applyUISnapshot(withoutLook(_fxPristineDefault),{skipRender:true});applyRawDefaults();}
           const sourceOwnsVlog=it.exif?.photoStyle===17&&!(snap&&typeof snap==='object'&&snap.selects&&Object.prototype.hasOwnProperty.call(snap.selects,'sel-input'));
-          const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams(it.adjustOverride||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
+          const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams((restoreUI?null:it.adjustOverride)||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
           if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
           const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
           if(lookLut!==undefined){P.lut=lookLut;if(lookLut)renderer.setLUT(lookLut);}
+          if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(renderer,rit);
           const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
           renderer.setImage(crop);// Effect scale exactly as the Editor's loupe: glow sigmas at this render's px per source px,
           // grain cells + attenuation against the export width, so a fitted cell shows the export's grain.
-          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih]});
+          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih],...fxStillQualityOpts(0,0,true)});
           rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
+          // Red-eye is a 2D pass after the render (drawRedEyePreview), in frame-normalised coords: map them into this view.
+          if(snap!=='orig'&&rit.redeye&&rit.redeye.some(o=>o.enabled!==false)&&typeof applyRedEyeCorrections==='function')
+            applyRedEyeCorrections(rendered,rit.redeye.map(o=>({...o,x:(o.x*iw-x)/sw,y:(o.y*ih-y)/sh,rx:(o.rx||0.02)*iw/sw,ry:(o.ry||o.rx||0.02)*ih/sh})));
           detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
-        }finally{if(restoreUI)applyUISnapshot(live,{skipRender:true});if(undo)undo();_fxHistLocked=locked;}
+        }finally{if(restoreUI){applyUISnapshot(live,{skipRender:true});rawDefSl.forEach((e,i)=>{e.defaultValue=rawDefVals[i];});}if(undo)undo();_fxHistLocked=locked;}
       }
       if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
       const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
