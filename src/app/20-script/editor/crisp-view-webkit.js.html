@@ -8,7 +8,16 @@
 // pointer events; every overlay inside the wrapper stays on top and aligned). At 100% that is an exact pixel copy.
 let _fxCrispRaf=0,_fxCrispOn=false;
 // Redraw after every preview render (bound at load: renderPreview lives in a later script block).
-window.addEventListener('load',()=>{if(typeof renderPreview==='function'&&!renderPreview.__crisp){const rp=renderPreview;renderPreview=function(){const r=rp.apply(this,arguments);fxCrispSchedule();return r;};renderPreview.__crisp=true;}});
+window.addEventListener('load',()=>{if(typeof renderPreview==='function'&&!renderPreview.__crisp){const rp=renderPreview;renderPreview=function(){const r=rp.apply(this,arguments);fxCrispStaleCheck();fxCrispSchedule();return r;};renderPreview.__crisp=true;}});
+// The crisp copy hides the live canvases (opacity 0). If a render changed which image layers show or where they sit (All FX adding
+// a border: new composite, photo moved inside it), the copy is stale; until the next frame redraws it the user saw the new border
+// over the OLD photo with a black hole where the hidden live photo is (for the whole settle render). Step aside at once instead.
+let _fxCrispSig='';
+function _fxCrispLayerSig(){
+  return ['fx-canvas-bd','fx-canvas','fx-canvas-bdfront'].map(id=>{const e=document.getElementById(id);if(!e||e.style.display==='none')return '-';
+    const r=e.getBoundingClientRect();return Math.round(r.left)+','+Math.round(r.top)+','+Math.round(r.width)+','+Math.round(r.height)+','+e.width+'x'+e.height;}).join('|')+'|'+!!window.__fxBdLayered;
+}
+function fxCrispStaleCheck(){if(_fxCrispOn&&_fxCrispLayerSig()!==_fxCrispSig)fxCrispSuspend();}
 function _fxCrispEnabled(){
   if(window.__fxCrispForce!=null)return !!window.__fxCrispForce;
   const ua=navigator.userAgent;return /AppleWebKit/.test(ua)&&!/Chrome|Chromium|Edg\//.test(ua);
@@ -60,7 +69,7 @@ function fxCrispDraw(){
   }
   // Only the active image canvases go transparent; a hidden one is left alone.
   for(const el of [bd,FX.cv,front])if(el)el.style.opacity=layers.includes(el)?'0':'';
-  _fxCrispOn=true;
+  _fxCrispOn=true;_fxCrispSig=_fxCrispLayerSig();
 }
 // The preview's on-screen size changed (tool sheet opened/resized, panel switched, re-render at a
 // new fit): keep the SAME part of the photo in view. Pan is in canvas-CSS px, so it scales with
