@@ -133,13 +133,14 @@ function mskShowSelIdx(){
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   // Hovering a mask's row (or pin) temporarily tints THAT mask, even with the overlay switched off; moving away restores.
-  if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskHoverIdx;
+  // A group (mask + its add/subtract/intersect components) shows its combined shape, as in Lightroom.
+  if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskGroupTailIdx(mskHoverIdx);
   if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   if(_mskAdjHeld)return -1; // auto-hide while an adjustment slider is held
   // "Image on B&W / black / white" show the SELECTION in full colour against a flat backdrop. A mask with nothing
   // selected yet (a fresh empty brush) would turn the whole photo flat; it leaves the photo as it is instead.
   if((mskSelViewStyle==='imgbw'||mskSelViewStyle==='imgblack'||mskSelViewStyle==='imgwhite')&&mskIsEmptyRaster(fxState.masks[mskSel]))return -1;
-  return mskSel;
+  return mskGroupTailIdx(mskSel);
 }
 function mskIsEmptyRaster(m){
   if(!m||m.type!=='brush'||!m.px)return false;
@@ -153,7 +154,7 @@ function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.natu
 function mskPreviewRenderOptions(extra={}){
   return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
-    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskGroupTailIdx(mskSel):-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
     ...((extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};

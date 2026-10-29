@@ -1,6 +1,6 @@
 // ── Per-mask tone curve editor ────────────────────────────────────────────────────────────────────
 function mskCrvDraw(){
-  const cv=document.getElementById('msk-crv'),m=fxState.masks[mskSel];if(!cv||!m)return;
+  const cv=document.getElementById('msk-crv'),m=mskAdjMask();if(!cv||!m)return;
   const x=cv.getContext('2d'),W=cv.width,pts=m.crv||[[0,0],[1,1]];
   x.clearRect(0,0,W,W);x.strokeStyle='rgba(128,128,128,.35)';x.lineWidth=1;
   for(let i=1;i<4;i++){x.beginPath();x.moveTo(i*W/4,0);x.lineTo(i*W/4,W);x.moveTo(0,i*W/4);x.lineTo(W,i*W/4);x.stroke();}
@@ -8,41 +8,41 @@ function mskCrvDraw(){
   const f=curveEval(pts);for(let i=0;i<=64;i++){const u=i/64,v=Math.min(1,Math.max(0,f(u)));i?x.lineTo(u*W,(1-v)*W):x.moveTo(u*W,(1-v)*W);}x.stroke();
   x.fillStyle='#fff';pts.forEach(p=>{x.beginPath();x.arc(p[0]*W,(1-p[1])*W,5,0,7);x.fill();});
 }
-function mskCrvReset(){const m=fxState.masks[mskSel];if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
+function mskCrvReset(){const m=mskAdjMask();if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
 function mskCrvInit(){
   const cv=document.getElementById('msk-crv');if(!cv)return;
   mskCrvDraw();
   let drag=-1,moved=false;
   const pos=e=>{const r=cv.getBoundingClientRect();return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];};
   cv.onpointerdown=e=>{
-    const m=fxState.masks[mskSel];if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
+    const m=mskAdjMask();if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
     const pts=m.crv||(m.crv=[[0,0],[1,1]]),[px,py]=pos(e);
     let hit=-1,best=0.07;pts.forEach((p,i)=>{const d=Math.hypot(p[0]-px,p[1]-py);if(d<best){best=d;hit=i;}});
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
     drag=hit;moved=false;_fxHistLocked=true;
   };
   cv.onpointermove=e=>{
-    const m=fxState.masks[mskSel];if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
+    const m=mskAdjMask();if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
     const lo=drag>0?pts[drag-1][0]+0.01:0,hi=drag<pts.length-1?pts[drag+1][0]-0.01:1;
     pts[drag][1]=py;if(drag>0&&drag<pts.length-1)pts[drag][0]=Math.min(hi,Math.max(lo,px));
     mskCrvDraw();fxUpdate();
   };
   const end=()=>{
     if(drag<0)return;drag=-1;_fxHistLocked=false;
-    const m=fxState.masks[mskSel];
+    const m=mskAdjMask();
     if(m&&m.crv&&m.crv.length===2&&m.crv[0][1]===0&&m.crv[1][1]===1)m.crv=null; // untouched = no curve
     mskCrvDraw();mskAmountSync();if(moved){fxUpdate();fxHistoryPush();}
   };
   cv.onpointerup=end;cv.onpointercancel=end;
   cv.ondblclick=e=>{
-    const m=fxState.masks[mskSel];if(!m||!m.crv)return;const[px,py]=pos(e);
+    const m=mskAdjMask();if(!m||!m.crv)return;const[px,py]=pos(e);
     const i=m.crv.findIndex((p,k)=>k>0&&k<m.crv.length-1&&Math.hypot(p[0]-px,p[1]-py)<0.07);
     if(i>0){m.crv.splice(i,1);mskCrvDraw();fxUpdate();fxHistoryPush();}
   };
 }
 // Zeroes every adjustment slider on the selected mask; the selection (shape, gates, raster) is untouched.
 function mskResetAdjust(){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   ['exp','con','temp','tint','sat','vibrance','hue','hi','sh','wh','bl','dehaze','clarity','tex','sharp','sharpMask','nr','colAmt'].forEach(k=>{if(m[k]!=null&&m[k]!==0)m[k]=0;});
   m.crv=null;
   if(typeof hapt==='function')hapt();

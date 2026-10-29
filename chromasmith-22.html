@@ -7575,7 +7575,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1029E';
+const BUILD='1.1029F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8661,7 +8661,7 @@ uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full eff
 uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
 uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
-uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add)
+uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add, 4 operand minus self)
                         // (this mask's shape combined with the shape resolved by mskO), y: tint,
                         // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
@@ -9073,7 +9073,8 @@ void mskSelectionWeights(vec2 gm2,vec2 uv2,vec3 srcCol,vec3 gateCol2,out float w
     if(mskO[i].y<0.5){weights[i]=0.0;continue;}
     float w=base[i];int operand=int(mskO[i].x);
     if(operand>=0&&operand<8&&operand!=i){
-      if(mskE[i].x>2.5)w=max(w,weights[operand]);
+      if(mskE[i].x>3.5)w=max(0.0,weights[operand]-w);   // group component: running result minus this shape
+      else if(mskE[i].x>2.5)w=max(w,weights[operand]);
       else if(mskE[i].x>1.5)w=min(w,weights[operand]);
       else if(mskE[i].x>0.5)w=max(0.0,w-weights[operand]);
     }
@@ -10600,7 +10601,10 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // uvOffL/uvScaleL (same opts mapping the comp pass uses) so tiles/loupe place them identically.
     const allMasks=P.masks||[];_mskEnsureIds(allMasks);
     const MK=allMasks.length?allMasks.slice(0,MSK_MAX):[];
-    if(MK.length)this.setMaskCurves(MK);
+    // Mask groups: a component applies no adjustment of its own; the group's last slot applies the
+    // root's adjustments to the combined shape (see _mskGroups).
+    const MKG=_mskGroups(MK),MSK_NOADJ={};
+    if(MK.length)this.setMaskCurves(MK.map((m,i)=>MKG.adj[i]>=0?MK[MKG.adj[i]]:MSK_NOADJ));
     const mskRef=this._maskReferenceSize,md=mskTexDims(this===FX?undefined:(mskRef&&mskRef.w||this.imgW),this===FX?undefined:(mskRef&&mskRef.h||this.imgH));
     // Preserve the native GPU depth comparison as the exact zero-refinement baseline.
     // Build a derived raster only when Feather/Edge actually modifies that selection.
@@ -10627,47 +10631,48 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const composePlan=_mskCompositionPlan(MK);
     composePlan.order.forEach((slot,rank)=>{mTopo[rank]=slot;});
     const _grpRestore=_mskGrpOffApply(MK);
-    try{MK.forEach((m,i)=>{const o=i*4;
+    try{MK.forEach((m,i)=>{const o=i*4,ai=MKG.adj[i],a=ai>=0?MK[ai]:MSK_NOADJ;
       if(m.type==='brush'){mB[o+3]=1;}                                              // raster (painted/sky) mask — mA unused
       else if(m.type==='none'){mB[o]=2;if(depthMaskSources[i])mB[o+3]=1;} // shapeless range mask; depth source is rasterized when ready
       else if(m.type==='linear'){mA[o]=m.x0;mA[o+1]=m.y0;mA[o+2]=m.x1;mA[o+3]=m.y1;mB[o]=1;}
       else{mA[o]=m.cx;mA[o+1]=m.cy;mA[o+2]=m.rx;mA[o+3]=m.ry;mB[o]=0;}
       mB[o+1]=m.feather!=null?m.feather:0.5;mB[o+2]=m.invert?1:0;
-      mC[o]=m.exp||0;mC[o+1]=m.con||0;mC[o+2]=m.temp||0;mC[o+3]=m.sat||0;
+      mC[o]=a.exp||0;mC[o+1]=a.con||0;mC[o+2]=a.temp||0;mC[o+3]=a.sat||0;
       mD[o]=m.lumLo!=null?m.lumLo:0;mD[o+1]=m.lumHi!=null?m.lumHi:1;
-      mD[o+2]=m.hi||0;mD[o+3]=m.sh||0;
+      mD[o+2]=a.hi||0;mD[o+3]=a.sh||0;
       // ROADMAP R7 — Depth Range gate, same on/off + floor/ceiling shape as the luminance gate
       // just above. depOn stays false (mDep[o]=0) for every mask created before this feature and
       // for every mask that never turned it on, so this is a pure no-op for them.
       mDep[o]=m.depOn&&!depthMaskSources[i]?1:0;mDep[o+1]=m.depLo!=null?m.depLo:0;mDep[o+2]=m.depHi!=null?m.depHi:1;
-      mDep[o+3]=m.vibrance||0; // local Vibrance: signed normalized saturation-aware adjustment
+      mDep[o+3]=a.vibrance||0; // local Vibrance: signed normalized saturation-aware adjustment
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
-      mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?1:0;
+      // 4 = group component subtract: the running group result minus this shape (Lightroom order).
+      mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
       mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
-      mE[o+1]=m.tint||0;mE[o+2]=m.hue||0;
+      mE[o+1]=a.tint||0;mE[o+2]=a.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would
       // renumber shader slots and force every stored operand ID to resolve again.
       // Solo (UI-only, never persisted — see mskSolo) rides the same slot: every non-eraser mask
       // except the soloed one is zeroed, exactly like mute, so isolating a mask's contribution
       // costs nothing new in the shader.
-      const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&i!==mskSolo&&!m.isExclude);
+      const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&MKG.root[i]!==(MKG.root[mskSolo]>=0?MKG.root[mskSolo]:mskSolo)&&!m.isExclude);
       const hiddenAll=!!(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.hideMasks); // eye icon: preview-only, never in an export
-      mE[o+3]=(m.muted||soloedOut||hiddenAll)?0:(m.amount!=null?m.amount:100)/100;
-      mF[o]=m.colHue||0;mF[o+1]=m.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=m.colSat!=null?m.colSat:0.65;
-      mJ[o]=(m.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
+      mE[o+3]=(ai<0||a.muted||m.muted||soloedOut||hiddenAll)?0:(a.amount!=null?a.amount:100)/100;
+      mF[o]=a.colHue||0;mF[o+1]=a.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=a.colSat!=null?a.colSat:0.65;
+      mJ[o]=(a.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
       // 0..1 strength of the one-way clamp (was a hard boolean) — see tanOneWayAmt's doc comment.
-      mJ[o+2]=(m.tanOneWayAmt!=null?m.tanOneWayAmt:(m.tanOneWay?100:0))/100;
-      mJ[o+3]=(m.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
-      mK[o]=(m.nr||0)/100;    // Noise Reduction: 0..1 unipolar mix toward the bilateral-filtered source
-      mK[o+1]=m.wh||0;        // Whites: signed -1..1, identity for legacy masks
-      mK[o+2]=m.bl||0;        // Blacks: signed -1..1, identity for legacy masks
-      mK[o+3]=m.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
-      mL[o]=(m.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
-      mL[o+1]=(m.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
-      mL[o+2]=(m.crv&&m.crv.length>1)?1:0; // per-mask tone curve present
+      mJ[o+2]=(a.tanOneWayAmt!=null?a.tanOneWayAmt:(a.tanOneWay?100:0))/100;
+      mJ[o+3]=(a.clarity||0)/100;  // Clarity: -1..1 gain on the WIDE source high-pass (see srcHPW)
+      mK[o]=(a.nr||0)/100;    // Noise Reduction: 0..1 unipolar mix toward the bilateral-filtered source
+      mK[o+1]=a.wh||0;        // Whites: signed -1..1, identity for legacy masks
+      mK[o+2]=a.bl||0;        // Blacks: signed -1..1, identity for legacy masks
+      mK[o+3]=a.dehaze||0;    // Dehaze: signed -1..1, identity for legacy masks
+      mL[o]=(a.sharp||0)/100; // Sharpen: -1..1 signed local edge gain
+      mL[o+1]=(a.sharpMask||0)/100; // Sharpen Mask: 0..1 smooth-area protection, identity when absent
+      mL[o+2]=(a.crv&&a.crv.length>1)?1:0; // per-mask tone curve present
       // Colour-range gate + skin uniformity. The TARGET (where gated pixels move to) is resolved
       // on the CPU by mskSkinTarget() — it folds the target mode (match-pick / MST swatch /
       // custom colour) and the Tan sliders into one hsv triple, so the shader stays dumb.
@@ -10680,14 +10685,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       mG[o+1]=(m.crRangeC!=null?m.crRangeC:(m.crRange!=null?m.crRange:35))/100;
       // Two samples per vec4, 4 vec4 per mask (16 floats/mask): mskCS[i*4]=(h0,s0,h1,s1), etc.
       CS.forEach((p,k)=>{const q=i*16+k*2;mS[q]=p.h||0;mS[q+1]=p.s||0;});
-      mH[o]=(m.uH||0)/100;mH[o+1]=(m.uS||0)/100;mH[o+2]=(m.uL||0)/100;
-      mH[o+3]=(m.preserve!=null?m.preserve:70)/100;
-      const tgt=mskSkinTarget(m);
+      mH[o]=(a.uH||0)/100;mH[o+1]=(a.uS||0)/100;mH[o+2]=(a.uL||0)/100;
+      mH[o+3]=(a.preserve!=null?a.preserve:70)/100;
+      const tgt=mskSkinTarget(ai>=0?a:m);
       mI[o]=tgt.h;mI[o+1]=tgt.s;mI[o+2]=tgt.v;
       // srcV: mean value of the gated pixels, measured ONCE in JS (mskMeasureSrcV) and passed in.
       // Must be identical for preview, loupe and every export tile — re-measuring per tile would
       // make each tile converge to a different level and show as blocks.
-      mI[o+3]=m.srcV!=null?m.srcV:tgt.v;});}finally{_grpRestore();}
+      mI[o+3]=(ai>=0?a:m).srcV!=null?(ai>=0?a:m).srcV:tgt.v;});}finally{_grpRestore();}
     if(MK.some(m=>m.type==='brush'||(m.origin==='depth'&&m.depOn)))mskBuildTex(this,MK);
     const uvOffL=(opts&&opts.uvOff)||[0,0],uvScaleL=(opts&&opts.uvScale)||[1,1];
     // LENS CORRECTION: runs FIRST on the raw source into fbs.lens (manual distortion/vignette/
@@ -16722,6 +16727,45 @@ function _mskCompositionPlan(masks){
   masks.forEach((_,i)=>visit(i));
   return{order,valid};
 }
+// Lightroom-style mask groups, derived from the composition graph (nothing new is stored).
+// A COMPONENT is a validly composed mask with no adjustments of its own; it joins the group of its
+// operand. The group is one mask: its components combine in a chain (root, then each component
+// adds / subtracts / intersects onto the running result) and ONE adjustment set, the root's, is
+// applied to the final combined shape, which is the weight of the group's last slot (the tail).
+// A composed mask that has its own adjustments keeps the older meaning (its own shape op the
+// operand, with its own adjustments), so edits saved before groups existed render unchanged.
+// Returns per slot: root (group root index), shared (is a component), adj (slot whose adjustments
+// this slot applies, -1 = none), tail (per root: the slot holding the combined weight).
+function _mskGroups(masks,plan){
+  const n=masks.length,byId=new Map(masks.map((m,i)=>[m.id,i]));plan=plan||_mskCompositionPlan(masks);
+  const opOf=m=>m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+  const own=m=>!!m&&(m.isExclude||(typeof mskHasAdjustment==='function'?mskHasAdjustment(m):false));
+  const shared=masks.map((m,i)=>!!opOf(m)&&!!plan.valid[i]&&byId.has(m.operandId)&&!own(m));
+  const root=new Array(n).fill(-1);
+  const rootOf=i=>{let cur=i,k=0;while(shared[cur]&&k++<n)cur=byId.get(masks[cur].operandId);return cur;};
+  for(let i=0;i<n;i++)root[i]=rootOf(i);
+  // A component under an eraser root is not a group member (an eraser applies no adjustment).
+  for(let i=0;i<n;i++)if(shared[i]&&masks[root[i]]&&masks[root[i]].isExclude){shared[i]=false;root[i]=i;}
+  const tail=new Array(n).fill(-1);
+  for(let i=0;i<n;i++)if(root[i]===i)tail[i]=i;
+  // The tail is the member no other member builds on; with several (an older tree), the last in list order.
+  const usedAsOperand=new Set();for(let i=0;i<n;i++)if(shared[i]&&root[i]>=0)usedAsOperand.add(byId.get(masks[i].operandId));
+  for(let i=0;i<n;i++)if(shared[i]&&root[i]>=0&&!usedAsOperand.has(i))tail[root[i]]=i;
+  const adj=new Array(n).fill(-1);
+  for(let i=0;i<n;i++){const r=root[i];if(r>=0&&tail[r]===i)adj[i]=r;}
+  return{root,shared,adj,tail};
+}
+// The mask whose adjustments the panel edits for slot i: the group root for a component.
+function mskAdjIdx(i){
+  const masks=fxState.masks;if(!masks[i])return i;
+  const g=_mskGroups(_mskEnsureIds(masks));return g.root[i]>=0?g.root[i]:i;
+}
+function mskAdjMask(i){return fxState.masks[mskAdjIdx(i==null?mskSel:i)];}
+// The slot whose effective weight is the whole group's combined shape (for the selection overlay).
+function mskGroupTailIdx(i){
+  const masks=fxState.masks;if(!masks[i])return i;
+  const g=_mskGroups(_mskEnsureIds(masks)),r=g.root[i];return r>=0&&g.tail[r]>=0?g.tail[r]:i;
+}
 // ── A18: one source of truth for a new mask's adjustment fields ──────────────────────────────
 // This shared block was written out verbatim in all six branches of mskAdd. Adding a field meant
 // remembering six places, and forgetting one produced a mask that rendered subtly differently
@@ -18665,6 +18709,9 @@ function _subjFindStatsHint(subjId){
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
+  {// Deleting a group component keeps the rest of the group attached: whatever built on it builds on its operand.
+    const masks=_mskEnsureIds(fxState.masks),gone=masks[mskSel],g=_mskGroups(masks);
+    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});}
   fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}
@@ -19972,7 +20019,7 @@ function _mskGrpOffApply(MK){
 }
 function mskGroupIsOff(m,key){return !!(m&&m.grpOffCsv&&m.grpOffCsv.split(',').includes(key));}
 function mskGroupEye(key){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   const set=new Set((m.grpOffCsv||'').split(',').filter(Boolean));set.has(key)?set.delete(key):set.add(key);
   m.grpOffCsv=[...set].join(',');mskRebuild();fxUpdate();fxHistoryPush();
 }
@@ -19989,7 +20036,10 @@ function _mskNonDefault(m,keys){let n=0;keys.forEach(k=>{const v=m[k];if(typeof 
 let _mskPendingCompose=null;
 function mskComposeMenu(ev,op){
   const masks=_mskEnsureIds(fxState.masks),m=masks[mskSel];if(!m)return;
-  _mskPendingCompose={op,operandId:m.id};mskAddMenu(ev,op);
+  // Chain onto the group's current result (its last component), not the bare root, so each new
+  // component adds to / subtracts from / intersects the whole group so far — Lightroom's order.
+  const tail=masks[mskGroupTailIdx(mskSel)]||m;
+  _mskPendingCompose={op,operandId:tail.id};mskAddMenu(ev,op);
 }
 function mskAddMenu(ev,composeOp){
   ev.stopPropagation();
@@ -20148,8 +20198,8 @@ function mskRowContext(ev,i){
 // Copy / paste of a mask's ADJUSTMENT settings (sliders, curve, colour) between masks - never the selection itself.
 const _MSK_ADJ_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colHue','colSat','colAmt','tex','clarity','dehaze','sharp','sharpMask','nr'];
 let _mskSettingsClip=null;
-function mskSettingsCopy(){const m=fxState.masks[mskSel];if(!m)return;_mskSettingsClip={k:{},crv:m.crv?JSON.parse(JSON.stringify(m.crv)):null};_MSK_ADJ_KEYS.forEach(k=>{_mskSettingsClip.k[k]=m[k]||0;});toast('Mask settings copied',true);}
-function mskSettingsPaste(){const m=fxState.masks[mskSel];if(!m||!_mskSettingsClip)return;Object.assign(m,_mskSettingsClip.k);m.crv=_mskSettingsClip.crv?JSON.parse(JSON.stringify(_mskSettingsClip.crv)):null;mskRebuild();fxUpdate();fxHistoryPush();}
+function mskSettingsCopy(){const m=mskAdjMask();if(!m)return;_mskSettingsClip={k:{},crv:m.crv?JSON.parse(JSON.stringify(m.crv)):null};_MSK_ADJ_KEYS.forEach(k=>{_mskSettingsClip.k[k]=m[k]||0;});toast('Mask settings copied',true);}
+function mskSettingsPaste(){const m=mskAdjMask();if(!m||!_mskSettingsClip)return;Object.assign(m,_mskSettingsClip.k);m.crv=_mskSettingsClip.crv?JSON.parse(JSON.stringify(_mskSettingsClip.crv)):null;mskRebuild();fxUpdate();fxHistoryPush();}
 // Housekeeping: a raster mask nothing was ever painted/selected into, and that is not part of a composition, selects nothing.
 function mskEmptyIndexes(){return fxState.masks.map((m,i)=>(mskIsEmptyRaster(m)&&!fxState.masks.some(o=>o.operandId&&o.operandId===m.id))?i:-1).filter(i=>i>=0);}
 function mskDeleteEmpty(){const idx=mskEmptyIndexes();if(!idx.length)return;mskPaintStop();for(let j=idx.length-1;j>=0;j--)fxState.masks.splice(idx[j],1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;mskRebuild();fxUpdate();fxHistoryPush();toast(idx.length+' empty mask'+(idx.length>1?'s':'')+' deleted (undo restores)',true);}
@@ -20535,7 +20585,7 @@ function _mskRow(label,k,val,min,max,sc,flip,title){
 const MSK_SLIDER_DEF={amount:100,preserve:70,crRange:35,crRangeC:35,depLo:0,depHi:1,lumLo:0,lumHi:1,feather:0.5};
 const MSK_SLIDER_GEOM=new Set(['cx','cy','rx','ry','x0','y0','x1','y1']);   // shape position: not an "adjustment", never reset this way
 function mskResetSlider(el){
-  const m=fxState.masks[mskSel],k=el&&el.dataset&&el.dataset.k;if(!m||!k||MSK_SLIDER_GEOM.has(k))return false;
+  const k=el&&el.dataset&&el.dataset.k,m=MSK_GROUP_ADJ_KEYS.has(k)?mskAdjMask():fxState.masks[mskSel];if(!m||!k||MSK_SLIDER_GEOM.has(k))return false;
   const def=MSK_SLIDER_DEF[k]!=null?MSK_SLIDER_DEF[k]:0,cur=m[k]==null?def:m[k];
   if(Math.abs(cur-def)<1e-9)return false;
   m[k]=def;if(m.origin==='depth'&&(k==='depLo'||k==='depHi'))delete m._refineCache;
@@ -20550,9 +20600,12 @@ function _mskWireReset(ctl){
 // Amount scales the finished adjustment, so with nothing adjusted yet it is a dead control: disabled (not hidden) until the mask has one.
 const _MSK_AMOUNT_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colAmt','tex','clarity','dehaze','sharp','nr','uH','uS','uL','tanDepth','tanWarm','tanOneWayAmt'];
 function mskHasAdjustment(m){return !!m&&(_mskNonDefault(m,_MSK_AMOUNT_KEYS)>0||!!(m.crv&&m.crv.length));}
-function mskAmountSync(){const m=fxState.masks[mskSel],el=document.querySelector('#local-ctl input[data-k="amount"]');if(!el||!m)return;const off=!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100);el.disabled=off;el.title=off?'Amount scales this mask\'s adjustments - it turns on once the mask has one':'';}
+function mskAmountSync(){const m=mskAdjMask(),el=document.querySelector('#local-ctl input[data-k="amount"]');if(!el||!m)return;const off=!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100);el.disabled=off;el.title=off?'Amount scales this mask\'s adjustments - it turns on once the mask has one':'';}
+// Adjustment keys a group component hands to its group root (see _mskGroups): Light, Color,
+// Effects, Detail and Amount. Shape, gate and skin-tone keys stay on the selected mask itself.
+const MSK_GROUP_ADJ_KEYS=new Set(['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colHue','colSat','colAmt','tex','clarity','dehaze','sharp','sharpMask','nr','amount']);
 function mskSlide(el){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=MSK_GROUP_ADJ_KEYS.has(el.dataset.k)?mskAdjMask():fxState.masks[mskSel];if(!m)return;
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
   m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
   if(m.origin==='depth'&&(el.dataset.k==='depLo'||el.dataset.k==='depHi'))delete m._refineCache; // range creates a fresh derived source; keep the user's refinement settings
@@ -20579,11 +20632,11 @@ function _hexToHueSat(hex){
   return[h,s];
 }
 function mskColSwatchSync(){
-  const pk=document.getElementById('msk-col-picker'),m=fxState.masks[mskSel];
+  const pk=document.getElementById('msk-col-picker'),m=mskAdjMask();
   if(pk&&m)pk.value=_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65);
 }
 function mskColPicked(el){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   const[h,s]=_hexToHueSat(el.value);
   m.colHue=h;m.colSat=Math.max(0.08,s); // floor sat so a near-grey pick still reads as a color, not a no-op tint
   const hueSl=document.getElementById('msk-col-hue');
@@ -21087,6 +21140,7 @@ function _mskRebuildInner(){
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush'){const was=mskPaintMode;mskPaintStop();if(was){_mskPaintResume={erase:mskPaintErase};if(typeof log==='function')log('Paint stopped on this mask type — it resumes when you select a brush mask again');}}
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
+  const _lg=_mskGroups(_mskEnsureIds(fxState.masks));
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
     b.style.display='flex';b.style.alignItems='center';b.style.gap='6px';
@@ -21135,8 +21189,10 @@ function _mskRebuildInner(){
     act('\u2212','Subtract from',(e)=>{mskComposeMenu(e,'subtract');});
     act('\u2229','Intersect with',(e)=>{mskComposeMenu(e,'intersect');});
     // Component depth: how many operand links lead from this mask to a mask with no composition.
+    // Group components (shared adjustments) all sit one level under their root, as in Lightroom.
     let depth=0,cur=m;const seenIds=new Set();
-    while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
+    if(_lg.shared[i])depth=1;
+    else while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
     if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
@@ -21187,6 +21243,7 @@ function _mskRebuildInner(){
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
     +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
+    +(mskAdjIdx(mskSel)!==mskSel?'<div class="msk-hint msk-group-hint">Adjustments below apply to the whole \u201c'+String((mskAdjMask().name||mskAutoLabel(mskAdjMask(),mskAdjIdx(mskSel)))).replace(/[<>&"]/g,'')+'\u201d mask.</div>':'')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]?
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
   // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
@@ -21294,8 +21351,9 @@ function _mskRebuildInner(){
       +'<span class="msk-hint">'+CS.length+'/'+CR_MAX_SAMPLES
       +(CS.length<CR_MAX_SAMPLES?' — shift-click the photo to add':'')+'</span></div>'):'';
 
+  const am=mskAdjMask()||m; // a group component edits its group's adjustments (one mask, one adjustment set)
   let selBody=shape
-    +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false).replace('<input class="fx-slider"',(!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100))?'<input disabled class="fx-slider"':'<input class="fx-slider"');
+    +_mskRow('Amount','amount',am.amount!=null?am.amount:100,0,100,1,false).replace('<input class="fx-slider"',(!mskHasAdjustment(am)&&(am.amount==null||am.amount>=100))?'<input disabled class="fx-slider"':'<input class="fx-slider"');
   // Range gates (colour / luminance / depth): the mask's OWN type decides which one is primary
   // (a Color Range mask IS its colour gate); on every other type they are secondary and live under
   // "More" — still there, one click away, never removed.
@@ -21549,38 +21607,38 @@ function _mskRebuildInner(){
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
   // Four groups in Lightroom's order: Light, Color, Effects, Detail. Exposure uses the same
   // +-100 = +-5 EV scale as the global Exposure slider (was +-1.5 stops).
-  const lightBody=_mskRow('Exposure','exp',m.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
-    +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
-    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
-    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
-    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+  const lightBody=_mskRow('Exposure','exp',am.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
+    +_mskRow('Contrast','con',am.con,-100,100,0.0075,false)
+    +_mskRow('Highlights','hi',am.hi,-100,100,0.01,false)
+    +_mskRow('Shadows','sh',am.sh,-100,100,0.01,false)
+    +_mskRow('Whites','wh',am.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Blacks','bl',am.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
     +'<div class="msk-crv-wrap" title="Tone curve for this mask only. Click to add a point, drag to bend, double-click a point to remove it."><div class="fx-label">Curve <button class="btn bgh" style="float:right;padding:0 8px" onclick="mskCrvReset()">Reset</button></div><canvas id="msk-crv" width="240" height="240" style="width:100%;max-width:240px;aspect-ratio:1;touch-action:none;border:1px solid var(--bdr);border-radius:4px;display:block;margin:4px auto"></canvas></div>';
-  const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
-    +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
-    +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
-    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
-    +_mskRow('Hue','hue',m.hue,-100,100,1,false)
+  const colorBody=_mskRow('Temp','temp',am.temp,-100,100,0.01,false)
+    +_mskRow('Tint','tint',am.tint,-100,100,0.01,false)
+    +_mskRow('Vibrance','vibrance',am.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
+    +_mskRow('Saturation','sat',am.sat,-100,100,0.01,false)
+    +_mskRow('Hue','hue',am.hue,-100,100,1,false)
     // Color paint: tint the masked area toward a picked colour; distinct from Temp/Tint and Hue.
     +'<div class="fx-row" title="Pick any color to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Color</div>'
-    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
+    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(am.colHue||0,am.colSat!=null?am.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
-    +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
-    +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false);
+    +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(am.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
+    +'<div class="fx-val">'+Math.round(am.colHue||0)+'°</div></div>'
+    +_mskRow('Color amount','colAmt',am.colAmt,0,100,0.01,false);
   const effectsBody='<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
-    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
-    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
-    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
-    +_mskRow('Dehaze','dehaze',m.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
-  const detailBody=_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
-    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
-    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
-  const cLight=_mskNonDefault(m,['exp','con','hi','sh','wh','bl'])+((m.crv&&m.crv.length)?1:0),
-    cColor=_mskNonDefault(m,['temp','tint','vibrance','sat','hue','colAmt']),
-    cEffects=_mskNonDefault(m,['tex','clarity','dehaze']),cDetail=_mskNonDefault(m,['sharp','sharpMask','nr']);
+    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(am.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+(am.tex||0)+'</div></div>'
+    +_mskRow('Clarity','clarity',am.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
+    +_mskRow('Dehaze','dehaze',am.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
+  const detailBody=_mskRow('Sharpen','sharp',am.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
+    +_mskRow('Sharpen Mask','sharpMask',am.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
+    +_mskRow('Noise Reduction','nr',am.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
+  const cLight=_mskNonDefault(am,['exp','con','hi','sh','wh','bl'])+((am.crv&&am.crv.length)?1:0),
+    cColor=_mskNonDefault(am,['temp','tint','vibrance','sat','hue','colAmt']),
+    cEffects=_mskNonDefault(am,['tex','clarity','dehaze']),cDetail=_mskNonDefault(am,['sharp','sharpMask','nr']);
   h+='<div class="msk-adjust-sec" role="group" aria-label="Adjustments">'
-    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(m,g);
+    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(am,g);
       // the eye only exists while the group holds values (or is already switched off, so it can be switched back on)
       return _mskGroup(g,lb,bd,'',c,(c||off)?{off}:null);}).join('')+'</div>';
   h+=_mskHowTo(m,caps);
@@ -21646,7 +21704,7 @@ function mskToggleIntersect(){
 // while preserving the identity of the referenced mask.
 // ── Per-mask tone curve editor ────────────────────────────────────────────────────────────────────
 function mskCrvDraw(){
-  const cv=document.getElementById('msk-crv'),m=fxState.masks[mskSel];if(!cv||!m)return;
+  const cv=document.getElementById('msk-crv'),m=mskAdjMask();if(!cv||!m)return;
   const x=cv.getContext('2d'),W=cv.width,pts=m.crv||[[0,0],[1,1]];
   x.clearRect(0,0,W,W);x.strokeStyle='rgba(128,128,128,.35)';x.lineWidth=1;
   for(let i=1;i<4;i++){x.beginPath();x.moveTo(i*W/4,0);x.lineTo(i*W/4,W);x.moveTo(0,i*W/4);x.lineTo(W,i*W/4);x.stroke();}
@@ -21654,41 +21712,41 @@ function mskCrvDraw(){
   const f=curveEval(pts);for(let i=0;i<=64;i++){const u=i/64,v=Math.min(1,Math.max(0,f(u)));i?x.lineTo(u*W,(1-v)*W):x.moveTo(u*W,(1-v)*W);}x.stroke();
   x.fillStyle='#fff';pts.forEach(p=>{x.beginPath();x.arc(p[0]*W,(1-p[1])*W,5,0,7);x.fill();});
 }
-function mskCrvReset(){const m=fxState.masks[mskSel];if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
+function mskCrvReset(){const m=mskAdjMask();if(!m||!m.crv)return;m.crv=null;mskCrvDraw();fxUpdate();fxHistoryPush();}
 function mskCrvInit(){
   const cv=document.getElementById('msk-crv');if(!cv)return;
   mskCrvDraw();
   let drag=-1,moved=false;
   const pos=e=>{const r=cv.getBoundingClientRect();return[Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,1-(e.clientY-r.top)/r.height))];};
   cv.onpointerdown=e=>{
-    const m=fxState.masks[mskSel];if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
+    const m=mskAdjMask();if(!m)return;e.preventDefault();cv.setPointerCapture(e.pointerId);
     const pts=m.crv||(m.crv=[[0,0],[1,1]]),[px,py]=pos(e);
     let hit=-1,best=0.07;pts.forEach((p,i)=>{const d=Math.hypot(p[0]-px,p[1]-py);if(d<best){best=d;hit=i;}});
     if(hit<0){pts.push([px,py]);pts.sort((a,b)=>a[0]-b[0]);hit=pts.findIndex(p=>p[0]===px&&p[1]===py);}
     drag=hit;moved=false;_fxHistLocked=true;
   };
   cv.onpointermove=e=>{
-    const m=fxState.masks[mskSel];if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
+    const m=mskAdjMask();if(drag<0||!m||!m.crv)return;const pts=m.crv,[px,py]=pos(e);moved=true;
     const lo=drag>0?pts[drag-1][0]+0.01:0,hi=drag<pts.length-1?pts[drag+1][0]-0.01:1;
     pts[drag][1]=py;if(drag>0&&drag<pts.length-1)pts[drag][0]=Math.min(hi,Math.max(lo,px));
     mskCrvDraw();fxUpdate();
   };
   const end=()=>{
     if(drag<0)return;drag=-1;_fxHistLocked=false;
-    const m=fxState.masks[mskSel];
+    const m=mskAdjMask();
     if(m&&m.crv&&m.crv.length===2&&m.crv[0][1]===0&&m.crv[1][1]===1)m.crv=null; // untouched = no curve
     mskCrvDraw();mskAmountSync();if(moved){fxUpdate();fxHistoryPush();}
   };
   cv.onpointerup=end;cv.onpointercancel=end;
   cv.ondblclick=e=>{
-    const m=fxState.masks[mskSel];if(!m||!m.crv)return;const[px,py]=pos(e);
+    const m=mskAdjMask();if(!m||!m.crv)return;const[px,py]=pos(e);
     const i=m.crv.findIndex((p,k)=>k>0&&k<m.crv.length-1&&Math.hypot(p[0]-px,p[1]-py)<0.07);
     if(i>0){m.crv.splice(i,1);mskCrvDraw();fxUpdate();fxHistoryPush();}
   };
 }
 // Zeroes every adjustment slider on the selected mask; the selection (shape, gates, raster) is untouched.
 function mskResetAdjust(){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   ['exp','con','temp','tint','sat','vibrance','hue','hi','sh','wh','bl','dehaze','clarity','tex','sharp','sharpMask','nr','colAmt'].forEach(k=>{if(m[k]!=null&&m[k]!==0)m[k]=0;});
   m.crv=null;
   if(typeof hapt==='function')hapt();
@@ -21886,13 +21944,14 @@ function mskShowSelIdx(){
   const tg=document.getElementById('tg-local');
   if(tg&&!tg.classList.contains('on'))return -1;
   // Hovering a mask's row (or pin) temporarily tints THAT mask, even with the overlay switched off; moving away restores.
-  if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskHoverIdx;
+  // A group (mask + its add/subtract/intersect components) shows its combined shape, as in Lightroom.
+  if(mskHoverIdx>=0&&fxState.masks[mskHoverIdx]&&!mskPaintMode&&!_mskPeek)return mskGroupTailIdx(mskHoverIdx);
   if(mskPreviewMode!=='select'||mskSel<0||!fxState.masks[mskSel])return -1;
   if(_mskAdjHeld)return -1; // auto-hide while an adjustment slider is held
   // "Image on B&W / black / white" show the SELECTION in full colour against a flat backdrop. A mask with nothing
   // selected yet (a fresh empty brush) would turn the whole photo flat; it leaves the photo as it is instead.
   if((mskSelViewStyle==='imgbw'||mskSelViewStyle==='imgblack'||mskSelViewStyle==='imgwhite')&&mskIsEmptyRaster(fxState.masks[mskSel]))return -1;
-  return mskSel;
+  return mskGroupTailIdx(mskSel);
 }
 function mskIsEmptyRaster(m){
   if(!m||m.type!=='brush'||!m.px)return false;
@@ -21906,7 +21965,7 @@ function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.natu
 function mskPreviewRenderOptions(extra={}){
   return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
     showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
-    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskSel:-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
+    showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskGroupTailIdx(mskSel):-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
     ...((extra&&extra.hdrIntermediate!=null)?{}:fxStillQualityOpts(0,0,true))};

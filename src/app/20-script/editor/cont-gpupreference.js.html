@@ -210,7 +210,7 @@ uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full eff
 uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
 uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
-uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add)
+uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add, 4 operand minus self)
                         // (this mask's shape combined with the shape resolved by mskO), y: tint,
                         // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders

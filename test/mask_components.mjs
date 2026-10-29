@@ -41,13 +41,14 @@ try{
       document.querySelector('#local-list > button .msk-li-act[title="'+{add:'Add to',subtract:'Subtract from',intersect:'Intersect with'}[op]+'"]').click();
       mskAdd('radial');
     }
-    out.ops=fxState.masks.slice(1).map(m=>[m.composeOp,m.operandId]);
+    // Components chain onto the group's running result (Lightroom order): root, then each previous component.
+    out.ops=fxState.masks.slice(1).map((m,k)=>[m.composeOp,m.operandId===fxState.masks[k].id]);
     out.count=document.getElementById('msk-count').textContent;
     out.depths=[...document.querySelectorAll('#local-list > button')].map(b=>b.dataset.depth||'0');
     // save/load round trip
     const s2=JSON.parse(JSON.stringify(getUISnapshot({skipRaster:true})));
     fxState.masks=[];applyUISnapshot(s2);
-    out.loaded=fxState.masks.map(m=>[m.id===fxState.masks[0].id,m.composeOp||'',m.operandId===fxState.masks[0].id]);
+    out.loaded=fxState.masks.map((m,k)=>[m.id===fxState.masks[0].id,m.composeOp||'',k>0&&m.operandId===fxState.masks[k-1].id]);
     out.loadedN=fxState.masks.length;
     // undo
     const before=fxHistory.length;await new Promise(r=>setTimeout(r,450));
@@ -55,7 +56,7 @@ try{
     return out;
   });
   assert.deepEqual(r.ops.map(x=>x[0]),['add','subtract','intersect']);
-  assert.ok(r.ops.every(x=>x[1]==='root'));
+  assert.ok(r.ops.every(x=>x[1]===true),'each component chains onto the group result so far');
   assert.equal(r.count,'4 of 8 masks');
   assert.deepEqual(r.depths,['0','1','1','1']);
   assert.equal(r.loadedN,4);

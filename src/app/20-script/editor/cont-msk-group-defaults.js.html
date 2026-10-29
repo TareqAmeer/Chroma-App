@@ -48,7 +48,7 @@ function _mskGrpOffApply(MK){
 }
 function mskGroupIsOff(m,key){return !!(m&&m.grpOffCsv&&m.grpOffCsv.split(',').includes(key));}
 function mskGroupEye(key){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   const set=new Set((m.grpOffCsv||'').split(',').filter(Boolean));set.has(key)?set.delete(key):set.add(key);
   m.grpOffCsv=[...set].join(',');mskRebuild();fxUpdate();fxHistoryPush();
 }
@@ -65,7 +65,10 @@ function _mskNonDefault(m,keys){let n=0;keys.forEach(k=>{const v=m[k];if(typeof 
 let _mskPendingCompose=null;
 function mskComposeMenu(ev,op){
   const masks=_mskEnsureIds(fxState.masks),m=masks[mskSel];if(!m)return;
-  _mskPendingCompose={op,operandId:m.id};mskAddMenu(ev,op);
+  // Chain onto the group's current result (its last component), not the bare root, so each new
+  // component adds to / subtracts from / intersects the whole group so far — Lightroom's order.
+  const tail=masks[mskGroupTailIdx(mskSel)]||m;
+  _mskPendingCompose={op,operandId:tail.id};mskAddMenu(ev,op);
 }
 function mskAddMenu(ev,composeOp){
   ev.stopPropagation();
@@ -224,8 +227,8 @@ function mskRowContext(ev,i){
 // Copy / paste of a mask's ADJUSTMENT settings (sliders, curve, colour) between masks - never the selection itself.
 const _MSK_ADJ_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colHue','colSat','colAmt','tex','clarity','dehaze','sharp','sharpMask','nr'];
 let _mskSettingsClip=null;
-function mskSettingsCopy(){const m=fxState.masks[mskSel];if(!m)return;_mskSettingsClip={k:{},crv:m.crv?JSON.parse(JSON.stringify(m.crv)):null};_MSK_ADJ_KEYS.forEach(k=>{_mskSettingsClip.k[k]=m[k]||0;});toast('Mask settings copied',true);}
-function mskSettingsPaste(){const m=fxState.masks[mskSel];if(!m||!_mskSettingsClip)return;Object.assign(m,_mskSettingsClip.k);m.crv=_mskSettingsClip.crv?JSON.parse(JSON.stringify(_mskSettingsClip.crv)):null;mskRebuild();fxUpdate();fxHistoryPush();}
+function mskSettingsCopy(){const m=mskAdjMask();if(!m)return;_mskSettingsClip={k:{},crv:m.crv?JSON.parse(JSON.stringify(m.crv)):null};_MSK_ADJ_KEYS.forEach(k=>{_mskSettingsClip.k[k]=m[k]||0;});toast('Mask settings copied',true);}
+function mskSettingsPaste(){const m=mskAdjMask();if(!m||!_mskSettingsClip)return;Object.assign(m,_mskSettingsClip.k);m.crv=_mskSettingsClip.crv?JSON.parse(JSON.stringify(_mskSettingsClip.crv)):null;mskRebuild();fxUpdate();fxHistoryPush();}
 // Housekeeping: a raster mask nothing was ever painted/selected into, and that is not part of a composition, selects nothing.
 function mskEmptyIndexes(){return fxState.masks.map((m,i)=>(mskIsEmptyRaster(m)&&!fxState.masks.some(o=>o.operandId&&o.operandId===m.id))?i:-1).filter(i=>i>=0);}
 function mskDeleteEmpty(){const idx=mskEmptyIndexes();if(!idx.length)return;mskPaintStop();for(let j=idx.length-1;j>=0;j--)fxState.masks.splice(idx[j],1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;mskRebuild();fxUpdate();fxHistoryPush();toast(idx.length+' empty mask'+(idx.length>1?'s':'')+' deleted (undo restores)',true);}

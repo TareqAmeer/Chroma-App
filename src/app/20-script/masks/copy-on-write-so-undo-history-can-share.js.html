@@ -147,3 +147,42 @@ function _mskCompositionPlan(masks){
   masks.forEach((_,i)=>visit(i));
   return{order,valid};
 }
+// Lightroom-style mask groups, derived from the composition graph (nothing new is stored).
+// A COMPONENT is a validly composed mask with no adjustments of its own; it joins the group of its
+// operand. The group is one mask: its components combine in a chain (root, then each component
+// adds / subtracts / intersects onto the running result) and ONE adjustment set, the root's, is
+// applied to the final combined shape, which is the weight of the group's last slot (the tail).
+// A composed mask that has its own adjustments keeps the older meaning (its own shape op the
+// operand, with its own adjustments), so edits saved before groups existed render unchanged.
+// Returns per slot: root (group root index), shared (is a component), adj (slot whose adjustments
+// this slot applies, -1 = none), tail (per root: the slot holding the combined weight).
+function _mskGroups(masks,plan){
+  const n=masks.length,byId=new Map(masks.map((m,i)=>[m.id,i]));plan=plan||_mskCompositionPlan(masks);
+  const opOf=m=>m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
+  const own=m=>!!m&&(m.isExclude||(typeof mskHasAdjustment==='function'?mskHasAdjustment(m):false));
+  const shared=masks.map((m,i)=>!!opOf(m)&&!!plan.valid[i]&&byId.has(m.operandId)&&!own(m));
+  const root=new Array(n).fill(-1);
+  const rootOf=i=>{let cur=i,k=0;while(shared[cur]&&k++<n)cur=byId.get(masks[cur].operandId);return cur;};
+  for(let i=0;i<n;i++)root[i]=rootOf(i);
+  // A component under an eraser root is not a group member (an eraser applies no adjustment).
+  for(let i=0;i<n;i++)if(shared[i]&&masks[root[i]]&&masks[root[i]].isExclude){shared[i]=false;root[i]=i;}
+  const tail=new Array(n).fill(-1);
+  for(let i=0;i<n;i++)if(root[i]===i)tail[i]=i;
+  // The tail is the member no other member builds on; with several (an older tree), the last in list order.
+  const usedAsOperand=new Set();for(let i=0;i<n;i++)if(shared[i]&&root[i]>=0)usedAsOperand.add(byId.get(masks[i].operandId));
+  for(let i=0;i<n;i++)if(shared[i]&&root[i]>=0&&!usedAsOperand.has(i))tail[root[i]]=i;
+  const adj=new Array(n).fill(-1);
+  for(let i=0;i<n;i++){const r=root[i];if(r>=0&&tail[r]===i)adj[i]=r;}
+  return{root,shared,adj,tail};
+}
+// The mask whose adjustments the panel edits for slot i: the group root for a component.
+function mskAdjIdx(i){
+  const masks=fxState.masks;if(!masks[i])return i;
+  const g=_mskGroups(_mskEnsureIds(masks));return g.root[i]>=0?g.root[i]:i;
+}
+function mskAdjMask(i){return fxState.masks[mskAdjIdx(i==null?mskSel:i)];}
+// The slot whose effective weight is the whole group's combined shape (for the selection overlay).
+function mskGroupTailIdx(i){
+  const masks=fxState.masks;if(!masks[i])return i;
+  const g=_mskGroups(_mskEnsureIds(masks)),r=g.root[i];return r>=0&&g.tail[r]>=0?g.tail[r]:i;
+}

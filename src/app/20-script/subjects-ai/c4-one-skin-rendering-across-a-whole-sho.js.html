@@ -144,6 +144,7 @@ function _mskRebuildInner(){
   mskUpdateSelViewControls();
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type!=='brush'){const was=mskPaintMode;mskPaintStop();if(was){_mskPaintResume={erase:mskPaintErase};if(typeof log==='function')log('Paint stopped on this mask type — it resumes when you select a brush mask again');}}
   if(mskAiTapMode&&(!fxState.masks[mskSel]||!mskIsAI(fxState.masks[mskSel])))mskAiTapToggle(false);
+  const _lg=_mskGroups(_mskEnsureIds(fxState.masks));
   fxState.masks.forEach((m,i)=>{
     const b=document.createElement('button');b.className='btn '+(i===mskSel?'bsec':'bgh');
     b.style.display='flex';b.style.alignItems='center';b.style.gap='6px';
@@ -192,8 +193,10 @@ function _mskRebuildInner(){
     act('\u2212','Subtract from',(e)=>{mskComposeMenu(e,'subtract');});
     act('\u2229','Intersect with',(e)=>{mskComposeMenu(e,'intersect');});
     // Component depth: how many operand links lead from this mask to a mask with no composition.
+    // Group components (shared adjustments) all sit one level under their root, as in Lightroom.
     let depth=0,cur=m;const seenIds=new Set();
-    while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
+    if(_lg.shared[i])depth=1;
+    else while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
     if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
@@ -244,6 +247,7 @@ function _mskRebuildInner(){
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
     +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
+    +(mskAdjIdx(mskSel)!==mskSel?'<div class="msk-hint msk-group-hint">Adjustments below apply to the whole \u201c'+String((mskAdjMask().name||mskAutoLabel(mskAdjMask(),mskAdjIdx(mskSel)))).replace(/[<>&"]/g,'')+'\u201d mask.</div>':'')
     +(m.composeOp&&!_mskCompositionPlan(_mskEnsureIds(fxState.masks)).valid[mskSel]?
       '<div class="msk-hint" role="alert">Selection is disabled because its composition operand is missing or cyclic. Use the … menu to repair or clear it.</div>':'');
   // Lightroom's Add / Subtract under the selected mask (plus Intersect and Invert): creates a NEW mask
@@ -351,8 +355,9 @@ function _mskRebuildInner(){
       +'<span class="msk-hint">'+CS.length+'/'+CR_MAX_SAMPLES
       +(CS.length<CR_MAX_SAMPLES?' — shift-click the photo to add':'')+'</span></div>'):'';
 
+  const am=mskAdjMask()||m; // a group component edits its group's adjustments (one mask, one adjustment set)
   let selBody=shape
-    +_mskRow('Amount','amount',m.amount!=null?m.amount:100,0,100,1,false).replace('<input class="fx-slider"',(!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100))?'<input disabled class="fx-slider"':'<input class="fx-slider"');
+    +_mskRow('Amount','amount',am.amount!=null?am.amount:100,0,100,1,false).replace('<input class="fx-slider"',(!mskHasAdjustment(am)&&(am.amount==null||am.amount>=100))?'<input disabled class="fx-slider"':'<input class="fx-slider"');
   // Range gates (colour / luminance / depth): the mask's OWN type decides which one is primary
   // (a Color Range mask IS its colour gate); on every other type they are secondary and live under
   // "More" — still there, one click away, never removed.
@@ -606,38 +611,38 @@ function _mskRebuildInner(){
   // ── ADJUST ───────────────────────────────────────────────────────────────────────────────────
   // Four groups in Lightroom's order: Light, Color, Effects, Detail. Exposure uses the same
   // +-100 = +-5 EV scale as the global Exposure slider (was +-1.5 stops).
-  const lightBody=_mskRow('Exposure','exp',m.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
-    +_mskRow('Contrast','con',m.con,-100,100,0.0075,false)
-    +_mskRow('Highlights','hi',m.hi,-100,100,0.01,false)
-    +_mskRow('Shadows','sh',m.sh,-100,100,0.01,false)
-    +_mskRow('Whites','wh',m.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
-    +_mskRow('Blacks','bl',m.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
+  const lightBody=_mskRow('Exposure','exp',am.exp,-100,100,0.05,false,'Same range as the global Exposure slider: -100..+100 = -5..+5 EV.')
+    +_mskRow('Contrast','con',am.con,-100,100,0.0075,false)
+    +_mskRow('Highlights','hi',am.hi,-100,100,0.01,false)
+    +_mskRow('Shadows','sh',am.sh,-100,100,0.01,false)
+    +_mskRow('Whites','wh',am.wh||0,-100,100,0.01,false,'Adjust the brightest tones inside this mask, using the same response as Basic Adjustments.')
+    +_mskRow('Blacks','bl',am.bl||0,-100,100,0.01,false,'Adjust the darkest tones inside this mask, using the same response as Basic Adjustments.')
     +'<div class="msk-crv-wrap" title="Tone curve for this mask only. Click to add a point, drag to bend, double-click a point to remove it."><div class="fx-label">Curve <button class="btn bgh" style="float:right;padding:0 8px" onclick="mskCrvReset()">Reset</button></div><canvas id="msk-crv" width="240" height="240" style="width:100%;max-width:240px;aspect-ratio:1;touch-action:none;border:1px solid var(--bdr);border-radius:4px;display:block;margin:4px auto"></canvas></div>';
-  const colorBody=_mskRow('Temp','temp',m.temp,-100,100,0.01,false)
-    +_mskRow('Tint','tint',m.tint,-100,100,0.01,false)
-    +_mskRow('Vibrance','vibrance',m.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
-    +_mskRow('Saturation','sat',m.sat,-100,100,0.01,false)
-    +_mskRow('Hue','hue',m.hue,-100,100,1,false)
+  const colorBody=_mskRow('Temp','temp',am.temp,-100,100,0.01,false)
+    +_mskRow('Tint','tint',am.tint,-100,100,0.01,false)
+    +_mskRow('Vibrance','vibrance',am.vibrance||0,-100,100,0.01,false,'Raises or lowers saturation more in muted colours, with less effect on already-saturated colours. Applied before the global post-print Vibrance stage.')
+    +_mskRow('Saturation','sat',am.sat,-100,100,0.01,false)
+    +_mskRow('Hue','hue',am.hue,-100,100,1,false)
     // Color paint: tint the masked area toward a picked colour; distinct from Temp/Tint and Hue.
     +'<div class="fx-row" title="Pick any color to tint the masked area toward — the hue slider below fine-tunes it."><div class="fx-label">Color</div>'
-    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
+    +'<input type="color" id="msk-col-picker" value="'+_hslToHex(am.colHue||0,am.colSat!=null?am.colSat:0.65)+'" oninput="mskColPicked(this)"></div>'
     +'<div class="fx-row"><div class="fx-label">Hue (fine-tune)</div>'
-    +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(m.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
-    +'<div class="fx-val">'+Math.round(m.colHue||0)+'°</div></div>'
-    +_mskRow('Color amount','colAmt',m.colAmt,0,100,0.01,false);
+    +'<input class="fx-slider fx-slider-grad" id="msk-col-hue" type="range" min="0" max="360" value="'+Math.round(am.colHue||0)+'" data-k="colHue" data-sc="1" data-fl="0" oninput="mskSlide(this);mskColSwatchSync()">'
+    +'<div class="fx-val">'+Math.round(am.colHue||0)+'°</div></div>'
+    +_mskRow('Color amount','colAmt',am.colAmt,0,100,0.01,false);
   const effectsBody='<div class="fx-row" title="Negative softens detail inside the mask (skin), positive sharpens it. Works on fine detail only — it does not change tone or color."><div class="fx-label">Texture</div>'
-    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(m.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
-    +'<div class="fx-val">'+(m.tex||0)+'</div></div>'
-    +_mskRow('Clarity','clarity',m.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
-    +_mskRow('Dehaze','dehaze',m.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
-  const detailBody=_mskRow('Sharpen','sharp',m.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
-    +_mskRow('Sharpen Mask','sharpMask',m.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
-    +_mskRow('Noise Reduction','nr',m.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
-  const cLight=_mskNonDefault(m,['exp','con','hi','sh','wh','bl'])+((m.crv&&m.crv.length)?1:0),
-    cColor=_mskNonDefault(m,['temp','tint','vibrance','sat','hue','colAmt']),
-    cEffects=_mskNonDefault(m,['tex','clarity','dehaze']),cDetail=_mskNonDefault(m,['sharp','sharpMask','nr']);
+    +'<input class="fx-slider" type="range" min="-100" max="100" value="'+(am.tex||0)+'" data-k="tex" data-sc="1" data-fl="0" oninput="mskSlide(this)">'
+    +'<div class="fx-val">'+(am.tex||0)+'</div></div>'
+    +_mskRow('Clarity','clarity',am.clarity||0,-100,100,1,false,'Midtone contrast at a wider scale than Texture — positive builds structure, negative smooths. This is the portrait move: soften skin here while the eyes keep their Texture.')
+    +_mskRow('Dehaze','dehaze',am.dehaze||0,-100,100,0.01,false,'Remove haze or add it back in bright, desaturated areas covered by this mask.');
+  const detailBody=_mskRow('Sharpen','sharp',am.sharp||0,-100,100,1,false,'Adds or softens fine edge contrast inside this mask. Separate from Texture, which targets surface detail. Respects mask coverage and Amount.')
+    +_mskRow('Sharpen Mask','sharpMask',am.sharpMask||0,0,100,1,false,'Protect smooth areas from local sharpening. Hold Alt while this slider is focused to preview white sharpened edges and black protected areas.')
+    +_mskRow('Noise Reduction','nr',am.nr||0,0,100,1,false,'Edge-aware smoothing inside the mask — a small bilateral filter that softens grain/noise without blurring across edges. Unlike Texture/Clarity this only smooths (0 = off); it never sharpens.');
+  const cLight=_mskNonDefault(am,['exp','con','hi','sh','wh','bl'])+((am.crv&&am.crv.length)?1:0),
+    cColor=_mskNonDefault(am,['temp','tint','vibrance','sat','hue','colAmt']),
+    cEffects=_mskNonDefault(am,['tex','clarity','dehaze']),cDetail=_mskNonDefault(am,['sharp','sharpMask','nr']);
   h+='<div class="msk-adjust-sec" role="group" aria-label="Adjustments">'
-    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(m,g);
+    +['adjust','adjColor','adjEffects','adjDetail'].map(g=>{const lb={adjust:'Light',adjColor:'Color',adjEffects:'Effects',adjDetail:'Detail'}[g],bd={adjust:lightBody,adjColor:colorBody,adjEffects:effectsBody,adjDetail:detailBody}[g],c={adjust:cLight,adjColor:cColor,adjEffects:cEffects,adjDetail:cDetail}[g],off=mskGroupIsOff(am,g);
       // the eye only exists while the group holds values (or is already switched off, so it can be switched back on)
       return _mskGroup(g,lb,bd,'',c,(c||off)?{off}:null);}).join('')+'</div>';
   h+=_mskHowTo(m,caps);

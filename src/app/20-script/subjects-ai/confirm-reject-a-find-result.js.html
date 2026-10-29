@@ -36,6 +36,9 @@ function _subjFindStatsHint(subjId){
 }
 function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
+  {// Deleting a group component keeps the rest of the group attached: whatever built on it builds on its operand.
+    const masks=_mskEnsureIds(fxState.masks),gone=masks[mskSel],g=_mskGroups(masks);
+    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});}
   fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}

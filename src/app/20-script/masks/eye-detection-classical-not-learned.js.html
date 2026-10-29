@@ -225,7 +225,7 @@ function _mskRow(label,k,val,min,max,sc,flip,title){
 const MSK_SLIDER_DEF={amount:100,preserve:70,crRange:35,crRangeC:35,depLo:0,depHi:1,lumLo:0,lumHi:1,feather:0.5};
 const MSK_SLIDER_GEOM=new Set(['cx','cy','rx','ry','x0','y0','x1','y1']);   // shape position: not an "adjustment", never reset this way
 function mskResetSlider(el){
-  const m=fxState.masks[mskSel],k=el&&el.dataset&&el.dataset.k;if(!m||!k||MSK_SLIDER_GEOM.has(k))return false;
+  const k=el&&el.dataset&&el.dataset.k,m=MSK_GROUP_ADJ_KEYS.has(k)?mskAdjMask():fxState.masks[mskSel];if(!m||!k||MSK_SLIDER_GEOM.has(k))return false;
   const def=MSK_SLIDER_DEF[k]!=null?MSK_SLIDER_DEF[k]:0,cur=m[k]==null?def:m[k];
   if(Math.abs(cur-def)<1e-9)return false;
   m[k]=def;if(m.origin==='depth'&&(k==='depLo'||k==='depHi'))delete m._refineCache;
@@ -240,9 +240,12 @@ function _mskWireReset(ctl){
 // Amount scales the finished adjustment, so with nothing adjusted yet it is a dead control: disabled (not hidden) until the mask has one.
 const _MSK_AMOUNT_KEYS=['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colAmt','tex','clarity','dehaze','sharp','nr','uH','uS','uL','tanDepth','tanWarm','tanOneWayAmt'];
 function mskHasAdjustment(m){return !!m&&(_mskNonDefault(m,_MSK_AMOUNT_KEYS)>0||!!(m.crv&&m.crv.length));}
-function mskAmountSync(){const m=fxState.masks[mskSel],el=document.querySelector('#local-ctl input[data-k="amount"]');if(!el||!m)return;const off=!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100);el.disabled=off;el.title=off?'Amount scales this mask\'s adjustments - it turns on once the mask has one':'';}
+function mskAmountSync(){const m=mskAdjMask(),el=document.querySelector('#local-ctl input[data-k="amount"]');if(!el||!m)return;const off=!mskHasAdjustment(m)&&(m.amount==null||m.amount>=100);el.disabled=off;el.title=off?'Amount scales this mask\'s adjustments - it turns on once the mask has one':'';}
+// Adjustment keys a group component hands to its group root (see _mskGroups): Light, Color,
+// Effects, Detail and Amount. Shape, gate and skin-tone keys stay on the selected mask itself.
+const MSK_GROUP_ADJ_KEYS=new Set(['exp','con','hi','sh','wh','bl','temp','tint','vibrance','sat','hue','colHue','colSat','colAmt','tex','clarity','dehaze','sharp','sharpMask','nr','amount']);
 function mskSlide(el){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=MSK_GROUP_ADJ_KEYS.has(el.dataset.k)?mskAdjMask():fxState.masks[mskSel];if(!m)return;
   const v=parseFloat(el.value),sc=parseFloat(el.dataset.sc);
   m[el.dataset.k]=el.dataset.fl==='1'?1-v/100:v*sc;
   if(m.origin==='depth'&&(el.dataset.k==='depLo'||el.dataset.k==='depHi'))delete m._refineCache; // range creates a fresh derived source; keep the user's refinement settings
@@ -269,11 +272,11 @@ function _hexToHueSat(hex){
   return[h,s];
 }
 function mskColSwatchSync(){
-  const pk=document.getElementById('msk-col-picker'),m=fxState.masks[mskSel];
+  const pk=document.getElementById('msk-col-picker'),m=mskAdjMask();
   if(pk&&m)pk.value=_hslToHex(m.colHue||0,m.colSat!=null?m.colSat:0.65);
 }
 function mskColPicked(el){
-  const m=fxState.masks[mskSel];if(!m)return;
+  const m=mskAdjMask();if(!m)return;
   const[h,s]=_hexToHueSat(el.value);
   m.colHue=h;m.colSat=Math.max(0.08,s); // floor sat so a near-grey pick still reads as a color, not a no-op tint
   const hueSl=document.getElementById('msk-col-hue');
