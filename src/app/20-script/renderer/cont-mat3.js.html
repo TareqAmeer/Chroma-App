@@ -791,7 +791,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // 4 = group component subtract: the running group result minus this shape (Lightroom order).
       // 5 = a hidden (muted) group component: passes the group result through unchanged.
       mE[o]=MKG.shared[i]&&m.muted?5:op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
-      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
+      mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]&&!mskIsEmptyColorRange(m)?1:0; // an unpicked Colour Range selects nothing (Lightroom)mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
       mE[o+1]=a.tint||0;mE[o+2]=a.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
       // slot (amount 0) rather than dropping the mask from the array, because removing it would

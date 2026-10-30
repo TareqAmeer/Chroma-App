@@ -139,9 +139,11 @@ function mskShowSelIdx(){
   if(_mskAdjHeld)return -1; // auto-hide while an adjustment slider is held
   // "Image on B&W / black / white" show the SELECTION in full colour against a flat backdrop. A mask with nothing
   // selected yet (a fresh empty brush) would turn the whole photo flat; it leaves the photo as it is instead.
-  if((mskSelViewStyle==='imgbw'||mskSelViewStyle==='imgblack'||mskSelViewStyle==='imgwhite')&&mskIsEmptyRaster(fxState.masks[mskSel]))return -1;
+  if((mskSelViewStyle==='imgbw'||mskSelViewStyle==='imgblack'||mskSelViewStyle==='imgwhite')&&(mskIsEmptyRaster(fxState.masks[mskSel])||mskIsEmptyColorRange(fxState.masks[mskSel])))return -1;
   return mskGroupTailIdx(mskSel);
 }
+// A Colour Range mask before its first pick: it selects nothing, as in Lightroom (it used to cover the whole photo).
+function mskIsEmptyColorRange(m){return !!m&&m.origin==='color'&&!(m.crSamples&&m.crSamples.length);}
 function mskIsEmptyRaster(m){
   if(!m||m.type!=='brush'||!m.px)return false;
   if(m.composeOp)return false;                       // a composed mask's coverage is not just its own pixels

@@ -42,5 +42,17 @@ try{
   await page.mouse.move(bx.l+bx.w*.2,bx.t+bx.h*.3);await page.mouse.down();await page.mouse.move(bx.l+bx.w*.4,bx.t+bx.h*.6,{steps:5});await page.mouse.up();
   assert.equal(await page.evaluate(()=>fxState.masks[mskSel].crSamples.length),1,'drag samples colour area once (click swallowed)');
   assert.ok(await page.evaluate(()=>/Refine/.test(document.getElementById('local-list').parentElement.innerText)||true));
-  console.log('PASS mask range sampling: lum eyedropper, drag area, shift add, remove');
+  // A Colour Range mask selects nothing until its first pick (Lightroom), then follows the pick.
+  const cr=await page.evaluate(()=>{
+    const rr=new FXR(document.createElement('canvas')),img=curItem().img,w=img.naturalWidth,h=img.naturalHeight;
+    const run=(masks)=>{const P=getFXParams();P.grain={enabled:false};P.masks=masks;rr.setImage(img);rr.render(P,w,h,{glowScale:1,seed:1});return rr.getPixels().px;};
+    const diff=(a,b)=>{let n=0;for(let i=0;i<a.length;i++)if(Math.abs(a[i]-b[i])>2)n++;return n;};
+    const picked=fxState.masks[mskSel],base=run([]);
+    const empty={...picked,id:'empty-cr',crSamples:[],exp:1},full={...picked,id:'picked-cr',exp:1};
+    return{empty:diff(base,run([empty])),picked:diff(base,run([full])),emptyFlag:mskIsEmptyColorRange(empty)};
+  });
+  assert.equal(cr.emptyFlag,true);
+  assert.equal(cr.empty,0,'unpicked Colour Range changes nothing');
+  assert.ok(cr.picked>0,'picked Colour Range applies its edit');
+  console.log('PASS mask range sampling: lum eyedropper, drag area, shift add, remove, empty colour range');
 }finally{await browser.close();server.close();}
