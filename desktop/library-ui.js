@@ -2007,6 +2007,10 @@
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
+    /* The rendered view (same renderer as Cull, saved edits applied) replaces the <img> once drawn. */
+    #lib-ql-view{flex:none;width:92vw;height:86vh;background:transparent;border-radius:4px}
+    #lib-ql-view[hidden]{display:none}
+    #lib-quicklook.ql-rendered #lib-ql-img{display:none}
     #lib-ql-badges{display:flex;gap:6px;align-items:center;min-height:22px}
     #lib-ql-badges .lib-ql-b{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#e8e8e8;font-size:11px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
     #lib-ql-badges .lib-ql-b.pick{border-color:var(--green-pine)}
@@ -10568,6 +10572,10 @@
   const cullItems = new Map(); // path -> { promise, lastUsed, item }
   let cullPreloadGen = 0;
   async function cullLoadItem(path) {
+    return (await cullLoadDisplay(path)) || cullLoadPrivate(path);
+  }
+  // The developed 2560px display tier of a RAW, or null when there is none (not a RAW / not decoded yet).
+  async function cullLoadDisplay(path) {
     if (window.__TAURI__ && RAW_EXT_RE.test(path)) {
       let recipeKey = rawRecipeKey(false, path);
       if (!window.chromasmithRawFullCleanup) {
@@ -10575,8 +10583,13 @@
         try { await invoke('get_decode_cache_path', { path, recipeKey: fullKey }); recipeKey = fullKey; } catch (_) {}
       }
       try {
+        // Never opened: develop just the display proxy (the Library's review tier) instead of a full Editor load.
+        let displayImg = await displayAssetImage(path, recipeKey, false).catch(() => null);
+        if (!displayImg && !LIBTEST) {
+          const st = await rawCacheSettings(path, 'review'); await cacheOneRaw(path, 'review', st); recipeKey = st.recipeKey;
+        }
         const [img, dims, m] = await Promise.all([
-          displayAssetImage(path, recipeKey),
+          displayImg || displayAssetImage(path, recipeKey),
           invoke('get_decode_cache_dims', { path, recipeKey }).catch(() => null),
           getMeta(path).catch(() => ({})),
         ]);
@@ -10588,7 +10601,7 @@
           exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len, date: m.date, lens: m.lens, make: m.make, model: m.model } };
       } catch (e) { rawPerf('cull-display-miss', path, { error: String(e && e.message || e) }); }
     }
-    return cullLoadPrivate(path);
+    return null;
   }
   // Not decoded yet (or not a RAW): the same private full load Compare uses.
   async function cullLoadPrivate(path) {
@@ -10653,9 +10666,55 @@
         cullTrimItems(keep);
       }
     };
-    worker(); worker();
+    // Then pre-draw them at the sizes this page's cells have: a new page opens with photo 1 as
+    // the large view and the rest in the strip.
+    const host = surveyHost(), cellsEl = host ? [...host.querySelectorAll('.lib-survey-cell')] : [];
+    const big = wrapSize(cellsEl[surveyState.focus]), small = wrapSize(cellsEl.find((_, i) => i !== surveyState.focus));
+    const job = (p, i) => ({ path: p, w: (i ? small : big)[0], h: (i ? small : big)[1], resolver: (q) => cullItem(q) });
+    const live = () => gen === cullPreloadGen && compareState.mode === 'cull' && state.viewMode === 'survey';
+    Promise.all([worker(), worker()]).then(() => { if (live() && cellsEl.length) detailPredraw([...next.map(job), ...prev.map(job)], live); });
   }
   const detailState={linked:true,metadata:false,renderer:null,queue:Promise.resolve(),cache:new Map()};
+  // Rendered views kept for reuse (each <= 1MP): the cull page on screen, its pre-drawn
+  // neighbours and Quick Look's photo + neighbours.
+  const DETAIL_CACHE_MAX = 16;
+  // ── Pre-draw: render views the user is about to see into detailState.cache ──────────────────
+  // A pre-drawn view is a cache hit for the real render (same key: path, recipe, view geometry,
+  // output size), so it appears at once. Pre-draws run one photo at a time on an off-screen
+  // stand-in with the same size as the real view, only after the user has been idle for
+  // DETAIL_PREDRAW_IDLE_MS (re-checked before every photo), and a new request drops the old list.
+  const DETAIL_PREDRAW_IDLE_MS = 250;
+  const predraw = { gen: 0, lastInput: 0, ghost: null };
+  ['keydown', 'pointerdown', 'pointermove', 'wheel'].forEach((t) => document.addEventListener(t, () => { predraw.lastInput = performance.now(); }, { capture: true, passive: true }));
+  function predrawGhost(w, h) {
+    let g = predraw.ghost;
+    if (!g || !g.isConnected) {
+      g = predraw.ghost = document.createElement('div');
+      g.setAttribute('aria-hidden', 'true');
+      g.style.cssText = 'position:fixed;left:-30000px;top:0;visibility:hidden;pointer-events:none;contain:strict;width:1px;height:1px;overflow:visible';
+      g.innerHTML = '<div class="lib-cmp-canvas-wrap" style="flex:none;position:absolute;left:0;top:0"><canvas></canvas></div>';
+      document.body.appendChild(g);
+    }
+    const wrap = g.firstElementChild; wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
+    return g;
+  }
+  // jobs: [{ path, w, h, resolver }] — w/h are the real view's wrap clientWidth/clientHeight.
+  async function detailPredraw(jobs, isLive) {
+    const gen = ++predraw.gen;
+    for (const job of jobs) {
+      for (;;) {
+        if (gen !== predraw.gen || !isLive()) return;
+        const idle = performance.now() - predraw.lastInput;
+        if (idle >= DETAIL_PREDRAW_IDLE_MS) break;
+        await new Promise((r) => setTimeout(r, DETAIL_PREDRAW_IDLE_MS - idle + 10));
+      }
+      await new Promise((r) => setTimeout(r, 0)); // yield to input between photos
+      if (gen !== predraw.gen || !isLive()) return;
+      if (!(job.w > 1 && job.h > 1)) continue;
+      await detailRender(predrawGhost(job.w, job.h), {}, 0, 'live', job.path, job.resolver).catch(() => false);
+    }
+  }
+  function wrapSize(el) { const w = el && el.querySelector('.lib-cmp-canvas-wrap'); return w ? [w.clientWidth, w.clientHeight] : [0, 0]; }
   function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
   function detailCells(){return state.viewMode==='compare'
     ? ['A','B'].map(w=>({cell:compareState[w==='A'?'paneA':'paneB'],el:compareHost()?.querySelector(`[data-pane="${w}"].lib-cmp-pane`)}))
@@ -10766,7 +10825,7 @@
           // Red-eye is a 2D pass after the render (drawRedEyePreview), in frame-normalised coords: map them into this view.
           if(snap!=='orig'&&rit.redeye&&rit.redeye.some(o=>o.enabled!==false)&&typeof applyRedEyeCorrections==='function')
             applyRedEyeCorrections(rendered,rit.redeye.map(o=>({...o,x:(o.x*iw-x)/sw,y:(o.y*ih-y)/sh,rx:(o.rx||0.02)*iw/sw,ry:(o.ry||o.rx||0.02)*ih/sh})));
-          detailState.cache.set(key,rendered);while(detailState.cache.size>4){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
+          detailState.cache.set(key,rendered);while(detailState.cache.size>DETAIL_CACHE_MAX){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
         }finally{if(restoreUI){applyUISnapshot(live,{skipRender:true});rawDefSl.forEach((e,i)=>{e.defaultValue=rawDefVals[i];});}if(undo)undo();_fxHistLocked=locked;}
       }
       if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
@@ -11422,7 +11481,8 @@
     // Drop queued (not yet started) developed-RAW review jobs that are no longer near the cursor.
     if (window_.length) purgeRawReviewQueue(new Set([path, ...window_])); // only when the photo is in the navigation order
     quicklook.prefetchQueue = window_.filter((candidate) => !quicklookPreviews.has(candidate) && !quicklookRequests.has(candidate));
-    window_.slice(0, 1).concat(window_.slice(2, 3)).forEach((p) => { const sc = state.sidecars.get(p); if (sc && sc.edited) epEnqueue(p); });
+    // Neighbours that Quick Look cannot draw itself (a RAW outside the desktop app) keep the background edited render.
+    if (!window.__TAURI__) window_.slice(0, 1).concat(window_.slice(2, 3)).forEach((p) => { const sc = state.sidecars.get(p); if (RAW_EXT_RE.test(p) && sc && sc.edited) epEnqueue(p); });
     pumpQuickLookPrefetch();
   }
   // Flag / rating / colour badges, styled like the grid's flag chips (same FLAG_SVG_* glyphs).
@@ -11465,7 +11525,9 @@
     if (!caption) return;
     const sc = state.sidecars.get(path) || {};
     const name = baseName(path);
-    if (quicklook.editedKind === 'cache') caption.textContent = name + ' · edited look — hold \\ for original';
+    if (quicklook.rendered) caption.textContent = name + (sc.edited ? ' · edited look' : '') + ' — hold \\ for original';
+    else if (quicklook.renderPending && !quicklook.developedMode) caption.textContent = name + (quicklook.editedKind === 'thumb' ? ' · edited look (thumbnail) — rendering…' : ' — rendering…');
+    else if (quicklook.editedKind === 'cache') caption.textContent = name + ' · edited look — hold \\ for original';
     else if (quicklook.rendering) caption.textContent = name + ' · original shown — rendering edit…';
     else if (quicklook.editedKind === 'thumb') caption.textContent = name + ' · edited look (thumbnail) — hold \\ for original';
     else if (sc.edited && !quicklook.baseNote.includes('RAW development')) caption.textContent = name + ' · original shown (edit not rendered yet)';
@@ -11499,6 +11561,12 @@
   function qlShowOriginal(on) {
     const img = document.getElementById('lib-ql-img');
     quicklook.holdOrig = !!on;
+    if (quicklook.rendered) { // the rendered view vs the original file's own preview
+      if (on && quicklook.url) { img.src = quicklook.url; img.dataset.previewSource = 'original'; img.classList.add('loaded'); }
+      document.getElementById('lib-quicklook')?.classList.toggle('ql-rendered', !(on && quicklook.url));
+      document.getElementById('lib-ql-view').hidden = !!(on && quicklook.url);
+      return;
+    }
     if (!img || !quicklook.editedUrl || !quicklook.url) return;
     img.src = on ? quicklook.url : quicklook.editedUrl;
     img.dataset.previewSource = on ? 'original' : (quicklook.editedKind === 'cache' ? 'edited-cache' : 'edited-thumb');
@@ -11509,6 +11577,7 @@
     el = document.createElement('div');
     el.id = 'lib-quicklook';
     el.innerHTML = `<img id="lib-ql-img" alt="">
+      <div id="lib-ql-view" class="lib-cmp-canvas-wrap" hidden><canvas></canvas></div>
       <div id="lib-ql-badges"></div>
       <div id="lib-ql-caption"></div>
       <button id="lib-ql-peak" type="button" aria-pressed="false" title="Focus peaking (E) — red marks the sharpest edges">Focus peaking</button>`;
@@ -11523,7 +11592,8 @@
   // is a separate canvas over the <img>, so toggling off removes it and leaves the photo untouched.
   let qlPeakOn = false;
   function qlPeakSync() {
-    const img = document.getElementById('lib-ql-img');
+    const view = document.querySelector('#lib-ql-view canvas'), rendered = document.getElementById('lib-quicklook')?.classList.contains('ql-rendered');
+    const img = rendered && view ? Object.assign(view, { complete: true, naturalWidth: view.width, naturalHeight: view.height }) : document.getElementById('lib-ql-img');
     const btn = document.getElementById('lib-ql-peak');
     if (btn) { btn.classList.toggle('on', qlPeakOn); btn.setAttribute('aria-pressed', String(qlPeakOn)); }
     let o = document.getElementById('lib-ql-peakcv');
@@ -11590,11 +11660,52 @@
       } catch (_) { /* keep the instant tier */ }
     }, QL_SHARPEN_DWELL_MS);
   }
+  // Quick Look draws the photo with the Cull renderer (detailRender): the Editor's own source (for a
+  // RAW the developed 2560px display tier, sized against the full frame), every saved edit, and
+  // grain/glow at export scale — so Space shows what the Editor shows. Neighbours are pre-drawn.
+  const QL_ORIGINAL_AFTER_MS = 700; // nothing correct on screen by then (no edited thumbnail): show the file's own preview meanwhile
+  const qlCell = { detail: { scale: 0, cx: .5, cy: .5 } };
+  async function qlRenderView(path, generation) {
+    const el = document.getElementById('lib-quicklook'), view = document.getElementById('lib-ql-view');
+    const live = () => quicklook.active && quicklook.path === path && generation === quicklook.generation;
+    view.hidden = false; view.style.visibility = 'hidden'; // laid out (detailRender sizes to it) but not shown until drawn
+    qlCell.detail = { scale: 0, cx: .5, cy: .5 };
+    let ok = false;
+    try { ok = await detailRender(el, qlCell, 0, 'live', path, (p) => qlItem(p)); } catch (_) { ok = false; }
+    if (!live()) return false;
+    if (!ok) { view.hidden = true; view.style.visibility = ''; el.querySelector('.lib-detail-error')?.remove(); return false; }
+    quicklook.renderPending = false;
+    view.style.visibility = '';
+    if (!quicklook.holdOrig) el.classList.add('ql-rendered'); else view.hidden = true;
+    quicklook.rendered = true; el.dataset.qlStage = 'render';
+    qlCaptionSync(path); qlPeakSync();
+    // Pre-draw the next and previous photos at this view's size.
+    const [w, h] = [view.clientWidth, view.clientHeight], win = qlPrefetchWindow(path);
+    const keep = new Set([path, ...win.slice(0, 3)]); cullTrimItems(keep);
+    detailPredraw([win[0], win[2], win[1]].filter(Boolean).map((p) => ({ path: p, w, h, resolver: (q) => qlItem(q) })), () => quicklook.active && quicklook.path === path);
+    return true;
+  }
+  // Quick Look's source: a RAW only from its developed display tier (never a multi-second full
+  // decode just to preview — that photo keeps the camera preview), anything else as Cull loads it.
+  function qlItem(path) {
+    if (!RAW_EXT_RE.test(path)) return cullItem(path);
+    if (!window.__TAURI__) return Promise.reject(new Error('no developed source'));
+    const rec = cullItems.get(path);
+    if (rec) { rec.lastUsed = performance.now(); return rec.promise; }
+    return cullLoadDisplay(path).then((item) => {
+      if (!item) throw new Error('no developed source');
+      if (!cullItems.has(path)) cullItems.set(path, { promise: Promise.resolve(item), lastUsed: performance.now(), item });
+      return item;
+    });
+  }
   async function showQuickLook(path, developed = false) {
     if (!path) return;
     const isRawPath = RAW_EXT_RE.test(path);
-    const wantDeveloped = isRawPath && (developed || quicklookAlwaysDeveloped());
+    // D (or "always develop" outside the desktop app): the plain RAW development without creative
+    // edits, as before. In the desktop app the rendered view already IS the developed RAW, edits applied.
+    const wantDeveloped = isRawPath && (developed || (quicklookAlwaysDeveloped() && !window.__TAURI__));
     const generation = ++quicklook.generation;
+    quicklook.openedAt = performance.now();
     quicklook.prefetchQueue = [];
     quicklook.active = true;
     quicklook.path = path;
@@ -11608,33 +11719,56 @@
     img.classList.remove('loaded');
     document.getElementById('lib-ql-badges').innerHTML = qlBadgesHtml(path);
     qlRevokeEdited(); quicklook.rendering = false; quicklook.holdOrig = false; quicklook.baseNote = '';
-    quicklook.editedUrl = qlEditedThumbUrl(path);
+    quicklook.rendered = false; quicklook.developedMode = wantDeveloped; quicklook.renderPending = !wantDeveloped;
+    el.classList.remove('ql-rendered'); document.getElementById('lib-ql-view').hidden = true; el.dataset.qlStage = '';
+    quicklook.editedUrl = qlEditedThumbUrl(path) || (!wantDeveloped && epThumbUrl(path)) || '';
     if (quicklook.editedUrl) quicklook.editedKind = 'thumb';
-    if (!wantDeveloped && (state.sidecars.get(path) || { edited: true }).edited) qlEditedRefresh(path);
-    if (quicklook.editedUrl) { // instant edited look from the cached grid thumb; full original loads behind it
-      img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded');
+    if (quicklook.editedUrl) { // instant edited look from the cached grid thumb while the full view renders
+      img.src = quicklook.editedUrl; img.dataset.previewSource = 'edited-thumb'; img.classList.add('loaded'); el.dataset.qlStage = 'thumb';
     }
-    try {
-      const bufPromise = quicklookPreview(path, developed); // started first so it wins the IPC race...
+    const live = () => quicklook.active && quicklook.path === path && generation === quicklook.generation;
+    // The file's own preview: shown for D, while holding \, and as the fallback when this photo has no
+    // developed source to render from (a RAW never opened, or outside the desktop app).
+    const fileReady = (async () => {
+      const bufPromise = quicklookPreview(path, wantDeveloped); // started first so it wins the IPC race...
       queueQuickLookNeighbors(path); // ...then the neighbours go out without waiting for it
       const buf = await bufPromise;
-      const reviewSidecar = wantDeveloped ? await getSidecar(path) : null;
-      if (!quicklook.active || quicklook.path !== path || generation !== quicklook.generation) return; // superseded or closed
+      if (!live()) return null;
       if (quicklook.url) URL.revokeObjectURL(quicklook.url);
       quicklook.url = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      if (!quicklook.editedUrl) {
-        img.src = quicklook.url;
-        img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
-      }
-      img.classList.add('loaded');
-      const creativeEditsOmitted = wantDeveloped && !!reviewSidecar?.edited;
-      quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : isRawPath && !wantDeveloped ? ' · camera preview — D to develop' : '';
-      qlCaptionSync(path);
+      return quicklook.url;
+    })();
+    fileReady.catch(() => {}); // consumed by showFile when this view is still current
+    const showFile = async (force) => {
+      let url = null; try { url = await fileReady; } catch (e) { if (live() && !quicklook.rendered) caption.textContent = baseName(path) + ' — preview unavailable'; return false; }
+      if (!url || !live() || quicklook.rendered || (!force && quicklook.editedUrl)) return !!url;
+      img.src = url;
+      img.dataset.previewSource = wantDeveloped ? 'developed-raw' : isRawPath ? 'camera-preview' : 'image';
+      img.classList.add('loaded'); el.dataset.qlStage = 'file';
+      return true;
+    };
+    if (wantDeveloped) {
+      if (!(await showFile(true))) return;
+      const reviewSidecar = await getSidecar(path);
+      if (!live()) return;
+      const creativeEditsOmitted = !!reviewSidecar?.edited;
+      quicklook.baseNote = creativeEditsOmitted ? ' · RAW development (creative edits not shown)' : '';
       caption.title = creativeEditsOmitted ? 'Open in Editor to review saved looks, masks and geometry.' : '';
-      if (!wantDeveloped) qlScheduleSharpen(path, generation);
-    } catch (e) {
-      if (quicklook.active && quicklook.path === path && generation === quicklook.generation) caption.textContent = baseName(path) + ' — preview unavailable';
+      qlCaptionSync(path);
+      return;
     }
+    // Slow render with nothing correct on screen yet: the file preview meanwhile.
+    setTimeout(() => { if (live() && !quicklook.rendered && !quicklook.editedUrl) showFile(false); }, QL_ORIGINAL_AFTER_MS);
+    const ok = await qlRenderView(path, generation);
+    if (ok || !live()) return;
+    // No developed source: the previous behaviour (camera preview, background edited render).
+    quicklook.renderPending = false;
+    if (isRawPath && quicklookAlwaysDeveloped()) { showQuickLook(path, true); return; }
+    if (!(await showFile(false)) || !live()) return;
+    quicklook.baseNote = isRawPath ? ' · camera preview — D to develop' : '';
+    if ((state.sidecars.get(path) || { edited: true }).edited) qlEditedRefresh(path);
+    qlCaptionSync(path);
+    qlScheduleSharpen(path, generation);
   }
   // Shared by the hard-wired arrows and the rebindable library.next/previous commands.
   // Key-repeat is throttled to one navigation per QL_NAV_REPEAT_MS (trailing edge, target
@@ -11662,6 +11796,8 @@
   function hideQuickLook() {
     qlNavCancel();
     quicklook.generation++;
+    quicklook.rendered = false; quicklook.renderPending = false;
+    document.getElementById('lib-quicklook')?.classList.remove('ql-rendered');
     quicklook.prefetchQueue = [];
     quicklook.active = false;
     quicklook.path = '';
@@ -12134,6 +12270,11 @@
     if (!img || !img.isConnected) return;
     img.src = url; img.classList.add('loaded');
     img.dataset.canvasThumb = '1'; img.dataset.editedThumb = '1'; img.style.transform = '';
+  }
+  // Quick Look's instant first frame: this photo's edited grid copy, if one matching its current recipe exists.
+  function epThumbUrl(path) {
+    const have = epThumbs.get(path), sc = state.sidecars.get(path);
+    return have && sc && sc.edited && sc.recipe && have.key === epKey(path, sc.recipe) ? have.url : '';
   }
   function epThumbPaintCached(path, img) {
     const have = epThumbs.get(path), sc = state.sidecars.get(path);

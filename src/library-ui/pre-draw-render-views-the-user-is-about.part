@@ -1,0 +1,209 @@
+  // ── Pre-draw: render views the user is about to see into detailState.cache ──────────────────
+  // A pre-drawn view is a cache hit for the real render (same key: path, recipe, view geometry,
+  // output size), so it appears at once. Pre-draws run one photo at a time on an off-screen
+  // stand-in with the same size as the real view, only after the user has been idle for
+  // DETAIL_PREDRAW_IDLE_MS (re-checked before every photo), and a new request drops the old list.
+  const DETAIL_PREDRAW_IDLE_MS = 250;
+  const predraw = { gen: 0, lastInput: 0, ghost: null };
+  ['keydown', 'pointerdown', 'pointermove', 'wheel'].forEach((t) => document.addEventListener(t, () => { predraw.lastInput = performance.now(); }, { capture: true, passive: true }));
+  function predrawGhost(w, h) {
+    let g = predraw.ghost;
+    if (!g || !g.isConnected) {
+      g = predraw.ghost = document.createElement('div');
+      g.setAttribute('aria-hidden', 'true');
+      g.style.cssText = 'position:fixed;left:-30000px;top:0;visibility:hidden;pointer-events:none;contain:strict;width:1px;height:1px;overflow:visible';
+      g.innerHTML = '<div class="lib-cmp-canvas-wrap" style="flex:none;position:absolute;left:0;top:0"><canvas></canvas></div>';
+      document.body.appendChild(g);
+    }
+    const wrap = g.firstElementChild; wrap.style.width = w + 'px'; wrap.style.height = h + 'px';
+    return g;
+  }
+  // jobs: [{ path, w, h, resolver }] — w/h are the real view's wrap clientWidth/clientHeight.
+  async function detailPredraw(jobs, isLive) {
+    const gen = ++predraw.gen;
+    for (const job of jobs) {
+      for (;;) {
+        if (gen !== predraw.gen || !isLive()) return;
+        const idle = performance.now() - predraw.lastInput;
+        if (idle >= DETAIL_PREDRAW_IDLE_MS) break;
+        await new Promise((r) => setTimeout(r, DETAIL_PREDRAW_IDLE_MS - idle + 10));
+      }
+      await new Promise((r) => setTimeout(r, 0)); // yield to input between photos
+      if (gen !== predraw.gen || !isLive()) return;
+      if (!(job.w > 1 && job.h > 1)) continue;
+      await detailRender(predrawGhost(job.w, job.h), {}, 0, 'live', job.path, job.resolver).catch(() => false);
+    }
+  }
+  function wrapSize(el) { const w = el && el.querySelector('.lib-cmp-canvas-wrap'); return w ? [w.clientWidth, w.clientHeight] : [0, 0]; }
+  function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
+  function detailCells(){return state.viewMode==='compare'
+    ? ['A','B'].map(w=>({cell:compareState[w==='A'?'paneA':'paneB'],el:compareHost()?.querySelector(`[data-pane="${w}"].lib-cmp-pane`)}))
+    : surveyState.cells.map((cell,i)=>({cell,el:surveyHost()?.querySelector(`[data-survey-idx="${i}"].lib-survey-cell`)}));}
+  function detailRerender(){if(state.viewMode==='compare'){renderComparePane('A');renderComparePane('B');}else surveyCellsRender();}
+  function detailControls(host){
+    const bar=host?.querySelector('#lib-compare-bar');if(!bar)return;
+    bar.insertAdjacentHTML('beforeend','<button type="button" class="lib-btn" data-detail="fit">Fit</button><button type="button" class="lib-btn" data-detail="native">100%</button><button type="button" class="lib-btn" data-detail="link" aria-pressed="true">Linked</button><button type="button" class="lib-btn" data-detail="meta" aria-pressed="false">Metadata</button>');
+    const link=bar.querySelector('[data-detail="link"]'),metadata=bar.querySelector('[data-detail="meta"]');link.textContent=detailState.linked?'Linked':'Unlinked';link.setAttribute('aria-pressed',String(detailState.linked));metadata.setAttribute('aria-pressed',String(detailState.metadata));
+    bar.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{
+      if(b.dataset.detail==='link'){detailState.linked=!detailState.linked;b.textContent=detailState.linked?'Linked':'Unlinked';b.setAttribute('aria-pressed',String(detailState.linked));return;}
+      if(b.dataset.detail==='meta'){detailState.metadata=!detailState.metadata;b.setAttribute('aria-pressed',String(detailState.metadata));host.querySelectorAll('.lib-detail-meta').forEach(m=>m.hidden=!detailState.metadata);detailRerender();return;}
+      for(const {cell} of detailCells())Object.assign(detailView(cell),{scale:b.dataset.detail==='native'?1:0,cx:.5,cy:.5});detailRerender();
+    });
+    let dragging=null,lx=0,ly=0;
+    const target=e=>e.target.closest('.lib-cmp-pane');
+    const cellFor=el=>el?.dataset.pane?compareState[el.dataset.pane==='A'?'paneA':'paneB']:surveyState.cells[+el?.dataset.surveyIdx];
+    const change=(el,scale,dx=0,dy=0)=>{
+      const cell=cellFor(el);if(!cell)return;const view=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight;if(!w||!h)return;
+      const fit=Math.min(1,el.querySelector('.lib-cmp-canvas-wrap').clientWidth/w,el.querySelector('.lib-cmp-canvas-wrap').clientHeight/h);
+      view.scale=scale??(view.scale||fit);view.cx=Math.max(0,Math.min(1,view.cx-dx/(w*view.scale)));view.cy=Math.max(0,Math.min(1,view.cy-dy/(h*view.scale)));
+      if(detailState.linked)for(const pair of detailCells())Object.assign(detailView(pair.cell),view);
+      detailRerender();
+    };
+    host.addEventListener('wheel',e=>{const el=target(e);if(!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;e.preventDefault();const cell=cellFor(el),v=detailView(cell),w=+el.dataset.sourceWidth,h=+el.dataset.sourceHeight,wrap=el.querySelector('.lib-cmp-canvas-wrap');if(!w||!h)return;const fit=Math.min(1,wrap.clientWidth/w,wrap.clientHeight/h);change(el,Math.min(8,Math.max(fit,(v.scale||fit)*Math.exp(-e.deltaY*.0015))));},{passive:false});
+    host.addEventListener('pointerdown',e=>{const el=target(e);if(e.button!==0||!el||!e.target.closest('.lib-cmp-canvas-wrap'))return;dragging=el;lx=e.clientX;ly=e.clientY;el.setPointerCapture(e.pointerId);e.preventDefault();});
+    host.addEventListener('pointermove',e=>{if(!dragging)return;change(dragging,null,e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY;});
+    host.addEventListener('pointerup',()=>dragging=null);host.addEventListener('pointercancel',()=>dragging=null);
+  }
+  function setupCompareZoomPan(){detailControls(compareHost());}
+  async function detailRender(el,cell,idx,srcKey,path,itemResolver=null){
+    const revision=cell.detailRevision=(cell.detailRevision||0)+1,entry=compareState.entryToken;
+    if (itemResolver) cell.pendingRevision = revision;
+    // Serialize only this viewer's renders; source reads/metadata may finish in any order.
+    const job=async()=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      const it=itemResolver?await itemResolver(path,entry):(typeof fxImages!=='undefined'?fxImages[idx]:null);if(!it)return false;
+      if(it._rawHalf&&typeof fxPromoteWebRaw==='function')await fxPromoteWebRaw(it);
+      if(typeof fnEnsureNative==='function')await fnEnsureNative(it);
+      const sc=await getSidecar(path),meta=await getMeta(path);
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      let strip=el.querySelector('.lib-detail-meta');if(!strip){strip=document.createElement('div');strip.className='lib-detail-meta';strip.style.cssText='padding:4px 8px;height:24px;box-sizing:border-box;flex:none;color:var(--mut);font-size:11px';el.appendChild(strip);}strip.hidden=!detailState.metadata;
+      const snap=srcKey==='live'?(sc.recipe?snapshotFromB64(sc.recipe):null):(typeof resolveSplitSnapshot==='function'?resolveSplitSnapshot(compareSrcKeyToDescriptor(srcKey)):'orig');
+      // Per-photo pixel edits (crop/rotate/straighten, heal, erase, red-eye) live on the photo item,
+      // not the shared UI: take them from this photo's recipe so the cell frames the photo the way
+      // the Editor does, without touching the Editor's current photo.
+      const own=(k)=>srcKey==='live'&&snap&&typeof snap==='object'&&snap[k]!==undefined;
+      const rit={...it,img:it.fullImg||it.img,geom:own('geom')?(snap.geom||defGeom()):it.geom,heal:own('heal')?(snap.heal||[]):it.heal,inpaint:own('inpaint')?(snap.inpaint||[]):it.inpaint,redeye:own('redeye')?(snap.redeye||[]):it.redeye};
+      // Cull renders from the display tier (see cullLoadItem): all view geometry below is in FULL-frame
+      // pixels (k = full/display), so 100% and the linked pan mean the same thing on either source.
+      const frameOf=(img)=>{const r={...rit,img};const src=typeof geomCanvas==='function'?geomCanvas(r):img;const k=(it._cullDisplay&&img===it.img)?fxFullScale({img}):1;
+        return {src,k,iw:Math.round((src.naturalWidth||src.width)*k),ih:Math.round((src.naturalHeight||src.height)*k)};};
+      let F=frameOf(rit.img);
+      const iw=F.iw,ih=F.ih,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
+      const fit=Math.min(1,Math.max(1,wrap.clientWidth)/iw,Math.max(1,wrap.clientHeight)/ih),scale=view.scale||fit;
+      const sw=Math.max(1,Math.min(iw,Math.floor(wrap.clientWidth/scale))),sh=Math.max(1,Math.min(ih,Math.floor(wrap.clientHeight/scale)));
+      const x=Math.max(0,Math.min(iw-sw,Math.round(view.cx*iw-sw/2))),y=Math.max(0,Math.min(ih-sh,Math.round(view.cy*ih-sh/2)));
+      const dpr=Math.min(window.devicePixelRatio||1,2),pw=Math.max(1,Math.round(sw*scale*dpr)),ph=Math.max(1,Math.round(sh*scale*dpr));
+      // At most viewport pixels, never a fitted canvas enlarged to simulate native detail.
+      const cap=Math.min(1,Math.sqrt(1e6/(pw*ph))),ow=Math.max(1,Math.round(pw*cap)),oh=Math.max(1,Math.round(ph*cap));
+      // The full frame only while the view needs more pixels than the display tier has (zoomed in).
+      if(it._cullDisplay){
+        const kD=fxFullScale({img:it.img}),needFull=ow>sw/kD*1.05;
+        if(needFull&&!it.fullImg){await cullEnsureFull(it);if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;}
+        rit.img=(needFull&&it.fullImg)||it.img;F=frameOf(rit.img); // the full frame stays loaded while its page is shown (Fit <-> 100% toggling)
+      }
+      const source=F.src,k=F.k;
+      const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
+      if(!rendered){
+        const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
+        // No saved recipe: the Editor opens such a photo at the pristine defaults, not at whatever
+        // the shared UI holds (Survey/Cull seed it from the FIRST photo's recipe).
+        const privateBaseline=(!!itemResolver||srcKey==='live')&&!snap&&_fxPristineDefault;
+        const restoreUI=(snap&&snap!=='orig')||privateBaseline;
+        // The look (sel-lut) loads asynchronously in selectLUT, so applying it through the shared
+        // Editor UI would render this photo with whatever look the Editor already held and then
+        // land the photo's look in the Editor after the restore. Resolve it here, render with it
+        // directly, and keep sel-lut out of the snapshot the shared UI applies.
+        const lookSnap=(snap&&snap!=='orig')?snap:privateBaseline?_fxPristineDefault:null;
+        let lookLut;
+        const lookSel=lookSnap&&lookSnap.selects&&Object.prototype.hasOwnProperty.call(lookSnap.selects,'sel-lut')?String(lookSnap.selects['sel-lut']||''):undefined;
+        if(lookSel!==undefined){
+          lookLut=!lookSel?null:lookSel.startsWith('p:')?await presetLut(lookSel.slice(2)):await lutLibGet(lookSel.slice(2)).then(rec=>rec?lutFromBytes(rec.data):null);
+          if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+        }
+        // Also kept out: per-photo pixel edits (taken into rit above), adjustIndependent (sets the
+        // Editor photo's override) and the RAW decode settings, which re-decode the Editor's current
+        // photo when they change (the cell's own source was decoded with this photo's settings).
+        const withoutLook=s=>{const out={...s};['geom','heal','inpaint','redeye','adjustIndependent','rawNr','rawNrHighStrength','nativeNr','demosaicAlgo'].forEach(k=>delete out[k]);if(lookSel===undefined)return out;const selects={...s.selects};delete selects['sel-lut'];return {...out,selects};};
+        // The Library's Editor open runs applyRawDefaults() after every recipe/pristine restore;
+        // it also rewrites two sliders' defaultValue, which the live restore below does not.
+        const rawDefSl=['sl-nr-col','sl-adj-sharp'].map(id=>document.getElementById(id)).filter(Boolean),rawDefVals=rawDefSl.map(e=>e.defaultValue);
+        _fxHistLocked=true;
+        try{
+          if(snap&&snap!=='orig'){applyUISnapshot(withoutLook(snap));applyRawDefaults();}
+          else if(privateBaseline){applyUISnapshot(withoutLook(_fxPristineDefault),{skipRender:true});applyRawDefaults();}
+          const sourceOwnsVlog=it.exif?.photoStyle===17&&!(snap&&typeof snap==='object'&&snap.selects&&Object.prototype.hasOwnProperty.call(snap.selects,'sel-input'));
+          const P=snap==='orig'?{...FX_ORIG_PARAMS,...(sourceOwnsVlog?{input:'vlog'}:{})}:getFXParams((restoreUI?null:it.adjustOverride)||undefined,sourceOwnsVlog?{input:'vlog'}:undefined);
+          if(!detailState.renderer){detailState.renderer=new FXR(document.createElement('canvas'));if(!detailState.renderer.ok)throw new Error('Compare renderer unavailable');}
+          const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
+          if(lookLut!==undefined){P.lut=lookLut;if(lookLut)renderer.setLUT(lookLut);}
+          if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(renderer,rit);
+          const ssw=sw/k,ssh=sh/k,crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(ssw*ssh)),ow*2/ssw,oh*2/ssh);crop.width=Math.max(1,Math.round(ssw*cropScale));crop.height=Math.max(1,Math.round(ssh*cropScale));crop.getContext('2d').drawImage(source,x/k,y/k,ssw,ssh,0,0,crop.width,crop.height);
+          renderer.setImage(crop);// Effect scale exactly as the Editor's loupe: glow sigmas at this render's px per source px,
+          // grain cells + attenuation against the export width, so a fitted cell shows the export's grain.
+          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:it._cullDisplay?iw:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih],...fxStillQualityOpts(0,0,true)});
+          rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
+          // Red-eye is a 2D pass after the render (drawRedEyePreview), in frame-normalised coords: map them into this view.
+          if(snap!=='orig'&&rit.redeye&&rit.redeye.some(o=>o.enabled!==false)&&typeof applyRedEyeCorrections==='function')
+            applyRedEyeCorrections(rendered,rit.redeye.map(o=>({...o,x:(o.x*iw-x)/sw,y:(o.y*ih-y)/sh,rx:(o.rx||0.02)*iw/sw,ry:(o.ry||o.rx||0.02)*ih/sh})));
+          detailState.cache.set(key,rendered);while(detailState.cache.size>DETAIL_CACHE_MAX){const old=detailState.cache.keys().next().value,c=detailState.cache.get(old);detailState.cache.delete(old);c.width=c.height=0;}
+        }finally{if(restoreUI){applyUISnapshot(live,{skipRender:true});rawDefSl.forEach((e,i)=>{e.defaultValue=rawDefVals[i];});}if(undo)undo();_fxHistLocked=locked;}
+      }
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      const canvas=el.querySelector('canvas');canvas.width=ow;canvas.height=oh;canvas.getContext('2d').drawImage(rendered,0,0);canvas.style.transform='';canvas.style.width=(sw*scale)+'px';canvas.style.height=(sh*scale)+'px';
+      Object.assign(el.dataset,{sourceWidth:String(iw),sourceHeight:String(ih),detailScale:String(scale),detailX:String(x),detailY:String(y),detailWidth:String(sw),detailHeight:String(sh)});
+
+      const row=state.entries.find(e=>e.path===path);strip.textContent=[meta.shutter,meta.aperture,meta.iso?'ISO '+meta.iso:'',row?.sharpness!=null?'Focus '+Math.round(row.sharpness):''].filter(Boolean).join(' · ')||'Exposure metadata unavailable';
+      if (itemResolver && cell.pendingRevision === revision) {
+        cell.presentedPath = path; cell.presentedSrcKey = srcKey; cell.pendingPath = '';
+        el.removeAttribute('aria-busy'); delete el.dataset.detailError;
+        el.querySelector('.lib-detail-error')?.remove();
+      }
+      return true;
+    };
+    detailState.queue=detailState.queue.catch(()=>{}).then(job);return detailState.queue.catch(e=>{
+      if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
+      console.warn('compare detail',e);el.dataset.detailError=String(e.message||e);
+      let error=el.querySelector('.lib-detail-error');if(!error){error=document.createElement('div');error.className='lib-detail-error';error.style.cssText='padding:16px;color:var(--mut);font-size:12px';el.querySelector('.lib-cmp-canvas-wrap')?.appendChild(error);}
+      if(error)error.textContent=`Could not load ${baseName(path)}: ${String(e.message||e)}`;
+      if (itemResolver && cell.pendingRevision === revision) { cell.pendingPath = ''; el.removeAttribute('aria-busy'); }
+      return false;
+    });
+  }
+
+  function canEnterCompare() {
+    if (state.source === 'lr') {
+      if (typeof toast === 'function') toast("Compare isn't available for Lightroom cloud albums yet", false);
+      return false;
+    }
+    return true;
+  }
+  /// Applies a label from Compare and repaints just the affected pane's flag row. Routed through
+  /// the grid's own setLabel so the sidecar write, the cache update and the grid's later repaint
+  /// all stay in one place — a second writer here is how the two views drift apart, which is the
+  /// defect ROADMAP 14 describes.
+  async function compareApplyLabel(path, label) {
+    const pane = compareState.focus;
+    if (!comparePaneReady(pane) || comparePathForIdx(compareState[pane === 'A' ? 'paneA' : 'paneB'].idx) !== path) return false;
+    await setLabel(path, label);
+    ['A', 'B'].forEach((w) => {
+      if (comparePathForIdx(compareState[w === 'A' ? 'paneA' : 'paneB'].idx) === path) renderComparePane(w);
+    });
+    compareSyncFocus();
+  }
+  /// Marks which pane the keyboard is acting on. Without a visible marker, Tab silently changes
+  /// what X does — the kind of hidden mode that makes a culling shortcut untrustworthy.
+  function compareSyncFocus() {
+    const host = document.getElementById('lib-compare');
+    if (!host) return;
+    host.querySelectorAll('.lib-cmp-pane').forEach((el) => {
+      el.classList.toggle('cmp-focus', el.dataset.pane === compareState.focus);
+    });
+    const bar = document.getElementById('lib-compare-bar');
+    if (bar) {
+      const t = bar.querySelector('.cmp-focus-note') || (() => {
+        const sp = document.createElement('span'); sp.className = 'cmp-focus-note';
+        sp.style.cssText = 'margin-left:auto;color:var(--acc)'; bar.appendChild(sp); return sp;
+      })();
+      t.textContent = `X/P/U → pane ${compareState.focus} (Tab swaps)`;
+    }
+  }

@@ -683,6 +683,10 @@
     #lib-ql-img{max-width:92vw;max-height:86vh;object-fit:contain;opacity:0;transition:opacity var(--duration-press,120ms) ease;
       border-radius:4px;box-shadow:none}
     #lib-ql-img.loaded{opacity:1}
+    /* The rendered view (same renderer as Cull, saved edits applied) replaces the <img> once drawn. */
+    #lib-ql-view{flex:none;width:92vw;height:86vh;background:transparent;border-radius:4px}
+    #lib-ql-view[hidden]{display:none}
+    #lib-quicklook.ql-rendered #lib-ql-img{display:none}
     #lib-ql-badges{display:flex;gap:6px;align-items:center;min-height:22px}
     #lib-ql-badges .lib-ql-b{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:5px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);color:#e8e8e8;font-size:11px;font-family:var(--mono);letter-spacing:.04em;text-transform:uppercase}
     #lib-ql-badges .lib-ql-b.pick{border-color:var(--green-pine)}

@@ -20,6 +20,11 @@
     img.src = url; img.classList.add('loaded');
     img.dataset.canvasThumb = '1'; img.dataset.editedThumb = '1'; img.style.transform = '';
   }
+  // Quick Look's instant first frame: this photo's edited grid copy, if one matching its current recipe exists.
+  function epThumbUrl(path) {
+    const have = epThumbs.get(path), sc = state.sidecars.get(path);
+    return have && sc && sc.edited && sc.recipe && have.key === epKey(path, sc.recipe) ? have.url : '';
+  }
   function epThumbPaintCached(path, img) {
     const have = epThumbs.get(path), sc = state.sidecars.get(path);
     if (!have || !sc || !sc.edited || !sc.recipe || !epThumbEligible(path, img)) return false;
