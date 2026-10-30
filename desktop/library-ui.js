@@ -10633,7 +10633,10 @@
           lookLut=!lookSel?null:lookSel.startsWith('p:')?await presetLut(lookSel.slice(2)):await lutLibGet(lookSel.slice(2)).then(rec=>rec?lutFromBytes(rec.data):null);
           if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;
         }
-        const withoutLook=s=>{const out={...s};delete out.geom;delete out.heal;delete out.inpaint;delete out.redeye;if(lookSel===undefined)return out;const selects={...s.selects};delete selects['sel-lut'];return {...out,selects};};
+        // Also kept out: per-photo pixel edits (taken into rit above), adjustIndependent (sets the
+        // Editor photo's override) and the RAW decode settings, which re-decode the Editor's current
+        // photo when they change (the cell's own source was decoded with this photo's settings).
+        const withoutLook=s=>{const out={...s};['geom','heal','inpaint','redeye','adjustIndependent','rawNr','rawNrHighStrength','nativeNr','demosaicAlgo'].forEach(k=>delete out[k]);if(lookSel===undefined)return out;const selects={...s.selects};delete selects['sel-lut'];return {...out,selects};};
         // The Library's Editor open runs applyRawDefaults() after every recipe/pristine restore;
         // it also rewrites two sliders' defaultValue, which the live restore below does not.
         const rawDefSl=['sl-nr-col','sl-adj-sharp'].map(id=>document.getElementById(id)).filter(Boolean),rawDefVals=rawDefSl.map(e=>e.defaultValue);
