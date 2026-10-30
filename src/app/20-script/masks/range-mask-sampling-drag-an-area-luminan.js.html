@@ -14,12 +14,12 @@ function _mskLumBand(m){
 }
 function mskLumEyedropperClick(e){
   const m=fxState.masks[mskSel];if(!m){mskLumEyedropper(false);return;}
-  if(fxLoupe){log('Exit the 1:1 view (Fit) before sampling','warn');return;}
+  if(fxLoupe){toast('Exit the 1:1 view (Fit) before sampling','warn');return;}
   const avg=_pickAvgRGB(e,true);if(!avg)return;
   const y=(0.2126*avg[0]+0.7152*avg[1]+0.0722*avg[2])/255;
   const add=!!(e.shiftKey||e.altKey);
   if(!add||!m.lumSamples)m.lumSamples=[];
-  if(m.lumSamples.length>=5){log('Maximum 5 luminance samples','warn');return;}
+  if(m.lumSamples.length>=5){toast('Maximum 5 luminance samples','warn');return;}
   m.lumSamples.push(Math.round(y*1000)/1000);
   _mskLumBand(m);
   if(!add)mskLumEyedropper(false);

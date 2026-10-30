@@ -98,7 +98,7 @@ function _mskAddCoatEyeMask(coatM){
   if(fxState.masks.length>=MSK_MAX)return;   // silently skip — the coat mask itself still succeeded
   const det=_mskDetectEyes(coatM);
   if(!det){
-    log('Could not confidently find the eyes (hidden under fur, closed, or a difficult angle) — add a Radial mask by hand if you want to brighten them.','warn');
+    toast('Could not confidently find the eyes (hidden under fur, closed, or a difficult angle) — add a Radial mask by hand if you want to brighten them.','warn');
     return;
   }
   // det.cy is TOP-DOWN; m.cy is stored BOTTOM-UP (see the mask-thumbnail preview's `(1-m.cy)*H`

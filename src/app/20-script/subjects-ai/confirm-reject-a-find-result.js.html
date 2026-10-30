@@ -264,7 +264,7 @@ async function mskAiUpdate(i){
   }catch(e){
     m.px=keep.px;m.mtW=keep.mtW;m.mtH=keep.mtH;
     m.aiState=job.cancelled?'stale':'failed';m.aiStateMsg=String(e&&e.message||e);
-    log('Mask update failed: '+m.aiStateMsg,'warn');
+    toast('Mask update failed: '+m.aiStateMsg,'warn');
   }finally{job.done();_mskAiUpdating=false;_mskTexDirty=true;mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
   return !m.aiState;
 }
@@ -285,7 +285,7 @@ async function mskAiUpdateAll(){
 }
 async function mskCopyAndReevaluate(){
   if(_mskSemanticCopyJob||fxImages.length<2||!fxState.masks.length)return;
-  if(!window.__TAURI__){log('Copy + re-evaluate needs the desktop app with on-device SAM. Static copy remains available.','warn');return;}
+  if(!window.__TAURI__){toast('Copy + re-evaluate needs the desktop app with on-device SAM. Static copy remains available.','warn');return;}
   if(typeof window.chromasmithFlushPendingSave==='function')await window.chromasmithFlushPendingSave();
   const sourceIndex=fxCurIdx,sourceItem=fxImages[sourceIndex],sourceSelection=mskSel;
   const sourceMasks=fxState.masks.map(_mskCloneLive);

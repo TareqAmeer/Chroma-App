@@ -155,7 +155,7 @@ function mskCrEyedropper(force){
 function mskCrEyedropperClick(e){
   if(!_mskCrEyeActive)return true;   // returns true when it consumed the click
   const m=fxState.masks[mskSel];if(!m){mskCrEyedropper(false);return true;}
-  if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a skin tone','warn');return true;}
+  if(fxLoupe){toast('Exit the 1:1 view (Fit) before picking a skin tone','warn');return true;}
   const avg=_pickAvgRGB(e,true);if(!avg)return true;
   // Field names h/s/v are kept so the packing code and saved masks are unchanged, but the VALUES
   // are Oklab hue-turn / chroma / L. rgb is stored so _mskMigrate can recompute after a space swap.
@@ -165,7 +165,7 @@ function mskCrEyedropperClick(e){
   // exception. Stays armed while adding so several picks are one gesture each.
   const add=!!(e.shiftKey||e.altKey);
   if(!add||!m.crSamples.length)m.crSamples=[];
-  if(m.crSamples.length>=CR_MAX_SAMPLES){log(`Maximum ${CR_MAX_SAMPLES} color samples`,'warn');mskCrEyedropper(false);return true;}
+  if(m.crSamples.length>=CR_MAX_SAMPLES){toast(`Maximum ${CR_MAX_SAMPLES} color samples`,'warn');mskCrEyedropper(false);return true;}
   m.crSamples.push({h,s,v,rgb:[Math.round(avg[0]),Math.round(avg[1]),Math.round(avg[2])]});
   m.crOn=true;
   if(!add)mskCrEyedropper(false);

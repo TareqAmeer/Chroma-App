@@ -7,7 +7,7 @@
 function _mskAdjustDefaults(){return{invert:false,lumLo:0,lumHi:1,exp:0,con:0,temp:0,tint:0,
   sat:0,vibrance:0,hue:0,hi:0,sh:0,wh:0,bl:0,dehaze:0,subtract:false,colHue:0,colAmt:0,colSat:0.65};}
 function mskAdd(type,configure){
-  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks','warn');return;}
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks','warn');return;}
   let m;
   if(type==='skin'||type==='coat'){
     // SEGMENTATION FIRST — desktop only, by design. Scribble over the subject, the on-device model

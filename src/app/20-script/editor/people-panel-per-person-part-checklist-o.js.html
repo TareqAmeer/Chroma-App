@@ -34,12 +34,12 @@ async function mskPersonCreate(id){
     const r=await samRunPoints(m);
     if(!r||r.ok===false){if(r&&!r.cancelled)toast(r.error||'Could not select '+c.label);return;}
     if(feats.length){
-      if(fxState.masks.length+(_mskPeople.separate?feats.length:1)-(wantWhole?0:1)>MSK_MAX){log('Not enough free mask slots for these parts (max '+MSK_MAX+')','warn');}
+      if(fxState.masks.length+(_mskPeople.separate?feats.length:1)-(wantWhole?0:1)>MSK_MAX){toast('Not enough free mask slots for these parts (max '+MSK_MAX+')','warn');}
       else{
         const fl=await _faceparseRunLayers(m);
         const mk=(px,name)=>Object.assign({type:'brush',origin:'ai',ai:true,px,mtW:fl.mtW,mtH:fl.mtH,aiPoints:[]},_mskAdjustDefaults(),_mskSkinDefaults(),{name});
         const made=[];
-        if(_mskPeople.separate)feats.forEach(p=>{const px=_facePlace(fl,[p.g]);if(px.some(v=>v>32))made.push(mk(px,p.label+' \u00b7 '+c.label));else log(p.label+' not found for '+c.label,'warn');});
+        if(_mskPeople.separate)feats.forEach(p=>{const px=_facePlace(fl,[p.g]);if(px.some(v=>v>32))made.push(mk(px,p.label+' \u00b7 '+c.label));else toast(p.label+' not found for '+c.label,'warn');});
         else{const px=_facePlace(fl,feats.map(p=>p.g));if(px.some(v=>v>32))made.push(mk(px,c.label+' \u00b7 '+feats.map(p=>p.label).join(', ')));}
         if(!wantWhole){const bi=fxState.masks.indexOf(m);if(bi>=0)fxState.masks.splice(bi,1);}
         made.forEach(x=>fxState.masks.push(x));

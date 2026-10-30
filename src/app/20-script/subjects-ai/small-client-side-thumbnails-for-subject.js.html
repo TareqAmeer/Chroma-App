@@ -185,7 +185,7 @@ async function subjFind(idx){
       // Below the user's own tolerance: don't install it, but don't throw the work away either —
       // "Use it anyway" applies the exact same result a moment later with no need to re-run Find.
       _subjLowConfPending={idx,s,header,mask};
-      log(`Find ${s.name}: below your minimum similarity (${header.score.toFixed(3)} < ${_subjMinScore.toFixed(2)}) — not applied.`,'warn');
+      toast(`Find ${s.name}: below your minimum similarity (${header.score.toFixed(3)} < ${_subjMinScore.toFixed(2)}) — not applied.`,'warn');
       toast(`${s.name}: match too weak by your setting — not applied`,false);
       mskRebuild();
       return;

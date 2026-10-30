@@ -183,10 +183,10 @@ async function _mskApplyFaceFallback(mask,item,group,silent){
   }finally{_faceparseRunning=false;}
 }
 async function mskFaceAutoExclude(){
-  if(!window.__TAURI__){log('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}
+  if(!window.__TAURI__){toast('Face-feature exclusion needs the desktop app (on-device model)','warn');return;}
   const m=fxState.masks[mskSel];
-  if(!m||m.origin!=='skin'){log('Select a Skin mask first','warn');return;}
-  if(!mskIsAI(m)||!m.px||!m.px.length){log('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
+  if(!m||m.origin!=='skin'){toast('Select a Skin mask first','warn');return;}
+  if(!mskIsAI(m)||!m.px||!m.px.length){toast('Scribble to select yourself first — the face crop is derived from that selection','warn');return;}
   if(_faceparseRunning)return;
   _faceparseRunning=true;
   const endActivity=fxPhotoActivity(curItem(),'Finding face features…');
@@ -203,7 +203,7 @@ async function mskFaceAutoExclude(){
     // (crop/rotate) since the last run.
     let fm=fxState.masks.find(x=>x.origin==='faceauto');
     if(!fm){
-      if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+      if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
       fm={type:'brush',origin:'faceauto'};
       Object.assign(fm,_mskSkinDefaults());
       fm.isExclude=true;fm.name='Face features';
@@ -230,11 +230,11 @@ async function mskFaceAutoExclude(){
 // it picks up the generalised Uniformity block (above) or any other adjustment on its own.
 const FACE_FEATURES=[{i:0,label:'Eyes & brows'},{i:1,label:'Glasses'},{i:2,label:'Lips'},{i:3,label:'Hair'}];
 async function mskFaceSelectFeature(groupIdx){
-  if(!window.__TAURI__){log('Face-feature selection needs the desktop app (on-device model)','warn');return;}
+  if(!window.__TAURI__){toast('Face-feature selection needs the desktop app (on-device model)','warn');return;}
   const src=fxState.masks[mskSel];
-  if(!src||!mskIsAI(src)||!src.px||!src.px.length){log('Scribble to select the subject first — the face crop is derived from that selection','warn');return;}
+  if(!src||!mskIsAI(src)||!src.px||!src.px.length){toast('Scribble to select the subject first — the face crop is derived from that selection','warn');return;}
   if(_faceparseRunning)return;
-  if(fxState.masks.length>=MSK_MAX){log('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   _faceparseRunning=true;
   const feat=FACE_FEATURES.find(f=>f.i===groupIdx);
   const endActivity=fxPhotoActivity(curItem(),'Finding '+(feat?feat.label.toLowerCase():'feature')+'…');
@@ -243,7 +243,7 @@ async function mskFaceSelectFeature(groupIdx){
     const r=await _faceparseRunLayers(src);
     const px=_facePlace(r,[groupIdx]);
     let has=false;for(let i=0;i<px.length;i++)if(px[i]>32){has=true;break;}
-    if(!has){log((feat?feat.label:'That feature')+' was not found in this selection (occluded, or not facing the camera?)','warn');toast('Not found — try a clearer view',false);return;}
+    if(!has){toast((feat?feat.label:'That feature')+' was not found in this selection (occluded, or not facing the camera?)','warn');toast('Not found — try a clearer view',false);return;}
     const nm={type:'brush',origin:'ai',ai:true,px,mtW:r.mtW,mtH:r.mtH,aiPoints:[],name:feat?feat.label:'Face feature',..._mskAdjustDefaults()};
     Object.assign(nm,_mskSkinDefaults());
     fxState.masks.push(nm);mskSel=fxState.masks.length-1;
