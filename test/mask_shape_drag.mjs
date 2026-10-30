@@ -73,6 +73,11 @@ try {
     const a4 = await st();
     res[kind + 'ZoomPan'] = (a4.pan[0] !== a3.pan[0] || a4.pan[1] !== a3.pan[1]) && JSON.stringify(a4.m) === JSON.stringify(a3.m);
   }
+  // An armed eyedropper samples through the shape and its pin (they used to swallow the click).
+  await page.evaluate(() => { fxState.masks = []; mskSel = -1; _resetZoom(); mskAdd('radial'); _mskDrawFor = null; mskOverlaySync(); mskCrEyedropper(true); });
+  const centre = await at('circle[data-h="move"]');
+  await page.mouse.click(centre[0], centre[1]); await page.waitForTimeout(250);
+  res.eyedropperThroughShape = await page.evaluate(() => (fxState.masks[0].crSamples || []).length === 1);
   console.log(res);
   for (const [k, v] of Object.entries(res)) assert.equal(v, true, k);
   assert.deepEqual(errors, []);

@@ -147,7 +147,7 @@ function mskAutoSamples(){
   toast(`Sampled ${m.crSamples.length} tones from the selection`,true);
 }
 function mskCrEyedropper(force){
-  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;
+  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-msk-cr-eye');if(btn)btn.classList.toggle('on',_mskCrEyeActive);
   if(FX.cv)FX.cv.style.cursor=_mskCrEyeActive?'crosshair':'';
   if(_mskCrEyeActive&&force==null)log('Click the tone you want to select','info');

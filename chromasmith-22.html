@@ -864,6 +864,7 @@ body.msk-brushing #fx-zoom-wrap,body.msk-brushing #fx-zoom-wrap *{cursor:none!im
 .msk-chip:hover{border-color:var(--acc);color:var(--acc)}
 .msk-chip[disabled]{opacity:.5;cursor:default}
 #msk-pin-layer.on{display:block}
+body.fx-eye-armed #fx-mask-overlay,body.fx-eye-armed #fx-mask-overlay *,body.fx-eye-armed .msk-pin{pointer-events:none!important}
 .msk-pin{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;box-sizing:border-box;
   border:2px solid #fff;background:rgba(0,0,0,.45);box-shadow:0 0 0 1px rgba(0,0,0,.6);color:#fff;font:600 10px/18px var(--sans);
   text-align:center;pointer-events:auto;cursor:pointer;transform:scale(var(--pin-s,1));touch-action:none;user-select:none}
@@ -7575,7 +7576,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1030A';
+const BUILD='1.1030B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15131,7 +15132,7 @@ function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate(
 // Color Mixer above (see bakeHsl) so no extra shader stage is needed. ═══
 let pcSel=-1,_pcEyedropperActive=false;
 function pcEyedropper(){
-  _pcEyedropperActive=!_pcEyedropperActive;
+  _pcEyedropperActive=!_pcEyedropperActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.toggle('on',_pcEyedropperActive);
   if(FX.cv)FX.cv.style.cursor=_pcEyedropperActive?'crosshair':'';
   if(_pcEyedropperActive)log('Click a color in the photo to target it','info');
@@ -15243,7 +15244,7 @@ function _pickAvgRGB(e,fromCanvas){
 function pcEyedropperClick(e){
   if(!_pcEyedropperActive)return;
   if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a point color','warn');return;}
-  _pcEyedropperActive=false;
+  _pcEyedropperActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   const avg=_pickAvgRGB(e,false);if(!avg)return;
@@ -19633,7 +19634,7 @@ function mskPaintToggle(){
   _mskPaintResume=null;
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode&&mskAiTapMode){mskAiTapMode=false;mskAiPromptMode='scribble';}
-  if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
+  if(mskPaintMode){_wbEyedropperActive=false;queueMicrotask(fxEyeArmedSync);const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   else mskPaintTransientReset();
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now
@@ -20914,7 +20915,7 @@ function mskAutoSamples(){
   toast(`Sampled ${m.crSamples.length} tones from the selection`,true);
 }
 function mskCrEyedropper(force){
-  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;
+  _mskCrEyeActive=force!=null?!!force:!_mskCrEyeActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-msk-cr-eye');if(btn)btn.classList.toggle('on',_mskCrEyeActive);
   if(FX.cv)FX.cv.style.cursor=_mskCrEyeActive?'crosshair':'';
   if(_mskCrEyeActive&&force==null)log('Click the tone you want to select','info');
@@ -24272,7 +24273,7 @@ function fxCanvasClick(e){
 // ── Range-mask sampling: drag an area, Luminance eyedropper ───────────────────────────────────
 let _mskLumEyeActive=false;
 function mskLumEyedropper(force){
-  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;
+  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;queueMicrotask(fxEyeArmedSync);
   if(_mskLumEyeActive&&typeof mskCrEyedropper==='function'&&_mskCrEyeActive)mskCrEyedropper(false);
   const btn=document.getElementById('btn-msk-lum-eye');if(btn)btn.classList.toggle('on',_mskLumEyeActive);
   if(FX.cv)FX.cv.style.cursor=_mskLumEyeActive?'crosshair':'';
@@ -24329,6 +24330,10 @@ function mskCrRefine(v){
 // While any pick mode is armed, the cursor becomes a pipette (hotspot at its tip) and a small
 // swatch follows it showing the colour under the tip (read from the canvas actually on screen,
 // i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
+// While any pick mode is armed, the mask's on-photo shape, handles and pins let clicks through to
+// the photo (body.fx-eye-armed, see CSS): otherwise a click inside a Radial/Linear mask, or on its
+// pin, grabbed the mask instead of sampling the colour under it.
+function fxEyeArmedSync(){if(document.body)document.body.classList.toggle('fx-eye-armed',_fxEyeArmed());}
 function _fxEyeArmed(){
   return !!(_wbEyedropperActive||_fnPickActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
     ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive));
@@ -24532,13 +24537,13 @@ function fnPickBaseAtOrig(ox,oy){
   return r;
 }
 function fnPickBase(){
-  _fnPickActive=!_fnPickActive;
+  _fnPickActive=!_fnPickActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.toggle('on',_fnPickActive);
   if(FX.cv)FX.cv.style.cursor=_fnPickActive?'crosshair':'';
   if(_fnPickActive)log('Click the unexposed film base (the clear rebate) to set the negative base colour','info');
 }
 function fnPickBaseClick(e){
-  _fnPickActive=false;
+  _fnPickActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   if(fxLoupe){fnSetStatus('Exit the 1:1 view (Fit) before picking the film base.',true);return;}
@@ -24610,7 +24615,7 @@ function fnApplyBaseToRoll(){
 }
 let _wbEyedropperActive=false;
 function wbEyedropper(){
-  _wbEyedropperActive=!_wbEyedropperActive;
+  _wbEyedropperActive=!_wbEyedropperActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-wb-eye');
   if(btn)btn.classList.toggle('on',_wbEyedropperActive);
   if(FX.cv)FX.cv.style.cursor=_wbEyedropperActive?'crosshair':'';
@@ -24619,7 +24624,7 @@ function wbEyedropper(){
 function wbEyedropperClick(e){
   if(!_wbEyedropperActive)return;
   if(fxLoupe){log('Exit the 1:1 view (Fit) before using the WB eyedropper','warn');return;}
-  _wbEyedropperActive=false;
+  _wbEyedropperActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-wb-eye');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   const src=fxWork||fxImg;if(!src)return;

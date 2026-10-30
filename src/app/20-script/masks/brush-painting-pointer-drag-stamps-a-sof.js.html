@@ -56,7 +56,7 @@ function mskPaintToggle(){
   _mskPaintResume=null;
   mskPaintMode=!mskPaintMode;
   if(mskPaintMode&&mskAiTapMode){mskAiTapMode=false;mskAiPromptMode='scribble';}
-  if(mskPaintMode){_wbEyedropperActive=false;const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
+  if(mskPaintMode){_wbEyedropperActive=false;queueMicrotask(fxEyeArmedSync);const b=document.getElementById('btn-wb-eye');if(b)b.classList.remove('on');}
   else mskPaintTransientReset();
   const b=document.getElementById('btn-msk-paint');if(b)b.classList.toggle('on',mskPaintMode);
   if(FX.cv)FX.cv.style.cursor=mskPaintMode?'none':''; // 'none': the ring cursor (msk-brush-cursor) IS the pointer now

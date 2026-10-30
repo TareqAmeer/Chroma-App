@@ -2,6 +2,10 @@
 // While any pick mode is armed, the cursor becomes a pipette (hotspot at its tip) and a small
 // swatch follows it showing the colour under the tip (read from the canvas actually on screen,
 // i.e. what the user sees) with its hex — the way Photoshop/Lightroom/Figma pickers behave.
+// While any pick mode is armed, the mask's on-photo shape, handles and pins let clicks through to
+// the photo (body.fx-eye-armed, see CSS): otherwise a click inside a Radial/Linear mask, or on its
+// pin, grabbed the mask instead of sampling the colour under it.
+function fxEyeArmedSync(){if(document.body)document.body.classList.toggle('fx-eye-armed',_fxEyeArmed());}
 function _fxEyeArmed(){
   return !!(_wbEyedropperActive||_fnPickActive||(typeof _pcEyedropperActive!=='undefined'&&_pcEyedropperActive)
     ||(typeof _mskCrEyeActive!=='undefined'&&_mskCrEyeActive)||(typeof _mskLumEyeActive!=='undefined'&&_mskLumEyeActive));

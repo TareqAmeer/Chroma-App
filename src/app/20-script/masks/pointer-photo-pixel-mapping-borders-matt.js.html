@@ -83,7 +83,7 @@ function _pickAvgRGB(e,fromCanvas){
 function pcEyedropperClick(e){
   if(!_pcEyedropperActive)return;
   if(fxLoupe){log('Exit the 1:1 view (Fit) before picking a point color','warn');return;}
-  _pcEyedropperActive=false;
+  _pcEyedropperActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   const avg=_pickAvgRGB(e,false);if(!avg)return;

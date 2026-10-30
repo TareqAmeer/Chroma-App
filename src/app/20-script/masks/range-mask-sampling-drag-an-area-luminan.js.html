@@ -1,7 +1,7 @@
 // ── Range-mask sampling: drag an area, Luminance eyedropper ───────────────────────────────────
 let _mskLumEyeActive=false;
 function mskLumEyedropper(force){
-  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;
+  _mskLumEyeActive=force!=null?!!force:!_mskLumEyeActive;queueMicrotask(fxEyeArmedSync);
   if(_mskLumEyeActive&&typeof mskCrEyedropper==='function'&&_mskCrEyeActive)mskCrEyedropper(false);
   const btn=document.getElementById('btn-msk-lum-eye');if(btn)btn.classList.toggle('on',_mskLumEyeActive);
   if(FX.cv)FX.cv.style.cursor=_mskLumEyeActive?'crosshair':'';

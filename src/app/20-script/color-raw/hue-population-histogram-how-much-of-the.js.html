@@ -119,7 +119,7 @@ function hslResetAll(){fxState.hsl=_hslDefault();bakeHsl();hslSyncUI();fxUpdate(
 // Color Mixer above (see bakeHsl) so no extra shader stage is needed. ═══
 let pcSel=-1,_pcEyedropperActive=false;
 function pcEyedropper(){
-  _pcEyedropperActive=!_pcEyedropperActive;
+  _pcEyedropperActive=!_pcEyedropperActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-pc-eye');if(btn)btn.classList.toggle('on',_pcEyedropperActive);
   if(FX.cv)FX.cv.style.cursor=_pcEyedropperActive?'crosshair':'';
   if(_pcEyedropperActive)log('Click a color in the photo to target it','info');

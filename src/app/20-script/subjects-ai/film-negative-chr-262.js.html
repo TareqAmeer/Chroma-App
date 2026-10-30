@@ -160,13 +160,13 @@ function fnPickBaseAtOrig(ox,oy){
   return r;
 }
 function fnPickBase(){
-  _fnPickActive=!_fnPickActive;
+  _fnPickActive=!_fnPickActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.toggle('on',_fnPickActive);
   if(FX.cv)FX.cv.style.cursor=_fnPickActive?'crosshair':'';
   if(_fnPickActive)log('Click the unexposed film base (the clear rebate) to set the negative base colour','info');
 }
 function fnPickBaseClick(e){
-  _fnPickActive=false;
+  _fnPickActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-fneg-pick');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   if(fxLoupe){fnSetStatus('Exit the 1:1 view (Fit) before picking the film base.',true);return;}
@@ -238,7 +238,7 @@ function fnApplyBaseToRoll(){
 }
 let _wbEyedropperActive=false;
 function wbEyedropper(){
-  _wbEyedropperActive=!_wbEyedropperActive;
+  _wbEyedropperActive=!_wbEyedropperActive;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-wb-eye');
   if(btn)btn.classList.toggle('on',_wbEyedropperActive);
   if(FX.cv)FX.cv.style.cursor=_wbEyedropperActive?'crosshair':'';
@@ -247,7 +247,7 @@ function wbEyedropper(){
 function wbEyedropperClick(e){
   if(!_wbEyedropperActive)return;
   if(fxLoupe){log('Exit the 1:1 view (Fit) before using the WB eyedropper','warn');return;}
-  _wbEyedropperActive=false;
+  _wbEyedropperActive=false;queueMicrotask(fxEyeArmedSync);
   const btn=document.getElementById('btn-wb-eye');if(btn)btn.classList.remove('on');
   if(FX.cv)FX.cv.style.cursor='';
   const src=fxWork||fxImg;if(!src)return;
