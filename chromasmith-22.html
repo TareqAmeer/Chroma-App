@@ -7576,7 +7576,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1030C';
+const BUILD='1.1030D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8662,7 +8662,7 @@ uniform vec4 mskA[8];  // radial: cx,cy,rx,ry | linear: x0,y0 -> x1,y1 (full eff
 uniform vec4 mskB[8];  // type (0 radial / 1 linear), feather 0..1, invert 0/1, isTexture 0/1
 uniform vec4 mskC[8];  // exposure (stops), contrast, temp, sat  (each -1..1-ish, pre-scaled in JS)
 uniform vec4 mskD[8];  // lumLo, lumHi (0..1 range gate), highlights, shadows (tonal, -1..1)
-uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add, 4 operand minus self)
+uniform vec4 mskE[8];  // x: composition op (0 none, 1 subtract, 2 intersect, 3 add, 4 operand minus self, 5 pass operand through)
                         // (this mask's shape combined with the shape resolved by mskO), y: tint,
                         // z: hue(deg), w: Amount 0..1 — one master scale on the whole
                         // mask, so it can be dialled back without rescaling all eight sliders
@@ -9074,7 +9074,8 @@ void mskSelectionWeights(vec2 gm2,vec2 uv2,vec3 srcCol,vec3 gateCol2,out float w
     if(mskO[i].y<0.5){weights[i]=0.0;continue;}
     float w=base[i];int operand=int(mskO[i].x);
     if(operand>=0&&operand<8&&operand!=i){
-      if(mskE[i].x>3.5)w=max(0.0,weights[operand]-w);   // group component: running result minus this shape
+      if(mskE[i].x>4.5)w=weights[operand];                // hidden group component: result passes through
+      else if(mskE[i].x>3.5)w=max(0.0,weights[operand]-w);   // group component: running result minus this shape
       else if(mskE[i].x>2.5)w=max(w,weights[operand]);
       else if(mskE[i].x>1.5)w=min(w,weights[operand]);
       else if(mskE[i].x>0.5)w=max(0.0,w-weights[operand]);
@@ -10649,7 +10650,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       // 4 = group component subtract: the running group result minus this shape (Lightroom order).
-      mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
+      // 5 = a hidden (muted) group component: passes the group result through unchanged.
+      mE[o]=MKG.shared[i]&&m.muted?5:op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
       mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
       mE[o+1]=a.tint||0;mE[o+2]=a.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
@@ -10660,7 +10662,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // costs nothing new in the shader.
       const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&MKG.root[i]!==(MKG.root[mskSolo]>=0?MKG.root[mskSolo]:mskSolo)&&!m.isExclude);
       const hiddenAll=!!(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.hideMasks); // eye icon: preview-only, never in an export
-      mE[o+3]=(ai<0||a.muted||m.muted||soloedOut||hiddenAll)?0:(a.amount!=null?a.amount:100)/100;
+      mE[o+3]=(ai<0||a.muted||soloedOut||hiddenAll)?0:(a.amount!=null?a.amount:100)/100; // a = the group root: muting it mutes the group
       mF[o]=a.colHue||0;mF[o+1]=a.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=a.colSat!=null?a.colSat:0.65;
       mJ[o]=(a.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself
@@ -18712,7 +18714,11 @@ function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
   {// Deleting a group component keeps the rest of the group attached: whatever built on it builds on its operand.
     const masks=_mskEnsureIds(fxState.masks),gone=masks[mskSel],g=_mskGroups(masks);
-    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});}
+    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});
+    // Deleting a group's main mask deletes the whole mask, components included (Lightroom), instead of
+    // leaving them as broken "operand missing" rows.
+    else if(gone){const parts=masks.filter((x,i)=>i!==mskSel&&g.shared[i]&&g.root[i]===mskSel);
+      if(parts.length){for(const x of parts)fxState.masks.splice(fxState.masks.indexOf(x),1);mskSel=fxState.masks.indexOf(gone);}}}
   fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}

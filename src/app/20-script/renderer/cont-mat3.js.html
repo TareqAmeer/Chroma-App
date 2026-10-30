@@ -789,7 +789,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       const op=m.compositionMigrated?m.composeOp:(m.composeOp||(m.intersect?'intersect':m.subtract?'subtract':''));
       const operand=op?MK.findIndex(x=>x.id===m.operandId):-1;
       // 4 = group component subtract: the running group result minus this shape (Lightroom order).
-      mE[o]=op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
+      // 5 = a hidden (muted) group component: passes the group result through unchanged.
+      mE[o]=MKG.shared[i]&&m.muted?5:op==='add'?3:op==='intersect'?2:op==='subtract'?(MKG.shared[i]?4:1):0;
       mO[o]=operand>=0?operand:-1;mO[o+1]=composePlan.valid[i]?1:0;mO[o+2]=(m.type==='radial'||m.type==='linear')&&m.ar>0?m.ar:0;
       mE[o+1]=a.tint||0;mE[o+2]=a.hue||0;
       // Amount, default 1 => identity for masks saved before it existed. Muting rides the same
@@ -800,7 +801,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // costs nothing new in the shader.
       const soloedOut=(typeof mskSolo!=='undefined'&&mskSolo!=null&&MKG.root[i]!==(MKG.root[mskSolo]>=0?MKG.root[mskSolo]:mskSolo)&&!m.isExclude);
       const hiddenAll=!!(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.hideMasks); // eye icon: preview-only, never in an export
-      mE[o+3]=(ai<0||a.muted||m.muted||soloedOut||hiddenAll)?0:(a.amount!=null?a.amount:100)/100;
+      mE[o+3]=(ai<0||a.muted||soloedOut||hiddenAll)?0:(a.amount!=null?a.amount:100)/100; // a = the group root: muting it mutes the group
       mF[o]=a.colHue||0;mF[o+1]=a.colAmt||0;mF[o+2]=m.rot||0;mF[o+3]=a.colSat!=null?a.colSat:0.65;
       mJ[o]=(a.tex||0)/100;   // Texture: -1..1 gain on the source high-pass
       mJ[o+1]=m.isExclude?1:0;// eraser: subtracted from every other mask, applies nothing itself

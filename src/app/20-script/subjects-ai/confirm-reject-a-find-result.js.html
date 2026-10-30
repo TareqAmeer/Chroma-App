@@ -38,7 +38,11 @@ function mskDelete(){if(mskSel<0)return;
   if(fxState.masks[mskSel]&&fxState.masks[mskSel].type==='brush')mskPaintStop();
   {// Deleting a group component keeps the rest of the group attached: whatever built on it builds on its operand.
     const masks=_mskEnsureIds(fxState.masks),gone=masks[mskSel],g=_mskGroups(masks);
-    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});}
+    if(gone&&g.shared[mskSel])masks.forEach((x,i)=>{if(i!==mskSel&&g.shared[i]&&x.operandId===gone.id)x.operandId=gone.operandId;});
+    // Deleting a group's main mask deletes the whole mask, components included (Lightroom), instead of
+    // leaving them as broken "operand missing" rows.
+    else if(gone){const parts=masks.filter((x,i)=>i!==mskSel&&g.shared[i]&&g.root[i]===mskSel);
+      if(parts.length){for(const x of parts)fxState.masks.splice(fxState.masks.indexOf(x),1);mskSel=fxState.masks.indexOf(gone);}}}
   fxState.masks.splice(mskSel,1);mskSel=Math.min(mskSel,fxState.masks.length-1);_mskTexDirty=true;
   if(typeof hapt==='function')hapt();
   mskRebuild();fxUpdate();}

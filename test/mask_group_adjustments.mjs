@@ -73,6 +73,9 @@ try {
     const ptsChain = [[.25, .5], [.75, .5], [.75, .5]];
     out.chain = lum([radial('root', .25, .5, .12, .25, { exp: 1.0 }), radial('c1', .75, .5, .12, .25, { composeOp: 'add', operandId: 'root' }),
       radial('c2', .75, .5, .06, .1, { composeOp: 'subtract', operandId: 'c1' })], ptsChain);
+    // Hiding a component (its eye) drops just that component; hiding the main mask hides the group.
+    out.hiddenComp = lum([radial('root', .25, .5, .12, .25, { exp: 1.0 }), radial('c1', .75, .5, .12, .25, { composeOp: 'add', operandId: 'root', muted: true })], pts);
+    out.hiddenRoot = lum([radial('root', .25, .5, .12, .25, { exp: 1.0, muted: true }), radial('c1', .75, .5, .12, .25, { composeOp: 'add', operandId: 'root' })], pts);
     // Legacy: a composed mask with its OWN adjustments keeps the old "self op operand" meaning.
     out.legacy = lum([radial('a', .25, .5, .12, .25, {}), radial('b', .75, .5, .12, .25, { exp: 1.0, composeOp: 'subtract', operandId: 'a' })], pts);
 
@@ -98,6 +101,9 @@ try {
     const c2 = fxState.masks[2]; mskSel = 1; mskDelete();
     out.relinked = c2.operandId === fxState.masks[0].id;
     out.validAfterDelete = _mskCompositionPlan(fxState.masks).valid.every(Boolean);
+    // Deleting the main mask deletes its components too.
+    fxState.masks = [radial('root', .25, .5, .12, .25, { exp: 1 }), radial('c1', .75, .5, .12, .25, { composeOp: 'add', operandId: 'root' }), radial('other', .5, .1, .1, .1, { exp: .5 })];
+    mskSel = 0; mskDelete(); out.afterRootDelete = fxState.masks.map(m => m.id);
     return out;
   });
   const d = (a, b) => a.map((v, i) => v - b[i]);
@@ -112,6 +118,10 @@ try {
   assert.ok(inter[0] > 20, 'Intersect: the overlap takes the edit');
   assert.ok(Math.abs(inter[1]) <= 1 && Math.abs(inter[2]) <= 1, 'Intersect: non-overlapping parts are untouched');
   assert.ok(chain[0] > 20 && Math.abs(chain[1]) <= 1, 'Chain: (root + c1) - c2');
+  const hc = d(r.hiddenComp, r.base), hr = d(r.hiddenRoot, r.base);
+  assert.ok(hc[0] > 20 && Math.abs(hc[1]) <= 1, 'a hidden component drops out, the rest of the group keeps the edit');
+  assert.ok(Math.abs(hr[0]) <= 1 && Math.abs(hr[1]) <= 1, 'hiding the main mask hides the whole group');
+  assert.deepEqual(r.afterRootDelete, ['other'], 'deleting the main mask deletes its components');
   assert.ok(Math.abs(legacy[0]) <= 1 && legacy[1] > 20, 'Legacy component with its own adjustments keeps self-minus-operand');
   assert.equal(r.firstOperand, 'root');
   assert.equal(r.secondOperand, 'c1', 'a second component chains onto the group so the result is cumulative');

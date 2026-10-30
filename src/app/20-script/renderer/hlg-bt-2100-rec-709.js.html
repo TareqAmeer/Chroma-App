@@ -338,7 +338,8 @@ void mskSelectionWeights(vec2 gm2,vec2 uv2,vec3 srcCol,vec3 gateCol2,out float w
     if(mskO[i].y<0.5){weights[i]=0.0;continue;}
     float w=base[i];int operand=int(mskO[i].x);
     if(operand>=0&&operand<8&&operand!=i){
-      if(mskE[i].x>3.5)w=max(0.0,weights[operand]-w);   // group component: running result minus this shape
+      if(mskE[i].x>4.5)w=weights[operand];                // hidden group component: result passes through
+      else if(mskE[i].x>3.5)w=max(0.0,weights[operand]-w);   // group component: running result minus this shape
       else if(mskE[i].x>2.5)w=max(w,weights[operand]);
       else if(mskE[i].x>1.5)w=min(w,weights[operand]);
       else if(mskE[i].x>0.5)w=max(0.0,w-weights[operand]);
