@@ -130,6 +130,7 @@
     for(const c of detailState.cache.values())c.width=c.height=0;detailState.cache.clear();
     for (const item of compareState.items.values()) releaseCompareItem(item);
     compareState.items.clear();
+    cullClearItems();
     surveyState.entryToken++;
     compareState.active = false;
     const host = compareHost();
@@ -198,11 +199,11 @@
     surveyState.cells = paths.map((path, fxIdx) => ({ path, fxIdx })); surveyState.focus = 0;
     state.viewMode = 'survey'; syncViewSeg();
     const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
-    const host = surveyHost(); if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
-    try { await openPathsInEditor(paths); }
-    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('cull openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Culling', false); exitCompareMode(); return; }
+    const host = surveyHost(); if (host) host.classList.add('on');
     if (entryToken !== compareState.entryToken || state.viewMode !== 'survey' || compareState.mode !== 'cull') return;
+    paths.forEach((p) => cullItem(p).catch(() => null)); // all four start now; cells render as each lands
     compareState.active = true; buildSurveyUI(); surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+    Promise.allSettled(paths.map((p) => cullItem(p))).then(() => { if (entryToken === compareState.entryToken && compareState.mode === 'cull') cullPreloadAround(surveyState.cullOffset); });
   }
   // CHR-267: "Delete rejected (n)" after culling. Reject only ever sets the Red label; nothing is
   // removed until this explicit step, which counts the rejects in THIS cull, asks once, and goes

@@ -305,6 +305,7 @@ fn main() {
             library::registry_set_many,
             library::get_decode_cache,
             library::get_decode_cache_path,
+            library::get_decode_cache_dims,
             library::hdr_headroom_clear,
             library::get_hdr_companion,
             library::get_display_decode_cache,

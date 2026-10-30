@@ -10261,7 +10261,7 @@
 
   function renderSurveyCell(idx) {
     const cell = surveyState.cells[idx], el = surveyHost()?.querySelector(`.lib-survey-cell[data-survey-idx="${idx}"]`);
-    if(cell&&el)return detailRender(el,cell,cell.fxIdx,'live',cell.path);
+    if(cell&&el)return detailRender(el,cell,cell.fxIdx,'live',cell.path,compareState.mode==='cull'?(p)=>cullItem(p):null);
   }
 
   function surveySyncCell(idx) {
@@ -10557,6 +10557,104 @@
     pruneCompareItems();
     return compareState.items.get(path) || null;
   }
+  // ── Cull sources ───────────────────────────────────────────────────────────────────────────
+  // A cull page used to install its 4 photos into the Editor as full 24MP frames (~1.1s each from
+  // the decode cache, serially) before any cell could draw. Cull renders from the Editor's own
+  // display tier instead (the 2560px proxy the Editor opens on, shared displayAssetImage cache),
+  // sized against the full frame's width so grain/glow stay at export scale; the full frame is read
+  // only while a cell is zoomed past Fit. The pages either side are preloaded, bounded by
+  // CULL_ITEM_MAX items (~18MB each), and work for pages the user has jumped away from is dropped.
+  const CULL_ITEM_MAX = 12;
+  const cullItems = new Map(); // path -> { promise, lastUsed, item }
+  let cullPreloadGen = 0;
+  async function cullLoadItem(path) {
+    if (window.__TAURI__ && RAW_EXT_RE.test(path)) {
+      let recipeKey = rawRecipeKey(false, path);
+      if (!window.chromasmithRawFullCleanup) {
+        const fullKey = rawRecipeKey(true, path);
+        try { await invoke('get_decode_cache_path', { path, recipeKey: fullKey }); recipeKey = fullKey; } catch (_) {}
+      }
+      try {
+        const [img, dims, m] = await Promise.all([
+          displayAssetImage(path, recipeKey),
+          invoke('get_decode_cache_dims', { path, recipeKey }).catch(() => null),
+          getMeta(path).catch(() => ({})),
+        ]);
+        // Full-frame size (decode cache header, else the RAW header): long edges, so a rotated proxy maps right.
+        const iw = img.naturalWidth || img.width, ilong = Math.max(iw, img.naturalHeight || img.height);
+        if (Array.isArray(dims) && Math.max(dims[0], dims[1]) > ilong) img._csFullW = Math.round(iw * Math.max(dims[0], dims[1]) / ilong);
+        const realExt = (path.match(/\.([^.\/]+)$/) || [, 'jpg'])[1].toLowerCase();
+        return { img, path, _cullDisplay: true, _cullRecipeKey: recipeKey, name: baseName(path).replace(/\.[^.]+$/, ''), ext: realExt, dpi: 240, bytes: null,
+          exif: { iso: m.iso, aperture: m.aperture, shutter: m.shutter, focalLen: m.focal_len, date: m.date, lens: m.lens, make: m.make, model: m.model } };
+      } catch (e) { rawPerf('cull-display-miss', path, { error: String(e && e.message || e) }); }
+    }
+    return cullLoadPrivate(path);
+  }
+  // Not decoded yet (or not a RAW): the same private full load Compare uses.
+  async function cullLoadPrivate(path) {
+    const files = await readPathsAsFiles([path], { pathBackedRaw: !!window.__TAURI__ });
+    if (!files.length) throw new Error(`Could not read ${baseName(path)}`);
+    await prepareBatchRawFiles(files, files.okPaths || [path]);
+    const loaded = await loadFXImages(files, { privateEntries: true });
+    const item = Array.isArray(loaded) && loaded[0];
+    if (!item) throw new Error(`Could not decode ${baseName(path)}`);
+    item.path = path; item._cullPrivate = true;
+    return item;
+  }
+  function cullItem(path) {
+    let rec = cullItems.get(path);
+    if (!rec) {
+      rec = { promise: null, lastUsed: 0, item: null };
+      rec.promise = cullLoadItem(path).then((item) => { rec.item = item; return item; });
+      rec.promise.catch(() => { if (cullItems.get(path) === rec) cullItems.delete(path); });
+      cullItems.set(path, rec);
+    }
+    rec.lastUsed = performance.now();
+    return rec.promise;
+  }
+  function cullReleaseItem(rec) {
+    const it = rec && rec.item;
+    if (!it) return;
+    if (it._cullPrivate) releaseCompareItem(it); // its own decode; display-tier images are the shared cache's
+    else delete it.fullImg;
+  }
+  function cullTrimItems(keep) {
+    if (cullItems.size <= CULL_ITEM_MAX) return;
+    const victims = [...cullItems.entries()].filter(([p]) => !keep.has(p)).sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    for (const [p, rec] of victims) { if (cullItems.size <= CULL_ITEM_MAX) break; cullItems.delete(p); cullReleaseItem(rec); }
+  }
+  function cullClearItems() { cullPreloadGen++; for (const rec of cullItems.values()) cullReleaseItem(rec); cullItems.clear(); }
+  // Full frame for a zoomed cell (native RGBA from the decode cache, as the Editor's own open reads it).
+  async function cullEnsureFull(it) {
+    if (!it || !it._cullDisplay || it.fullImg) return;
+    if (!it._cullFull) it._cullFull = loadNativeCachedImage(it.path, it._cullRecipeKey)
+      .catch(async () => { // full decode pruned from the cache: decode it (seconds; only on zoom)
+        const priv = await cullLoadPrivate(it.path), full = priv.fullImg || priv.img;
+        if (priv.img && priv.img !== full) { try { priv.img.width = priv.img.height = 0; } catch (_) {} }
+        return full;
+      })
+      .then((c) => { it.fullImg = c; return c; }).finally(() => { it._cullFull = null; });
+    try { await it._cullFull; } catch (e) { rawPerf('cull-full-failed', it.path, { error: String(e && e.message || e) }); } // render from the display tier instead
+  }
+  // After a page is on screen: warm the next page, then the previous one, two loads at a time.
+  // A newer page (or leaving cull) bumps the generation, so queued preloads for a page the user
+  // jumped past never start.
+  function cullPreloadAround(offset) {
+    const gen = ++cullPreloadGen, all = surveyState.cullPaths;
+    const next = all.slice(offset + 4, offset + 8), prev = all.slice(Math.max(0, offset - 4), offset);
+    const keep = new Set([...all.slice(offset, offset + 4), ...next, ...prev]), shown = new Set(all.slice(offset, offset + 4));
+    for (const [p, rec] of cullItems) if (!shown.has(p) && rec.item && rec.item._cullDisplay) delete rec.item.fullImg; // full frames only for the page on screen
+    cullTrimItems(keep);
+    const queue = [...next, ...prev].filter((p) => !cullItems.has(p));
+    const worker = async () => {
+      while (queue.length && gen === cullPreloadGen && compareState.mode === 'cull') {
+        const p = queue.shift();
+        await cullItem(p).catch(() => null);
+        cullTrimItems(keep);
+      }
+    };
+    worker(); worker();
+  }
   const detailState={linked:true,metadata:false,renderer:null,queue:Promise.resolve(),cache:new Map()};
   function detailView(cell){return cell.detail||(cell.detail={scale:0,cx:.5,cy:.5});}
   function detailCells(){return state.viewMode==='compare'
@@ -10606,15 +10704,25 @@
       // the Editor does, without touching the Editor's current photo.
       const own=(k)=>srcKey==='live'&&snap&&typeof snap==='object'&&snap[k]!==undefined;
       const rit={...it,img:it.fullImg||it.img,geom:own('geom')?(snap.geom||defGeom()):it.geom,heal:own('heal')?(snap.heal||[]):it.heal,inpaint:own('inpaint')?(snap.inpaint||[]):it.inpaint,redeye:own('redeye')?(snap.redeye||[]):it.redeye};
-      let source=rit.img;
-      if(typeof geomCanvas==='function')source=geomCanvas(rit);
-      const iw=source.naturalWidth||source.width,ih=source.naturalHeight||source.height,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
+      // Cull renders from the display tier (see cullLoadItem): all view geometry below is in FULL-frame
+      // pixels (k = full/display), so 100% and the linked pan mean the same thing on either source.
+      const frameOf=(img)=>{const r={...rit,img};const src=typeof geomCanvas==='function'?geomCanvas(r):img;const k=(it._cullDisplay&&img===it.img)?fxFullScale({img}):1;
+        return {src,k,iw:Math.round((src.naturalWidth||src.width)*k),ih:Math.round((src.naturalHeight||src.height)*k)};};
+      let F=frameOf(rit.img);
+      const iw=F.iw,ih=F.ih,wrap=el.querySelector('.lib-cmp-canvas-wrap'),view=detailView(cell);
       const fit=Math.min(1,Math.max(1,wrap.clientWidth)/iw,Math.max(1,wrap.clientHeight)/ih),scale=view.scale||fit;
       const sw=Math.max(1,Math.min(iw,Math.floor(wrap.clientWidth/scale))),sh=Math.max(1,Math.min(ih,Math.floor(wrap.clientHeight/scale)));
       const x=Math.max(0,Math.min(iw-sw,Math.round(view.cx*iw-sw/2))),y=Math.max(0,Math.min(ih-sh,Math.round(view.cy*ih-sh/2)));
       const dpr=Math.min(window.devicePixelRatio||1,2),pw=Math.max(1,Math.round(sw*scale*dpr)),ph=Math.max(1,Math.round(sh*scale*dpr));
       // At most viewport pixels, never a fitted canvas enlarged to simulate native detail.
       const cap=Math.min(1,Math.sqrt(1e6/(pw*ph))),ow=Math.max(1,Math.round(pw*cap)),oh=Math.max(1,Math.round(ph*cap));
+      // The full frame only while the view needs more pixels than the display tier has (zoomed in).
+      if(it._cullDisplay){
+        const kD=fxFullScale({img:it.img}),needFull=ow>sw/kD*1.05;
+        if(needFull&&!it.fullImg){await cullEnsureFull(it);if(!el.isConnected||entry!==compareState.entryToken||cell.detailRevision!==revision)return false;}
+        rit.img=(needFull&&it.fullImg)||it.img;F=frameOf(rit.img); // the full frame stays loaded while its page is shown (Fit <-> 100% toggling)
+      }
+      const source=F.src,k=F.k;
       const key=JSON.stringify([path,srcKey,snap,x,y,sw,sh,ow,oh]);let rendered=detailState.cache.get(key);
       if(!rendered){
         const live=getUISnapshot(),locked=_fxHistLocked,undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
@@ -10650,10 +10758,10 @@
           const renderer=detailState.renderer;renderer.resetTextureSnapshotFrom(FX);
           if(lookLut!==undefined){P.lut=lookLut;if(lookLut)renderer.setLUT(lookLut);}
           if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(renderer,rit);
-          const crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(sw*sh)),ow*2/sw,oh*2/sh);crop.width=Math.max(1,Math.round(sw*cropScale));crop.height=Math.max(1,Math.round(sh*cropScale));crop.getContext('2d').drawImage(source,x,y,sw,sh,0,0,crop.width,crop.height);
+          const ssw=sw/k,ssh=sh/k,crop=document.createElement('canvas'),cropScale=Math.min(1,Math.sqrt(2e6/(ssw*ssh)),ow*2/ssw,oh*2/ssh);crop.width=Math.max(1,Math.round(ssw*cropScale));crop.height=Math.max(1,Math.round(ssh*cropScale));crop.getContext('2d').drawImage(source,x/k,y/k,ssw,ssh,0,0,crop.width,crop.height);
           renderer.setImage(crop);// Effect scale exactly as the Editor's loupe: glow sigmas at this render's px per source px,
           // grain cells + attenuation against the export width, so a fitted cell shows the export's grain.
-          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih],...fxStillQualityOpts(0,0,true)});
+          renderer.render(P,ow,oh,{...fxZoomGlowOpts(iw,ow/sw),truncRefW:it._cullDisplay?iw:iw*(it.fullImg?1:fxFullScale(it)),uvOff:[x/iw,(ih-y-sh)/ih],uvScale:[sw/iw,sh/ih],...fxStillQualityOpts(0,0,true)});
           rendered=document.createElement('canvas');rendered.width=ow;rendered.height=oh;rendered.getContext('2d').drawImage(renderer.cv,0,0);crop.width=crop.height=0;
           // Red-eye is a 2D pass after the render (drawRedEyePreview), in frame-normalised coords: map them into this view.
           if(snap!=='orig'&&rit.redeye&&rit.redeye.some(o=>o.enabled!==false)&&typeof applyRedEyeCorrections==='function')
@@ -10853,6 +10961,7 @@
     for(const c of detailState.cache.values())c.width=c.height=0;detailState.cache.clear();
     for (const item of compareState.items.values()) releaseCompareItem(item);
     compareState.items.clear();
+    cullClearItems();
     surveyState.entryToken++;
     compareState.active = false;
     const host = compareHost();
@@ -10921,11 +11030,11 @@
     surveyState.cells = paths.map((path, fxIdx) => ({ path, fxIdx })); surveyState.focus = 0;
     state.viewMode = 'survey'; syncViewSeg();
     const compare = compareHost(); if (compare) { compare.classList.remove('on'); compare.innerHTML = ''; }
-    const host = surveyHost(); if (host) { host.classList.add('on'); host.innerHTML = '<div id="lib-empty">Loading…</div>'; }
-    try { await openPathsInEditor(paths); }
-    catch (e) { if (entryToken !== compareState.entryToken) return; console.error('cull openPathsInEditor', e); if (typeof toast === 'function') toast('Could not load photos for Culling', false); exitCompareMode(); return; }
+    const host = surveyHost(); if (host) host.classList.add('on');
     if (entryToken !== compareState.entryToken || state.viewMode !== 'survey' || compareState.mode !== 'cull') return;
+    paths.forEach((p) => cullItem(p).catch(() => null)); // all four start now; cells render as each lands
     compareState.active = true; buildSurveyUI(); surveyHost()?.querySelector('.lib-survey-cell')?.focus({ preventScroll: true });
+    Promise.allSettled(paths.map((p) => cullItem(p))).then(() => { if (entryToken === compareState.entryToken && compareState.mode === 'cull') cullPreloadAround(surveyState.cullOffset); });
   }
   // CHR-267: "Delete rejected (n)" after culling. Reject only ever sets the Red label; nothing is
   // removed until this explicit step, which counts the rejects in THIS cull, asks once, and goes

@@ -585,6 +585,28 @@ pub fn get_decode_cache(path: String, recipe_key: String) -> Result<tauri::ipc::
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// Full-frame size of the cached decode, read from the file header without decoding it. Culling
+/// renders from the display proxy but sizes grain/glow against the export (full) width.
+#[tauri::command(async)]
+pub fn get_decode_cache_dims(path: String, recipe_key: String) -> Result<(u32, u32), String> {
+    if let Some(file) = decode_cache_file(&path, &recipe_key)? {
+        if is_strip_cache(&file) {
+            return crate::strip_cache::source_dims(&crate::strip_cache::FileSource::open(&file)?);
+        }
+        return image::image_dimensions(&file).map_err(|e| format!("decode cache dims: {e}"));
+    }
+    // The full decode can be pruned while its display proxy survives: read the developed frame
+    // size (crop/active area, as decode_raw_v2 crops it) from the RAW header, no pixel decode.
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let source = rawler::rawsource::RawSource::new_from_slice(&bytes);
+    let decoder = rawler::get_decoder(&source).map_err(|e| format!("no decoder: {e}"))?;
+    let raw = decoder
+        .raw_image(&source, &rawler::decoders::RawDecodeParams::default(), true)
+        .map_err(|e| format!("raw header: {e}"))?;
+    let (w, h) = (raw.width as u32, raw.height as u32);
+    Ok(raw.crop_area.or(raw.active_area).filter(|r| r.d.w > 0 && r.d.h > 0).map(|r| (r.d.w as u32, r.d.h as u32)).unwrap_or((w, h)))
+}
+
 /// Returns the existing full-quality cache path so the WebView can load the PNG through the
 /// native asset protocol instead of transferring its tens of megabytes through IPC.
 #[tauri::command(async)]
