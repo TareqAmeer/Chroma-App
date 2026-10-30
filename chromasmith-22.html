@@ -7576,7 +7576,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1030D';
+const BUILD='1.1030E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16946,7 +16946,7 @@ async function mskAddSubjectMatte(opt={}){
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    if(!/no distinct subject/.test(String(e&&e.message))){log(label+' failed: '+(e&&e.message||e),'error');toast(label+' failed — see log','warn');}
+    if(!/no distinct subject/.test(String(e&&e.message))){log(label+' failed: '+(e&&e.message||e),'error');toast(label+' failed: '+_mskFailReason(e),'warn');}
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{endActivity();}
@@ -16954,6 +16954,13 @@ async function mskAddSubjectMatte(opt={}){
 
 // Foreground (item 18): the nearest depth layer. Otsu splits the photo's depth histogram into near and far; the
 // mask ramps over a few depth levels around the split, then is snapped to the photo's edges (fast guided upsample).
+// A short, readable reason for a failed AI mask toast (the log is hidden by default, so "see log" was a dead end).
+function _mskFailReason(e){
+  const m=String(e&&e.message||e||'unknown error');
+  if(/depth estimate unavailable/.test(m))return 'the depth model could not run on this photo';
+  if(/not installed|missing model|no such file/i.test(m))return 'the model is not installed';
+  return m.length>90?m.slice(0,87)+'…':m;
+}
 async function mskAddForeground(){
   if(!window.__TAURI__){toast('Foreground needs the desktop app','warn');return null;}
   const it=curItem(),img=it&&it.img;if(!img){toast('Open a photo first','warn');return null;}
@@ -16974,7 +16981,7 @@ async function mskAddForeground(){
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    if(!/flat depth|Cancelled/.test(String(e&&e.message))){log('Foreground failed: '+(e&&e.message||e),'error');toast('Foreground failed — see log','warn');}
+    if(!/flat depth|Cancelled/.test(String(e&&e.message))){log('Foreground failed: '+(e&&e.message||e),'error');toast('Foreground failed: '+_mskFailReason(e),'warn');}
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{job.done();}
@@ -17231,7 +17238,7 @@ async function mskAddLandscape(cat){
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    log('Landscape failed: '+(e&&e.message||e),'error');toast('Landscape selection failed — see log','warn');
+    log('Landscape failed: '+(e&&e.message||e),'error');toast('Landscape selection failed: '+_mskFailReason(e),'warn');
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{job.done();}

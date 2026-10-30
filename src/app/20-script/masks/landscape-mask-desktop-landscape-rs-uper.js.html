@@ -72,7 +72,7 @@ async function mskAddLandscape(cat){
     mskRebuild();fxUpdate();renderPreview();fxHistoryPush();
     return m;
   }catch(e){
-    log('Landscape failed: '+(e&&e.message||e),'error');toast('Landscape selection failed — see log','warn');
+    log('Landscape failed: '+(e&&e.message||e),'error');toast('Landscape selection failed: '+_mskFailReason(e),'warn');
     const i=fxState.masks.indexOf(m);if(i>=0){fxState.masks.splice(i,1);mskSel=Math.max(0,Math.min(mskSel,fxState.masks.length-1));mskRebuild();fxUpdate();}
     return null;
   }finally{job.done();}

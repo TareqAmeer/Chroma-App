@@ -32,6 +32,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } }), errors = [];
   page.on('console', msg => { if (msg.type() === 'error' && /GLSL compile error|LINK FAILED|SHADER_COMPILE/i.test(msg.text())) errors.push(msg.text()); });
   page.on('pageerror', err => errors.push(`page error: ${err.message}`));
+  await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch {} });
   await page.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html?deskx=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof loadFXImages === 'function' && typeof FX !== 'undefined', null, { timeout: 30000 });
   const png = (await readFile(path.join(ROOT, 'test/fixtures/portrait.png'))).toString('base64');
@@ -43,11 +44,14 @@ try {
     fxSection('local', true); const tg = document.getElementById('tg-local'); if (tg && !tg.classList.contains('on')) toggleFX('local');
   }, png);
   const st = () => page.evaluate(() => { const m = fxState.masks[mskSel]; return { m: { cx: m.cx, cy: m.cy, rx: m.rx, x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1 }, pan: [fxPanX, fxPanY] }; });
-  const at = (sel) => page.evaluate((sel) => { const h = document.querySelector('#fx-mask-overlay ' + sel); if (!h) return null; const r = h.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }, sel);
+  const at0 = (sel) => page.evaluate((sel) => { const h = document.querySelector('#fx-mask-overlay ' + sel); if (!h) return null; const r = h.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }, sel);
+  // The canvas can still be settling (fit zoom / layout) right after load or Add: wait until the handle stops moving.
+  const at = async (sel) => { let a = await at0(sel); for (let k = 0; k < 20; k++) { await page.waitForTimeout(120); const b = await at0(sel); if (a && b && Math.abs(a[0] - b[0]) < 0.5 && Math.abs(a[1] - b[1]) < 0.5) return b; a = b; } return a; };
   const drag = async (pt, dx = 60, dy = 40) => { await page.mouse.move(pt[0], pt[1]); await page.mouse.down(); for (let i = 1; i <= 8; i++) { await page.mouse.move(pt[0] + dx * i / 8, pt[1] + dy * i / 8); await page.waitForTimeout(15); } await page.mouse.up(); await page.waitForTimeout(150); };
   const res = {};
   for (const kind of ['radial', 'linear']) {
-    await page.evaluate((k) => { fxState.masks = []; mskSel = -1; _resetZoom(); mskAdd(k); }, kind);
+    // A startup dialog can open a moment after load and cover the canvas: close it first.
+    await page.evaluate((k) => { document.querySelector('[data-tour-action="close"]')?.click(); document.getElementById('cs-modal-ov')?.remove(); fxState.masks = []; mskSel = -1; _resetZoom(); mskAdd(k); }, kind);
     await page.waitForTimeout(300);
     const a0 = await st();
     // Right after Add: an edge handle still resizes (it used to redraw the whole shape).

@@ -138,6 +138,15 @@ independent scaling faults, both measured on a synthetic folder (`?libtest=1&lib
   every Hamming distance 0-8 so the threshold boundary is covered — a faster hamming returning
   different distances would silently re-cluster the user's duplicates and still look like a win.
 
+**`npm run mask:audit`** (`test/mask_full_audit.mjs`, slow: ~2k actions, run in the background) drives
+every Masks-panel control of the desktop editor build per mask type and state — the list comes from a live
+scan with every group expanded and every popup menu opened — and flags page errors, controls that change
+nothing, and adjustment sliders that change the mask but not the photo. Expected flags (read the JSON, don't
+chase these): AI / Skin / Depth / Teeth masks have empty coverage under the `libtest` mock (no models), so
+their sliders report `nopix`; Noise Reduction is `nopix` on the noise-free fixture; buttons that already are
+in their target state (Reset with no curve, selecting the selected row) are `noop`. `--probe=file.js` runs an
+ad-hoc async snippet after the same boot, for chasing a single flag.
+
 **`test/mask_raster.mjs`** exists because **no export golden contains a raster mask** — every
 recipe uses analytic shapes, so the entire brush/sky/AI storage path had zero coverage. It
 asserts byte-exact snapshot round-trips, that legacy plain-`Array` masks still load, and that
