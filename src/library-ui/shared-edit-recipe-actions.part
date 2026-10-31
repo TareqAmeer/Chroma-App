@@ -128,10 +128,23 @@
     const batch = await invoke('recipe_batch_create', { label, items });
     await runRecipeBatch(batch);
   }
+  // AI/sky masks hold the SOURCE photo's pixels. Pasting them as-is lands the same selection on a
+  // different photo (and shows it in the thumbnail), so flag them stale and drop the raster: the
+  // editor re-runs them on the target when it opens (_mskAutoUpdateStale).
+  function recipeWithStaleAiMasks(b64) {
+    const snap = snapshotFromB64(b64);
+    if (!Array.isArray(snap.masks)) return b64;
+    let changed = false;
+    snap.masks.forEach(m => {
+      if (!m || !(m.origin === 'sky' || m.origin === 'ai' || m.ai)) return;
+      m.aiState = 'stale'; delete m.pxb64; m.mtW = 0; m.mtH = 0; changed = true;
+    });
+    return changed ? snapshotToB64(snap) : b64;
+  }
   async function libPasteEdit(paths) {
     const recipe = window.__copiedRecipe;
     if (!recipe) return;
-    try { await startRecipeBatch('Paste edit', paths, () => recipe, true); }
+    try { await startRecipeBatch('Paste edit', paths, () => recipeWithStaleAiMasks(recipe), true); }
     catch (e) { toast(humanizeErr('paste edits', e), 'err'); }
   }
   // Dust sync is deliberately separate from paste: choose spots, then approve each photo.

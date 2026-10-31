@@ -494,7 +494,7 @@
         try {
           await startRecipeBatch('Selective paste', paths, cur => {
             const base = cur.recipe ? snapshotFromB64(cur.recipe) : null;
-            return snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, selection.source, selection.keys));
+            return recipeWithStaleAiMasks(snapshotToB64(window.chromasmithMergeSelectiveRecipe(base, selection.source, selection.keys)));
           }, true);
         } catch (e) { toast(humanizeErr('paste selected settings', e), 'err'); }
       });
