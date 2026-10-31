@@ -488,8 +488,11 @@ pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn
     if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
         let mut existing = index_destination(Path::new(&dest));
         for (i, f) in files.iter_mut().enumerate() {
-            f.duplicate = existing.is_duplicate(f);
-            // The duplicate pass can read a lot of the card; keep the dialog moving.
+            // Name+size only. Content matching of renamed copies hashes dest candidates (a
+            // 200k-file library has tens of thousands of same-size RW2s) and stalled the dialog;
+            // ingest_run re-checks by content at copy time.
+            f.duplicate = existing.names.get(&f.name.to_lowercase()).is_some_and(|&sz| sz == f.size);
+            // keep the dialog moving.
             if i % 20 == 0 {
                 progress(ScanProgress { scanned, current: f.name.clone() });
             }
