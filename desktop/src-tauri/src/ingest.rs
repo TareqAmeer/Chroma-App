@@ -487,8 +487,12 @@ pub fn scan_card_run(path: String, dest_root: Option<String>, progress: &mut dyn
     // Preserve the name/size fast path; renamed copies use bounded content matching.
     if let Some(dest) = dest_root.filter(|d| !d.is_empty()) {
         let mut existing = index_destination(Path::new(&dest));
-        for f in files.iter_mut() {
+        for (i, f) in files.iter_mut().enumerate() {
             f.duplicate = existing.is_duplicate(f);
+            // The duplicate pass can read a lot of the card; keep the dialog moving.
+            if i % 20 == 0 {
+                progress(ScanProgress { scanned, current: f.name.clone() });
+            }
         }
     }
     progress(ScanProgress { scanned, current: String::new() });
@@ -509,15 +513,35 @@ fn media_hash(path: &Path) -> Option<blake3::Hash> {
     hash.update_reader(&mut file).ok()?;
     Some(hash.finalize())
 }
+/// Cheap signature: size-bound hash of the first and last 64 KB. Same-size RAWs (fixed-size RW2)
+/// almost never collide here, so full-file hashing only happens for real duplicate candidates.
+fn media_sig(path: &Path) -> Option<blake3::Hash> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut hash = blake3::Hasher::new();
+    let mut buf = vec![0u8; 65536];
+    let n = file.read(&mut buf).ok()?;
+    hash.update(&buf[..n]);
+    if len > 131072 {
+        file.seek(SeekFrom::Start(len - 65536)).ok()?;
+        file.read_exact(&mut buf).ok()?;
+        hash.update(&buf);
+    }
+    Some(hash.finalize())
+}
 impl DestinationIndex {
     fn is_duplicate(&mut self, file: &CardFile) -> bool {
         if self.names.get(&file.name.to_lowercase()).is_some_and(|&size| size == file.size) { return true; }
         let key = (file.size, ext_lower(Path::new(&file.name)));
         let Some(paths) = self.candidates.get(&key) else { return false };
-        let Some(source_hash) = media_hash(Path::new(&file.path)) else { return false };
+        let Some(source_sig) = media_sig(Path::new(&file.path)) else { return false };
+        let mut source_full: Option<Option<blake3::Hash>> = None;
         paths.iter().any(|path| {
-            let digest = self.hashes.entry(path.clone()).or_insert_with(|| media_hash(path));
-            *digest == Some(source_hash)
+            let sig = self.hashes.entry(path.clone()).or_insert_with(|| media_sig(path));
+            if *sig != Some(source_sig) { return false; }
+            let src = *source_full.get_or_insert_with(|| media_hash(Path::new(&file.path)));
+            src.is_some() && src == media_hash(path)
         })
     }
 }
