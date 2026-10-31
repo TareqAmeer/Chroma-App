@@ -543,6 +543,10 @@ impl DestinationIndex {
         paths.iter().any(|path| {
             let sig = self.hashes.entry(path.clone()).or_insert_with(|| media_sig(path));
             if *sig != Some(source_sig) { return false; }
+            // Large files (RAW/video): a matching size + head/tail signature is trusted, as in the scan.
+            // Full-hashing both copies of every already-imported 30 MB RAW made the pre-copy
+            // re-check read ~60 MB per file off the card (20+ min for 6k files, with no progress).
+            if file.size > 4 * 1024 * 1024 { return true; }
             let src = *source_full.get_or_insert_with(|| media_hash(Path::new(&file.path)));
             src.is_some() && src == media_hash(path)
         })
@@ -862,7 +866,12 @@ fn ingest_run_cancellable(
     // scan produced `files` — see the doc comment above.
     let mut existing = index_destination(&dest_root);
     let mut all = files;
-    for f in all.iter_mut() {
+    let check_total = all.len();
+    for (ci, f) in all.iter_mut().enumerate() {
+        if check_total > 200 && ci % 100 == 0 {
+            progress(IngestProgress { job_id: job_id.to_string(), done: 0, total: check_total, current: format!("Checking for duplicates {ci}/{check_total}"), bytes_done: 0, bytes_total: 0 });
+            if cancel.load(Ordering::Acquire) { return Ok(IngestResult { cancelled: true, copied: 0, completed_files: Vec::new(), duplicates_skipped: 0, failed: Vec::new(), dest_root: options.dest_root.clone(), bytes: 0 }); }
+        }
         f.duplicate = existing.is_duplicate(f);
     }
 
