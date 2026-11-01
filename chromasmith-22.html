@@ -2522,6 +2522,20 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         </div>
       </div>
+      <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
+      <div class="fx-ctrl" data-fxsec="redeye">
+        <div class="fx-ctrl-title">Red Eye</div>
+        <div class="fx-fields" id="ff-redeye">
+          <div class="fx-row"><div class="fx-label">Eye mode</div><select class="fx-select" id="sel-redeye-mode" onchange="redeyeModeChanged()"><option value="human">Human — red</option><option value="white">Pet — white</option><option value="green">Pet — green</option><option value="yellow">Pet — yellow</option></select></div>
+          <div class="fx-row"><div class="fx-label">Pupil size</div><input class="fx-slider" type="range" min="10" max="90" value="60" id="sl-redeye-size" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-size">60%</div></div>
+          <div class="fx-row"><div class="fx-label">Darken</div><input class="fx-slider" type="range" min="0" max="100" value="75" id="sl-redeye-dark" oninput="redeyeControlChanged()"><div class="fx-val" id="vl-redeye-dark">75%</div></div>
+          <div class="btn-row" style="margin-top:2px"><button class="btn fx-btn-primary" id="btn-redeye-add" onclick="redeyeToggle()" style="flex:1">Add eye correction</button></div>
+          <div class="btn-row" style="margin-top:4px"><button class="btn bgh" id="btn-redeye-auto" onclick="redeyeFixAll()" style="flex:1">Detect and fix all human eyes</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="redeye-count">No eye corrections — drag a circle over the eye.</div>
+          <div class="btn-row" style="margin-top:6px"><button class="btn bgh" style="flex:1" onclick="redeyeUndoLast()">Undo last</button><button class="btn bgh" style="flex:1" onclick="redeyeClear()">Clear all</button></div>
+          <div style="font-size:var(--fs-1);color:var(--mut);margin-top:6px">Auto-detect uses face eye landmarks and proposes red pupils for review. Pet modes are placed manually.</div>
+        </div>
+      </div>
       <!-- CANVAS (aspect-ratio matte around image + borders) -->
       <div class="fx-ctrl" data-fxsec="canvas">
         <div class="fx-ctrl-title">Canvas <div class="fx-toggle" id="tg-canvas" onclick="toggleFX('canvas')"></div></div>
@@ -2717,7 +2731,8 @@ window.bumpBootSplashWatchdog(16000); // initial grace period before any progres
           <div class="ni-add-lb">Add photos</div>
           <div class="ni-hint">Drop an image to start · <a href="#" onclick="gpImportClick();return false" style="color:var(--acc);text-decoration:none" title="Pick photos from your Google Photos library">Google Photos…</a></div>
         </div>
-        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+        <div class="fx-zoom-wrap" id="fx-zoom-wrap" style="position:relative"><canvas id="fx-canvas-fullbase" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas" onclick="fxCanvasClick(event)"></canvas><canvas id="fx-canvas-redeye" style="display:none;position:absolute;top:0;left:0;pointer-events:none"></canvas><canvas id="fx-canvas-orig" style="display:none;position:absolute;top:0;left:0"></canvas>
+          <svg id="fx-redeye-overlay" viewBox="0 0 1 1" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;display:none;z-index:3"></svg>
           <!-- Mask overlays live INSIDE fx-zoom-wrap (not fx-wrap) so they ride the exact same
                CSS transform as the canvas — glued to it by the compositor during zoom/pan with
                no per-event JS repositioning, instead of chasing getBoundingClientRect() a frame
@@ -5833,7 +5848,7 @@ uniform sampler2D curveTex;uniform float useCurve;
 // HSL color mixer: a 33^3 LUT baked on the CPU from applyHSL (8 hue bands x hue/sat/lum),
 // applied right after the look LUT. Gated off (and never baked) when every band is zero.
 uniform sampler3D hslLut;uniform float useHsl;
-// LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
+  // LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
 // GLOBAL image uv (uvOffL/uvScaleL) so they are resolution-independent and land identically in
 // the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus
 // an optional luminance-range gate and invert. Applied after basicAdjust, before the curves.
@@ -12452,6 +12467,7 @@ async function samRunPoints(m){
     }
     const refined=_samRefineMask(mask,header.width,header.height);
     m.px=Uint8ClampedArray.from(refined);m.mtW=header.width;m.mtH=header.height;
+    m.refineFeather=0;m.refineEdge=0;delete m._refineCache;
     _mskTexDirty=true;_samLastError=null;
     // "+ Coat" is one button making two masks: the FIRST real segmentation of a coat mask spawns
     // its paired eye-brightness mask right alongside it. Only once — re-scribbling to refine the
@@ -13543,12 +13559,110 @@ function mskBuildTex(){
   fxState.masks.slice(0,MSK_MAX).forEach((m,i)=>{
     if(m.type!=='brush')return;
     mskEnsureDims(m);
-    const px=m.px,dst=i<4?buf:buf2,ch=i<4?i:i-4;
+    const px=mskRefinedPixels(m),dst=i<4?buf:buf2,ch=i<4?i:i-4;
     for(let j=0;j<w*h;j++)dst[j*4+ch]=px[j];
   });
   FX.setMaskTex(buf,w,h);
   FX.setMaskTex2(buf2,w,h);
   _mskTexDirty=false;
+}
+// The authored mask remains in m.px. Feather and Edge always derive a cached effective
+// selection from that source, so slider movement never compounds edge changes into the mask.
+// The cache is intentionally private and omitted from snapshots; all render paths use this
+// texture builder, including tiled exports.
+function _mskBoxExtrema(src,w,h,r,wantMax){
+  if(r<=0)return Uint8ClampedArray.from(src);
+  const tmp=new Uint8ClampedArray(src.length),out=new Uint8ClampedArray(src.length);
+  const pass=(input,output,length,count,stride)=>{
+    const line=new Int32Array(length*2+1);
+    for(let n=0;n<count;n++){
+      const base=n*stride;let head=0,tail=0,next=0;
+      for(let pos=0;pos<length;pos++){
+        const end=Math.min(length-1,pos+r);
+        while(next<=end){const val=input[base+next];while(tail>head&&(wantMax?input[base+line[tail-1]]<=val:input[base+line[tail-1]]>=val))tail--;line[tail++]=next++;}
+        const start=Math.max(0,pos-r);while(head<tail&&line[head]<start)head++;
+        output[base+pos]=input[base+line[head]];
+      }
+    }
+  };
+  // Sliding-window deque makes each separable pass linear regardless of radius.
+  pass(src,tmp,w,h,w);
+  // Columns are traversed with a strided accessor through a temporary transposed raster.
+  const transposed=new Uint8ClampedArray(src.length);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)transposed[x*h+y]=tmp[y*w+x];
+  pass(transposed,out,h,w,h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)tmp[y*w+x]=out[x*h+y];
+  out.set(tmp);
+  return out;
+}
+function _mskBlurCoverage(src,w,h,r){
+  if(r<=0)return Uint8ClampedArray.from(src);
+  const tmp=new Float32Array(src.length),out=new Uint8ClampedArray(src.length),diam=2*r+1;
+  for(let y=0;y<h;y++){
+    let sum=0;for(let k=0;k<=Math.min(w-1,r);k++)sum+=src[y*w+k];
+    for(let x=0;x<w;x++){const lo=Math.max(0,x-r),hi=Math.min(w-1,x+r);tmp[y*w+x]=sum/(hi-lo+1);const add=x+r+1,drop=x-r;if(add<w)sum+=src[y*w+add];if(drop>=0)sum-=src[y*w+drop];}
+  }
+  for(let x=0;x<w;x++){
+    let sum=0;for(let k=0;k<=Math.min(h-1,r);k++)sum+=tmp[k*w+x];
+    for(let y=0;y<h;y++){const lo=Math.max(0,y-r),hi=Math.min(h-1,y+r);out[y*w+x]=Math.round(sum/(hi-lo+1));const add=y+r+1,drop=y-r;if(add<h)sum+=tmp[add*w+x];if(drop>=0)sum-=tmp[drop*w+x];}
+  }
+  return out;
+}
+function mskRefinedPixels(m){
+  mskEnsureDims(m);
+  const feather=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
+  const edge=Math.max(-100,Math.min(100,Number(m.refineEdge)||0));
+  if(!feather&&!edge)return m.px;
+  const key=[m.mtW,m.mtH,feather,edge,m.px];
+  const c=m._refineCache;
+  if(c&&c.w===key[0]&&c.h===key[1]&&c.feather===feather&&c.edge===edge&&c.src===m.px)return c.px;
+  const radius=Math.max(1,Math.round(Math.max(m.mtW,m.mtH)*0.018));
+  let px=m.px;
+  if(edge){const r=Math.max(1,Math.round(radius*Math.abs(edge)/100));px=_mskBoxExtrema(px,m.mtW,m.mtH,r,edge>0);}
+  if(feather){const r=Math.max(1,Math.round(radius*feather/100));px=_mskBlurCoverage(px,m.mtW,m.mtH,r);}
+  m._refineCache={w:m.mtW,h:m.mtH,feather,edge,src:m.px,px};
+  return px;
+}
+function mskRefineControls(m){
+  if(!m||!mskIsAI(m)||!m.px||!m.px.length)return '';
+  const f=Math.max(0,Math.min(100,Number(m.refineFeather)||0));
+  const e=Math.max(-100,Math.min(100,Number(m.refineEdge)||0));
+  return '<div class="msk-refine-controls"><div class="fx-row"><div class="fx-label">Feather</div>'
+    +'<input class="fx-slider" type="range" min="0" max="100" step="1" value="'+f+'" oninput="mskRefinementSet(\'refineFeather\',this.value,this)"><div class="fx-val">'+f+'</div></div>'
+    +'<div class="fx-row"><div class="fx-label">Edge</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="'+e+'" oninput="mskRefinementSet(\'refineEdge\',this.value,this)"><div class="fx-val">'+e+'</div></div>'
+    +'<div class="btn-row"><button class="btn bgh" onclick="mskRefinementReset()">Reset refinement</button></div></div>';
+}
+function mskRefinementSet(key,value,input){
+  const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+  const n=Number(value);if(key!=='refineFeather'&&key!=='refineEdge')return;
+  m[key]=Number.isFinite(n)?Math.max(key==='refineEdge'?-100:0,Math.min(100,n)):0;
+  if(input&&input.nextElementSibling)input.nextElementSibling.textContent=String(m[key]);
+  delete m._refineCache;_mskTexDirty=true;
+  fxScheduleRender();
+  if(!mskRefinementSet._timer)fxHistoryPush();
+  clearTimeout(mskRefinementSet._timer);mskRefinementSet._timer=setTimeout(()=>{mskRefinementSet._timer=null;fxUpdate();},250);
+}
+function mskRefinementReset(){
+  const m=fxState.masks[mskSel];if(!m||!mskIsAI(m))return;
+  m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
+  fxHistoryPush();mskRebuild();fxUpdate();
+}
+function mskRefineEdges(m){
+  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return;
+  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;if(!img)return;
+  mskEnsureDims(m);
+  const w=m.mtW,h=m.mtH,d=mskSourceData(w,h,img);if(!d)return;
+  const I=new Float32Array(w*h),P=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(m.px[j]||0)/255;}
+  const R=8,EPS=1e-4;
+  const meanI=_boxFilterJS(I,w,h,R),meanP=_boxFilterJS(P,w,h,R),IP=new Float32Array(w*h),II=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){IP[j]=I[j]*P[j];II[j]=I[j]*I[j];}
+  const corrIP=_boxFilterJS(IP,w,h,R),corrII=_boxFilterJS(II,w,h,R),a=new Float32Array(w*h),b=new Float32Array(w*h);
+  for(let j=0;j<w*h;j++){const varI=corrII[j]-meanI[j]*meanI[j],covIP=corrIP[j]-meanI[j]*meanP[j];a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];}
+  const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R),out=new Uint8ClampedArray(w*h);
+  for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
+  m.px=out;m.refineFeather=0;m.refineEdge=0;delete m._refineCache;_mskTexDirty=true;
+  if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 // Box filter via a per-row then per-column RUNNING SUM — genuinely O(w*h) regardless of radius,
 // which is what keeps the guided filter below responsive at mskTexDims (2048px) resolution.
@@ -13600,31 +13714,6 @@ function _boxFilterJS(src,w,h,r){
 // greyscale at mskTexDims resolution (same downscale mskGenerateSky already uses); input = the
 // mask itself, both normalized to 0..1. Bakes the result straight into m.px, so preview, loupe and
 // every export tile agree automatically — no per-frame shader cost, no renderTiled halo needed.
-function mskRefineEdges(m){
-  if(!m||m.type!=='brush'||!m.px||!m.mtW||!m.mtH)return;
-  const img=(typeof curItem==='function'&&curItem()&&curItem().img)||fxWork||fxImg;
-  if(!img)return;
-  mskEnsureDims(m);
-  const w=m.mtW,h=m.mtH;
-  const d=mskSourceData(w,h,img);if(!d)return;
-  const I=new Float32Array(w*h),P=new Float32Array(w*h);
-  for(let j=0;j<w*h;j++){I[j]=(0.2126*d[j*4]+0.7152*d[j*4+1]+0.0722*d[j*4+2])/255;P[j]=(m.px[j]||0)/255;}
-  const R=8,EPS=1e-4;
-  const meanI=_boxFilterJS(I,w,h,R),meanP=_boxFilterJS(P,w,h,R);
-  const IP=new Float32Array(w*h),II=new Float32Array(w*h);
-  for(let j=0;j<w*h;j++){IP[j]=I[j]*P[j];II[j]=I[j]*I[j];}
-  const corrIP=_boxFilterJS(IP,w,h,R),corrII=_boxFilterJS(II,w,h,R);
-  const a=new Float32Array(w*h),b=new Float32Array(w*h);
-  for(let j=0;j<w*h;j++){
-    const varI=corrII[j]-meanI[j]*meanI[j],covIP=corrIP[j]-meanI[j]*meanP[j];
-    a[j]=covIP/(varI+EPS);b[j]=meanP[j]-a[j]*meanI[j];
-  }
-  const meanA=_boxFilterJS(a,w,h,R),meanB=_boxFilterJS(b,w,h,R);
-  const out=new Uint8ClampedArray(w*h);
-  for(let j=0;j<w*h;j++)out[j]=Math.max(0,Math.min(255,Math.round((meanA[j]*I[j]+meanB[j])*255)));
-  m.px=out;_mskTexDirty=true;
-  if(typeof fxHistoryPush==='function')fxHistoryPush();
-}
 function _smoothstepJS(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);}
 // One-shot sky heuristic (no ML): weights the upper part of the frame, favouring blue-ish
 // and/or bright (overcast) pixels. A reasonable starting point the user then brush-refines —
@@ -13881,6 +13970,7 @@ function _mskGroup(key,label,body,note){
 function mskAddMenu(ev){
   ev.stopPropagation();
   document.querySelectorAll('.msk-more-menu').forEach(e=>e.remove());
+  if(fxState.masks.length>=MSK_MAX){toast('Maximum '+MSK_MAX+' masks — delete one first','warn');return;}
   const item=(label,ic,type)=>'<button class="msk-more-it" onclick="document.querySelectorAll(\'.msk-more-menu\').forEach(e=>e.remove());mskAdd(\''+type+'\')">'
     +icon(ic,15)+'<span>'+label+'</span></button>';
   const hd=(label)=>'<div class="msk-more-hd">'+label+'</div>';
@@ -13893,7 +13983,8 @@ function mskAddMenu(ev){
   // wired correctly. Every OTHER AI-mask entry point (subjPanelHtml, mskFaceAutoExclude, etc.)
   // already gates on window.__TAURI__ — the actual "can this run" check — so this now matches.
   const desktop=!!window.__TAURI__;
-  const html=hd('Shape')
+  const html='<div class="msk-more-hd">'+fxState.masks.length+' / '+MSK_MAX+' masks</div>'
+    +hd('Shape')
     +item('Radial','local','radial')+item('Linear','linearGrad','linear')
     +'<div class="msk-more-sep"></div>'+hd('Paint')
     +item('Brush','brush','brush')+item('Sky','sky','sky')
@@ -14832,9 +14923,10 @@ function mskRebuild(){
       +'<button class="btn '+(mskPaintErase?'bsec':'bgh')+'" id="btn-msk-erase" onclick="mskPaintErase_toggle()" title="Erase instead of add">'+icon('eraser',14)+' Erase</button></div>'
       +'<div class="fx-row"><div class="fx-label">Brush size</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushSize+'" oninput="mskBrushSize=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushSize+'</div></div>'
       +'<div class="fx-row"><div class="fx-label">Flow</div><input class="fx-slider" type="range" min="1" max="100" value="'+mskBrushFlow+'" oninput="mskBrushFlow=parseFloat(this.value);this.nextElementSibling.textContent=this.value"><div class="fx-val">'+mskBrushFlow+'</div></div>'
-      +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
-      +(caps.sky?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()">Re-detect sky</button>':'')
-      +'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button></div>'
+         +mskRefineControls(m)
+       +'<div class="btn-row"><button class="btn bgh" onclick="mskPaintClear()">Clear paint</button>'
+       +(caps.sky?'<button class="btn bgh" onclick="mskGenerateSky(fxState.masks['+mskSel+']);fxUpdate()">Re-detect sky</button>':'')
+       +(mskIsAI(m)?'<button class="btn bgh" onclick="mskRefineEdges(fxState.masks['+mskSel+']);mskRebuild();fxUpdate()" title="Snap this mask\'s soft/rough edges to real edges in the photo (a guided filter, using the photo as its own guide)">'+icon('refine',14)+' Refine edges</button>':'')+'</div>'
       +(caps.painterly?'<div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:2px">Click Paint, then drag on the photo above to add this adjustment. Painted area is resolution-independent — matches at export and the 1:1 loupe.</div>':'');
   }
   // ── SELECTION: Amount, the colour gate (non-skin masks) and the luminance band ──────────────
@@ -15420,6 +15512,7 @@ function getUISnapshot(opts){
   // the push is skipped, and Cmd-Z silently does nothing to a repair. Plain numbers — no raster,
   // so `skipRaster` does not apply and history stays cheap.
   s.heal=(it&&it.heal&&it.heal.length)?_clone(it.heal):null;
+  s.redeye=(it&&it.redeye&&it.redeye.length)?_clone(it.redeye):null;
   s.adjustIndependent=!!(it&&it.adjustOverride); // whether THIS photo's Basic Adjustments are independent of the shared batch value — see adjToggleScope
   // structuredClone rather than four separate JSON round-trips: same deep copy, no intermediate
   // strings. (These hold only plain arrays/objects/numbers, all structured-cloneable.)
@@ -15463,6 +15556,7 @@ const PASTE_CATEGORIES=[
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
   {key:'bloom',label:'Bloom',sliders:['bloom-a','bloom-th','bloom-r'],toggles:['tg-bloom'],selects:[]},
   {key:'masks',label:'Local Adjustments (masks)',sliders:[],toggles:['tg-local'],selects:[],extra:['masks']},
+  {key:'redeye',label:'Red-eye corrections',sliders:[],toggles:[],selects:[],extra:['redeye']},
   {key:'canvas',label:'Canvas / Borders / Vignette',sliders:['b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig'],toggles:['tg-vig','tg-borders','tg-canvas'],selects:['sel-b1-type','sel-b2-type','sel-b1-src','sel-b2-src','sel-film-frame'],extra:['canvas','frameShuffle'],colors:['cl-b1','cl-b2']},
 ];
 function pasteEditSelectiveApply(base,src,checkedKeys){
@@ -15515,6 +15609,7 @@ function applyUISnapshot(s,opts){
     if(hit)hit.heal=s.heal?_clone(s.heal):[];
     if(typeof healSyncUI==='function')healSyncUI();
   }
+  if(s.redeye!==undefined){const hit=curItem();if(hit)hit.redeye=s.redeye?_clone(s.redeye):[];if(typeof redeyeSyncUI==='function')redeyeSyncUI();}
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
@@ -16600,6 +16695,8 @@ function saveSession(quiet){
   // would smear patches over whatever happened to load next. Plain numbers, so unlike mask
   // rasters this cannot blow the localStorage quota.
   s._heal=(git&&git.heal&&git.heal.length)?git.heal:null;
+  s._redeyeFor=git?git.name:null;
+  s._redeye=(git&&git.redeye&&git.redeye.length)?git.redeye:null;
   s._ver=2; // see applyUISnapshot's note — exposure slider mapping changed from /50 to /20
   // ⚠️ localStorage is a ~5MB quota. A photo carrying brush/AI masks can exceed it on its own
   // (each raster is base64'd), and the throw is a QuotaExceededError that used to be swallowed
@@ -16671,6 +16768,7 @@ function loadSessionGeomFor(){
     // Retouch is PER-PHOTO — a blemish belongs to one frame — so unlike geometry it is restored
     // only onto the photo it was recorded for, never broadcast across the batch.
     if(s._heal&&fxImages[0])fxImages[0].heal=JSON.parse(JSON.stringify(s._heal));
+    if(s._redeye&&fxImages[0])fxImages[0].redeye=JSON.parse(JSON.stringify(s._redeye));
     if(!s._geom)return;
     fxImages.forEach(it=>it.geom=JSON.parse(JSON.stringify(s._geom)));
     const ss=document.getElementById('sl-straighten'),sv=document.getElementById('vl-straighten');
@@ -17100,6 +17198,7 @@ function getFXParams(adjValsOverride){return{
   hsl:(!!(document.getElementById('tg-hsl')||{classList:{contains:()=>false}}).classList.contains('on')&&!hslIdentity())||
       (!!(document.getElementById('tg-pointcolor')||{classList:{contains:()=>false}}).classList.contains('on')&&!pointColorsIdentity()),
   masks:(document.getElementById('tg-local')||{classList:{contains:()=>false}}).classList.contains('on')?fxState.masks:[],
+  redEyeOps:(typeof curItem==='function'&&curItem()&&curItem().redeye)||[],
   adjust:computeAdjustBlock(adjValsOverride),
   // Noise reduction runs on the RAW source before the LUT — independent of the Adjust toggle,
   // active whenever Luminance or Color > 0 (both default 0 → off → byte-identical default path).
@@ -17525,6 +17624,7 @@ function renderPreview(){
   // Compose from the actual backing-store render. Passing cw/ch here downsampled a 2k×3k
   // preview back to the ~500×750 fit footprint before the border was added, making bordered
   // previews visibly pixelated; CSS scales the finished canvas to the fit footprint below.
+  drawRedEyePreview(P);
   applyPreviewBorders(P,pw,ph);
   document.getElementById('fx-info').textContent=fxFullResPreview&&!_fxPreviewInteracting
     ?`Full res ${Math.round(fxZoom*100)}% — rendered ${pw}\u00d7${ph}; export full ${iw}\u00d7${ih}`
@@ -18106,11 +18206,12 @@ function applyPreviewBorders(P,pw,ph){
   if(!bAny&&!cvOn&&!frameOn){if(bd)bd.style.display='none';FX.cv.style.display='block';_fxDisplayMap=null;return;}
   if(!bd){bd=document.createElement('canvas');bd.id='fx-canvas-bd';bd.style.cssText='display:block;max-width:100%;height:auto';wrap.appendChild(bd);}
   // stage 1: bordered image (or the bare render when borders are off)
-  let stage=FX.cv;
+  const redEyeCv=document.getElementById('fx-canvas-redeye'),baseStage=redEyeCv&&redEyeCv.style.display!=='none'?redEyeCv:FX.cv;
+  let stage=baseStage;
   if(bAny){
     const tw=pw+2*(b1t+b2t),th=ph+2*(b1t+b2t);
     stage=document.createElement('canvas');stage.width=tw;stage.height=th;
-    drawBorderLayers(stage.getContext('2d'),FX.cv,P,b1t,b2t,borderSeed(fxImages[fxCurIdx],P));
+    drawBorderLayers(stage.getContext('2d'),baseStage,P,b1t,b2t,borderSeed(fxImages[fxCurIdx],P));
   }
   // stage 1b: film frame around the bordered image, BEFORE the matte — the frame is part of the
   // photograph, the matte is the wall behind it.
@@ -18126,7 +18227,7 @@ function applyPreviewBorders(P,pw,ph){
   if(stage!==FX.cv)stage.width=stage.height=0;
   if(framed!==stage&&framed!==FX.cv)framed.width=framed.height=0;
   if(fin!==framed&&fin!==stage&&fin!==FX.cv)fin.width=fin.height=0;
-  FX.cv.style.display='none';bd.style.display='block';
+  FX.cv.style.display='none';if(redEyeCv)redEyeCv.style.display='none';bd.style.display='block';
   // Where the photo itself sits inside the composited frame, so pointer handlers can undo it.
   // canvasCompose centres the bordered stage, so the matte inset is half the size difference.
   const inset=b1t+b2t;
@@ -18227,11 +18328,13 @@ function fxSelectImage(idx){
   samInvalidate(); // AI Select embeddings belong to the OUTGOING photo — see samInvalidate's doc comment
   const it=fxImages[fxCurIdx];
   fxState.masks=it.masks||(it.masks=[]);
+  if(!_redeyeDrag)redeyeMode=false;
+  redeyeSyncUI();
   mskSel=Math.min(mskSel,fxState.masks.length-1);
   if(typeof mskRebuild==='function')mskRebuild();
   if(typeof fxSyncVideoUI==='function')fxSyncVideoUI();
   if(cropMode)cropExit();
-  fxImg=it.img;updateWork();
+  fxImg=it.img;updateWork();redeyeSyncUI();
   const ss=document.getElementById('sl-straighten');
   if(ss){const ang=(it.geom&&it.geom.angle)||0;ss.value=ang;document.getElementById('vl-straighten').textContent=ang.toFixed(1)+'°';}
   if(typeof ahRoiSyncUI==='function'){_ahRoiArmed=false;_ahRoiDrag=null;ahRoiSyncUI();}
@@ -18761,6 +18864,72 @@ function healClear(){
   const it=curItem();it.heal=[];updateWork();renderPreview();healSyncUI();fxHistoryPush();
   toast('Retouching cleared',true);
 }
+// Lightroom-style manual eye-area drag; values are normalized to the geometry-applied photo,
+// following the coordinate convention already used by Chroma's drawn radial masks.
+let redeyeMode=false,_redeyeDrag=null;
+function redeyeOps(){const it=curItem();return it?(it.redeye||(it.redeye=[])):null;}
+function redeyeToggle(){redeyeMode=!redeyeMode;if(redeyeMode&&healMode)healToggle();if(FX.cv)FX.cv.style.cursor=redeyeMode?'crosshair':'';const b=document.getElementById('btn-redeye-add');if(b){b.classList.toggle('on',redeyeMode);b.textContent=redeyeMode?'Drag over an eye…':'Add eye correction';}redeyeOverlaySync();}
+function redeyeModeChanged(){const sel=document.getElementById('sel-redeye-mode'),mode=sel?sel.value:'human';redeyeSyncUI();const ops=redeyeOps();if(ops&&ops.length){ops[ops.length-1].mode=mode;fxHistoryPush();renderPreview();}}
+function redeyeSyncUI(){
+  const size=document.getElementById('sl-redeye-size'),dark=document.getElementById('sl-redeye-dark');
+  const sv=document.getElementById('vl-redeye-size'),dv=document.getElementById('vl-redeye-dark');
+  const ops=redeyeOps()||[],last=ops[ops.length-1],sel=document.getElementById('sel-redeye-mode');
+  if(last&&size&&document.activeElement!==size)size.value=last.pupilSize==null?60:last.pupilSize;
+  if(last&&dark&&document.activeElement!==dark)dark.value=last.darken==null?75:last.darken;
+  if(last&&sel&&document.activeElement!==sel)sel.value=last.mode||'human';
+  if(sv&&size)sv.textContent=size.value+'%';if(dv&&dark)dv.textContent=dark.value+'%';
+  const lbl=document.getElementById('redeye-count');if(lbl)lbl.textContent=ops.length?`${ops.length} eye correction${ops.length===1?'':'s'} · drag over another eye to add`:'No eye corrections — drag a circle over the eye.';
+  const card=document.querySelector('.fx-ctrl[data-fxsec="redeye"]');if(card)card.classList.toggle('fx-has-redeye',ops.length>0);
+  redeyeOverlaySync();
+}
+function redeyeControlChanged(){redeyeSyncUI();const ops=redeyeOps();if(!ops||!ops.length)return;const op=ops[ops.length-1];op.pupilSize=+document.getElementById('sl-redeye-size').value;op.darken=+document.getElementById('sl-redeye-dark').value;const sel=document.getElementById('sel-redeye-mode');op.mode=sel?sel.value:'human';clearTimeout(redeyeControlChanged._t);redeyeControlChanged._t=setTimeout(()=>{fxHistoryPush();renderPreview();},250);}
+async function redeyeFixAll(){
+  if(!window.__TAURI__||!fxWork){toast('Automatic eye detection requires the desktop face detector',false);return;}
+  const btn=document.getElementById('btn-redeye-auto');if(btn)btn.disabled=true;
+  try{
+    const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d',{willReadFrequently:true});cx.drawImage(fxWork,0,0,w,h);
+    const rgba=cx.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);for(let i=0,j=0;i<rgba.length;i+=4){rgb[j++]=rgba[i];rgb[j++]=rgba[i+1];rgb[j++]=rgba[i+2];}
+    const faces=await _samFramedInvoke('scrfd_detect',{width:w,height:h},rgb),ops=redeyeOps()||[],known=new Set(ops.map(o=>`${Math.round(o.x*10000)}:${Math.round(o.y*10000)}`));let added=0;
+    for(const f of faces||[])for(const kp of (f.kps||[]).slice(0,2)){
+      const ex=kp[0]/w,ey=kp[1]/h,key=`${Math.round(ex*10000)}:${Math.round(ey*10000)}`;if(known.has(key))continue;
+      // Reuse SCRFD eye landmarks and the GEGL color gate during rendering; do not add a second,
+      // hand-tuned RGB classifier here. Lightroom's Fix All similarly proposes eye regions for
+      // review, while GEGL's tested red-eye operator decides which pixels actually change.
+      const rad=Math.max(2,Math.round(Math.min(f.x1-f.x0,f.y1-f.y0)*0.045));
+      ops.push({x:ex,y:ey,rx:rad/w,ry:rad/h,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:'human',enabled:true,source:'face-landmark'});known.add(key);added++;
+    }
+    const it=curItem();if(it)it.redeye=ops;fxHistoryPush();redeyeSyncUI();renderPreview();toast(added?`Found ${added} red-eye candidate${added===1?'':'s'} — review the highlighted pupils`:'No red-eye candidates found',true);
+  }catch(e){console.warn('[red-eye detection]',e);toast('Automatic red-eye detection failed',false);}
+  finally{if(btn)btn.disabled=false;}
+}
+function redeyeOverlaySync(){
+  const svg=document.getElementById('fx-redeye-overlay');if(!svg)return;
+  const ops=redeyeOps(),active=!!(ops&&ops.length),box=mskOverlayBox();
+  if(!box||!fxWork||cropMode||fxLoupe||!active&&!_redeyeDrag){svg.style.display='none';svg.innerHTML='';return;}
+  svg.style.display='block';svg.style.left='0';svg.style.top='0';svg.style.width=box.width+'px';svg.style.height=box.height+'px';
+  const w=fxWork.naturalWidth||fxWork.width,h=fxWork.naturalHeight||fxWork.height;
+  const shapes=(ops||[]).map((op,i)=>`<ellipse data-redeye-i="${i}" cx="${op.x}" cy="${op.y}" rx="${op.rx}" ry="${op.ry}" fill="rgba(232,74,65,.08)" stroke="${op.enabled===false?'#aaa':'#f06456'}" stroke-width=".003" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:move" onclick="redeyeToggleOne(${i})"/><circle data-redeye-resize="${i}" cx="${op.x+op.rx}" cy="${op.y+op.ry}" r=".008" fill="#f06456" stroke="#fff" stroke-width=".002" vector-effect="non-scaling-stroke" style="pointer-events:all;cursor:nwse-resize"/>`).join('');
+  const drag=_redeyeDrag?`<ellipse cx="${_redeyeDrag.cx}" cy="${_redeyeDrag.cy}" rx="${_redeyeDrag.rx}" ry="${_redeyeDrag.ry}" fill="rgba(232,74,65,.08)" stroke="#f06456" stroke-width=".003" vector-effect="non-scaling-stroke"/>`:'';
+  svg.setAttribute('viewBox','0 0 1 1');svg.innerHTML=shapes+drag;
+}
+function redeyeToggleOne(i){const ops=redeyeOps();if(!ops||!ops[i])return;ops[i].enabled=ops[i].enabled===false;fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeUndoLast(){const ops=redeyeOps();if(!ops||!ops.length)return;ops.pop();fxHistoryPush();redeyeSyncUI();renderPreview();}
+function redeyeClear(){const ops=redeyeOps();if(!ops||!ops.length)return;const it=curItem();it.redeye=[];fxHistoryPush();redeyeSyncUI();renderPreview();}
+(function initRedEye(){
+  const wrap=document.getElementById('fx-zoom-wrap');if(!wrap)return;
+  const svg=document.getElementById('fx-redeye-overlay');
+  if(svg){
+    svg.addEventListener('pointerdown',e=>{const move=e.target.closest('[data-redeye-i]'),resize=e.target.closest('[data-redeye-resize]');if(!move&&!resize)return;e.preventDefault();e.stopPropagation();const n=resize?+(resize.dataset.redeyeResize):+(move.dataset.redeyeI);_redeyeDrag={mode:resize?'resize':'move',i:n,last:_mskPointToUV(e)};if(!_redeyeDrag.last){_redeyeDrag=null;return;}_fxHistLocked=true;svg.setPointerCapture(e.pointerId);},true);
+    svg.addEventListener('pointermove',e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;const p=_mskPointToUV(e),op=redeyeOps()[_redeyeDrag.i];if(!p||!op)return;const dx=p.nx-_redeyeDrag.last.nx,dy=p.ny-_redeyeDrag.last.ny;if(_redeyeDrag.mode==='move'){op.x=Math.max(op.rx,Math.min(1-op.rx,op.x+dx));op.y=Math.max(op.ry,Math.min(1-op.ry,op.y+dy));}else{op.rx=Math.max(.002,Math.min(Math.min(op.x,1-op.x),op.rx+dx));op.ry=Math.max(.002,Math.min(Math.min(op.y,1-op.y),op.ry+dy));}_redeyeDrag.last=p;redeyeOverlaySync();renderPreview();},true);
+    const finish=e=>{if(!_redeyeDrag||!['move','resize'].includes(_redeyeDrag.mode))return;_redeyeDrag=null;_fxHistLocked=false;fxHistoryPush();redeyeSyncUI();};
+    svg.addEventListener('pointerup',finish,true);svg.addEventListener('pointercancel',finish,true);
+  }
+  wrap.addEventListener('pointerdown',e=>{if(!redeyeMode||!fxWork||cropMode||fxLoupe||!['fx-canvas','fx-canvas-bd'].includes(e.target.id))return;e.preventDefault();e.stopPropagation();const p=_mskPointToUV(e);if(!p)return;_redeyeDrag={sx:p.nx,sy:p.ny,cx:p.nx,cy:p.ny,rx:0.001,ry:0.001};try{e.target.setPointerCapture(e.pointerId);}catch(_){}redeyeOverlaySync();},true);
+  wrap.addEventListener('pointermove',e=>{if(!_redeyeDrag)return;const p=_mskPointToUV(e);if(!p)return;_redeyeDrag.cx=(_redeyeDrag.sx+p.nx)/2;_redeyeDrag.cy=(_redeyeDrag.sy+p.ny)/2;_redeyeDrag.rx=Math.max(.002,Math.abs(p.nx-_redeyeDrag.sx)/2);_redeyeDrag.ry=Math.max(.002,Math.abs(p.ny-_redeyeDrag.sy)/2);redeyeOverlaySync();},true);
+  const end=e=>{if(!_redeyeDrag)return;const d=_redeyeDrag;_redeyeDrag=null;if(d.rx>=.002&&d.ry>=.002){const sel=document.getElementById('sel-redeye-mode'),ops=redeyeOps();ops.push({x:d.cx,y:d.cy,rx:d.rx,ry:d.ry,pupilSize:+document.getElementById('sl-redeye-size').value,darken:+document.getElementById('sl-redeye-dark').value,threshold:.4,mode:sel?sel.value:'human',enabled:true});fxHistoryPush();redeyeSyncUI();renderPreview();}else redeyeOverlaySync();};
+  wrap.addEventListener('pointerup',end,true);wrap.addEventListener('pointercancel',end,true);
+})();
 // Pointer coordinates arrive in the DISPLAYED canvas's space, but heal ops are normalised
 // against the ORIGINAL image (see healApply) — and geometry sits between the two. So a click is
 // mapped back through the crop/rotate the photo is currently showing, or every spot would land
@@ -19207,7 +19376,49 @@ async function processToCanvas(P,src,iw,ih,onTile){
   const c=document.createElement('canvas');c.width=w;c.height=h;
   // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
   c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
-  return c;
+  return applyRedEyeCorrections(c,P.redEyeOps);
+}
+// Port of GEGL's red-eye-removal point operation (GNOME commit 1870ad1d8c26be68be88e07ff2b56044dc417df8):
+// test adjusted channels using RED_FACTOR=.5133333, GREEN_FACTOR=1, BLUE_FACTOR=.1933333,
+// then replace red with (adjusted green + adjusted blue)/(2*RED_FACTOR). The drawn pupil mask
+// and darken blend follow Lightroom Classic's documented interface. The elliptical mask keeps
+// processing within the manually selected pupil; all coordinates use the working image.
+function applyRedEyeCorrections(canvas,ops){
+  if(!ops||!ops.length)return canvas;
+  const w=canvas.width,h=canvas.height,x=canvas.getContext('2d',{willReadFrequently:true});
+  for(const op of ops){
+    if(op.enabled===false)continue;
+    const cx=op.x*w,cy=op.y*h,rx=Math.max(1,(op.rx||0.02)*w),ry=Math.max(1,(op.ry||op.rx||0.02)*h);
+    const x0=Math.max(0,Math.floor(cx-rx)),x1=Math.min(w-1,Math.ceil(cx+rx)),y0=Math.max(0,Math.floor(cy-ry)),y1=Math.min(h-1,Math.ceil(cy+ry));
+    const iw=x1-x0+1,ih=y1-y0+1;if(iw<1||ih<1)continue;
+    const id=x.getImageData(x0,y0,iw,ih),d=id.data,pupil=Math.max(0.05,Math.min(0.95,(op.pupilSize==null?60:op.pupilSize)/100)),dark=Math.max(0,Math.min(1,(op.darken==null?75:op.darken)/100)),threshold=op.threshold==null?0.4:op.threshold,adjustedThreshold=(threshold-0.4)*2,prx=rx*pupil,pry=ry*pupil;
+    for(let py=0;py<ih;py++)for(let px=0;px<iw;px++){
+      const dx=(x0+px+0.5-cx)/prx,dy=(y0+py+0.5-cy)/pry,q=dx*dx+dy*dy;if(q>=1)continue;
+      const rad=Math.sqrt(q),t=Math.max(0,Math.min(1,(1-rad)/0.08)),edge=t*t*(3-2*t),i=(py*iw+px)*4,r=d[i],g=d[i+1],b=d[i+2],mode=op.mode||'human',ar=r*0.5133333,ag=g,ab=b*0.1933333;
+      if(mode==='human'){
+        if(ar>=ag-adjustedThreshold&&ar>=ab-adjustedThreshold){const corrected=Math.max(0,Math.min(255,(ag+ab)/(2*0.5133333)));d[i]=Math.round(r+(corrected-r)*dark*edge);}
+      }else{
+        // Pet Eye: follow the channel-mixer approach documented by darktable for local pupil
+        // correction. Neutralize only the selected reflection hue, retaining the pupil's local
+        // luminance and feather. White reflection uses the same weighted-gray coefficients as
+        // darktable's documented RGB-to-gray mixer.
+        let rr=r,gg=g,bb=b;
+        if(mode==='green')gg=(r+b)*0.5;
+        else if(mode==='yellow'){rr=(g+b)*0.5;gg=(r+b)*0.5;}
+        else {const gray=.24*r+.68*g+.08*b;rr=gg=bb=gray;}
+        d[i]=Math.round(r+(rr-r)*dark*edge);d[i+1]=Math.round(g+(gg-g)*dark*edge);d[i+2]=Math.round(b+(bb-b)*dark*edge);
+      }
+    }
+    x.putImageData(id,x0,y0);
+  }
+  return canvas;
+}
+function drawRedEyePreview(P){
+  const cv=document.getElementById('fx-canvas-redeye');if(!cv)return;
+  if(fxCompare||!P.redEyeOps||!P.redEyeOps.some(o=>o.enabled!==false)){cv.dataset.active='0';cv.style.display='none';return;}
+  if(cv.width!==FX.cv.width||cv.height!==FX.cv.height){cv.width=FX.cv.width;cv.height=FX.cv.height;}
+  const x=cv.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,cv.width,cv.height);x.drawImage(FX.cv,0,0);applyRedEyeCorrections(cv,P.redEyeOps);
+  cv.style.width=FX.cv.style.width;cv.style.height=FX.cv.style.height;cv.dataset.active='1';cv.style.display='block';
 }
 // TILED full-res render: process the image in overlapping tiles so peak GPU memory stays tiny
 // and CONSTANT regardless of resolution. Each tile is processed with a halo wide enough for the
@@ -19256,7 +19467,7 @@ async function renderTiled(P,src,iw,ih,onTile){
     if(typeof fxExportCancel!=='undefined'&&fxExportCancel)throw new Error('export cancelled');
     await new Promise(r=>requestAnimationFrame(r));
   }
-  return out;
+  return applyRedEyeCorrections(out,P.redEyeOps);
 }
 // Export scope: 'all' processes every loaded photo, 'current' only the one being previewed
 // (the filmstrip selection). Only meaningful — and only shown — when >1 photo is loaded.
@@ -19423,7 +19634,7 @@ async function exportFX(){
         // this item's own override (or undefined to fall back to the shared DOM value) so an
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
         const savedMasks=fxState.masks;fxState.masks=it.masks||[];
-        const P=getFXParams(it.adjustOverride||undefined);
+        const P=getFXParams(it.adjustOverride||undefined);P.redEyeOps=it.redeye||[];
         fxState.masks=savedMasks;
         const src=geomCanvas(it);   // apply this image's rotate/flip/straighten/crop first (now on the denoised pixels, if High ran above)
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
@@ -21750,7 +21961,7 @@ const FX_SECTIONS=[['image','Image'],['looks','Looks'],['adjust','Adjust'],
   ['curves','Curves'],['hsl','Mixer'],['pointcolor','Point Color'],
   ['nr','Noise'],['lens','Lens'],['retouch','Retouch'],
   ['crop','Crop'],
-  ['local','Masks'],
+  ['local','Masks'],['redeye','Red Eye'],
   ['grain','Grain'],['hal','Halation'],['bloom','Bloom'],['art','Artifacts'],['vig','Effects'],
   ['borders','Borders'],['canvas','Canvas'],
   ['export','Output'],['wm','Watermark'],['exppreset','Export Presets'],['style','Styles'],['share','Sharing'],

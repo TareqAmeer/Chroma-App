@@ -1305,11 +1305,6 @@ fn cancel_denoise_high(token: String) {
 }
 
 #[tauri::command]
-fn lens_profile_available(make: String, model: String, lens_model: String) -> bool {
-    lens_correct::profile_available(&make, &model, &lens_model)
-}
-
-#[tauri::command]
 fn list_lens_profiles() -> Vec<lens_correct::LensProfileEntry> {
     lens_correct::list_lens_profiles()
 }
@@ -1740,23 +1735,6 @@ fn write_file_bytes(path: String, data_b64: String) -> Result<(), String> {
     std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
 }
 
-// Raw-body twin of write_file_bytes — see write_lightroom_tiff_raw's comment for why this
-// avoids the base64 triple-copy that OOMs on large exports.
-#[tauri::command]
-fn write_file_bytes_raw(request: tauri::ipc::Request<'_>) -> Result<(), String> {
-    let path = request
-        .headers()
-        .get("x-path")
-        .and_then(|v| v.to_str().ok())
-        .ok_or("missing x-path header")?
-        .to_string();
-    let bytes = match request.body() {
-        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
-        _ => return Err("expected raw request body".into()),
-    };
-    std::fs::write(&path, bytes).map_err(|e| format!("write {path}: {e}"))
-}
-
 // "Save to Lightroom" writer: like write_file_bytes, but first reads the ORIGINAL TIFF still
 // sitting at `path` (the Edit-In file we're about to overwrite) and splices its EXIF sub-IFD
 // (shutter/aperture/ISO/focal length/lens/DateTimeOriginal — everything Lightroom's Info panel
@@ -1895,11 +1873,6 @@ fn take_pending_open_path(state: tauri::State<PendingOpen>) -> Vec<String> {
 // PendingOpen above, for the same reason (a cold-launch race is unlikely for an interactive
 // sign-in flow the user just triggered, but costs nothing to guard against anyway).
 struct PendingOAuth(Mutex<Option<String>>);
-
-#[tauri::command]
-fn take_pending_oauth_callback(state: tauri::State<PendingOAuth>) -> Option<String> {
-    state.0.lock().unwrap().take()
-}
 
 /// Registered custom URL scheme for Adobe's OAuth redirect (tauri.conf.json's
 /// plugins.deep-link.desktop.schemes) — a real constant, not just an inline literal, because the
@@ -2137,8 +2110,8 @@ pub(crate) fn unique_dest_pub(dir: &Path, name: &str) -> PathBuf {
     unique_dest(dir, name)
 }
 
-// Raw-body writer, modelled on write_file_bytes_raw: the render arrives as the IPC request's
-// binary body with the filename in a header, so a full-res export isn't tripled in memory the
+// Raw-body writer: the render arrives as the IPC request's binary body with the filename in a
+// header, so a full-res export isn't tripled in memory the
 // way the base64 path is (the same triple-copy that OOMed Lightroom TIFF saves — see
 // write_lightroom_tiff_raw's comment). The header carries the name BASE64-encoded because HTTP
 // headers are ASCII-only and export filenames routinely are not.
@@ -2560,7 +2533,6 @@ fn main() {
             collage_output_path,
             denoise_raw_high,
             cancel_denoise_high,
-            lens_profile_available,
             list_lens_profiles,
             download_url_native,
             native_build_tag,
@@ -2572,15 +2544,12 @@ fn main() {
             read_file_head,
             peek_raw_camera_path,
             write_file_bytes,
-            write_file_bytes_raw,
             write_lightroom_tiff,
             write_lightroom_tiff_raw,
             http_native,
             take_pending_open_path,
-            take_pending_oauth_callback,
             google_oauth_loopback,
             library::list_dir,
-            library::get_thumbnail,
             library::get_thumbnail_or_offline,
             library::get_thumbnail_fast,
             library::album_list,
@@ -2588,8 +2557,6 @@ fn main() {
             library::album_rename,
             library::album_delete,
             library::album_add,
-            library::album_remove,
-            library::album_set_order,
             library::list_album,
             library::get_quicklook_preview,
             library::get_meta,
@@ -2602,7 +2569,6 @@ fn main() {
             library::sidecar_delete_version,
             library::set_sidecar,
             library::set_keywords,
-            library::set_people_regions,
             library::reset_edit,
             library::undo_reset_edit,
             library::get_export_history,
@@ -2610,7 +2576,6 @@ fn main() {
             library::duplicate_file,
             library::trash_file,
             library::reveal_in_finder,
-            library::list_edited,
             library::list_collection,
             library::list_exported,
             library::collection_counts,
@@ -2619,16 +2584,15 @@ fn main() {
             library::rescan_edited_registry_recursive,
             library::cancel_registry_rescan,
             library::phash_batch,
-            library::registry_set_cmd,
             library::registry_set_many,
             library::get_decode_cache,
             library::get_decode_cache_path,
             library::get_display_decode_cache,
             library::get_display_decode_cache_path,
-            library::save_decode_cache,
             library::get_lr_thumb,
             library::save_lr_thumb,
             sam_encode,
+            scrfd_detect,
             sam_points,
             subject_learn,
             subject_locate,
@@ -2652,10 +2616,11 @@ fn main() {
             catalog::catalog_add_root,
             catalog::catalog_remove_root,
             catalog::catalog_keep_root,
-            catalog::catalog_roots,
             catalog::catalog_scan,
             catalog::catalog_scan_cancel,
             catalog::catalog_query,
+            catalog::catalog_rename_preview,
+            catalog::catalog_rename_apply,
             catalog::catalog_counts,
             catalog::catalog_date_counts,
             catalog::catalog_note_deleted,
@@ -2679,21 +2644,15 @@ fn main() {
             catalog::catalog_set_person_ignored,
             catalog::catalog_set_person_kind,
             catalog::catalog_unnamed_clusters,
-            catalog::catalog_detect_portable_people,
-            catalog::catalog_export_portable_people,
-            catalog::catalog_import_portable_people,
             catalog::catalog_clip_embed,
             catalog::catalog_clip_search,
             catalog::catalog_clip_tags,
-            catalog::catalog_rebuild,
             catalog::catalog_thumbnails,
             catalog::catalog_hq_offline,
             catalog::catalog_hq_offline_list,
             catalog::catalog_hq_offline_set_active,
             catalog::catalog_cancel_reset,
-            catalog::catalog_cancel_pending,
             catalog::catalog_bg_set_paused,
-            catalog::catalog_bg_paused,
             hq_offline_force_quit,
             catalog::catalog_focus,
             catalog::catalog_stack,
@@ -2707,7 +2666,6 @@ fn main() {
             sam2_points,
             faceparse_run,
             depth_run,
-            scrfd_detect,
             save_to_gphotos_downloads,
             gphotos_downloads_dir,
             save_to_lr_downloads,

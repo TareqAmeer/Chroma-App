@@ -34,10 +34,11 @@ When instructed to "run triage" or "triage linear":
 When instructed to "start work" or "next task":
 
 1. Fetch issues assigned to the user in `Todo` or `In Progress` status. Request ONLY `ID`, `Title`, and `Priority` fields with `limit: 3`.
-2. Select the highest priority issue, then fetch its full description in a separate targeted tool call.
+2. Select the highest priority issue, then fetch its full description in a separate targeted tool call. When the user authorizes work through the open repository queue and no assigned actionable issue exists, select from this team's open backlog by priority and dependency order. Keep issue list requests small and fetch descriptions only for selected work.
 3. Update status to `In Progress`.
 4. Output an `### Implementation Plan` detailing planned code changes.
-5. STOP GENERATING. Wait for explicit user approval ("LGTM" or "Approved") before modifying any code.
+5. Continue implementation after presenting the plan when the user has authorized execution. Authorization to work through a ticket queue carries across subsequent tickets; do not request approval for each ticket. Ask only when a material requirement is ambiguous, an action falls outside the authorized scope, or a destructive operation needs explicit approval.
+6. Inspect existing worktrees before starting. Reuse a suitable task checkout or create a named feature branch/worktree based on current `origin/main`. Define the task-owned files and keep unrelated drafts, promotional assets, and other agents' changes separate.
 
 ### 3. Completion Protocol (Codebase -> Linear & DEVLOG)
 
@@ -46,9 +47,11 @@ When implementation and verification are complete, run this mandatory task-compl
 1. Resolve the exact Linear issue for this work. Prefer the issue identifier supplied by the user; otherwise search by task title and only use a unique, clearly matching result. Do not guess or update an unrelated issue.
 2. Append a 2–3 bullet summary of completed work, modified files, and issue ID to `DEVLOG.md`.
 3. Stage only task-owned files. Preserve unrelated and pre-existing working-tree changes; never use `git add -A` to publish them.
-4. Commit the completed task on `main` with a concise, descriptive message. If the current branch is not `main`, or unrelated local changes prevent a safe commit on `main`, stop and report the blocker instead of rewriting or discarding work.
-5. Push to `origin main`; never force-push. If remote `main` has advanced, integrate it safely and rerun relevant verification before pushing. Stop if a safe fast-forward update is not possible.
-6. Update the matching Linear issue with the completion summary, verification performed, and commit hash. Keep the issue in `In Review`; never mark it `Done` because the user does their own final testing.
+4. Commit task-owned changes in the task's named feature branch/worktree with a concise, descriptive message. Feature branches may hold task commits; being on a non-main branch is a normal workflow state, not a reason to stop. Preserve unrelated local changes. If the checkout is detached, create a named task branch before committing.
+5. Publish through a clean, dedicated `main` integration checkout. Fetch current `origin/main`, check whether the feature or an equivalent patch is already published, and integrate only missing task changes. Resolve conflicts while preserving newer main behavior, then run relevant verification. Do not replace current files wholesale with older worktree copies or mix unrelated drafts into the integration. Preserve dirty checkouts rather than discarding or rewriting their work.
+6. Push the verified integration to `origin main`; never force-push. If remote main advances, integrate it safely and rerun relevant verification before retrying. Use a fast-forward update of remote main. Authorization to complete and publish the task carries through this integration step; do not stop merely because implementation started on a feature branch.
+7. Verify publication before reporting completion: confirm the remote main commit contains the task change, and record the published commit hash and verification in DEVLOG and the matching Linear issue. Keep the issue in `In Review`; never mark it `Done` because the user does their own final testing. Do not claim that uncommitted work, a local commit, or a feature-branch push alone is published to main.
+8. If safe integration or publication is genuinely blocked, report "implemented locally, publication blocked" and include the branch, checkout path, commit hash (if any), exact blocker, and remaining verification. Preserve the work and continue independent authorized steps. Never silently leave completed features stranded in a worktree.
 
 ### 4. Visual Attachment Protocol
 
@@ -59,3 +62,13 @@ When reading a Linear issue that contains markdown image links (e.g., `![alt](ht
    `.scripts/fetch-linear-image.sh "<IMAGE_URL>" "/tmp/issue_image.png"`
 3. Inspect `/tmp/issue_image.png` using local vision/image viewing capabilities.
 4. Reference visual context (UI layout bugs, design specs, alignment issues) directly in the `### Implementation Plan`.
+
+## Storage-efficient worktree policy
+
+This repository has a 50 GB working-folder budget. Avoid creating a linked worktree for each ticket: reuse the current checkout and switch feature branches serially when its working tree is safe to switch. Keep completed commits on their feature branches and integrate them through the normal clean main checkout. Create at most one temporary linked worktree at a time, only when parallel isolation is necessary; record why it is needed and remove it as soon as its task-owned changes are preserved. Do not duplicate model/vendor assets or build outputs into another checkout.
+
+Run desktop Cargo builds through `desktop/package.json` scripts (`npm run dev` or `npm run build`) so `scripts/tauri-shared-cache.mjs` directs all linked checkouts to the same per-user Cargo target directory. For direct Cargo commands, set `CARGO_TARGET_DIR` to that same directory first. Rust target directories are generated cache and may be removed when no build is using them; never delete source, untracked work, vendor/model assets, or an entire checkout as a cache-cleanup shortcut. Inspect Git status and the exact resolved path before cleanup. Never use `git clean -fdx` for storage reclamation.
+
+Keep large shared, immutable assets in one canonical checkout unless a build explicitly requires a different location. Do not hardlink editable source or use `git clone --shared` as a worktree substitute; edits through a hardlink affect every name, and Git's shared-clone object alternates can become invalid after source garbage collection. Git linked worktrees already share repository objects and refs while retaining distinct working directories, so prefer one working directory and shared generated caches over multiple full copies.
+
+References: [Git worktrees](https://git-scm.com/docs/git-worktree), [Cargo build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html), [Git shared clones](https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---shared), and [Windows hard links](https://learn.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions).
