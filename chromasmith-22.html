@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1101E';
+const BUILD='1.1101F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -29778,6 +29778,10 @@ async function _exportFXRun(){
     // Google Photos-sync mirror (Phase 3) record exactly which on-disk photo each successful
     // upload came from, instead of guessing from the output filename.
     const libPaths=typeof window.chromasmithGetOpenedPaths==='function'?window.chromasmithGetOpenedPaths():[];
+    const seenNames=new Map();
+    // Save-as-you-go (see the end of the per-item loop): desktop shell, multi-photo, and nothing
+    // downstream that needs every file's bytes at the end (Lightroom write-back, Google Photos).
+    let streamSave=N>1&&tauriNative()&&!(window.chromasmithSaveToLightroomPending&&window.chromasmithEditInPath)&&!(gpSaveEnabled()&&gpTok());
     // ── Phase 1: render every image to bytes at FULL resolution (no share yet). Each image is
     // its own try/catch so ONE bad/oversized/corrupt image can't silently discard every image
     // already rendered before it — previously a single mid-batch exception skipped straight to
@@ -29786,7 +29790,15 @@ async function _exportFXRun(){
     // whatever already succeeded still gets saved. ──
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
-      const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null;
+      const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null,exportCopy=null;
+      // Batch only: the export-time RAW re-decode (full cleanup / High NR) writes full-res pixels into
+      // it.img. Done in place on the editor's own item, every photo in the batch kept those pixels
+      // (+ the HDR float stash) until the editor was reloaded — ~0.7 GB per RAW, which ran WebKit's
+      // content process into its 8 GB kill threshold mid-batch. Decode into an export-only copy
+      // instead and drop it once this photo is encoded. A single-photo export keeps the old in-place
+      // upgrade (bounded to one photo, and the editor keeps the cleaned pixels).
+      const useExportCopy=()=>{if(N>1&&it===sourceItem){exportCopy=it={...sourceItem,img:document.createElement('canvas')};}};
+      const dropExportCopy=()=>{if(exportCopy){const c=exportCopy.img;delete c._sceneLinear;delete c._sceneLinearPresent;c.width=c.height=0;exportCopy=null;}};
       try{
         if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
@@ -29804,10 +29816,13 @@ async function _exportFXRun(){
         if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(sourceItem)]))&&(it.rawFile||libPaths[fxImages.indexOf(sourceItem)])&&typeof window.chromasmithApplyFullCleanup==='function'){
           setExportPhotoStatus(idx,'rendering','cleaning…');
           setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
+          const pre=it;useExportCopy();
           try{
             const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(sourceItem)]);
             if(r&&r.applied)it._fullCleanupApplied=true;
+            else if(it!==pre){dropExportCopy();it=pre;}
           }catch(e){
+            if(it!==pre){dropExportCopy();it=pre;}
             log(`Full cleanup failed for ${it.name} — exporting with the chroma-only cleanup: ${(e&&e.message)||e}`,'warn');
           }
         }
@@ -29820,12 +29835,14 @@ async function _exportFXRun(){
         if(exportRawNr==='high'&&it.rawFile&&!it._nrHighApplied&&typeof window.chromasmithDenoiseHigh==='function'){
           setExportPhotoStatus(idx,'rendering','denoising…');
           setProg(idx,`Denoising ${idx+1}/${N}: ${it.name}…`);
+          const pre=it;useExportCopy();
           try{
             await window.chromasmithDenoiseHigh(it,
               (done,tot)=>{if(tot>0)setProg(idx+done/tot,`Denoising ${idx+1}/${N}: ${it.name} — ${Math.round(done/tot*100)}%…`);},
               null);
             it._nrHighApplied=true;
           }catch(e){
+            if(it!==pre){dropExportCopy();it=pre;}
             log(`High-tier noise reduction failed for ${it.name} — continuing with Fast: ${(e&&e.message)||e}`,'warn');
           }
         }
@@ -29954,7 +29971,7 @@ async function _exportFXRun(){
         const pat=fld.replace('{nover}','').trim();
         const usesPattern=pat&&pat!=='photo'&&(single||pat.includes('{')); // batch only honors real patterns, not a leftover single-photo rename
         let base;
-        const seqN=window._expOnlyItems?fxImages.indexOf(it)+1:idx+1; // a retry keeps each photo's original batch number
+        const seqN=window._expOnlyItems?fxImages.indexOf(sourceItem)+1:idx+1; // a retry keeps each photo's original batch number
         if(usesPattern){
           base=pat.replace(/\{name\}/g,it.name).replace(/\{seq\}/g,String(seqN)).replace(/\{date\}/g,new Date().toISOString().slice(0,10));
           if(!single&&!pat.includes('{name}')&&!pat.includes('{seq}'))base+='_'+seqN;
@@ -29965,17 +29982,34 @@ async function _exportFXRun(){
         // srcPath: the item's on-disk Library source path (undefined outside the native
         // shell, or if libPaths and fxImages have desynced) — captured HERE per-item rather
         // than inferred from the output filename afterward, per the fxIdx lookup above.
-        const fxIdx=fxImages.indexOf(it);
+        const fxIdx=fxImages.indexOf(sourceItem); // sourceItem: `it` may be an export-only copy
         const srcPath=fxIdx>=0?libPaths[fxIdx]:undefined;
         // Stashed for fxSaveGainMapHeic's RAW-headroom path (_hdrHeadroomPngFor needs the
         // FINAL export size to resize the headroom map to, after borders/matte/resample have
         // already changed it from the graded frame's own dimensions).
-        it._exportW=ec.width;it._exportH=ec.height;
-        results.push({content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx,srcPath});
+        sourceItem._exportW=it._exportW=ec.width;sourceItem._exportH=it._exportH=ec.height;
+        const res={content:out,fname:noVer?`${base}.${outExt}`:`${base}_${ver}.${outExt}`,mime,srcIdx:idx,srcPath};
+        // Dedupe filenames as each one is produced (same order-based result as a pass at the end):
+        // without a custom {name}/{seq} pattern, batch items fall back to their own source name
+        // (`base=it.name`) — two source photos from different folders/extensions but the same base
+        // name would otherwise overwrite one another on save. Append _2/_3/... on any repeat.
+        {const n=(seenNames.get(res.fname)||0)+1;seenNames.set(res.fname,n);
+          if(n>1){const dot=res.fname.lastIndexOf('.');res.fname=dot<0?`${res.fname}_${n}`:`${res.fname.slice(0,dot)}_${n}${res.fname.slice(dot)}`;}}
+        results.push(res);
         ec.width=ec.height=0; // free big intermediates promptly
         setProg(idx+1,`Rendered ${idx+1}/${N}`);
         setExportPhotoStatus(idx,'rendered');
         log(`Rendered ${results[results.length-1].fname} (${it.dpi} DPI)`,'ok');
+        // Desktop batch: write this file now and let its bytes go, instead of holding every encoded
+        // output (PNG for a RAW source by default, tens of MB each) until Phase 2 — a few hundred
+        // photos was several GB of retained buffers on top of the render working set. A failed save
+        // keeps its bytes for the retry list; Phase 2 reports it and saves anything not yet written.
+        if(streamSave){
+          setExportPhotoStatus(idx,'saving');
+          const sr1=await saveFilesNative([res]);
+          if(!sr1)streamSave=false; // older native shell: Phase 2 saves the rest the old way
+          else{res.receipt=sr1[0]||{ok:false,err:'save failed'};if(res.receipt.ok){res.content=null;setExportPhotoStatus(idx,'saved',res.receipt.skipped?'already exists — skipped':undefined);}}
+        }
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
@@ -29983,19 +30017,10 @@ async function _exportFXRun(){
         console.error(e);
       }finally{
         if(decodedJpeg){if(decodedGeometry&&decodedGeometry!==decodedJpeg)decodedGeometry.width=decodedGeometry.height=0;decodedJpeg.width=decodedJpeg.height=0;}
+        dropExportCopy();
       }
     }
-    // Dedupe filenames before saving: without a custom {name}/{seq} pattern, batch items fall
-    // back to their own source name (`base=it.name`) — two source photos from different
-    // folders/extensions but the same base name collide on the same rendered filename and would
-    // silently overwrite one another on save. Append _2/_3/... on any repeat.
-    {
-      const seen=new Map();
-      for(const r of results){
-        const n=(seen.get(r.fname)||0)+1;seen.set(r.fname,n);
-        if(n>1){const dot=r.fname.lastIndexOf('.');r.fname=dot<0?`${r.fname}_${n}`:`${r.fname.slice(0,dot)}_${n}${r.fname.slice(dot)}`;}
-      }
-    }
+    // (Filename dedupe now happens per item as each render is pushed — see `seenNames` above.)
     // ── Phase 2: save ──
     // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write each
     // render straight back over the file(s) Lightroom handed us instead of the normal
@@ -30050,11 +30075,11 @@ async function _exportFXRun(){
       window.chromasmithSaveToLightroomPending=false;
     }else if(results.length){
       setProg(N,`Saving ${results.length} file(s)…`);
-      results.forEach(r=>setExportPhotoStatus(r.srcIdx,'saving'));
+      results.forEach(r=>{if(!r.receipt)setExportPhotoStatus(r.srcIdx,'saving');});
       // HDR (gain map): single photo only — the gain map is derived from ONE original file's
       // headroom (window.chromasmithSourcePath), and a batch has no single source. Falls through
       // to the normal save on any failure, so an HDR attempt can never lose an export.
-      if(fxHdrExportEnabled()&&results.length===1){
+      if(fxHdrExportEnabled()&&results.length===1&&!results[0].receipt){
         const r0=results[0];
         const bytes=r0.content instanceof Uint8Array?r0.content:new Uint8Array(r0.content);
         if(await fxSaveGainMapHeic(bytes,r0.fname,items[r0.srcIdx])){
@@ -30066,7 +30091,10 @@ async function _exportFXRun(){
           return;
         }
       }
-      sr=await saveFiles(results);
+      // Files already written during Phase 1 (streamSave) carry their receipt; save only the rest.
+      const pend=results.filter(r=>!r.receipt);
+      const sp=pend.length?await saveFiles(pend):null;
+      sr=results.some(r=>r.receipt)?results.map(r=>r.receipt||(Array.isArray(sp)?sp[pend.indexOf(r)]:{ok:true,path:r.fname})):sp;
       if(Array.isArray(sr)){
         // Native desktop save: every file has a real per-item result, so report SAVES rather
         // than renders — a file that never reached disk must not show (or be counted) as saved.

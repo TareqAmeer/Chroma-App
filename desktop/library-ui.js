@@ -8603,12 +8603,31 @@
     }
     return trashed;
   }
+  // In-flight guard for the read+load phase that runs BEFORE exportFX's own _fxExportRuns guard
+  // engages: a slow/unresponsive app invites a second click, which used to re-read and reload the
+  // whole batch into the editor underneath the export already running (doubling memory, swapping
+  // fxImages out from under its per-photo loop).
+  let libExportBusy = false;
+  function libExportRunning() {
+    if (!libExportBusy && !document.body.classList.contains('fx-exporting')) return false;
+    toast('An export is already running');
+    return true;
+  }
   async function libExportPaths(paths) {
     if (!paths.length) return;
+    if (libExportRunning()) return;
+    libExportBusy = true;
+    try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
+  }
+  async function libExportPathsInner(paths) {
     const n = paths.length;
-    const files = await readPathsAsFiles(paths);
+    // Path-backed RAW (head read only; the native decoder reads the file by path) — the same
+    // read the batch-open path uses. A full read held every selected RAW (~30 MB each) in JS
+    // memory for the whole export.
+    const files = await readPathsAsFiles(paths, { pathBackedRaw: !!window.__TAURI__ });
     if (!files.length) return;
     const okPaths = files.okPaths || paths;
+    await prepareBatchRawFiles(files, okPaths);
     state.openedPath = '';
     window.chromasmithSourcePath = null;
     state.openedPaths = okPaths;
@@ -9144,6 +9163,7 @@
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
+      if (libExportRunning()) return;
       if (n <= 1) await openInEditor(paths[0]);
       else await openPathsInEditor(paths);
       const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
