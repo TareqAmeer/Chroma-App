@@ -82,6 +82,7 @@ function installFXImages(entries,loadKey,opts){
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
   window.__pm&&window.__pm('ifx-masks');
+  _bwDetectDone=false; // new photo: allow one smart-default pass (see autoDetectBW)
   if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
   window.__pm&&window.__pm('ifx-bw');

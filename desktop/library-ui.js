@@ -5402,6 +5402,9 @@
   async function openInEditorInner(path) {
     // Capture before save flushing or editor setup can change the Gallery layout.
     if (state.open && state.expanded_view && !state.unified_view) rememberGalleryScrollPosition();
+    // Coming from the Library grid (or nothing open yet) vs. flipping photos inside the editor —
+    // only the former closes the tool panel; a tool you have open stays open while you switch photos.
+    const openedFromLibrary = !!state.expanded_view || !state.openedPath;
     const openT0 = performance.now();
     rawPerf('open-start', path);
     if (RAW_EXT_RE.test(path)) window.chromasmithPrefetchRawPeek?.(path); // Rust reads+parses the EXIF while JS flushes/snapshots below
@@ -6015,7 +6018,7 @@
       // over the image — the photo itself, not a chosen tool, should be the first thing you see.
       // Same mechanism a rail-icon click already uses to close the panel (fxSection,
       // chromasmith-22.html), so clicking any tool reopens it exactly like it always did.
-      if (document.body.classList.contains('deskx') && !state.unified_view) document.body.classList.add('panel-closed');
+      if (openedFromLibrary && document.body.classList.contains('deskx') && !state.unified_view) document.body.classList.add('panel-closed');
       if (typeof syncLibFlagRow === 'function') syncLibFlagRow();
       if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
       // E5 fix (editor_ux_spec.json, 2026-09-09): this is the real "switching photos" path (a

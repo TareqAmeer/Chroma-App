@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1101D';
+const BUILD='1.1101E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14147,6 +14147,7 @@ function installFXImages(entries,loadKey,opts){
   for(let i=1;i<fxImages.length;i++)fxImages[i].masks=[];
   if(typeof mskRebuild==='function')mskRebuild(); // refresh the Masks panel to this photo's own list — otherwise it kept showing the OUTGOING photo's mask buttons until the user touched something
   window.__pm&&window.__pm('ifx-masks');
+  _bwDetectDone=false; // new photo: allow one smart-default pass (see autoDetectBW)
   if(!opts.deferRender)autoDetectBW(fxWork||fxImg);   // smart default for the White-glow switch (overridable)
   if(typeof loadSessionGeomFor==='function')loadSessionGeomFor(); // restore saved crop/rotate IF this is the same photo the session was saved from
   window.__pm&&window.__pm('ifx-bw');
@@ -14365,8 +14366,13 @@ async function loadFXImages(fileList,opts){
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.
+// Runs once per photo load: installFXImages clears _bwDetectDone, and the first detect (or a
+// restored/pasted recipe via applyUISnapshot) sets it. Later full-quality swaps of the SAME photo
+// call this again — they must not overwrite a White glow setting the recipe already chose.
+let _bwDetectDone=false;
 function autoDetectBW(img){
-  const tg=document.getElementById('tg-hal-white');if(!tg||!img)return;
+  const tg=document.getElementById('tg-hal-white');if(!tg||!img||_bwDetectDone)return;
+  _bwDetectDone=true;
   let bw=false;
   try{
     const{px}=getPx(img,256);                       // small downscaled sample
@@ -23049,6 +23055,9 @@ function applyUISnapshot(s,opts){
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
+  // A saved/pasted/undone edit now owns the White glow switch: stop a later full-quality swap's
+  // autoDetectBW from flipping it back (the pristine default and offscreen renders don't count).
+  if(!(opts&&opts.skipRender)&&(typeof _fxPristineDefault==='undefined'||s!==_fxPristineDefault))_bwDetectDone=true;
   let _lutPromise;
   _FX_SNAP_SELECTS.forEach(id=>{const el=document.getElementById(id);if(el&&s.selects[id]!==undefined){const next=String(s.selects[id]??''),changed=el.value!==next;el.value=next;el._chipsRender&&el._chipsRender();if(id==='sel-lut'&&changed)_lutPromise=selectLUT(el.value,true);if(id==='sel-print'&&changed)selectPrint(el.value,true);}});
   _FX_SNAP_COLORS.forEach(id=>{const el=document.getElementById(id);if(el&&s.colors[id]!==undefined)el.value=s.colors[id];});

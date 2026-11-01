@@ -1,5 +1,10 @@
+// Runs once per photo load: installFXImages clears _bwDetectDone, and the first detect (or a
+// restored/pasted recipe via applyUISnapshot) sets it. Later full-quality swaps of the SAME photo
+// call this again — they must not overwrite a White glow setting the recipe already chose.
+let _bwDetectDone=false;
 function autoDetectBW(img){
-  const tg=document.getElementById('tg-hal-white');if(!tg||!img)return;
+  const tg=document.getElementById('tg-hal-white');if(!tg||!img||_bwDetectDone)return;
+  _bwDetectDone=true;
   let bw=false;
   try{
     const{px}=getPx(img,256);                       // small downscaled sample
