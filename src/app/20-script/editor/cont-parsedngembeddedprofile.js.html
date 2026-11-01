@@ -285,6 +285,12 @@ async function loadRw2(file,opts){
     c.getContext('2d').putImageData(new ImageData(rgba,w,h),0,0);
     if(!privateEntry&&img.work)c._csWork=fxWorkCanvasFromRGBA(img.work,w); // Rust-built ~2560px working copy (loadFXImages installs it)
     if(!privateEntry&&window.__TAURI__&&typeof raw.filmBase==='function'){c._filmRaw=raw;c._filmApplied=false;}
+    // The canvas (and its working copy) now own these pixels. The native shim is kept alive by
+    // c._filmRaw for film-negative re-develops, and used to hold its whole decode response with it
+    // (~120 MB per 24MP RAW: RGBA body + working-copy trailer) for as long as the photo stayed
+    // loaded — a batch export/open of a few dozen RAWs ran WebKit's content process past its 8 GB
+    // kill limit. Drop the pixel buffers; refine/filmBase/filmDevelop re-decode from path/bytes.
+    if(!privateEntry&&typeof raw.releasePixels==='function')raw.releasePixels();
     // Stashed on the CANVAS object, not on the fxImages[] entry — installFXImages assigns
     // `img:c`, and this way the headroom data survives that indirection with zero extra
     // plumbing (mirrors the `refine()` background-swap above, which matches back on `it.img===c`

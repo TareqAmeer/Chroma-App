@@ -9,8 +9,12 @@
 //     path-backed head read the batch-open path already uses.
 //  D. libExportPaths had no in-flight guard: a second click (the app was unresponsive, so users
 //     click again) re-read and reloaded the whole batch into the editor under the running export.
-// Part 1 (A+B) drives the real exportFX in Chromium; part 2 (C+D) runs the real libExportPaths
-// source in a vm with IPC mocks.
+//  E. (the one that actually OOMed a 23:22 re-test) every RAW loaded into the editor kept its native
+//     decoder shim alive via canvas._filmRaw, and the shim kept its WHOLE decode response
+//     (_buf / _cachedPixels: ~120 MB per 24MP frame) — so loading a batch of a few dozen RAWs for
+//     export grew ~170 MB/s of reachable ArrayBuffers until WebKit killed the page.
+// Part 1 (A+B+E) drives the real exportFX / loadRw2 in Chromium; part 2 (C+D) runs the real
+// libExportPaths source in a vm with IPC mocks.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -94,6 +98,33 @@ const out = await pg.evaluate(async (b64) => {
   const after = fxImages.map((it) => { const im = it.img; return { w: im.naturalWidth || im.width, h: im.naturalHeight || im.height, hdr: !!im._sceneLinear }; });
   return { before, after, events, widths };
 }, png);
+// E: real loadRw2 with a stand-in native shim (same interface as desktop-native.js's NativeLibRawShim).
+const shimSrc = await readFile(path.join(ROOT, 'desktop/desktop-native.js'), 'utf8');
+const rel = /\n\s*releasePixels\(\)\s*\{([^}]*)\}/.exec(shimSrc);
+check(!!rel && /_buf\s*=\s*null/.test(rel[1]) && /_cachedPixels\s*=\s*null/.test(rel[1]) && !/_bytes/.test(rel[1]),
+  `E: NativeLibRawShim.releasePixels drops _buf/_cachedPixels but keeps _bytes for refine/film (${rel ? rel[0].trim() : 'missing'})`);
+const e = await pg.evaluate(async () => {
+  const W = 600, H = 400; const shims = [];
+  class Shim {
+    constructor() { shims.push(this); }
+    async open() { this._buf = new ArrayBuffer(24 + W * H * 4); this._bytes = new Uint8Array(8); }
+    async metadata() { return { make: 'Panasonic', model: 'DC-S9' }; }
+    async imageData() { return { width: W, height: H, colors: 4, bits: 8, rgba: true, data: new Uint8ClampedArray(this._buf, 24, W * H * 4) }; }
+    get worker() { return { terminate() {} }; }
+    async filmBase() {} async filmDevelop() {}
+    releasePixels() { this._buf = null; this._cachedPixels = null; }
+    releaseDecodeBuffers() { this._buf = null; this._cachedPixels = null; this._bytes = null; }
+  }
+  const prevGet = window.getLibRaw, prevT = window.__TAURI__;
+  window.getLibRaw = async () => Shim; window.__TAURI__ = {};
+  try {
+    const r = await loadRw2(new File([new Uint8Array(16)], 'x.RW2'));
+    const s = shims[0];
+    return { kept: r.canvas._filmRaw === s, buf: !!s._buf, bytes: !!s._bytes, w: r.canvas.width };
+  } finally { window.getLibRaw = prevGet; window.__TAURI__ = prevT; }
+});
+check(e.kept && e.w === 600, `E: loadRw2 still keeps the shim for film develops (${JSON.stringify(e)})`);
+check(!e.buf && e.bytes, `E: a loaded RAW no longer pins the shim's full decode buffer (buf held=${e.buf}, bytes kept=${e.bytes})`);
 await br.close(); server.close();
 console.log('events:', out.events.join(' | '));
 const cleans = out.events.filter((e) => e.startsWith('clean:')).length;

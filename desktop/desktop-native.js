@@ -452,6 +452,9 @@
     // Compare/Scrub entries keep the developed canvas, not a second full native response
     // buffer. filmBase/filmDevelop need only sourcePath + decode recipe after initial decode.
     releaseDecodeBuffers() { this._buf = null; this._cachedPixels = null; this._bytes = null; }
+    // Pixels only (loadRw2 calls this once the canvas holds them): keeps _bytes/_sourcePath, which
+    // refine() and filmBase()/filmDevelop() still re-decode from. imageData() is one-shot.
+    releasePixels() { this._buf = null; this._cachedPixels = null; }
     get worker() { return { terminate() {} }; }
     async filmBase(nx, ny) {
       const src = this._sourcePath ? { sourcePath: this._sourcePath } : {};
