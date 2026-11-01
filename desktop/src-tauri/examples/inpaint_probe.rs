@@ -6,18 +6,31 @@ mod platform;
 mod sam;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    assert_eq!(
-        args.len(),
-        5,
-        "inpaint_probe <ORT dll/dylib> <model-directory> <photo> <output-directory>"
+    assert!(
+        args.len() == 5 || args.len() == 9,
+        "inpaint_probe <ORT dll/dylib> <model-directory> <photo> <output-directory> [mask-x0 mask-y0 mask-x1 mask-y1 (0..1000)]"
     );
     sam::set_dylib_path(args[1].clone().into());
     inpaint::set_root(args[2].clone().into());
     let rgb = image::open(&args[3]).unwrap().to_rgb8();
     let (w, h) = rgb.dimensions();
+    let rect = if args.len() == 9 {
+        let values: Vec<u32> = args[5..9]
+            .iter()
+            .map(|value| value.parse().expect("mask coordinates must be integers"))
+            .collect();
+        (values[0], values[1], values[2], values[3])
+    } else {
+        (300, 460, 330, 790)
+    };
+    assert!(rect.0 < rect.2 && rect.1 < rect.3 && rect.2 <= 1000 && rect.3 <= 1000);
+    let x0 = w * rect.0 / 1000;
+    let y0 = h * rect.1 / 1000;
+    let x1 = w * rect.2 / 1000;
+    let y1 = h * rect.3 / 1000;
     let mut mask = vec![255; w as usize * h as usize];
-    for y in (h * 46 / 100)..(h * 79 / 100) {
-        for x in (w * 30 / 100)..(w * 33 / 100) {
+    for y in y0..y1 {
+        for x in x0..x1 {
             mask[(y * w + x) as usize] = 0;
         }
     }
