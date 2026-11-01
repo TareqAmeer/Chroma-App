@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1101C';
+const BUILD='1.1101D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -29020,7 +29020,8 @@ function buildLookGallery(){
   // (no headers needed, there's only one).
   const groups=groupedLutKeys();
   let entries=[['','Original']];
-  if(fxLookCatFilter==='All'){
+  // A search always spans every category: a match filed under another chip used to look missing.
+  if(fxLookCatFilter==='All'||fxLookSearch){
     groups.forEach(([cat,keys])=>{
       const ks=keys.filter(_lookMatches);
       if(!ks.length)return;                     // a search can empty a whole category — drop its header too
