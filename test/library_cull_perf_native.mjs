@@ -46,11 +46,74 @@ const report = {
     cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length, memoryBytes: os.totalmem() },
   cache: 'Source-resolution cull cells warmed explicitly in the same native process; initial disk/OS cache unspecified',
   isolation: { nativeCatalogDir, nativeCacheDir },
-  samples: [], failures: [],
+  samples: [], failures: [], diagnostics: { stages: [], events: [], target: null },
 };
 const output = process.env.CULL_PERF_REPORT || 'test/output/chr267-native-perf.json';
 const save = async () => { await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, JSON.stringify(report, null, 2)); };
+const diagnosticStartedAt = Date.now();
+const stage = name => report.diagnostics.stages.push({ at: new Date().toISOString(), elapsedMs: Date.now() - diagnosticStartedAt, name });
+const event = (type, data = {}) => {
+  const events = report.diagnostics.events;
+  events.push({ at: new Date().toISOString(), elapsedMs: Date.now() - diagnosticStartedAt, type, ...data });
+  if (events.length > 200) events.splice(0, events.length - 200);
+};
+const context = page.context();
+page.on('close', () => event('playwright.page.close'));
+page.on('crash', () => event('playwright.page.crash'));
+page.on('console', message => event('playwright.console', { level: message.type(), text: message.text().slice(0, 500) }));
+page.on('pageerror', error => event('playwright.pageerror', { text: String(error).slice(0, 1000) }));
+page.on('framenavigated', frame => event('playwright.frameNavigated', { url: frame.url().slice(0, 1000), mainFrame: frame === page.mainFrame() }));
+context.on('close', () => event('playwright.context.close'));
+browser.on('disconnected', () => event('playwright.browser.disconnected'));
+
+// Browser-level target events are diagnostic-only and do not change app state.
+// Failure-time /json/list comparison helps distinguish a lost Playwright page
+// from a WebView target that actually disappeared.
+let browserCdp = null;
+let pageCdp = null;
+let targetId = null;
 try {
+  browserCdp = await browser.newBrowserCDPSession();
+  for (const name of ['Target.targetCrashed', 'Target.targetDestroyed', 'Target.detachedFromTarget']) {
+    browserCdp.on(name, payload => {
+      if (name === 'Target.detachedFromTarget' || !targetId || payload.targetId === targetId
+        || payload.targetInfo?.targetId === targetId) event(`cdp.${name}`, payload);
+    });
+  }
+  await browserCdp.send('Target.setDiscoverTargets', { discover: true });
+  const targets = await browserCdp.send('Target.getTargets');
+  const pageInfo = targets.targetInfos.find(info => info.type === 'page' && info.url === page.url());
+  targetId = pageInfo?.targetId || null;
+  report.diagnostics.target = pageInfo
+    ? { ...pageInfo, browserSession: 'browser-level CDP' }
+    : { targetId: null, url: page.url(), browserSession: 'browser-level CDP' };
+  if (pageInfo?.targetId) {
+    pageCdp = await context.newCDPSession(page);
+    report.diagnostics.target.pageSessionAttached = true;
+    pageCdp.on('Inspector.detached', params => event('cdp.Inspector.detached', params));
+  }
+} catch (error) {
+  event('cdp.initialization.error', { text: String(error).slice(0, 1000) });
+}
+const compareTargetsAfterFailure = async () => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    const url = new URL('/json/list', endpoint);
+    const response = await fetch(url, { signal: controller.signal });
+    const targets = await response.json();
+    const matching = targets.filter(info => info.id === targetId || info.url === report.runtime?.url);
+    report.diagnostics.failureTargetComparison = {
+      at: new Date().toISOString(), status: response.status, targetId,
+      matching: matching.map(info => ({ id: info.id, type: info.type, title: info.title, url: info.url })),
+      targetCount: targets.length,
+    };
+  } catch (error) {
+    report.diagnostics.failureTargetComparison = { at: new Date().toISOString(), targetId, error: String(error).slice(0, 500) };
+  } finally { clearTimeout(timeout); }
+};
+try {
+  stage('runtime.evaluate.start');
   const runtime = await page.evaluate(() => {
     if (new URL(location.href).searchParams.has('libtest')) throw Error('Mock Library fixture is forbidden');
     if (!window.__TAURI__?.core?.invoke) throw Error('Actual native IPC is required');
@@ -60,9 +123,11 @@ try {
       userAgent: navigator.userAgent, viewport: [innerWidth, innerHeight], dpr: devicePixelRatio,
       gpu: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : null };
   });
+  stage('runtime.evaluate.complete');
   Object.assign(report, { runtime });
   assert.equal(runtime.build, expectedBuild, 'native app source/build must match the recorded build');
   const initialCatalog = await page.evaluate(() => window.__TAURI__.core.invoke('catalog_query', { q: { limit: 3, offset: 0 } }));
+  stage('initial.catalog.complete');
   assert(initialCatalog.total <= 2 && initialCatalog.entries.every(entry =>
     fixturePaths.some(p => p.replaceAll('\\', '/').toLowerCase() === entry.path.replaceAll('\\', '/').toLowerCase())),
     'use an isolated native catalog containing only this RAW fixture, never the user catalog');
@@ -79,7 +144,9 @@ try {
     if (!window.__TAURI__?.event?.emit) throw Error('Native folder-drop event bridge is required');
     await window.__TAURI__.event.emit('tauri://drag-drop', { paths: [folder], position: { x: 0, y: 0 } });
   }, folder);
+  stage('folder.drop.complete');
   await page.waitForFunction(() => document.querySelectorAll('#lib-grid .lib-card').length === 2, undefined, { timeout: 60000 });
+  stage('library.cards.ready');
   const welcomeSkip = page.locator('#cs-modal-ov').getByRole('button', { name: 'Skip for now', exact: true });
   if (await welcomeSkip.isVisible()) await welcomeSkip.click();
   const cards = page.locator('#lib-grid .lib-card');
@@ -89,11 +156,13 @@ try {
   await page.locator('#lib-cull-time-all').click();
   await page.locator('#lib-cull-time-start').click();
   await page.locator('#fx-confirm-ok').click();
+  stage('cull.entered');
   // This is deliberate warming, outside the measured navigation/zoom intervals.
   await page.waitForFunction(() => {
     const cells = [...document.querySelectorAll('#lib-survey .lib-survey-cell')];
     return cells.length === 2 && cells.every(el => +el.dataset.sourceWidth * +el.dataset.sourceHeight >= 44e6);
   }, undefined, { timeout: 180000 });
+  stage('source-resolution.warmed');
   await page.locator('#lib-survey [data-detail="fit"]').click();
   await page.locator('.lib-survey-cell[data-survey-idx="0"]').focus();
   // Start from an idle fitted presentation, not outstanding work from the warming controls.
@@ -111,6 +180,7 @@ try {
     window.__chr267WarmFitFrames = ready ? (window.__chr267WarmFitFrames || 0) + 1 : 0;
     return window.__chr267WarmFitFrames >= 2;
   }, undefined, { timeout: 15000 });
+  stage('idle-fit.ready');
   // Install an event-clock observer without modifying app functions or accelerating any work.
   await page.evaluate(() => {
     const state = window.__chr267PresentationProbe = { pending: null, results: [] };
@@ -174,17 +244,21 @@ try {
   };
   navigation: for (let run = 0; run < 3; run++) {
     for (const [key, index] of [['ArrowRight', 1], ['ArrowLeft', 0]]) {
+      stage(`sharp.${run}.${index}.start`);
       await arm('sharp', index, key);
       await page.keyboard.press(key);
       const sample = await observation();
+      stage(`sharp.${run}.${index}.complete`);
       report.samples.push({run, ...sample, budgetMs: 100, pass: sample.presented && sample.ms < 100});
       if (!sample.presented) break navigation;
     }
   }
   const focusedIndex = await page.locator('.lib-survey-cell.cmp-focus').getAttribute('data-survey-idx');
   await arm('native', Number(focusedIndex));
+  stage('native-detail.start');
   await page.locator('#lib-survey [data-detail="native"]').click();
   const native = await observation();
+  stage('native-detail.complete');
   report.samples.push({...native, budgetMs: 500, pass: native.presented && native.ms < 500});
   report.nativeStages = await page.evaluate(() => (window.__rawPerfLog || []).slice(-100));
   report.failures = report.samples.filter(s => !s.pass).map(s => `${s.mode} ${s.index}: ${s.presented ? s.ms.toFixed(1)+'ms' : 'no qualifying frame'} (budget ${s.budgetMs}ms)`);
@@ -192,9 +266,14 @@ try {
   console.log(JSON.stringify({samples:report.samples, failures:report.failures, output}));
   if (report.failures.length) process.exitCode = 1;
 } catch (error) {
-  report.failures.push(String(error.stack || error)); await save(); throw error;
+  stage('harness.failure');
+  report.failures.push(String(error.stack || error));
+  await compareTargetsAfterFailure();
+  await save(); throw error;
 } finally {
   await page.evaluate(() => window.__chr267PresentationProbe?.cleanup?.()).catch(() => {});
   // Disconnect only. Never close the native app or reset the user's preferences/cache.
   await browser.close();
+  await pageCdp?.detach().catch(() => {});
+  await browserCdp?.detach().catch(() => {});
 }
