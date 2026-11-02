@@ -128,8 +128,10 @@ const lazy = await pg.evaluate(async (b64) => {
   return { ev, hashes, fxCount: fxImages.length };
 }, png);
 console.log('lazy events:', lazy.ev.join(' | '));
-check(lazy.ev.join(',') === 'load:0,save:L0_v1-0.png,load:1,save:L1_v1-0.png,load:2,save:L2_v1-0.png'.replace(/v1-0/g, (lazy.ev[1] || '').match(/v\d+-\d+/)?.[0] || 'v1-0'),
-  `F: lazy items load one at a time as the export reaches them (${lazy.ev.join(' ')})`);
+{ let loads = 0, saves = 0, maxAhead = 0; for (const e of lazy.ev) { if (e.startsWith('load:')) loads++; else saves++; maxAhead = Math.max(maxAhead, loads - saves); }
+  const order = lazy.ev.filter((e) => e.startsWith('load:')).join(',');
+  check(order === 'load:0,load:1,load:2' && maxAhead === 2 && lazy.ev.indexOf('load:1') < lazy.ev.findIndex((e) => e.startsWith('save:')),
+    `F: lazy items load as the export reaches them, the next one prefetched while the current renders — never more than one ahead (${lazy.ev.join(' ')})`); }
 check(lazy.fxCount === 3, `F: the editor's own photos are untouched by a lazy export (fxImages=${lazy.fxCount})`);
 // E: real loadRw2 with a stand-in native shim (same interface as desktop-native.js's NativeLibRawShim).
 const shimSrc = await readFile(path.join(ROOT, 'desktop/desktop-native.js'), 'utf8');

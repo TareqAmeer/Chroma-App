@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1102B';
+const BUILD='1.1102C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -29742,6 +29742,15 @@ async function _exportFXRun(opts){
       return copy;
     }finally{fxState.masks=sm;if(undo)undo();}
   });
+  // Lazy batch (Library Quick export): photo 1 is still decoding natively, so use that wait to
+  // warm the export renderer — a tiny render with photo 1's settings makes WebKit compile the
+  // export pipeline's shaders now instead of inside photo 1's render (measured 11.4 s vs ~4.5 s for
+  // the photos after it). Nothing is read back; a failure here only loses the head start.
+  if(items.length&&typeof items[0]._exportLoad==='function'){
+    try{const wc=document.createElement('canvas');wc.width=wc.height=64;const wx=wc.getContext('2d');wx.fillStyle='#808080';wx.fillRect(0,0,64,64);
+      exportRenderer.setImage(wc);exportRenderer.render(_expPs[0],64,64,{glowScale:fxGlowScale(),...fxStillQualityOpts(64,64,false),seed:0}); // fixed seed: leaves the grain RNG sequence untouched
+      exportRenderer.gl&&exportRenderer.gl.flush();wc.width=wc.height=0;}catch(e){console.warn('export warm-up',e);}
+  }
   // High-tier neural NR is shared across the whole export the same way every other FX slider
   // is (see the per-item loop's own comment below on masks/adjustOverride being the ONLY truly
   // per-photo state) — window.chromasmithRawNr is the CURRENTLY active photo's setting, and
@@ -29796,6 +29805,8 @@ async function _exportFXRun(opts){
     }else{photoListEl.style.display='none';photoListEl.innerHTML='';}
   }
   let failed=0;
+  // Lazy batch: the next photo's decode, started while this one renders/encodes (one at most).
+  let prefetch=null;
   let activityOutcome='completed';
   let exportRevealPath='';
   // Google Photos upload is on → grab/refresh the token NOW, under this click's activation
@@ -29849,8 +29860,14 @@ async function _exportFXRun(opts){
         if(typeof sourceItem._exportLoad==='function'){ // decode on demand (Library Quick export)
           setExportPhotoStatus(idx,'rendering','decoding…');
           setProg(idx,`Decoding ${idx+1}/${N}: ${it.name}…`);
-          it=exportCopy=await sourceItem._exportLoad();
+          tm.prefetched=!!(prefetch&&prefetch.idx===idx);
+          const load=tm.prefetched?prefetch.p:sourceItem._exportLoad();prefetch=null;
+          it=exportCopy=await load;
         }
+        // Start decoding the NEXT photo now, so its native decode overlaps this photo's render,
+        // encode and write. Bounded: one decoded frame ahead, never more.
+        {const nx=items[idx+1];
+          if(nx&&typeof nx._exportLoad==='function'&&!prefetch&&!fxExportCancel){const p=nx._exportLoad();p.catch(()=>{});prefetch={idx:idx+1,p};}}
         if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -30064,7 +30081,7 @@ async function _exportFXRun(opts){
           else{res.receipt=sr1[0]||{ok:false,err:'save failed'};if(res.receipt.ok){res.content=null;setExportPhotoStatus(idx,'saved',res.receipt.skipped?'already exists — skipped':undefined);}}
         }
         {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
-          expDiag(`photo ${idx+1}/${N} name=${it.name} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
+          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
@@ -30228,6 +30245,8 @@ async function _exportFXRun(opts){
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
     _expOverlay(false);
+    // A cancelled/failed batch can leave a prefetched decode behind: free it when it lands.
+    if(prefetch){prefetch.p.then(x=>{if(x&&x.img){delete x.img._sceneLinear;x.img.width=x.img.height=0;}}).catch(()=>{});prefetch=null;}
     if(capNative()&&typeof window.chromasmithShowMobileExportResult==='function')window.chromasmithShowMobileExportResult();
     fxExportCancel=false;
     if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting',outcome:activityOutcome,failedCount:failed,revealPath:exportRevealPath});
