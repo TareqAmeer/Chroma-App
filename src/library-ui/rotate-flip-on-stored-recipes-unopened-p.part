@@ -179,40 +179,88 @@
     try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
   }
   async function libExportPathsInner(paths) {
+    const clickedAt = performance.now();
     const n = paths.length;
-    // Path-backed RAW (head read only; the native decoder reads the file by path) — the same
-    // read the batch-open path uses. A full read held every selected RAW (~30 MB each) in JS
-    // memory for the whole export.
-    const files = await readPathsAsFiles(paths, { pathBackedRaw: !!window.__TAURI__ });
-    if (!files.length) return;
-    const okPaths = files.okPaths || paths;
-    await prepareBatchRawFiles(files, okPaths);
-    state.openedPath = '';
-    window.chromasmithSourcePath = null;
-    state.openedPaths = okPaths;
-    await libLoadFX(files);
-    try {
-      const firstSc = await getSidecar(okPaths[0]);
-      if (firstSc.recipe) {
-        applyUISnapshot(snapshotFromB64(firstSc.recipe));
-        if (typeof applyRawDefaults === 'function') applyRawDefaults();
+    // Show the export as started at once: the steps below (sidecars, camera peek) take a moment,
+    // and a silent gap after the click is what made people click Export again.
+    if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting', done: 0, total: n, current: 'Preparing…' });
+    // Lazy batch: nothing is decoded up front and the editor is left alone. Each photo is decoded
+    // ONCE, at export quality, only when the export reaches it (item._exportLoad, see exportFX).
+    // This used to load the whole selection into the editor first — an interactive-quality decode
+    // of every RAW (~3 s each, before the progress bar even appeared) — and then decode each one
+    // AGAIN at export quality, while every loaded photo stayed in memory.
+    const sidecars = [];
+    for (const p of paths) { try { sidecars.push(await getSidecar(p)); } catch (e) { sidecars.push({}); } }
+    const snapOf = (sc) => { try { return sc && sc.recipe ? snapshotFromB64(sc.recipe) : null; } catch (e) { console.error('restore recipe', e); return null; } };
+    const items = [], failed = [];
+    for (let i = 0; i < paths.length; i++) {
+      const p = paths[i], isRaw = RAW_EXT_RE.test(p);
+      let ext = (p.split('.').pop() || '').toLowerCase(); if (ext === 'jpeg') ext = 'jpg'; if (ext === 'tiff') ext = 'tif';
+      const stub = document.createElement('canvas'); stub.width = stub.height = 1;
+      const item = { img: stub, name: baseName(p).replace(/\.[^.]+$/, ''), ext, dpi: 240, bytes: null, _srcPath: p, geom: defGeom() };
+      const snap = snapOf(sidecars[i]);
+      if (snap) {
+        if (snap.geom !== undefined) item.geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
+        if (snap.masks) item.masks = JSON.parse(JSON.stringify(snap.masks));
+        if (snap.adjustIndependent && snap.sliders) { const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
       }
-    } catch (e) { console.error('seed shared FX for batch export', e); }
-    for (let i = 0; i < okPaths.length; i++) {
-      const sc = await getSidecar(okPaths[i]);
-      if (!sc.recipe || !fxImages[i]) continue;
-      try {
-        const snap = snapshotFromB64(sc.recipe);
-        if (snap.geom !== undefined) fxImages[i].geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
-        if (snap.masks) fxImages[i].masks = JSON.parse(JSON.stringify(snap.masks));
-        if (snap.adjustIndependent && snap.sliders) {
-          const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; });
-          fxImages[i].adjustOverride = v;
-        }
-      } catch (e) { console.error('restore recipe', e); }
+      const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p });
+      const loadPrivate = async () => {
+        const files = await readPathsAsFiles([p], { pathBackedRaw: !!window.__TAURI__ });
+        if (!files.length) throw new Error('could not read ' + baseName(p));
+        const entries = await loadFXImages(files, { privateEntries: true });
+        if (!entries || !entries[0]) throw new Error('could not decode ' + baseName(p));
+        return { ...entries[0], ...perPhoto() };
+      };
+      if (isRaw && window.__TAURI__ && typeof window.chromasmithApplyFullCleanup === 'function') {
+        let file = null;
+        try { file = (await readPathsAsFiles([p], { pathBackedRaw: true }))[0] || null; } catch (e) { console.error('read RAW head', p, e); }
+        if (!file) { failed.push(p); continue; }
+        let ident = null;
+        try { ident = await invoke('peek_raw_camera_path', { path: p }); } catch (e) { console.error('peek_raw_camera_path', p, e); }
+        item.rawFile = file; item.fileSize = file.size;
+        if (ident) item.exif = { make: ident.make || '', model: ident.model || '', lens: ident.lens || '', photoStyle: ident.photoStyle };
+        // The export-quality decode (full cleanup tier) straight into a fresh canvas — the same
+        // decode exportFX's cleanup pass ran on top of the editor's earlier one.
+        item._exportLoad = async () => {
+          const it = { ...item, img: document.createElement('canvas') }; delete it._exportLoad;
+          const r = await window.chromasmithApplyFullCleanup(it, p);
+          if (!r || !r.applied) { it.img.width = it.img.height = 0; return loadPrivate(); }
+          it._fullCleanupApplied = true;
+          return it;
+        };
+      } else {
+        item._exportLoad = loadPrivate;
+      }
+      items.push(item);
     }
-    setExportScope(n > 1 ? 'all' : 'current');
-    await exportFX();
+    if (failed.length) toast(`Could not read ${failed.length} of ${n} photo(s)`, false);
+    if (!items.length) { window.libActivityJobDone?.('export', { label: 'Exporting', outcome: 'failed', failedCount: failed.length }); return; }
+    // Shared FX come from the first photo's saved recipe on top of factory defaults — what loading
+    // the batch into the editor used to set up — and the editor's own settings are put back after.
+    // History/autosave stay locked while the editor's controls hold the batch's look, or the swap
+    // would be pushed as an edit — and written to the sidecar — of whatever photo the editor has
+    // open (same guard renderSnapshotTo uses for its temporary swap).
+    const editorSnapshot = typeof getUISnapshot === 'function' ? getUISnapshot() : null;
+    const canLock = typeof _fxHistLocked !== 'undefined', wasLocked = canLock && _fxHistLocked;
+    if (canLock) _fxHistLocked = true;
+    try {
+      try {
+        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true });
+        const anyRaw = items.some((it) => RAW_EXT_RE.test(it._srcPath));
+        if (anyRaw && typeof applyRawDefaults === 'function') applyRawDefaults();
+        const firstSnap = snapOf(sidecars[paths.indexOf(items[0]._srcPath)]);
+        if (firstSnap) {
+          await applyUISnapshot(firstSnap); // resolves once the look's LUT has loaded
+          if (typeof applyRawDefaults === 'function') applyRawDefaults();
+        }
+      } catch (e) { console.error('seed shared FX for batch export', e); }
+      await exportFX({ items, clickedAt });
+    } finally {
+      if (editorSnapshot) { try { await applyUISnapshot(editorSnapshot); } catch (e) { console.error('restore editor after export', e); } }
+      if (typeof _fxHistPushTimer !== 'undefined' && _fxHistPushTimer) { clearTimeout(_fxHistPushTimer); _fxHistPushTimer = null; }
+      if (canLock) _fxHistLocked = wasLocked;
+    }
   }
   // Same target-resolution order the grid's own kbTargets() (further down) uses — duplicated
   // rather than shared because it's needed before kbTargets' own `const` declaration runs

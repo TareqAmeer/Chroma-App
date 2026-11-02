@@ -7,6 +7,9 @@
 //     them all at the end — on the desktop shell each file can be written as soon as it renders.
 //  C. Quick export read every selected RAW fully into JS memory (read_file_bytes) instead of the
 //     path-backed head read the batch-open path already uses.
+//  F. (real-app timing, 8 RAWs) Quick export loaded the whole selection into the editor first —
+//     an interactive decode of every RAW (~35 s before any progress) — then decoded each AGAIN
+//     at export quality. It now hands exportFX lazy items that decode once, when reached.
 //  D. libExportPaths had no in-flight guard: a second click (the app was unresponsive, so users
 //     click again) re-read and reloaded the whole batch into the editor under the running export.
 //  E. (the one that actually OOMed a 23:22 re-test) every RAW loaded into the editor kept its native
@@ -34,27 +37,40 @@ const check = (ok, msg) => { console.log((ok ? 'PASS ' : 'FAIL ') + msg); if (!o
   // Start at the in-flight guard declared just above libExportPaths when present (post-fix).
   const g = src.lastIndexOf('  let libExportBusy', a);
   const start = g > 0 && a - g < 2000 ? g : a;
-  const reads = [], exports = [], toasts = [];
+  const reads = [], exports = [], toasts = [], loads = [], cleanups = [];
   const releases = [];
+  const winMock = { __TAURI__: {}, chromasmithApplyFullCleanup: async (it, p) => { cleanups.push(p); it.img.width = 40; it.img.height = 30; return { applied: true }; } };
   const ctx = vm.createContext({
-    window: { __TAURI__: {} }, document: { body: { classList: { contains: () => false } } },
-    state: {}, console,
+    window: winMock, console, performance,
+    document: { body: { classList: { contains: () => false } }, createElement: () => ({ width: 300, height: 150 }) },
+    state: {}, RAW_EXT_RE: /\.(rw2|nef|dng)$/i, ADJ_FIELDS: [], baseName: (p) => p.split('/').pop(), defGeom: () => ({}),
     toast: (m) => toasts.push(m),
-    readPathsAsFiles: async (paths, opts) => { reads.push(opts || null); const f = paths.map((p) => ({ name: p })); f.okPaths = paths; return f; },
+    invoke: async (cmd) => { if (cmd === 'peek_raw_camera_path') return { make: 'Panasonic', model: 'DC-S9', lens: '' }; throw Error('unexpected ' + cmd); },
+    readPathsAsFiles: async (paths, opts) => { reads.push(opts || null); const f = paths.map((p) => ({ name: p, size: 1, __csSourcePath: p })); f.okPaths = paths; return f; },
     prepareBatchRawFiles: async () => {},
-    libLoadFX: async () => {},
-    getSidecar: async () => ({}),
+    libLoadFX: async () => { loads.push('editor'); },
+    loadFXImages: async () => { loads.push('private'); return [{ img: { width: 4, height: 4 } }]; },
+    getSidecar: async () => ({}), snapshotFromB64: () => null,
+    getUISnapshot: () => ({}), applyUISnapshot: async () => {}, applyRawDefaults: () => {},
     fxImages: [],
     setExportScope: () => {},
-    exportFX: () => { exports.push(1); return new Promise((r) => { releases.push(r); }); },
+    exportFX: (opts) => { exports.push(opts); return new Promise((r) => { releases.push(r); }); },
   });
   vm.runInContext(src.slice(start, b) + '\nglobalThis.libExportPaths = libExportPaths;', ctx);
   const p1 = ctx.libExportPaths(['/x/A.RW2', '/x/B.RW2']);
   await new Promise((r) => setTimeout(r, 10));
   const p2 = ctx.libExportPaths(['/x/A.RW2', '/x/B.RW2']); // the "double click"
   await new Promise((r) => setTimeout(r, 10));
-  check(!!(reads[0] && reads[0].pathBackedRaw), `C: Quick export reads RAWs path-backed (got options ${JSON.stringify(reads[0])})`);
-  check(reads.length === 1 && exports.length === 1, `D: second click during a running export does not re-read/reload the batch (reads=${reads.length}, exports=${exports.length})`);
+  check(reads.length > 0 && reads.every((o) => o && o.pathBackedRaw), `C: Quick export reads RAWs path-backed (got options ${JSON.stringify(reads)})`);
+  check(exports.length === 1 && reads.length === 2, `D: second click during a running export does not re-read/reload the batch (reads=${reads.length}, exports=${exports.length})`);
+  const items = exports[0] && exports[0].items;
+  check(!loads.length && !cleanups.length && Array.isArray(items) && items.length === 2 && items.every((it) => typeof it._exportLoad === 'function' && it._srcPath),
+    `F: Quick export decodes nothing up front and leaves the editor alone — every photo is a lazy export item (editor/private loads=${JSON.stringify(loads)}, decodes=${cleanups.length}, items=${items && items.length})`);
+  if (items) {
+    const first = await items[0]._exportLoad();
+    check(cleanups.length === 1 && cleanups[0] === '/x/A.RW2' && first._fullCleanupApplied && first.img.width === 40 && first.exif && first.exif.make === 'Panasonic' && first._srcPath === '/x/A.RW2',
+      `F: a lazy RAW decodes once, at export quality, with its camera identity, when the export reaches it (${JSON.stringify({ cleanups, w: first.img.width, exif: first.exif })})`);
+  }
   releases.forEach((r) => r());
   await Promise.all([p1, p2]);
 }
@@ -98,6 +114,23 @@ const out = await pg.evaluate(async (b64) => {
   const after = fxImages.map((it) => { const im = it.img; return { w: im.naturalWidth || im.width, h: im.naturalHeight || im.height, hdr: !!im._sceneLinear }; });
   return { before, after, events, widths };
 }, png);
+// F (browser): exportFX({items}) with lazy loaders — each photo loads only when reached, after the
+// previous one was written, and renders the same pixels as the eager (editor-loaded) export above.
+const lazy = await pg.evaluate(async (b64) => {
+  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const ev = [], hashes = [];
+  const hash = async (u) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', u))).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const items = [0, 1, 2].map((i) => ({ img: Object.assign(document.createElement('canvas'), { width: 1, height: 1 }), name: `L${i}`, ext: 'png', dpi: 240, bytes: null, _srcPath: `/lib/L${i}.png`, geom: defGeom(),
+    _exportLoad: async () => { ev.push('load:' + i); const e = await loadFXImages([new File([bin], `L${i}.png`, { type: 'image/png' })], { privateEntries: true }); return { ...e[0], _srcPath: `/lib/L${i}.png`, geom: defGeom() }; } }));
+  window.saveFilesNative = async (rs) => { for (const r of rs) { ev.push('save:' + r.fname); hashes.push(await hash(r.content)); } return rs.map((r) => ({ ok: true, path: '/out/' + r.fname })); };
+  window.chromasmithApplyFullCleanup = undefined;
+  await exportFX({ items });
+  return { ev, hashes, fxCount: fxImages.length };
+}, png);
+console.log('lazy events:', lazy.ev.join(' | '));
+check(lazy.ev.join(',') === 'load:0,save:L0_v1-0.png,load:1,save:L1_v1-0.png,load:2,save:L2_v1-0.png'.replace(/v1-0/g, (lazy.ev[1] || '').match(/v\d+-\d+/)?.[0] || 'v1-0'),
+  `F: lazy items load one at a time as the export reaches them (${lazy.ev.join(' ')})`);
+check(lazy.fxCount === 3, `F: the editor's own photos are untouched by a lazy export (fxImages=${lazy.fxCount})`);
 // E: real loadRw2 with a stand-in native shim (same interface as desktop-native.js's NativeLibRawShim).
 const shimSrc = await readFile(path.join(ROOT, 'desktop/desktop-native.js'), 'utf8');
 const rel = /\n\s*releasePixels\(\)\s*\{([^}]*)\}/.exec(shimSrc);

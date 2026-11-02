@@ -173,12 +173,18 @@ async function exportFX(...a){
       try{P.KeepAwake&&P.KeepAwake.allowSleep();}catch(e){}
       void fxNotifyExportFinished(P,t0);}}
 }
-async function _exportFXRun(){
+// opts.items (the Library's Quick export): photos that are NOT open in the editor. Each may carry
+// `_srcPath` (its file, in place of the editor's opened-paths lookup) and `_exportLoad()`, which
+// decodes it only when the export reaches it — so a batch never pre-decodes every photo up front.
+async function _exportFXRun(opts){
+  const optItems=opts&&Array.isArray(opts.items)?opts.items:null;
+  if(!optItems){
   if(!fxImages.length){log('No image loaded','warn');return}
   await fxEnsureFullQuality(); // never export the display-tier stand-in
   if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
+  }
   const scope=fxImages.length>1?fxExportScope:'all';
-  const items=window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
+  const items=optItems||window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
   // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
   // photos and videos in one batch isn't a designed use case (Library integration explicitly
   // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
@@ -285,6 +291,12 @@ async function _exportFXRun(){
     // Google Photos-sync mirror (Phase 3) record exactly which on-disk photo each successful
     // upload came from, instead of guessing from the output filename.
     const libPaths=typeof window.chromasmithGetOpenedPaths==='function'?window.chromasmithGetOpenedPaths():[];
+    const srcPathOf=x=>x&&x._srcPath||libPaths[fxImages.indexOf(x)];
+    // Per-photo phase timings into the app's own log file (EXPORT_DIAG lines) so a real-app batch
+    // can be measured without devtools. No-op outside the desktop shell.
+    const expDiag=m=>{try{window.__TAURI__?.log?.info?.('EXPORT_DIAG '+m);}catch(_){}};
+    const expT0=performance.now(),expClick=opts&&opts.clickedAt||expT0;
+    expDiag(`start n=${N} fromClickMs=${Math.round(expT0-expClick)} lazy=${items.some(x=>typeof x._exportLoad==='function')}`);
     const seenNames=new Map();
     // Save-as-you-go (see the end of the per-item loop): desktop shell, multi-photo, and nothing
     // downstream that needs every file's bytes at the end (Lightroom write-back, Google Photos).
@@ -298,6 +310,7 @@ async function _exportFXRun(){
     for(let idx=0;idx<items.length;idx++){
       if(fxExportCancel){activityOutcome='cancelled';log(`Export cancelled after ${idx} of ${N} image(s)`,'warn');break;}
       const sourceItem=items[idx];let it=sourceItem;let decodedJpeg=null,decodedGeometry=null,exportCopy=null;
+      const tm={start:performance.now()};
       // Batch only: the export-time RAW re-decode (full cleanup / High NR) writes full-res pixels into
       // it.img. Done in place on the editor's own item, every photo in the batch kept those pixels
       // (+ the HDR float stash) until the editor was reloaded — ~0.7 GB per RAW, which ran WebKit's
@@ -307,6 +320,11 @@ async function _exportFXRun(){
       const useExportCopy=()=>{if(N>1&&it===sourceItem){exportCopy=it={...sourceItem,img:document.createElement('canvas')};}};
       const dropExportCopy=()=>{if(exportCopy){const c=exportCopy.img;delete c._sceneLinear;delete c._sceneLinearPresent;c.width=c.height=0;exportCopy=null;}};
       try{
+        if(typeof sourceItem._exportLoad==='function'){ // decode on demand (Library Quick export)
+          setExportPhotoStatus(idx,'rendering','decoding…');
+          setProg(idx,`Decoding ${idx+1}/${N}: ${it.name}…`);
+          it=exportCopy=await sourceItem._exportLoad();
+        }
         if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -320,12 +338,12 @@ async function _exportFXRun(){
         // with what is on the canvas rather than losing the export.
         const filmRecipe=_expPs[idx]._nativeFilmRecipe;
         it=await fnNativeExportItem(it,filmRecipe);
-        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(libPaths[fxImages.indexOf(sourceItem)]))&&(it.rawFile||libPaths[fxImages.indexOf(sourceItem)])&&typeof window.chromasmithApplyFullCleanup==='function'){
+        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(srcPathOf(sourceItem)))&&(it.rawFile||srcPathOf(sourceItem))&&typeof window.chromasmithApplyFullCleanup==='function'){
           setExportPhotoStatus(idx,'rendering','cleaning…');
           setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
           const pre=it;useExportCopy();
           try{
-            const r=await window.chromasmithApplyFullCleanup(it,libPaths[fxImages.indexOf(sourceItem)]);
+            const r=await window.chromasmithApplyFullCleanup(it,srcPathOf(sourceItem));
             if(r&&r.applied)it._fullCleanupApplied=true;
             else if(it!==pre){dropExportCopy();it=pre;}
           }catch(e){
@@ -371,6 +389,7 @@ async function _exportFXRun(){
         await new Promise(r=>requestAnimationFrame(r)); // let the log paint before the heavy GL work
         // Per-tile progress: a big tiled photo used to freeze the bar for its whole render
         // (setProg was image-granular only) — feed the tile fraction in as a fractional image.
+        tm.decoded=performance.now();
         let proc;
         try{proc=await processToCanvas(P,src,iw,ih,
           (t,tot)=>setProg(idx+t/tot,`Rendering ${idx+1}/${N}: ${it.name} — tile ${t}/${tot}…`),exportRenderer);}
@@ -450,6 +469,7 @@ async function _exportFXRun(){
           // q=1.0 switches the encoder from 4:2:0 to 4:4:4 chroma (≈3× file size); iOS then
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
+          tm.rendered=performance.now();
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
           out=new Uint8Array(await blob.arrayBuffer());
@@ -461,7 +481,7 @@ async function _exportFXRun(){
             // in the exported file says so and export_history.json's own recipe record never
             // made it INTO the file itself.
             const {look,print}=exportRecipeNames;
-            const metadataPath=libPaths[fxImages.indexOf(sourceItem)];
+            const metadataPath=srcPathOf(sourceItem);
             const sidecarXml=metadataPath&&window.__TAURI__?.core?await window.__TAURI__.core.invoke('read_export_sidecar',{path:metadataPath}):null;
             out=injectRecipeXmp(out,outExt,look,print,sidecarXml,document.getElementById('tg-exp-gps')?.checked!==false);
           }
@@ -489,8 +509,7 @@ async function _exportFXRun(){
         // srcPath: the item's on-disk Library source path (undefined outside the native
         // shell, or if libPaths and fxImages have desynced) — captured HERE per-item rather
         // than inferred from the output filename afterward, per the fxIdx lookup above.
-        const fxIdx=fxImages.indexOf(sourceItem); // sourceItem: `it` may be an export-only copy
-        const srcPath=fxIdx>=0?libPaths[fxIdx]:undefined;
+        const srcPath=srcPathOf(sourceItem); // sourceItem: `it` may be an export-only copy
         // Stashed for fxSaveGainMapHeic's RAW-headroom path (_hdrHeadroomPngFor needs the
         // FINAL export size to resize the headroom map to, after borders/matte/resample have
         // already changed it from the graded frame's own dimensions).
@@ -513,10 +532,13 @@ async function _exportFXRun(){
         // keeps its bytes for the retry list; Phase 2 reports it and saves anything not yet written.
         if(streamSave){
           setExportPhotoStatus(idx,'saving');
+          tm.encoded=performance.now();
           const sr1=await saveFilesNative([res]);
           if(!sr1)streamSave=false; // older native shell: Phase 2 saves the rest the old way
           else{res.receipt=sr1[0]||{ok:false,err:'save failed'};if(res.receipt.ok){res.content=null;setExportPhotoStatus(idx,'saved',res.receipt.skipped?'already exists — skipped':undefined);}}
         }
+        {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
+          expDiag(`photo ${idx+1}/${N} name=${it.name} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
@@ -528,6 +550,7 @@ async function _exportFXRun(){
       }
     }
     // (Filename dedupe now happens per item as each render is pushed — see `seenNames` above.)
+    expDiag(`done rendered=${results.length}/${N} failed=${failed} total_ms=${Math.round(performance.now()-expT0)} sinceClick_ms=${Math.round(performance.now()-expClick)}`);
     // ── Phase 2: save ──
     // Lightroom "Edit In" handoff (see library-ui.js's Save-to-Lightroom wiring): write each
     // render straight back over the file(s) Lightroom handed us instead of the normal
