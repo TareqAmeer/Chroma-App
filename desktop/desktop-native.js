@@ -715,13 +715,21 @@
   // body and the finished JPEG (same header layout WebKit's encoder writes) comes back. WebKit's
   // canvas.toBlob spent 2-3 s per 26MP photo on the main thread; this is ~0.6 s off it plus the
   // pixel read. Returns null when the shell doesn't have the command (caller falls back to toBlob).
+  // Opt-in (main.rs native_jpeg_flag / CS_NATIVE_JPEG=1): returns null when off, so the caller
+  // uses toBlob. window.__csNativeJpegTimes carries the last call's getImageData / round-trip ms.
+  let nativeJpegOn = null;
   window.chromasmithEncodeJpegNative = async function (canvas, quality) {
-    const w = canvas.width, h = canvas.height;
+    if (nativeJpegOn === null) { try { nativeJpegOn = !!(await invoke('native_jpeg_flag')); } catch (e) { nativeJpegOn = false; } }
+    if (!nativeJpegOn) return null;
+    const w = canvas.width, h = canvas.height, t0 = performance.now();
     const px = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+    const t1 = performance.now();
+    window.__csNativeJpegTimes = { getImageData: t1 - t0 };
     try {
       const r = await invoke('encode_jpeg_rgba', new Uint8Array(px.buffer, px.byteOffset, px.byteLength),
         { headers: { 'x-width': String(w), 'x-height': String(h), 'x-quality': String(Math.max(1, Math.min(100, Math.round((quality == null ? 0.92 : quality) * 100)))) } });
       const out = r instanceof ArrayBuffer ? new Uint8Array(r) : (ArrayBuffer.isView(r) ? new Uint8Array(r.buffer, r.byteOffset, r.byteLength) : null);
+      window.__csNativeJpegTimes.roundTrip = performance.now() - t1; // IPC both ways + the Rust encode (logged separately as native_encode)
       return out && out.length > 4 && out[0] === 0xFF && out[1] === 0xD8 ? out : null;
     } catch (e) {
       if (/encode_jpeg_rgba/.test(String(e && e.message || e)) && /not found|unknown|Command/i.test(String(e && e.message || e))) return null;

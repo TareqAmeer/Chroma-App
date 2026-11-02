@@ -89,22 +89,22 @@
   {
    "file": "normal-photo-export.part",
    "firstLine": 2977,
-   "lines": 180
+   "lines": 192
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 3157,
+   "firstLine": 3169,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 3264,
+   "firstLine": 3276,
    "lines": 117
   },
   {
    "file": "app-entry-point-builder-plugins-setup-ho.part",
-   "firstLine": 3381,
-   "lines": 1331
+   "firstLine": 3393,
+   "lines": 1332
   }
  ]
 }

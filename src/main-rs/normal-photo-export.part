@@ -80,7 +80,19 @@ fn encode_jpeg_rgba(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Resp
         tauri::ipc::InvokeBody::Raw(bytes) => bytes,
         _ => return Err("expected raw request body".into()),
     };
-    encode_jpeg_rgba_bytes(rgba, w, h, quality).map(tauri::ipc::Response::new)
+    let t = std::time::Instant::now();
+    let out = encode_jpeg_rgba_bytes(rgba, w, h, quality)?;
+    log::info!("EXPORT_DIAG native_encode {w}x{h} q{quality} encode_ms={} in_mb={} out_mb={}", t.elapsed().as_millis(), rgba.len() / 1_000_000, out.len() / 1_000_000);
+    Ok(tauri::ipc::Response::new(out))
+}
+
+/// Native JPEG export encode is opt-in (CS_NATIVE_JPEG=1 at launch, e.g. `open -n --env
+/// CS_NATIVE_JPEG=1 Chromasmith.app`): measured end to end in the real app it was slower than
+/// WebKit's toBlob (2.3-4.1 s vs 2.1-2.9 s per 26MP photo) once the canvas read and the IPC
+/// round trip are counted, so toBlob stays the default until that changes.
+#[tauri::command]
+fn native_jpeg_flag() -> bool {
+    std::env::var("CS_NATIVE_JPEG").as_deref() == Ok("1")
 }
 
 fn encode_jpeg_rgba_bytes(rgba: &[u8], w: u32, h: u32, quality: u8) -> Result<Vec<u8>, String> {

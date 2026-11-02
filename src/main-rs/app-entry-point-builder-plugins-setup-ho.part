@@ -431,6 +431,7 @@ fn main() {
             save_to_lr_downloads,
             save_export_file_raw,
             encode_jpeg_rgba,
+            native_jpeg_flag,
             stream_open,
             stream_write,
             stream_close,

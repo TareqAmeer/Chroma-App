@@ -492,14 +492,13 @@ async function _exportFXRun(opts){
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
           tm.rendered=performance.now();
-          // Desktop JPEG: encode in Rust (window.chromasmithEncodeJpegNative) — off the main thread and
-          // ~4x faster than WebKit's toBlob; any failure falls back to the canvas encoder below.
+          // Desktop JPEG: optional Rust encode (window.chromasmithEncodeJpegNative, opt-in via CS_NATIVE_JPEG=1 —
+          // slower than toBlob end to end in the real app); null/failure falls back to the canvas encoder below.
           out=null;
           if(mime==='image/jpeg'&&typeof window.chromasmithEncodeJpegNative==='function'){
-            try{out=await window.chromasmithEncodeJpegNative(ec,q);tm.native=1;}catch(e){out=null;log(`Native JPEG encode failed for ${it.name} — using the canvas encoder: ${(e&&e.message)||e}`,'warn');}
+            try{window.__csNativeJpegTimes=null;out=await window.chromasmithEncodeJpegNative(ec,q);tm.native=out?1:0;tm.nativeT=window.__csNativeJpegTimes;}catch(e){out=null;log(`Native JPEG encode failed for ${it.name} — using the canvas encoder: ${(e&&e.message)||e}`,'warn');}
           }
           if(!out){
-          tm.native=0;
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
           out=new Uint8Array(await blob.arrayBuffer());
@@ -572,7 +571,7 @@ async function _exportFXRun(opts){
         {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
           const sub=tm.sub?Object.entries(tm.sub).map(([k,v])=>k+'='+Math.round(v)).join(','):'';
           expDiag(`photo ${idx+1}/${N} name=${it.name} render_sub=[geom=${d('geom0','geom1')},pre=${d('geom1','decoded')},p2c=${d('decoded','p2c')}{${sub}},compose=${d('p2c','compose')},resample=${d('compose','resampled')},post=${d('resampled','rendered')}]`);
-          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (${tm.native?'native':'toBlob'}=${d('rendered','blob')},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
+          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (${tm.native?'native':'toBlob'}=${d('rendered','blob')}${tm.nativeT?`[getImageData=${Math.round(tm.nativeT.getImageData||0)},roundTrip=${Math.round(tm.nativeT.roundTrip||0)}]`:''},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
