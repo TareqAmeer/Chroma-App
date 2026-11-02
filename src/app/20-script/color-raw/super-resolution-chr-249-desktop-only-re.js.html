@@ -42,7 +42,9 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     renderer.setImage(src);
     fxSetCapturedExportDepth(renderer,P);
     renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});
-    const{px,w,h}=renderer.getPixels();
+    // WebKit (the Mac app): fence-polled readback so the UI stays live while the GPU finishes. Chromium
+    // keeps the plain read — its ANGLE pixel-pack path measured ~20% slower per photo there.
+    const{px,w,h}=typeof renderer.getPixelsAsync==='function'&&/Apple/.test(navigator.vendor||'')?await renderer.getPixelsAsync():renderer.getPixels();
     const c=document.createElement('canvas');c.width=w;c.height=h;
     // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
     c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);

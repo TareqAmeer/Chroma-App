@@ -1157,6 +1157,31 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     for(let y=0;y<H>>1;y++){const y2=H-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
     return{px,w:W,h:H};
   }
+  // Same pixels as getPixels(), but the main thread doesn't sit inside readPixels while the GPU
+  // finishes a full-resolution export render (2-3 s for 24MP on this Mac — the export's longest
+  // "not responding" stretch): read into a pixel-pack buffer behind a fence, poll the fence from
+  // timers, then copy out. Falls back to the synchronous read where fences aren't available.
+  async getPixelsAsync(){const gl=this.gl;
+    if(typeof gl.fenceSync!=='function'||typeof gl.getBufferSubData!=='function')return this.getPixels();
+    const W=this.cv.width,H=this.cv.height;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    const pbo=gl.createBuffer();gl.bindBuffer(gl.PIXEL_PACK_BUFFER,pbo);gl.bufferData(gl.PIXEL_PACK_BUFFER,W*H*4,gl.STREAM_READ);
+    let sync=null;
+    try{
+      gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,0);
+      sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+      for(;;){const s=gl.clientWaitSync(sync,0,0);
+        if(s===gl.ALREADY_SIGNALED||s===gl.CONDITION_SATISFIED)break;
+        if(s===gl.WAIT_FAILED||gl.isContextLost())throw new Error('GPU readback failed');
+        await new Promise(r=>setTimeout(r,8));}
+      const px=new Uint8Array(W*H*4);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER,pbo);gl.getBufferSubData(gl.PIXEL_PACK_BUFFER,0,px);
+      const row=W*4,tmp=new Uint8Array(row);
+      for(let y=0;y<H>>1;y++){const y2=H-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
+      return{px,w:W,h:H};
+    }finally{if(sync)gl.deleteSync(sync);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);gl.deleteBuffer(pbo);}
+  }
   // ── Offscreen targets + tile presentation (the Full-res 1:1 tile cache, see fxTiles*) ──
   // RGBA8 texture+framebuffer; NEAREST so a blit or a sample never resamples.
   newTarget(w,h){const gl=this.gl,t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);

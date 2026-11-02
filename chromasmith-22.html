@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1101G';
+const BUILD='1.1102A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11019,6 +11019,31 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const row=W*4,tmp=new Uint8Array(row);
     for(let y=0;y<H>>1;y++){const y2=H-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
     return{px,w:W,h:H};
+  }
+  // Same pixels as getPixels(), but the main thread doesn't sit inside readPixels while the GPU
+  // finishes a full-resolution export render (2-3 s for 24MP on this Mac — the export's longest
+  // "not responding" stretch): read into a pixel-pack buffer behind a fence, poll the fence from
+  // timers, then copy out. Falls back to the synchronous read where fences aren't available.
+  async getPixelsAsync(){const gl=this.gl;
+    if(typeof gl.fenceSync!=='function'||typeof gl.getBufferSubData!=='function')return this.getPixels();
+    const W=this.cv.width,H=this.cv.height;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    const pbo=gl.createBuffer();gl.bindBuffer(gl.PIXEL_PACK_BUFFER,pbo);gl.bufferData(gl.PIXEL_PACK_BUFFER,W*H*4,gl.STREAM_READ);
+    let sync=null;
+    try{
+      gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,0);
+      sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+      for(;;){const s=gl.clientWaitSync(sync,0,0);
+        if(s===gl.ALREADY_SIGNALED||s===gl.CONDITION_SATISFIED)break;
+        if(s===gl.WAIT_FAILED||gl.isContextLost())throw new Error('GPU readback failed');
+        await new Promise(r=>setTimeout(r,8));}
+      const px=new Uint8Array(W*H*4);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER,pbo);gl.getBufferSubData(gl.PIXEL_PACK_BUFFER,0,px);
+      const row=W*4,tmp=new Uint8Array(row);
+      for(let y=0;y<H>>1;y++){const y2=H-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
+      return{px,w:W,h:H};
+    }finally{if(sync)gl.deleteSync(sync);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);gl.deleteBuffer(pbo);}
   }
   // ── Offscreen targets + tile presentation (the Full-res 1:1 tile cache, see fxTiles*) ──
   // RGBA8 texture+framebuffer; NEAREST so a blit or a sample never resamples.
@@ -29285,7 +29310,9 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     renderer.setImage(src);
     fxSetCapturedExportDepth(renderer,P);
     renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});
-    const{px,w,h}=renderer.getPixels();
+    // WebKit (the Mac app): fence-polled readback so the UI stays live while the GPU finishes. Chromium
+    // keeps the plain read — its ANGLE pixel-pack path measured ~20% slower per photo there.
+    const{px,w,h}=typeof renderer.getPixelsAsync==='function'&&/Apple/.test(navigator.vendor||'')?await renderer.getPixelsAsync():renderer.getPixels();
     const c=document.createElement('canvas');c.width=w;c.height=h;
     // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
     c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
