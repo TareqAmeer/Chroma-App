@@ -643,7 +643,9 @@
   // (geometry, masks and history on the item are untouched — only pixels change), so the export
   // renders the complete pipeline. `sourcePath` is used when the item carries no rawFile (a photo
   // installed from the Library's decode cache).
-  window.chromasmithApplyFullCleanup = async function (it, sourcePath) {
+  // opts.background: a batch export's prefetch of the NEXT photo — decoded on the native low-priority
+  // pool (main.rs on_prefetch_pool) so it doesn't slow the photo currently rendering.
+  window.chromasmithApplyFullCleanup = async function (it, sourcePath, opts) {
     if (!it || !it.img) return { applied: false, reason: 'no item' };
     let bytes, byPath = null;
     // Prefer letting Rust read the file (no 30MB IPC round trip) whenever there's a real path.
@@ -667,6 +669,7 @@
     req.filmSource = !!req.filmNegative;
     if (mode === 'lut') { req.lutKey = lutKey; req.wantExt = !!window.chromasmithHdrPreview; }
     if (byPath) req.sourcePath = byPath;
+    if (opts && opts.background) req.background = true;
     const buf = await framedInvoke('decode_raw_v2', req, bytes);
     const head = new Uint32Array(buf, 0, 6);
     const w = head[0], h = head[1];

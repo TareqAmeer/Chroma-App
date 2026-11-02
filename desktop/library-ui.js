@@ -8663,9 +8663,9 @@
         if (ident) item.exif = { make: ident.make || '', model: ident.model || '', lens: ident.lens || '', photoStyle: ident.photoStyle };
         // The export-quality decode (full cleanup tier) straight into a fresh canvas — the same
         // decode exportFX's cleanup pass ran on top of the editor's earlier one.
-        item._exportLoad = async () => {
+        item._exportLoad = async (opts) => {
           const it = { ...item, img: document.createElement('canvas') }; delete it._exportLoad;
-          const r = await window.chromasmithApplyFullCleanup(it, p);
+          const r = await window.chromasmithApplyFullCleanup(it, p, opts);
           if (!r || !r.applied) { it.img.width = it.img.height = 0; return loadPrivate(); }
           it._fullCleanupApplied = true;
           return it;

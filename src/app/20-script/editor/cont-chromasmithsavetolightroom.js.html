@@ -341,7 +341,7 @@ async function _exportFXRun(opts){
         // Start decoding the NEXT photo now, so its native decode overlaps this photo's render,
         // encode and write. Bounded: one decoded frame ahead, never more.
         {const nx=items[idx+1];
-          if(nx&&typeof nx._exportLoad==='function'&&!prefetch&&!fxExportCancel){const p=nx._exportLoad();p.catch(()=>{});prefetch={idx:idx+1,p};}}
+          if(nx&&typeof nx._exportLoad==='function'&&!prefetch&&!fxExportCancel){const p=nx._exportLoad({background:true});p.catch(()=>{});prefetch={idx:idx+1,p};}}
         if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -397,7 +397,9 @@ async function _exportFXRun(opts){
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
         const P=_expPs[idx];
         if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
-        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);   // apply this image's rotate/flip/straighten/crop first
+        tm.geom0=performance.now();
+        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);
+        tm.geom1=performance.now();   // apply this image's rotate/flip/straighten/crop first
         if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
         setExportPhotoStatus(idx,'rendering');
@@ -421,6 +423,7 @@ async function _exportFXRun(opts){
             log(`Super Resolution skipped for ${it.name}: ${e&&e.message||e} — exporting at normal size`,'warn');
           }
         }
+        tm.p2c=performance.now();tm.sub=exportRenderer._p2cTimes||null;exportRenderer._p2cTimes=null;
         const w=proc.width,h=proc.height;
         const{b1t,b2t}=borderLayerSizes(P,w);
         await filmEdgeReady(P);   // never export before the film strips have decoded
@@ -449,7 +452,9 @@ async function _exportFXRun(opts){
         }
         // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
         // means the final file's long edge and the sharpening is judged at the real output size.
+        tm.compose=performance.now();
         ec=await exportResample(ec);
+        tm.resampled=performance.now();
         // Watermark is drawn IN PLACE on ec, after resize (see applyWatermark), and deliberately
         // skipped on a Lightroom Edit-In write-back — that path overwrites the ORIGINAL file the
         // user opened from Lightroom, and silently burning a watermark into it would be a real
@@ -489,7 +494,7 @@ async function _exportFXRun(opts){
           tm.rendered=performance.now();
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
-          out=new Uint8Array(await blob.arrayBuffer());
+          out=new Uint8Array(await blob.arrayBuffer());tm.blob=performance.now();
           if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
             if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
             out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
@@ -555,7 +560,9 @@ async function _exportFXRun(opts){
           else{res.receipt=sr1[0]||{ok:false,err:'save failed'};if(res.receipt.ok){res.content=null;setExportPhotoStatus(idx,'saved',res.receipt.skipped?'already exists — skipped':undefined);}}
         }
         {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
-          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
+          const sub=tm.sub?Object.entries(tm.sub).map(([k,v])=>k+'='+Math.round(v)).join(','):'';
+          expDiag(`photo ${idx+1}/${N} name=${it.name} render_sub=[geom=${d('geom0','geom1')},pre=${d('geom1','decoded')},p2c=${d('decoded','p2c')}{${sub}},compose=${d('p2c','compose')},resample=${d('compose','resampled')},post=${d('resampled','rendered')}]`);
+          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (toBlob=${d('rendered','blob')},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));

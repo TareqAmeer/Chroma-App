@@ -200,6 +200,8 @@ static RAW_DECODE_CACHE: Mutex<Option<RawDecodeCacheEntry>> = Mutex::new(None);
 static INTERACTIVE_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
 
 fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    // Already on the export-prefetch pool: stay there (its par_iters use its own 2 workers).
+    if std::thread::current().name().is_some_and(|n| n.starts_with("cs-export-prefetch")) { return f(); }
     let pool = INTERACTIVE_POOL.get_or_init(|| {
         if std::env::var("CS_INTERACTIVE_POOL").as_deref() == Ok("0") { return None; }
         let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
@@ -211,6 +213,31 @@ fn on_interactive_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
                 unsafe {
                     extern "C" { fn pthread_set_qos_class_self_np(q: u32, p: i32) -> i32; }
                     let _ = pthread_set_qos_class_self_np(0x19, 0); // QOS_CLASS_USER_INITIATED
+                }
+            })
+            .build()
+            .ok()
+    });
+    match pool { Some(p) => p.install(f), None => f() }
+}
+
+/// Batch-export prefetch (decode_raw_v2 with `background: true`): the NEXT photo's decode runs
+/// while the current photo renders/encodes in the WebView. On the all-cores user-initiated pool
+/// it slowed that render/encode by about its own cost (real-app EXPORT_DIAG, 4-core i5), so it
+/// gets two workers at QoS utility and only uses cycles the export leaves spare.
+static PREFETCH_POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+
+fn on_prefetch_pool<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    let pool = PREFETCH_POOL.get_or_init(|| {
+        let threads = std::env::var("CS_PREFETCH_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(2usize).max(1);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .thread_name(|i| format!("cs-export-prefetch-{i}"))
+            .start_handler(|_| {
+                #[cfg(target_os = "macos")]
+                unsafe {
+                    extern "C" { fn pthread_set_qos_class_self_np(q: u32, p: i32) -> i32; }
+                    let _ = pthread_set_qos_class_self_np(0x11, 0); // QOS_CLASS_UTILITY
                 }
             })
             .build()
@@ -1197,6 +1224,9 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     // A half-first open already started this exact full decode (see SPEC_FULL): wait for it.
     if json["half"].as_bool() != Some(true) && payload.is_empty() {
         if let Some(res) = take_speculative_full(json) { return res.map(tauri::ipc::Response::new); }
+    }
+    if json["background"].as_bool() == Some(true) {
+        return on_prefetch_pool(|| decode_raw_v2_vec(json, payload, None)).map(tauri::ipc::Response::new);
     }
     decode_raw_v2_vec(json, payload, None).map(tauri::ipc::Response::new)
 }

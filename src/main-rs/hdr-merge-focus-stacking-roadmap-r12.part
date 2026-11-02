@@ -197,6 +197,9 @@ fn decode_raw_v2_payload(json: &serde_json::Value, payload: &[u8]) -> Result<tau
     if json["half"].as_bool() != Some(true) && payload.is_empty() {
         if let Some(res) = take_speculative_full(json) { return res.map(tauri::ipc::Response::new); }
     }
+    if json["background"].as_bool() == Some(true) {
+        return on_prefetch_pool(|| decode_raw_v2_vec(json, payload, None)).map(tauri::ipc::Response::new);
+    }
     decode_raw_v2_vec(json, payload, None).map(tauri::ipc::Response::new)
 }
 

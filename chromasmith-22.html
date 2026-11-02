@@ -7578,7 +7578,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1102C';
+const BUILD='1.1102D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11034,14 +11034,18 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,0);
       sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);gl.flush();
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);
+      const t0=performance.now();
       for(;;){const s=gl.clientWaitSync(sync,0,0);
         if(s===gl.ALREADY_SIGNALED||s===gl.CONDITION_SATISFIED)break;
         if(s===gl.WAIT_FAILED||gl.isContextLost())throw new Error('GPU readback failed');
         await new Promise(r=>setTimeout(r,8));}
+      const t1=performance.now();
       const px=new Uint8Array(W*H*4);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER,pbo);gl.getBufferSubData(gl.PIXEL_PACK_BUFFER,0,px);
+      const t2=performance.now();
       const row=W*4,tmp=new Uint8Array(row);
       for(let y=0;y<H>>1;y++){const y2=H-1-y;tmp.set(px.subarray(y*row,y*row+row));px.copyWithin(y*row,y2*row,y2*row+row);px.set(tmp,y2*row)}
+      this._lastReadTimes={gpuWait:t1-t0,copyOut:t2-t1,flip:performance.now()-t2};
       return{px,w:W,h:H};
     }finally{if(sync)gl.deleteSync(sync);gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);gl.deleteBuffer(pbo);}
   }
@@ -29307,16 +29311,20 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
   if(typeof renderer.releaseBufferPool==='function')renderer.releaseBufferPool();
   try{
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
-    renderer.setImage(src);
+    // Sub-phase times for the export's EXPORT_DIAG line (renderer._p2cTimes, read by exportFX).
+    const T={},now=()=>performance.now();let t=now();renderer._p2cTimes=T;
+    renderer.setImage(src);T.upload=now()-t;t=now();
     fxSetCapturedExportDepth(renderer,P);
-    renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});
+    renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});T.submit=now()-t;t=now();
     // WebKit (the Mac app): fence-polled readback so the UI stays live while the GPU finishes. Chromium
     // keeps the plain read — its ANGLE pixel-pack path measured ~20% slower per photo there.
     const{px,w,h}=typeof renderer.getPixelsAsync==='function'&&/Apple/.test(navigator.vendor||'')?await renderer.getPixelsAsync():renderer.getPixels();
+    T.readback=now()-t;if(renderer._lastReadTimes)Object.assign(T,renderer._lastReadTimes);t=now();
     const c=document.createElement('canvas');c.width=w;c.height=h;
     // view over the SAME buffer (no full-size copy — getPixels already returns a fresh array)
-    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);
-    return applyRedEyeCorrections(c,P.redEyeOps);
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer),w,h),0,0);T.put=now()-t;t=now();
+    const out=applyRedEyeCorrections(c,P.redEyeOps);T.redeye=now()-t;
+    return out;
   }finally{renderer._maskReferenceSize=previousMaskSize;}
 }
 // Port of GEGL's red-eye-removal point operation (GNOME commit 1870ad1d8c26be68be88e07ff2b56044dc417df8):
@@ -29867,7 +29875,7 @@ async function _exportFXRun(opts){
         // Start decoding the NEXT photo now, so its native decode overlaps this photo's render,
         // encode and write. Bounded: one decoded frame ahead, never more.
         {const nx=items[idx+1];
-          if(nx&&typeof nx._exportLoad==='function'&&!prefetch&&!fxExportCancel){const p=nx._exportLoad();p.catch(()=>{});prefetch={idx:idx+1,p};}}
+          if(nx&&typeof nx._exportLoad==='function'&&!prefetch&&!fxExportCancel){const p=nx._exportLoad({background:true});p.catch(()=>{});prefetch={idx:idx+1,p};}}
         if(it._srcTier)await fxPromoteSrcTier(it); // phone working copy → full-resolution original for export
         if(it._rawHalf){ // browser RAW proxy → full-resolution decode for export
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -29923,7 +29931,9 @@ async function _exportFXRun(opts){
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
         const P=_expPs[idx];
         if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
-        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);   // apply this image's rotate/flip/straighten/crop first
+        tm.geom0=performance.now();
+        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);
+        tm.geom1=performance.now();   // apply this image's rotate/flip/straighten/crop first
         if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
         setExportPhotoStatus(idx,'rendering');
@@ -29947,6 +29957,7 @@ async function _exportFXRun(opts){
             log(`Super Resolution skipped for ${it.name}: ${e&&e.message||e} — exporting at normal size`,'warn');
           }
         }
+        tm.p2c=performance.now();tm.sub=exportRenderer._p2cTimes||null;exportRenderer._p2cTimes=null;
         const w=proc.width,h=proc.height;
         const{b1t,b2t}=borderLayerSizes(P,w);
         await filmEdgeReady(P);   // never export before the film strips have decoded
@@ -29975,7 +29986,9 @@ async function _exportFXRun(opts){
         }
         // Resize + output sharpening, LAST — after borders and the matte, so the target long edge
         // means the final file's long edge and the sharpening is judged at the real output size.
+        tm.compose=performance.now();
         ec=await exportResample(ec);
+        tm.resampled=performance.now();
         // Watermark is drawn IN PLACE on ec, after resize (see applyWatermark), and deliberately
         // skipped on a Lightroom Edit-In write-back — that path overwrites the ORIGINAL file the
         // user opened from Lightroom, and silently burning a watermark into it would be a real
@@ -30015,7 +30028,7 @@ async function _exportFXRun(opts){
           tm.rendered=performance.now();
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
-          out=new Uint8Array(await blob.arrayBuffer());
+          out=new Uint8Array(await blob.arrayBuffer());tm.blob=performance.now();
           if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
             if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
             out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
@@ -30081,7 +30094,9 @@ async function _exportFXRun(opts){
           else{res.receipt=sr1[0]||{ok:false,err:'save failed'};if(res.receipt.ok){res.content=null;setExportPhotoStatus(idx,'saved',res.receipt.skipped?'already exists — skipped':undefined);}}
         }
         {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
-          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
+          const sub=tm.sub?Object.entries(tm.sub).map(([k,v])=>k+'='+Math.round(v)).join(','):'';
+          expDiag(`photo ${idx+1}/${N} name=${it.name} render_sub=[geom=${d('geom0','geom1')},pre=${d('geom1','decoded')},p2c=${d('decoded','p2c')}{${sub}},compose=${d('p2c','compose')},resample=${d('compose','resampled')},post=${d('resampled','rendered')}]`);
+          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (toBlob=${d('rendered','blob')},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
