@@ -34,6 +34,9 @@ const ENGINE = arg('engine', 'webkit');
 // --hashes: seed Math.random and hash every rendered frame's pixels (pre-encode) — for proving a
 // performance change left the output pixel-identical. Adds a readback per photo; don't time with it.
 const HASHES = process.argv.includes('--hashes');
+// --rgba-src: give each frame its pixels as a typed array (what the desktop export decode now does),
+// so setImage takes the direct-upload path — compare --hashes with and without it.
+const RGBA_SRC = process.argv.includes('--rgba-src');
 // Budgets (Intel Iris Plus 645 dev Mac, synthetic 6000x4000, bench recipe). Generous on purpose:
 // they catch a regression of the kind fixed here, not run-to-run noise. Measured 2026-11-02, 10 photos:
 //   webkit   before: 5.5-6.2 s/photo, UI blocked 91-94% of the export, longest stall 6.0-7.6 s
@@ -68,6 +71,8 @@ if (DIR) {
   inputs = await Promise.all(names.map(async (n) => ({ name: n, b64: (await readFile(path.join(dir, n))).toString('base64') })));
 }
 const recipe = JSON.parse(await readFile(path.join(ROOT, 'test/fixtures/export_bench_recipe.json'), 'utf8'));
+// --off nr,hal,bloom,...: switch recipe toggles off — for attributing GPU render time to features.
+for (const k of (arg('off', '') || '').split(',').filter(Boolean)) recipe.toggles[k] = false;
 await pg.evaluate(async ({ N, W, H, inputs, recipe, FMT }) => {
   let files;
   if (inputs) files = inputs.map((f) => new File([Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0))], f.name, { type: 'image/jpeg' }));
@@ -97,12 +102,13 @@ const pidTree = () => { let out = []; try { out = execFileSync('pgrep', ['-f', p
 let peakJs = 0, peakRss = 0, sampling = true;
 const sampler = (async () => { while (sampling) { try { if (cdp) { const u = await cdp.send('Runtime.getHeapUsage'); peakJs = Math.max(peakJs, u.usedSize + (u.backingStorageSize || 0)); } const pids = pidTree(); if (pids.length) { const rss = execFileSync('ps', ['-o', 'rss=', '-p', pids.join(',')]).toString().trim().split('\n').reduce((a, b) => a + (+b || 0), 0) * 1024; peakRss = Math.max(peakRss, rss); } } catch {} await new Promise((r) => setTimeout(r, 150)); } })();
 
-const res = await pg.evaluate(async (HASHES) => {
+const res = await pg.evaluate(async ({ HASHES, RGBA_SRC }) => {
+  if (RGBA_SRC) { const g = window.geomCanvas; window.geomCanvas = function (...a) { const c = g.apply(this, a); if (c && c.getContext && !c._rgbaSrc) c._rgbaSrc = { data: c.getContext('2d').getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height }; return c; }; }
   if (HASHES) { let z = 42; Math.random = () => { z = (z * 1664525 + 1013904223) >>> 0; return z / 4294967296; }; }
   const pixHashes = [];
   const T = {}; const per = []; let cur = null; let phase = 'start'; const marks = []; const gaps = [];
   const setPhase = (p) => { phase = p; marks.push([performance.now(), p]); };
-  const wrap = (name, key) => { const f = window[name]; if (typeof f !== 'function') return; window[name] = async function (...a) { const t = performance.now(); setPhase(key); try { return await f.apply(this, a); } finally { setPhase('after-' + key); if (cur) cur[key] = (cur[key] || 0) + performance.now() - t; } }; };
+  const wrap = (name, key) => { const f = window[name]; if (typeof f !== 'function') return; window[name] = async function (...a) { const t = performance.now(); setPhase(key); try { const r = await f.apply(this, a); if (key === 'render' && typeof FXExport !== 'undefined' && FXExport && FXExport._p2cTimes && cur) cur.p2c = Object.fromEntries(Object.entries(FXExport._p2cTimes).map(([k, v]) => [k, Math.round(v)])); return r; } finally { setPhase('after-' + key); if (cur) cur[key] = (cur[key] || 0) + performance.now() - t; } }; };
   const wrapSync = (name, key) => { const f = window[name]; if (typeof f !== 'function') return; window[name] = function (...a) { const t = performance.now(); const prev = phase; setPhase(key); try { return f.apply(this, a); } finally { setPhase(prev); if (cur) cur[key] = (cur[key] || 0) + performance.now() - t; } }; };
   for (const n of ['drawBorderLayers', 'applyWatermark', 'injectMetadata', 'embedSRGBTag', 'injectDPI', 'injectRecipeXmp', 'geomCanvas']) wrapSync(n, n);
   if (typeof FXR !== 'undefined') for (const m of ['setImage', 'render', 'getPixels']) { const f = FXR.prototype[m]; if (typeof f === 'function') FXR.prototype[m] = function (...a) { const t = performance.now(); const prev = phase; setPhase('gl.' + m); try { return f.apply(this, a); } finally { setPhase(prev); if (cur) cur['gl.' + m] = (cur['gl.' + m] || 0) + performance.now() - t; } }; }
@@ -124,19 +130,19 @@ const res = await pg.evaluate(async (HASHES) => {
   on = false; clearInterval(tick);
   for (const [a, b] of gaps) { for (let i = 0; i < marks.length; i++) { const s0 = Math.max(a, marks[i][0]), e0 = Math.min(b, i + 1 < marks.length ? marks[i + 1][0] : Infinity); if (e0 > s0) lagBy[marks[i][1]] = (lagBy[marks[i][1]] || 0) + e0 - s0; } }
   return { lagBy, pixHashes, loopLag, loopAt, total: performance.now() - t0, per, bytes, stall, stallAt, n: fxImages.length };
-}, HASHES);
+}, { HASHES, RGBA_SRC });
 sampling = false; await sampler;
 await br.close(); server.close();
 const msPerPhoto = res.total / Math.max(1, res.per.length);
 const blockedMs = Object.values(res.lagBy).reduce((a, b) => a + b, 0);
 const out = { blockedFraction: +(blockedMs / res.total).toFixed(2), blockedMsByPhase: Object.fromEntries(Object.entries(res.lagBy).map(([k, v]) => [k, Math.round(v)])), pixHashes: res.pixHashes, engine: ENGINE, photos: res.n, saved: res.per.length, totalMs: Math.round(res.total), msPerPhoto: Math.round(msPerPhoto), maxStallMs: Math.round(res.loopLag), stallAt: res.loopAt, maxFrameGapMs: Math.round(res.stall), frameGapAt: res.stallAt, peakJsMB: Math.round(peakJs / 1e6), peakRssMB: ENGINE === 'webkit' ? null : Math.round(peakRss / 1e6), outMB: Math.round(res.bytes / 1e6),
-  perPhoto: res.per.map((p) => ({ detail: Object.fromEntries(Object.entries(p).filter(([k, v]) => typeof v === 'number' && !['total', 'render', 'resample', 'encode', 'bytes', 'hash'].includes(k) && v > 5).map(([k, v]) => [k, Math.round(v)])), total: Math.round(p.total), render: Math.round(p.render || 0), resample: Math.round(p.resample || 0), encode: Math.round(p.encode || 0), other: Math.round(p.total - (p.render || 0) - (p.resample || 0) - (p.encode || 0)), hash: p.hash, MB: +(p.bytes / 1e6).toFixed(1) })) };
+  perPhoto: res.per.map((p) => ({ p2c: p.p2c, detail: Object.fromEntries(Object.entries(p).filter(([k, v]) => typeof v === 'number' && !['total', 'render', 'resample', 'encode', 'bytes', 'hash', 'p2c'].includes(k) && v > 5).map(([k, v]) => [k, Math.round(v)])), total: Math.round(p.total), render: Math.round(p.render || 0), resample: Math.round(p.resample || 0), encode: Math.round(p.encode || 0), other: Math.round(p.total - (p.render || 0) - (p.resample || 0) - (p.encode || 0)), hash: p.hash, MB: +(p.bytes / 1e6).toFixed(1) })) };
 if (JSON_OUT) console.log(JSON.stringify(out));
 else {
   console.log(`[${ENGINE}] photos ${out.saved}/${out.photos}  total ${out.totalMs} ms  per photo ${out.msPerPhoto} ms  UI blocked ${Math.round(out.blockedFraction * 100)}% of the time, longest stall ${out.maxStallMs} ms (${out.stallAt})  longest frame gap ${out.maxFrameGapMs} ms (${out.frameGapAt})  peak JS ${out.peakJsMB} MB  peak RSS ${out.peakRssMB == null ? 'n/a' : out.peakRssMB + ' MB'}  output ${out.outMB} MB`);
   console.log('main thread blocked (ms, >50ms gaps, attributed to the phase running during each gap): ' + JSON.stringify(out.blockedMsByPhase));
   if (HASHES) console.log('pixels ' + out.pixHashes.join(' '));
-  out.perPhoto.forEach((p, i) => console.log(`  #${i + 1}  total ${p.total}  render ${p.render}  resample ${p.resample}  encode ${p.encode}  other ${p.other}  (${p.MB} MB) ${p.hash} ${JSON.stringify(p.detail)}`));
+  out.perPhoto.forEach((p, i) => console.log(`  #${i + 1}  total ${p.total}  render ${p.render}  resample ${p.resample}  encode ${p.encode}  other ${p.other}  (${p.MB} MB) ${p.hash} ${JSON.stringify(p.detail)} p2c=${JSON.stringify(p.p2c || {})}`));
 }
 const fails = [];
 if (out.saved !== out.photos) fails.push(`only ${out.saved}/${out.photos} photos exported`);

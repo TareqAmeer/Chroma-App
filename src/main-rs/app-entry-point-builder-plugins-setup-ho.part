@@ -430,6 +430,7 @@ fn main() {
             gphotos_downloads_dir,
             save_to_lr_downloads,
             save_export_file_raw,
+            encode_jpeg_rgba,
             stream_open,
             stream_write,
             stream_close,

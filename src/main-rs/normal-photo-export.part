@@ -65,6 +65,79 @@ pub(crate) fn unique_dest_pub(dir: &Path, name: &str) -> PathBuf {
 // way the base64 path is (the same triple-copy that OOMed Lightroom TIFF saves — see
 // write_lightroom_tiff_raw's comment). The header carries the name BASE64-encoded because HTTP
 // headers are ASCII-only and export filenames routinely are not.
+/// Batch/still export JPEG encode off the WebView's main thread (WebKit's canvas.toBlob took
+/// 2-3 s per 26MP photo there, blocking the UI). Raw RGBA body + x-width/x-height/x-quality headers;
+/// returns the JPEG bytes. The header layout copies what WebKit's encoder writes so the exported
+/// file's metadata is unchanged: JFIF 1.01 APP0 (density is patched by JS injectDPI as before), an
+/// Exif APP1 with ColorSpace=sRGB + pixel dimensions, and the empty-IPTC Photoshop APP13. 4:4:4
+/// sampling, standard Huffman tables, libjpeg quality scaling (100 = all-ones quantisation).
+#[tauri::command(async)]
+fn encode_jpeg_rgba(request: tauri::ipc::Request<'_>) -> Result<tauri::ipc::Response, String> {
+    let hdr = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u32>().ok());
+    let (w, h) = (hdr("x-width").ok_or("missing x-width")?, hdr("x-height").ok_or("missing x-height")?);
+    let quality = hdr("x-quality").unwrap_or(92).clamp(1, 100) as u8;
+    let rgba = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes,
+        _ => return Err("expected raw request body".into()),
+    };
+    encode_jpeg_rgba_bytes(rgba, w, h, quality).map(tauri::ipc::Response::new)
+}
+
+fn encode_jpeg_rgba_bytes(rgba: &[u8], w: u32, h: u32, quality: u8) -> Result<Vec<u8>, String> {
+    if w == 0 || h == 0 || w > 65535 || h > 65535 { return Err(format!("bad size {w}x{h}")); }
+    if rgba.len() != (w as usize) * (h as usize) * 4 { return Err(format!("expected {} RGBA bytes, got {}", (w as usize) * (h as usize) * 4, rgba.len())); }
+    let mut out = Vec::with_capacity(rgba.len() / 2);
+    let mut enc = jpeg_encoder::Encoder::new(&mut out, quality);
+    enc.set_sampling_factor(jpeg_encoder::SamplingFactor::F_1_1);
+    // Exif (big-endian): IFD0 { ExifIFD pointer } -> ExifIFD { ColorSpace=1, PixelX, PixelY }.
+    let mut exif: Vec<u8> = b"Exif\0\0MM\0\x2a\0\0\0\x08".to_vec();
+    exif.extend_from_slice(&[0x00, 0x01, 0x87, 0x69, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x00]);
+    exif.extend_from_slice(&[0x00, 0x03, 0xa0, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00]);
+    exif.extend_from_slice(&[0xa0, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01]); exif.extend_from_slice(&w.to_be_bytes());
+    exif.extend_from_slice(&[0xa0, 0x03, 0x00, 0x04, 0x00, 0x00, 0x00, 0x01]); exif.extend_from_slice(&h.to_be_bytes());
+    exif.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+    enc.add_app_segment(1, exif).map_err(|e| e.to_string())?;
+    let mut ps: Vec<u8> = b"Photoshop 3.0\0".to_vec();
+    ps.extend_from_slice(b"8BIM\x04\x04\0\0\0\0\0\0");
+    ps.extend_from_slice(b"8BIM\x04\x25\0\0\0\0\0\x10");
+    ps.extend_from_slice(&[0xd4, 0x1d, 0x8c, 0xd9, 0x8f, 0x00, 0xb2, 0x04, 0xe9, 0x80, 0x09, 0x98, 0xec, 0xf8, 0x42, 0x7e]); // md5("") = empty IPTC
+    enc.add_app_segment(13, ps).map_err(|e| e.to_string())?;
+    enc.encode(rgba, w as u16, h as u16, jpeg_encoder::ColorType::Rgba).map_err(|e| e.to_string())?;
+    // jpeg-encoder writes JFIF 1.02; WebKit's files say 1.01 (SOI, FFE0, len, "JFIF\0", major, minor).
+    if out.len() > 12 && &out[6..11] == b"JFIF\0" { out[12] = 0x01; }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod encode_jpeg_tests {
+    #[test]
+    fn writes_webkit_shaped_headers_and_decodes() {
+        let (w, h) = (16u32, 8u32);
+        let rgba: Vec<u8> = (0..w * h).flat_map(|i| [(i * 3) as u8, (i * 5) as u8, 200, 255]).collect();
+        let jpg = super::encode_jpeg_rgba_bytes(&rgba, w, h, 100).unwrap();
+        assert_eq!(&jpg[0..4], &[0xFF, 0xD8, 0xFF, 0xE0]);
+        assert_eq!(&jpg[6..13], b"JFIF\0\x01\x01");
+        let s = String::from_utf8_lossy(&jpg[..300]);
+        assert!(s.contains("Exif") && s.contains("Photoshop 3.0"));
+        let img = image::load_from_memory_with_format(&jpg, image::ImageFormat::Jpeg).unwrap().to_rgb8();
+        assert_eq!((img.width(), img.height()), (w, h));
+        for (i, p) in img.pixels().enumerate() { for c in 0..3 { let d = (p[c] as i32 - rgba[i * 4 + c] as i32).abs(); assert!(d <= 3, "pixel {i} ch {c} off by {d}"); } }
+        assert!(super::encode_jpeg_rgba_bytes(&rgba[..10], w, h, 90).is_err());
+    }
+    /// CS_ENC_IN=<jpeg> CS_ENC_OUT=<jpeg> cargo test --release encode_jpeg_tests -- --ignored:
+    /// re-encode a real export's pixels for an exiftool/pixel comparison against WebKit's file.
+    #[test]
+    #[ignore]
+    fn reencode_real_export() {
+        let (Ok(i), Ok(o)) = (std::env::var("CS_ENC_IN"), std::env::var("CS_ENC_OUT")) else { return };
+        let img = image::open(&i).unwrap().to_rgba8();
+        let t = std::time::Instant::now();
+        let jpg = super::encode_jpeg_rgba_bytes(img.as_raw(), img.width(), img.height(), 100).unwrap();
+        eprintln!("encoded {}x{} in {} ms -> {} bytes", img.width(), img.height(), t.elapsed().as_millis(), jpg.len());
+        std::fs::write(o, jpg).unwrap();
+    }
+}
+
 #[tauri::command(async)]
 fn save_export_file_raw(request: tauri::ipc::Request<'_>) -> Result<GpSaveResult, String> {
     use base64::Engine;

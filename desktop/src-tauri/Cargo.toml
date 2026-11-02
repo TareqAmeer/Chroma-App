@@ -56,6 +56,8 @@ rawler = "0.7"
 # the dependency explicit for our own code).
 rayon = "1"
 base64 = "0.22"
+# Export JPEG encode off the WebView main thread (encode_jpeg_rgba): SIMD, pure Rust, ~0.6 s for 26MP.
+jpeg-encoder = { version = "0.7", features = ["simd"] }
 # Library browser: thumbnail generation (downsize + JPEG-encode both RAW-decoded buffers and
 # regular JPEG/PNG files) and a small non-crypto hash for the on-disk thumbnail cache key.
 image = { version = "0.25", default-features = false, features = [

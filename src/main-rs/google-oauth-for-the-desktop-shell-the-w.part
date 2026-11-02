@@ -107,6 +107,10 @@ fn with_log_plugin(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri:
             .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview))
             .level(log::LevelFilter::Info)
             .level_for("rawler", log::LevelFilter::Error)
+            // The plugin default (40 KB, keep one) rotated away a batch export's EXPORT_DIAG
+            // lines and every crash's lead-up within minutes. 5 MB, current + 2 rotated files.
+            .max_file_size(5_000_000)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(2))
             .build(),
     )
 }

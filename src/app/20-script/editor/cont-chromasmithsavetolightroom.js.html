@@ -329,7 +329,7 @@ async function _exportFXRun(opts){
       // instead and drop it once this photo is encoded. A single-photo export keeps the old in-place
       // upgrade (bounded to one photo, and the editor keeps the cleaned pixels).
       const useExportCopy=()=>{if(N>1&&it===sourceItem){exportCopy=it={...sourceItem,img:document.createElement('canvas')};}};
-      const dropExportCopy=()=>{if(exportCopy){const c=exportCopy.img;delete c._sceneLinear;delete c._sceneLinearPresent;c.width=c.height=0;exportCopy=null;}};
+      const dropExportCopy=()=>{if(exportCopy){const c=exportCopy.img;delete c._sceneLinear;delete c._sceneLinearPresent;c._rgbaSrc=null;c.width=c.height=0;exportCopy=null;}};
       try{
         if(typeof sourceItem._exportLoad==='function'){ // decode on demand (Library Quick export)
           setExportPhotoStatus(idx,'rendering','decoding…');
@@ -492,9 +492,19 @@ async function _exportFXRun(opts){
           // fails to save the result to Photos — cap at 0.99 on touch devices.
           if(!isPng&&q>=1&&isMemoryConstrained()){q=0.99;log('Quality capped at 99 on this device (100% produces files iOS cannot save to Photos)','warn');}
           tm.rendered=performance.now();
+          // Desktop JPEG: encode in Rust (window.chromasmithEncodeJpegNative) — off the main thread and
+          // ~4x faster than WebKit's toBlob; any failure falls back to the canvas encoder below.
+          out=null;
+          if(mime==='image/jpeg'&&typeof window.chromasmithEncodeJpegNative==='function'){
+            try{out=await window.chromasmithEncodeJpegNative(ec,q);tm.native=1;}catch(e){out=null;log(`Native JPEG encode failed for ${it.name} — using the canvas encoder: ${(e&&e.message)||e}`,'warn');}
+          }
+          if(!out){
+          tm.native=0;
           const blob=await fxEncodeExportCanvas(ec,mime,isPng?undefined:q); // WebP reuses the same quality slider as JPG — no dedicated control, per scoping decision
           if(!blob){log(`Export failed encoding ${it.name} (image too large for this device's canvas)`,'err');failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:'too large to encode'});continue;}
-          out=new Uint8Array(await blob.arrayBuffer());tm.blob=performance.now();
+          out=new Uint8Array(await blob.arrayBuffer());
+          }
+          tm.blob=performance.now();
           if(!isWebp){ // metadata splicing below is JPEG/PNG-specific; WebP ships with no embedded metadata for now
             if(it.bytes)out=injectMetadata(out,it.bytes,outExt); // restore Exif/ICC/IPTC/XMP (Orientation neutralised) the re-encode dropped
             out=embedSRGBTag(out,outExt); // NEVER re-embed it.icc (the SOURCE file's own profile) — see embedSRGBTag's comment
@@ -562,7 +572,7 @@ async function _exportFXRun(opts){
         {const t=performance.now(),d=(a,b)=>tm[a]&&tm[b]?Math.round(tm[b]-tm[a]):-1;
           const sub=tm.sub?Object.entries(tm.sub).map(([k,v])=>k+'='+Math.round(v)).join(','):'';
           expDiag(`photo ${idx+1}/${N} name=${it.name} render_sub=[geom=${d('geom0','geom1')},pre=${d('geom1','decoded')},p2c=${d('decoded','p2c')}{${sub}},compose=${d('p2c','compose')},resample=${d('compose','resampled')},post=${d('resampled','rendered')}]`);
-          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (toBlob=${d('rendered','blob')},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
+          expDiag(`photo ${idx+1}/${N} name=${it.name} prefetched=${tm.prefetched?1:0} decode_ms=${d('start','decoded')} render_ms=${d('decoded','rendered')} encode_ms=${d('rendered','encoded')} (${tm.native?'native':'toBlob'}=${d('rendered','blob')},metadata=${d('blob','encoded')}) write_ms=${tm.encoded?Math.round(t-tm.encoded):-1} total_ms=${Math.round(t-tm.start)} sinceClick_ms=${Math.round(t-expClick)}`);}
       }catch(e){
         failed++;(window._expFail=window._expFail||[]).push({kind:'render',name:it.name,item:it,recipe:window._expRecipe||null,err:(e&&e.message||String(e)).slice(0,80)});
         setExportPhotoStatus(idx,'failed',(e&&e.message||String(e)).slice(0,60));
