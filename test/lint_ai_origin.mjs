@@ -23,6 +23,7 @@ const src = await readFile(path.join(ROOT, FILE), 'utf8');
 const ALLOW = [
   /function mskIsAI\(/,
   /function mskIsPromptedSAM\(/,        // deliberately excludes Skin: it has no prompts to replay
+  /function _mskIsOneShotAI\(/,         // deliberately excludes Skin: MSK_REEVAL_MODES (matte/foreground/landscape) never apply to it
   /^\s*\/\//,                        // comment lines
   /\?'AI'/,                          // the auto-label branch
 ];
