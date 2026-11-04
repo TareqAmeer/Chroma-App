@@ -14,6 +14,7 @@ for (const theme of ['dark', 'light']) {
   for (const width of [1280, 1440]) {
     const page = await browser.newPage({ viewport: { width, height: 800 } });
     page.on('pageerror', (e) => errors.push(String(e)));
+    await page.addInitScript(() => { try { localStorage.setItem('chromasmith-tour-seen-v1', '1'); } catch (_) {} });
     page.on('dialog', (d) => { errors.push('unexpected dialog: ' + d.message()); d.dismiss(); });
     await page.goto(pathToFileURL(process.env.APP_HTML || path.join(ROOT, 'chromasmith-22.html')).href + '?deskx=1', { waitUntil: 'load', timeout: 60000 });
     await page.waitForFunction(() => typeof window.loadFXImages === 'function' && typeof settingsToggle === 'function', null, { timeout: 30000 });
