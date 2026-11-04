@@ -212,6 +212,72 @@
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, Math.round(c.height * 0.1));
     return (await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
   }
+  // Browser stand-in for desktop/src-tauri/src/raw_review_jobs.rs (see libtestInvoke): the same
+  // Job / Item / Summary shapes and status transitions, kept in memory.
+  const ltRawJobs = [];
+  function libtestRawReviewJobs(cmd, A) {
+    const now = () => Math.floor(Date.now() / 1000);
+    const copy = (j) => structuredClone(j);
+    if (cmd === 'raw_review_jobs_create') {
+      const items = A.items || [];
+      if (!items.length || items.length > 50000) throw new Error('Select between 1 and 50000 RAWs');
+      if (new Set(items.map((i) => i.path)).size !== items.length) throw new Error('RAW review jobs cannot contain the same source path twice');
+      const t = now(), id = ltRawJobs.reduce((m, j) => Math.max(m, j.id), 0) + 1;
+      const job = { id, label: String(A.label || ''), status: 'running', createdAt: t, updatedAt: t,
+        items: items.map((i, index) => ({ index, path: i.path, recipeKey: i.recipeKey, settingsJson: i.settingsJson, sourceMtimeNs: '1700000000000000000', sourceSize: 1000, status: 'pending', error: null })) };
+      ltRawJobs.push(job);
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_list') {
+      return ltRawJobs.slice().sort((a, b) => b.id - a.id).slice(0, 100).map((j) => ({
+        id: j.id, label: j.label, status: j.status, createdAt: j.createdAt, updatedAt: j.updatedAt,
+        total: j.items.length, completed: j.items.filter((i) => i.status === 'completed').length,
+        pending: j.items.filter((i) => i.status === 'pending' || i.status === 'working').length,
+        failed: j.items.filter((i) => i.status === 'failed').length,
+        failedItems: j.items.filter((i) => i.status === 'failed').slice(0, 20).map((i) => `${i.path}: ${i.error || 'failed'}`.slice(0, 240)),
+      }));
+    }
+    const job = ltRawJobs.find((x) => x.id === A.id);
+    if (!job) throw new Error('Query returned no rows');
+    if (cmd === 'raw_review_jobs_get') return copy(job);
+    if (cmd === 'raw_review_jobs_checkpoint') {
+      if (!['working', 'completed', 'failed'].includes(A.status)) throw new Error('Invalid RAW review checkpoint');
+      const item = job.items.find((i) => i.index === A.index);
+      if (!item) throw new Error('Query returned no rows');
+      if (job.status !== 'running' || (item.status === 'completed' && A.status !== 'completed')) throw new Error('RAW review job is no longer running');
+      item.status = A.status; item.error = A.error == null ? null : String(A.error).slice(0, 2048);
+      job.updatedAt = now();
+      return copy(item);
+    }
+    if (cmd === 'raw_review_jobs_finish') {
+      if (job.status !== 'running') throw new Error('RAW review job is not running');
+      if (job.items.some((i) => i.status === 'pending' || i.status === 'working')) throw new Error('RAW review job still has unfinished items');
+      job.status = job.items.some((i) => i.status === 'failed') ? 'partial' : 'completed'; job.updatedAt = now();
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_cancel') {
+      if (!['running', 'interrupted'].includes(job.status)) throw new Error('RAW review job cannot be cancelled in its current state');
+      job.status = 'cancelled'; job.updatedAt = now();
+      for (const i of job.items) if (i.status === 'pending' || i.status === 'working') i.status = 'cancelled';
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_interrupt') {
+      if (job.status !== 'running') throw new Error('RAW review job is not running');
+      job.status = 'interrupted'; job.updatedAt = now();
+      for (const i of job.items) if (i.status === 'working') { i.status = 'pending'; i.error = null; }
+      return copy(job);
+    }
+    // raw_review_jobs_resume: libtest sources never change and no review cache exists, so an item
+    // resumes as pending unless the caller's expected recipe key no longer matches.
+    if (job.status === 'running') throw new Error('RAW review job is already running');
+    const expected = new Map((A.expectedRecipeKeys || []).map((k) => [k.index, k.recipeKey]));
+    for (const i of job.items) {
+      if (expected.has(i.index) && expected.get(i.index) !== i.recipeKey) { i.status = 'failed'; i.error = 'RAW review settings changed; prepare this RAW again'; }
+      else { i.status = 'pending'; i.error = null; }
+    }
+    job.status = 'running'; job.updatedAt = now();
+    return copy(job);
+  }
   function libtestInvoke(cmd, args) {
     const A = args || {};
     if (LIBTEST && (cmd === 'queue_offline_edit' || cmd === 'set_sidecar')) {
@@ -1023,6 +1089,37 @@
       case 'subject_merge': case 'subject_remove_ref':
         return Promise.resolve({ id: A.keepId || A.id, name: 'Subject', prototype: [], refs: [], encoder: 'libtest' });
       case 'subject_locate_multi': return Promise.resolve([{ x: 0.5, y: 0.5, score: 0.9 }]);
+      // ── CHR-233 follow-up stand-ins (shapes from the Rust; see each command's source).
+      // Optional ONNX models are absent in the browser, exactly like an install without them:
+      // matte.rs matte_models -> [], main.rs landscape_available / superres_available -> false,
+      // and the model-backed runs fail (every caller gates on availability or catches).
+      case 'matte_models': return Promise.resolve([]);
+      case 'landscape_available': case 'superres_available': case 'native_jpeg_flag': return Promise.resolve(false);
+      case 'matte_run': case 'landscape_run': case 'superres_run': case 'scene_detect': case 'sam2_warm':
+      case 'encode_jpeg_rgba': case 'catalog_raw_face_detail':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      // sam_box / sam2_box need a prior sam_encode / sam2_encode, which libtest never answers.
+      case 'sam_box': case 'sam2_box': return Promise.reject(new Error(cmd + ': no photo encoded yet'));
+      // library.rs get_decode_cache_dims: Err on a cache miss when the RAW header can't be
+      // read either — libtest's ".RW2" files are PNG bytes (the caller catches -> null).
+      case 'get_decode_cache_dims': return Promise.reject(new Error('libtest: not cached'));
+      // main.rs read_export_sidecar: Ok(None) when no sidecar sits beside the file.
+      case 'read_export_sidecar': return Promise.resolve(null);
+      // catalog.rs SidecarSweepResult { dirs, changed }.
+      case 'catalog_sync_sidecars':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve({ dirs: 1, changed: 0 });
+      // inpaint.rs: the MI-GAN model is never installed in the browser (inpaint_model_status ->
+      // false); the install download and every job command are native-only, and with no job ever
+      // started, inpaint_job / inpaint_cancel answer like Rust does for an id it never issued.
+      case 'inpaint_model_status': return Promise.resolve(false);
+      case 'inpaint_model_install': case 'inpaint_start': case 'inpaint_accept': case 'inpaint_resolve': case 'inpaint_export_bundle':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      case 'inpaint_job': case 'inpaint_cancel': return Promise.reject(new Error('Unknown inpainting job'));
+      case 'raw_review_jobs_create': case 'raw_review_jobs_list': case 'raw_review_jobs_get':
+      case 'raw_review_jobs_checkpoint': case 'raw_review_jobs_finish': case 'raw_review_jobs_cancel':
+      case 'raw_review_jobs_interrupt': case 'raw_review_jobs_resume':
+        try { return Promise.resolve(libtestRawReviewJobs(cmd, A)); } catch (e) { return Promise.reject(e); }
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
   }
