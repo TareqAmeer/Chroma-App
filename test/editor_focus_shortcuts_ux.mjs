@@ -153,6 +153,36 @@ r = await paletteRow('ctrl+z');
 assert(r.some((x) => x.label === 'Undo'), 'bindings are searchable');
 r = await paletteRow('');
 assert.equal(r[0].group, 'Action', 'empty query lists actions first');
+// CHR-196: contextual ranking + inline "why unavailable" reasons, read from the live palette rows.
+const paletteRows = async (q) => {
+  await page.keyboard.press('Control+K');
+  await page.fill('#cp-input', q);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#cp-list .cp-row')].map((x) => ({ label: x.querySelector('span').textContent, ctx: x.dataset.ctx === '1', disabled: x.getAttribute('aria-disabled') === 'true', why: x.querySelector('.cp-why')?.textContent || '' })));
+  await page.keyboard.press('Escape');
+  return rows;
+};
+await page.evaluate(() => { fxSection('adjust', true); });
+let pr = await paletteRows('mask');
+const del = pr.find((x) => x.label === 'Masks: delete selected mask');
+assert(del && del.disabled && del.why === 'Open the Masks panel first', 'disabled mask action explains why in its row: ' + JSON.stringify(del));
+assert(pr.findIndex((x) => x.disabled) > pr.findIndex((x) => !x.disabled), 'unavailable commands trail available ones');
+// Choosing an unavailable row explains the reason instead of running it.
+const masksBefore = await page.evaluate(() => fxState.masks.length);
+await page.keyboard.press('Control+K'); await page.fill('#cp-input', 'delete selected mask'); await page.keyboard.press('Enter');
+assert.equal(await page.evaluate(() => fxState.masks.length), masksBefore, 'unavailable command did not run');
+// Open the Masks tool: mask commands become contextual and lead the empty-query list.
+await page.evaluate(() => { fxSection('local', true); });
+pr = await paletteRows('');
+assert(pr[0].ctx && !pr[0].disabled && /mask/i.test(pr[0].label), 'with Masks open, a runnable mask command leads: ' + JSON.stringify(pr.slice(0, 3)));
+const firstPlain = pr.find((x) => !x.ctx);
+assert(firstPlain && !firstPlain.disabled, 'after suggestions, ordinary commands follow');
+pr = await paletteRows('add');
+assert(pr[0].ctx && /mask/i.test(pr[0].label), '"add" with Masks open ranks Add-mask commands first: ' + JSON.stringify(pr.slice(0, 3)));
+// Reason follows live state: Masks panel open now, so delete is blocked only by having no mask selected.
+const hasSel = await page.evaluate(() => !!fxState.masks[mskSel]);
+pr = await paletteRows('delete selected mask');
+assert.equal(pr.find((x) => x.label === 'Masks: delete selected mask')?.why, hasSel ? '' : 'Select a mask first', 'reason updates with live state');
+await page.evaluate(() => { fxSection('adjust', true); });
 // palette entry for a registry action runs it
 await page.keyboard.press('Control+K'); await page.fill('#cp-input', 'focus mode'); await page.keyboard.press('Enter');
 assert.equal(await page.evaluate(() => document.body.classList.contains('cs-focus')), true, 'palette runs focus mode');
