@@ -3106,6 +3106,9 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 body.sk2.mobile-fx .fx-ctrl-title{font-size:15px;line-height:1.2;padding-top:8px;padding-bottom:6px;margin-bottom:6px}
 body.sk2.mobile-fx .sk2-dup-title>.fx-ctrl-title{min-height:0!important}
 body.mobile-fx #fx-looks-cats,body.mobile-fx #fx-looks{overflow-y:hidden!important;touch-action:pan-x}
+/* The sk2 segmented-control rule forces overflow:visible!important on every .chip-tap row; the phone
+   Looks category row must stay a horizontal scroller or it pushes the sheet ~300px wide. */
+body.sk2.mobile-fx .fx-panel #fx-looks-cats{overflow-x:auto!important;overflow-y:hidden!important}
 body.sk2.mobile-fx #row-lut-mix{position:static;flex-wrap:nowrap;align-items:center;gap:10px;margin:8px 0 0!important;padding:2px 0;box-shadow:none}
 body.sk2.mobile-fx #row-lut-mix>.fx-label{order:1;flex:0 0 auto;margin:0}
 body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;height:32px;margin:0}
