@@ -4719,6 +4719,9 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
         <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
         <div class="fx-row" title="Scales the perspective-corrected photo to hide empty frame edges."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
+        <div class="fx-row" title="Stretches the photo horizontally (positive) or vertically (negative) to undo the squash a strong perspective correction leaves."><div class="fx-label">Aspect</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-asp" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-asp">0</div></div>
+        <div class="fx-row" title="Shifts the corrected photo left or right inside the frame."><div class="fx-label">X Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ox" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ox">0</div></div>
+        <div class="fx-row" title="Shifts the corrected photo up or down inside the frame."><div class="fx-label">Y Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-oy" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-oy">0</div></div>
       </div>
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
@@ -7593,7 +7596,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104H';
+const BUILD='1.1104I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -9681,7 +9684,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale;uniform vec2 aspect;uniform vec2 texSize;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale,lnsAsp;uniform vec2 lnsOff;uniform vec2 aspect;uniform vec2 texSize;
 // PERSPECTIVE / KEYSTONE — a real projective transform, not a shear. Converging verticals (the
 // building-shot problem) are a perspective effect, so undoing them needs the division: a shear
 // straightens the edges but leaves the spacing wrong, which reads as a stretched building rather
@@ -9699,7 +9702,11 @@ vec2 lensPersp(vec2 c){
   // Guard the pole: at d<=0 the homography flips the image through infinity. Clamping instead of
   // letting it wrap keeps an over-driven slider ugly-but-sane rather than kaleidoscopic.
   d=max(d,0.15);
-  return c/d*lnsScale;
+  c=c/d*lnsScale;
+  // Aspect (Lightroom Transform): positive widens the photo (samples a narrower source span on x),
+  // negative makes it taller. Offset then shifts the frame; both are exact identity at 0.
+  if(lnsAsp>0.0)c.x/=1.0+lnsAsp; else if(lnsAsp<0.0)c.y/=1.0-lnsAsp;
+  return c-lnsOff;
 }
 // Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
 // chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue
@@ -10573,7 +10580,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
     const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
     this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
-      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||lns0.asp||lns0.ox||lns0.oy||(lns0.scale!=null&&lns0.scale!==1)),
       nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
       deconv:!!(dc0.amount>0),
       dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
@@ -10727,11 +10734,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
     // skipped (reading straight from the previous stage's output name) so the default
     // no-correction path never touches these buffers.
-    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||lnsP.asp||lnsP.ox||lnsP.oy||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
       this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
-         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
+         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,lnsAsp:lnsP.asp||0,lnsOff:[lnsP.ox||0,lnsP.oy||0],
          texSize:[1/this.imgW,1/this.imgH],
          aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }
@@ -14487,7 +14494,7 @@ const _FF_VIEW_ONLY_FN=/^\s*(?:window\.)?(mskSetPreviewMode|mskAddMenu|pcEyedrop
 document.addEventListener('pointerdown',(e)=>{const b=e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle');if(!b)return;if(b.matches(_FF_VIEW_ONLY_SEL)||_FF_VIEW_ONLY_FN.test(b.getAttribute('onclick')||''))return;_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -22968,7 +22975,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // gap as deconv-amt/deconv-rad before DT1.
   'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
   'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
-  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
   // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
@@ -23058,7 +23065,7 @@ const PASTE_CATEGORIES=[
   {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
-  {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale'],toggles:[],selects:[]},
+  {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy'],toggles:[],selects:[]},
   {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
   {key:'artifacts',label:'Film Artifacts',sliders:['art-du','art-sc','art-lk'],toggles:['tg-art'],selects:[],extra:['artSeed','dustMode']},
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
@@ -25433,7 +25440,7 @@ function exportPresetListRefresh(selectName){
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
-  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
+  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale','sl-lens-asp','sl-lens-ox','sl-lens-oy',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-filmneg','tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
@@ -26237,7 +26244,10 @@ function getFXParams(adjValsOverride,contextOverride){return{
     // Scale can hide, so the slider stops where the result stops being usable.
     pv:adjVal('sl-lens-pv')/250, ph:adjVal('sl-lens-ph')/250,
     rot:adjVal('sl-lens-rot')*Math.PI/1800,   // slider is tenths of a degree
-    scale:1/(1+adjVal('sl-lens-scale')/100)},
+    scale:1/(1+adjVal('sl-lens-scale')/100),
+    // Aspect -100..100 -> up to 2x stretch on one axis; X/Y offset -100..100 -> +/-25% of the frame
+    // (positive X moves the photo right, positive Y moves it up, as in Lightroom's Transform panel).
+    asp:adjVal('sl-lens-asp')/100, ox:adjVal('sl-lens-ox')/400, oy:adjVal('sl-lens-oy')/400},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
     dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
@@ -26469,7 +26479,7 @@ function _fxTileCacheStats(){return{tiles:_fxTiles.map.size,bytes:_fxTiles.bytes
 function _fxTileModeOK(P,src){
   if(!FX.gl||typeof FX.gl.blitFramebuffer!=='function'||(src&&src._sceneLinearPresent))return false;
   const lns=P.lens||{},nr=P.nr||{},dc=P.deconv||{};
-  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
+  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||lns.asp||lns.ox||lns.oy||(lns.scale!=null&&lns.scale!==1)
     ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
 }
 // Glow/blur scale for a zoomed crop rendered at `sq` output px per working-image px. Halation, bloom and skin blurs are sized
@@ -29512,7 +29522,7 @@ function fxExportTileSize(P,src,halo,renderer){
   const conservative=P.tonemap||src._sceneLinearPresent
     ||(P.nr&&(P.nr.luma>0||P.nr.color>0||P.nr.hlDesat>0))
     ||(P.deconv&&P.deconv.amount>0)||(P.depthBlur&&P.depthBlur.enabled)
-    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||(P.lens.scale!=null&&P.lens.scale!==1)))
+    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||P.lens.asp||P.lens.ox||P.lens.oy||(P.lens.scale!=null&&P.lens.scale!==1)))
     ||(P.tiltShift&&P.tiltShift.enabled);
   const advanced=P.debug||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||(P.masks||[]).some(m=>m.crOn);
   const larger=!conservative&&/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
@@ -34700,7 +34710,7 @@ const CS_CONTROL_UNIT_SPECS={
   'sl-pc-h':'%','sl-pc-s':'%','sl-pc-l':'%','sl-pc-r':'%','sl-pc-sm':'%',
   'sl-msk-selview-opacity':'%',
   'sl-lens-dist':'%','sl-lens-vig':'%','sl-lens-ca':'%','sl-lens-pv':'%','sl-lens-ph':'%',
-  'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-defr':'%',
+  'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-asp':'%','sl-lens-ox':'%','sl-lens-oy':'%','sl-lens-defr':'%',
   'sl-straighten':'°',
   'sl-grain-a':'%','sl-grain-motion':'%','sl-gate-weave':'%','sl-film-breath':'%',
   'sl-art-du':'%','sl-art-sc':'%','sl-art-lk':'%','sl-hal-a':'%','sl-hal-p':'%','sl-bloom-a':'%','sl-bloom-th':'%','sl-vig':'%',

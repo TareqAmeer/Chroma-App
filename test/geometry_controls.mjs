@@ -87,6 +87,47 @@ try {
   assert.ok(mapped.snapshotKeys.length > 0, 'snapshot was captured');
   assert.ok(mapped.size[0] > 1 && mapped.size[1] > 1, 'shared processToCanvas path returns a usable canvas');
   assert.ok(mapped.nonZero > 0 && mapped.alpha === 32 * 24, `export render contains image pixels (${mapped.nonZero} nonzero channels, ${mapped.alpha} opaque pixels)`);
+  // CHR-248: Aspect / X Offset / Y Offset — mapping, snapshot, and real GPU pixels through the
+  // shared processToCanvas export path. Source: red ramps left->right, green ramps top->bottom.
+  const geo = await page.evaluate(async () => {
+    for (const id of ['sl-lens-asp', 'sl-lens-ox', 'sl-lens-oy']) {
+      if (document.querySelectorAll(`#${id}`).length !== 1) throw new Error(`${id} must exist once`);
+      if (!document.querySelector(`[data-fxsec="straighten"] #${id}`)) throw new Error(`${id} is outside Transform`);
+    }
+    const reset = () => { for (const id of ['sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale','sl-lens-asp','sl-lens-ox','sl-lens-oy']) document.getElementById(id).value = 0; };
+    reset();
+    document.getElementById('sl-lens-asp').value = 40;
+    document.getElementById('sl-lens-ox').value = 40;
+    document.getElementById('sl-lens-oy').value = -20;
+    const snap = window.getUISnapshot(); reset(); window.applyUISnapshot(snap);
+    const lens = window.getFXParams().lens;
+    const W = 64, H = 48, src = document.createElement('canvas'); src.width = W; src.height = H;
+    const cx = src.getContext('2d'), id = cx.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y*W+x)*4; id.data[i] = x*4; id.data[i+1] = y*5; id.data[i+2] = 128; id.data[i+3] = 255; }
+    cx.putImageData(id, 0, 0);
+    const R = new FXR(document.createElement('canvas'));
+    const base = window.getFXParams();
+    const run = async l => { const P = JSON.parse(JSON.stringify(base)); P.lens = Object.assign({dist:0,vig:0,ca:0,defringe:0,pv:0,ph:0,rot:0,scale:1}, l);
+      const c = await window.processToCanvas(P, src, W, H, undefined, R); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+    const at = (d, x, y, ch) => d[(y*W+x)*4+ch];
+    const b = await run({}), b2 = await run({}), z = await run({asp:0, ox:0, oy:0});
+    let det = 0; for (let i = 0; i < b.length; i++) det = Math.max(det, Math.abs(b[i] - b2[i]));
+    const ox = await run({ox:0.1}), oy = await run({oy:0.1}), asp = await run({asp:0.5});
+        let diff = 0; for (let i = 0; i < b.length; i++) diff = Math.max(diff, Math.abs(b[i] - z[i]));
+    return { lens, det, diff,
+      rBase: at(b,48,24,0), rOx: at(ox,48,24,0),           // photo moved right -> pixel shows content from the left
+      gBase: at(b,32,30,1), gOy: at(oy,32,30,1),           // +Y moved up -> content from lower down
+      rAspBase: at(b,56,24,0), rAsp: at(asp,56,24,0), gAspBase: at(b,32,40,1), gAsp: at(asp,32,40,1) };
+  });
+  assert.equal(geo.lens.asp, 0.4); assert.equal(geo.lens.ox, 0.1); assert.equal(geo.lens.oy, -0.05);
+  // Two identical baseline renders already differ by a few LSBs (render dither), so identity is
+  // judged against that measured run-to-run noise rather than demanding byte equality.
+  assert.ok(geo.diff <= Math.max(geo.det, 1), `zero Aspect/Offset matches the untransformed render (max diff ${geo.diff}, run-to-run noise ${geo.det})`);
+  assert.ok(geo.rOx < geo.rBase - 10, `X offset shifts photo right (${geo.rBase} -> ${geo.rOx})`);
+  assert.ok(geo.gOy > geo.gBase + 10, `Y offset (+UI) moves photo up (${geo.gBase} -> ${geo.gOy})`);
+  assert.ok(geo.rAsp < geo.rAspBase - 10, `positive Aspect stretches horizontally (${geo.rAspBase} -> ${geo.rAsp})`);
+  assert.ok(Math.abs(geo.gAsp - geo.gAspBase) <= 2, `positive Aspect leaves vertical untouched (${geo.gAspBase} -> ${geo.gAsp})`);
+  console.log('PASS: Aspect / X Offset / Y Offset mapping, snapshot, identity, and GPU pixel direction', JSON.stringify(geo));
   console.log('PASS: Transform placement, snapshot round-trip, manual parameter mapping, and shared export recipe handoff');
 } finally {
   await browser.close();

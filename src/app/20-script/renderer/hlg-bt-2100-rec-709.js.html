@@ -920,7 +920,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale;uniform vec2 aspect;uniform vec2 texSize;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale,lnsAsp;uniform vec2 lnsOff;uniform vec2 aspect;uniform vec2 texSize;
 // PERSPECTIVE / KEYSTONE — a real projective transform, not a shear. Converging verticals (the
 // building-shot problem) are a perspective effect, so undoing them needs the division: a shear
 // straightens the edges but leaves the spacing wrong, which reads as a stretched building rather
@@ -938,7 +938,11 @@ vec2 lensPersp(vec2 c){
   // Guard the pole: at d<=0 the homography flips the image through infinity. Clamping instead of
   // letting it wrap keeps an over-driven slider ugly-but-sane rather than kaleidoscopic.
   d=max(d,0.15);
-  return c/d*lnsScale;
+  c=c/d*lnsScale;
+  // Aspect (Lightroom Transform): positive widens the photo (samples a narrower source span on x),
+  // negative makes it taller. Offset then shifts the frame; both are exact identity at 0.
+  if(lnsAsp>0.0)c.x/=1.0+lnsAsp; else if(lnsAsp<0.0)c.y/=1.0-lnsAsp;
+  return c-lnsOff;
 }
 // Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
 // chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue

@@ -687,7 +687,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
     const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
     this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
-      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||lns0.asp||lns0.ox||lns0.oy||(lns0.scale!=null&&lns0.scale!==1)),
       nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
       deconv:!!(dc0.amount>0),
       dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
@@ -841,11 +841,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
     // skipped (reading straight from the previous stage's output name) so the default
     // no-correction path never touches these buffers.
-    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||lnsP.asp||lnsP.ox||lnsP.oy||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
       this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
-         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
+         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,lnsAsp:lnsP.asp||0,lnsOff:[lnsP.ox||0,lnsP.oy||0],
          texSize:[1/this.imgW,1/this.imgH],
          aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }

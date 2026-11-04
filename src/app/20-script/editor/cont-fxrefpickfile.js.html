@@ -147,7 +147,10 @@ function getFXParams(adjValsOverride,contextOverride){return{
     // Scale can hide, so the slider stops where the result stops being usable.
     pv:adjVal('sl-lens-pv')/250, ph:adjVal('sl-lens-ph')/250,
     rot:adjVal('sl-lens-rot')*Math.PI/1800,   // slider is tenths of a degree
-    scale:1/(1+adjVal('sl-lens-scale')/100)},
+    scale:1/(1+adjVal('sl-lens-scale')/100),
+    // Aspect -100..100 -> up to 2x stretch on one axis; X/Y offset -100..100 -> +/-25% of the frame
+    // (positive X moves the photo right, positive Y moves it up, as in Lightroom's Transform panel).
+    asp:adjVal('sl-lens-asp')/100, ox:adjVal('sl-lens-ox')/400, oy:adjVal('sl-lens-oy')/400},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
     dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
