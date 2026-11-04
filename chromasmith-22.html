@@ -7597,7 +7597,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104N';
+const BUILD='1.1104O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -25435,6 +25435,31 @@ function _pmStyleSummary(r){const parts=[];const lut=r&&r.selects&&r.selects['se
   return parts.length?'Changes: '+parts.join(', '):'Changes: no tools switched on';}
 function _pmExportSummary(st){const s=st||{};const f={auto:'Match source',jpg:'JPG',png:'PNG',webp:'WebP'}[s.fmt]||s.fmt||'—';
   return `${f}${s.fmt==='png'?'':' · quality '+(s.q??'—')} · ${+s.size?('long edge '+s.size+'px'):'full size'}${+s.sharp?' · sharpened':''}`;}
+// The user's own library Looks (IndexedDB "luts", value "l:<name>") get the same Rename / Export /
+// Delete trio as Edit Styles. Rename keeps the selection and any Style that points at the old name.
+async function lookRename(name){
+  const n=(await askTextModal('Rename look','',name)||'').trim();if(!n||n===name)return false;
+  if((await lutLibList()).includes(n)){toast(`A look named "${n}" already exists`,false);return false;}
+  const rec=await lutLibGet(name);if(!rec){toast('Look not found',false);return false;}
+  await lutLibPut(n,rec.data);await lutLibDel(name);
+  const sel=document.getElementById('sel-lut'),wasSel=sel&&sel.value==='l:'+name;
+  await refreshLUTSelect(wasSel?'l:'+n:(sel&&sel.value)||'');
+  const st=stylesList();let changed=false;
+  st.forEach(x=>{const ss=x.recipe&&x.recipe.selects;if(ss&&ss['sel-lut']==='l:'+name){ss['sel-lut']='l:'+n;changed=true;}});
+  if(changed){stylesSave(st);if(typeof styleListRefresh==='function')styleListRefresh();}
+  return true;
+}
+async function lookExport(name){
+  const rec=await lutLibGet(name);if(!rec){toast('Look not found',false);return;}
+  dl(writeCube(lutFromBytes(rec.data),name),name.replace(/[^\w.-]+/g,'_')+'.cube');
+}
+async function lookDelete(name){
+  if(!await confirmModal(`Delete look "${name}"? This cannot be undone.`,'Delete'))return false;
+  const sel=document.getElementById('sel-lut'),wasSel=sel&&sel.value==='l:'+name;
+  await lutLibDel(name);await refreshLUTSelect(wasSel?'':(sel&&sel.value)||'');
+  if(wasSel)selectLUT('');
+  return true;
+}
 let _pmTab='looks';
 // Opens on the tab the caller names, else Looks (the first tab) — never whichever tab was open last.
 function presetsManagerOpen(tab){_pmTab=tab||'looks';_csModal('Presets','<div id="pm-body"></div>');presetsManagerRender();}
@@ -25461,12 +25486,12 @@ function presetsManagerRender(){
   if(_pmTab==='looks'){
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">A <b>Look</b> changes only the colour and film treatment. Star looks in the Looks grid to pin them here.</div>`;
     h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:6px 0 2px">FAVOURITES</div>`+(favs.length?favs.map(k=>row(prettyLUT(k),'Look',b('Apply',`selectLUT('p:'+${q(k)});document.getElementById('cs-modal-ov').remove()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
-    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?_pmFolders(own,o=>o.textContent,o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this saved look?','Delete'))return;await lutLibDel(${q(o.value.slice(2))});await refreshLUTSelect();presetsManagerOpen('looks');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
+    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?_pmFolders(own,o=>o.textContent,o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`lookRename(${q(o.value.slice(2))}).then(()=>presetsManagerOpen('looks'))`)+b('Export',`lookExport(${q(o.value.slice(2))})`)+b('Delete',`lookDelete(${q(o.value.slice(2))}).then(()=>presetsManagerOpen('looks'))`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
   }else if(_pmTab==='styles'){
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Edit Style</b> reapplies its selected settings to any photo. Crop and retouch are opt-in when saving.</div>`;
     h+=(styles.length?_pmFolders(styles,st=>st.name,st=>row(st.name,_pmStyleSummary(st.recipe),
       b('Apply',`styleApply(${q(st.name)})`)+b('Rename',`styleRename(${q(st.name)}).then(()=>presetsManagerOpen('styles'))`)+b('Export',`styleExport(${q(st.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this style?','Delete'))return;stylesSave(stylesList().filter(x=>x.name!==${q(st.name)}));styleListRefresh();presetsManagerOpen('styles');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
-    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button></div>`;
+    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button>${styles.length?'<button class="btn bgh" title="Export every Style, with folders and favourites, as one bundle file" onclick="styleExportBundle()">Export all…</button>':''}</div>`;
   }else{
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Export Recipe</b> only changes the files you export: format, quality, size and sharpening.</div>`;
     h+=(exps.length?_pmFolders(exps,e=>e.name,e=>row(e.name,_pmExportSummary(e.settings),

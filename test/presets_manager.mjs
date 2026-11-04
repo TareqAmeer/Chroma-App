@@ -72,6 +72,48 @@ try {
   assert.deepEqual(raw, [], `raw control ids shown in picker: ${raw.join(', ')}`);
   assert.deepEqual(await page.evaluate(() => [_fxPrettyId('tg-lut'), _fxPrettyId('tg-hal-white'), _fxPrettyId('tg-grain')]), ['Look', 'Halation: white', 'Grain']);
   await close();
+
+  // CHR-197: your own saved Looks get Rename / Export / Delete, like Edit Styles.
+  await page.evaluate(async () => {
+    const lut = new Float32Array(SZ * SZ * SZ * 3).fill(1);
+    await lutLibPut('My Look', lutToBytes(lut));
+    await refreshLUTSelect('l:My Look');
+    // A Style that points at the look must follow a rename.
+    stylesSave([...stylesList(), { version: 2, name: 'Uses Look', recipe: { sliders: {}, toggles: {}, selects: { 'sel-lut': 'l:My Look' }, colors: {} }, keys: [] }]);
+  });
+  const ownRow = (name) => page.locator('#pm-body .pm-name[title="' + name + '"]').locator('xpath=../..');
+  await page.evaluate(() => presetsManagerOpen('looks'));
+  assert.deepEqual(await ownRow('My Look').locator('button').allTextContents(), ['Apply', 'Rename', 'Export', 'Delete']);
+  // libtest runs with the mocked desktop shell, so dl() goes through saveFile's native path:
+  // capture what is handed to saveFile rather than waiting for a browser download.
+  await page.evaluate(() => { window.saveFile = async (content, fname) => { window.__saved = { content: String(content), fname }; }; });
+  await ownRow('My Look').locator('button', { hasText: 'Export' }).click();
+  await page.waitForFunction(() => !!window.__saved);
+  const saved = await page.evaluate(() => window.__saved);
+  assert.equal(saved.fname, 'My_Look.cube');
+  const cube = saved.content;
+  assert.match(cube, /LUT_3D_SIZE 33/); assert.match(cube, /^1.000000 1.000000 1.000000$/m, 'exported .cube carries the saved LUT');
+  await ownRow('My Look').locator('button', { hasText: 'Rename' }).click();
+  await page.fill('#fx-ask-input', 'Film/Renamed Look');
+  await page.click('#fx-ask-ok');
+  await page.waitForSelector('#pm-body .pm-name[title="Film/Renamed Look"]');
+  assert.deepEqual(await page.evaluate(async () => [(await lutLibList()).sort(), document.getElementById('sel-lut').value, stylesList().find((s) => s.name === 'Uses Look').recipe.selects['sel-lut']]),
+    [['Film/Renamed Look'], 'l:Film/Renamed Look', 'l:Film/Renamed Look'], 'rename moves the library entry, keeps the selection and updates Styles that use it');
+  await ownRow('Film/Renamed Look').locator('button', { hasText: 'Delete' }).click();
+  await page.click('#fx-confirm-ok');
+  await page.waitForFunction(async () => (await lutLibList()).length === 0);
+  await page.waitForFunction(() => !document.querySelector('#pm-body .pm-name[title="Film/Renamed Look"]'));
+  assert.equal(await page.evaluate(() => document.getElementById('sel-lut').value), '', 'deleting the selected look clears the selection');
+  await close();
+
+  // Edit Styles tab: "Export all" writes the existing multi-Style bundle.
+  await page.evaluate(() => presetsManagerOpen('styles'));
+  const bundleP = page.waitForEvent('download');
+  await page.locator('#pm-body button', { hasText: 'Export all' }).click();
+  const bundle = JSON.parse(await (await import('node:fs/promises')).readFile(await (await bundleP).path(), 'utf8'));
+  assert.equal(bundle.format, 'chromasmith-style-bundle');
+  assert.deepEqual(bundle.styles.map((s) => s.name).sort(), ['Loose', 'Street/Grit', 'Uses Look', 'Wedding/Cool', 'Wedding/Warm']);
+  await close();
   assert.deepEqual(errors, [], errors.join('; '));
   console.log(`PASS: presets manager defaults to Looks, groups folders, ${labels.length} picker labels are human.`);
 } finally {
