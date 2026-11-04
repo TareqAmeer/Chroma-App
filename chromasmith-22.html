@@ -7596,7 +7596,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104J';
+const BUILD='1.1104K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7658,6 +7658,9 @@ function csAbout(){
     +'halation pass runs in your browser; the app works with the network switched off.</p>'
     +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
     +`<span>Version</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">v. ${BUILD}</span></div>`
+    // CHR-182: the shortcut editor (rebind, conflicts, reset to defaults) is reachable from Settings.
+    +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Keyboard</div>'
+    +'<div class="btn-row" style="margin:0 0 16px"><button class="btn bgh" data-about="shortcuts" onclick="document.getElementById(\'cs-modal-ov\').remove();chromasmithShowShortcuts()">Customise keyboard shortcuts…</button></div>'
     +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
     +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
     +'<div class="btn-row" style="margin-top:0">'
@@ -32369,6 +32372,13 @@ function ovfBuild(){
   // duplicated between this menu and Tools.
   // Moved off the always-visible deskbar (top-bar decluttering pass) — the one semi-destructive
   // action in that cluster, and the least frequently reached for next to Undo/Redo/Export.
+  // CHR-196/182: a visible route to the command palette and the shortcut editor. Windows has no
+  // native menu bar, so without these rows both were reachable only by already knowing the keys.
+  // The hint shows the live (possibly rebound) binding from the shortcut registry.
+  const kb=id=>{const b=typeof csShortcutBinding==='function'&&csShortcutBinding(id);return b?' <kbd class="fx-ovf-kbd" style="margin-left:auto;font-family:var(--mono);font-size:10px;opacity:var(--op-4)">'+csShortcutLabel(b)+'</kbd>':'';};
+  h+='<button class="fx-ovf-item" data-ovf="commands" onclick="ovfClose();cpOpen()">Search commands…'+kb('editor.search')+'</button>';
+  h+='<button class="fx-ovf-item" data-ovf="shortcuts" onclick="ovfClose();chromasmithShowShortcuts()">Keyboard shortcuts…'+kb('editor.shortcuts')+'</button>';
+  h+='<div class="fx-ovf-sep"></div>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();fxResetAll()">Reset all edits</button>';
   h+='<div class="fx-ovf-sep"></div>';
   // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and

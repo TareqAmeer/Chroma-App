@@ -11,6 +11,9 @@ function csAbout(){
     +'halation pass runs in your browser; the app works with the network switched off.</p>'
     +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
     +`<span>Version</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">v. ${BUILD}</span></div>`
+    // CHR-182: the shortcut editor (rebind, conflicts, reset to defaults) is reachable from Settings.
+    +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Keyboard</div>'
+    +'<div class="btn-row" style="margin:0 0 16px"><button class="btn bgh" data-about="shortcuts" onclick="document.getElementById(\'cs-modal-ov\').remove();chromasmithShowShortcuts()">Customise keyboard shortcuts…</button></div>'
     +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
     +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
     +'<div class="btn-row" style="margin-top:0">'

@@ -16,6 +16,13 @@ function ovfBuild(){
   // duplicated between this menu and Tools.
   // Moved off the always-visible deskbar (top-bar decluttering pass) — the one semi-destructive
   // action in that cluster, and the least frequently reached for next to Undo/Redo/Export.
+  // CHR-196/182: a visible route to the command palette and the shortcut editor. Windows has no
+  // native menu bar, so without these rows both were reachable only by already knowing the keys.
+  // The hint shows the live (possibly rebound) binding from the shortcut registry.
+  const kb=id=>{const b=typeof csShortcutBinding==='function'&&csShortcutBinding(id);return b?' <kbd class="fx-ovf-kbd" style="margin-left:auto;font-family:var(--mono);font-size:10px;opacity:var(--op-4)">'+csShortcutLabel(b)+'</kbd>':'';};
+  h+='<button class="fx-ovf-item" data-ovf="commands" onclick="ovfClose();cpOpen()">Search commands…'+kb('editor.search')+'</button>';
+  h+='<button class="fx-ovf-item" data-ovf="shortcuts" onclick="ovfClose();chromasmithShowShortcuts()">Keyboard shortcuts…'+kb('editor.shortcuts')+'</button>';
+  h+='<div class="fx-ovf-sep"></div>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();fxResetAll()">Reset all edits</button>';
   h+='<div class="fx-ovf-sep"></div>';
   // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and
