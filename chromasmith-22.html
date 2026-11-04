@@ -7593,7 +7593,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104G';
+const BUILD='1.1104H';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15313,9 +15313,13 @@ function _pickAvgRGB(e,fromCanvas){
   const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
   const K=5,half=(K-1)/2;
   const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
-  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
-  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
-  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  let d5=null;
+  if(src===FX.cv)d5=fxReadCanvasRGBA(src,bx,by,K,K);   // GL readback (same reader as the hover loupe)
+  if(!d5){
+    const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+    tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+    d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  }
   let ar=0,ag=0,ab=0;const n5=K*K;
   for(let i=0;i<d5.length;i+=4){ar+=d5[i];ag+=d5[i+1];ab+=d5[i+2];}
   return[ar/n5,ag/n5,ab/n5];
@@ -24478,8 +24482,41 @@ function _fxEyeArmed(){
 }
 const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
 let _fxEyeEl=null,_fxEyeRaf=0,_fxEyeEv=null;
-const _fxEyeTc=document.createElement('canvas');_fxEyeTc.width=_fxEyeTc.height=1;
-const _fxEyeCtx=_fxEyeTc.getContext('2d',{willReadFrequently:true});
+// Read RGBA bytes from a canvas on screen. For the WebGL preview canvas (FX.cv) this reads the GL
+// drawing buffer directly with readPixels (preserveDrawingBuffer:true keeps it valid between
+// frames) instead of drawImage-ing the WebGL canvas into a 2D canvas: that path came back all-zero
+// (#000000) in the desktop app's WKWebView while working in Chromium. The context is
+// premultipliedAlpha:false, which WebKit has to convert on the drawImage path. Falls back to
+// drawImage for 2D canvases (#fx-canvas-bd) or when GL is unavailable. Returns null rather than a
+// fake black when the read is fully transparent (alpha 0 means nothing was read; the preview
+// always writes opaque pixels).
+const _fxReadTc=document.createElement('canvas');
+function _fxAllTransparent(d){for(let i=3;i<d.length;i+=4)if(d[i])return false;return true;}
+function fxReadCanvasRGBA(el,x,y,w,h){
+  if(!el||!el.width||!el.height)return null;
+  w=Math.min(w,el.width);h=Math.min(h,el.height);
+  x=Math.max(0,Math.min(el.width-w,x|0));y=Math.max(0,Math.min(el.height-h,y|0));
+  let d=null;
+  const gl=(typeof FX!=='undefined'&&FX&&el===FX.cv&&FX.gl&&!FX.gl.isContextLost())?FX.gl:null;
+  if(gl&&gl.drawingBufferWidth===el.width&&gl.drawingBufferHeight===el.height){
+    try{
+      const prev=gl.getParameter(gl.FRAMEBUFFER_BINDING),raw=new Uint8Array(w*h*4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      gl.readPixels(x,el.height-y-h,w,h,gl.RGBA,gl.UNSIGNED_BYTE,raw);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,prev);
+      d=new Uint8ClampedArray(w*h*4);   // GL rows are bottom-up: flip to canvas row order
+      for(let r=0;r<h;r++)d.set(raw.subarray((h-1-r)*w*4,(h-r)*w*4),r*w*4);
+    }catch(err){d=null;}
+  }
+  if(!d||_fxAllTransparent(d)){
+    try{
+      if(_fxReadTc.width!==w||_fxReadTc.height!==h){_fxReadTc.width=w;_fxReadTc.height=h;}
+      const cx=_fxReadTc.getContext('2d',{willReadFrequently:true});
+      cx.clearRect(0,0,w,h);cx.drawImage(el,x,y,w,h,0,0,w,h);d=cx.getImageData(0,0,w,h).data;
+    }catch(err){return null;}
+  }
+  return _fxAllTransparent(d)?null:d;
+}
 function _fxEyeHide(){if(_fxEyeEl)_fxEyeEl.style.display='none';}
 function _fxEyeMove(e){
   if(!_fxEyeArmed()){_fxEyeHide();if(e.currentTarget.style.cursor===_FX_EYE_CURSOR)e.currentTarget.style.cursor='';return;}
@@ -24492,7 +24529,7 @@ function _fxEyeDraw(){
   const el=ev.el,r=el.getBoundingClientRect();if(!r.width||!r.height||!el.width)return;
   const px=Math.floor((ev.x-r.left)*el.width/r.width),py=Math.floor((ev.y-r.top)*el.height/r.height);
   if(px<0||py<0||px>=el.width||py>=el.height||!fxPointerToCanvasPx({clientX:ev.x,clientY:ev.y})){_fxEyeHide();return;}  // off-photo / on the frame
-  let d;try{_fxEyeCtx.clearRect(0,0,1,1);_fxEyeCtx.drawImage(el,px,py,1,1,0,0,1,1);d=_fxEyeCtx.getImageData(0,0,1,1).data;}catch(err){return;}
+  const d=fxReadCanvasRGBA(el,px,py,1,1);if(!d){_fxEyeHide();return;}   // unreadable: hide, never show a fake #000000
   if(!_fxEyeEl){
     _fxEyeEl=document.createElement('div');
     _fxEyeEl.style.cssText='position:fixed;z-index:9999;pointer-events:none;display:none;align-items:center;gap:6px;padding:3px 7px 3px 3px;border-radius:14px;background:rgba(20,20,20,.88);color:#fff;font:11px/1 ui-monospace,Menlo,monospace;box-shadow:0 2px 8px rgba(0,0,0,.4)';
