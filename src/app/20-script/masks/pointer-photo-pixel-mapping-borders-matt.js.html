@@ -101,7 +101,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`;
+    bt.title=`Point ${i+1}`+(pt.enabled===false?' (off)':'');if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -111,18 +111,32 @@ function pcSyncUI(){
   const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
   const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
   if(!pt)return;
-  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm'],['lumLo','llo'],['lumHi','lhi']].forEach(([k,sfx])=>{
     const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
-    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
   pt[key]=parseFloat(v)||0;
-  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  if(key==='lumLo')pt.lumLo=Math.min(pt.lumLo,pt.lumHi==null?100:pt.lumHi);
+  if(key==='lumHi')pt.lumHi=Math.max(pt.lumHi,pt.lumLo||0);
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm',lumLo:'llo',lumHi:'lhi'}[key];
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
+}
+// CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
+function pcToggleEnabled(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  pt.enabled=pt.enabled===false;if(pt.enabled)delete pt.enabled;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+function pcDuplicate(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  fxState.pointColors.splice(pcSel+1,0,JSON.parse(JSON.stringify(pt)));pcSel++;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){
   if(pcSel<0||!fxState.pointColors[pcSel])return;

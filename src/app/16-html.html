@@ -502,7 +502,11 @@
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
             <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
             <div class="fx-row" title="How gradually the adjustment fades toward the edge of the selected color range"><div class="fx-label">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-pc-sm" oninput="pcSlider('smoothness',this.value)"><div class="fx-val" id="vl-pc-sm">50</div></div>
+            <div class="fx-row" title="Only colours at least this bright are selected (0 = no lower limit)"><div class="fx-label">Lightness from</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-pc-llo" oninput="pcSlider('lumLo',this.value)"><div class="fx-val" id="vl-pc-llo">0</div></div>
+            <div class="fx-row" title="Only colours at most this bright are selected (100 = no upper limit)"><div class="fx-label">Lightness to</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-pc-lhi" oninput="pcSlider('lumHi',this.value)"><div class="fx-val" id="vl-pc-lhi">100</div></div>
             <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh" id="btn-pc-enable" onclick="pcToggleEnabled()" title="Turn this colour range off without losing its settings">Turn off</button>
+              <button class="btn bgh" onclick="pcDuplicate()" title="Copy this colour range and its adjustments">Duplicate</button>
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
             </div>
           </div>

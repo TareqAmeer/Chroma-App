@@ -4538,7 +4538,11 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
             <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
             <div class="fx-row" title="How gradually the adjustment fades toward the edge of the selected color range"><div class="fx-label">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-pc-sm" oninput="pcSlider('smoothness',this.value)"><div class="fx-val" id="vl-pc-sm">50</div></div>
+            <div class="fx-row" title="Only colours at least this bright are selected (0 = no lower limit)"><div class="fx-label">Lightness from</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-pc-llo" oninput="pcSlider('lumLo',this.value)"><div class="fx-val" id="vl-pc-llo">0</div></div>
+            <div class="fx-row" title="Only colours at most this bright are selected (100 = no upper limit)"><div class="fx-label">Lightness to</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-pc-lhi" oninput="pcSlider('lumHi',this.value)"><div class="fx-val" id="vl-pc-lhi">100</div></div>
             <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh" id="btn-pc-enable" onclick="pcToggleEnabled()" title="Turn this colour range off without losing its settings">Turn off</button>
+              <button class="btn bgh" onclick="pcDuplicate()" title="Copy this colour range and its adjustments">Duplicate</button>
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
             </div>
           </div>
@@ -7589,7 +7593,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104D';
+const BUILD='1.1104E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7736,7 +7740,10 @@ function applyHSL(r,g,b,hA,sA,lA){
 // hue/saturation picked from the photo (the eyedropper), with its own adjustable Range (how wide
 // a neighborhood of similar colors it grabs) instead of a fixed band width. Same weighted-kernel
 // shape as applyHSL for a consistent feel, just re-centered per point and range-driven per point.
-function pcWeight(h,s,pt){
+function pcWeight(h,s,pt,v){
+  // CHR-259: a disabled range selects nothing; an optional lightness band (lumLo..lumHi, 0-100 on HSV
+  // value) gates the selection. Records without them keep the old selection exactly (full 0..100 band).
+  if(pt.enabled===false)return 0;
   let df=Math.abs(h-pt.h);if(df>.5)df=1-df;
   const hHalf=0.03+(pt.range||0)/100*0.22;     // range 0-100 -> ±10.8°..90° hue half-width
   const sHalf=0.15+(pt.range||0)/100*0.55;     // wider range also tolerates more saturation drift
@@ -7747,14 +7754,19 @@ function pcWeight(h,s,pt){
   const edgePower=Math.pow(2,(50-smooth)/50);
   const wh=Math.pow(Math.max(0,1-Math.pow(df/hHalf,2)),edgePower);
   const ws=Math.pow(Math.max(0,1-Math.pow((s-pt.s)/sHalf,2)),edgePower);
-  return wh*ws*Math.min(1,s*3);
+  let wl=1;
+  if(v!=null&&((pt.lumLo||0)>0||(pt.lumHi!=null&&pt.lumHi<100))){
+    const lo=(pt.lumLo||0)/100,hi=(pt.lumHi==null?100:pt.lumHi)/100,soft=0.02+Math.max(0,Math.min(100,pt.smoothness==null?50:pt.smoothness))/100*0.08;
+    wl=Math.max(0,Math.min(1,(v-lo)/soft+1))*Math.max(0,Math.min(1,(hi-v)/soft+1));
+  }
+  return wh*ws*Math.min(1,s*3)*wl;
 }
 function applyPointColors(r,g,b,points){
   if(!points||!points.length)return[r,g,b];
   const[h,s,v]=r2hsv(r,g,b);
   let dh=0,ds=0,dv=0;
   for(const pt of points){
-    const w=pcWeight(h,s,pt);if(w<=0)continue;
+    const w=pcWeight(h,s,pt,v);if(w<=0)continue;
     dh+=w*(pt.hue||0)*0.45/360;ds+=w*((pt.sat||0)/100)*.55;dv+=w*((pt.lum||0)/100)*.11;
   }
   return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
@@ -15329,7 +15341,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`;
+    bt.title=`Point ${i+1}`+(pt.enabled===false?' (off)':'');if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -15339,18 +15351,32 @@ function pcSyncUI(){
   const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
   const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
   if(!pt)return;
-  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm'],['lumLo','llo'],['lumHi','lhi']].forEach(([k,sfx])=>{
     const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
-    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
   pt[key]=parseFloat(v)||0;
-  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  if(key==='lumLo')pt.lumLo=Math.min(pt.lumLo,pt.lumHi==null?100:pt.lumHi);
+  if(key==='lumHi')pt.lumHi=Math.max(pt.lumHi,pt.lumLo||0);
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm',lumLo:'llo',lumHi:'lhi'}[key];
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
+}
+// CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
+function pcToggleEnabled(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  pt.enabled=pt.enabled===false;if(pt.enabled)delete pt.enabled;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+function pcDuplicate(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  fxState.pointColors.splice(pcSel+1,0,JSON.parse(JSON.stringify(pt)));pcSel++;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){
   if(pcSel<0||!fxState.pointColors[pcSel])return;
