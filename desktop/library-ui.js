@@ -502,7 +502,6 @@
         }));
       }
       case 'eject_volume': return Promise.resolve();
-      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve(true);
       case 'trash_file_with_undo': {
         (window.__libtestCalls = window.__libtestCalls || []).push(['trash_file', A]);
         const receipt = { photo: { originalPath: A.path, receiptId: `libtest-trash:${A.path}` }, sidecar: null, warning: null };
@@ -950,6 +949,7 @@
       case 'catalog_photo_ids_for_paths': return Promise.resolve((A.paths || []).map((p) => parseInt((/(\d+)\.\w+$/.exec(p) || [])[1] || '0', 10) - 1000));
       case 'collage_output_path': return Promise.resolve(String(A.firstSource || '/test/AllPhotos/x.jpg').replace(/[^/]*$/, 'Collage.jpg'));
       case 'take_pending_open_path': return Promise.resolve([]);
+      case 'take_pending_oauth_callback': return Promise.resolve(null);
       // Decode caches: the real commands return Err on a miss, which every caller already treats
       // as "decode it yourself" — a permanent miss exercises that path.
       case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path': case 'hdr_headroom_clear': case 'get_hdr_companion':
