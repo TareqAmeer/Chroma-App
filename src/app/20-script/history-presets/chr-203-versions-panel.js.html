@@ -381,7 +381,7 @@ function bakeHsl(){
   // default snapshot and then the photo's recipe, each re-baking an unchanged (usually identity)
   // cube — ~36k applyHSL evals, the biggest single cost of applyUISnapshot (~60ms Chromium,
   // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
-  const key=JSON.stringify([hA,sA,lA,pts]);
+  const key=JSON.stringify([hA,sA,lA,pts],(k,v)=>k==='name'?undefined:v); // a range's name never changes the cube
   const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
   let hit=memo.get(key);
   if(!hit){

@@ -34,6 +34,25 @@ try{
   await page.locator('text=Duplicate').first().click();
   const pts=await page.evaluate(()=>fxState.pointColors.length+':'+document.querySelectorAll('#pc-list .pc-chip').length+':'+fxState.pointColors[1].lumLo);
   assert.equal(pts,'2:2:90','duplicate copies the range with its settings');
+  // Name: typed into the panel, shown on the chip, saved with the recipe (snapshot round-trip and
+  // history), never part of the render.
+  const cube0=await page.evaluate(()=>Array.from(FX._hslSnapshot||[]).join(','));
+  await page.locator('#in-pc-name').fill('  Warm   skin ');await page.locator('#in-pc-name').press('Enter');
+  assert.equal(await page.evaluate(()=>fxState.pointColors[1].name),'Warm skin');
+  assert.equal(await page.locator('#pc-list .pc-chip').nth(1).getAttribute('title'),'Warm skin');
+  assert.equal(await page.evaluate(()=>fxHistory[fxHistIdx].snap.pointColors[1].name),'Warm skin','rename is an undoable step');
+  assert.equal(await page.evaluate(()=>Array.from(FX._hslSnapshot||[]).join(',')),cube0,'a name does not change the baked cube');
+  assert.equal(await page.evaluate(()=>fxState.pointColors[0].name),undefined,'only the selected range is renamed');
+  const saved=await page.evaluate(()=>JSON.stringify(getUISnapshot()));
+  await page.evaluate(()=>{fxState.pointColors[1].name='x';});
+  await page.evaluate((j)=>{applyUISnapshot(JSON.parse(j));pcSel=1;pcSyncUI();},saved);
+  assert.equal(await page.evaluate(()=>fxState.pointColors[1].name),'Warm skin','name survives a recipe round-trip');
+  assert.equal(await page.locator('#in-pc-name').inputValue(),'Warm skin');
+  await page.locator('text=Duplicate').first().click();
+  assert.equal(await page.evaluate(()=>fxState.pointColors[2].name),'Warm skin copy');
+  await page.locator('#in-pc-name').fill('');await page.locator('#in-pc-name').press('Enter');
+  assert.equal(await page.evaluate(()=>'name' in fxState.pointColors[2]),false,'clearing removes the name');
+  assert.equal(await page.locator('#pc-list .pc-chip').nth(2).getAttribute('title'),'Point 3');
   assert.deepEqual(errs,[]);
-  console.log('PASS point colour on/off, lightness band and duplicate');
+  console.log('PASS point colour on/off, lightness band, duplicate and name');
 }finally{await browser.close();server.close();}

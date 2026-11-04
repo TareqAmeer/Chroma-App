@@ -497,6 +497,7 @@
                other job (display:none/block toggled by pcSlider et al.) still no-ops safely via
                getElementById returning null. -->
           <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row" title="A name for this colour range, saved with the edit"><div class="fx-label">Name</div><input class="vinput" id="in-pc-name" type="text" maxlength="40" placeholder="Point 1" onchange="pcRename(this.value)" onkeydown="if(event.key==='Enter')this.blur()"></div>
             <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-h" oninput="pcSlider('hue',this.value)"><div class="fx-val" id="vl-pc-h">0</div></div>
             <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>

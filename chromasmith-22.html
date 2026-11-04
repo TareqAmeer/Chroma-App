@@ -4533,6 +4533,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
                other job (display:none/block toggled by pcSlider et al.) still no-ops safely via
                getElementById returning null. -->
           <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row" title="A name for this colour range, saved with the edit"><div class="fx-label">Name</div><input class="vinput" id="in-pc-name" type="text" maxlength="40" placeholder="Point 1" onchange="pcRename(this.value)" onkeydown="if(event.key==='Enter')this.blur()"></div>
             <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-h" oninput="pcSlider('hue',this.value)"><div class="fx-val" id="vl-pc-h">0</div></div>
             <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
@@ -7596,7 +7597,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104M';
+const BUILD='1.1104N';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15054,7 +15055,7 @@ function bakeHsl(){
   // default snapshot and then the photo's recipe, each re-baking an unchanged (usually identity)
   // cube — ~36k applyHSL evals, the biggest single cost of applyUISnapshot (~60ms Chromium,
   // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
-  const key=JSON.stringify([hA,sA,lA,pts]);
+  const key=JSON.stringify([hA,sA,lA,pts],(k,v)=>k==='name'?undefined:v); // a range's name never changes the cube
   const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
   let hit=memo.get(key);
   if(!hit){
@@ -15355,7 +15356,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`+(pt.enabled===false?' (off)':'');if(pt.enabled===false)bt.style.opacity='.35';
+    bt.title=pcName(pt,i)+(pt.enabled===false?' (off)':'');bt.setAttribute('aria-label',bt.title);if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -15370,6 +15371,7 @@ function pcSyncUI(){
     const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
   const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
@@ -15381,6 +15383,16 @@ function pcSlider(key,v){
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
 }
+// CHR-259: each range can carry a user name (pt.name, saved with the recipe like every other
+// point field). Blank = no name, shown as "Point N". Names never affect the selection or render.
+function pcName(pt,i){return(pt&&typeof pt.name==='string'&&pt.name.trim())?pt.name.trim():'Point '+(i+1);}
+function pcRename(v){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const name=String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,40);
+  if((pt.name||'')===name)return;
+  if(name)pt.name=name;else delete pt.name;
+  pcRebuild();pcSyncUI();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
 // CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
 function pcToggleEnabled(){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
@@ -15389,7 +15401,8 @@ function pcToggleEnabled(){
 }
 function pcDuplicate(){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
-  fxState.pointColors.splice(pcSel+1,0,JSON.parse(JSON.stringify(pt)));pcSel++;
+  const dup=JSON.parse(JSON.stringify(pt));if(dup.name)dup.name=(dup.name+' copy').slice(0,40);
+  fxState.pointColors.splice(pcSel+1,0,dup);pcSel++;
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){

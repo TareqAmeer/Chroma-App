@@ -105,7 +105,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`+(pt.enabled===false?' (off)':'');if(pt.enabled===false)bt.style.opacity='.35';
+    bt.title=pcName(pt,i)+(pt.enabled===false?' (off)':'');bt.setAttribute('aria-label',bt.title);if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -120,6 +120,7 @@ function pcSyncUI(){
     const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
   const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
@@ -131,6 +132,16 @@ function pcSlider(key,v){
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
 }
+// CHR-259: each range can carry a user name (pt.name, saved with the recipe like every other
+// point field). Blank = no name, shown as "Point N". Names never affect the selection or render.
+function pcName(pt,i){return(pt&&typeof pt.name==='string'&&pt.name.trim())?pt.name.trim():'Point '+(i+1);}
+function pcRename(v){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const name=String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,40);
+  if((pt.name||'')===name)return;
+  if(name)pt.name=name;else delete pt.name;
+  pcRebuild();pcSyncUI();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
 // CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
 function pcToggleEnabled(){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
@@ -139,7 +150,8 @@ function pcToggleEnabled(){
 }
 function pcDuplicate(){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
-  fxState.pointColors.splice(pcSel+1,0,JSON.parse(JSON.stringify(pt)));pcSel++;
+  const dup=JSON.parse(JSON.stringify(pt));if(dup.name)dup.name=(dup.name+' copy').slice(0,40);
+  fxState.pointColors.splice(pcSel+1,0,dup);pcSel++;
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){

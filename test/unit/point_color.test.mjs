@@ -24,3 +24,11 @@ test('the lightness band keeps the inside and drops the far outside', () => {
   const edge = pc.pcWeight(0.0, 0.6, band, 0.39);
   assert.ok(edge > 0 && edge < pc.pcWeight(0.0, 0.6, band, 0.55), 'soft just outside the lower edge');
 });
+
+test('a range name is a label only: blank falls back to "Point N", and the selection ignores it', () => {
+  const named = load(['pcName']);
+  assert.equal(named.pcName({ name: '  Sky  ' }, 0), 'Sky');
+  assert.equal(named.pcName({ name: '   ' }, 2), 'Point 3');
+  assert.equal(named.pcName({}, 0), 'Point 1');
+  assert.equal(pc.pcWeight(0.0, 0.6, { ...pt, name: 'Sky' }, 0.5), pc.pcWeight(0.0, 0.6, pt, 0.5));
+});
