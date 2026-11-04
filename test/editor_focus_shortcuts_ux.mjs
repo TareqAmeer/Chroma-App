@@ -191,7 +191,9 @@ const names = await page.evaluate(() => {
 for (const n of names) { assert(n.name, `tool ${n.k} has a canonical name`); assert(n.inPalette, `tool ${n.k} appears in the palette as "${n.name}"`); assert.equal(n.title.replace(/\s+/g, ' '), n.name, `panel title for ${n.k} equals canonical name`); }
 r = await paletteRow('red eye');
 assert(r.some((x) => x.label === 'Red Eye' && x.group === 'Section'), 'Red Eye reachable from palette');
-for (const [q, want] of [['brightness', 'Light'], ['exposure', 'Light'], ['tone', 'Light'], ['basic', 'Light'], ['vignette', 'Effects']]) {
+// Queries resolve to the tool's canonical name (CS_NAMES), so a rename keeps the check meaningful.
+for (const [q, key] of [['brightness', 'adjust'], ['exposure', 'adjust'], ['tone', 'adjust'], ['basic', 'adjust'], ['vignette', 'vig']]) {
+  const want = await page.evaluate((k) => CS_NAMES[k], key);
   r = await paletteRow(q);
   assert(r.length && r.slice(0, 3).some((x) => x.label === want), `"${q}" reaches ${want}: ` + JSON.stringify(r.slice(0, 3)));
 }
