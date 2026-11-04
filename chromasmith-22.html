@@ -7583,7 +7583,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1103C';
+const BUILD='1.1104A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -33016,7 +33016,12 @@ function fxRailFlatToggle(){
 // Phone tool filters = the desktop rail's own groups (FX_GROUPS), so both apps sort tools the same way.
 const FX_MOBILE_CATS={all:null};
 Object.entries(FX_GROUPS).forEach(([g,d])=>{FX_MOBILE_CATS[g]=new Set(d.members);});
-const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
+// Phones get a focused editor: looks, light, colour mixer, curves, film effects (grain, halation,
+// bloom, vignette, borders), masks, healing, crop and saved edits. Pro/technical tools stay on
+// desktop: source/print profiles, film-negative conversion, colour wheels, point colour, noise
+// reduction, deconvolution, lens corrections and red-eye. Edits made with them on desktop still render.
+const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share',
+  'inprint','filmneg','wheels','pointcolor','nr','deconv','lens','redeye']);
 let _fxMobileCat='all';
 const FX_MOBILE_DESC={looks:'Film looks.',inprint:'Source profile, highlight response and print stock.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
   borders:'Film borders and frames.',canvas:'Add space around the photo.',style:'Save and reuse whole edits.'};

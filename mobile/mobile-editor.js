@@ -100,6 +100,10 @@ function toolBrowser(){
   const cats=$('#fx-tool-cats');if(!cats)return;
   cats.innerHTML=Object.entries(GROUPS).map(([key,g])=>'<button data-cat="'+key+'" aria-pressed="false">'+g.label+'</button>').join('');
   cats.onclick=e=>{const b=e.target.closest('button');if(b)fxMobileFilter(b.dataset.cat);};
+  // Tools in FX_MOBILE_HIDE are desktop-only and never reach the grid: drop a category left with none.
+  {const shown=new Set([...document.querySelectorAll('#fx-tool-grid .fx-sec-btn')].map(b=>b.dataset.sec));
+    cats.querySelectorAll('button').forEach(b=>{const k=GROUPS[b.dataset.cat]?.keys;b.hidden=!!k&&!k.some(x=>shown.has(x));});
+    if(GROUPS[category]?.keys&&!GROUPS[category].keys.some(x=>shown.has(x)))category='all';}
   if(!$('#phone-tool-search')){
     const row=document.createElement('label');row.className='phone-tool-search';row.innerHTML='<span class="phone-sr">Search tools</span><input id="phone-tool-search" type="search" placeholder="Search tools" autocomplete="off">';cats.before(row);
     row.querySelector('input').oninput=e=>{search=e.target.value;filterTools();};
