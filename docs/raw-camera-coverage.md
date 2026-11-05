@@ -49,12 +49,19 @@ Samples come from [raw.pixls.us `/data-unique/`](https://raw.pixls.us/data-uniqu
 | 3FR | Hasselblad H3D (reports H3DII-39) | 53.6 MB | OK | 7247×5444 | 3623×2722 | 24.7 s | Embedded profile, parsed as a DNG profile ³ |
 | IIQ | Phase One P65+ | 71.9 MB | OK (edge rows fixed, note 4) | 8984×6732 | 4492×3366 | 27.4 s | LibRaw sRGB fallback |
 | DNG | Canon EOS 5D Mark III via Adobe DNG Converter (lossless) | 23.2 MB | OK | 5796×3870 | 2898×1935 | 10.5 s | Embedded DNG profile |
+| CR3 | Canon EOS M200 ⁶ | 28.8 MB | OK | not run | 3012×2010 | 2.6 s (half) | LibRaw sRGB fallback |
+| RWL | Leica C (Typ 112) ⁶ | 14.8 MB | OK | not run | 2008×1508 | 0.8 s (half) | LibRaw sRGB fallback |
+| DNG (Leica, compressed) | Leica M (Typ 240) ⁶ | 30.1 MB | OK | not run | 2992×2000 | 2.5 s (half) | Embedded DNG profile |
+| ORF (OM System) | OM Digital Solutions OM-3 ⁶ | 21.6 MB | OK | not run | 2610×1956 | 1.9 s (half) | LibRaw sRGB fallback |
+| X3F (Foveon Quattro) | Sigma DP0 Quattro ⁶ | 57.2 MB | **Not supported** — LibRaw returns no image; the app now says "This RAW format is not supported … Convert it to DNG or TIFF first" instead of a JS TypeError | — | — | — | — |
 
 Times are the probe's wall time per `loadRw2` call with libraw-wasm 1.6.0 (note 5), on a slow, shared container CPU (load average about 20 on 4 cores during the run). Treat them as relative, not as user-facing figures.
 
 **Orientation.** libraw-wasm's `metadata()` has no flip/orientation field. LibRaw applies the EXIF orientation itself (`userFlip:-1`). All 10 samples are landscape, and none came out turned 90° relative to the sensor `width`/`height`. That means no sample exercised a rotated file, so **orientation handling is still unverified**. A 180° turn could not be detected this way at all.
 
 Notes:
+
+6. Gap-fill samples (2026-11-05) from raw.pixls.us `/data/` rather than the CC0 `/data-unique/` set, which has none for these makers. Listed in `test/fixtures/raw-samples.json`, fetched by `tools/scripts/fetch-raw-samples.mjs`, never committed. Measured half-size only (`--half`).
 
 1. LibRaw reports 1944×1296 for this 40D file even on a full decode, which is half the 40D's 3888×2592 sensor. The file is small (5.8 MB), which is consistent with an sRAW capture. Not otherwise verified.
 2. **Fixed: one decode instead of two.** `loadRw2` used to decode linear first, for the DCP path. Only then did LibRaw's metadata show that no bundled DCP matched, so it decoded again for the LibRaw sRGB fallback. It now reads make/model from the file header (`rawSniffMakeModel`: TIFF IFDs, RAF header). When no bundled DCP can match and the file has no embedded DNG profile, it decodes once, straight to the fallback settings. LibRaw's own make/model is still checked after the decode, and a wrong hint falls back to a linear re-decode. CR3 and X3F have no TIFF/RAF header, so they keep the old two-decode path. Probe timings, same machine and session, before → after, full size: CR2 4.2 → 1.7 s, NEF 24.0 → 9.8 s, ARW 5.0 → 2.5 s, RAF 73.6 → 34.9 s, ORF 10.5 → 4.9 s, RW2 14.0 → 6.4 s, PEF 9.2 → 4.2 s, IIQ 61.7 → 28.8 s. Half size: RAF 16.8 → 8.5 s, IIQ 45.2 → 20.6 s. The full-resolution pixel SHA-256 is identical before and after for all 10 samples, at full and half size. The per-worker deadline is `withRawDecodeTimeout`'s 180 s; it was 45 s when these samples were first measured.

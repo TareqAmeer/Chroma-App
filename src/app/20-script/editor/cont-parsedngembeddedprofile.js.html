@@ -224,6 +224,9 @@ async function loadRw2(file,opts){
       };
       if(!sdrFirst)await meta();
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      // CHR-250: LibRaw returns no image for formats it cannot decode (Sigma Quattro X3F); say so
+      // instead of the later "Cannot read properties of undefined (reading 'rgba')".
+      if(!img||!img.data)throw new Error('This RAW format is not supported by the RAW decoder ('+(((file&&file.name)||'').split('.').pop()||'').toUpperCase()+'). Convert it to DNG or TIFF first.');
       if(sdrFirst)await meta();
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
     });

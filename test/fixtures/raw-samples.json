@@ -139,6 +139,72 @@
       "size": 23206642,
       "license": "CC0-1.0",
       "licenseUrl": "https://raw.pixls.us/data-unique/LICENSE.txt"
+    },
+    {
+      "id": "canon-eos-m200-cr3",
+      "maker": "Canon",
+      "model": "EOS M200",
+      "format": "CR3",
+      "sensor": "Bayer",
+      "file": "Canon__Canon_EOS_M200___MG_2231.CR3",
+      "url": "https://raw.pixls.us/data/Canon/Canon%20EOS%20M200/_MG_2231.CR3",
+      "sha256": "9b900c04ae37ba827b7894e66907657a0b174a74855c40039a8ca0c95583f141",
+      "size": 28778121,
+      "license": "raw.pixls.us /data/ (per-file licence on the site)",
+      "licenseUrl": "https://raw.pixls.us/"
+    },
+    {
+      "id": "leica-c-typ112-rwl",
+      "maker": "Leica",
+      "model": "C (Typ 112)",
+      "format": "RWL",
+      "sensor": "Bayer",
+      "file": "Leica__C_(Typ_112)__L1000006.RWL",
+      "url": "https://raw.pixls.us/data/Leica/C%20%28Typ%20112%29/L1000006.RWL",
+      "sha256": "081a6cf55204297f213e50b3398ff43e902dd684154ea79d1efea6503538176a",
+      "size": 14836224,
+      "license": "raw.pixls.us /data/ (per-file licence on the site)",
+      "licenseUrl": "https://raw.pixls.us/"
+    },
+    {
+      "id": "leica-m-typ240-dng",
+      "maker": "Leica",
+      "model": "M (Typ 240)",
+      "format": "DNG",
+      "sensor": "Bayer",
+      "file": "Leica__M_(Typ_240)__ADG_RPUsubmit_compressed_L1006373.DNG",
+      "url": "https://raw.pixls.us/data/Leica/M%20%28Typ%20240%29/ADG_RPUsubmit_compressed_L1006373.DNG",
+      "sha256": "bf35a4da121f853cb644253b69515b441748f95fcbd6fdea2de025a76e6c24cd",
+      "size": 30146560,
+      "license": "raw.pixls.us /data/ (per-file licence on the site)",
+      "licenseUrl": "https://raw.pixls.us/"
+    },
+    {
+      "id": "sigma-dp0-quattro-x3f",
+      "maker": "Sigma",
+      "model": "DP0 Quattro",
+      "format": "X3F",
+      "sensor": "Foveon",
+      "file": "Sigma__DP0_Quattro___SDI0263.X3F",
+      "url": "https://raw.pixls.us/data/Sigma/DP0%20Quattro/_SDI0263.X3F",
+      "sha256": "9e3095dd20237d35117faaaf1c66e22d0c271ab931f60775b3538519b49f54aa",
+      "size": 57197852,
+      "license": "raw.pixls.us /data/ (per-file licence on the site)",
+      "licenseUrl": "https://raw.pixls.us/"
+    },
+    {
+      "id": "om-system-om3-orf",
+      "maker": "OM Digital Solutions",
+      "model": "OM-3",
+      "format": "ORF",
+      "sensor": "Bayer",
+      "file": "OM_Digital_Solutions__OM-3__P5048182.ORF",
+      "url": "https://raw.pixls.us/data/OM%20Digital%20Solutions/OM-3/P5048182.ORF",
+      "sha256": "1cee7deb661e45101ab3ca6c4240d24ed949b167ed423703fca15c09dd8ec176",
+      "size": 21636473,
+      "license": "raw.pixls.us /data/ (per-file licence on the site)",
+      "licenseUrl": "https://raw.pixls.us/"
     }
-  ]
+  ],
+  "gapFill": "CR3, Leica RWL/DNG, Sigma X3F and OM System come from raw.pixls.us /data/ (not the CC0 /data-unique/ set); fetched only, never committed."
 }
