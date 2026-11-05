@@ -57,23 +57,32 @@ try{
   assert.equal(r.minZoom,0.25);
   assert.ok(r.sliderRoundTrip>500&&r.sliderRoundTrip<1000);
   assert.equal(r.fitSnap,true,'slider snaps to Fit near the fit position');
-  const c=await page.evaluate(async()=>{
-    fxZoom=FX_FIT;const zw=document.getElementById('fx-zoom-wrap');
-    const ev=(t,x,y,o={})=>zw.dispatchEvent(new PointerEvent(t,{pointerId:1,pointerType:'mouse',button:0,clientX:x,clientY:y,bubbles:true,cancelable:true,...o}));
-    zw.setPointerCapture=()=>{};
-    ev('pointerdown',300,300);ev('pointerup',300,300);
-    const click=_fxZoomToPct(fxZoom);
-    ev('pointerdown',300,300);ev('pointermove',340,300);ev('pointerup',340,300);   // a drag must NOT toggle
-    const afterDrag=_fxZoomToPct(fxZoom);
-    ev('pointerdown',300,300);ev('pointerup',300,300);                             // click again -> Fit
-    const back=Math.abs(fxZoom-FX_FIT)<1e-6;
-    mskAiTapMode=true;ev('pointerdown',300,300);ev('pointerup',300,300);mskAiTapMode=false;
-    const armed=Math.abs(fxZoom-FX_FIT)<1e-6;                                        // armed tool: no zoom
-    return{click,afterDrag,back,armed};
-  });
-  assert.ok(Math.abs(c.click-100)<1e-6,'a real click on the photo zooms to 100%');
-  assert.ok(Math.abs(c.afterDrag-100)<1e-6,'a drag pans, it does not toggle zoom');
-  assert.equal(c.back,true);assert.equal(c.armed,true);
+  // Real pointer clicks run against a REAL opened photo: the stubbed 60px canvas above can't survive
+  // the app's own async re-layout (the crisp-zoom render re-pins #fx-zoom-wrap to the canvas footprint
+  // between evaluates), so a stub here measured the stub, not the product. 3000x2000 on a dpr=2 page.
+  const rp=await browser.newPage({viewport:{width:1400,height:900},deviceScaleFactor:2});
+  rp.on('pageerror',e=>errors.push(e.message));
+  await rp.goto(`http://127.0.0.1:${server.address().port}/chromasmith-22.html?deskx=1`,{waitUntil:'load'});
+  await rp.waitForFunction(()=>typeof fxSection==='function'&&typeof _fxClickZoom==='function');
+  await rp.setInputFiles('#in-fx-img',{name:'photo3x2.png',mimeType:'image/png',buffer:await rp.evaluate(async()=>{const c=document.createElement('canvas');c.width=3000;c.height=2000;const g=c.getContext('2d');g.fillStyle='#888';g.fillRect(0,0,3000,2000);const b=await new Promise(r=>c.toBlob(r,'image/png'));return [...new Uint8Array(await b.arrayBuffer())];}).then(a=>Buffer.from(a))});
+  await rp.waitForFunction(()=>{const c=document.getElementById('fx-canvas');return c&&c.width>0&&fxWork;},null,{timeout:30000});
+  await rp.evaluate(()=>{document.querySelector('[data-tour-action="close"]')?.click();document.getElementById('cs-modal-ov')?.remove();});
+  await rp.waitForTimeout(1200);
+  const at=await rp.evaluate(()=>{const r=document.getElementById('fx-zoom-wrap').getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2,fit:Math.abs(fxZoom-FX_FIT)<1e-6};});
+  assert.equal(at.fit,true,'real photo opens at Fit');
+  const st=()=>rp.evaluate(()=>({pct:_fxZoomToPct(fxZoom),fit:Math.abs(fxZoom-FX_FIT)<1e-6,label:document.getElementById('fx-zoom-pct').textContent}));
+  const settle=()=>rp.waitForTimeout(400);
+  await rp.mouse.click(at.x,at.y);await settle();const c1=await st();
+  assert.ok(Math.abs(c1.pct-100)<1e-6,'a real click on the photo zooms to 100% (got '+c1.pct+')');
+  assert.equal(c1.label,'100%');
+  await rp.mouse.move(at.x,at.y);await rp.mouse.down();await rp.mouse.move(at.x+40,at.y,{steps:4});await rp.mouse.up();await settle();
+  assert.ok(Math.abs((await st()).pct-100)<1e-6,'a drag pans, it does not toggle zoom');
+  await rp.mouse.click(at.x,at.y);await settle();
+  assert.equal((await st()).fit,true,'click again returns to Fit');
+  await rp.evaluate(()=>{mskAiTapMode=true;});await rp.mouse.click(at.x,at.y);await settle();
+  const armed=(await st()).fit;await rp.evaluate(()=>{mskAiTapMode=false;});
+  assert.equal(armed,true,'armed tool: a click does not zoom');
+  await rp.close();
   const nodom=await page.evaluate(()=>{
     // The desktop open path can reach the readout before #fx-canvas / #fx-zoom-wrap exist: must not throw.
     const keepZ=document.getElementById('fx-zoom-wrap'),keepC=document.getElementById('fx-canvas');
