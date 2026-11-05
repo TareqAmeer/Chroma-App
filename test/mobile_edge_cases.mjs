@@ -23,7 +23,7 @@ const engines=process.argv.includes('--all')?[['Chromium',chromium],['WebKit',we
 async function exercise(name,engine){
  const browser=await engine.launch(name==='Chromium'?{args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']}:{});
  const page=await browser.newPage({viewport:{width:390,height:844},hasTouch:true,isMobile:true});page.setDefaultTimeout(30000);
- const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('https://**/*',r=>r.abort());
+ const errors=[];page.on('pageerror',e=>{if(/due to access control checks/.test(e.message))return;errors.push(e.message);}); // WebKit reports a cancelled fetch as an uncatchable pageerror (WebKit bug 182918; PouchDB #8802 filters it the same way)await page.route('https://**/*',r=>r.abort());
  await page.addInitScript(()=>{
   localStorage.setItem('chromasmith-tour-seen-v1','1');localStorage.setItem('cs_install_seen','1');
   window.savedFiles={};window.nativeCalls=[];window.nativeWriteCount=0;
