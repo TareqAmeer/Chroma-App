@@ -110,3 +110,9 @@ Prototype: `tools/scripts/mask_matting_eval.py`, scored with the CHR-297 harness
 - Shipped in the editor: Show-selection dropdown (6 styles + Off), Light/Color/Effects/Detail groups, Exposure ±5 EV, round AI scribble cursor, edit pins (select + drag radial/linear), Auto mask brush, Reset adjustments, auto-show selection while brushing, per-mask tone curve (256x8 `mskCrvTex`, `mskL[i].z` flag), auto-detect chips (native `scene_detect`, RT-DETR person + pets) with EdgeSAM hover preview, AI progress strip with Cancel (cancel discards the result; native calls cannot be interrupted).
 - Colour-model edge matting kept per owner decision despite the negative classical-matting result above; not yet scored on the real-photo set.
 - Not done: lifting the 8-mask cap (15 uniform arrays x8 plus two 4-channel raster textures; doubling exceeds the 224-vector WebGL2 minimum and needs two more raster textures), per-person body parts, CPU-worker parity for the mask curve.
+
+## Progress (2026-11-05)
+- CHR-297: public real-photo set (40 photos: P3M portraits, AIM-500 objects, DIS5K fine-edge, ADE20K sky,
+  CelebAMask-HQ faces) with dataset ground truth; gate `npm run mask:quality:real` against the committed
+  `test/mask_quality_real_baseline.json`. Photos are fetched, not committed. Results in masking-model-bench.md.
+- CHR-298: quality filled for face parsing and the landscape model; Intel Mac speed rows still open.
