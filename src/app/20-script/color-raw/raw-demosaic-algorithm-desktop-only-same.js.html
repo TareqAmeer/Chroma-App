@@ -107,3 +107,122 @@ function cropGridOverlaySync(){
 function cropSetGrid(v){cropGrid=v;const sel=document.getElementById('sel-crop-grid');if(sel)sel.value=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
   cropGridShown=v!=='off';cropGridOverlaySync();
   const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
+// ── CHR-288 highlight reconstruction cores (pure; NOT wired to any control yet) ──────────────────
+// Input: interleaved scene-linear camera RGB (Float32Array, white balance applied, BEFORE the
+// camera-to-output colour transform and BEFORE any clip/u16 packing) plus the per-channel sensor
+// saturation level "clip" in the same units. That is the only place the clipped-channel pattern is
+// still knowable: once WB-scaled channels are clipped to a common white (LibRaw highlight=0, the
+// browser decode's current setting) the information these modes use is gone. test/probe_hl_modes.mjs
+// measures it on the CC0 samples (GH5S: 2.7% of R and 1.4% of B at 65535 with highlight=0, none
+// with highlight=1). Re-implemented from the published descriptions (RawPedia "Highlight
+// reconstruction"; darktable manual "highlight reconstruction: inpaint opposed"), no code copied.
+// Every mode returns the input array itself when no pixel reaches its threshold.
+//   'blend'       ramps clipped pixels toward neutral at their brightest channel's value
+//                 (from 80% of the clip threshold up to it) — removes the magenta/cyan cast only.
+//   'propagate'   colour propagation: the chromaticity (channel / channel-mean) of unclipped
+//                 pixels diffuses into each clipped region by repeated 8-neighbour averaging
+//                 (Jacobi, deterministic); each clipped channel becomes ratio * level, the level
+//                 taken from the unclipped channels (or, all clipped, the largest lower bound).
+//   'opposed'     inpaint opposed: per channel, the mean cube-root difference between it and the
+//                 mean of the two opposed channels, measured on unclipped pixels within 2px of
+//                 clipped ones, is added back to the opposed mean wherever that channel clipped.
+// A reconstructed channel never drops below its recorded (clipped) value.
+function hlClippedMask(rgb,n,clip,thr){
+  const m=new Uint8Array(n);let any=0;
+  for(let i=0;i<n;i++){let k=0;for(let c=0;c<3;c++)if(rgb[3*i+c]>=clip[c]*thr)k|=1<<c;m[i]=k;if(k)any=1;}
+  return any?m:null;
+}
+function hlReconstruct(rgb,w,h,clip,mode,opts){
+  opts=opts||{};const n=w*h,thr=opts.threshold||0.995;
+  if(!mode||mode==='clip')return rgb;
+  if(mode==='blend'){
+    const lo=0.8*thr;let out=null;
+    for(let i=0;i<n;i++){
+      let r=0,mx=0;for(let c=0;c<3;c++){const v=rgb[3*i+c];r=Math.max(r,v/clip[c]);mx=Math.max(mx,v);}
+      if(r<=lo)continue;
+      if(!out)out=new Float32Array(rgb);
+      const t=Math.min(1,(r-lo)/(thr-lo));
+      for(let c=0;c<3;c++)out[3*i+c]=rgb[3*i+c]+(mx-rgb[3*i+c])*t;
+    }
+    return out||rgb;
+  }
+  const M=hlClippedMask(rgb,n,clip,thr);
+  if(!M)return rgb;
+  const out=new Float32Array(rgb);
+  if(mode==='propagate'){
+    const K=new Float32Array(3*n),known=new Uint8Array(n);
+    for(let i=0;i<n;i++)if(!M[i]){const s=(rgb[3*i]+rgb[3*i+1]+rgb[3*i+2])/3;if(s>0){for(let c=0;c<3;c++)K[3*i+c]=rgb[3*i+c]/s;known[i]=1;}}
+    const passes=opts.passes||64;
+    for(let p=0;p<passes;p++){
+      const nk=known.slice(),nK=K.slice();let filled=0,left=0;
+      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+        const i=y*w+x;if(known[i])continue;
+        let a0=0,a1=0,a2=0,cnt=0;
+        for(let dy=-1;dy<=1;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-1;dx<=1;dx++){const xx=x+dx;if((!dx&&!dy)||xx<0||xx>=w)continue;const j=yy*w+xx;if(known[j]){a0+=K[3*j];a1+=K[3*j+1];a2+=K[3*j+2];cnt++;}}}
+        if(cnt){nK[3*i]=a0/cnt;nK[3*i+1]=a1/cnt;nK[3*i+2]=a2/cnt;nk[i]=1;filled++;}else left++;
+      }
+      known.set(nk);K.set(nK);
+      if(!left||!filled)break;
+    }
+    for(let i=0;i<n;i++){
+      const k=M[i];if(!k)continue;
+      const kr=known[i]?[K[3*i],K[3*i+1],K[3*i+2]]:[1,1,1];
+      let lvl=0,u=0;
+      for(let c=0;c<3;c++)if(!(k&(1<<c))&&kr[c]>0){lvl+=rgb[3*i+c]/kr[c];u++;}
+      if(u)lvl/=u;else for(let c=0;c<3;c++)if(kr[c]>0)lvl=Math.max(lvl,rgb[3*i+c]/kr[c]);
+      for(let c=0;c<3;c++)if(k&(1<<c))out[3*i+c]=Math.max(rgb[3*i+c],kr[c]*lvl);
+    }
+    return out;
+  }
+  if(mode==='opposed'){
+    const cb=Math.cbrt,sum=[0,0,0],cnt=[0,0,0];
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=y*w+x;if(M[i])continue;
+      let near=0;
+      for(let dy=-2;dy<=2;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-2;dx<=2;dx++){const xx=x+dx;if(xx>=0&&xx<w)near|=M[yy*w+xx];}}
+      if(!near)continue;
+      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])];
+      for(let c=0;c<3;c++)if(near&(1<<c)){sum[c]+=q[c]-(q[(c+1)%3]+q[(c+2)%3])/2;cnt[c]++;}
+    }
+    const chroma=sum.map((s,c)=>cnt[c]?s/cnt[c]:0);
+    for(let i=0;i<n;i++){
+      const k=M[i];if(!k)continue;
+      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])];
+      for(let c=0;c<3;c++)if(k&(1<<c)){const e=(q[(c+1)%3]+q[(c+2)%3])/2+chroma[c];out[3*i+c]=Math.max(rgb[3*i+c],e>0?e*e*e:0);}
+    }
+    return out;
+  }
+  throw new Error('hlReconstruct: unknown mode '+mode);
+}
+// ── CHR-289 retinex-style dynamic-range compression core (pure; NOT wired to any control yet) ─────
+// Multiscale centre/surround illumination estimate after Jobson, Rahman & Woodell's MSR (IEEE TIP
+// 1997): log B = mean_k log(G_sigma_k * Y + eps). Instead of MSRCR's output stretch (an
+// image-global gain/offset that would differ per tile), the illumination is compressed about a
+// caller-supplied ANCHOR (a whole-image statistic, computed once, never per tile):
+//   d = log B - log anchor;  log gain = -(d<0 ? shadows : highlights) * d, clamped to +-log(maxGain).
+// The caller multiplies scene-linear RGB by the gain (hue-preserving). Strengths are 0..1; both 0
+// returns null so the neutral path does no work. Gaussians are truncated at radius ceil(3 sigma)
+// with clamp-to-edge, so a tile carrying drcRetinexHalo(sigmas) pixels of halo on every side
+// reproduces the whole-image gain exactly in its interior. Sigmas are in pixels of the buffer passed
+// in: preview, loupe and export must scale them by (buffer width / full image width).
+function drcRetinexHalo(sigmas){return Math.ceil(3*Math.max.apply(null,sigmas));}
+function drcGaussBlur(src,w,h,sigma){
+  const r=Math.ceil(3*sigma),k=new Float32Array(2*r+1);let s=0;
+  for(let i=-r;i<=r;i++){k[i+r]=Math.exp(-i*i/(2*sigma*sigma));s+=k[i+r];}
+  for(let i=0;i<k.length;i++)k[i]/=s;
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const xx=x+i<0?0:x+i>=w?w-1:x+i;a+=k[i+r]*src[y*w+xx];}tmp[y*w+x]=a;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const yy=y+i<0?0:y+i>=h?h-1:y+i;a+=k[i+r]*tmp[yy*w+x];}out[y*w+x]=a;}
+  return out;
+}
+function drcRetinex(Y,w,h,o){
+  const sh=o.shadows||0,hl=o.highlights||0;
+  if(!sh&&!hl)return null;
+  if(!(o.anchor>0))throw new Error('drcRetinex: anchor (whole-image statistic) required');
+  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor);
+  const L=new Float32Array(w*h);
+  for(const s of sig){const b=drcGaussBlur(Y,w,h,s);for(let i=0;i<L.length;i++)L[i]+=Math.log(b[i]+eps)/sig.length;}
+  const g=new Float32Array(w*h);
+  for(let i=0;i<g.length;i++){const d=L[i]-la;let lg=-(d<0?sh:hl)*d;lg=lg>lim?lim:lg<-lim?-lim:lg;g[i]=Math.exp(lg);}
+  return g;
+}
