@@ -33,24 +33,24 @@ The browser path instead asks LibRaw WASM to produce a render (or linear data wh
 
 ## Measured browser decode (CHR-250)
 
-**Path tested: browser only.** The app's own `loadRw2()` in headless Chromium (Playwright, SwiftShader), served with COOP/COEP so `SharedArrayBuffer` works, using the vendored `libraw-wasm@1.1.2` with the default RAW profile setting. **The native desktop Rust (`rawler`) path was NOT tested** — it cannot be built in this environment. None of these results say anything about it.
+**Path tested: browser only.** The app's own `loadRw2()` in headless Chromium (Playwright, SwiftShader), served with COOP/COEP so `SharedArrayBuffer` works, using the vendored `libraw-wasm@1.6.0` (LibRaw 0.22.1; 1.1.2 until note 5) with the default RAW profile setting. **The native desktop Rust (`rawler`) path was NOT tested** — it cannot be built in this environment. None of these results say anything about it.
 
 Samples come from [raw.pixls.us `/data-unique/`](https://raw.pixls.us/data-unique/). That set is dedicated **CC0 1.0** by its [LICENSE.txt](https://raw.pixls.us/data-unique/LICENSE.txt); the `/data/` set is not used because it mixes in CC BY-NC-SA files. URL, SHA-256, size and licence for each file are in `test/fixtures/raw-samples.json`. The RAW files themselves are gitignored and never committed.
 
 | Format | Camera (sample) | Size | Decode | Output (full) | Output (half / proxy) | Full decode time | Colour path taken |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR2 | Canon EOS 40D | 5.8 MB | OK | 1944×1296 ¹ | 1944×1296 ¹ | 1.7 s | LibRaw sRGB fallback |
-| NEF | Nikon D7200 | 22.7 MB | OK | 6016×4016 | 3008×2008 | 9.8 s | LibRaw sRGB fallback |
-| ARW | Sony ILCE-7S | 6.2 MB | OK | 2784×1872 | 1392×936 | 2.5 s | LibRaw sRGB fallback |
-| RAF (X-Trans III) | Fujifilm X-Pro2 | 26.8 MB | OK | 6032×4028 | 3016×2014 | 34.9 s ² | LibRaw sRGB fallback |
-| ORF | Olympus XZ-1 | 10.8 MB | OK | 3680×2760 | 1840×1380 | 4.9 s | LibRaw sRGB fallback |
-| RW2 | Panasonic DC-GH5S | 19.2 MB | OK | 3704×2776 | 1852×1388 | 6.4 s | LibRaw sRGB fallback (no DC-GH5S DCP) |
-| PEF | Pentax K10D | 9.6 MB | OK | 3896×2616 | 1948×1308 | 4.2 s | LibRaw sRGB fallback |
-| 3FR | Hasselblad H3D (reports H3DII-39) | 53.6 MB | OK | 7247×5444 | 3623×2722 | 24.4 s | Embedded profile, parsed as a DNG profile ³ |
-| IIQ | Phase One P65+ | 71.9 MB | OK, edge rows corrupt ⁴ | 8984×6732 | 4492×3366 | 28.8 s ² | LibRaw sRGB fallback |
-| DNG | Canon EOS 5D Mark III via Adobe DNG Converter (lossless) | 23.2 MB | OK | 5796×3870 | 2898×1935 | 11.9 s | Embedded DNG profile |
+| CR2 | Canon EOS 40D | 5.8 MB | OK | 1944×1296 ¹ | 1944×1296 ¹ | 1.1 s | LibRaw sRGB fallback |
+| NEF | Nikon D7200 | 22.7 MB | OK | 6016×4016 | 3008×2008 | 9.2 s | LibRaw sRGB fallback |
+| ARW | Sony ILCE-7S | 6.2 MB | OK | 2784×1872 | 1392×936 | 2.0 s | LibRaw sRGB fallback |
+| RAF (X-Trans III) | Fujifilm X-Pro2 | 26.8 MB | OK | 6032×4028 | 3016×2014 | 48.9 s ⁵ | LibRaw sRGB fallback |
+| ORF | Olympus XZ-1 | 10.8 MB | OK | 3680×2760 | 1840×1380 | 3.2 s | LibRaw sRGB fallback |
+| RW2 | Panasonic DC-GH5S | 19.2 MB | OK | 3704×2776 | 1852×1388 | 3.6 s | LibRaw sRGB fallback (no DC-GH5S DCP) |
+| PEF | Pentax K10D | 9.6 MB | OK | 3896×2616 | 1948×1308 | 4.0 s | LibRaw sRGB fallback |
+| 3FR | Hasselblad H3D (reports H3DII-39) | 53.6 MB | OK | 7247×5444 | 3623×2722 | 24.7 s | Embedded profile, parsed as a DNG profile ³ |
+| IIQ | Phase One P65+ | 71.9 MB | OK (edge rows fixed, note 4) | 8984×6732 | 4492×3366 | 27.4 s | LibRaw sRGB fallback |
+| DNG | Canon EOS 5D Mark III via Adobe DNG Converter (lossless) | 23.2 MB | OK | 5796×3870 | 2898×1935 | 10.5 s | Embedded DNG profile |
 
-Times are the probe's wall time per `loadRw2` call after the single-decode change (note 2), on a slow, shared container CPU. Treat them as relative, not as user-facing figures. The 3FR and DNG rows did not change path; their spread is machine noise.
+Times are the probe's wall time per `loadRw2` call with libraw-wasm 1.6.0 (note 5), on a slow, shared container CPU (load average about 20 on 4 cores during the run). Treat them as relative, not as user-facing figures.
 
 **Orientation.** libraw-wasm's `metadata()` has no flip/orientation field. LibRaw applies the EXIF orientation itself (`userFlip:-1`). All 10 samples are landscape, and none came out turned 90° relative to the sensor `width`/`height`. That means no sample exercised a rotated file, so **orientation handling is still unverified**. A 180° turn could not be detected this way at all.
 
@@ -64,16 +64,23 @@ Notes:
    - Chromasmith's embedded-profile render: +5.8 / +19.0
 
    The app's render is slightly *less* magenta than the camera's own preview, so nothing was changed.
-4. **The IIQ edge noise is a libraw-wasm 1.1.2 bug, not the app's crop or orientation.**
+4. **Fixed by the 1.6.0 upgrade (note 5): the IIQ edge noise was a libraw-wasm 1.1.2 bug, not the app's crop or orientation.**
    - **What it looks like.** Roughly 10 rows at the top *and* roughly 10 at the bottom of the full-size frame are coloured noise (about 6 of each at half size). It is not a one-pixel row.
    - **The crop is right.** LibRaw reads `top_margin` 6 and `left_margin` 36 from the file's own IIQ tags. That is the same active area rawler 0.7.2 uses (`p65.toml`: `[36, 6, 16, 46]`). Decoding with `userFlip:0` gives the same rows.
    - **Native LibRaw is clean.** LibRaw 0.21.3 and 0.22.2 (rawpy) decode the same file with clean edges.
    - **Cause.** The vendored wrapper's `open()` copies the file into a local `std::vector` and hands that pointer to `open_buffer()`. The copy is freed when `open()` returns, but LibRaw reads the file again during `unpack()` inside `imageData()`. It is reading freed memory.
-   - **Upstream has fixed it.** Upstream `libraw_wrapper.cpp` now keeps the buffer as a class member. Decoding with the npm `libraw-wasm@1.6.0` build (tested from a scratch copy, not vendored) gives clean edges.
+   - **Upstream has fixed it.** Upstream `libraw_wrapper.cpp` now keeps the buffer as a class member. `libraw-wasm@1.6.0` is now vendored and gives clean edges.
    - **The output also depends on call order.** Any allocation between `open()` and `imageData()` changes the result. Calling `metadata()` first changed pixels across the whole IIQ frame, not just the edges.
-   - **Not fixed here.** The fix is upgrading `vendor/libraw`. That changes the decoder for every camera, so the wasm linearisation fit (`GAIN`/`PW` in `loadRw2`, see raw-dcp.md) would need re-checking.
+   - **With 1.6.0 the call order no longer matters.** Measured on the IIQ at full size: `metadata()` before or after `imageData()` gives identical pixels.
+5. **Upgrade to libraw-wasm 1.6.0 (from 1.1.2).** Source, checksums and licence: `vendor/libraw/README.md`. Measured with `test/raw_decode_coverage.mjs`, same machine, before → after:
+   - **All 10 samples still decode**, with the same dimensions at full and half size and the same colour path.
+   - **Linear output (the DCP input that `GAIN`/`PW` in `loadRw2` linearise) is bit-identical for 9 of 10 samples.** Compared directly, both versions with `loadRw2`'s linear settings, half size. Only the IIQ differs, by the use-after-free. Likely reason: the `gamm:[1,1]` the app passes has 2 elements, and upstream's wrapper source (v1.6.0, and an older commit from the 1.1.x line) only reads a 6-element `gamm`, so LibRaw's default BT.709 curve stays on. That curve is what the `GAIN`/`PW` fit undoes. The fit is therefore still valid and was not changed. No sample uses a bundled DC-S9/RX100M5 DCP; that path shares the same linear decode.
+   - **sRGB-fallback / embedded-profile output, full size.** Mean colour (8-bit RGB) is unchanged to 3 decimals for 9 of 10. A few hundred to a few thousand isolated pixels differ (0.00–0.03 % of the frame, mean |Δ| about 1 level on those pixels, none on the borders): LibRaw 0.22.1's demosaic, not a colour or exposure change. Mean absolute channel delta over the frame is 0.000 for all 9. The full-size SHA-256 changed for 8 of them (CR2 unchanged); at half size CR2, NEF, PEF and DNG are unchanged.
+   - **IIQ:** mean RGB 123.6 / 149.1 / 125.1 → 124.6 / 150.2 / 125.9, mean abs channel delta 1.28 levels, 97 % of pixels changed (the 1.1.2 output was corrupted across the whole frame, not only at the edges). Row-to-row luma noise in the top 16 rows 48.1 → 3.8 and bottom 16 rows 46.6 → 3.2, against 4.0 in the rows just inside. Thumbnails at full and half size have clean edges.
+   - **Times** (alternating runs, same session, LibRaw sRGB settings, full size): NEF 11.8 / 12.2 → 6.1 / 6.4 s, RAF 43.8 / 36.1 → 35.1 / 31.5 s, IIQ 26.3 / 25.8 → 13.2 / 11.3 s. The single coverage run measured RAF 30.3 → 48.9 s, but the alternating runs show that was machine load.
+   - **Embedded previews** (centre 80 %, 8-bit mean RGB) differ from the app's LibRaw sRGB render for most samples, e.g. CR2 preview 129 / 102 / 70 vs app 172 / 138 / 105. That gap is identical before and after the upgrade, so it is not caused by it. The 3FR and IIQ carry no JPEG preview.
 
-**Not covered.** The CC0 set has no Canon CR3, Leica DNG/RWL, Sigma X3F or OM System file, so those remain **unknown**. Pixel correctness was checked only by looking at thumbnails and by mean/spread of luma, not against a reference render.
+**Not covered.** The CC0 set has no Canon CR3, Leica DNG/RWL, Sigma X3F or OM System file, so those remain **unknown**. Pixel correctness was checked only by looking at thumbnails, by mean/spread of luma and by comparing against the previous decoder version, not against a reference render.
 
 Re-run the measurement:
 

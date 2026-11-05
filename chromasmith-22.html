@@ -7627,7 +7627,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105O';
+const BUILD='1.1105P';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14202,12 +14202,12 @@ async function loadRw2(file,opts){
       if(privateEntry)openSettings.privateEntry=true;
       await raw.open(bytes,openSettings);
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
-      // ⚠️ sdrFirst reads metadata AFTER imageData, exactly like the old fallback decode (which never
-      // called metadata()): libraw-wasm 1.1.2's open() frees its copy of the file while LibRaw still
-      // reads from it during unpack (use-after-free, fixed upstream by keeping the buffer as a member),
-      // so ANY allocation in between — metadata() included — changes what a lazily-read file decodes
-      // to. Measured on the Phase One IIQ: metadata-first altered pixels across the whole frame. The
-      // other 9 samples are unaffected either way; this order keeps all 10 byte-identical to before.
+      // sdrFirst reads metadata AFTER imageData, like the old fallback decode (which never called
+      // metadata()). This order was load-bearing under libraw-wasm 1.1.2, whose open() freed its copy
+      // of the file while LibRaw still read from it during unpack (use-after-free), so any allocation
+      // in between changed the pixels of a lazily-read file (Phase One IIQ). The vendored 1.6.0 keeps
+      // the buffer alive: measured on the IIQ, metadata-first and metadata-last now give identical
+      // pixels. The order is kept only because nothing needs it changed.
       // Side effect: on a half-size decode, metadata read after processing reports the halved frame
       // in width/height (make/model/iso unchanged). No caller reads meta.width/height (checked
       // with app-uses/grep); the probe test/raw_decode_coverage.mjs only logs them.

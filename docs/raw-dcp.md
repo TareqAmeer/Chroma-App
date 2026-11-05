@@ -4,7 +4,7 @@ Deep-dive on RAW decoding and the DCP colour pipeline. Load this when touching `
 
 ## 7. RW2 / RAW + DCP camera-profile pipeline
 
-- Decoder: `libraw-wasm@1.1.2` (vendored, sha512-verified). Lazy `import()` on first RW2
+- Decoder: `libraw-wasm@1.6.0` (LibRaw 0.22.1; vendored, sha512-verified, see `vendor/libraw/README.md`). Lazy `import()` on first RW2
   load. `.RAW` extension also accepted (some Panasonic modes write RW2 data as `.RAW`).
 - `loadRw2()` → `raw.imageData()` returns an **object** `{width,height,colors,bits,data}`,
   not a flat array (was an all-black bug). Orientation honored (`userFlip:-1`).
@@ -47,11 +47,11 @@ Deep-dive on RAW decoding and the DCP colour pipeline. Load this when touching `
   with a desktop-app alternative. Native desktop decoding is not subject to this deadline.
 - Browser path with no bundled DCP (CHR-250): `loadRw2` reads make/model from the file header
   (`rawSniffMakeModel`) and decodes ONCE, straight to the LibRaw sRGB fallback, with no
-  throw-away linear decode first. ⚠️ libraw-wasm 1.1.2's `open()` frees its copy of the file
-  while LibRaw still reads from it in `imageData()` (use-after-free, fixed upstream). Any call
-  that allocates between `open()` and `imageData()`, such as `metadata()`, can change the pixels
-  of formats LibRaw reads lazily (Phase One IIQ). Keep the call order until the decoder is upgraded.
-  Details: raw-camera-coverage.md, notes 2 and 4.
+  throw-away linear decode first. libraw-wasm 1.1.2's `open()` freed its copy of the file while
+  LibRaw still read from it in `imageData()` (use-after-free: IIQ edge noise, call-order-dependent
+  pixels). Fixed by the upgrade to 1.6.0. Its linear output is bit-identical to 1.1.2's for every
+  non-IIQ sample, so the `GAIN`/`PW` linearisation still holds. Details: raw-camera-coverage.md,
+  notes 2, 4 and 5.
 - **When the user says "doesn't match Lightroom", FIRST ask what's rendering the comparison
   image** — macOS Preview of a `.RAW` shows the camera's embedded JPEG (warmer/darker), not
   the real RAW render.
