@@ -4279,6 +4279,7 @@
         if (card) seen = { path: card.dataset.path, off: card.getBoundingClientRect().top - vt };
         anchor = Math.max(0, scroller.scrollTop - g.offsetTop) / o.rowH * o.cols;
       }
+      if (!g.clientWidth) return; // hidden while the settle timer ran: see the ResizeObserver guard
       const raw = virtMetrics(g);
       if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
       // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
@@ -9877,6 +9878,11 @@
       let roW = -1;
       _virtRO = new ResizeObserver(() => {
         const w = grid.clientWidth;
+        // Hidden grid (Survey/Cull/Compare cover it with display:none): no layout box, so every card reads
+        // offsetTop 0 / width 0 and virtMetrics() would report "all cards in one row, 16px pitch". Re-windowing
+        // on that mounted a fresh card set whose thumbnails then forced a ~100ms style recalc each, freezing a
+        // 50k Library for minutes after entering Cull (test/library_cull_50k.mjs). Keep the last real metrics.
+        if (!w) return;
         const live = virtMetrics(grid), measured = state._virtMetrics;
         const geometryChanged = live && measured && (live.cols !== measured.cols || Math.abs(live.rowH - measured.rowH) > 0.5);
         if (((roW >= 0 && w !== roW) || geometryChanged) && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure();
