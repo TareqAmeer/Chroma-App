@@ -4543,6 +4543,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div class="fx-row" title="Only colours at most this bright are selected (100 = no upper limit)"><div class="fx-label">Lightness to</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-pc-lhi" oninput="pcSlider('lumHi',this.value)"><div class="fx-val" id="vl-pc-lhi">100</div></div>
             <div class="btn-row" style="margin-top:4px">
               <button class="btn bgh" id="btn-pc-enable" onclick="pcToggleEnabled()" title="Turn this colour range off without losing its settings">Turn off</button>
+              <button class="btn bgh" id="btn-pc-showsel" onclick="pcToggleShowSel()" aria-pressed="false" title="Show which pixels this colour range selects (view only, never exported). Uses the mask overlay style.">Show selection</button>
               <button class="btn bgh" onclick="pcDuplicate()" title="Copy this colour range and its adjustments">Duplicate</button>
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
             </div>
@@ -7597,7 +7598,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1104Q';
+const BUILD='1.1105A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8544,7 +8545,7 @@ class FXR{
   _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
     const tx=this.txs;
     return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
-      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
   _stagePass(name,u,b,srcName,opts,uncacheable){
     const tx=this.txs[name];let key=null;
     if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
@@ -8685,6 +8686,10 @@ uniform sampler2D curveTex;uniform float useCurve;
 // HSL color mixer: a 33^3 LUT baked on the CPU from applyHSL (8 hue bands x hue/sat/lum),
 // applied right after the look LUT. Gated off (and never baked) when every band is zero.
 uniform sampler3D hslLut;uniform float useHsl;
+// CHR-259 Point Colour "Show selection": a 33^3 R8 cube of the SELECTED range's weight (pcWeight),
+// baked on the same grid and input space as hslLut and sampled at the same point. Preview-only:
+// pcShowSel is forced to 0 unless render() gets the private preview token.
+uniform sampler3D pcSelLut;uniform float pcShowSel;
 // LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
 // GLOBAL image uv (uvOffL/uvScaleL) so they are resolution-independent and land identically in
 // the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus
@@ -9325,6 +9330,11 @@ if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,
                 c.rgb.b<=1.0?graded.b:shoulder.b);
   }
   c.rgb=mix(lb,graded,lutMix);}
+// Point Colour selection weight, measured on the colour as it ENTERS the HSL stage (the cube was baked
+// over that input), before later stages move the colour. Composited by the selection overlay below.
+float pcSelW=-1.0,pcSelEdge=0.0;
+if(pcShowSel>0.5){float sc=32./33.,of=.5/33.;pcSelW=texture(pcSelLut,clamp(c.rgb,0.0,1.0)*sc+of).r;
+  pcSelEdge=clamp((abs(dFdx(pcSelW))+abs(dFdy(pcSelW)))*4.0,0.0,1.0);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
 c.rgb=applyCDL(c.rgb);
@@ -9449,6 +9459,7 @@ if(showSharpMask){o=vec4(vec3(sharpKeep),1.0);return;}
 if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
   vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
   c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
+if(pcSelW>=0.0){selShowW=pcSelW;selShowEdge=pcSelEdge;}
 if(selShowW>=0.0){
   // Modes: 0 colour on B&W, 1 colour on image, 2 white-on-black, 3 image on B&W, 4 image on black, 5 image on white.
   vec3 fc=clamp(c.rgb,0.0,1.0);
@@ -10448,6 +10459,14 @@ void main(){
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
+  // CHR-259 Point Colour selection-view cube: SZ^3 single-channel weight bytes, same layout as setHslLUT.
+  setPcSelLUT(d){const gl=this.gl;this._pcSelSnapshot=new Uint8Array(d);if(!this.pcSelTx)this.pcSelTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D,this.pcSelTx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.R8,SZ,SZ,SZ,0,gl.RED,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
   // Per-mask tone curves: 256x8 RGBA8, row i = mask i. Rebuilt only when a curve actually changes.
   setMaskCurves(MK){const gl=this.gl;
@@ -10523,6 +10542,8 @@ void main(){
     this.setPrintLUT(source._printLutSnapshot);
     if(source._hslSnapshot)this.setHslLUT(source._hslSnapshot);
     else{if(this.hslTx)this.gl.deleteTexture(this.hslTx);this.hslTx=null;this._hslSnapshot=null;}
+    if(source._pcSelSnapshot)this.setPcSelLUT(source._pcSelSnapshot);
+    else{if(this.pcSelTx)this.gl.deleteTexture(this.pcSelTx);this.pcSelTx=null;this._pcSelSnapshot=null;}
     if(source._curveSnapshot)this.setCurveTex(source._curveSnapshot);
     else{if(this.curveTx)this.gl.deleteTexture(this.curveTx);this.curveTx=null;this._curveSnapshot=null;}
     if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
@@ -10531,14 +10552,14 @@ void main(){
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -10834,6 +10855,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      // CHR-259: Point Colour selection view — preview token only, so export/tile renders never show it.
+      pcSelLut:11,pcShowSel:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showPcSel&&this.pcSelTx)?1:0,
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
       maskTex:4,maskTex2:7,mskCrvTex:10,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
@@ -10870,7 +10893,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]};
-    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]],lutSrc,opts,anyGate);
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -15372,6 +15395,7 @@ function pcSyncUI(){
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
   const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
+  pcShowSelActive();pcShowSelSyncBtn();
   const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
@@ -15410,6 +15434,45 @@ function pcDelete(){
   fxState.pointColors.splice(pcSel,1);
   pcSel=Math.min(pcSel,fxState.pointColors.length-1);
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+}
+// CHR-259 "Show selection": view-only overlay of the SELECTED range's weight, drawn by the lut
+// shader's selection-view path (same style/colour/opacity settings as the mask overlay). It is UI
+// state only: never in fxState, history, recipes or exports (render() only honours it with the
+// private preview token). It is tied to the exact point object it was turned on for, so picking
+// another range, adding/duplicating/deleting one, undo or opening another photo switches it off.
+let _pcShowSelPt=null;
+function pcShowSelActive(){
+  const pt=_pcShowSelPt;if(!pt)return false;
+  const tg=document.getElementById('tg-pointcolor');
+  if(!tg||!tg.classList.contains('on')||!fxState.pointColors||fxState.pointColors[pcSel]!==pt){_pcShowSelPt=null;pcShowSelSyncBtn();return false;}
+  return true;
+}
+function pcShowSelSyncBtn(){
+  const b=document.getElementById('btn-pc-showsel');if(!b)return;
+  const on=!!_pcShowSelPt;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+}
+function pcToggleShowSel(force){
+  const pt=fxState.pointColors&&fxState.pointColors[pcSel];
+  const on=force!=null?!!force:!_pcShowSelPt;
+  _pcShowSelPt=on&&pt?pt:null;
+  pcShowSelSyncBtn();fxUpdate();
+}
+// The weight cube for the selected range, on the same 33^3 grid and input space as bakeHsl's cube:
+// bakeHsl applies the Color Mixer first and evaluates the points on ITS output, so the weight is
+// measured there too. Re-baked only when an input changes; uploaded to the preview renderer only.
+function pcSelBake(){
+  const pt=_pcShowSelPt;if(!pt||!FX.ok)return;
+  const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
+  if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
+  const key=JSON.stringify([hA,sA,lA,pt],(k,v)=>k==='name'?undefined:v);
+  if(pcSelBake._key===key&&FX.pcSelTx)return;
+  const d=new Uint8Array(S*S*S);
+  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+    const[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+    const[h,s,v]=r2hsv(R,G,B);
+    d[bi*S2+g*S+r]=Math.max(0,Math.min(1,pcWeight(h,s,pt,v)))*255+.5|0;}
+  FX.setPcSelLUT(d);pcSelBake._key=key;
 }
 function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bakeHsl();fxUpdate();}
 
@@ -22157,8 +22220,9 @@ function mskIsEmptyRaster(m){
 // capped glow kernels relative to this (see render()'s capK).
 function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
+  const showPcSel=typeof pcShowSelActive==='function'&&pcShowSelActive();if(showPcSel)pcSelBake();
   return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
+    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),showPcSel:showPcSel,
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskGroupTailIdx(mskSel):-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).

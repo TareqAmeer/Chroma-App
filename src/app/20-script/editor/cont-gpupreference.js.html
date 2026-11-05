@@ -60,7 +60,7 @@ class FXR{
   _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
     const tx=this.txs;
     return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
-      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
   _stagePass(name,u,b,srcName,opts,uncacheable){
     const tx=this.txs[name];let key=null;
     if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
@@ -201,6 +201,10 @@ uniform sampler2D curveTex;uniform float useCurve;
 // HSL color mixer: a 33^3 LUT baked on the CPU from applyHSL (8 hue bands x hue/sat/lum),
 // applied right after the look LUT. Gated off (and never baked) when every band is zero.
 uniform sampler3D hslLut;uniform float useHsl;
+// CHR-259 Point Colour "Show selection": a 33^3 R8 cube of the SELECTED range's weight (pcWeight),
+// baked on the same grid and input space as hslLut and sampled at the same point. Preview-only:
+// pcShowSel is forced to 0 unless render() gets the private preview token.
+uniform sampler3D pcSelLut;uniform float pcShowSel;
 // LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
 // GLOBAL image uv (uvOffL/uvScaleL) so they are resolution-independent and land identically in
 // the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus

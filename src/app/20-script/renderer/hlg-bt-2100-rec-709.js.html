@@ -557,6 +557,11 @@ if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,
                 c.rgb.b<=1.0?graded.b:shoulder.b);
   }
   c.rgb=mix(lb,graded,lutMix);}
+// Point Colour selection weight, measured on the colour as it ENTERS the HSL stage (the cube was baked
+// over that input), before later stages move the colour. Composited by the selection overlay below.
+float pcSelW=-1.0,pcSelEdge=0.0;
+if(pcShowSel>0.5){float sc=32./33.,of=.5/33.;pcSelW=texture(pcSelLut,clamp(c.rgb,0.0,1.0)*sc+of).r;
+  pcSelEdge=clamp((abs(dFdx(pcSelW))+abs(dFdy(pcSelW)))*4.0,0.0,1.0);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
 c.rgb=applyCDL(c.rgb);
@@ -681,6 +686,7 @@ if(showSharpMask){o=vec4(vec3(sharpKeep),1.0);return;}
 if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
   vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
   c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
+if(pcSelW>=0.0){selShowW=pcSelW;selShowEdge=pcSelEdge;}
 if(selShowW>=0.0){
   // Modes: 0 colour on B&W, 1 colour on image, 2 white-on-black, 3 image on B&W, 4 image on black, 5 image on white.
   vec3 fc=clamp(c.rgb,0.0,1.0);

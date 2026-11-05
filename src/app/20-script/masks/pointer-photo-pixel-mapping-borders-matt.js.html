@@ -121,6 +121,7 @@ function pcSyncUI(){
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
   const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
+  pcShowSelActive();pcShowSelSyncBtn();
   const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
@@ -159,6 +160,45 @@ function pcDelete(){
   fxState.pointColors.splice(pcSel,1);
   pcSel=Math.min(pcSel,fxState.pointColors.length-1);
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+}
+// CHR-259 "Show selection": view-only overlay of the SELECTED range's weight, drawn by the lut
+// shader's selection-view path (same style/colour/opacity settings as the mask overlay). It is UI
+// state only: never in fxState, history, recipes or exports (render() only honours it with the
+// private preview token). It is tied to the exact point object it was turned on for, so picking
+// another range, adding/duplicating/deleting one, undo or opening another photo switches it off.
+let _pcShowSelPt=null;
+function pcShowSelActive(){
+  const pt=_pcShowSelPt;if(!pt)return false;
+  const tg=document.getElementById('tg-pointcolor');
+  if(!tg||!tg.classList.contains('on')||!fxState.pointColors||fxState.pointColors[pcSel]!==pt){_pcShowSelPt=null;pcShowSelSyncBtn();return false;}
+  return true;
+}
+function pcShowSelSyncBtn(){
+  const b=document.getElementById('btn-pc-showsel');if(!b)return;
+  const on=!!_pcShowSelPt;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+}
+function pcToggleShowSel(force){
+  const pt=fxState.pointColors&&fxState.pointColors[pcSel];
+  const on=force!=null?!!force:!_pcShowSelPt;
+  _pcShowSelPt=on&&pt?pt:null;
+  pcShowSelSyncBtn();fxUpdate();
+}
+// The weight cube for the selected range, on the same 33^3 grid and input space as bakeHsl's cube:
+// bakeHsl applies the Color Mixer first and evaluates the points on ITS output, so the weight is
+// measured there too. Re-baked only when an input changes; uploaded to the preview renderer only.
+function pcSelBake(){
+  const pt=_pcShowSelPt;if(!pt||!FX.ok)return;
+  const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
+  if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
+  const key=JSON.stringify([hA,sA,lA,pt],(k,v)=>k==='name'?undefined:v);
+  if(pcSelBake._key===key&&FX.pcSelTx)return;
+  const d=new Uint8Array(S*S*S);
+  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+    const[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+    const[h,s,v]=r2hsv(R,G,B);
+    d[bi*S2+g*S+r]=Math.max(0,Math.min(1,pcWeight(h,s,pt,v)))*255+.5|0;}
+  FX.setPcSelLUT(d);pcSelBake._key=key;
 }
 function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bakeHsl();fxUpdate();}
 
