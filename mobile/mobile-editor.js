@@ -66,9 +66,29 @@ const more0=window.fxMoreMenu;window.fxMoreMenu=function(){
   // Phones get a short More menu: these are desktop/pro views (press-and-hold already compares).
   const DESK_ONLY=/^(All FX settings|Histogram|Metadata|Compare \(split view\))/;
   const buttons=[...content.children].filter(b=>!DESK_ONLY.test((b.textContent||'').trim()));old.remove();const s=sheet('More','');
+  // Copy / Paste settings: the current photo's look and adjustments (not its crop, masks or heal,
+  // which belong to that photo), pasted with the same category merge as Apply previous settings.
+  const mk=(t,fn)=>{const b=document.createElement('button');b.className='btn bgh';b.textContent=t;b.onclick=fn;return b;};
+  const prev=buttons.findIndex(b=>/^Apply previous settings/.test((b.textContent||'').trim()));
+  buttons.splice(prev<0?buttons.length:prev,0,mk('Copy settings',copySettings),mk('Paste settings',pasteSettings));
   const host=s.el.querySelector('.phone-dialog-content');host.append(...buttons);
   host.addEventListener('click',e=>{if(e.target.closest('button'))s.close();},true);
 };
+let settingsClip=null;
+function copySettings(){
+  if(!fxImages.length){toast('Open a photo first');return;}
+  const snap=JSON.parse(JSON.stringify(getUISnapshot()));['geom','heal','masks'].forEach(k=>delete snap[k]);
+  settingsClip=snap;window.hapt?.();toast('Settings copied');
+}
+function pasteSettings(){
+  if(!fxImages.length){toast('Open a photo first');return;}
+  if(!settingsClip){toast('Copy settings from a photo first');return;}
+  applyUISnapshot(pasteEditSelectiveApply(getUISnapshot(),settingsClip,allFxCats().map(c=>c.key)));
+  fxUpdate();if(typeof syncSectionEnabled==='function')syncSectionEnabled();if(typeof syncAllFxBtn==='function')syncAllFxBtn();
+  if(typeof fxHistoryPush==='function')fxHistoryPush();window.hapt?.();
+  if(typeof csActionPill==='function')csActionPill('Settings pasted','Undo',()=>fxUndo());else toast('Settings pasted');
+}
+window.MobileSettingsClip={copy:copySettings,paste:pasteSettings,get has(){return !!settingsClip;}};
 const hapt0=window.hapt;window.hapt=function(){if(!pref('haptics',true))return;return hapt0?.apply(this,arguments);};
 // A labelled alternative to every photo gesture. Swipe editing is opt-in for this session.
 window.csSwipeAdjust=false;
@@ -178,7 +198,7 @@ function maskWorkflow(){
   const card=$('.fx-ctrl[data-fxsec=local]');if(!card||$('#phone-mask-flow'))return;
   const flow=document.createElement('div');flow.id='phone-mask-flow';flow.innerHTML='<p>1. Choose an area · 2. Adjust it</p><div class="phone-actions"><button data-mask-add>Choose area</button><button data-mask-paint>Add paint</button><button data-mask-erase>Erase</button></div><p id="phone-mask-status" role="status"></p>';
   card.prepend(flow);
-  flow.querySelector('[data-mask-add]').onclick=()=>sheet('Choose an area','<p>Use a brush or shape to target part of the photo.</p><div class="phone-actions"><button data-mask="brush">Brush</button><button data-mask="radial">Ellipse</button><button data-mask="linear">Gradient</button></div>',(el,close)=>el.querySelectorAll('[data-mask]').forEach(b=>b.onclick=()=>{mskAdd(b.dataset.mask);if(b.dataset.mask==='brush'&&!mskPaintMode)mskPaintToggle();close();maskStatus();}));
+  flow.querySelector('[data-mask-add]').onclick=()=>sheet('Choose an area','<p>Use a brush or shape to target part of the photo.</p><div class="phone-actions"><button data-mask="brush">Brush</button><button data-mask="radial">Ellipse</button><button data-mask="linear">Gradient</button><button data-mask="sky">Sky</button></div>',(el,close)=>el.querySelectorAll('[data-mask]').forEach(b=>b.onclick=()=>{mskAdd(b.dataset.mask);if(b.dataset.mask==='brush'&&!mskPaintMode)mskPaintToggle();close();maskStatus();}));
   flow.querySelector('[data-mask-paint]').onclick=()=>{if(mskSel<0)mskAdd('brush');if(mskPaintErase)mskPaintErase_toggle();if(!mskPaintMode)mskPaintToggle();maskStatus();};
   flow.querySelector('[data-mask-erase]').onclick=()=>{if(mskSel<0){toast('Choose an area first');return;}if(!mskPaintMode)mskPaintToggle();if(!mskPaintErase)mskPaintErase_toggle();maskStatus();};
 }
