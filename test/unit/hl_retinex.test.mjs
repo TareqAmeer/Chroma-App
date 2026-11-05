@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { load } from './extract.mjs';
 
-const app = load(['hlClippedMask', 'hlPushPull', 'hlLabel', 'hlReconstruct', 'drcRetinexHalo', 'drcGaussBlur', 'drcRetinex'],
+const app = load(['hlClippedMask', 'hlPushPull', 'hlLabel', 'hlReconstruct', 'drcRetinexHalo', 'drcBoxMean', 'drcGuided', 'drcRetinex'],
   { Uint8Array, Error });
 
 const CLIP = [1, 1, 1];
@@ -163,9 +163,22 @@ test('halo-prone step edge: gain changes only within the halo radius of the edge
   const w = 80, h = 8, Y = lumOf((x) => (x < 40 ? 0.02 : 0.8), w, h);
   const g = app.drcRetinex(Y, w, h, { shadows: 0.6, highlights: 0.6, anchor: 0.13, sigmas: S });
   const R = app.drcRetinexHalo(S);
-  assert.equal(R, 18);
+  assert.equal(R, 12); // guided filter: two box stages of radius round(sigma) -> 2 * 6
   for (let x = 0; x < 40 - R; x++) assert.ok(Math.abs(g[4 * w + x] - g[4 * w]) < 1e-6, 'flat left of halo');
   for (let x = 40 + R; x < w; x++) assert.ok(Math.abs(g[4 * w + x] - g[5 * w - 1]) < 1e-6, 'flat right of halo');
+});
+
+test('strong step edge: guided base keeps the gain flat up to the edge (no MSR halo)', () => {
+  // Gaussian surrounds (the previous core) lost 83% of the dark-side lift next to this edge and
+  // overshot the bright side by 45%; the guided base layer: ~2% each.
+  const w = 400, h = 8, Y = lumOf((x) => (x < 200 ? 0.02 : 0.8), w, h);
+  const g = app.drcRetinex(Y, w, h, { shadows: 0.6, highlights: 0.6, anchor: 0.13, sigmas: [4, 12, 40] });
+  const row = (x) => g[4 * w + x], dk = row(0), br = row(w - 1);
+  let dmin = Infinity, bmax = 0;
+  for (let x = 150; x < 200; x++) dmin = Math.min(dmin, row(x));
+  for (let x = 200; x < 250; x++) bmax = Math.max(bmax, row(x));
+  assert.ok(1 - dmin / dk < 0.05, `dark-side halo ${((1 - dmin / dk) * 100).toFixed(1)}%`);
+  assert.ok(bmax / br - 1 < 0.05, `bright-side halo ${((bmax / br - 1) * 100).toFixed(1)}%`);
 });
 
 test('tile with drcRetinexHalo() halo reproduces the whole-image gain exactly (no seam)', () => {
@@ -178,4 +191,14 @@ test('tile with drcRetinexHalo() halo reproduces the whole-image gain exactly (n
   for (let y = 0; y < h; y++) for (let x = 0; x < tw; x++) T[y * tw + x] = Y[y * w + x0 + x];
   const gt = app.drcRetinex(T, tw, h, o);
   for (let y = 0; y < h; y++) for (let x = 40; x < 72; x++) assert.equal(gt[y * tw + x - x0], full[y * w + x]);
+});
+
+test('tile seam exact across a strong edge (guided base, multi-scale)', () => {
+  const w = 120, h = 40, S2 = [2, 5, 9], Y = lumOf((x, y) => (x + 0.5 * y < 70 ? 0.015 : 0.9), w, h);
+  const o = { shadows: 0.7, highlights: 0.5, anchor: 0.1, sigmas: S2 };
+  const full = app.drcRetinex(Y, w, h, o), R = app.drcRetinexHalo(S2);
+  const x0 = 50 - R, x1 = Math.min(w, 90 + R), tw = x1 - x0, T = new Float32Array(tw * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < tw; x++) T[y * tw + x] = Y[y * w + x0 + x];
+  const gt = app.drcRetinex(T, tw, h, o);
+  for (let y = 0; y < h; y++) for (let x = 50; x < 90; x++) assert.equal(gt[y * tw + x - x0], full[y * w + x]);
 });

@@ -7603,7 +7603,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105J';
+const BUILD='1.1105K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11961,33 +11961,47 @@ function hlReconstruct(rgb,w,h,clip,mode,opts){
   throw new Error('hlReconstruct: unknown mode '+mode);
 }
 // ── CHR-289 retinex-style dynamic-range compression core (pure; NOT wired to any control yet) ─────
-// Multiscale centre/surround illumination estimate after Jobson, Rahman & Woodell's MSR (IEEE TIP
-// 1997): log B = mean_k log(G_sigma_k * Y + eps). Instead of MSRCR's output stretch (an
-// image-global gain/offset that would differ per tile), the illumination is compressed about a
-// caller-supplied ANCHOR (a whole-image statistic, computed once, never per tile):
-//   d = log B - log anchor;  log gain = -(d<0 ? shadows : highlights) * d, clamped to +-log(maxGain).
+// Multiscale illumination estimate in the spirit of Jobson, Rahman & Woodell's MSR (IEEE TIP 1997),
+// but each scale's surround is an EDGE-AWARE base layer: a self-guided filter (He, Sun & Tang,
+// TPAMI 2013) on log luminance, L = mean_k GF_rk(log(Y+eps)), radius r_k = round(sigma_k). A plain
+// Gaussian surround smears a bright edge into its dark neighbour, so the dark side near the edge is
+// under-lifted (the MSR halo); the guided filter keeps the step in the base, so the gain stays flat
+// up to the edge. gfEps (log-domain variance, default 0.04) sets which steps count as edges:
+// smaller keeps more edges. Instead of MSRCR's output stretch (an image-global gain/offset that
+// would differ per tile), the illumination is compressed about a caller-supplied ANCHOR (a
+// whole-image statistic, computed once, never per tile):
+//   d = L - log anchor;  log gain = -(d<0 ? shadows : highlights) * d, clamped to +-log(maxGain).
 // The caller multiplies scene-linear RGB by the gain (hue-preserving). Strengths are 0..1; both 0
-// returns null so the neutral path does no work. Gaussians are truncated at radius ceil(3 sigma)
-// with clamp-to-edge, so a tile carrying drcRetinexHalo(sigmas) pixels of halo on every side
-// reproduces the whole-image gain exactly in its interior. Sigmas are in pixels of the buffer passed
-// in: preview, loupe and export must scale them by (buffer width / full image width).
-function drcRetinexHalo(sigmas){return Math.ceil(3*Math.max.apply(null,sigmas));}
-function drcGaussBlur(src,w,h,sigma){
-  const r=Math.ceil(3*sigma),k=new Float32Array(2*r+1);let s=0;
-  for(let i=-r;i<=r;i++){k[i+r]=Math.exp(-i*i/(2*sigma*sigma));s+=k[i+r];}
-  for(let i=0;i<k.length;i++)k[i]/=s;
-  const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const xx=x+i<0?0:x+i>=w?w-1:x+i;a+=k[i+r]*src[y*w+xx];}tmp[y*w+x]=a;}
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const yy=y+i<0?0:y+i>=h?h-1:y+i;a+=k[i+r]*tmp[yy*w+x];}out[y*w+x]=a;}
+// returns null so the neutral path does no work. Box sums are direct (fixed summation order) with
+// clamp-to-edge; the guided filter is two box stages, so its reach is 2r and a tile carrying
+// drcRetinexHalo(sigmas) = 2*max r pixels of halo on every side reproduces the whole-image gain
+// exactly in its interior. Sigmas are in pixels of the buffer passed in: preview, loupe and export
+// must scale them by (buffer width / full image width).
+function drcRetinexHalo(sigmas){return 2*Math.max.apply(null,sigmas.map(s=>Math.max(1,Math.round(s))));}
+// Separable box mean, radius r, clamp-to-edge, direct sums in a fixed order (tile-exact).
+function drcBoxMean(src,w,h,r){
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h),k=1/(2*r+1);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const xx=x+i<0?0:x+i>=w?w-1:x+i;a+=src[y*w+xx];}tmp[y*w+x]=a*k;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const yy=y+i<0?0:y+i>=h?h-1:y+i;a+=tmp[yy*w+x];}out[y*w+x]=a*k;}
   return out;
+}
+// Self-guided filter (guide = input): q = mean_a*I + mean_b with a = var/(var+eps), b = (1-a)*mean.
+function drcGuided(I,w,h,r,eps){
+  const n=w*h,II=new Float32Array(n);for(let i=0;i<n;i++)II[i]=I[i]*I[i];
+  const m=drcBoxMean(I,w,h,r),m2=drcBoxMean(II,w,h,r),A=new Float32Array(n),B=new Float32Array(n);
+  for(let i=0;i<n;i++){const v=Math.max(0,m2[i]-m[i]*m[i]),a=v/(v+eps);A[i]=a;B[i]=(1-a)*m[i];}
+  const ma=drcBoxMean(A,w,h,r),mb=drcBoxMean(B,w,h,r),q=new Float32Array(n);
+  for(let i=0;i<n;i++)q[i]=ma[i]*I[i]+mb[i];
+  return q;
 }
 function drcRetinex(Y,w,h,o){
   const sh=o.shadows||0,hl=o.highlights||0;
   if(!sh&&!hl)return null;
   if(!(o.anchor>0))throw new Error('drcRetinex: anchor (whole-image statistic) required');
-  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor);
+  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor),ge=o.gfEps||0.04;
+  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
   const L=new Float32Array(w*h);
-  for(const s of sig){const b=drcGaussBlur(Y,w,h,s);for(let i=0;i<L.length;i++)L[i]+=Math.log(b[i]+eps)/sig.length;}
+  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
   const g=new Float32Array(w*h);
   for(let i=0;i<g.length;i++){const d=L[i]-la;let lg=-(d<0?sh:hl)*d;lg=lg>lim?lim:lg<-lim?-lim:lg;g[i]=Math.exp(lg);}
   return g;
