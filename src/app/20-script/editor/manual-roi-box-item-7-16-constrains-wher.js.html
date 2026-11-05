@@ -73,3 +73,154 @@ function geomStraightenSlider(v){geomStraighten(_stS2A(v));}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(2)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomResetRotate(){const it=curItem();if(!it||!it.geom)return;it.geom.rot=0;it.geom.flipH=false;it.geom.flipV=false;broadcastGeom();updateWork();renderPreview();buildLookGallery();fxHistoryPush();}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
+// ══ CHR-248: UPRIGHT "Level" and "Vertical" ═══════════════════════════════════════════════
+// Lightroom's Upright modes, the two simplest: Level rotates so horizontal and vertical structure
+// is square to the frame; Vertical removes converging verticals (and levels them). Both only SET
+// the existing controls (Straighten / Vertical / Rotate), so preview, export and tiled renders need
+// nothing new. Method, re-implemented from published descriptions (no code reused):
+//  1. Line segments: a simplified LSD (Grompone von Gioi et al., "LSD: a Line Segment Detector",
+//     IPOL 2012) — pixels grouped by region growing on level-line orientation (22.5 deg tolerance),
+//     each region fitted by weighted PCA into a segment. No a-contrario validation; a length and
+//     thickness gate stands in for it.
+//  2. Classify near-vertical / near-horizontal segments, then fit the transform to make them
+//     axis-aligned, rejecting outliers by iterative trimming (the idea behind darktable's "ashift"
+//     module and Markus Hebel's ShiftN: fit lens-shift + rotation to the converging line sets).
+//     darktable is GPL, so only its documented behaviour was used, not its source.
+// Vertical fits the SAME homography the lens shader samples with (lensPersp: rotate, then divide
+// by 1+pv*y+ph*x, in centred 0..1 coords with y UP because textures are uploaded flipped), so the
+// fit is exact for what gets rendered. Source lines map to output lines by l_out = H^T l_src.
+const UP_EDGE=480;            // analysis long edge; straight lines survive heavy downscaling
+function _upGray(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const k=Math.min(1,UP_EDGE/Math.max(w0,h0));
+  const w=Math.max(16,Math.round(w0*k)),h=Math.max(16,Math.round(h0*k));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data,g=new Float32Array(w*h);
+  for(let i=0,p=0;i<w*h;i++,p+=4)g[i]=(0.2126*d[p]+0.7152*d[p+1]+0.0722*d[p+2])/255;
+  return{g,w,h};
+}
+/// Simplified LSD. gray: Float32Array (0..1), w*h. Returns [{x1,y1,x2,y2,len}] in pixel coords (y down).
+function upLineSegments(gray,w,h){
+  const n=w*h,mag=new Float32Array(n),ang=new Float32Array(n);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    const i=y*w+x;
+    const gx=(gray[i-w+1]+2*gray[i+1]+gray[i+w+1])-(gray[i-w-1]+2*gray[i-1]+gray[i+w-1]);
+    const gy=(gray[i+w-1]+2*gray[i+w]+gray[i+w+1])-(gray[i-w-1]+2*gray[i-w]+gray[i-w+1]);
+    mag[i]=Math.hypot(gx,gy);ang[i]=Math.atan2(gx,-gy); // level-line angle: perpendicular to the gradient
+  }
+  const THR=0.12,TAU=Math.PI/8,minPts=Math.max(12,Math.round(Math.max(w,h)*0.03));
+  const order=[];for(let i=0;i<n;i++)if(mag[i]>THR)order.push(i);
+  order.sort((a,b)=>mag[b]-mag[a]);
+  const used=new Uint8Array(n),segs=[],reg=[];
+  const adiff=(a,b)=>{let d=Math.abs(a-b)%(2*Math.PI);return d>Math.PI?2*Math.PI-d:d;};
+  for(const s of order){
+    if(used[s])continue;
+    reg.length=0;reg.push(s);used[s]=1;
+    let sx=Math.cos(ang[s]),sy=Math.sin(ang[s]),th=ang[s];
+    for(let k=0;k<reg.length;k++){
+      const p=reg[k],px=p%w,py=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const qx=px+dx,qy=py+dy;if(qx<1||qy<1||qx>=w-1||qy>=h-1)continue;
+        const q=qy*w+qx;if(used[q]||mag[q]<=THR||adiff(ang[q],th)>TAU)continue;
+        used[q]=1;reg.push(q);sx+=Math.cos(ang[q]);sy+=Math.sin(ang[q]);th=Math.atan2(sy,sx);
+      }
+    }
+    if(reg.length<minPts)continue;
+    let W=0,mx=0,my=0;for(const p of reg){const m=mag[p];W+=m;mx+=m*(p%w);my+=m*((p/w)|0);}mx/=W;my/=W;
+    let cxx=0,cyy=0,cxy=0;for(const p of reg){const m=mag[p],dx=p%w-mx,dy=((p/w)|0)-my;cxx+=m*dx*dx;cyy+=m*dy*dy;cxy+=m*dx*dy;}
+    const a=0.5*Math.atan2(2*cxy,cxx-cyy),ux=Math.cos(a),uy=Math.sin(a);
+    let lo=Infinity,hi=-Infinity,wd=0;
+    for(const p of reg){const dx=p%w-mx,dy=((p/w)|0)-my,t=dx*ux+dy*uy,o=-dx*uy+dy*ux;if(t<lo)lo=t;if(t>hi)hi=t;wd+=o*o;}
+    const len=hi-lo,thick=Math.sqrt(wd/reg.length);
+    if(len<minPts||thick>Math.max(1.5,len*0.06))continue; // blobs and fat regions are not lines
+    segs.push({x1:mx+lo*ux,y1:my+lo*uy,x2:mx+hi*ux,y2:my+hi*uy,len});
+  }
+  return segs;
+}
+// Deviation (deg) of a segment from its nearest axis: {axis:'h'|'v', dev}, dev in y-down image
+// degrees (positive = clockwise on screen).
+function _upAxisDev(s){
+  let a=Math.atan2(s.y2-s.y1,s.x2-s.x1)*180/Math.PI;a=((a%180)+180)%180; // 0..180
+  if(a<=45)return{axis:'h',dev:a};if(a>=135)return{axis:'h',dev:a-180};return{axis:'v',dev:a-90};
+}
+function _upWMedian(v){ // v: [[value,weight]]
+  if(!v.length)return null;v=v.slice().sort((a,b)=>a[0]-b[0]);
+  let tot=0;for(const x of v)tot+=x[1];let acc=0;for(const x of v){acc+=x[1];if(acc>=tot/2)return x[0];}return v[v.length-1][0];
+}
+/// Upright Level: the Straighten change (degrees, autoHorizon's sign convention) that squares the
+/// dominant horizontal + vertical structure, or null without enough evidence.
+function upLevelAngle(segs,w,h,maxTilt){
+  maxTilt=maxTilt||15;
+  let c=segs.map(s=>({...(_upAxisDev(s)),len:s.len})).filter(d=>Math.abs(d.dev)<=maxTilt);
+  let est=null;
+  for(let it=0;it<4;it++){ // trimmed weighted median: drop lines that disagree, re-estimate
+    est=_upWMedian(c.map(d=>[d.dev,d.len]));if(est===null)return null;
+    const tol=it<2?4:1.5,keep=c.filter(d=>Math.abs(d.dev-est)<=tol);if(keep.length===c.length)break;c=keep;
+  }
+  let tot=0;for(const d of c)tot+=d.len;
+  if(c.length<2||tot<0.35*Math.max(w,h))return null;
+  let sw=0,sm=0;for(const d of c){sw+=d.len;sm+=d.len*d.dev;} // refine with the weighted mean of the inliers
+  const corr=-sm/sw;return Math.abs(corr)<0.05?0:Math.round(corr*20)/20;
+}
+// Output→source homography of the lens shader (see lensPersp), uniform scale dropped.
+function _upH(pv,ph,rot){const c=Math.cos(rot),s=Math.sin(rot);
+  return[c,-s,0, s,c,0, ph*c+pv*s, -ph*s+pv*c, 1];}
+// Segment (pixel coords, y down) → homogeneous line in shader-centred coords (y up).
+function _upSrcLine(s,w,h){
+  const p1=[s.x1/w-0.5,0.5-s.y1/h,1],p2=[s.x2/w-0.5,0.5-s.y2/h,1];
+  return[p1[1]*p2[2]-p1[2]*p2[1],p1[2]*p2[0]-p1[0]*p2[2],p1[0]*p2[1]-p1[1]*p2[0]];
+}
+// sin of the angle between the mapped line and vertical, in PIXELS (normal scaled by 1/w, 1/h).
+function _upVertResid(l,H,w,h){
+  const a=H[0]*l[0]+H[3]*l[1]+H[6]*l[2],b=H[1]*l[0]+H[4]*l[1]+H[7]*l[2];
+  const ax=a/w,by=b/h,n=Math.hypot(ax,by);return n>0?by/n:1;
+}
+/// Upright Vertical: fit {pv, rot} (lens shader units; ph held at its current value) so near-
+/// vertical segments come out vertical. Returns {pv,rot,lines} or null.
+function upFitVertical(segs,w,h,ph){
+  ph=ph||0;
+  let c=segs.filter(s=>{const d=_upAxisDev(s);return d.axis==='v'&&Math.abs(d.dev)<=30;}).map(s=>({l:_upSrcLine(s,w,h),len:s.len}));
+  let tot=0;for(const d of c)tot+=d.len;
+  if(c.length<2||tot<0.3*h)return null;
+  const PVM=0.4,RM=Math.PI/18;
+  const cost=(lines,pv,rot)=>{const H=_upH(pv,ph,rot);let e=0;for(const d of lines){const r=_upVertResid(d.l,H,w,h);e+=d.len*r*r;}return e+1e-4*tot*pv*pv;};
+  const fit=lines=>{
+    let best={pv:0,rot:0,e:cost(lines,0,0)},spv=PVM/10,sr=RM/10;
+    for(let pv=-PVM;pv<=PVM+1e-9;pv+=spv)for(let r=-RM;r<=RM+1e-9;r+=sr){const e=cost(lines,pv,r);if(e<best.e)best={pv,rot:r,e};}
+    for(let k=0;k<6;k++){spv/=4;sr/=4;const b0=best;
+      for(let i=-4;i<=4;i++)for(let j=-4;j<=4;j++){const pv=Math.max(-PVM,Math.min(PVM,b0.pv+i*spv)),r=Math.max(-RM,Math.min(RM,b0.rot+j*sr));const e=cost(lines,pv,r);if(e<best.e)best={pv,rot:r,e};}}
+    return best;
+  };
+  let best=fit(c);
+  for(let it=0;it<3;it++){ // outlier trimming: a slanted roof edge must not bend the verticals
+    const H=_upH(best.pv,ph,best.rot),tol=Math.sin((it?1.5:4)*Math.PI/180);
+    const keep=c.filter(d=>Math.abs(_upVertResid(d.l,H,w,h))<=tol);
+    let kt=0;for(const d of keep)kt+=d.len;
+    if(keep.length<2||kt<0.2*h||keep.length===c.length)break;
+    c=keep;best=fit(c);
+  }
+  return{pv:best.pv,rot:best.rot,lines:c.length};
+}
+function _upSetSlider(id,v){const s=document.getElementById(id);if(!s)return;s.value=v;const vl=document.getElementById('vl-'+id.slice(3));if(vl)vl.textContent=s.value;if(typeof fxPaintSlider==='function')fxPaintSlider(s);}
+/// Button handlers. Both analyse geomCanvas(it): exactly the frame the lens shader receives.
+function uprightLevel(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h),d=upLevelAngle(segs,G.w,G.h);
+  if(d===null){toast('Level: no clear horizontal or vertical lines found',false);return;}
+  if(d===0){toast('Already level',true);return;}
+  const g=curGeom(),a=Math.max(-45,Math.min(45,Math.round((((g&&g.angle)||0)+d)*20)/20));
+  const sl=document.getElementById('sl-straighten');if(sl){sl.value=_stA2S(a);fxPaintSlider(sl);}
+  geomStraighten(a); // one history entry (debounced push inside)
+  toast(`Level: ${d>0?'+':''}${d.toFixed(1)}°`,true);log(`Upright Level: ${d.toFixed(2)}° (${segs.length} segments)`,'ok');
+}
+function uprightVertical(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h);
+  const f=upFitVertical(segs,G.w,G.h,adjVal('sl-lens-ph')/250);
+  if(!f){toast('Vertical: not enough vertical lines found',false);return;}
+  _upSetSlider('sl-lens-pv',Math.max(-100,Math.min(100,Math.round(f.pv*250))));
+  _upSetSlider('sl-lens-rot',Math.max(-100,Math.min(100,Math.round(f.rot*1800/Math.PI))));
+  fxUpdate(); // both sliders land in ONE debounced history entry
+  toast('Vertical applied',true);log(`Upright Vertical: pv ${f.pv.toFixed(3)}, rot ${(f.rot*180/Math.PI).toFixed(2)}° from ${f.lines} lines`,'ok');
+}
