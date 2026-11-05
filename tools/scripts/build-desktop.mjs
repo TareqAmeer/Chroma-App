@@ -81,6 +81,7 @@ mirrorDir(cd('assets', 'brand'), join(distDir, 'assets', 'brand')); // favicon +
 copyIfChanged(cd('desktop', 'desktop-native.js'), join(distDir, 'desktop-native.js'));
 copyIfChanged(cd('desktop', 'header-menus.js'), join(distDir, 'header-menus.js'));
 copyIfChanged(cd('desktop', 'library-ui.js'), join(distDir, 'library-ui.js'));
+copyIfChanged(cd('desktop', 'static-gallery.mjs'), join(distDir, 'static-gallery.mjs')); // CHR-239 web gallery builder, dynamic-imported by library-ui.js
 copyIfChanged(cd('desktop', 'inpaint-ui.js'), join(distDir, 'inpaint-ui.js'));
 copyIfChanged(cd('desktop', 'second-display.html'), join(distDir, 'second-display.html'));
 copyIfChanged(cd('desktop', 'second-display.js'), join(distDir, 'second-display.js'));

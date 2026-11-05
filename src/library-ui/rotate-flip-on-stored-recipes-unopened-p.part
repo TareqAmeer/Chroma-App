@@ -768,6 +768,7 @@
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
+    exportMenu.subItem('Web gallery…', () => createWebGallery(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (libExportRunning()) return;
