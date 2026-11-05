@@ -221,6 +221,44 @@ vec3 applyCDL(vec3 c){
   vec3 o=vec3(pow(base.r,cdlPower.r),pow(base.g,cdlPower.g),pow(base.b,cdlPower.b));
   return clamp(o,0.0,1.0);
 }
+// CHR-291 channel mixer + CHR-290 Lab adjustments + CHR-291 colour toning. Runs right after the
+// colour wheels (CDL), before masks and the film FX passes. Each stage is gated by a JS-side
+// identity check (rtColourUniforms), so untouched values never convert and stay byte-identical.
+// Mixer: linear sRGB (IEC 61966-2-1 transfer), out = M * in, rows = output R,G,B; luminance is NOT
+// preserved (same as RawTherapee's mixer). Lab: CIE 1976 L*a*b* from linear sRGB via XYZ, D65
+// reference white, no chromatic adaptation. Out-of-gamut results clamp to 0..1 (or only below 0
+// when highlight headroom "useTonemap" is on).
+uniform float rtMixOn,rtLabOn;uniform vec3 rtMixR,rtMixG,rtMixB,rtLab;uniform vec2 rtToneS,rtToneH;
+const vec3 RT_WHITE=vec3(0.95047,1.0,1.08883);
+float rtLabF(float t){return t>216.0/24389.0?pow(t,1.0/3.0):(24389.0/27.0*t+16.0)/116.0;}
+float rtLabFi(float f){float t=f*f*f;return t>216.0/24389.0?t:(116.0*f-16.0)/(24389.0/27.0);}
+vec3 rtLin2Lab(vec3 l){
+  vec3 x=vec3(dot(l,vec3(0.4124564,0.3575761,0.1804375)),dot(l,vec3(0.2126729,0.7151522,0.0721750)),dot(l,vec3(0.0193339,0.1191920,0.9503041)))/RT_WHITE;
+  vec3 f=vec3(rtLabF(x.x),rtLabF(x.y),rtLabF(x.z));
+  return vec3(116.0*f.y-16.0,500.0*(f.x-f.y),200.0*(f.y-f.z));
+}
+vec3 rtLab2Lin(vec3 lab){
+  float fy=(lab.x+16.0)/116.0;
+  vec3 x=vec3(rtLabFi(fy+lab.y/500.0),rtLabFi(fy),rtLabFi(fy-lab.z/200.0))*RT_WHITE;
+  return vec3(dot(x,vec3(3.2404542,-1.5371385,-0.4985314)),dot(x,vec3(-0.9692660,1.8760108,0.0415560)),dot(x,vec3(0.0556434,-0.2040259,1.0572252)));
+}
+vec3 rtColour(vec3 c){
+  if(rtMixOn<0.5&&rtLabOn<0.5)return c;
+  vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+  if(rtMixOn>0.5)lin=vec3(dot(rtMixR,lin),dot(rtMixG,lin),dot(rtMixB,lin));
+  if(rtLabOn>0.5){
+    vec3 lab=rtLin2Lab(lin);
+    float L=max(lab.x,0.0);
+    L=100.0*pow(L/100.0,exp2(-rtLab.x));                    // lightness: gamma on L*, 0 and 100 fixed
+    L=max(50.0+(L-50.0)*(1.0+rtLab.y),0.0);                  // contrast around L* 50
+    vec2 ab=lab.yz*(1.0+rtLab.z);                            // chromaticity: -1 gives neutral grey
+    float tw=clamp(L/100.0,0.0,1.0);                         // toning: shadows to highlights by L*
+    ab+=mix(rtToneS,rtToneH,tw)*30.0;                        // slider 100 = 30 a*/b* units
+    lin=rtLab2Lin(vec3(L,ab));
+  }
+  lin=useTonemap<0.5?clamp(lin,0.0,1.0):max(lin,0.0);
+  return vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
+}
 vec3 basicAdjust(vec3 c){
   if(adjOn<0.5)return c;
   // exposure + white balance in linear light
@@ -557,9 +595,15 @@ if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,
                 c.rgb.b<=1.0?graded.b:shoulder.b);
   }
   c.rgb=mix(lb,graded,lutMix);}
+// Point Colour selection weight, measured on the colour as it ENTERS the HSL stage (the cube was baked
+// over that input), before later stages move the colour. Composited by the selection overlay below.
+float pcSelW=-1.0,pcSelEdge=0.0;
+if(pcShowSel>0.5){float sc=32./33.,of=.5/33.;pcSelW=texture(pcSelLut,clamp(c.rgb,0.0,1.0)*sc+of).r;
+  pcSelEdge=clamp((abs(dFdx(pcSelW))+abs(dFdy(pcSelW)))*4.0,0.0,1.0);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
 c.rgb=applyCDL(c.rgb);
+c.rgb=rtColour(c.rgb);
 float selShowW=-1.0,selShowEdge=0.0; // selection-view overlay, composited at the end
 if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
@@ -681,6 +725,7 @@ if(showSharpMask){o=vec4(vec3(sharpKeep),1.0);return;}
 if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
   vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
   c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
+if(pcSelW>=0.0){selShowW=pcSelW;selShowEdge=pcSelEdge;}
 if(selShowW>=0.0){
   // Modes: 0 colour on B&W, 1 colour on image, 2 white-on-black, 3 image on B&W, 4 image on black, 5 image on white.
   vec3 fc=clamp(c.rgb,0.0,1.0);
@@ -920,7 +965,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale;uniform vec2 aspect;uniform vec2 texSize;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale,lnsAsp;uniform vec2 lnsOff;uniform vec2 aspect;uniform vec2 texSize;
 // PERSPECTIVE / KEYSTONE — a real projective transform, not a shear. Converging verticals (the
 // building-shot problem) are a perspective effect, so undoing them needs the division: a shear
 // straightens the edges but leaves the spacing wrong, which reads as a stretched building rather
@@ -938,7 +983,11 @@ vec2 lensPersp(vec2 c){
   // Guard the pole: at d<=0 the homography flips the image through infinity. Clamping instead of
   // letting it wrap keeps an over-driven slider ugly-but-sane rather than kaleidoscopic.
   d=max(d,0.15);
-  return c/d*lnsScale;
+  c=c/d*lnsScale;
+  // Aspect (Lightroom Transform): positive widens the photo (samples a narrower source span on x),
+  // negative makes it taller. Offset then shifts the frame; both are exact identity at 0.
+  if(lnsAsp>0.0)c.x/=1.0+lnsAsp; else if(lnsAsp<0.0)c.y/=1.0-lnsAsp;
+  return c-lnsOff;
 }
 // Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
 // chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue

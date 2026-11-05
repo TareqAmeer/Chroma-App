@@ -545,6 +545,11 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
 .msk-rowbar{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.msk-edit-note{font-size:var(--fs-1);color:var(--mut);margin:0 0 var(--sp-2);padding:var(--sp-1) var(--sp-2);border-left:3px solid var(--acc,#e8a33d);background:var(--bs-shade,rgba(128,128,128,.08));border-radius:0 var(--r-sm) var(--r-sm) 0}
+#local-list>button[data-gr]{box-shadow:inset 3px 0 0 var(--grp)}
+body.sk2 #local-list>.btn[data-gr]{box-shadow:inset 3px 0 0 var(--grp)!important}
+body.sk2 #local-list>.btn.bsec[data-gr]{box-shadow:inset 3px 0 0 var(--grp),inset 5px 0 0 var(--k-color-accent-a)!important}
+.msk-grp-tag{background:transparent;border:1px solid var(--grp,currentColor);color:var(--txt)}
 .msk-rowbar-nm{flex:1 1 38%;min-width:0;font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
 .msk-layout-toggle{min-height:28px;padding:var(--sp-1) var(--sp-2);white-space:nowrap;font-size:var(--fs-1)}
@@ -1268,6 +1273,7 @@ body.mobile-fx #fx-tool-cats button.on{background:#ffbd00;color:#111}
 body.mobile-fx #fx-tool-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-content:start;gap:8px 0;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 8px 60px}
 body.mobile-fx #fx-tool-grid .fx-sec-btn{width:100%;min-width:0;min-height:90px;gap:8px;padding:8px 2px;border-radius:0;color:#ddd;font-family:var(--sans)}
 body.mobile-fx #fx-tool-grid .fx-sec-btn[hidden]{display:none}
+body.mobile-fx .fx-desk-only{display:none} /* CHR-290/291 desktop-only sub-tools inside a phone-visible card */
 body.mobile-fx #fx-tool-grid .fx-sec-ic{font-size:28px;color:#f3f3f3}
 body.mobile-fx #fx-tool-grid .fx-sec-lb{white-space:normal;font-size:12px;font-weight:400;text-align:center}
 /* Chromasmith identity on the phone (not a Snapseed clone): brand accent instead of yellow,
@@ -1626,6 +1632,9 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 body.deskx{--deskx-topbar-h:56px;--deskbar-control-gap:12px}
 body.deskx header,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
+/* CHR-264: main:has(#panel-fx.active){max-width:1640px} (the web layout cap) outranks the rule above
+   through its #id, so on screens wider than 1640px the editor left an empty band on the right. */
+body.deskx main:has(#panel-fx.active){max-width:none}
 body.deskx.fx-deskb main{overflow:hidden;overflow:clip;height:100vh}   /* clip: not a scroll container, so focus restore on app switch cannot scroll (shift) the editor */
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
 /* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
@@ -3144,6 +3153,9 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 body.sk2.mobile-fx .fx-ctrl-title{font-size:15px;line-height:1.2;padding-top:8px;padding-bottom:6px;margin-bottom:6px}
 body.sk2.mobile-fx .sk2-dup-title>.fx-ctrl-title{min-height:0!important}
 body.mobile-fx #fx-looks-cats,body.mobile-fx #fx-looks{overflow-y:hidden!important;touch-action:pan-x}
+/* The sk2 segmented-control rule forces overflow:visible!important on every .chip-tap row; the phone
+   Looks category row must stay a horizontal scroller or it pushes the sheet ~300px wide. */
+body.sk2.mobile-fx .fx-panel #fx-looks-cats{overflow-x:auto!important;overflow-y:hidden!important}
 body.sk2.mobile-fx #row-lut-mix{position:static;flex-wrap:nowrap;align-items:center;gap:10px;margin:8px 0 0!important;padding:2px 0;box-shadow:none}
 body.sk2.mobile-fx #row-lut-mix>.fx-label{order:1;flex:0 0 auto;margin:0}
 body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;height:32px;margin:0}
@@ -4372,6 +4384,29 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="fx-row" title="Contrast in the small-detail band (approximately 2–4 source pixels). Zero leaves the image unchanged."><div class="fx-label">Small</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-2" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-2">0</div></div>
           <div class="fx-row" title="Contrast in the medium-detail band (approximately 4–8 source pixels). Zero leaves the image unchanged."><div class="fx-label">Medium</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-3" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-3">0</div></div>
           <div class="fx-row" title="Contrast in the low-frequency residual around the renderer's working-value midpoint (0.5). Zero leaves the image unchanged."><div class="fx-label">Residual</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-res" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-res">0</div></div>
+          <!-- CHR-291 / CHR-290 desktop-only colour tools. Hidden on phones (body.mobile-fx), which keep a
+               simplified Tone panel; recipes made on desktop still render there. -->
+          <div class="fx-desk-only" id="adj-rt-colour">
+          <div class="fx-sub" title="RawTherapee-style channel mixer in linear RGB: each output channel is a weighted sum of the input red, green and blue. Default is the identity (100% of its own channel). Luminance is not preserved.">Channel mixer</div>
+          <div class="fx-row" title="Red output: percentage of input red."><div class="fx-label">Red ← R</div><input class="fx-slider" type="range" min="-200" max="200" value="100" id="sl-adj-mix-rr" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-rr">100</div></div>
+          <div class="fx-row" title="Red output: percentage of input green."><div class="fx-label">Red ← G</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-rg" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-rg">0</div></div>
+          <div class="fx-row" title="Red output: percentage of input blue."><div class="fx-label">Red ← B</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-rb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-rb">0</div></div>
+          <div class="fx-row" title="Green output: percentage of input red."><div class="fx-label">Green ← R</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-gr" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-gr">0</div></div>
+          <div class="fx-row" title="Green output: percentage of input green."><div class="fx-label">Green ← G</div><input class="fx-slider" type="range" min="-200" max="200" value="100" id="sl-adj-mix-gg" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-gg">100</div></div>
+          <div class="fx-row" title="Green output: percentage of input blue."><div class="fx-label">Green ← B</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-gb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-gb">0</div></div>
+          <div class="fx-row" title="Blue output: percentage of input red."><div class="fx-label">Blue ← R</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-br" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-br">0</div></div>
+          <div class="fx-row" title="Blue output: percentage of input green."><div class="fx-label">Blue ← G</div><input class="fx-slider" type="range" min="-200" max="200" value="0" id="sl-adj-mix-bg" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-bg">0</div></div>
+          <div class="fx-row" title="Blue output: percentage of input blue."><div class="fx-label">Blue ← B</div><input class="fx-slider" type="range" min="-200" max="200" value="100" id="sl-adj-mix-bb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-mix-bb">100</div></div>
+          <div class="fx-sub" title="CIELAB (D65 white) lightness, contrast and chromaticity. Zero leaves the image unchanged.">Lab adjustments</div>
+          <div class="fx-row" title="Brightens or darkens CIELAB lightness while keeping black and white fixed."><div class="fx-label">Lightness</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-lab-l" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-lab-l">0</div></div>
+          <div class="fx-row" title="Lightness contrast around L* = 50."><div class="fx-label">Lab contrast</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-lab-con" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-lab-con">0</div></div>
+          <div class="fx-row" title="Scales CIELAB chroma. -100 gives black and white; lightness is unchanged."><div class="fx-label">Chromaticity</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-lab-chroma" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-lab-chroma">0</div></div>
+          <div class="fx-sub" title="Shifts the a* (green–magenta) and b* (blue–yellow) colour of shadows and highlights, blended by lightness. Lightness is unchanged. Zero leaves the image unchanged.">Colour toning</div>
+          <div class="fx-row" title="Shadows a*: negative greener, positive more magenta."><div class="fx-label">Shadows a*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#e64980)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-sa" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-sa">0</div></div>
+          <div class="fx-row" title="Shadows b*: negative bluer, positive more yellow."><div class="fx-label">Shadows b*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ffd43b)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-sb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-sb">0</div></div>
+          <div class="fx-row" title="Highlights a*: negative greener, positive more magenta."><div class="fx-label">Highlights a*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#e64980)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-ha" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-ha">0</div></div>
+          <div class="fx-row" title="Highlights b*: negative bluer, positive more yellow."><div class="fx-label">Highlights b*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ffd43b)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-hb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-hb">0</div></div>
+          </div>
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
           </div>
@@ -4522,12 +4557,18 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
                other job (display:none/block toggled by pcSlider et al.) still no-ops safely via
                getElementById returning null. -->
           <div id="pc-ctl" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+            <div class="fx-row" title="A name for this colour range, saved with the edit"><div class="fx-label">Name</div><input class="vinput" id="in-pc-name" type="text" maxlength="40" placeholder="Point 1" onchange="pcRename(this.value)" onkeydown="if(event.key==='Enter')this.blur()"></div>
             <div class="fx-row"><div class="fx-label">Hue</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-h" oninput="pcSlider('hue',this.value)"><div class="fx-val" id="vl-pc-h">0</div></div>
             <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-s" oninput="pcSlider('sat',this.value)"><div class="fx-val" id="vl-pc-s">0</div></div>
             <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider fx-slider-grad" type="range" min="-100" max="100" value="0" id="sl-pc-l" oninput="pcSlider('lum',this.value)"><div class="fx-val" id="vl-pc-l">0</div></div>
             <div class="fx-row" title="How wide a neighborhood of similar colors around the picked point is affected — low = only close matches, high = a broad spread of nearby hues/saturations"><div class="fx-label">Range</div><input class="fx-slider" type="range" min="0" max="100" value="35" id="sl-pc-r" oninput="pcSlider('range',this.value)"><div class="fx-val" id="vl-pc-r">35</div></div>
             <div class="fx-row" title="How gradually the adjustment fades toward the edge of the selected color range"><div class="fx-label">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-pc-sm" oninput="pcSlider('smoothness',this.value)"><div class="fx-val" id="vl-pc-sm">50</div></div>
+            <div class="fx-row" title="Only colours at least this bright are selected (0 = no lower limit)"><div class="fx-label">Lightness from</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-pc-llo" oninput="pcSlider('lumLo',this.value)"><div class="fx-val" id="vl-pc-llo">0</div></div>
+            <div class="fx-row" title="Only colours at most this bright are selected (100 = no upper limit)"><div class="fx-label">Lightness to</div><input class="fx-slider" type="range" min="0" max="100" value="100" id="sl-pc-lhi" oninput="pcSlider('lumHi',this.value)"><div class="fx-val" id="vl-pc-lhi">100</div></div>
             <div class="btn-row" style="margin-top:4px">
+              <button class="btn bgh" id="btn-pc-enable" onclick="pcToggleEnabled()" title="Turn this colour range off without losing its settings">Turn off</button>
+              <button class="btn bgh" id="btn-pc-showsel" onclick="pcToggleShowSel()" aria-pressed="false" title="Show which pixels this colour range selects (view only, never exported). Uses the mask overlay style.">Show selection</button>
+              <button class="btn bgh" onclick="pcDuplicate()" title="Copy this colour range and its adjustments">Duplicate</button>
               <button class="btn bgh" onclick="pcDelete()">Delete point</button>
             </div>
           </div>
@@ -4700,10 +4741,18 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <button class="btn" id="btn-ah-roi-clear" onclick="ahRoiClear()" style="display:none;margin-left:6px" title="Clear region — Auto level goes back to searching the whole frame"><span class="fx-db-ic" id="ic-ah-clear"></span></button>
         </div>
         <div class="fx-sub">Perspective</div>
+        <div class="btn-row fx-upright-row" style="margin-bottom:6px">
+          <button class="btn bgh" id="btn-upright-level" onclick="uprightLevel()" title="Upright Level: finds the photo's straight lines and rotates so horizontals and verticals are square to the frame.">Level</button>
+          <button class="btn bgh" id="btn-upright-vertical" onclick="uprightVertical()" title="Upright Vertical: finds near-vertical lines and sets Vertical and Rotate so they come out parallel and upright.">Vertical</button>
+        </div>
+        <div class="fx-row" title="How much of the detected correction Level and Vertical apply. About 85% usually looks more natural than a full correction; 100% makes the lines exactly square."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="85" id="sl-upright-amt" oninput="_upAmtLabel()"><div class="fx-val" id="vl-upright-amt">85%</div></div>
         <div class="fx-row" title="Corrects converging verticals while preserving perspective spacing."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
         <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
         <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
         <div class="fx-row" title="Scales the perspective-corrected photo to hide empty frame edges."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
+        <div class="fx-row" title="Stretches the photo horizontally (positive) or vertically (negative) to undo the squash a strong perspective correction leaves."><div class="fx-label">Aspect</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-asp" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-asp">0</div></div>
+        <div class="fx-row" title="Shifts the corrected photo left or right inside the frame."><div class="fx-label">X Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ox" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ox">0</div></div>
+        <div class="fx-row" title="Shifts the corrected photo up or down inside the frame."><div class="fx-label">Y Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-oy" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-oy">0</div></div>
       </div>
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
@@ -7578,7 +7627,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1102F';
+const BUILD='1.1105Z';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -7640,6 +7689,9 @@ function csAbout(){
     +'halation pass runs in your browser; the app works with the network switched off.</p>'
     +`<div style="display:flex;gap:8px;align-items:center;color:var(--mut);font-size:var(--fs-1);margin-bottom:16px">`
     +`<span>Version</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--txt)">v. ${BUILD}</span></div>`
+    // CHR-182: the shortcut editor (rebind, conflicts, reset to defaults) is reachable from Settings.
+    +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Keyboard</div>'
+    +'<div class="btn-row" style="margin:0 0 16px"><button class="btn bgh" data-about="shortcuts" onclick="document.getElementById(\'cs-modal-ov\').remove();chromasmithShowShortcuts()">Customise keyboard shortcuts…</button></div>'
     +'<div class="fx-sub" style="border-top:1px solid var(--bdr);margin-bottom:8px">Diagnostics</div>'
     +'<p style="margin:0 0 10px;color:var(--mut);font-size:var(--fs-1)">Only useful when reporting a problem.</p>'
     +'<div class="btn-row" style="margin-top:0">'
@@ -7725,7 +7777,10 @@ function applyHSL(r,g,b,hA,sA,lA){
 // hue/saturation picked from the photo (the eyedropper), with its own adjustable Range (how wide
 // a neighborhood of similar colors it grabs) instead of a fixed band width. Same weighted-kernel
 // shape as applyHSL for a consistent feel, just re-centered per point and range-driven per point.
-function pcWeight(h,s,pt){
+function pcWeight(h,s,pt,v){
+  // CHR-259: a disabled range selects nothing; an optional lightness band (lumLo..lumHi, 0-100 on HSV
+  // value) gates the selection. Records without them keep the old selection exactly (full 0..100 band).
+  if(pt.enabled===false)return 0;
   let df=Math.abs(h-pt.h);if(df>.5)df=1-df;
   const hHalf=0.03+(pt.range||0)/100*0.22;     // range 0-100 -> ±10.8°..90° hue half-width
   const sHalf=0.15+(pt.range||0)/100*0.55;     // wider range also tolerates more saturation drift
@@ -7736,14 +7791,19 @@ function pcWeight(h,s,pt){
   const edgePower=Math.pow(2,(50-smooth)/50);
   const wh=Math.pow(Math.max(0,1-Math.pow(df/hHalf,2)),edgePower);
   const ws=Math.pow(Math.max(0,1-Math.pow((s-pt.s)/sHalf,2)),edgePower);
-  return wh*ws*Math.min(1,s*3);
+  let wl=1;
+  if(v!=null&&((pt.lumLo||0)>0||(pt.lumHi!=null&&pt.lumHi<100))){
+    const lo=(pt.lumLo||0)/100,hi=(pt.lumHi==null?100:pt.lumHi)/100,soft=0.02+Math.max(0,Math.min(100,pt.smoothness==null?50:pt.smoothness))/100*0.08;
+    wl=Math.max(0,Math.min(1,(v-lo)/soft+1))*Math.max(0,Math.min(1,(hi-v)/soft+1));
+  }
+  return wh*ws*Math.min(1,s*3)*wl;
 }
 function applyPointColors(r,g,b,points){
   if(!points||!points.length)return[r,g,b];
   const[h,s,v]=r2hsv(r,g,b);
   let dh=0,ds=0,dv=0;
   for(const pt of points){
-    const w=pcWeight(h,s,pt);if(w<=0)continue;
+    const w=pcWeight(h,s,pt,v);if(w<=0)continue;
     dh+=w*(pt.hue||0)*0.45/360;ds+=w*((pt.sat||0)/100)*.55;dv+=w*((pt.lum||0)/100)*.11;
   }
   return hsv2r((h+dh+1)%1,Math.max(0,Math.min(1,s+ds)),Math.max(0,Math.min(1,v+dv)));
@@ -8514,7 +8574,7 @@ class FXR{
   _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
     const tx=this.txs;
     return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
-      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
   _stagePass(name,u,b,srcName,opts,uncacheable){
     const tx=this.txs[name];let key=null;
     if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
@@ -8655,6 +8715,10 @@ uniform sampler2D curveTex;uniform float useCurve;
 // HSL color mixer: a 33^3 LUT baked on the CPU from applyHSL (8 hue bands x hue/sat/lum),
 // applied right after the look LUT. Gated off (and never baked) when every band is zero.
 uniform sampler3D hslLut;uniform float useHsl;
+// CHR-259 Point Colour "Show selection": a 33^3 R8 cube of the SELECTED range's weight (pcWeight),
+// baked on the same grid and input space as hslLut and sampled at the same point. Preview-only:
+// pcShowSel is forced to 0 unless render() gets the private preview token.
+uniform sampler3D pcSelLut;uniform float pcShowSel;
 // LOCAL ADJUSTMENTS: up to 4 ANALYTIC masks (radial ellipse / linear gradient) evaluated in
 // GLOBAL image uv (uvOffL/uvScaleL) so they are resolution-independent and land identically in
 // the preview, the 1:1 loupe and every export tile. Per mask: exposure/contrast/temp/sat plus
@@ -8958,6 +9022,44 @@ vec3 applyCDL(vec3 c){
   vec3 base=max(c*cdlSlope+cdlOffset,0.0);                 // pow() of a negative base is undefined in GLSL
   vec3 o=vec3(pow(base.r,cdlPower.r),pow(base.g,cdlPower.g),pow(base.b,cdlPower.b));
   return clamp(o,0.0,1.0);
+}
+// CHR-291 channel mixer + CHR-290 Lab adjustments + CHR-291 colour toning. Runs right after the
+// colour wheels (CDL), before masks and the film FX passes. Each stage is gated by a JS-side
+// identity check (rtColourUniforms), so untouched values never convert and stay byte-identical.
+// Mixer: linear sRGB (IEC 61966-2-1 transfer), out = M * in, rows = output R,G,B; luminance is NOT
+// preserved (same as RawTherapee's mixer). Lab: CIE 1976 L*a*b* from linear sRGB via XYZ, D65
+// reference white, no chromatic adaptation. Out-of-gamut results clamp to 0..1 (or only below 0
+// when highlight headroom "useTonemap" is on).
+uniform float rtMixOn,rtLabOn;uniform vec3 rtMixR,rtMixG,rtMixB,rtLab;uniform vec2 rtToneS,rtToneH;
+const vec3 RT_WHITE=vec3(0.95047,1.0,1.08883);
+float rtLabF(float t){return t>216.0/24389.0?pow(t,1.0/3.0):(24389.0/27.0*t+16.0)/116.0;}
+float rtLabFi(float f){float t=f*f*f;return t>216.0/24389.0?t:(116.0*f-16.0)/(24389.0/27.0);}
+vec3 rtLin2Lab(vec3 l){
+  vec3 x=vec3(dot(l,vec3(0.4124564,0.3575761,0.1804375)),dot(l,vec3(0.2126729,0.7151522,0.0721750)),dot(l,vec3(0.0193339,0.1191920,0.9503041)))/RT_WHITE;
+  vec3 f=vec3(rtLabF(x.x),rtLabF(x.y),rtLabF(x.z));
+  return vec3(116.0*f.y-16.0,500.0*(f.x-f.y),200.0*(f.y-f.z));
+}
+vec3 rtLab2Lin(vec3 lab){
+  float fy=(lab.x+16.0)/116.0;
+  vec3 x=vec3(rtLabFi(fy+lab.y/500.0),rtLabFi(fy),rtLabFi(fy-lab.z/200.0))*RT_WHITE;
+  return vec3(dot(x,vec3(3.2404542,-1.5371385,-0.4985314)),dot(x,vec3(-0.9692660,1.8760108,0.0415560)),dot(x,vec3(0.0556434,-0.2040259,1.0572252)));
+}
+vec3 rtColour(vec3 c){
+  if(rtMixOn<0.5&&rtLabOn<0.5)return c;
+  vec3 lin=vec3(s2lp(c.r),s2lp(c.g),s2lp(c.b));
+  if(rtMixOn>0.5)lin=vec3(dot(rtMixR,lin),dot(rtMixG,lin),dot(rtMixB,lin));
+  if(rtLabOn>0.5){
+    vec3 lab=rtLin2Lab(lin);
+    float L=max(lab.x,0.0);
+    L=100.0*pow(L/100.0,exp2(-rtLab.x));                    // lightness: gamma on L*, 0 and 100 fixed
+    L=max(50.0+(L-50.0)*(1.0+rtLab.y),0.0);                  // contrast around L* 50
+    vec2 ab=lab.yz*(1.0+rtLab.z);                            // chromaticity: -1 gives neutral grey
+    float tw=clamp(L/100.0,0.0,1.0);                         // toning: shadows to highlights by L*
+    ab+=mix(rtToneS,rtToneH,tw)*30.0;                        // slider 100 = 30 a*/b* units
+    lin=rtLab2Lin(vec3(L,ab));
+  }
+  lin=useTonemap<0.5?clamp(lin,0.0,1.0):max(lin,0.0);
+  return vec3(l2sp(lin.r),l2sp(lin.g),l2sp(lin.b));
 }
 vec3 basicAdjust(vec3 c){
   if(adjOn<0.5)return c;
@@ -9295,9 +9397,15 @@ if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,
                 c.rgb.b<=1.0?graded.b:shoulder.b);
   }
   c.rgb=mix(lb,graded,lutMix);}
+// Point Colour selection weight, measured on the colour as it ENTERS the HSL stage (the cube was baked
+// over that input), before later stages move the colour. Composited by the selection overlay below.
+float pcSelW=-1.0,pcSelEdge=0.0;
+if(pcShowSel>0.5){float sc=32./33.,of=.5/33.;pcSelW=texture(pcSelLut,clamp(c.rgb,0.0,1.0)*sc+of).r;
+  pcSelEdge=clamp((abs(dFdx(pcSelW))+abs(dFdy(pcSelW)))*4.0,0.0,1.0);}
 if(useHsl>.5){float sc=32./33.,of=.5/33.;vec3 ccH=clamp(c.rgb,0.0,1.0);vec3 gradedH=texture(hslLut,ccH*sc+of).rgb;c.rgb=useTonemap>0.5?gradedH+(c.rgb-ccH):gradedH;}
 c.rgb=basicAdjust(c.rgb);
 c.rgb=applyCDL(c.rgb);
+c.rgb=rtColour(c.rgb);
 float selShowW=-1.0,selShowEdge=0.0; // selection-view overlay, composited at the end
 if(mskN>0.5){
   vec2 gm=uvOffL+uv*uvScaleL;
@@ -9419,6 +9527,7 @@ if(showSharpMask){o=vec4(vec3(sharpKeep),1.0);return;}
 if(useCurve>.5){vec3 ccC=clamp(c.rgb,0.0,1.0);vec3 t=ccC*(255.0/256.0)+(0.5/256.0);
   vec3 curved=vec3(texture(curveTex,vec2(t.r,.5)).r,texture(curveTex,vec2(t.g,.5)).g,texture(curveTex,vec2(t.b,.5)).b);
   c.rgb=useTonemap>0.5?curved+(c.rgb-ccC):curved;}
+if(pcSelW>=0.0){selShowW=pcSelW;selShowEdge=pcSelEdge;}
 if(selShowW>=0.0){
   // Modes: 0 colour on B&W, 1 colour on image, 2 white-on-black, 3 image on B&W, 4 image on black, 5 image on white.
   vec3 fc=clamp(c.rgb,0.0,1.0);
@@ -9658,7 +9767,7 @@ void main(){
 precision highp float;
 precision highp sampler2D;
 in vec2 uv;out vec4 o;
-uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale;uniform vec2 aspect;uniform vec2 texSize;
+uniform sampler2D img;uniform float lnsDist,lnsVig,lnsCA,lnsDefr,lnsPV,lnsPH,lnsRot,lnsScale,lnsAsp;uniform vec2 lnsOff;uniform vec2 aspect;uniform vec2 texSize;
 // PERSPECTIVE / KEYSTONE — a real projective transform, not a shear. Converging verticals (the
 // building-shot problem) are a perspective effect, so undoing them needs the division: a shear
 // straightens the edges but leaves the spacing wrong, which reads as a stretched building rather
@@ -9676,7 +9785,11 @@ vec2 lensPersp(vec2 c){
   // Guard the pole: at d<=0 the homography flips the image through infinity. Clamping instead of
   // letting it wrap keeps an over-driven slider ugly-but-sane rather than kaleidoscopic.
   d=max(d,0.15);
-  return c/d*lnsScale;
+  c=c/d*lnsScale;
+  // Aspect (Lightroom Transform): positive widens the photo (samples a narrower source span on x),
+  // negative makes it taller. Offset then shifts the frame; both are exact identity at 0.
+  if(lnsAsp>0.0)c.x/=1.0+lnsAsp; else if(lnsAsp<0.0)c.y/=1.0-lnsAsp;
+  return c-lnsOff;
 }
 // Defringe: desaturate the purple/green edge fringes left on high-contrast boundaries by lateral
 // chromatic aberration. Distinct from lnsCA above, which geometrically SHIFTS the red and blue
@@ -10414,6 +10527,14 @@ void main(){
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
+  // CHR-259 Point Colour selection-view cube: SZ^3 single-channel weight bytes, same layout as setHslLUT.
+  setPcSelLUT(d){const gl=this.gl;this._pcSelSnapshot=new Uint8Array(d);if(!this.pcSelTx)this.pcSelTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D,this.pcSelTx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.R8,SZ,SZ,SZ,0,gl.RED,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
   // Per-mask tone curves: 256x8 RGBA8, row i = mask i. Rebuilt only when a curve actually changes.
   setMaskCurves(MK){const gl=this.gl;
@@ -10489,6 +10610,8 @@ void main(){
     this.setPrintLUT(source._printLutSnapshot);
     if(source._hslSnapshot)this.setHslLUT(source._hslSnapshot);
     else{if(this.hslTx)this.gl.deleteTexture(this.hslTx);this.hslTx=null;this._hslSnapshot=null;}
+    if(source._pcSelSnapshot)this.setPcSelLUT(source._pcSelSnapshot);
+    else{if(this.pcSelTx)this.gl.deleteTexture(this.pcSelTx);this.pcSelTx=null;this._pcSelSnapshot=null;}
     if(source._curveSnapshot)this.setCurveTex(source._curveSnapshot);
     else{if(this.curveTx)this.gl.deleteTexture(this.curveTx);this.curveTx=null;this._curveSnapshot=null;}
     if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
@@ -10497,14 +10620,14 @@ void main(){
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -10550,7 +10673,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
     const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
     this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
-      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||lns0.asp||lns0.ox||lns0.oy||(lns0.scale!=null&&lns0.scale!==1)),
       nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
       deconv:!!(dc0.amount>0),
       dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
@@ -10704,11 +10827,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
     // skipped (reading straight from the previous stage's output name) so the default
     // no-correction path never touches these buffers.
-    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||lnsP.asp||lnsP.ox||lnsP.oy||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
       this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
-         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
+         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,lnsAsp:lnsP.asp||0,lnsOff:[lnsP.ox||0,lnsP.oy||0],
          texSize:[1/this.imgW,1/this.imgH],
          aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }
@@ -10800,6 +10923,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      // CHR-259: Point Colour selection view — preview token only, so export/tile renders never show it.
+      pcSelLut:11,pcShowSel:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showPcSel&&this.pcSelTx)?1:0,
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
       maskTex:4,maskTex2:7,mskCrvTex:10,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
@@ -10833,10 +10958,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
+      ...rtColourUniforms(A.rtColour,A.enabled),
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]};
-    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]],lutSrc,opts,anyGate);
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -11697,7 +11823,7 @@ let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
 let fxPinned=null, fxSplitSrc='orig';
 let fxHistOn=false;                        // live histogram toggle
-const FX_FIT=0.9; // displayed 100% = whole photo fits the canvas with a margin (room for a border)
+const FX_FIT=0.95; // displayed 100% = whole photo fits the canvas with a margin (room for a border). CHR-264: 0.9 -> 0.95 (+11% photo area at 1280/1440; revisit if borders look cramped)
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
 // Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps
@@ -11772,6 +11898,178 @@ function cropGridOverlaySync(){
 function cropSetGrid(v){cropGrid=v;const sel=document.getElementById('sel-crop-grid');if(sel)sel.value=v;try{localStorage.setItem('chromasmith_crop_grid',v);}catch(e){}
   cropGridShown=v!=='off';cropGridOverlaySync();
   const r=document.getElementById('crop-rect');if(r){r.querySelectorAll('.crop-grid-v,.crop-grid-h').forEach(n=>n.remove());r.insertAdjacentHTML('beforeend',cropGridLinesHtml());}}
+// ── CHR-288 highlight reconstruction cores (pure; NOT wired to any control yet) ──────────────────
+// Input: interleaved scene-linear camera RGB (Float32Array, white balance applied, BEFORE the
+// camera-to-output colour transform and BEFORE any clip/u16 packing) plus the per-channel sensor
+// saturation level "clip" in the same units. That is the only place the clipped-channel pattern is
+// still knowable: once WB-scaled channels are clipped to a common white (LibRaw highlight=0, the
+// browser decode's current setting) the information these modes use is gone. test/probe_hl_modes.mjs
+// measures it on the CC0 samples (GH5S: 2.7% of R and 1.4% of B at 65535 with highlight=0, none
+// with highlight=1). Re-implemented from the published descriptions (RawPedia "Highlight
+// reconstruction"; darktable manual "highlight reconstruction: inpaint opposed"), no code copied.
+// Every mode returns the input array itself when no pixel reaches its threshold.
+//   'blend'       ramps clipped pixels toward neutral at their brightest channel's value
+//                 (from 80% of the clip threshold up to it) — removes the magenta/cyan cast only.
+//   'propagate'   colour propagation: the chromaticity (channel / channel-mean) of unclipped
+//                 pixels is filled into each clipped region by a push-pull mip-pyramid
+//                 (hlPushPull: one linear pass, holes of any size, deterministic); each clipped channel becomes ratio * level, the level
+//                 taken from the unclipped channels (or, all clipped, the largest lower bound).
+//   'opposed'     inpaint opposed: per channel AND per connected clipped region, the mean cube-root
+//                 difference between it and the mean of the two opposed channels, measured on
+//                 unclipped pixels within 2px of that region, is added back to the opposed mean wherever that channel clipped.
+// A reconstructed channel never drops below its recorded (clipped) value.
+function hlClippedMask(rgb,n,clip,thr){
+  const m=new Uint8Array(n);let any=0;
+  for(let i=0;i<n;i++){let k=0;for(let c=0;c<3;c++)if(rgb[3*i+c]>=clip[c]*thr)k|=1<<c;m[i]=k;if(k)any=1;}
+  return any?m:null;
+}
+// Push-pull (mip-pyramid) fill of a 3-channel field K where known[i]==0 (Gortler et al. 1996
+// "pull-push"): push sums value*weight and weight over 2x2 blocks up to 1x1; pull walks back down
+// and every unknown pixel takes the bilinear sample of the filled level above. One linear pass
+// (~4/3 n work) fills holes of any size; known pixels are never touched. Sets known[i]=1 for every
+// pixel it fills (all of them, unless nothing at all was known).
+function hlPushPull(K,known,w,h){
+  const S=[],W=[],dims=[];
+  let s=new Float32Array(K),wt=new Float32Array(w*h),lw=w,lh=h;
+  for(let i=0;i<w*h;i++){if(known[i])wt[i]=1;else s[3*i]=s[3*i+1]=s[3*i+2]=0;}
+  S.push(s);W.push(wt);dims.push([lw,lh]);
+  while(lw>1||lh>1){
+    const nw=Math.ceil(lw/2),nh=Math.ceil(lh/2),ns=new Float32Array(3*nw*nh),nwt=new Float32Array(nw*nh);
+    for(let y=0;y<lh;y++)for(let x=0;x<lw;x++){const i=y*lw+x,j=(y>>1)*nw+(x>>1);if(!wt[i])continue;nwt[j]+=wt[i];ns[3*j]+=s[3*i];ns[3*j+1]+=s[3*i+1];ns[3*j+2]+=s[3*i+2];}
+    s=ns;wt=nwt;lw=nw;lh=nh;S.push(s);W.push(wt);dims.push([lw,lh]);
+  }
+  if(!W[W.length-1][0])return; // nothing known anywhere
+  // Normalise every level to a value field V (where weight>0), then pull top-down.
+  let V=new Float32Array(3);for(let c=0;c<3;c++)V[c]=S[S.length-1][c]/W[W.length-1][0];
+  for(let l=S.length-2;l>=0;l--){
+    const [cw,ch]=dims[l],[pw,ph]=dims[l+1],sl=S[l],wl=W[l],nv=new Float32Array(3*cw*ch),last=l===0;
+    for(let y=0;y<ch;y++){
+      const fy=Math.min(ph-1,Math.max(0,(y+0.5)/2-0.5)),y0=Math.floor(fy),y1=Math.min(ph-1,y0+1),ty=fy-y0;
+      for(let x=0;x<cw;x++){
+        const i=y*cw+x;
+        if(wl[i]){const iw=1/wl[i];nv[3*i]=sl[3*i]*iw;nv[3*i+1]=sl[3*i+1]*iw;nv[3*i+2]=sl[3*i+2]*iw;continue;}
+        const fx=Math.min(pw-1,Math.max(0,(x+0.5)/2-0.5)),x0=Math.floor(fx),x1=Math.min(pw-1,x0+1),tx=fx-x0;
+        const a=y0*pw+x0,b=y0*pw+x1,c2=y1*pw+x0,d=y1*pw+x1;
+        for(let c=0;c<3;c++)nv[3*i+c]=(V[3*a+c]*(1-tx)+V[3*b+c]*tx)*(1-ty)+(V[3*c2+c]*(1-tx)+V[3*d+c]*tx)*ty;
+        if(last){K[3*i]=nv[3*i];K[3*i+1]=nv[3*i+1];K[3*i+2]=nv[3*i+2];known[i]=1;}
+      }
+    }
+    V=nv;
+  }
+}
+// 8-connected components of a nonzero mask: Int32Array labels (0 = background, 1..count).
+function hlLabel(M,w,h){
+  const L=new Int32Array(w*h),st=new Int32Array(w*h);let count=0;
+  for(let s0=0;s0<w*h;s0++){
+    if(!M[s0]||L[s0])continue;count++;let sp=0;st[sp++]=s0;L[s0]=count;
+    while(sp){const p=st[--sp],px=p%w,py=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++){const yy=py+dy;if(yy<0||yy>=h)continue;for(let dx=-1;dx<=1;dx++){const xx=px+dx;if(xx<0||xx>=w)continue;const q=yy*w+xx;if(M[q]&&!L[q]){L[q]=count;st[sp++]=q;}}}}
+  }
+  return{L,count};
+}
+function hlReconstruct(rgb,w,h,clip,mode,opts){
+  opts=opts||{};const n=w*h,thr=opts.threshold||0.995;
+  if(!mode||mode==='clip')return rgb;
+  if(mode==='blend'){
+    const lo=0.8*thr;let out=null;
+    for(let i=0;i<n;i++){
+      let r=0,mx=0;for(let c=0;c<3;c++){const v=rgb[3*i+c];r=Math.max(r,v/clip[c]);mx=Math.max(mx,v);}
+      if(r<=lo)continue;
+      if(!out)out=new Float32Array(rgb);
+      const t=Math.min(1,(r-lo)/(thr-lo));
+      for(let c=0;c<3;c++)out[3*i+c]=rgb[3*i+c]+(mx-rgb[3*i+c])*t;
+    }
+    return out||rgb;
+  }
+  const M=hlClippedMask(rgb,n,clip,thr);
+  if(!M)return rgb;
+  const out=new Float32Array(rgb);
+  if(mode==='propagate'){
+    const K=new Float32Array(3*n),known=new Uint8Array(n);
+    for(let i=0;i<n;i++)if(!M[i]){const s=(rgb[3*i]+rgb[3*i+1]+rgb[3*i+2])/3;if(s>0){for(let c=0;c<3;c++)K[3*i+c]=rgb[3*i+c]/s;known[i]=1;}}
+    hlPushPull(K,known,w,h);
+    for(let i=0;i<n;i++){
+      const k=M[i];if(!k)continue;
+      const kr=known[i]?[K[3*i],K[3*i+1],K[3*i+2]]:[1,1,1];
+      let lvl=0,u=0;
+      for(let c=0;c<3;c++)if(!(k&(1<<c))&&kr[c]>0){lvl+=rgb[3*i+c]/kr[c];u++;}
+      if(u)lvl/=u;else for(let c=0;c<3;c++)if(kr[c]>0)lvl=Math.max(lvl,rgb[3*i+c]/kr[c]);
+      for(let c=0;c<3;c++)if(k&(1<<c))out[3*i+c]=Math.max(rgb[3*i+c],kr[c]*lvl);
+    }
+    return out;
+  }
+  if(mode==='opposed'){
+    // darktable's segmentation idea: each connected clipped region gets its OWN chroma offset from
+    // its own 2px border, so differently coloured clipped lights do not share one compromise
+    // colour. A region whose border has too few samples for a channel (<8) falls back to the
+    // image-global estimate.
+    const cb=Math.cbrt,{L,count}=hlLabel(M,w,h),gs=[0,0,0],gc=[0,0,0];
+    const rs=new Float64Array(3*(count+1)),rc=new Float64Array(3*(count+1)),seen=new Int32Array(count+1);let stamp=0;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const i=y*w+x;if(M[i])continue;
+      let near=0;stamp++;const labs=[];
+      for(let dy=-2;dy<=2;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-2;dx<=2;dx++){const xx=x+dx;if(xx<0||xx>=w)continue;const j=yy*w+xx;if(M[j]){near|=M[j];const l=L[j];if(seen[l]!==stamp){seen[l]=stamp;labs.push(l);}}}}
+      if(!near)continue;
+      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])];
+      for(let c=0;c<3;c++)if(near&(1<<c)){const v=q[c]-(q[(c+1)%3]+q[(c+2)%3])/2;gs[c]+=v;gc[c]++;for(const l of labs){rs[3*l+c]+=v;rc[3*l+c]++;}}
+    }
+    const chroma=new Float64Array(3*(count+1));
+    for(let l=1;l<=count;l++)for(let c=0;c<3;c++)chroma[3*l+c]=rc[3*l+c]>=8?rs[3*l+c]/rc[3*l+c]:(gc[c]?gs[c]/gc[c]:0);
+    for(let i=0;i<n;i++){
+      const k=M[i];if(!k)continue;
+      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])],l=L[i];
+      for(let c=0;c<3;c++)if(k&(1<<c)){const e=(q[(c+1)%3]+q[(c+2)%3])/2+chroma[3*l+c];out[3*i+c]=Math.max(rgb[3*i+c],e>0?e*e*e:0);}
+    }
+    return out;
+  }
+  throw new Error('hlReconstruct: unknown mode '+mode);
+}
+// ── CHR-289 retinex-style dynamic-range compression core (pure; NOT wired to any control yet) ─────
+// Multiscale illumination estimate in the spirit of Jobson, Rahman & Woodell's MSR (IEEE TIP 1997),
+// but each scale's surround is an EDGE-AWARE base layer: a self-guided filter (He, Sun & Tang,
+// TPAMI 2013) on log luminance, L = mean_k GF_rk(log(Y+eps)), radius r_k = round(sigma_k). A plain
+// Gaussian surround smears a bright edge into its dark neighbour, so the dark side near the edge is
+// under-lifted (the MSR halo); the guided filter keeps the step in the base, so the gain stays flat
+// up to the edge. gfEps (log-domain variance, default 0.04) sets which steps count as edges:
+// smaller keeps more edges. Instead of MSRCR's output stretch (an image-global gain/offset that
+// would differ per tile), the illumination is compressed about a caller-supplied ANCHOR (a
+// whole-image statistic, computed once, never per tile):
+//   d = L - log anchor;  log gain = -(d<0 ? shadows : highlights) * d, clamped to +-log(maxGain).
+// The caller multiplies scene-linear RGB by the gain (hue-preserving). Strengths are 0..1; both 0
+// returns null so the neutral path does no work. Box sums are direct (fixed summation order) with
+// clamp-to-edge; the guided filter is two box stages, so its reach is 2r and a tile carrying
+// drcRetinexHalo(sigmas) = 2*max r pixels of halo on every side reproduces the whole-image gain
+// exactly in its interior. Sigmas are in pixels of the buffer passed in: preview, loupe and export
+// must scale them by (buffer width / full image width).
+function drcRetinexHalo(sigmas){return 2*Math.max.apply(null,sigmas.map(s=>Math.max(1,Math.round(s))));}
+// Separable box mean, radius r, clamp-to-edge, direct sums in a fixed order (tile-exact).
+function drcBoxMean(src,w,h,r){
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h),k=1/(2*r+1);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const xx=x+i<0?0:x+i>=w?w-1:x+i;a+=src[y*w+xx];}tmp[y*w+x]=a*k;}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++){const yy=y+i<0?0:y+i>=h?h-1:y+i;a+=tmp[yy*w+x];}out[y*w+x]=a*k;}
+  return out;
+}
+// Self-guided filter (guide = input): q = mean_a*I + mean_b with a = var/(var+eps), b = (1-a)*mean.
+function drcGuided(I,w,h,r,eps){
+  const n=w*h,II=new Float32Array(n);for(let i=0;i<n;i++)II[i]=I[i]*I[i];
+  const m=drcBoxMean(I,w,h,r),m2=drcBoxMean(II,w,h,r),A=new Float32Array(n),B=new Float32Array(n);
+  for(let i=0;i<n;i++){const v=Math.max(0,m2[i]-m[i]*m[i]),a=v/(v+eps);A[i]=a;B[i]=(1-a)*m[i];}
+  const ma=drcBoxMean(A,w,h,r),mb=drcBoxMean(B,w,h,r),q=new Float32Array(n);
+  for(let i=0;i<n;i++)q[i]=ma[i]*I[i]+mb[i];
+  return q;
+}
+function drcRetinex(Y,w,h,o){
+  const sh=o.shadows||0,hl=o.highlights||0;
+  if(!sh&&!hl)return null;
+  if(!(o.anchor>0))throw new Error('drcRetinex: anchor (whole-image statistic) required');
+  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor),ge=o.gfEps||0.04;
+  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
+  const L=new Float32Array(w*h);
+  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
+  const g=new Float32Array(w*h);
+  for(let i=0;i<g.length;i++){const d=L[i]-la;let lg=-(d<0?sh:hl)*d;lg=lg>lim?lim:lg<-lim?-lim:lg;g[i]=Math.exp(lg);}
+  return g;
+}
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
 // Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
 // ResolutionUnit tags), NOT a JFIF APP0 segment — readDPI must check both,
@@ -13819,6 +14117,48 @@ function rawSharedMemoryOk(){
   if(!capAndroid())return false;
   try{new WebAssembly.Memory({initial:1,maximum:1,shared:true});return true;}catch(e){return false;}
 }
+// CHR-250: camera make/model read straight from the file header, BEFORE LibRaw runs, so loadRw2
+// can tell up front that no bundled DCP applies and decode once (LibRaw sRGB) instead of twice
+// (linear for the DCP, then again for the sRGB fallback — 58 s for a full X-Pro2 RAF). Covers
+// TIFF-structured RAWs (CR2/NEF/ARW/ORF/RW2/PEF/3FR/IIQ/DNG: Make 271 / Model 272 in IFD0, its
+// chain, SubIFDs or the Exif IFD) and Fuji RAF (model at 0x1C of the fixed header). Anything else
+// (CR3, X3F, …) returns null and keeps the old decode-then-decide path. Only a hint: loadRw2
+// re-checks LibRaw's own make/model after the decode and re-decodes linear if the hint was wrong.
+function rawSniffMakeModel(bytes){
+  try{
+    const n=bytes.length;if(n<32)return null;
+    const str=(o,len)=>{let s='';for(let i=0;i<len&&o+i<n;i++){const c=bytes[o+i];if(!c)break;s+=String.fromCharCode(c);}return s.trim();};
+    if(str(0,15)==='FUJIFILMCCD-RAW')return{make:'FUJIFILM',model:str(0x1C,32)};
+    const le=bytes[0]===0x49&&bytes[1]===0x49;
+    if(!le&&!(bytes[0]===0x4D&&bytes[1]===0x4D))return null;
+    const d=new DataView(bytes.buffer,bytes.byteOffset,n);
+    let make=null,model=null;const seen=new Set();
+    const walk=(off,depth)=>{
+      if(depth>4||!off||seen.has(off)||off+2>n||make&&model)return;
+      seen.add(off);
+      const cnt=d.getUint16(off,le);if(cnt>1000)return;
+      const next=[];
+      for(let i=0;i<cnt;i++){
+        const e=off+2+12*i;if(e+12>n)return;
+        const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),c=d.getUint32(e+4,le),v=c>4?d.getUint32(e+8,le):e+8;
+        if(typ===2&&(tag===271||tag===272)&&c<256&&v+c<=n){const s=str(v,c);if(tag===271&&make==null)make=s;else if(tag===272&&model==null)model=s;}
+        else if((tag===330||tag===34665)&&(typ===4||typ===13)){for(let k=0;k<c&&k<8;k++){const p=c>1?v+4*k:e+8;if(p+4<=n)next.push(d.getUint32(p,le));}}
+      }
+      if(off+2+12*cnt+4<=n)next.push(d.getUint32(off+2+12*cnt,le));
+      for(const o of next)walk(o,depth+1);
+    };
+    walk(d.getUint32(4,le),0);
+    return make&&model?{make,model}:null;
+  }catch(e){return null;}
+}
+// True only when the header names a camera that NO bundled DCP entry could match. Deliberately
+// looser than cameraDcpPrefix (model regex alone, against model and make+model) because LibRaw
+// normalizes make strings ("NIKON CORPORATION" -> "Nikon"); a false "might match" only costs the
+// old two-decode path, never a wrong colour path.
+function rawSniffRulesOutBundledDcp(sn){
+  if(!sn||!sn.make||!sn.model)return false;
+  return !CAMERA_DCP_PREFIXES.some(c=>c.model.test(sn.model)||c.model.test(sn.make+' '+sn.model));
+}
 async function loadRw2(file,opts){
   // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
   // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
@@ -13843,50 +14183,87 @@ async function loadRw2(file,opts){
   let m,img;
   const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1,filmSource}; // linear 16-bit camera RGB (DCP input space)
   const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
+  // The LibRaw sRGB fallback's exact settings (used up front by sdrFirst, or as the re-decode below).
+  const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
+  // CHR-250: browser only (desktop's native shim develops in Rust and never re-decodes). When the
+  // file header already rules out every bundled DCP and the file carries no embedded DNG profile,
+  // the linear decode below would only be thrown away for the sRGB fallback — so decode straight
+  // to the fallback's settings: one LibRaw run instead of two, byte-identical pixels.
+  let embDcp=null,sdrFirst=false;
+  if(profile&&!srcPath&&!window.__TAURI__&&rawSniffRulesOutBundledDcp(rawSniffMakeModel(bytesCopy))){
+    embDcp=parseDngEmbeddedProfile(bytesCopy);
+    sdrFirst=!embDcp;
+  }
   try{
     await withRawDecodeTimeout(raw,async()=>{
-      const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
+      const openSettings=sdrFirst?{...fallbackSettings}:{...(profile?dcpSettings:sdrSettings),filmSource};
       if(srcPath)openSettings.sourcePath=srcPath;
-      if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      if(rawDecodeSettings&&!sdrFirst)Object.assign(openSettings,rawDecodeSettings);
       if(privateEntry)openSettings.privateEntry=true;
       await raw.open(bytes,openSettings);
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
-      m=await raw.metadata();
-      // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
-      if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
-      if(profile)profile=rawProfileFor(m,profile);
+      // sdrFirst reads metadata AFTER imageData, like the old fallback decode (which never called
+      // metadata()). This order was load-bearing under libraw-wasm 1.1.2, whose open() freed its copy
+      // of the file while LibRaw still read from it during unpack (use-after-free), so any allocation
+      // in between changed the pixels of a lazily-read file (Phase One IIQ). The vendored 1.6.0 keeps
+      // the buffer alive: measured on the IIQ, metadata-first and metadata-last now give identical
+      // pixels. The order is kept only because nothing needs it changed.
+      // Side effect: on a half-size decode, metadata read after processing reports the halved frame
+      // in width/height (make/model/iso unchanged). No caller reads meta.width/height (checked
+      // with app-uses/grep); the probe test/raw_decode_coverage.mjs only logs them.
+      const meta=async()=>{
+        m=await raw.metadata();
+        // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
+        if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
+        if(profile)profile=rawProfileFor(m,profile);
+      };
+      if(!sdrFirst)await meta();
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      // CHR-250: LibRaw returns no image for formats it cannot decode (Sigma Quattro X3F); say so
+      // instead of the later "Cannot read properties of undefined (reading 'rgba')".
+      if(!img||!img.data)throw new Error('This RAW format is not supported by the RAW decoder ('+(((file&&file.name)||'').split('.').pop()||'').toUpperCase()+'). Convert it to DNG or TIFF first.');
+      if(sdrFirst)await meta();
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
     });
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
-  // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
-  // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
-  // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
-  // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
-  // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
-  // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
-  // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
-  let embDcp=null;
   // CHR-162: skipped when the native shell already developed the pixels (img.rgba — a bundled,
   // Adobe-on-disk or embedded-DNG profile LUT applied in Rust): parsing needs the whole file
   // (75MB for an iPhone ProRAW, over IPC), and the sRGB fallback below would then throw that
   // develop away and decode the RAW a second time.
-  if(profile&&!img.rgba&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
-  if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
-    profile=null;
+  const decodeAgain=async settings=>{
     const raw2=new LibRaw();
     try{
       await withRawDecodeTimeout(raw2,async()=>{
-        const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
-        if(srcPath)fallbackSettings.sourcePath=srcPath;
-        if(privateEntry)fallbackSettings.privateEntry=true;
-        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
+        const st={...settings};
+        if(srcPath)st.sourcePath=srcPath;
+        if(privateEntry)st.privateEntry=true;
+        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),st);
         img=await raw2.imageData();
       });
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
-    if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+  };
+  const noProfileLog=()=>{if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');};
+  if(sdrFirst){
+    if(!cameraDcpPrefix(m.make,m.model)){profile=null;noProfileLog();}
+    // The header hint was wrong (LibRaw's own make/model DOES match a bundled DCP): redo the
+    // linear decode the DCP path needs. Never expected; costs the old second decode, nothing worse.
+    else await decodeAgain({...dcpSettings,...(rawDecodeSettings||{})});
+  }else{
+    // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
+    // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+    // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
+    // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
+    // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
+    // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
+    // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
+    if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
+    if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+      profile=null;
+      await decodeAgain(fallbackSettings);
+      noProfileLog();
+    }
   }
   // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
   // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
@@ -14175,7 +14552,7 @@ function installFXImages(entries,loadKey,opts){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=FX_FIT;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
   window.__pm&&window.__pm('ifx-zoom');
   fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
@@ -14464,7 +14841,7 @@ const _FF_VIEW_ONLY_FN=/^\s*(?:window\.)?(mskSetPreviewMode|mskAddMenu|pcEyedrop
 document.addEventListener('pointerdown',(e)=>{const b=e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle');if(!b)return;if(b.matches(_FF_VIEW_ONLY_SEL)||_FF_VIEW_ONLY_FN.test(b.getAttribute('onclick')||''))return;_ffAutoEnable(e);},true);
 function fxUpdate(){
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -14549,7 +14926,7 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
-const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin'];
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
   fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
@@ -14655,12 +15032,71 @@ async function verRender(){
     const acts=(cur?'':`<button class="btn bgh" style="${sb}" onclick="verCompare(${i})">Compare</button><button class="btn bgh" style="${sb}" onclick="verMakeCurrent(${i})">Make current</button>`)
       +(hasV?`<button class="btn bgh" style="${sb}" onclick="verRename(${i})">Rename</button>`:'')+(hasV&&!cur?`<button class="btn bgh" style="${sb}" onclick="verDelete(${i})">Delete</button>`:'');
     return `<div class="ver-row" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)">
-      ${cur&&thumb?`<img src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`:'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
+      ${cur&&thumb?`<img class="ver-thumb" data-ver-cur="1" src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`
+        :v.recipe?`<img class="ver-thumb" data-ver-i="${i}" width="72" alt="" style="min-height:48px;background:var(--bdr);flex:0 0 auto">`
+        :'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
         <div class="fx-hint" style="margin:0">${cur?'Current':'Saved version'}</div>
         ${acts?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${acts}</div>`:''}
       </div></div>`;}).join('');
+  vers.forEach((v,i)=>{if(i!==act&&v.recipe)verThumb(v.recipe).then(url=>{
+    const el=host.querySelector(`img[data-ver-i="${i}"]`);if(el&&url)el.src=url;}).catch(e=>console.warn('version thumbnail',e&&e.message||e));});
+}
+// Per-version thumbnails: each saved version's OWN recipe rendered small, so the rows show what
+// each version looks like rather than the current edit. Rendered in a hidden render-only copy of
+// the app (?csrender=1 -> csRenderEditPreview, the same instance the Library's edited previews
+// use), so the live Editor's sliders/LUT/masks are never swapped, a version's look can load
+// asynchronously, and nothing here can write history or the sidecar. Strictly sequential, cached
+// by (photo, recipe) — a changed recipe is a different key, so it re-renders by itself — and the
+// hidden instance is dropped after 60s idle. Source = the current photo's own pixels downscaled
+// (RAW photos therefore render from the developed image, without per-version RAW settings).
+const VER_THUMB_EDGE=144;
+const _verT={frame:null,ready:null,chain:Promise.resolve(),cache:new Map(),src:null,srcImg:null,srcId:0,idle:0,ids:new WeakMap(),n:0};
+function _verHash(s){let a=0x811c9dc5,b=0x9747b28c;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,0x01000193)>>>0;b=Math.imul(b+c+i,0x85ebca6b)>>>0;b^=b>>>13;}
+  return a.toString(16)+'.'+(b>>>0).toString(16);}
+function _verThumbFrame(){
+  clearTimeout(_verT.idle);
+  if(_verT.ready)return _verT.ready;
+  const f=document.createElement('iframe');f.setAttribute('aria-hidden','true');f.tabIndex=-1;f.title='version thumbnail renderer';
+  f.style.cssText='position:fixed;left:0;top:0;width:640px;height:480px;border:0;opacity:0;pointer-events:none;z-index:-1';
+  f.src=location.pathname+'?csrender=1';document.body.appendChild(f);_verT.frame=f;
+  _verT.ready=new Promise((res,rej)=>{const t0=performance.now();const tick=()=>{
+    if(_verT.frame!==f)return rej(new Error('renderer closed'));
+    let w=null;try{w=f.contentWindow;}catch(_){}
+    if(w&&typeof w.csRenderEditPreview==='function')return res(w);
+    if(performance.now()-t0>60000)return rej(new Error('renderer did not boot'));setTimeout(tick,100);};tick();});
+  _verT.ready.catch(()=>_verThumbDrop());
+  return _verT.ready;
+}
+function _verThumbDrop(){clearTimeout(_verT.idle);if(_verT.frame)_verT.frame.remove();_verT.frame=null;_verT.ready=null;}
+// The current photo as a JPEG a few times the thumbnail size (cached per source image).
+async function _verThumbSource(){
+  const it=curItem(),img=it&&it.img;if(!img)throw new Error('no photo');
+  if(_verT.srcImg===img&&_verT.src)return _verT.src;
+  if(!_verT.ids.has(img))_verT.ids.set(img,++_verT.n);
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height,k=Math.min(1,VER_THUMB_EDGE*3/Math.max(w0,h0));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w0*k));c.height=Math.max(1,Math.round(h0*k));
+  const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(img,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));if(!blob)throw new Error('encode failed');
+  _verT.srcImg=img;_verT.srcId=_verT.ids.get(img);_verT.src=await blob.arrayBuffer();return _verT.src;
+}
+/// Object URL of `recipeB64` rendered on the current photo. Cached; renders queue one at a time.
+function verThumb(recipeB64){
+  const it=curItem(),img=it&&it.img;if(!img)return Promise.resolve(null);
+  if(!_verT.ids.has(img))_verT.ids.set(img,++_verT.n);
+  const key=_verT.ids.get(img)+':'+_verHash(recipeB64);
+  if(_verT.cache.has(key))return _verT.cache.get(key);
+  const p=_verT.chain.then(async()=>{
+    const src=await _verThumbSource(),w=await _verThumbFrame();
+    const out=await w.csRenderEditPreview(src.slice(0),recipeB64,VER_THUMB_EDGE);
+    return URL.createObjectURL(new Blob([out],{type:'image/jpeg'}));
+  });
+  _verT.chain=p.catch(()=>{}).then(()=>{clearTimeout(_verT.idle);_verT.idle=setTimeout(_verThumbDrop,60000);});
+  p.catch(()=>_verT.cache.delete(key));
+  _verT.cache.set(key,p);
+  if(_verT.cache.size>48){const [k0,old]=_verT.cache.entries().next().value;_verT.cache.delete(k0);old.then(u=>u&&URL.revokeObjectURL(u)).catch(()=>{});}
+  return p;
 }
 async function verSaveNew(){const api=window.chromasmithVersions;if(!api)return;
   const name=(await askTextModal('Save as new version','The current edit stays as it is; the new version starts as a copy of it.')||'').trim();if(!name)return;
@@ -15021,7 +15457,7 @@ function bakeHsl(){
   // default snapshot and then the photo's recipe, each re-baking an unchanged (usually identity)
   // cube — ~36k applyHSL evals, the biggest single cost of applyUISnapshot (~60ms Chromium,
   // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
-  const key=JSON.stringify([hA,sA,lA,pts]);
+  const key=JSON.stringify([hA,sA,lA,pts],(k,v)=>k==='name'?undefined:v); // a range's name never changes the cube
   const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
   let hit=memo.get(key);
   if(!hit){
@@ -15290,9 +15726,13 @@ function _pickAvgRGB(e,fromCanvas){
   const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
   const K=5,half=(K-1)/2;
   const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
-  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
-  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
-  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  let d5=null;
+  if(src===FX.cv)d5=fxReadCanvasRGBA(src,bx,by,K,K);   // GL readback (same reader as the hover loupe)
+  if(!d5){
+    const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+    tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+    d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  }
   let ar=0,ag=0,ab=0;const n5=K*K;
   for(let i=0;i<d5.length;i+=4){ar+=d5[i];ag+=d5[i+1];ab+=d5[i+2];}
   return[ar/n5,ag/n5,ab/n5];
@@ -15318,7 +15758,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`;
+    bt.title=pcName(pt,i)+(pt.enabled===false?' (off)':'');bt.setAttribute('aria-label',bt.title);if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -15328,24 +15768,90 @@ function pcSyncUI(){
   const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
   const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
   if(!pt)return;
-  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm'],['lumLo','llo'],['lumHi','lhi']].forEach(([k,sfx])=>{
     const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
-    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
+  pcShowSelActive();pcShowSelSyncBtn();
+  const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
   pt[key]=parseFloat(v)||0;
-  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  if(key==='lumLo')pt.lumLo=Math.min(pt.lumLo,pt.lumHi==null?100:pt.lumHi);
+  if(key==='lumHi')pt.lumHi=Math.max(pt.lumHi,pt.lumLo||0);
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm',lumLo:'llo',lumHi:'lhi'}[key];
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
+}
+// CHR-259: each range can carry a user name (pt.name, saved with the recipe like every other
+// point field). Blank = no name, shown as "Point N". Names never affect the selection or render.
+function pcName(pt,i){return(pt&&typeof pt.name==='string'&&pt.name.trim())?pt.name.trim():'Point '+(i+1);}
+function pcRename(v){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const name=String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,40);
+  if((pt.name||'')===name)return;
+  if(name)pt.name=name;else delete pt.name;
+  pcRebuild();pcSyncUI();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+// CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
+function pcToggleEnabled(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  pt.enabled=pt.enabled===false;if(pt.enabled)delete pt.enabled;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+function pcDuplicate(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const dup=JSON.parse(JSON.stringify(pt));if(dup.name)dup.name=(dup.name+' copy').slice(0,40);
+  fxState.pointColors.splice(pcSel+1,0,dup);pcSel++;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){
   if(pcSel<0||!fxState.pointColors[pcSel])return;
   fxState.pointColors.splice(pcSel,1);
   pcSel=Math.min(pcSel,fxState.pointColors.length-1);
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+}
+// CHR-259 "Show selection": view-only overlay of the SELECTED range's weight, drawn by the lut
+// shader's selection-view path (same style/colour/opacity settings as the mask overlay). It is UI
+// state only: never in fxState, history, recipes or exports (render() only honours it with the
+// private preview token). It is tied to the exact point object it was turned on for, so picking
+// another range, adding/duplicating/deleting one, undo or opening another photo switches it off.
+let _pcShowSelPt=null;
+function pcShowSelActive(){
+  const pt=_pcShowSelPt;if(!pt)return false;
+  const tg=document.getElementById('tg-pointcolor');
+  if(!tg||!tg.classList.contains('on')||!fxState.pointColors||fxState.pointColors[pcSel]!==pt){_pcShowSelPt=null;pcShowSelSyncBtn();return false;}
+  return true;
+}
+function pcShowSelSyncBtn(){
+  const b=document.getElementById('btn-pc-showsel');if(!b)return;
+  const on=!!_pcShowSelPt;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+}
+function pcToggleShowSel(force){
+  const pt=fxState.pointColors&&fxState.pointColors[pcSel];
+  const on=force!=null?!!force:!_pcShowSelPt;
+  _pcShowSelPt=on&&pt?pt:null;
+  pcShowSelSyncBtn();fxUpdate();
+}
+// The weight cube for the selected range, on the same 33^3 grid and input space as bakeHsl's cube:
+// bakeHsl applies the Color Mixer first and evaluates the points on ITS output, so the weight is
+// measured there too. Re-baked only when an input changes; uploaded to the preview renderer only.
+function pcSelBake(){
+  const pt=_pcShowSelPt;if(!pt||!FX.ok)return;
+  const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
+  if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
+  const key=JSON.stringify([hA,sA,lA,pt],(k,v)=>k==='name'?undefined:v);
+  if(pcSelBake._key===key&&FX.pcSelTx)return;
+  const d=new Uint8Array(S*S*S);
+  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+    const[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+    const[h,s,v]=r2hsv(R,G,B);
+    d[bi*S2+g*S+r]=Math.max(0,Math.min(1,pcWeight(h,s,pt,v)))*255+.5|0;}
+  FX.setPcSelLUT(d);pcSelBake._key=key;
 }
 function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bakeHsl();fxUpdate();}
 
@@ -15966,10 +16472,60 @@ function _cpCommands(){
     if(linked.has(a.id)||!csShortcutHandlers[a.id]||!a.contexts.includes('editor')||['editor.compare','editor.search'].includes(a.id))return;
     add('Action',a.label,()=>{if(csShortcutHandlers[a.id]({})===false&&typeof toast==='function')toast('Not available right now: '+a.label+' needs an open photo or a different view');});sc(a.id);
   });
+  _cpAnnotate(cmds);
   return cmds;
 }
+// CHR-196: context, read live at open (like the list itself). Commands about the tool card(s)
+// that are open now rank first, and an action that cannot run says WHY in its row before it is
+// chosen (greyed, reason inline, the way native menus grey an item), not only in a toast after.
+function _cpActiveSections(){return new Set([...document.querySelectorAll('.fx-ctrl.sec-active[data-fxsec]')].map(c=>c.dataset.fxsec));}
+// Which open tool card(s) make a command contextual, by palette group or registry id.
+function _cpContextSections(c){
+  if(c.group==='Mask'||(c.sc&&c.sc.startsWith('editor.mask-')))return['local'];
+  // Look / Print entries are deliberately never "Suggested": the Looks card already shows that
+  // whole gallery, and 100+ look names would bury every other suggestion.
+  if(c.sc&&/^editor\.(crop|crop-grid|rotate-left|rotate-right|flip-h|flip-v)$/.test(c.sc))return['crop','rotate','straighten'];
+  if(c.sc==='editor.export'||c.label==='Manage presets')return['export','exppreset','style','wm','share'];
+  if(c.sc&&/^editor\.(wb-eyedrop|auto-enhance)$/.test(c.sc))return['adjust'];
+  if(c.sc==='editor.reshuffle-artifacts')return['art'];
+  return[];
+}
+// Reasons mirror each registry handler's own "return false" conditions (the csShortcutRegister
+// calls in the accessibility section): a command is only shown unavailable when its handler refuses.
+function _cpWhyUnavailable(id){
+  const photo=typeof fxImages!=='undefined'&&fxImages.length>0;
+  const panel=typeof _mskKeyOn==='function'&&_mskKeyOn();
+  const masks=(typeof fxState!=='undefined'&&fxState.masks)||[],sel=typeof mskSel!=='undefined'?masks[mskSel]:null;
+  const PANEL='Open the Masks panel first';
+  switch(id){
+    case'editor.mask-panel':case'editor.crop-grid':return photo?'':'Open a photo first';
+    case'editor.mask-add-radial':case'editor.mask-add-linear':case'editor.mask-add-brush':
+      return!photo?'Open a photo first':masks.length>=MSK_MAX?'Mask limit reached ('+MSK_MAX+')':'';
+    case'editor.mask-overlay':case'editor.mask-overlay-style':case'editor.mask-pins':return panel?'':PANEL;
+    case'editor.mask-delete':case'editor.mask-delete-alt':case'editor.mask-duplicate':case'editor.mask-invert':
+      return!panel?PANEL:(typeof healMode!=='undefined'&&healMode)?'Finish retouching first':(typeof cropMode!=='undefined'&&cropMode)?'Finish cropping first':!sel?'Select a mask first':'';
+    case'editor.mask-prev':case'editor.mask-next':return!panel?PANEL:masks.length<2?'Needs two or more masks':'';
+    case'editor.mask-brush':case'editor.mask-brush-erase':case'editor.mask-brush-slot':
+      return!panel?PANEL:(!sel||sel.type!=='brush')?'Select a Brush mask first':'';
+    case'editor.next':case'editor.previous':return(typeof fxImages!=='undefined'&&fxImages.length>1)?'':'Open more than one photo';
+    case'editor.crop':return(typeof cropMode!=='undefined'&&cropMode)?'Crop is already on':'';
+    case'editor.focus-mode':return document.body.classList.contains('deskx')?'':'Only in the desktop layout';
+  }
+  return'';
+}
+function _cpAnnotate(cmds){
+  const act=_cpActiveSections();
+  cmds.forEach(c=>{
+    c.ctx=_cpContextSections(c).some(k=>act.has(k));
+    c.why=c.sc?_cpWhyUnavailable(c.sc):'';
+    if(c.why)c.run=()=>{if(typeof toast==='function')toast(c.label+': '+c.why);};
+  });
+}
 function _cpFilter(cmds,q){
-  q=q.trim().toLowerCase();if(!q){const rk=c=>c.group==='Action'?0:c.group==='Section'?1:c.group==='Tab'?2:3;return cmds.map((c,i)=>[rk(c),i,c]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(x=>x[2]);}
+  q=q.trim().toLowerCase();
+  // Empty query: runnable commands for the open tool first ("Suggested"), then actions,
+  // sections, tabs, the rest; commands that cannot run right now sink to the bottom.
+  if(!q){const rk=c=>(c.why?10:c.ctx?-10:0)+(c.group==='Action'?0:c.group==='Section'?1:c.group==='Tab'?2:3);return cmds.map((c,i)=>[rk(c),i,c]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(x=>x[2]);}
   // Simple subsequence fuzzy match (like most command palettes): every char of q must appear
   // in order somewhere in the label, not necessarily contiguous. Ranks exact substring first.
   const scored=[];
@@ -15977,7 +16533,8 @@ function _cpFilter(cmds,q){
     const hay=(c.group+' '+c.label+(c.sc&&csShortcutBinding(c.sc)?' '+csShortcutLabel(csShortcutBinding(c.sc)):'')).toLowerCase();
     const sub=hay.indexOf(q);
     // CHR-196: tools and actions outrank the 113 look names; an alias hit counts as a match.
-    const pri=(c.group==='Section'||c.group==='Action')?0:500;
+    // CHR-196: within a tier, the open tool's commands lead and unavailable ones trail.
+    const pri=((c.group==='Section'||c.group==='Action')?0:500)+(c.why?100:c.ctx?-50:0);
     if(sub>=0){scored.push([sub+pri,c]);continue;}
     if(c.aliases&&c.aliases.includes(q)){scored.push([200+pri,c]);continue;}
     let qi=0;for(let i=0;i<hay.length&&qi<q.length;i++)if(hay[i]===q[qi])qi++;
@@ -16003,8 +16560,8 @@ function cpOpen(){
   function render(){
     const filtered=_cpFilter(cmds,input.value);
     if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
-    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
-      +`<span>${c.label}</span><span style="display:flex;align-items:center;gap:8px"><kbd class="cp-kbd" style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.sc&&csShortcutBinding(c.sc)?csShortcutLabel(csShortcutBinding(c.sc)):''}</kbd><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></span></div>`).join('')
+    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}"${c.why?' aria-disabled="true"':''}${c.ctx&&!c.why?' data-ctx="1"':''} style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}${c.why?';opacity:.6':''}">`
+      +`<span>${c.label}</span>${c.why?`<span class="cp-why" style="flex:1;min-width:0;font-size:11px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_pmEsc(c.why)}</span>`:c.ctx?'<span class="cp-ctx" style="flex:1;font-size:10px;opacity:var(--op-4);text-align:right">Suggested</span>':''}<span style="display:flex;align-items:center;gap:8px"><kbd class="cp-kbd" style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.sc&&csShortcutBinding(c.sc)?csShortcutLabel(csShortcutBinding(c.sc)):''}</kbd><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></span></div>`).join('')
       ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
     list.querySelectorAll('.cp-row').forEach(row=>{
       row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};
@@ -17719,6 +18276,8 @@ async function samRunPoints(m,opts={}){
     if(!opts.detached&&m.origin==='coat'&&!m._coatEyeAdded){m._coatEyeAdded=true;_mskAddCoatEyeMask(m);mskSel=fxState.masks.indexOf(m);}
     if(!opts.detached){if(typeof hapt==='function')hapt();mskRebuild();fxUpdate();renderPreview();fxHistoryPush();}
     if(edgeLater){const stored=m.px;
+      // Bounded re-entry, not a retry loop: the inner call passes edgeNow:true, so it applies the matte
+      // in place and never sets edgeLater again — at most one follow-up is ever pending per scribble.
       mskMatteModelFor(m.aiEdge).then(md=>_mskMatteFor(item,md)).then(()=>{
         if(curItem()===item&&fxState.masks.includes(m)&&m.px===stored&&_samNormalizeBox(m.aiBox))return samRunPoints(m,{silent:true,precomputed:edgeLater,edgeNow:true});
       }).catch(e=>log('Edge matting skipped — '+(e&&e.message||e),'warn'));}
@@ -21262,6 +21821,11 @@ function _mskRebuildInner(){
     if(_lg.shared[i])depth=1;
     else while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
+    // Group rail: every member of a shared-adjustment group gets the same coloured left rail and the
+    // root row says how many parts it has, so stacked masks read as one layer with its components.
+    {const gr=_lg.root[i],members=gr>=0?_lg.root.reduce((n,r,k)=>n+((r===gr&&_lg.shared[k])?1:0),0):0;
+      if(gr>=0&&members>0){b.dataset.gr=String(gr);b.style.setProperty('--grp','hsl('+((gr*67+200)%360)+' 62% 56%)');
+        if(gr===i){const c=document.createElement('span');c.className='msk-tag msk-grp-tag';c.textContent='Group \u00b7 '+(members+1);c.title='This mask and '+members+' component'+(members>1?'s':'')+' share one set of adjustments';b.insertBefore(c,b.children[2]||null);}}}
     if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
@@ -21309,6 +21873,10 @@ function _mskRebuildInner(){
     +(m.intersect?'<span class="msk-tag">Intersecting</span>':'')
     +(m.invert?'<span class="msk-tag">Inverted</span>':'')
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
+    +(()=>{const ri=mskAdjIdx(mskSel),rm=fxState.masks[ri];
+      if(ri!==mskSel&&rm)return '';   // a component: the Adjustments hint below already names the group
+      const g=_mskGroups(_mskEnsureIds(fxState.masks)),n=g.root.reduce((c,r,k)=>c+((r===mskSel&&g.shared[k])?1:0),0);
+      return n?'<div class="msk-edit-note" role="note">Group of <b>'+(n+1)+'</b> shapes. Adjustments apply to the combined shape.</div>':'';})()
     +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
     +(mskAdjIdx(mskSel)!==mskSel?'<div class="msk-hint msk-group-hint">Adjustments below apply to the whole \u201c'+String((mskAdjMask().name||mskAutoLabel(mskAdjMask(),mskAdjIdx(mskSel)))).replace(/[<>&"]/g,'')+'\u201d mask.</div>':'')
@@ -22033,8 +22601,9 @@ function mskIsEmptyRaster(m){
 // capped glow kernels relative to this (see render()'s capK).
 function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
+  const showPcSel=typeof pcShowSelActive==='function'&&pcShowSelActive();if(showPcSel)pcSelBake();
   return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
+    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),showPcSel:showPcSel,
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskGroupTailIdx(mskSel):-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).
@@ -22740,22 +23309,28 @@ function mskPinDown(e){
   window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
 }
 // Click-to-select on the photo: a click (not a drag) on a mask's covered area selects that mask, topmost first.
+// Does mask m cover the top-down photo point (nx,ny)? Shared by click-select and drag-to-move.
+function _mskHitOne(m,nx,ny){
+  if(!m||m.muted||m.isExclude||m.composeOp==='subtract')return false;
+  if(m.type==='radial'){
+    const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
+    const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
+    return (lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1;
+  }
+  if(m.type==='linear'){
+    const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
+    if(!(L>0))return false;
+    const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;return t>=0&&t<=1;
+  }
+  if(m.px&&m.mtW&&m.mtH&&m.px.length){
+    const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
+    return m.px[y*m.mtW+x]>64;
+  }
+  return false;
+}
 function mskHitTest(nx,ny){
   const ms=fxState.masks;
-  for(let i=ms.length-1;i>=0;i--){
-    const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
-    if(m.type==='radial'){
-      const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
-      const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
-      if((lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
-    }else if(m.type==='linear'){
-      const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
-      if(L>0){const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
-    }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
-      const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
-      if(m.px[y*m.mtW+x]>64)return i;
-    }
-  }
+  for(let i=ms.length-1;i>=0;i--)if(_mskHitOne(ms[i],nx,ny))return i;
   return -1;
 }
 function mskPhotoClick(e){
@@ -22799,12 +23374,26 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_mskDrawFor){_mskDr
 function mskHandleDown(e){
   if(e.button!==0)return;
   e.stopPropagation();e.preventDefault();
-  const svg=document.getElementById('fx-mask-overlay'),m=fxState.masks[mskSel];if(!m)return;
+  const svg=document.getElementById('fx-mask-overlay');let m=fxState.masks[mskSel];if(!m)return;
+  // The full-photo "under" rect moves the selected shape wherever you press. If the press is on a
+  // DIFFERENT radial/linear mask and outside the selected one, select that mask first and drag it,
+  // so grabbing a mask always moves that mask (was: it moved the selected one and ignored the target).
+  let which=e.currentTarget.dataset.h;
+  if((which==='move'||which==='lmove')&&e.currentTarget.tagName==='rect'){
+    const pn=fxPointerToPhotoNorm(e);
+    if(pn&&!_mskHitOne(m,pn.nx,pn.ny)){
+      const j=mskHitTest(pn.nx,pn.ny);
+      if(j>=0&&j!==mskSel&&(fxState.masks[j].type==='radial'||fxState.masks[j].type==='linear')){
+        mskSel=j;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();m=fxState.masks[j];
+        which=m.type==='radial'?'move':'lmove';
+      }
+    }
+  }
   const[px,py]=mskHandlePos(e);
   mskAdoptTrueShape(m);
   // Snapshot of the shape at grab time: moves and rotations apply as deltas from it, so grabbing
   // off-centre never makes the shape jump to the pointer.
-  _mskDrag={which:e.currentTarget.dataset.h,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
+  _mskDrag={which,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
   if(_mskDrag.which==='draw'){_mskDrawFor=null;_mskDrag.draw=true;}
   // Lock history for the drag: mskHandleUp pushes exactly one undo snapshot on release.
   _fxHistLocked=true;
@@ -22896,9 +23485,9 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
   'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
-  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
   // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
@@ -22984,11 +23573,11 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
   {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
-  {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale'],toggles:[],selects:[]},
+  {key:'lens',label:'Lens Corrections',sliders:['lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy'],toggles:[],selects:[]},
   {key:'grain',label:'Film Grain',sliders:['grain-a','grain-sz'],toggles:['tg-grain'],selects:['sel-grain-fmt']},
   {key:'artifacts',label:'Film Artifacts',sliders:['art-du','art-sc','art-lk'],toggles:['tg-art'],selects:[],extra:['artSeed','dustMode']},
   {key:'halation',label:'Halation',sliders:['hal-a','hal-r','hal-p'],toggles:['tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme'],selects:[]},
@@ -24412,8 +25001,41 @@ function _fxEyeArmed(){
 }
 const _FX_EYE_CURSOR='url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#fff" stroke-width="3.5"/><path d="M4 20l1-4 9-9 3 3-9 9Z M13 4l7 7M17 3l4 4-3 3-4-4Z" stroke="#000" stroke-width="1.6"/></svg>')+'") 3 21, crosshair';
 let _fxEyeEl=null,_fxEyeRaf=0,_fxEyeEv=null;
-const _fxEyeTc=document.createElement('canvas');_fxEyeTc.width=_fxEyeTc.height=1;
-const _fxEyeCtx=_fxEyeTc.getContext('2d',{willReadFrequently:true});
+// Read RGBA bytes from a canvas on screen. For the WebGL preview canvas (FX.cv) this reads the GL
+// drawing buffer directly with readPixels (preserveDrawingBuffer:true keeps it valid between
+// frames) instead of drawImage-ing the WebGL canvas into a 2D canvas: that path came back all-zero
+// (#000000) in the desktop app's WKWebView while working in Chromium. The context is
+// premultipliedAlpha:false, which WebKit has to convert on the drawImage path. Falls back to
+// drawImage for 2D canvases (#fx-canvas-bd) or when GL is unavailable. Returns null rather than a
+// fake black when the read is fully transparent (alpha 0 means nothing was read; the preview
+// always writes opaque pixels).
+const _fxReadTc=document.createElement('canvas');
+function _fxAllTransparent(d){for(let i=3;i<d.length;i+=4)if(d[i])return false;return true;}
+function fxReadCanvasRGBA(el,x,y,w,h){
+  if(!el||!el.width||!el.height)return null;
+  w=Math.min(w,el.width);h=Math.min(h,el.height);
+  x=Math.max(0,Math.min(el.width-w,x|0));y=Math.max(0,Math.min(el.height-h,y|0));
+  let d=null;
+  const gl=(typeof FX!=='undefined'&&FX&&el===FX.cv&&FX.gl&&!FX.gl.isContextLost())?FX.gl:null;
+  if(gl&&gl.drawingBufferWidth===el.width&&gl.drawingBufferHeight===el.height){
+    try{
+      const prev=gl.getParameter(gl.FRAMEBUFFER_BINDING),raw=new Uint8Array(w*h*4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+      gl.readPixels(x,el.height-y-h,w,h,gl.RGBA,gl.UNSIGNED_BYTE,raw);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,prev);
+      d=new Uint8ClampedArray(w*h*4);   // GL rows are bottom-up: flip to canvas row order
+      for(let r=0;r<h;r++)d.set(raw.subarray((h-1-r)*w*4,(h-r)*w*4),r*w*4);
+    }catch(err){d=null;}
+  }
+  if(!d||_fxAllTransparent(d)){
+    try{
+      if(_fxReadTc.width!==w||_fxReadTc.height!==h){_fxReadTc.width=w;_fxReadTc.height=h;}
+      const cx=_fxReadTc.getContext('2d',{willReadFrequently:true});
+      cx.clearRect(0,0,w,h);cx.drawImage(el,x,y,w,h,0,0,w,h);d=cx.getImageData(0,0,w,h).data;
+    }catch(err){return null;}
+  }
+  return _fxAllTransparent(d)?null:d;
+}
 function _fxEyeHide(){if(_fxEyeEl)_fxEyeEl.style.display='none';}
 function _fxEyeMove(e){
   if(!_fxEyeArmed()){_fxEyeHide();if(e.currentTarget.style.cursor===_FX_EYE_CURSOR)e.currentTarget.style.cursor='';return;}
@@ -24426,7 +25048,7 @@ function _fxEyeDraw(){
   const el=ev.el,r=el.getBoundingClientRect();if(!r.width||!r.height||!el.width)return;
   const px=Math.floor((ev.x-r.left)*el.width/r.width),py=Math.floor((ev.y-r.top)*el.height/r.height);
   if(px<0||py<0||px>=el.width||py>=el.height||!fxPointerToCanvasPx({clientX:ev.x,clientY:ev.y})){_fxEyeHide();return;}  // off-photo / on the frame
-  let d;try{_fxEyeCtx.clearRect(0,0,1,1);_fxEyeCtx.drawImage(el,px,py,1,1,0,0,1,1);d=_fxEyeCtx.getImageData(0,0,1,1).data;}catch(err){return;}
+  const d=fxReadCanvasRGBA(el,px,py,1,1);if(!d){_fxEyeHide();return;}   // unreadable: hide, never show a fake #000000
   if(!_fxEyeEl){
     _fxEyeEl=document.createElement('div');
     _fxEyeEl.style.cssText='position:fixed;z-index:9999;pointer-events:none;display:none;align-items:center;gap:6px;padding:3px 7px 3px 3px;border-radius:14px;background:rgba(20,20,20,.88);color:#fff;font:11px/1 ui-monospace,Menlo,monospace;box-shadow:0 2px 8px rgba(0,0,0,.4)';
@@ -25219,6 +25841,44 @@ async function exportPresetApply(name){
   log(`Export preset applied: ${name}`,'ok');
   return true;
 }
+// CHR-197: Export Recipes get the same file export/import as Edit Styles. The destination folder
+// is a path on THIS machine, so it is never written into the file and never read back from one.
+const _EXPRECIPE_FORMAT='chromasmith-export-recipes';
+function exportRecipesFileText(names){
+  const list=exportPresetsList().filter(p=>!names||names.includes(p.name));
+  return JSON.stringify({format:_EXPRECIPE_FORMAT,version:1,recipes:list.map(p=>{const s={...(p.settings||{})};delete s.dest;return{name:p.name,settings:s};})},null,2);
+}
+function exportRecipeExport(name){
+  if(!exportPresetsList().some(p=>p.name===name))return;
+  anchorDownload(exportRecipesFileText([name]),name.replace(/[^\w.-]+/g,'_')+'.chromasmith-export.json','application/json');
+}
+// Validates the whole file before saving anything; a name that already exists is kept and the
+// imported one becomes "Name (imported)". Returns the names that were added.
+function exportRecipesImportText(text){
+  if(typeof text!=='string'||text.length>256*1024)throw new Error('Export recipe file is too large or unreadable');
+  let d;try{d=JSON.parse(text);}catch(_){throw new Error('This is not a valid export recipe file');}
+  if(!d||d.format!==_EXPRECIPE_FORMAT||d.version!==1||!Array.isArray(d.recipes)||!d.recipes.length||d.recipes.length>200)throw new Error('Unsupported export recipe file format');
+  const FMTS=['auto','jpg','png','webp'],num=v=>(typeof v==='string'||typeof v==='number')&&String(v).trim()!==''&&Number.isFinite(+v);
+  const list=exportPresetsList(),used=new Set(list.map(p=>p.name)),added=[];
+  const recs=d.recipes.map((r,i)=>{
+    if(!r||typeof r.name!=='string'||!r.name.trim()||r.name.length>200||!r.settings||typeof r.settings!=='object'||Array.isArray(r.settings))throw new Error('Recipe '+(i+1)+' needs a name and settings');
+    const s=r.settings;
+    if(!FMTS.includes(s.fmt))throw new Error('Recipe "'+r.name+'" has an unknown format');
+    for(const k of ['q','size','sharp'])if(!num(s[k]))throw new Error('Recipe "'+r.name+'" has an invalid '+k);
+    if(+s.q<1||+s.q>100||+s.size<0||+s.sharp<0)throw new Error('Recipe "'+r.name+'" has an out-of-range value');
+    return{name:r.name.trim(),settings:{fmt:s.fmt,q:String(s.q),size:String(s.size),sharp:String(s.sharp),keepGps:s.keepGps!==false}};
+  });
+  recs.forEach(r=>{let n=r.name;if(used.has(n)){n=r.name+' (imported)';let k=2;while(used.has(n)){n=r.name+' (imported '+k+')';k++;}}used.add(n);list.push({name:n,settings:r.settings});added.push(n);});
+  exportPresetsSave(list);if(typeof exportPresetListRefresh==='function')exportPresetListRefresh();
+  return added;
+}
+function exportRecipeImportClick(after){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.hidden=true;document.body.appendChild(inp);
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;
+    try{const n=exportRecipesImportText(await f.text());toast(`Imported ${n.length} export recipe${n.length===1?'':'s'}`,true);if(after)after();}
+    catch(e){toast(e&&e.message||'Could not import export recipes',false);}};
+  inp.click();
+}
 // CHR-202: run one export per chosen preset, back to back. Each run's files get the preset name
 // appended ({name}_<preset>) so the deliveries never overwrite each other; the panel's own
 // format/quality/size/sharpening, GPS metadata policy and filename are put back afterwards.
@@ -25271,6 +25931,31 @@ function _pmStyleSummary(r){const parts=[];const lut=r&&r.selects&&r.selects['se
   return parts.length?'Changes: '+parts.join(', '):'Changes: no tools switched on';}
 function _pmExportSummary(st){const s=st||{};const f={auto:'Match source',jpg:'JPG',png:'PNG',webp:'WebP'}[s.fmt]||s.fmt||'—';
   return `${f}${s.fmt==='png'?'':' · quality '+(s.q??'—')} · ${+s.size?('long edge '+s.size+'px'):'full size'}${+s.sharp?' · sharpened':''}`;}
+// The user's own library Looks (IndexedDB "luts", value "l:<name>") get the same Rename / Export /
+// Delete trio as Edit Styles. Rename keeps the selection and any Style that points at the old name.
+async function lookRename(name){
+  const n=(await askTextModal('Rename look','',name)||'').trim();if(!n||n===name)return false;
+  if((await lutLibList()).includes(n)){toast(`A look named "${n}" already exists`,false);return false;}
+  const rec=await lutLibGet(name);if(!rec){toast('Look not found',false);return false;}
+  await lutLibPut(n,rec.data);await lutLibDel(name);
+  const sel=document.getElementById('sel-lut'),wasSel=sel&&sel.value==='l:'+name;
+  await refreshLUTSelect(wasSel?'l:'+n:(sel&&sel.value)||'');
+  const st=stylesList();let changed=false;
+  st.forEach(x=>{const ss=x.recipe&&x.recipe.selects;if(ss&&ss['sel-lut']==='l:'+name){ss['sel-lut']='l:'+n;changed=true;}});
+  if(changed){stylesSave(st);if(typeof styleListRefresh==='function')styleListRefresh();}
+  return true;
+}
+async function lookExport(name){
+  const rec=await lutLibGet(name);if(!rec){toast('Look not found',false);return;}
+  dl(writeCube(lutFromBytes(rec.data),name),name.replace(/[^\w.-]+/g,'_')+'.cube');
+}
+async function lookDelete(name){
+  if(!await confirmModal(`Delete look "${name}"? This cannot be undone.`,'Delete'))return false;
+  const sel=document.getElementById('sel-lut'),wasSel=sel&&sel.value==='l:'+name;
+  await lutLibDel(name);await refreshLUTSelect(wasSel?'':(sel&&sel.value)||'');
+  if(wasSel)selectLUT('');
+  return true;
+}
 let _pmTab='looks';
 // Opens on the tab the caller names, else Looks (the first tab) — never whichever tab was open last.
 function presetsManagerOpen(tab){_pmTab=tab||'looks';_csModal('Presets','<div id="pm-body"></div>');presetsManagerRender();}
@@ -25297,17 +25982,17 @@ function presetsManagerRender(){
   if(_pmTab==='looks'){
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">A <b>Look</b> changes only the colour and film treatment. Star looks in the Looks grid to pin them here.</div>`;
     h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:6px 0 2px">FAVOURITES</div>`+(favs.length?favs.map(k=>row(prettyLUT(k),'Look',b('Apply',`selectLUT('p:'+${q(k)});document.getElementById('cs-modal-ov').remove()`))).join(''):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
-    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?_pmFolders(own,o=>o.textContent,o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this saved look?','Delete'))return;await lutLibDel(${q(o.value.slice(2))});await refreshLUTSelect();presetsManagerOpen('looks');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
+    h+=`<div style="font-size:11px;color:var(--k-color-muted);margin:12px 0 2px">YOUR SAVED LOOKS</div>`+(own.length?_pmFolders(own,o=>o.textContent,o=>row(o.textContent,'Your .cube look',b('Apply',`const s=document.getElementById('sel-lut');s.value=${q(o.value)};selectLUT(${q(o.value)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`lookRename(${q(o.value.slice(2))}).then(()=>presetsManagerOpen('looks'))`)+b('Export',`lookExport(${q(o.value.slice(2))})`)+b('Delete',`lookDelete(${q(o.value.slice(2))}).then(()=>presetsManagerOpen('looks'))`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet — Colour Copy → Use in editor, or Look → Apply LUT → Save, adds one.</div>');
   }else if(_pmTab==='styles'){
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Edit Style</b> reapplies its selected settings to any photo. Crop and retouch are opt-in when saving.</div>`;
     h+=(styles.length?_pmFolders(styles,st=>st.name,st=>row(st.name,_pmStyleSummary(st.recipe),
       b('Apply',`styleApply(${q(st.name)})`)+b('Rename',`styleRename(${q(st.name)}).then(()=>presetsManagerOpen('styles'))`)+b('Export',`styleExport(${q(st.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this style?','Delete'))return;stylesSave(stylesList().filter(x=>x.name!==${q(st.name)}));styleListRefresh();presetsManagerOpen('styles');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
-    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button></div>`;
+    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();styleSaveCurrent()">Save current edit as style…</button><button class="btn bgh" onclick="document.getElementById('cs-modal-ov').remove();styleImportClick()">Import…</button>${styles.length?'<button class="btn bgh" title="Export every Style, with folders and favourites, as one bundle file" onclick="styleExportBundle()">Export all…</button>':''}</div>`;
   }else{
     h+=`<div style="font-size:12px;color:var(--k-color-muted);margin-bottom:8px">An <b>Export Recipe</b> only changes the files you export: format, quality, size and sharpening.</div>`;
     h+=(exps.length?_pmFolders(exps,e=>e.name,e=>row(e.name,_pmExportSummary(e.settings),
-      b('Use',`exportPresetApply(${q(e.name)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`(async()=>{const n=(await askTextModal('Rename export recipe','',${q(e.name)})||'').trim();if(!n)return;const l=exportPresetsList();const it=l.find(x=>x.name===${q(e.name)});if(it)it.name=n;exportPresetsSave(l);if(typeof exportPresetListRefresh==='function')exportPresetListRefresh(n);presetsManagerOpen('export');})()`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this export recipe?','Delete'))return;exportPresetsSave(exportPresetsList().filter(x=>x.name!==${q(e.name)}));if(typeof exportPresetListRefresh==='function')exportPresetListRefresh();presetsManagerOpen('export');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
-    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();exportPresetSaveCurrent()">Save current export settings…</button></div>`;
+      b('Use',`exportPresetApply(${q(e.name)});document.getElementById('cs-modal-ov').remove()`)+b('Rename',`(async()=>{const n=(await askTextModal('Rename export recipe','',${q(e.name)})||'').trim();if(!n)return;const l=exportPresetsList();const it=l.find(x=>x.name===${q(e.name)});if(it)it.name=n;exportPresetsSave(l);if(typeof exportPresetListRefresh==='function')exportPresetListRefresh(n);presetsManagerOpen('export');})()`)+b('Export',`exportRecipeExport(${q(e.name)})`)+b('Delete',`(async()=>{if(!await confirmModal('Delete this export recipe?','Delete'))return;exportPresetsSave(exportPresetsList().filter(x=>x.name!==${q(e.name)}));if(typeof exportPresetListRefresh==='function')exportPresetListRefresh();presetsManagerOpen('export');})()`))):'<div style="font-size:12px;color:var(--k-color-muted);padding:6px 0">None yet.</div>');
+    h+=`<div class="btn-row" style="margin-top:12px"><button class="btn bsec" onclick="document.getElementById('cs-modal-ov').remove();exportPresetSaveCurrent()">Save current export settings…</button><button class="btn bgh" data-pm="export-import" onclick="exportRecipeImportClick(()=>presetsManagerOpen('export'))">Import…</button></div>`;
   }
   host.innerHTML=h;
 }
@@ -25329,8 +26014,8 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
-  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-mix-rr','sl-adj-mix-rg','sl-adj-mix-rb','sl-adj-mix-gr','sl-adj-mix-gg','sl-adj-mix-gb','sl-adj-mix-br','sl-adj-mix-bg','sl-adj-mix-bb','sl-adj-lab-l','sl-adj-lab-con','sl-adj-lab-chroma','sl-adj-tone-sa','sl-adj-tone-sb','sl-adj-tone-ha','sl-adj-tone-hb','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale','sl-lens-asp','sl-lens-ox','sl-lens-oy',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-filmneg','tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
@@ -26037,9 +26722,30 @@ function matchSeriesClear(){
 }
 let _adjSharpMaskPreview=false;
 let _mskSharpMaskPreview=false;
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','mix-rr','mix-rg','mix-rb','mix-gr','mix-gg','mix-gb','mix-br','mix-bg','mix-bb','lab-l','lab-con','lab-chroma','tone-sa','tone-sb','tone-ha','tone-hb','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
-function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:(f==='sharp-radius'?1:0));if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+// Non-zero slider defaults; a missing key (older recipes/snapshots) falls back to these.
+const ADJ_DEFAULTS={'sharp-detail':50,'sharp-radius':1,'mix-rr':100,'mix-gg':100,'mix-bb':100};
+// CHR-291/CHR-290: channel mixer, Lab adjustments and colour toning. Pure: slider values (percent)
+// -> render block. Mixer rows are output R/G/B, each a fraction of input R,G,B (RawTherapee
+// stores the same per-mille, identity 1000/0/0 per row). Lab values are -1..1.
+function rtColourBlock(v){
+  const g=(k)=>{const x=v&&v[k]!=null?Number(v[k]):(ADJ_DEFAULTS[k]||0);return isFinite(x)?x:(ADJ_DEFAULTS[k]||0);};
+  return{mix:['rr','rg','rb','gr','gg','gb','br','bg','bb'].map(k=>g('mix-'+k)/100),
+    lab:{lightness:g('lab-l')/100,contrast:g('lab-con')/100,chroma:g('lab-chroma')/100},
+    tone:{sa:g('tone-sa')/100,sb:g('tone-sb')/100,ha:g('tone-ha')/100,hb:g('tone-hb')/100}};
+}
+// Shader uniforms for the block, each stage identity-gated so an untouched (or disabled) Tone card
+// does no Lab conversion and stays byte-identical to before these tools existed.
+function rtColourUniforms(rt,enabled){
+  const I=[1,0,0,0,1,0,0,0,1],m=(rt&&rt.mix)||I,L=(rt&&rt.lab)||{},T=(rt&&rt.tone)||{};
+  const mixOn=!!enabled&&m.some((x,i)=>x!==I[i]);
+  const lab=[L.lightness||0,L.contrast||0,L.chroma||0],tone=[T.sa||0,T.sb||0,T.ha||0,T.hb||0];
+  const labOn=!!enabled&&(lab.some(x=>x!==0)||tone.some(x=>x!==0));
+  return{rtMixOn:mixOn?1:0,rtMixR:m.slice(0,3),rtMixG:m.slice(3,6),rtMixB:m.slice(6,9),
+    rtLabOn:labOn?1:0,rtLab:lab,rtToneS:tone.slice(0,2),rtToneH:tone.slice(2,4)};
+}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(ADJ_DEFAULTS[f]||0);if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
   v=v||domAdjustVals();
   return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
@@ -26051,6 +26757,7 @@ function computeAdjustBlock(v){
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
     sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpRadius:(v['sharp-radius']==null?1:Math.max(0.5,Math.min(3,v['sharp-radius']))), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
+    rtColour:rtColourBlock(v),
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride,contextOverride){return{
@@ -26134,7 +26841,10 @@ function getFXParams(adjValsOverride,contextOverride){return{
     // Scale can hide, so the slider stops where the result stops being usable.
     pv:adjVal('sl-lens-pv')/250, ph:adjVal('sl-lens-ph')/250,
     rot:adjVal('sl-lens-rot')*Math.PI/1800,   // slider is tenths of a degree
-    scale:1/(1+adjVal('sl-lens-scale')/100)},
+    scale:1/(1+adjVal('sl-lens-scale')/100),
+    // Aspect -100..100 -> up to 2x stretch on one axis; X/Y offset -100..100 -> +/-25% of the frame
+    // (positive X moves the photo right, positive Y moves it up, as in Lightroom's Transform panel).
+    asp:adjVal('sl-lens-asp')/100, ox:adjVal('sl-lens-ox')/400, oy:adjVal('sl-lens-oy')/400},
   grain:{enabled:document.getElementById('tg-grain').classList.contains('on'),amount:parseFloat(document.getElementById('sl-grain-a').value),size:parseFloat(document.getElementById('sl-grain-sz').value),format:(document.getElementById('sel-grain-fmt')||{}).value||'35mm'},
   artifacts:{enabled:!!(document.getElementById('tg-art')||{classList:{contains:()=>false}}).classList.contains('on'),
     dust:adjVal('sl-art-du'),scratch:adjVal('sl-art-sc'),leak:adjVal('sl-art-lk'),seed:fxState.artSeed,dustMode:fxState.dustMode||0},
@@ -26366,7 +27076,7 @@ function _fxTileCacheStats(){return{tiles:_fxTiles.map.size,bytes:_fxTiles.bytes
 function _fxTileModeOK(P,src){
   if(!FX.gl||typeof FX.gl.blitFramebuffer!=='function'||(src&&src._sceneLinearPresent))return false;
   const lns=P.lens||{},nr=P.nr||{},dc=P.deconv||{};
-  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
+  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||lns.asp||lns.ox||lns.oy||(lns.scale!=null&&lns.scale!==1)
     ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
 }
 // Glow/blur scale for a zoomed crop rendered at `sq` output px per working-image px. Halation, bloom and skin blurs are sized
@@ -27259,11 +27969,17 @@ async function exportSharpen(cv,level){
 // margin both scale off the long edge for the same reason a 24px watermark looks right on a 1080
 // social export and comically small on a 6000px print export. White fill + a dark stroke keeps it
 // legible on both light and dark image content without needing per-photo tuning.
-function applyWatermark(cv){
-  const on=document.getElementById('tg-exp-wm');
-  const text=(document.getElementById('exp-wm-text')||{}).value||'';
-  if(!on||!on.classList.contains('on')||!text.trim())return cv;
-  const opacity=(parseFloat((document.getElementById('sl-exp-wm-op')||{}).value)||55)/100;
+// opts {text, opacity 0..1} lets a caller with its own settings (the Library web gallery,
+// CHR-239) draw the same mark without reading or touching the Export panel's controls.
+function applyWatermark(cv,opts){
+  let text,opacity;
+  if(opts){text=String(opts.text||'');opacity=Math.max(0,Math.min(1,Number(opts.opacity??0.55)));if(!text.trim())return cv;}
+  else{
+    const on=document.getElementById('tg-exp-wm');
+    text=(document.getElementById('exp-wm-text')||{}).value||'';
+    if(!on||!on.classList.contains('on')||!text.trim())return cv;
+    opacity=(parseFloat((document.getElementById('sl-exp-wm-op')||{}).value)||55)/100;
+  }
   const ctx=cv.getContext('2d');
   const longEdge=Math.max(cv.width,cv.height);
   const fontPx=Math.max(10,Math.round(longEdge*0.022));
@@ -28394,6 +29110,212 @@ function geomStraightenSlider(v){geomStraighten(_stS2A(v));}
 function geomStraighten(v){const g=curGeom();if(!g)return;g.angle=parseFloat(v)||0;document.getElementById('vl-straighten').textContent=(g.angle).toFixed(2)+'°';broadcastGeom(); /* crop kept: it is normalised to the same-aspect inscribed frame, so it stays valid */updateWork();clearTimeout(fxTimer);fxTimer=setTimeout(()=>{renderPreview();fxHistoryPush();},120);}
 function geomResetRotate(){const it=curItem();if(!it||!it.geom)return;it.geom.rot=0;it.geom.flipH=false;it.geom.flipV=false;broadcastGeom();updateWork();renderPreview();buildLookGallery();fxHistoryPush();}
 function geomReset(){const it=curItem();if(!it)return;it.geom=defGeom();if(typeof hapt==='function')hapt();broadcastGeom();const ss=document.getElementById('sl-straighten');if(ss){ss.value=0;fxPaintSlider(ss);}document.getElementById('vl-straighten').textContent='0°';if(cropMode)cropExit();updateWork();renderPreview();buildLookGallery();fxHistoryPush();log('Geometry reset','info');}
+// ══ CHR-248: UPRIGHT "Level" and "Vertical" ═══════════════════════════════════════════════
+// Lightroom's Upright modes, the two simplest: Level rotates so horizontal and vertical structure
+// is square to the frame; Vertical removes converging verticals (and levels them). Both only SET
+// the existing controls (Straighten / Vertical / Rotate), so preview, export and tiled renders need
+// nothing new. Method, re-implemented from published descriptions (no code reused):
+//  1. Line segments: a simplified LSD (Grompone von Gioi et al., "LSD: a Line Segment Detector",
+//     IPOL 2012) — pixels grouped by region growing on level-line orientation (22.5 deg tolerance),
+//     each region fitted by weighted PCA into a segment. No a-contrario validation; a length and
+//     thickness gate stands in for it.
+//  2. Classify near-vertical / near-horizontal segments, then fit the transform to make them
+//     axis-aligned, rejecting outliers by iterative trimming (the idea behind darktable's "ashift"
+//     module and Markus Hebel's ShiftN: fit lens-shift + rotation to the converging line sets).
+//     darktable is GPL, so only its documented behaviour was used, not its source.
+// Vertical fits the SAME homography the lens shader samples with (lensPersp: rotate, then divide
+// by 1+pv*y+ph*x, in centred 0..1 coords with y UP because textures are uploaded flipped), so the
+// fit is exact for what gets rendered. Source lines map to output lines by l_out = H^T l_src.
+const UP_EDGE=480;            // analysis long edge; straight lines survive heavy downscaling
+function _upGray(img){
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height;
+  const k=Math.min(1,UP_EDGE/Math.max(w0,h0));
+  const w=Math.max(16,Math.round(w0*k)),h=Math.max(16,Math.round(h0*k));
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data,g=new Float32Array(w*h);
+  for(let i=0,p=0;i<w*h;i++,p+=4)g[i]=(0.2126*d[p]+0.7152*d[p+1]+0.0722*d[p+2])/255;
+  return{g,w,h};
+}
+/// Simplified LSD. gray: Float32Array (0..1), w*h. Returns [{x1,y1,x2,y2,len}] in pixel coords (y down).
+function upLineSegments(gray,w,h){
+  const n=w*h,mag=new Float32Array(n),ang=new Float32Array(n);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    const i=y*w+x;
+    const gx=(gray[i-w+1]+2*gray[i+1]+gray[i+w+1])-(gray[i-w-1]+2*gray[i-1]+gray[i+w-1]);
+    const gy=(gray[i+w-1]+2*gray[i+w]+gray[i+w+1])-(gray[i-w-1]+2*gray[i-w]+gray[i-w+1]);
+    mag[i]=Math.hypot(gx,gy);ang[i]=Math.atan2(gx,-gy); // level-line angle: perpendicular to the gradient
+  }
+  const THR=0.12,TAU=Math.PI/8,minPts=Math.max(12,Math.round(Math.max(w,h)*0.03));
+  const order=[];for(let i=0;i<n;i++)if(mag[i]>THR)order.push(i);
+  order.sort((a,b)=>mag[b]-mag[a]);
+  const used=new Uint8Array(n),segs=[],reg=[];
+  const adiff=(a,b)=>{let d=Math.abs(a-b)%(2*Math.PI);return d>Math.PI?2*Math.PI-d:d;};
+  for(const s of order){
+    if(used[s])continue;
+    reg.length=0;reg.push(s);used[s]=1;
+    let sx=Math.cos(ang[s]),sy=Math.sin(ang[s]),th=ang[s];
+    for(let k=0;k<reg.length;k++){
+      const p=reg[k],px=p%w,py=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const qx=px+dx,qy=py+dy;if(qx<1||qy<1||qx>=w-1||qy>=h-1)continue;
+        const q=qy*w+qx;if(used[q]||mag[q]<=THR||adiff(ang[q],th)>TAU)continue;
+        used[q]=1;reg.push(q);sx+=Math.cos(ang[q]);sy+=Math.sin(ang[q]);th=Math.atan2(sy,sx);
+      }
+    }
+    if(reg.length<minPts)continue;
+    let W=0,mx=0,my=0;for(const p of reg){const m=mag[p];W+=m;mx+=m*(p%w);my+=m*((p/w)|0);}mx/=W;my/=W;
+    let cxx=0,cyy=0,cxy=0;for(const p of reg){const m=mag[p],dx=p%w-mx,dy=((p/w)|0)-my;cxx+=m*dx*dx;cyy+=m*dy*dy;cxy+=m*dx*dy;}
+    const a=0.5*Math.atan2(2*cxy,cxx-cyy),ux=Math.cos(a),uy=Math.sin(a);
+    let lo=Infinity,hi=-Infinity,wd=0;
+    for(const p of reg){const dx=p%w-mx,dy=((p/w)|0)-my,t=dx*ux+dy*uy,o=-dx*uy+dy*ux;if(t<lo)lo=t;if(t>hi)hi=t;wd+=o*o;}
+    const len=hi-lo,thick=Math.sqrt(wd/reg.length);
+    if(len<minPts||thick>Math.max(1.5,len*0.06))continue; // blobs and fat regions are not lines
+    // LSD's a-contrario validation: the rectangle must hold far more aligned pixels than chance.
+    let rth=a;if(adiff(rth,th)>Math.PI/2)rth+=Math.PI; // orient the axis like the region's level lines
+    if(_upRectLogNFA(mag,ang,w,h,mx,my,ux,uy,rth,lo,hi,reg,THR,TAU,thick)>=0)continue; // texture, not a line
+    segs.push({x1:mx+lo*ux,y1:my+lo*uy,x2:mx+hi*ux,y2:my+hi*uy,len});
+  }
+  return segs;
+}
+// log10 of the binomial tail P[X>=k], X~Bin(n,p) (LSD's nfa(), Hoeffding-free exact sum with lgamma).
+function _upLogGamma(x){ // Windschitl approximation, as LSD uses for x>15; Lanczos below
+  if(x>15)return 0.918938533204673+(x-0.5)*Math.log(x)-x+0.5*x*Math.log(x*Math.sinh(1/x)+1/(810*Math.pow(x,6)));
+  const q=[75122.6331530,80916.6278952,36308.2951477,8687.24529705,1168.92649479,83.8676043424,2.50662827511];
+  let a=(x+0.5)*Math.log(x+5.5)-(x+5.5),b=0;for(let n=0;n<7;n++){a-=Math.log(x+n);b+=q[n]*Math.pow(x,n);}return a+Math.log(b);
+}
+function _upLogBinTail(n,k,p){
+  if(k<=0)return 0;if(k>n)return -Infinity;
+  const lt=(i)=>(_upLogGamma(n+1)-_upLogGamma(i+1)-_upLogGamma(n-i+1)+i*Math.log(p)+(n-i)*Math.log(1-p));
+  let m=lt(k),sum=1,term=1;
+  for(let i=k+1;i<=n;i++){term*=((n-i+1)/i)*(p/(1-p));sum+=term;if(term<sum*1e-12)break;}
+  return (m+Math.log(sum))/Math.LN10;
+}
+/// log10 NFA of a line-support region's rectangle (von Gioi et al., LSD, IPOL 2012): number of
+/// tests (NM)^(5/2)*11 times the chance that >=k of its n pixels are aligned to within TAU when
+/// orientations are random. < 0 means fewer than one expected false detection per image. Like
+/// LSD's rect_improve it also tries narrower rectangles and keeps the best.
+function _upRectLogNFA(mag,ang,w,h,mx,my,ux,uy,rth,lo,hi,reg,THR,TAU,thick){
+  const logNT=2.5*(Math.log10(w)+Math.log10(h))+Math.log10(11),p=TAU/Math.PI;
+  // Rectangle width: the RMS-equivalent band (sqrt(12)*rms for a uniform spread), not the full
+  // extent, so one stray noisy pixel cannot double a 2px line's width and sink its density.
+  let olo=Infinity,ohi=-Infinity;
+  for(const q of reg){const o=-(q%w-mx)*uy+(((q/w)|0)-my)*ux;if(o<olo)olo=o;if(o>ohi)ohi=o;}
+  const rw=Math.max(1,Math.min(ohi-olo,Math.sqrt(12)*(thick||0)));olo=Math.max(olo,-rw/2);ohi=Math.min(ohi,rw/2);
+  const adiff=(a,b)=>{let d=Math.abs(a-b)%(2*Math.PI);return d>Math.PI?2*Math.PI-d:d;};
+  const nfa=(wlo,whi)=>{
+    const x0=Math.floor(Math.min(mx+lo*ux-wlo*uy,mx+hi*ux-wlo*uy,mx+lo*ux-whi*uy,mx+hi*ux-whi*uy))-1;
+    const x1=Math.ceil(Math.max(mx+lo*ux-wlo*uy,mx+hi*ux-wlo*uy,mx+lo*ux-whi*uy,mx+hi*ux-whi*uy))+1;
+    const y0=Math.floor(Math.min(my+lo*uy+wlo*ux,my+hi*uy+wlo*ux,my+lo*uy+whi*ux,my+hi*uy+whi*ux))-1;
+    const y1=Math.ceil(Math.max(my+lo*uy+wlo*ux,my+hi*uy+wlo*ux,my+lo*uy+whi*ux,my+hi*uy+whi*ux))+1;
+    let n=0,k=0;
+    for(let y=Math.max(1,y0);y<=Math.min(h-2,y1);y++)for(let x=Math.max(1,x0);x<=Math.min(w-2,x1);x++){
+      const dx=x-mx,dy=y-my,t=dx*ux+dy*uy,o=-dx*uy+dy*ux;
+      if(t<lo-0.5||t>hi+0.5||o<wlo-0.5||o>whi+0.5)continue;
+      n++;const i=y*w+x;if(mag[i]>THR&&adiff(ang[i],rth)<=TAU)k++;
+    }
+    return logNT+_upLogBinTail(n,k,p);
+  };
+  // LSD's density gate: a curved edge (a leaf, a cobble) grown into a straight rectangle leaves most
+  // of that rectangle empty; LSD refines such regions and rejects them below 0.7 region/area density.
+  if(reg.length/((hi-lo+1)*(ohi-olo+1))<0.7)return Infinity;
+  let best=nfa(olo,ohi),wl=olo,wh=ohi;
+  for(let s=0;s<5&&wh-wl>1;s++){wl+=0.25;wh-=0.25;const v=nfa(wl,wh);if(v<best)best=v;}
+  return best;
+}
+// Deviation (deg) of a segment from its nearest axis: {axis:'h'|'v', dev}, dev in y-down image
+// degrees (positive = clockwise on screen).
+function _upAxisDev(s){
+  let a=Math.atan2(s.y2-s.y1,s.x2-s.x1)*180/Math.PI;a=((a%180)+180)%180; // 0..180
+  if(a<=45)return{axis:'h',dev:a};if(a>=135)return{axis:'h',dev:a-180};return{axis:'v',dev:a-90};
+}
+function _upWMedian(v){ // v: [[value,weight]]
+  if(!v.length)return null;v=v.slice().sort((a,b)=>a[0]-b[0]);
+  let tot=0;for(const x of v)tot+=x[1];let acc=0;for(const x of v){acc+=x[1];if(acc>=tot/2)return x[0];}return v[v.length-1][0];
+}
+/// Upright Level: the Straighten change (degrees, autoHorizon's sign convention) that squares the
+/// dominant horizontal + vertical structure, or null without enough evidence.
+function upLevelAngle(segs,w,h,maxTilt){
+  maxTilt=maxTilt||15;
+  let c=segs.map(s=>({...(_upAxisDev(s)),len:s.len})).filter(d=>Math.abs(d.dev)<=maxTilt);
+  let est=null;
+  for(let it=0;it<4;it++){ // trimmed weighted median: drop lines that disagree, re-estimate
+    est=_upWMedian(c.map(d=>[d.dev,d.len]));if(est===null)return null;
+    const tol=it<2?4:1.5,keep=c.filter(d=>Math.abs(d.dev-est)<=tol);if(keep.length===c.length)break;c=keep;
+  }
+  let tot=0;for(const d of c)tot+=d.len;
+  if(c.length<2||tot<0.35*Math.max(w,h))return null;
+  let sw=0,sm=0;for(const d of c){sw+=d.len;sm+=d.len*d.dev;} // refine with the weighted mean of the inliers
+  const corr=-sm/sw;return Math.abs(corr)<0.05?0:Math.round(corr*20)/20;
+}
+// Output→source homography of the lens shader (see lensPersp), uniform scale dropped.
+function _upH(pv,ph,rot){const c=Math.cos(rot),s=Math.sin(rot);
+  return[c,-s,0, s,c,0, ph*c+pv*s, -ph*s+pv*c, 1];}
+// Segment (pixel coords, y down) → homogeneous line in shader-centred coords (y up).
+function _upSrcLine(s,w,h){
+  const p1=[s.x1/w-0.5,0.5-s.y1/h,1],p2=[s.x2/w-0.5,0.5-s.y2/h,1];
+  return[p1[1]*p2[2]-p1[2]*p2[1],p1[2]*p2[0]-p1[0]*p2[2],p1[0]*p2[1]-p1[1]*p2[0]];
+}
+// sin of the angle between the mapped line and vertical, in PIXELS (normal scaled by 1/w, 1/h).
+function _upVertResid(l,H,w,h){
+  const a=H[0]*l[0]+H[3]*l[1]+H[6]*l[2],b=H[1]*l[0]+H[4]*l[1]+H[7]*l[2];
+  const ax=a/w,by=b/h,n=Math.hypot(ax,by);return n>0?by/n:1;
+}
+/// Upright Vertical: fit {pv, rot} (lens shader units; ph held at its current value) so near-
+/// vertical segments come out vertical. Returns {pv,rot,lines} or null.
+function upFitVertical(segs,w,h,ph){
+  ph=ph||0;
+  let c=segs.filter(s=>{const d=_upAxisDev(s);return d.axis==='v'&&Math.abs(d.dev)<=30;}).map(s=>({l:_upSrcLine(s,w,h),len:s.len}));
+  let tot=0;for(const d of c)tot+=d.len;
+  if(c.length<2||tot<0.3*h)return null;
+  const PVM=0.4,RM=Math.PI/18;
+  const cost=(lines,pv,rot)=>{const H=_upH(pv,ph,rot);let e=0;for(const d of lines){const r=_upVertResid(d.l,H,w,h);e+=d.len*r*r;}return e+1e-4*tot*pv*pv;};
+  const fit=lines=>{
+    let best={pv:0,rot:0,e:cost(lines,0,0)},spv=PVM/10,sr=RM/10;
+    for(let pv=-PVM;pv<=PVM+1e-9;pv+=spv)for(let r=-RM;r<=RM+1e-9;r+=sr){const e=cost(lines,pv,r);if(e<best.e)best={pv,rot:r,e};}
+    for(let k=0;k<6;k++){spv/=4;sr/=4;const b0=best;
+      for(let i=-4;i<=4;i++)for(let j=-4;j<=4;j++){const pv=Math.max(-PVM,Math.min(PVM,b0.pv+i*spv)),r=Math.max(-RM,Math.min(RM,b0.rot+j*sr));const e=cost(lines,pv,r);if(e<best.e)best={pv,rot:r,e};}}
+    return best;
+  };
+  let best=fit(c);
+  for(let it=0;it<3;it++){ // outlier trimming: a slanted roof edge must not bend the verticals
+    const H=_upH(best.pv,ph,best.rot),tol=Math.sin((it?1.5:4)*Math.PI/180);
+    const keep=c.filter(d=>Math.abs(_upVertResid(d.l,H,w,h))<=tol);
+    let kt=0;for(const d of keep)kt+=d.len;
+    if(keep.length<2||kt<0.2*h||keep.length===c.length)break;
+    c=keep;best=fit(c);
+  }
+  return{pv:best.pv,rot:best.rot,lines:c.length};
+}
+// Upright amount (0..100 %, default 85): darktable/ShiftN note that ~80-90 % of a full keystone
+// correction usually looks more natural, as the eye expects slight convergence looking up.
+function upAmount(v,pct){return Math.round(v*(pct==null?85:pct))/100;}
+function _upAmt(){const s=document.getElementById('sl-upright-amt');return s?+s.value:85;}
+function _upAmtLabel(){const s=document.getElementById('sl-upright-amt'),v=document.getElementById('vl-upright-amt');if(s&&v)v.textContent=s.value+'%';if(s&&typeof fxPaintSlider==='function')fxPaintSlider(s);}
+function _upSetSlider(id,v){const s=document.getElementById(id);if(!s)return;s.value=v;const vl=document.getElementById('vl-'+id.slice(3));if(vl)vl.textContent=s.value;if(typeof fxPaintSlider==='function')fxPaintSlider(s);}
+/// Button handlers. Both analyse geomCanvas(it): exactly the frame the lens shader receives.
+function uprightLevel(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h),d0=upLevelAngle(segs,G.w,G.h);
+  const d=d0===null?null:Math.round(upAmount(d0,_upAmt())*20)/20;
+  if(d===null){toast('Level: no clear horizontal or vertical lines found',false);return;}
+  if(d===0){toast('Already level',true);return;}
+  const g=curGeom(),a=Math.max(-45,Math.min(45,Math.round((((g&&g.angle)||0)+d)*20)/20));
+  const sl=document.getElementById('sl-straighten');if(sl){sl.value=_stA2S(a);fxPaintSlider(sl);}
+  geomStraighten(a); // one history entry (debounced push inside)
+  toast(`Level: ${d>0?'+':''}${d.toFixed(1)}°`,true);log(`Upright Level: ${d.toFixed(2)}° (${segs.length} segments)`,'ok');
+}
+function uprightVertical(){
+  const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
+  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h);
+  const f=upFitVertical(segs,G.w,G.h,adjVal('sl-lens-ph')/250);
+  if(!f){toast('Vertical: not enough vertical lines found',false);return;}
+  const k=_upAmt()/100;
+  _upSetSlider('sl-lens-pv',Math.max(-100,Math.min(100,Math.round(f.pv*k*250))));
+  _upSetSlider('sl-lens-rot',Math.max(-100,Math.min(100,Math.round(f.rot*k*1800/Math.PI))));
+  fxUpdate(); // both sliders land in ONE debounced history entry
+  toast('Vertical applied',true);log(`Upright Vertical: pv ${f.pv.toFixed(3)}, rot ${(f.rot*180/Math.PI).toFixed(2)}° from ${f.lines} lines`,'ok');
+}
 
 // ── retouch interaction ───────────────────────────────────────────────────────────────────
 let healMode=false,healEraseMode=false,healEraseHeld=false,_healShiftFrom=null;
@@ -29324,7 +30246,15 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     // Sub-phase times for the export's EXPORT_DIAG line (renderer._p2cTimes, read by exportFX).
     const T={},now=()=>performance.now();let t=now();renderer._p2cTimes=T;
-    renderer.setImage(src);T.upload=now()-t;t=now();
+    // Film negative: a 16-bit PNG/TIFF <img> uploaded straight to WebGL rounds to 8 bits differently
+    // from the 2D-canvas copy renderTiled uploads; the inversion amplifies that 1 level to ~40, so
+    // single-shot and tiled exports of a real scan disagreed (CHR-262). Upload the same canvas decode.
+    let upSrc=src;
+    if(P.filmNeg&&P.filmNeg.enabled&&typeof HTMLImageElement!=='undefined'&&src instanceof HTMLImageElement){
+      upSrc=document.createElement('canvas');upSrc.width=src.naturalWidth||src.width;upSrc.height=src.naturalHeight||src.height;
+      upSrc.getContext('2d').drawImage(src,0,0);
+    }
+    renderer.setImage(upSrc);T.upload=now()-t;t=now();
     fxSetCapturedExportDepth(renderer,P);
     renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});T.submit=now()-t;t=now();
     // WebKit (the Mac app): fence-polled readback so the UI stays live while the GPU finishes. Chromium
@@ -29409,7 +30339,7 @@ function fxExportTileSize(P,src,halo,renderer){
   const conservative=P.tonemap||src._sceneLinearPresent
     ||(P.nr&&(P.nr.luma>0||P.nr.color>0||P.nr.hlDesat>0))
     ||(P.deconv&&P.deconv.amount>0)||(P.depthBlur&&P.depthBlur.enabled)
-    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||(P.lens.scale!=null&&P.lens.scale!==1)))
+    ||(P.lens&&(P.lens.dist||P.lens.vig||P.lens.ca||P.lens.defringe||P.lens.pv||P.lens.ph||P.lens.rot||P.lens.asp||P.lens.ox||P.lens.oy||(P.lens.scale!=null&&P.lens.scale!==1)))
     ||(P.tiltShift&&P.tiltShift.enabled);
   const advanced=P.debug||(P.halation&&P.halation.enabled)||(P.bloom&&P.bloom.enabled)||(P.masks||[]).some(m=>m.crOn);
   const larger=!conservative&&/Android/i.test(navigator.userAgent)&&typeof memory==='number'&&memory>=(advanced?4:2);
@@ -31846,12 +32776,17 @@ async function lrAuthNative(cid){
     client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
     scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
   const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
+  // main.rs stashes every callback URL in PendingOAuth as well as emitting the event. Drain a
+  // stale one from an earlier attempt first, then poll the stash as a fallback for a callback
+  // that lands before the listener is registered (or while the webview was reloading).
+  await invoke('take_pending_oauth_callback').catch(()=>null);
   const callbackPromise=new Promise((resolve,reject)=>{
-    let unlisten=null;
-    const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
-    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>{
-      clearTimeout(timeout);if(unlisten)unlisten();resolve(e.payload);
-    }).then(un=>{unlisten=un;});
+    let unlisten=null,done=false,poll=null;
+    const finish=(url)=>{if(done)return;done=true;clearTimeout(timeout);clearInterval(poll);if(unlisten)unlisten();
+      invoke('take_pending_oauth_callback').catch(()=>null);resolve(url);};
+    const timeout=setTimeout(()=>{done=true;clearInterval(poll);if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
+    poll=setInterval(()=>{invoke('take_pending_oauth_callback').then(u=>{if(u)finish(u);}).catch(()=>{});},1000);
+    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>finish(e.payload)).then(un=>{if(done)un();else unlisten=un;});
   });
   try{await invoke('open_url_native',{url:authUrl})}
   catch(e){throw new Error('Could not open the sign-in page: '+(e&&e.message||e))}
@@ -32251,6 +33186,13 @@ function ovfBuild(){
   // duplicated between this menu and Tools.
   // Moved off the always-visible deskbar (top-bar decluttering pass) — the one semi-destructive
   // action in that cluster, and the least frequently reached for next to Undo/Redo/Export.
+  // CHR-196/182: a visible route to the command palette and the shortcut editor. Windows has no
+  // native menu bar, so without these rows both were reachable only by already knowing the keys.
+  // The hint shows the live (possibly rebound) binding from the shortcut registry.
+  const kb=id=>{const b=typeof csShortcutBinding==='function'&&csShortcutBinding(id);return b?' <kbd class="fx-ovf-kbd" style="margin-left:auto;font-family:var(--mono);font-size:10px;opacity:var(--op-4)">'+csShortcutLabel(b)+'</kbd>':'';};
+  h+='<button class="fx-ovf-item" data-ovf="commands" onclick="ovfClose();cpOpen()">Search commands…'+kb('editor.search')+'</button>';
+  h+='<button class="fx-ovf-item" data-ovf="shortcuts" onclick="ovfClose();chromasmithShowShortcuts()">Keyboard shortcuts…'+kb('editor.shortcuts')+'</button>';
+  h+='<div class="fx-ovf-sep"></div>';
   h+='<button class="fx-ovf-item" onclick="ovfClose();fxResetAll()">Reset all edits</button>';
   h+='<div class="fx-ovf-sep"></div>';
   // This is the desktop shell's ONLY menu (the web header and tabs are hidden under deskx), and
@@ -32982,7 +33924,12 @@ function fxRailFlatToggle(){
 // Phone tool filters = the desktop rail's own groups (FX_GROUPS), so both apps sort tools the same way.
 const FX_MOBILE_CATS={all:null};
 Object.entries(FX_GROUPS).forEach(([g,d])=>{FX_MOBILE_CATS[g]=new Set(d.members);});
-const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share']);
+// Phones get a focused editor: looks, light, colour mixer, curves, film effects (grain, halation,
+// bloom, vignette, borders), masks, healing, crop and saved edits. Pro/technical tools stay on
+// desktop: source/print profiles, film-negative conversion, colour wheels, point colour, noise
+// reduction, deconvolution, lens corrections and red-eye. Edits made with them on desktop still render.
+const FX_MOBILE_HIDE=new Set(['art','export','wm','exppreset','share',
+  'inprint','filmneg','wheels','pointcolor','nr','deconv','lens','redeye']);
 let _fxMobileCat='all';
 const FX_MOBILE_DESC={looks:'Film looks.',inprint:'Source profile, highlight response and print stock.',adjust:'Exposure, contrast, white balance and colour.',crop:'Crop, rotate and straighten.',
   borders:'Film borders and frames.',canvas:'Add space around the photo.',style:'Save and reuse whole edits.'};
@@ -34587,7 +35534,7 @@ const CS_CONTROL_UNIT_SPECS={
   'sl-pc-h':'%','sl-pc-s':'%','sl-pc-l':'%','sl-pc-r':'%','sl-pc-sm':'%',
   'sl-msk-selview-opacity':'%',
   'sl-lens-dist':'%','sl-lens-vig':'%','sl-lens-ca':'%','sl-lens-pv':'%','sl-lens-ph':'%',
-  'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-defr':'%',
+  'sl-lens-rot':{unit:'°',scale:.1,precision:1,sign:true},'sl-lens-scale':'%','sl-lens-asp':'%','sl-lens-ox':'%','sl-lens-oy':'%','sl-lens-defr':'%',
   'sl-straighten':'°',
   'sl-grain-a':'%','sl-grain-motion':'%','sl-gate-weave':'%','sl-film-breath':'%',
   'sl-art-du':'%','sl-art-sc':'%','sl-art-lk':'%','sl-hal-a':'%','sl-hal-p':'%','sl-bloom-a':'%','sl-bloom-th':'%','sl-vig':'%',

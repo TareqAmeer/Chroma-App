@@ -502,6 +502,11 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
 .msk-rowbar{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
+.msk-edit-note{font-size:var(--fs-1);color:var(--mut);margin:0 0 var(--sp-2);padding:var(--sp-1) var(--sp-2);border-left:3px solid var(--acc,#e8a33d);background:var(--bs-shade,rgba(128,128,128,.08));border-radius:0 var(--r-sm) var(--r-sm) 0}
+#local-list>button[data-gr]{box-shadow:inset 3px 0 0 var(--grp)}
+body.sk2 #local-list>.btn[data-gr]{box-shadow:inset 3px 0 0 var(--grp)!important}
+body.sk2 #local-list>.btn.bsec[data-gr]{box-shadow:inset 3px 0 0 var(--grp),inset 5px 0 0 var(--k-color-accent-a)!important}
+.msk-grp-tag{background:transparent;border:1px solid var(--grp,currentColor);color:var(--txt)}
 .msk-rowbar-nm{flex:1 1 38%;min-width:0;font-size:var(--fs-3);font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msk-more{margin-left:auto}
 .msk-layout-toggle{min-height:28px;padding:var(--sp-1) var(--sp-2);white-space:nowrap;font-size:var(--fs-1)}
@@ -1225,6 +1230,7 @@ body.mobile-fx #fx-tool-cats button.on{background:#ffbd00;color:#111}
 body.mobile-fx #fx-tool-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-content:start;gap:8px 0;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 8px 60px}
 body.mobile-fx #fx-tool-grid .fx-sec-btn{width:100%;min-width:0;min-height:90px;gap:8px;padding:8px 2px;border-radius:0;color:#ddd;font-family:var(--sans)}
 body.mobile-fx #fx-tool-grid .fx-sec-btn[hidden]{display:none}
+body.mobile-fx .fx-desk-only{display:none} /* CHR-290/291 desktop-only sub-tools inside a phone-visible card */
 body.mobile-fx #fx-tool-grid .fx-sec-ic{font-size:28px;color:#f3f3f3}
 body.mobile-fx #fx-tool-grid .fx-sec-lb{white-space:normal;font-size:12px;font-weight:400;text-align:center}
 /* Chromasmith identity on the phone (not a Snapseed clone): brand accent instead of yellow,
@@ -1583,6 +1589,9 @@ body.fx-deskb #fx-deskbar-tools .fx-mini{background:var(--sur2)}
 body.deskx{--deskx-topbar-h:56px;--deskbar-control-gap:12px}
 body.deskx header,body.deskx #fx-filmstrip{display:none}
 body.deskx main{max-width:none;margin:0;padding:var(--deskx-topbar-h) 0 0}
+/* CHR-264: main:has(#panel-fx.active){max-width:1640px} (the web layout cap) outranks the rule above
+   through its #id, so on screens wider than 1640px the editor left an empty band on the right. */
+body.deskx main:has(#panel-fx.active){max-width:none}
 body.deskx.fx-deskb main{overflow:hidden;overflow:clip;height:100vh}   /* clip: not a scroll container, so focus restore on app switch cannot scroll (shift) the editor */
 body.deskx:not(.fx-deskb) main{overflow-y:auto;height:100vh;padding:var(--sp-9) 24px var(--sp-11)}
 /* 2026-09-10 (3.1.9/3.1.10): a real 3-column grid — Editor (Developer) View.dc.html's own
@@ -3101,6 +3110,9 @@ html.cs-boot-tauri,html.cs-boot-tauri body{background:#141414}
 body.sk2.mobile-fx .fx-ctrl-title{font-size:15px;line-height:1.2;padding-top:8px;padding-bottom:6px;margin-bottom:6px}
 body.sk2.mobile-fx .sk2-dup-title>.fx-ctrl-title{min-height:0!important}
 body.mobile-fx #fx-looks-cats,body.mobile-fx #fx-looks{overflow-y:hidden!important;touch-action:pan-x}
+/* The sk2 segmented-control rule forces overflow:visible!important on every .chip-tap row; the phone
+   Looks category row must stay a horizontal scroller or it pushes the sheet ~300px wide. */
+body.sk2.mobile-fx .fx-panel #fx-looks-cats{overflow-x:auto!important;overflow-y:hidden!important}
 body.sk2.mobile-fx #row-lut-mix{position:static;flex-wrap:nowrap;align-items:center;gap:10px;margin:8px 0 0!important;padding:2px 0;box-shadow:none}
 body.sk2.mobile-fx #row-lut-mix>.fx-label{order:1;flex:0 0 auto;margin:0}
 body.sk2.mobile-fx #row-lut-mix>.fx-slider{order:2;flex:1 1 auto;min-width:0;height:32px;margin:0}

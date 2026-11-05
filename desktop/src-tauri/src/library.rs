@@ -3649,10 +3649,6 @@ fn trash_file_with_receipt(path: &str) -> Result<Option<crate::trash_undo::Trash
     Ok(Some(TrashReceipt { photo, sidecar, warning: None }))
 }
 
-/// Legacy-compatible Trash command; false still means the source disappeared before deletion.
-#[tauri::command]
-pub fn trash_file(path: String) -> Result<bool, String> { Ok(trash_file_with_receipt(&path)?.is_some()) }
-
 /// Undo-capable Library Trash operation. The receipt includes exact platform-generated identities
 /// for the photo and matching XMP, never a basename/mtime reconstruction.
 #[tauri::command]

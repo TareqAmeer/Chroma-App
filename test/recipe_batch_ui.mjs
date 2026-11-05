@@ -121,7 +121,9 @@ try {
   await page.evaluate(async () => { if (!document.querySelector('#lib-overlay').classList.contains('on')) await window.chromasmithToggleLibrary(); });
   if (!(await page.locator('#lib-overlay').evaluate(el => el.classList.contains('full')))) await page.keyboard.press('g');
   await page.locator('#lib-act-pill').click();
-  const activitySummary = await page.locator('#lib-act-pill').innerText();
+  // Job details render in the topbar Jobs popover (#sk2-act-pop) when the shell has one, and only
+  // inside the pill when it doesn't (renderActivity: "Open Jobs for details." vs "Click for details.").
+  const activitySummary = await page.evaluate(() => (document.getElementById('sk2-act-pop') || document.getElementById('lib-act-pill')).innerText);
   assert.match(activitySummary, /1 applied · 1 failed · 0 pending · 1 skipped/);
   await page.screenshot({ path: "test/output/recipe-batch-" + theme + '-activity.png' });
   await page.locator('#lib-act-batch-results').click({ timeout: 5000 });

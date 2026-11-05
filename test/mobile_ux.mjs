@@ -161,6 +161,18 @@ await page.screenshot({path:resolve(outputDir,`${name}-gallery-large-text.png`)}
       assert.equal(await page.evaluate(()=>fxState.masks.at(-1).type),'brush');
       assert(await page.evaluate(()=>mskPaintMode));await page.locator('[data-mask-erase]').click();assert(await page.evaluate(()=>mskPaintErase));
       await page.evaluate(()=>mskPaintStop());
+      // Sky is offered on phones too (the colour/position heuristic needs no desktop model).
+      await page.locator('[data-mask-add]').click();await page.locator('[data-mask=sky]').click();
+      assert.equal(await page.evaluate(()=>fxState.masks.at(-1).origin),'sky');
+    });
+    await check('More menu has Copy / Paste settings; paste restores the copied adjustments in one undo step',async()=>{
+      await page.evaluate(()=>{const s=document.getElementById('sl-adj-con');s.value=37;s.dispatchEvent(new Event('input',{bubbles:true}));});
+      await page.evaluate(()=>fxMoreMenu());await page.locator('.phone-dialog-content button',{hasText:'Copy settings'}).click();
+      await page.evaluate(()=>{const s=document.getElementById('sl-adj-con');s.value=-20;s.dispatchEvent(new Event('input',{bubbles:true}));fxHistoryPush();});
+      await page.evaluate(()=>fxMoreMenu());await page.locator('.phone-dialog-content button',{hasText:'Paste settings'}).click();
+      assert.equal(await page.evaluate(()=>+document.getElementById('sl-adj-con').value),37);
+      await page.evaluate(()=>fxUndo());await page.waitForTimeout(150);
+      assert.equal(await page.evaluate(()=>+document.getElementById('sl-adj-con').value),-20);
     });
     await check('real export renderer reaches Files and returns an honest save receipt',async()=>{
       await page.evaluate(()=>{window.chromasmithMobileExportDestination='files';document.getElementById('sel-exp-fmt').value='jpg';document.getElementById('sel-exp-size').value='2048';document.getElementById('sl-exp-q').value=88;});

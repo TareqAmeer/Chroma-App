@@ -49,6 +49,44 @@ async function exportPresetApply(name){
   log(`Export preset applied: ${name}`,'ok');
   return true;
 }
+// CHR-197: Export Recipes get the same file export/import as Edit Styles. The destination folder
+// is a path on THIS machine, so it is never written into the file and never read back from one.
+const _EXPRECIPE_FORMAT='chromasmith-export-recipes';
+function exportRecipesFileText(names){
+  const list=exportPresetsList().filter(p=>!names||names.includes(p.name));
+  return JSON.stringify({format:_EXPRECIPE_FORMAT,version:1,recipes:list.map(p=>{const s={...(p.settings||{})};delete s.dest;return{name:p.name,settings:s};})},null,2);
+}
+function exportRecipeExport(name){
+  if(!exportPresetsList().some(p=>p.name===name))return;
+  anchorDownload(exportRecipesFileText([name]),name.replace(/[^\w.-]+/g,'_')+'.chromasmith-export.json','application/json');
+}
+// Validates the whole file before saving anything; a name that already exists is kept and the
+// imported one becomes "Name (imported)". Returns the names that were added.
+function exportRecipesImportText(text){
+  if(typeof text!=='string'||text.length>256*1024)throw new Error('Export recipe file is too large or unreadable');
+  let d;try{d=JSON.parse(text);}catch(_){throw new Error('This is not a valid export recipe file');}
+  if(!d||d.format!==_EXPRECIPE_FORMAT||d.version!==1||!Array.isArray(d.recipes)||!d.recipes.length||d.recipes.length>200)throw new Error('Unsupported export recipe file format');
+  const FMTS=['auto','jpg','png','webp'],num=v=>(typeof v==='string'||typeof v==='number')&&String(v).trim()!==''&&Number.isFinite(+v);
+  const list=exportPresetsList(),used=new Set(list.map(p=>p.name)),added=[];
+  const recs=d.recipes.map((r,i)=>{
+    if(!r||typeof r.name!=='string'||!r.name.trim()||r.name.length>200||!r.settings||typeof r.settings!=='object'||Array.isArray(r.settings))throw new Error('Recipe '+(i+1)+' needs a name and settings');
+    const s=r.settings;
+    if(!FMTS.includes(s.fmt))throw new Error('Recipe "'+r.name+'" has an unknown format');
+    for(const k of ['q','size','sharp'])if(!num(s[k]))throw new Error('Recipe "'+r.name+'" has an invalid '+k);
+    if(+s.q<1||+s.q>100||+s.size<0||+s.sharp<0)throw new Error('Recipe "'+r.name+'" has an out-of-range value');
+    return{name:r.name.trim(),settings:{fmt:s.fmt,q:String(s.q),size:String(s.size),sharp:String(s.sharp),keepGps:s.keepGps!==false}};
+  });
+  recs.forEach(r=>{let n=r.name;if(used.has(n)){n=r.name+' (imported)';let k=2;while(used.has(n)){n=r.name+' (imported '+k+')';k++;}}used.add(n);list.push({name:n,settings:r.settings});added.push(n);});
+  exportPresetsSave(list);if(typeof exportPresetListRefresh==='function')exportPresetListRefresh();
+  return added;
+}
+function exportRecipeImportClick(after){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';inp.hidden=true;document.body.appendChild(inp);
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];inp.remove();if(!f)return;
+    try{const n=exportRecipesImportText(await f.text());toast(`Imported ${n.length} export recipe${n.length===1?'':'s'}`,true);if(after)after();}
+    catch(e){toast(e&&e.message||'Could not import export recipes',false);}};
+  inp.click();
+}
 // CHR-202: run one export per chosen preset, back to back. Each run's files get the preset name
 // appended ({name}_<preset>) so the deliveries never overwrite each other; the panel's own
 // format/quality/size/sharpening, GPS metadata policy and filename are put back afterwards.

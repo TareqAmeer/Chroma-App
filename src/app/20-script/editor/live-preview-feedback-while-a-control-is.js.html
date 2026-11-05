@@ -53,7 +53,7 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
-const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin'];
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
   fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));

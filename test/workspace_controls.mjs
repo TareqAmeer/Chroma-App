@@ -84,7 +84,7 @@ try {
   assert.deepEqual(hiddenSection.order.slice(0, 2), ['sl-adj-con', 'sl-adj-exp'], 'row order is persisted by stable control IDs');
 
   await page.evaluate(() => {
-    const command = _cpCommands().find(item => item.group === 'Section' && item.label === 'Light');
+    const command = _cpCommands().find(item => item.group === 'Section' && item.label === CS_NAMES.adjust);
     command.run();
   });
   assert.equal(await page.locator('.fx-ctrl[data-fxsec="adjust"]').evaluate(card => card.hidden), false, 'search result restores a hidden section');

@@ -1,4 +1,12 @@
 {
   "note": "Called by the frontend but not yet answered by the ?libtest=1 stand-in. May only shrink.",
-  "unmocked": []
+  "unmocked": [],
+  "neverCalled": {
+    "publish_collection_apply_deletions": "Backend foundation (desktop/src-tauri/src/publish.rs, offline hard-drive publish services) with Rust tests; no frontend UI yet. Not dead: keep until the publish UI lands.",
+    "publish_collection_create": "Backend foundation (desktop/src-tauri/src/publish.rs, offline hard-drive publish services) with Rust tests; no frontend UI yet. Not dead: keep until the publish UI lands.",
+    "publish_collection_list": "Backend foundation (desktop/src-tauri/src/publish.rs, offline hard-drive publish services) with Rust tests; no frontend UI yet. Not dead: keep until the publish UI lands.",
+    "publish_collection_sync_photos": "Backend foundation (desktop/src-tauri/src/publish.rs, offline hard-drive publish services) with Rust tests; no frontend UI yet. Not dead: keep until the publish UI lands.",
+    "publish_collection_write_output": "Backend foundation (desktop/src-tauri/src/publish.rs, offline hard-drive publish services) with Rust tests; no frontend UI yet. Not dead: keep until the publish UI lands.",
+    "superres_cancel": "Wired to superres::request_cancel; Export has no cancel control yet to call it from (fxSuperResCanvas). Keep for an export-cancel UI (CHR-183)."
+  }
 }

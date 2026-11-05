@@ -243,11 +243,17 @@ async function exportSharpen(cv,level){
 // margin both scale off the long edge for the same reason a 24px watermark looks right on a 1080
 // social export and comically small on a 6000px print export. White fill + a dark stroke keeps it
 // legible on both light and dark image content without needing per-photo tuning.
-function applyWatermark(cv){
-  const on=document.getElementById('tg-exp-wm');
-  const text=(document.getElementById('exp-wm-text')||{}).value||'';
-  if(!on||!on.classList.contains('on')||!text.trim())return cv;
-  const opacity=(parseFloat((document.getElementById('sl-exp-wm-op')||{}).value)||55)/100;
+// opts {text, opacity 0..1} lets a caller with its own settings (the Library web gallery,
+// CHR-239) draw the same mark without reading or touching the Export panel's controls.
+function applyWatermark(cv,opts){
+  let text,opacity;
+  if(opts){text=String(opts.text||'');opacity=Math.max(0,Math.min(1,Number(opts.opacity??0.55)));if(!text.trim())return cv;}
+  else{
+    const on=document.getElementById('tg-exp-wm');
+    text=(document.getElementById('exp-wm-text')||{}).value||'';
+    if(!on||!on.classList.contains('on')||!text.trim())return cv;
+    opacity=(parseFloat((document.getElementById('sl-exp-wm-op')||{}).value)||55)/100;
+  }
   const ctx=cv.getContext('2d');
   const longEdge=Math.max(cv.width,cv.height);
   const fontPx=Math.max(10,Math.round(longEdge*0.022));

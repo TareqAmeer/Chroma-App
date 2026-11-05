@@ -54,7 +54,8 @@ try {
   );
 
   await page.locator('#lib-act-pill').click();
-  await page.waitForSelector('#lib-act-pill .lib-act-pop');
+  // Details open in the topbar Jobs popover when the shell has one, else inside the pill (renderActivity).
+  await page.waitForSelector('#sk2-act-pop .lib-act-pop, #lib-act-pill .lib-act-pop');
   const responsiveness = await page.evaluate(async () => {
     let frames = 0;
     let maxFrameGapMs = 0;

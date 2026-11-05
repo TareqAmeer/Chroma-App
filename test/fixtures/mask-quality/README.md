@@ -36,3 +36,9 @@ Create a manifest outside version control or in this folder after adding reviewe
 Fix thresholds before evaluating candidates and record how they were chosen. Run `node test/mask_refinement_quality.mjs --manifest <path-to-manifest.json>`. The report includes normalized alpha MAE, boundary-band MAE, hard-background false-positive coverage, and RGB composite MAE over black and white. A passing report is a quantitative gate, not proof that no visible halos exist: inspect each labelled image at 100% and record that visual review alongside the report. Keep synthetic evaluator tests separate from photo results.
 
 `npm run mask:quality:self-test` checks metric behavior without claiming photographic quality. Do not check downloaded fixture data or manifests containing private paths into Git unless their redistribution and privacy terms are approved.
+
+## Public real-photo set (CHR-297)
+`realset.json` lists 40 public labelled photos (dataset, parquet row, source sha256). The photos are not in git:
+`node test/mask_quality_real.mjs` (or `npm run mask:quality:real`) fetches them with
+`tools/scripts/mask_realset_fetch.py` into `test/output/mask-realset/`, runs the bundled models, and compares IoU
+and boundary F per category with `test/mask_quality_real_baseline.json`. `--update` rewrites the baseline.

@@ -65,6 +65,7 @@ const KNOWN_EXCLUSIONS = {
     'wheel-lift-l': 'tracked via s.wheels (fxState.wheels)', 'wheel-gamma-l': 'see wheel-lift-l', 'wheel-gain-l': 'see wheel-lift-l',
     'pc-h': 'tracked via s.pointColors (fxState.pointColors array, one entry per picked point)',
     'pc-s': 'see pc-h', 'pc-l': 'see pc-h', 'pc-r': 'see pc-h', 'pc-sm': 'see pc-h',
+    'pc-llo': 'see pc-h (CHR-259 lightness band: pcSlider writes pt.lumLo)', 'pc-lhi': 'see pc-h (pt.lumHi)',
     'msk-selview-opacity': 'a mask-selection VIEW aid (how bright the selection overlay renders), not graded photo state',
     // VIDEO-ONLY rows (chromasmith-22.html: fxSyncVideoUI shows/hides them) — docs/video-grading.md
     // owns their persistence path, not the still-photo effects snapshot.
