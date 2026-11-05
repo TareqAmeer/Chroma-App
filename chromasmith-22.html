@@ -7602,7 +7602,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105E';
+const BUILD='1.1105F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11758,7 +11758,7 @@ let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
 let fxPinned=null, fxSplitSrc='orig';
 let fxHistOn=false;                        // live histogram toggle
-const FX_FIT=0.9; // displayed 100% = whole photo fits the canvas with a margin (room for a border)
+const FX_FIT=0.95; // displayed 100% = whole photo fits the canvas with a margin (room for a border). CHR-264: 0.9 -> 0.95 (+11% photo area at 1280/1440; revisit if borders look cramped)
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
 // Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps
@@ -14312,7 +14312,7 @@ function installFXImages(entries,loadKey,opts){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=FX_FIT;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
   window.__pm&&window.__pm('ifx-zoom');
   fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too

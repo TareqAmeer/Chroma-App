@@ -38,7 +38,7 @@ try{
     const out={};
     out.k=_fxTrueZoomK();                              // percent per fxZoom unit = 1500*2/6000*100 = 50
     out.fitLabel=(_updateZoomReadout(),document.getElementById('fx-zoom-pct').textContent);
-    out.fitPct=_fxZoomToPct(FX_FIT);                    // 0.9*50 = 45%
+    out.fitPct=_fxZoomToPct(FX_FIT);out.fitExpect=Math.round(FX_FIT*50*100)/100; // Fit shows as FX_FIT*50 (k=50)
     _fxClickZoom(400,300);
     out.afterClick=_fxZoomToPct(fxZoom);                // 100%
     out.label100=(_updateZoomReadout(),document.getElementById('fx-zoom-pct').textContent);
@@ -50,7 +50,7 @@ try{
     out.fitSnap=(zoomSetSlider(_fxZoomToSlider(FX_FIT)+3),Math.abs(fxZoom-FX_FIT)<1e-9);
     return out;
   });
-  assert.equal(r.k,50);assert.equal(r.fitLabel,'Fit');assert.equal(r.fitPct,45);
+  assert.equal(r.k,50);assert.equal(r.fitLabel,'Fit');assert.equal(r.fitPct,r.fitExpect);
   assert.ok(Math.abs(r.afterClick-100)<1e-6,'click zooms to true 100%');
   assert.equal(r.label100,'100%');assert.equal(r.back,true);
   assert.ok(Math.abs(r.maxPct-1600)<1,'slider top end is 1600%');

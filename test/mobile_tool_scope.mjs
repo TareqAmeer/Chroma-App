@@ -28,6 +28,10 @@ try{
   for(const k of ['looks','adjust','curves','hsl','grain','hal','bloom','local','retouch','crop'])assert(grid.includes(k),k+' stays on phones');
   const cats=await page.evaluate(()=>[...document.querySelectorAll('#fx-tool-cats button')].map(b=>{fxMobileFilter(b.dataset.cat);return{cat:b.dataset.cat,hidden:b.hidden,n:[...document.querySelectorAll('#fx-tool-grid .fx-sec-btn')].filter(x=>!x.hidden).length};}));
   for(const c of cats)assert(c.hidden||c.n>0,'category '+c.cat+' is visible but empty');
+  await page.evaluate(()=>{fxToolsClose();fxMoreMenu();});await page.waitForTimeout(400);
+  const more=await page.evaluate(()=>[...document.querySelectorAll('.phone-dialog-content button')].filter(e=>e.offsetParent).map(e=>e.textContent.trim()));
+  for(const t of ['All FX settings','Histogram','Metadata','Compare (split view)'])assert(!more.some(x=>x.startsWith(t)),t+' is desktop-only');
+  for(const t of ['History','Reset photo'])assert(more.some(x=>x.startsWith(t)),t+' stays in the phone More menu');
   assert.deepEqual(errs,[]);
-  console.log('PASS phone tool scope: '+grid.length+' tools, no empty categories');
+  console.log('PASS phone tool scope: '+grid.length+' tools, no empty categories; More menu: '+more.length+' items');
 }finally{await browser.close();server.close();}

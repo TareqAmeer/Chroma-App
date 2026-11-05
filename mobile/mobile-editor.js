@@ -63,7 +63,9 @@ const more0=window.fxMoreMenu;window.fxMoreMenu=function(){
   if(!mob())return more0.apply(this,arguments);
   if(activeDialog?.el.querySelector('h2')?.textContent==='More'){activeDialog.close();return;}
   more0.apply(this,arguments);const old=$('#fx-more-menu'),content=old?.querySelector('.mm-sheet');if(!content)return;
-  const buttons=[...content.children];old.remove();const s=sheet('More','');
+  // Phones get a short More menu: these are desktop/pro views (press-and-hold already compares).
+  const DESK_ONLY=/^(All FX settings|Histogram|Metadata|Compare \(split view\))/;
+  const buttons=[...content.children].filter(b=>!DESK_ONLY.test((b.textContent||'').trim()));old.remove();const s=sheet('More','');
   const host=s.el.querySelector('.phone-dialog-content');host.append(...buttons);
   host.addEventListener('click',e=>{if(e.target.closest('button'))s.close();},true);
 };
