@@ -60,15 +60,20 @@ assert.deepEqual([norm.paper, norm.orientation, norm.columns, norm.rows, norm.fo
 
 // PDF: a tiny real JPEG (1x1) per page; every xref offset must point at its "n 0 obj".
 const jpeg = Uint8Array.from(Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64'));
-const pdf = helpers.contactSheetPdf([{ jpeg, width: 1, height: 1, ptWidth: 595.28, ptHeight: 841.89 }, { jpeg, width: 1, height: 1, ptWidth: 841.89, ptHeight: 595.28 }]);
+const pdf = helpers.contactSheetPdf([{ jpeg, width: 1, height: 1, ptWidth: 595.28, ptHeight: 841.89 }, { jpeg, width: 1, height: 1, ptWidth: 841.89, ptHeight: 595.28 }], { title: 'Trip (day 1) \\ caf\u00e9', producer: 'Chromasmith' });
 const text = Buffer.from(pdf).toString('latin1');
 assert.ok(text.startsWith('%PDF-1.4\n') && text.endsWith('%%EOF\n'));
 assert.equal((text.match(/\/Type \/Page /g) || []).length, 2);
 assert.match(text, /\/MediaBox \[0 0 595\.28 841\.89\]/); assert.match(text, /\/MediaBox \[0 0 841\.89 595\.28\]/);
 const xrefAt = Number(/startxref\n(\d+)\n/.exec(text)[1]);
-assert.ok(text.slice(xrefAt).startsWith('xref\n0 9\n'), 'startxref points at the xref table');
-const offsets = text.slice(xrefAt).split('\n').slice(3, 11).map((l) => Number(l.slice(0, 10)));
+assert.ok(text.slice(xrefAt).startsWith('xref\n0 10\n'), 'startxref points at the xref table');
+const offsets = text.slice(xrefAt).split('\n').slice(3, 12).map((l) => Number(l.slice(0, 10)));
 offsets.forEach((o, i) => assert.ok(text.startsWith(`${i + 1} 0 obj`, o), `xref offset of object ${i + 1}`));
+// /Info dictionary: trailer points at it, Title/Producer are escaped PDF literal strings.
+const infoN = Number(/\/Info (\d+) 0 R/.exec(text)[1]);
+assert.equal(infoN, 9);
+assert.ok(text.includes('9 0 obj\n<< /Title (Trip \\(day 1\\) \\\\ caf?) /Producer (Chromasmith) >>'), 'Info dict with escaped title');
+assert.match(Buffer.from(helpers.contactSheetPdf([{ jpeg, width: 1, height: 1, ptWidth: 1, ptHeight: 1 }])).toString('latin1'), /\/Title \(Contact sheet\) \/Producer \(Chromasmith\)/);
 assert.throws(() => helpers.contactSheetPdf([]), /at least one page/);
 assert.throws(() => helpers.contactSheetPdf([{ jpeg: new Uint8Array([0x89, 0x50]), width: 1, height: 1, ptWidth: 1, ptHeight: 1 }]), /not a JPEG/);
 

@@ -95,7 +95,7 @@
   // Minimal PDF 1.4 writer: one full-page baseline JPEG (DCTDecode, DeviceRGB) per page, placed at
   // the page's physical size in points. The pixels are the already-composed graded page, so the
   // PDF adds no second layout engine. No ICC output intent yet (CHR-236 owns print profiles).
-  function contactSheetPdf(pages) {
+  function contactSheetPdf(pages, info) {
     if (!Array.isArray(pages) || !pages.length) throw new RangeError('A contact-sheet PDF needs at least one page');
     const enc = new TextEncoder(), chunks = [], offsets = [];
     let size = 0;
@@ -114,10 +114,16 @@
       offsets[pn + 2] = size; push(`${pn + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${Math.round(page.width)} /Height ${Math.round(page.height)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
       push(jpeg); push('\nendstream\nendobj\n');
     });
-    const count = 3 + 3 * pages.length, xref = size;
+    // /Info dictionary (Title, Producer) so viewers and Finder show a real document name. Strings are
+    // PDF literal strings: escape \ ( ) and drop control chars; non-ASCII becomes '?' (PDFDocEncoding-safe).
+    const pdfStr = (v) => '(' + String(v).replace(/[^\x20-\x7e]/g, '?').replace(/[\\()]/g, (c) => '\\' + c) + ')';
+    const title = (info && info.title) || 'Contact sheet', producer = (info && info.producer) || 'Chromasmith';
+    const infoN = 3 + 3 * pages.length;
+    offsets[infoN] = size; push(`${infoN} 0 obj\n<< /Title ${pdfStr(title)} /Producer ${pdfStr(producer)} >>\nendobj\n`);
+    const count = infoN + 1, xref = size;
     let tail = `xref\n0 ${count}\n0000000000 65535 f \n`;
     for (let n = 1; n < count; n++) tail += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
-    push(`${tail}trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    push(`${tail}trailer\n<< /Size ${count} /Root 1 0 R /Info ${infoN} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
     const out = new Uint8Array(size);
     let at = 0;
     for (const c of chunks) { out.set(c, at); at += c.length; }
@@ -394,7 +400,7 @@
       }
       const stem = baseName(okPaths[0]).replace(/\.[^.]+$/, '') || 'photos';
       const items = settings.format === 'pdf'
-        ? [{ content: contactSheetPdf(outputs.map((o) => ({ jpeg: o.bytes, width: o.layout.width, height: o.layout.height, ptWidth: o.layout.ptWidth, ptHeight: o.layout.ptHeight }))), fname: `${stem}-contact-sheet.pdf`, mime: 'application/pdf' }]
+        ? [{ content: contactSheetPdf(outputs.map((o) => ({ jpeg: o.bytes, width: o.layout.width, height: o.layout.height, ptWidth: o.layout.ptWidth, ptHeight: o.layout.ptHeight })), { title: `${stem} contact sheet`, producer: 'Chromasmith' }), fname: `${stem}-contact-sheet.pdf`, mime: 'application/pdf' }]
         : outputs.map((o, i) => ({ content: o.bytes, fname: outputs.length === 1 ? `${stem}-contact-sheet.png` : `${stem}-contact-sheet-p${String(i + 1).padStart(2, '0')}.png`, mime: 'image/png' }));
       const receipt = await saveFiles(items);
       if (Array.isArray(receipt) && receipt.some((r) => !r.ok)) throw new Error(receipt.find((r) => !r.ok)?.err || 'Save failed');
