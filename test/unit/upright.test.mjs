@@ -2,7 +2,7 @@
 import { load } from './extract.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-const ctx = load(['upLineSegments', '_upAxisDev', '_upWMedian', 'upLevelAngle', '_upH', '_upSrcLine', '_upVertResid', 'upFitVertical'], { Uint8Array, Float64Array });
+const ctx = load(['upLineSegments', '_upRectLogNFA', '_upLogBinTail', '_upLogGamma', 'upAmount', '_upAxisDev', '_upWMedian', 'upLevelAngle', '_upH', '_upSrcLine', '_upVertResid', 'upFitVertical'], { Uint8Array, Float64Array });
 
 // Anti-aliased dark segments (2px wide) on a mid-grey background, y-down pixel coords.
 function draw(w, h, segs) {
@@ -68,3 +68,37 @@ for (const pv0 of [0.15, -0.22, 0.3]) {
     }
   });
 }
+
+// a-contrario (NFA + density) check: smoothed random texture (foliage/gravel-like) must not
+// produce line segments, while the same detector still finds a real line drawn on top of it.
+// Before the check: 4 / 23 / 189 false segments for blur 1/2/3; after: 0 / 7 / 7.
+function texture(w, h, blur, seed) {
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  let g = new Float32Array(w * h).map(() => rnd());
+  for (let it = 0; it < blur; it++) { const o = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { let s = 0; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) s += g[(y + a) * w + x + b]; o[y * w + x] = s / 9; }
+    g = o; }
+  for (let i = 0; i < g.length; i++) g[i] = Math.min(1, Math.max(0, (g[i] - 0.5) * 4 + 0.5));
+  return g;
+}
+test('false-line check rejects random texture', () => {
+  for (const blur of [1, 2, 3]) {
+    const segs = ctx.upLineSegments(texture(320, 240, blur, 7 + blur), 320, 240);
+    assert.ok(segs.length <= 8, `blur ${blur}: ${segs.length} false segments`);
+  }
+});
+test('false-line check keeps a real line under pixel noise', () => {
+  let seed = 3; const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  const w = 320, h = 240, g = draw(w, h, [[40, 60, 280, 75]]).map(v => Math.min(v, 0.7 - 0.1 * rnd()));
+  const segs = ctx.upLineSegments(g, w, h).filter(s => s.len > 200);
+  assert.ok(segs.length >= 1, 'the drawn line survives');
+});
+test('NFA: tiny regions fail, long aligned regions pass', () => {
+  assert.ok(ctx._upLogBinTail(12, 12, 1 / 8) > -11.5 && ctx._upLogBinTail(12, 12, 1 / 8) < -10.5);
+  assert.ok(Math.abs(ctx._upLogBinTail(10, 0, 0.5)) < 1e-12);
+});
+test('amount scales a correction (default 85%)', () => {
+  assert.equal(ctx.upAmount(4, 85), 3.4);
+  assert.equal(ctx.upAmount(4, 100), 4);
+  assert.equal(ctx.upAmount(4, 0), 0);
+});

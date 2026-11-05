@@ -4721,6 +4721,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <button class="btn bgh" id="btn-upright-level" onclick="uprightLevel()" title="Upright Level: finds the photo's straight lines and rotates so horizontals and verticals are square to the frame.">Level</button>
           <button class="btn bgh" id="btn-upright-vertical" onclick="uprightVertical()" title="Upright Vertical: finds near-vertical lines and sets Vertical and Rotate so they come out parallel and upright.">Vertical</button>
         </div>
+        <div class="fx-row" title="How much of the detected correction Level and Vertical apply. About 85% usually looks more natural than a full correction; 100% makes the lines exactly square."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="85" id="sl-upright-amt" oninput="_upAmtLabel()"><div class="fx-val" id="vl-upright-amt">85%</div></div>
         <div class="fx-row" title="Corrects converging verticals while preserving perspective spacing."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
         <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
         <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
@@ -7602,7 +7603,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105H';
+const BUILD='1.1105I';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -29026,9 +29027,57 @@ function upLineSegments(gray,w,h){
     for(const p of reg){const dx=p%w-mx,dy=((p/w)|0)-my,t=dx*ux+dy*uy,o=-dx*uy+dy*ux;if(t<lo)lo=t;if(t>hi)hi=t;wd+=o*o;}
     const len=hi-lo,thick=Math.sqrt(wd/reg.length);
     if(len<minPts||thick>Math.max(1.5,len*0.06))continue; // blobs and fat regions are not lines
+    // LSD's a-contrario validation: the rectangle must hold far more aligned pixels than chance.
+    let rth=a;if(adiff(rth,th)>Math.PI/2)rth+=Math.PI; // orient the axis like the region's level lines
+    if(_upRectLogNFA(mag,ang,w,h,mx,my,ux,uy,rth,lo,hi,reg,THR,TAU,thick)>=0)continue; // texture, not a line
     segs.push({x1:mx+lo*ux,y1:my+lo*uy,x2:mx+hi*ux,y2:my+hi*uy,len});
   }
   return segs;
+}
+// log10 of the binomial tail P[X>=k], X~Bin(n,p) (LSD's nfa(), Hoeffding-free exact sum with lgamma).
+function _upLogGamma(x){ // Windschitl approximation, as LSD uses for x>15; Lanczos below
+  if(x>15)return 0.918938533204673+(x-0.5)*Math.log(x)-x+0.5*x*Math.log(x*Math.sinh(1/x)+1/(810*Math.pow(x,6)));
+  const q=[75122.6331530,80916.6278952,36308.2951477,8687.24529705,1168.92649479,83.8676043424,2.50662827511];
+  let a=(x+0.5)*Math.log(x+5.5)-(x+5.5),b=0;for(let n=0;n<7;n++){a-=Math.log(x+n);b+=q[n]*Math.pow(x,n);}return a+Math.log(b);
+}
+function _upLogBinTail(n,k,p){
+  if(k<=0)return 0;if(k>n)return -Infinity;
+  const lt=(i)=>(_upLogGamma(n+1)-_upLogGamma(i+1)-_upLogGamma(n-i+1)+i*Math.log(p)+(n-i)*Math.log(1-p));
+  let m=lt(k),sum=1,term=1;
+  for(let i=k+1;i<=n;i++){term*=((n-i+1)/i)*(p/(1-p));sum+=term;if(term<sum*1e-12)break;}
+  return (m+Math.log(sum))/Math.LN10;
+}
+/// log10 NFA of a line-support region's rectangle (von Gioi et al., LSD, IPOL 2012): number of
+/// tests (NM)^(5/2)*11 times the chance that >=k of its n pixels are aligned to within TAU when
+/// orientations are random. < 0 means fewer than one expected false detection per image. Like
+/// LSD's rect_improve it also tries narrower rectangles and keeps the best.
+function _upRectLogNFA(mag,ang,w,h,mx,my,ux,uy,rth,lo,hi,reg,THR,TAU,thick){
+  const logNT=2.5*(Math.log10(w)+Math.log10(h))+Math.log10(11),p=TAU/Math.PI;
+  // Rectangle width: the RMS-equivalent band (sqrt(12)*rms for a uniform spread), not the full
+  // extent, so one stray noisy pixel cannot double a 2px line's width and sink its density.
+  let olo=Infinity,ohi=-Infinity;
+  for(const q of reg){const o=-(q%w-mx)*uy+(((q/w)|0)-my)*ux;if(o<olo)olo=o;if(o>ohi)ohi=o;}
+  const rw=Math.max(1,Math.min(ohi-olo,Math.sqrt(12)*(thick||0)));olo=Math.max(olo,-rw/2);ohi=Math.min(ohi,rw/2);
+  const adiff=(a,b)=>{let d=Math.abs(a-b)%(2*Math.PI);return d>Math.PI?2*Math.PI-d:d;};
+  const nfa=(wlo,whi)=>{
+    const x0=Math.floor(Math.min(mx+lo*ux-wlo*uy,mx+hi*ux-wlo*uy,mx+lo*ux-whi*uy,mx+hi*ux-whi*uy))-1;
+    const x1=Math.ceil(Math.max(mx+lo*ux-wlo*uy,mx+hi*ux-wlo*uy,mx+lo*ux-whi*uy,mx+hi*ux-whi*uy))+1;
+    const y0=Math.floor(Math.min(my+lo*uy+wlo*ux,my+hi*uy+wlo*ux,my+lo*uy+whi*ux,my+hi*uy+whi*ux))-1;
+    const y1=Math.ceil(Math.max(my+lo*uy+wlo*ux,my+hi*uy+wlo*ux,my+lo*uy+whi*ux,my+hi*uy+whi*ux))+1;
+    let n=0,k=0;
+    for(let y=Math.max(1,y0);y<=Math.min(h-2,y1);y++)for(let x=Math.max(1,x0);x<=Math.min(w-2,x1);x++){
+      const dx=x-mx,dy=y-my,t=dx*ux+dy*uy,o=-dx*uy+dy*ux;
+      if(t<lo-0.5||t>hi+0.5||o<wlo-0.5||o>whi+0.5)continue;
+      n++;const i=y*w+x;if(mag[i]>THR&&adiff(ang[i],rth)<=TAU)k++;
+    }
+    return logNT+_upLogBinTail(n,k,p);
+  };
+  // LSD's density gate: a curved edge (a leaf, a cobble) grown into a straight rectangle leaves most
+  // of that rectangle empty; LSD refines such regions and rejects them below 0.7 region/area density.
+  if(reg.length/((hi-lo+1)*(ohi-olo+1))<0.7)return Infinity;
+  let best=nfa(olo,ohi),wl=olo,wh=ohi;
+  for(let s=0;s<5&&wh-wl>1;s++){wl+=0.25;wh-=0.25;const v=nfa(wl,wh);if(v<best)best=v;}
+  return best;
 }
 // Deviation (deg) of a segment from its nearest axis: {axis:'h'|'v', dev}, dev in y-down image
 // degrees (positive = clockwise on screen).
@@ -29094,11 +29143,17 @@ function upFitVertical(segs,w,h,ph){
   }
   return{pv:best.pv,rot:best.rot,lines:c.length};
 }
+// Upright amount (0..100 %, default 85): darktable/ShiftN note that ~80-90 % of a full keystone
+// correction usually looks more natural, as the eye expects slight convergence looking up.
+function upAmount(v,pct){return Math.round(v*(pct==null?85:pct))/100;}
+function _upAmt(){const s=document.getElementById('sl-upright-amt');return s?+s.value:85;}
+function _upAmtLabel(){const s=document.getElementById('sl-upright-amt'),v=document.getElementById('vl-upright-amt');if(s&&v)v.textContent=s.value+'%';if(s&&typeof fxPaintSlider==='function')fxPaintSlider(s);}
 function _upSetSlider(id,v){const s=document.getElementById(id);if(!s)return;s.value=v;const vl=document.getElementById('vl-'+id.slice(3));if(vl)vl.textContent=s.value;if(typeof fxPaintSlider==='function')fxPaintSlider(s);}
 /// Button handlers. Both analyse geomCanvas(it): exactly the frame the lens shader receives.
 function uprightLevel(){
   const it=curItem();if(!it||!it.img){toast('Load a photo first');return;}
-  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h),d=upLevelAngle(segs,G.w,G.h);
+  const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h),d0=upLevelAngle(segs,G.w,G.h);
+  const d=d0===null?null:Math.round(upAmount(d0,_upAmt())*20)/20;
   if(d===null){toast('Level: no clear horizontal or vertical lines found',false);return;}
   if(d===0){toast('Already level',true);return;}
   const g=curGeom(),a=Math.max(-45,Math.min(45,Math.round((((g&&g.angle)||0)+d)*20)/20));
@@ -29111,8 +29166,9 @@ function uprightVertical(){
   const G=_upGray(geomCanvas(it)),segs=upLineSegments(G.g,G.w,G.h);
   const f=upFitVertical(segs,G.w,G.h,adjVal('sl-lens-ph')/250);
   if(!f){toast('Vertical: not enough vertical lines found',false);return;}
-  _upSetSlider('sl-lens-pv',Math.max(-100,Math.min(100,Math.round(f.pv*250))));
-  _upSetSlider('sl-lens-rot',Math.max(-100,Math.min(100,Math.round(f.rot*1800/Math.PI))));
+  const k=_upAmt()/100;
+  _upSetSlider('sl-lens-pv',Math.max(-100,Math.min(100,Math.round(f.pv*k*250))));
+  _upSetSlider('sl-lens-rot',Math.max(-100,Math.min(100,Math.round(f.rot*k*1800/Math.PI))));
   fxUpdate(); // both sliders land in ONE debounced history entry
   toast('Vertical applied',true);log(`Upright Vertical: pv ${f.pv.toFixed(3)}, rot ${(f.rot*180/Math.PI).toFixed(2)}° from ${f.lines} lines`,'ok');
 }

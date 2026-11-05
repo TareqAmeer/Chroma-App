@@ -145,3 +145,4 @@ desktop/src-tauri/vendor/matte/isnet.onnx
 
 # CHR-250 camera RAW samples (CC0; fetched by tools/scripts/fetch-raw-samples.mjs). Never commit.
 test/fixtures/raw-samples/
+test/fixtures/public-samples/

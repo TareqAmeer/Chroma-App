@@ -79,6 +79,9 @@ try {
   const openPanel = () => page.evaluate(() => { if (typeof fxSection === 'function') fxSection('straighten'); });
   await loadSynthetic('vert', 0.2);
   await settle();
+  const setAmt = (v) => page.evaluate((v) => { const s = document.getElementById('sl-upright-amt'); s.value = v; s.dispatchEvent(new Event('input')); }, v);
+  assert.equal(await page.evaluate(() => +document.getElementById('sl-upright-amt').value), 85, 'Amount defaults to 85%');
+  await setAmt(100);
   const vBefore = (await measure()).filter(d => d.axis === 'v').map(d => d.dev);
   assert.ok(vBefore.length >= 4 && Math.max(...vBefore) - Math.min(...vBefore) > 3, `verticals converge before: ${vBefore}`);
   await openPanel(); await page.click('#btn-upright-vertical');
@@ -106,6 +109,17 @@ try {
   await page.evaluate(() => window.fxUndo());
   await settle();
   assert.equal((await sliders()).angle, a0, 'one undo restores Straighten');
+  // Amount 85%: Level applies 85% of the detected angle, Vertical 85% of pv.
+  await setAmt(85);
+  await page.click('#btn-upright-level'); await settle();
+  const s85 = await sliders();
+  assert.ok(Math.abs(s85.angle - a0 + 3.4) <= 0.3, `85% Level -> -3.4 deg, got ${s85.angle - a0}`);
+  await page.evaluate(() => window.fxUndo()); await settle();
+  await loadSynthetic('vert', 0.2); await settle();
+  await page.click('#btn-upright-vertical'); await settle();
+  const v85 = await sliders();
+  assert.ok(Math.abs(v85.pv - 42.5) <= 4, `85% Vertical -> ~42 slider, got ${v85.pv}`);
+  assert.equal(await page.evaluate(() => document.getElementById('vl-upright-amt').textContent), '85%');
   console.log('PASS: Upright Level/Vertical set the existing controls, the real render comes out level/upright, undo restores');
 } finally {
   await browser.close();

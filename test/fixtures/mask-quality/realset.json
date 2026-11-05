@@ -1,0 +1,539 @@
+{
+ "note": "CHR-297 public real-photo set: selection list only, photos are fetched by tools/scripts/mask_realset_fetch.py into test/output/mask-realset/ (gitignored).",
+ "sources": {
+  "p3m": {
+   "repo": "nobg/P3M-10K",
+   "file": "data/P3M_500_NP-00000-of-00001.parquet",
+   "home": "https://github.com/JizhiziLi/P3M",
+   "url": "https://huggingface.co/datasets/nobg/P3M-10K"
+  },
+  "aim": {
+   "repo": "nobg/AIM-500",
+   "file": "data/test-00000-of-00001.parquet",
+   "home": "https://github.com/JizhiziLi/AIM",
+   "url": "https://huggingface.co/datasets/nobg/AIM-500"
+  },
+  "dis": {
+   "repo": "nobg/DIS5K",
+   "file": "data/DIS_TE1-00000-of-00001-f9bce3f0fddcae93.parquet",
+   "home": "https://github.com/xuebinqin/DIS",
+   "url": "https://huggingface.co/datasets/nobg/DIS5K"
+  },
+  "ade": {
+   "repo": "1aurent/ADE20K",
+   "file": "data/validation-00000-of-00001.parquet",
+   "home": "https://groups.csail.mit.edu/vision/datasets/ADE20K/",
+   "url": "https://huggingface.co/datasets/1aurent/ADE20K"
+  },
+  "celeb": {
+   "repo": "v-xchen-v/celebamask_hq",
+   "file": "data/train-00000-of-00006.parquet",
+   "home": "https://github.com/switchablenorms/CelebAMask-HQ",
+   "url": "https://huggingface.co/datasets/v-xchen-v/celebamask_hq"
+  }
+ },
+ "fixtures": [
+  {
+   "id": "portrait-001",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 0,
+   "sha256": "11e33552d06da55805474a27184269b4e420ff01c11c92017b1dc6cd09f5fc97",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.4767
+  },
+  {
+   "id": "portrait-002",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 50,
+   "sha256": "35eebfe228d4a1cc529f9432a95f7dafe3f7fc869f00764426639cc9784236b4",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.4323
+  },
+  {
+   "id": "portrait-003",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 100,
+   "sha256": "2d5eeb0dae97e5c264c271a04f5456d7e207c0171f756ce1790a8cc9d8174d67",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.1533
+  },
+  {
+   "id": "portrait-004",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 150,
+   "sha256": "c60f3d9dcd24529b4834602adf322842a9d060efd8ec22132fee36b52c158b58",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.5056
+  },
+  {
+   "id": "portrait-005",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 200,
+   "sha256": "14fa01c6a5d77bccb89dad80bcf41eb4eb32dc655e76be94f402b80b3884177a",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.2132
+  },
+  {
+   "id": "portrait-006",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 250,
+   "sha256": "1b680491b92cfab643b3f3767af3230c8c61393f93db3665895bd4c7b860a8fa",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.253
+  },
+  {
+   "id": "portrait-007",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 300,
+   "sha256": "7aef02c95ebed895a16f2b01118f39a0736a195a497445a4e96628f756c6c7b8",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.3228
+  },
+  {
+   "id": "portrait-008",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 350,
+   "sha256": "a1aef533be57c723223d39dac74c789b764794046578ce7c64b42d00551b1859",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.3725
+  },
+  {
+   "id": "portrait-009",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 400,
+   "sha256": "0d43279ec8f3954acfeb27083e9b24c5a708ee46e4ead99c50d03e250ba77d4c",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.2281
+  },
+  {
+   "id": "portrait-010",
+   "category": "portrait",
+   "source": "p3m",
+   "row": 450,
+   "sha256": "4d9361d6e4a8378dc5bb0da1fbd8febb38fc92866c4f9f3da0d7e62bdbe6b2dd",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.4049
+  },
+  {
+   "id": "object-001",
+   "category": "object",
+   "source": "aim",
+   "row": 0,
+   "sha256": "4790523188e39dcc1e84dec431e558e91ccbad68e34094894ad6fc54cbf5fa99",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.4066,
+   "name": "o_004cddc9",
+   "aimType": "SO"
+  },
+  {
+   "id": "object-002",
+   "category": "object",
+   "source": "aim",
+   "row": 6,
+   "sha256": "a682ac44d70450a636d0aa8a9a51d3b0b813cc06510f159fdce9a8b66e0e29bd",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.2204,
+   "name": "o_053490ad",
+   "aimType": "SO"
+  },
+  {
+   "id": "object-003",
+   "category": "object",
+   "source": "aim",
+   "row": 12,
+   "sha256": "fbff814192f9d4e933c2335aa07989299743c9d5a0dd5ef05c8c87de3765ee8a",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.336,
+   "name": "o_09b8ed47",
+   "aimType": "SO"
+  },
+  {
+   "id": "object-004",
+   "category": "object",
+   "source": "aim",
+   "row": 24,
+   "sha256": "e97ef74ea0799850bf4fee9d8b287bf702a835887e179a9d328ad296bee0dcef",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.3018,
+   "name": "o_0fc8d771",
+   "aimType": "SO"
+  },
+  {
+   "id": "object-005",
+   "category": "object",
+   "source": "aim",
+   "row": 30,
+   "sha256": "396593b78449a4274def668fbe87d897cf8060e83c0b7a6de4aaea91a0e92d57",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.2145,
+   "name": "o_12c828bc",
+   "aimType": "STM"
+  },
+  {
+   "id": "object-006",
+   "category": "object",
+   "source": "aim",
+   "row": 36,
+   "sha256": "95dc094ac5d13ca2c6ca94287033e3aa4ec85863c3b8851ae9de321ba256d32e",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.0521,
+   "name": "o_1546f28b",
+   "aimType": "NS"
+  },
+  {
+   "id": "object-007",
+   "category": "object",
+   "source": "aim",
+   "row": 42,
+   "sha256": "7e90a3b6f2c602542ff0e67ed7426bcdaf59a8a7a611d8b3d12169ccba7300b6",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.2472,
+   "name": "o_1a9abc07",
+   "aimType": "SO"
+  },
+  {
+   "id": "object-008",
+   "category": "object",
+   "source": "aim",
+   "row": 48,
+   "sha256": "fef80afbe2744d8a5f102165ef442f7a56c2a26cdb8384c85df183ec78a09453",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.1864,
+   "name": "o_1b6adf19",
+   "aimType": "SO"
+  },
+  {
+   "id": "fine-edge-001",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 0,
+   "sha256": "5ea97748f3ece483ab1bafa7d91488329d3c8ee706de67745a0fe94a43dffa21",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.5786,
+   "name": "1#Accessories#1#Bag#26345192014_f722d1ef0b_o.jpg"
+  },
+  {
+   "id": "fine-edge-002",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 40,
+   "sha256": "0990f11ff0607d3808f43157b0ed1f7c7cf5ca169c1be307b585ac20ed53cfeb",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.1262,
+   "name": "10#Frame#1#BasketballHoop#IMG_20210701_214143.jpg"
+  },
+  {
+   "id": "fine-edge-003",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 80,
+   "sha256": "d5d7be00ea2ef7b4a4c5675c5992d3bb6deb6efa27489ffc96d984600078650d",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.0875,
+   "name": "11#Furniture#13#Ladder#36394692211_7054fe209b_o.jpg"
+  },
+  {
+   "id": "fine-edge-004",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 120,
+   "sha256": "cdd3691f525108351428f8930ba68e3066f846781a40b063d06bc1ec094c3235",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.1529,
+   "name": "11#Furniture#2#Bench#8190876431_717af3f29b_o.jpg"
+  },
+  {
+   "id": "fine-edge-005",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 160,
+   "sha256": "012c3f43c12b5017187b80253955be0062999f75501e44a577c862b27abd6ce3",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.0545,
+   "name": "13#Insect#10#Mosquito#4867892704_b56452c4d7_o.jpg"
+  },
+  {
+   "id": "fine-edge-006",
+   "category": "fine-edge",
+   "source": "dis",
+   "row": 200,
+   "sha256": "d6c7366801dc6ac9db3eb25832b38fa2dfa06d820814e1839e8db4123e5c459e",
+   "tasks": [
+    "subject",
+    "click"
+   ],
+   "gtCoverage": 0.1585,
+   "name": "14#Kitchenware#7#Stove#IMG_20210520_204633.jpg"
+  },
+  {
+   "id": "sky-001",
+   "category": "sky",
+   "source": "ade",
+   "row": 619,
+   "sha256": "b220f57eb3afec2e3e752c082e55d6509390da40a5806f6b4dcc10b836e58bdf",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.1817,
+   "name": "ADE_val_00000275.jpg"
+  },
+  {
+   "id": "sky-002",
+   "category": "sky",
+   "source": "ade",
+   "row": 623,
+   "sha256": "c3ae0dc463b30926fd5fb5238f576d05cfd6da580778d5e1ac71c035fdff7ea8",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.2402,
+   "name": "ADE_val_00000369.jpg"
+  },
+  {
+   "id": "sky-003",
+   "category": "sky",
+   "source": "ade",
+   "row": 626,
+   "sha256": "7b8cb19f7691b4a8c5027916801a980dbb5d00117ba96ed2b42ba467d818a3ac",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.2859,
+   "name": "ADE_val_00001443.jpg"
+  },
+  {
+   "id": "sky-004",
+   "category": "sky",
+   "source": "ade",
+   "row": 629,
+   "sha256": "3de27e05c128d2853e5a70d55e0a757e2f32d68ab2a89d3641226d81f0c621ac",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.2292,
+   "name": "ADE_val_00000498.jpg"
+  },
+  {
+   "id": "sky-005",
+   "category": "sky",
+   "source": "ade",
+   "row": 634,
+   "sha256": "3e35f8a8c6ddf8b56c2b6fe6980f1ee469a3db274a27d8236d5bd8a21f77c3fa",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.1786,
+   "name": "ADE_val_00001726.jpg"
+  },
+  {
+   "id": "sky-006",
+   "category": "sky",
+   "source": "ade",
+   "row": 638,
+   "sha256": "c0ce691185abb6489f0b1f474da0040278a4c276b7cd48b1ed76af751a6c5c32",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.0712,
+   "name": "ADE_val_00000874.jpg"
+  },
+  {
+   "id": "sky-007",
+   "category": "sky",
+   "source": "ade",
+   "row": 642,
+   "sha256": "82cc83e7674d03359f3bc0845e4c2828f5db97d9ba1e970aab1b3c5d3e2f0821",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.1223,
+   "name": "ADE_val_00000917.jpg"
+  },
+  {
+   "id": "sky-008",
+   "category": "sky",
+   "source": "ade",
+   "row": 646,
+   "sha256": "3252ed0d16c6edb635a6421db69ef9bbd837dbab8e32a7150eaed2c8e6a0120e",
+   "tasks": [
+    "sky"
+   ],
+   "gtCoverage": 0.5689,
+   "name": "ADE_val_00001110.jpg"
+  },
+  {
+   "id": "face-001",
+   "category": "face",
+   "source": "celeb",
+   "row": 0,
+   "sha256": "2325a3166b0f36e115544e8fa4a47eca2c05bb817005101bad97f3006c1df8f3",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2842
+  },
+  {
+   "id": "face-002",
+   "category": "face",
+   "source": "celeb",
+   "row": 12,
+   "sha256": "245f448d4cfdc93d80a104f81f63f2c6d4eabc97438c5d5aa38000df45a6b40d",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2727
+  },
+  {
+   "id": "face-003",
+   "category": "face",
+   "source": "celeb",
+   "row": 24,
+   "sha256": "6da702fe628d603a51d869a86da32560218b4b677c63d53c1342d7be544ce39e",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2817
+  },
+  {
+   "id": "face-004",
+   "category": "face",
+   "source": "celeb",
+   "row": 36,
+   "sha256": "210c6e70ed813be55705b46c8690a333d22f2d3855f7b8abc71d181100e5d6a4",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.1926
+  },
+  {
+   "id": "face-005",
+   "category": "face",
+   "source": "celeb",
+   "row": 48,
+   "sha256": "6a03f3984001829f09ef50a28aeb1ebd02df2826b395f0f8fd1f6c61e7db83fa",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.3239
+  },
+  {
+   "id": "face-006",
+   "category": "face",
+   "source": "celeb",
+   "row": 60,
+   "sha256": "83291f9fac84db4a0e4a72e122c43d8a015c39c47266255e2ca721e2fd330960",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2593
+  },
+  {
+   "id": "face-007",
+   "category": "face",
+   "source": "celeb",
+   "row": 72,
+   "sha256": "24fc2fc1df94634af2304e64e193cd22112c56174c748763ee0a1037b89a7706",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2771
+  },
+  {
+   "id": "face-008",
+   "category": "face",
+   "source": "celeb",
+   "row": 84,
+   "sha256": "c63771fec074fdc0b293db41c7aa66204aa6e2b671ae2374e16d94bbc4e98c35",
+   "tasks": [
+    "face-skin",
+    "face-hair"
+   ],
+   "gtCoverage": 0.2361
+  }
+ ]
+}
