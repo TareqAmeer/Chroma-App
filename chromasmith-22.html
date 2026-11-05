@@ -545,7 +545,7 @@ body.mobile-fx .hsl-chip{border-width:var(--bw-3)}
 .seg>button.on{background:var(--sur);color:var(--txt);box-shadow:inset 0 1px 0 var(--hov)}
 /* ══ MASK PANEL ══════════════════════════════════════════════════════════════════════════════ */
 .msk-rowbar{display:flex;flex-wrap:nowrap;align-items:center;gap:var(--sp-1) var(--sp-2);padding:var(--sp-1) 0 var(--sp-3);border-bottom:1px solid var(--bdr);margin-bottom:var(--sp-2)}
-.msk-edit-note{font-size:var(--fs-1);color:var(--mut);margin:0 0 var(--sp-2);padding:var(--sp-1) var(--sp-2);border-left:3px solid var(--acc,#e8a33d);background:var(--bs-shade,rgba(128,128,128,.08));border-radius:0 var(--r-1,4px) var(--r-1,4px) 0}
+.msk-edit-note{font-size:var(--fs-1);color:var(--mut);margin:0 0 var(--sp-2);padding:var(--sp-1) var(--sp-2);border-left:3px solid var(--acc,#e8a33d);background:var(--bs-shade,rgba(128,128,128,.08));border-radius:0 var(--r-sm) var(--r-sm) 0}
 #local-list>button[data-gr]{box-shadow:inset 3px 0 0 var(--grp)}
 body.sk2 #local-list>.btn[data-gr]{box-shadow:inset 3px 0 0 var(--grp)!important}
 body.sk2 #local-list>.btn.bsec[data-gr]{box-shadow:inset 3px 0 0 var(--grp),inset 5px 0 0 var(--k-color-accent-a)!important}
@@ -7627,7 +7627,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105R';
+const BUILD='1.1105S';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
