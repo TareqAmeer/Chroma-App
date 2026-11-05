@@ -5,7 +5,7 @@
 //   NODE_USE_ENV_PROXY=1 node tools/scripts/fetch-raw-samples.mjs
 // Usage: node test/raw_decode_coverage.mjs [--json out.json] [--half] [--only id,id] [--thumbs dir]
 // Records per sample: suffix accepted by FMT_RAW_WEB, decode OK / error, output size, orientation,
-// colour path taken (bundled DCP vs LibRaw sRGB fallback), decode time. It does NOT test the
+// colour path taken (bundled DCP vs LibRaw sRGB fallback), decode time, SHA-256 of the full-res pixels. It does NOT test the
 // native Rust (rawler) desktop path. Exits 1 only if no sample file is present.
 const { chromium } = await import(process.env.CHROMASMITH_PLAYWRIGHT_MODULE || 'playwright');
 import { createServer } from 'node:http';
@@ -81,6 +81,11 @@ try {
           const d = g.getImageData(0, 0, c.width, c.height).data; let sum = 0, sq = 0, n = 0;
           for (let i = 0; i < d.length; i += 4) { const y = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += y; sq += y * y; n++; }
           out.meanLuma = +(sum / n).toFixed(1); out.stdLuma = +Math.sqrt(sq / n - (sum / n) ** 2).toFixed(1);
+          // Full-resolution pixel hash: lets a decode-path change prove pixel-identical output.
+          { const fc = document.createElement('canvas'); fc.width = res.canvas.width; fc.height = res.canvas.height;
+            const fg = fc.getContext('2d'); fg.drawImage(res.canvas, 0, 0);
+            const px = fg.getImageData(0, 0, fc.width, fc.height).data;
+            out.pixelSha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', px))].map((b) => b.toString(16).padStart(2, '0')).join(''); }
           if (thumbs) { const t = document.createElement('canvas'); t.width = 480; t.height = Math.round(480 * res.canvas.height / res.canvas.width); t.getContext('2d').drawImage(res.canvas, 0, 0, t.width, t.height); out.thumb = t.toDataURL('image/jpeg', 0.8); }
         } catch (e) {
           Object.assign(out, { ok: false, ms: Math.round(performance.now() - t0), error: String(e && e.message || e) });

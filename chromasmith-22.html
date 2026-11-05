@@ -7602,7 +7602,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105C';
+const BUILD='1.1105D';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13880,6 +13880,48 @@ function rawSharedMemoryOk(){
   if(!capAndroid())return false;
   try{new WebAssembly.Memory({initial:1,maximum:1,shared:true});return true;}catch(e){return false;}
 }
+// CHR-250: camera make/model read straight from the file header, BEFORE LibRaw runs, so loadRw2
+// can tell up front that no bundled DCP applies and decode once (LibRaw sRGB) instead of twice
+// (linear for the DCP, then again for the sRGB fallback — 58 s for a full X-Pro2 RAF). Covers
+// TIFF-structured RAWs (CR2/NEF/ARW/ORF/RW2/PEF/3FR/IIQ/DNG: Make 271 / Model 272 in IFD0, its
+// chain, SubIFDs or the Exif IFD) and Fuji RAF (model at 0x1C of the fixed header). Anything else
+// (CR3, X3F, …) returns null and keeps the old decode-then-decide path. Only a hint: loadRw2
+// re-checks LibRaw's own make/model after the decode and re-decodes linear if the hint was wrong.
+function rawSniffMakeModel(bytes){
+  try{
+    const n=bytes.length;if(n<32)return null;
+    const str=(o,len)=>{let s='';for(let i=0;i<len&&o+i<n;i++){const c=bytes[o+i];if(!c)break;s+=String.fromCharCode(c);}return s.trim();};
+    if(str(0,15)==='FUJIFILMCCD-RAW')return{make:'FUJIFILM',model:str(0x1C,32)};
+    const le=bytes[0]===0x49&&bytes[1]===0x49;
+    if(!le&&!(bytes[0]===0x4D&&bytes[1]===0x4D))return null;
+    const d=new DataView(bytes.buffer,bytes.byteOffset,n);
+    let make=null,model=null;const seen=new Set();
+    const walk=(off,depth)=>{
+      if(depth>4||!off||seen.has(off)||off+2>n||make&&model)return;
+      seen.add(off);
+      const cnt=d.getUint16(off,le);if(cnt>1000)return;
+      const next=[];
+      for(let i=0;i<cnt;i++){
+        const e=off+2+12*i;if(e+12>n)return;
+        const tag=d.getUint16(e,le),typ=d.getUint16(e+2,le),c=d.getUint32(e+4,le),v=c>4?d.getUint32(e+8,le):e+8;
+        if(typ===2&&(tag===271||tag===272)&&c<256&&v+c<=n){const s=str(v,c);if(tag===271&&make==null)make=s;else if(tag===272&&model==null)model=s;}
+        else if((tag===330||tag===34665)&&(typ===4||typ===13)){for(let k=0;k<c&&k<8;k++){const p=c>1?v+4*k:e+8;if(p+4<=n)next.push(d.getUint32(p,le));}}
+      }
+      if(off+2+12*cnt+4<=n)next.push(d.getUint32(off+2+12*cnt,le));
+      for(const o of next)walk(o,depth+1);
+    };
+    walk(d.getUint32(4,le),0);
+    return make&&model?{make,model}:null;
+  }catch(e){return null;}
+}
+// True only when the header names a camera that NO bundled DCP entry could match. Deliberately
+// looser than cameraDcpPrefix (model regex alone, against model and make+model) because LibRaw
+// normalizes make strings ("NIKON CORPORATION" -> "Nikon"); a false "might match" only costs the
+// old two-decode path, never a wrong colour path.
+function rawSniffRulesOutBundledDcp(sn){
+  if(!sn||!sn.make||!sn.model)return false;
+  return !CAMERA_DCP_PREFIXES.some(c=>c.model.test(sn.model)||c.model.test(sn.make+' '+sn.model));
+}
 async function loadRw2(file,opts){
   // opts.half (browser only): LibRaw half-size decode — each 2×2 Bayer block becomes one pixel, so
   // no demosaic and a quarter of the pixels through every JS pass below. Used for the on-screen
@@ -13904,50 +13946,84 @@ async function loadRw2(file,opts){
   let m,img;
   const dcpSettings={halfSize:half,useCameraWb:true,outputColor:0,outputBps:16,gamm:[1,1],noAutoBright:true,userQual:3,userFlip:-1,filmSource}; // linear 16-bit camera RGB (DCP input space)
   const sdrSettings={halfSize:half,useCameraWb:true,outputColor:1,outputBps:8,userQual:3,userFlip:-1,filmSource};                               // sRGB, 8-bit, AHD, camera WB
+  // The LibRaw sRGB fallback's exact settings (used up front by sdrFirst, or as the re-decode below).
+  const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
+  // CHR-250: browser only (desktop's native shim develops in Rust and never re-decodes). When the
+  // file header already rules out every bundled DCP and the file carries no embedded DNG profile,
+  // the linear decode below would only be thrown away for the sRGB fallback — so decode straight
+  // to the fallback's settings: one LibRaw run instead of two, byte-identical pixels.
+  let embDcp=null,sdrFirst=false;
+  if(profile&&!srcPath&&!window.__TAURI__&&rawSniffRulesOutBundledDcp(rawSniffMakeModel(bytesCopy))){
+    embDcp=parseDngEmbeddedProfile(bytesCopy);
+    sdrFirst=!embDcp;
+  }
   try{
     await withRawDecodeTimeout(raw,async()=>{
-      const openSettings={...(profile?dcpSettings:sdrSettings),filmSource};
+      const openSettings=sdrFirst?{...fallbackSettings}:{...(profile?dcpSettings:sdrSettings),filmSource};
       if(srcPath)openSettings.sourcePath=srcPath;
-      if(rawDecodeSettings)Object.assign(openSettings,rawDecodeSettings);
+      if(rawDecodeSettings&&!sdrFirst)Object.assign(openSettings,rawDecodeSettings);
       if(privateEntry)openSettings.privateEntry=true;
       await raw.open(bytes,openSettings);
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-opened');
-      m=await raw.metadata();
-      // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
-      if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
-      if(profile)profile=rawProfileFor(m,profile);
+      // ⚠️ sdrFirst reads metadata AFTER imageData, exactly like the old fallback decode (which never
+      // called metadata()): libraw-wasm 1.1.2's open() frees its copy of the file while LibRaw still
+      // reads from it during unpack (use-after-free, fixed upstream by keeping the buffer as a member),
+      // so ANY allocation in between — metadata() included — changes what a lazily-read file decodes
+      // to. Measured on the Phase One IIQ: metadata-first altered pixels across the whole frame. The
+      // other 9 samples are unaffected either way; this order keeps all 10 byte-identical to before.
+      // Side effect: on a half-size decode, metadata read after processing reports the halved frame
+      // in width/height (make/model/iso unchanged). No caller reads meta.width/height (checked
+      // with app-uses/grep); the probe test/raw_decode_coverage.mjs only logs them.
+      const meta=async()=>{
+        m=await raw.metadata();
+        // libraw-wasm names these camera_make/camera_model; everything below (and the desktop shim) reads make/model. Without this the web build found no bundled profile for ANY camera and decoded every RAW a second time.
+        if(m){if(m.make==null)m.make=m.camera_make;if(m.model==null)m.model=m.camera_model;}
+        if(profile)profile=rawProfileFor(m,profile);
+      };
+      if(!sdrFirst)await meta();
       img=await raw.imageData(); // {width,height,colors,bits,dataSize,data:Uint8Array|Uint16Array}
+      if(sdrFirst)await meta();
       if(!privateEntry)window.__pm&&window.__pm('loadRw2-imagedata');
     });
   }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
   finally{try{raw.worker.terminate()}catch(_){}} // free the worker's grown wasm shared memory (~0.5–1GB) — leaking it per decode is fatal on phones
-  // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
-  // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
-  // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
-  // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
-  // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
-  // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
-  // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
-  let embDcp=null;
   // CHR-162: skipped when the native shell already developed the pixels (img.rgba — a bundled,
   // Adobe-on-disk or embedded-DNG profile LUT applied in Rust): parsing needs the whole file
   // (75MB for an iPhone ProRAW, over IPC), and the sRGB fallback below would then throw that
   // develop away and decode the RAW a second time.
-  if(profile&&!img.rgba&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
-  if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
-    profile=null;
+  const decodeAgain=async settings=>{
     const raw2=new LibRaw();
     try{
       await withRawDecodeTimeout(raw2,async()=>{
-        const fallbackSettings={...sdrSettings,...(rawDecodeSettings||{}),profile:'',outputColor:1,outputBps:8};
-        if(srcPath)fallbackSettings.sourcePath=srcPath;
-        if(privateEntry)fallbackSettings.privateEntry=true;
-        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),fallbackSettings);
+        const st={...settings};
+        if(srcPath)st.sourcePath=srcPath;
+        if(privateEntry)st.privateEntry=true;
+        await raw2.open(srcPath?new Uint8Array(0):await fullBytes(),st);
         img=await raw2.imageData();
       });
     }catch(e){throw new Error('RW2 decode failed: '+errStr(e))}
     finally{try{raw2.worker.terminate()}catch(_){}}
-    if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');
+  };
+  const noProfileLog=()=>{if(!privateEntry)log(`No bundled colour profile for ${m.make||''} ${m.model||''} — using the file's embedded colour matrix (LibRaw sRGB)`,'info');};
+  if(sdrFirst){
+    if(!cameraDcpPrefix(m.make,m.model)){profile=null;noProfileLog();}
+    // The header hint was wrong (LibRaw's own make/model DOES match a bundled DCP): redo the
+    // linear decode the DCP path needs. Never expected; costs the old second decode, nothing worse.
+    else await decodeAgain({...dcpSettings,...(rawDecodeSettings||{})});
+  }else{
+    // No bundled DCP for this camera (iPhone/Pixel/Samsung DNG, other bodies…): fall back to
+    // LibRaw's own sRGB render, which uses the colour matrix embedded in the file, instead of failing.
+    // ⚠️ NOT gated on window.__TAURI__ (CHR-133 follow-up): the original fix only handled the
+    // browser/wasm path. On desktop, NativeLibRawShim.open() independently downgrades to
+    // mode='linear16' when camPrefix is missing (it never throws), but THIS function still ran
+    // the DCP branch below against that linear16 buffer and threw on the missing camPrefix —
+    // so desktop iPhone/DNG opens failed even though the native shim itself handled it gracefully.
+    if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model))embDcp=parseDngEmbeddedProfile(await fullBytes());
+    if(profile&&!img.rgba&&!embDcp&&!cameraDcpPrefix(m.make,m.model)){
+      profile=null;
+      await decodeAgain(fallbackSettings);
+      noProfileLog();
+    }
   }
   // Auto-enable the V-Log input transform (ROADMAP.md F2, first half) — Panasonic PhotoStyle
   // 17 means the file IS V-Log, so grading it as Standard/Rec.709 looks badly wrong (flat,
