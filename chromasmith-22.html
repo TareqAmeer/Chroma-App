@@ -7598,7 +7598,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1105A';
+const BUILD='1.1105B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -14712,12 +14712,71 @@ async function verRender(){
     const acts=(cur?'':`<button class="btn bgh" style="${sb}" onclick="verCompare(${i})">Compare</button><button class="btn bgh" style="${sb}" onclick="verMakeCurrent(${i})">Make current</button>`)
       +(hasV?`<button class="btn bgh" style="${sb}" onclick="verRename(${i})">Rename</button>`:'')+(hasV&&!cur?`<button class="btn bgh" style="${sb}" onclick="verDelete(${i})">Delete</button>`:'');
     return `<div class="ver-row" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)">
-      ${cur&&thumb?`<img src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`:'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
+      ${cur&&thumb?`<img class="ver-thumb" data-ver-cur="1" src="${thumb}" width="72" alt="" style="outline:2px solid var(--k-color-accent-a);flex:0 0 auto">`
+        :v.recipe?`<img class="ver-thumb" data-ver-i="${i}" width="72" alt="" style="min-height:48px;background:var(--bdr);flex:0 0 auto">`
+        :'<div style="width:72px;height:48px;border:1px solid var(--bdr);flex:0 0 auto"></div>'}
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.name)}</div>
         <div class="fx-hint" style="margin:0">${cur?'Current':'Saved version'}</div>
         ${acts?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${acts}</div>`:''}
       </div></div>`;}).join('');
+  vers.forEach((v,i)=>{if(i!==act&&v.recipe)verThumb(v.recipe).then(url=>{
+    const el=host.querySelector(`img[data-ver-i="${i}"]`);if(el&&url)el.src=url;}).catch(e=>console.warn('version thumbnail',e&&e.message||e));});
+}
+// Per-version thumbnails: each saved version's OWN recipe rendered small, so the rows show what
+// each version looks like rather than the current edit. Rendered in a hidden render-only copy of
+// the app (?csrender=1 -> csRenderEditPreview, the same instance the Library's edited previews
+// use), so the live Editor's sliders/LUT/masks are never swapped, a version's look can load
+// asynchronously, and nothing here can write history or the sidecar. Strictly sequential, cached
+// by (photo, recipe) — a changed recipe is a different key, so it re-renders by itself — and the
+// hidden instance is dropped after 60s idle. Source = the current photo's own pixels downscaled
+// (RAW photos therefore render from the developed image, without per-version RAW settings).
+const VER_THUMB_EDGE=144;
+const _verT={frame:null,ready:null,chain:Promise.resolve(),cache:new Map(),src:null,srcImg:null,srcId:0,idle:0,ids:new WeakMap(),n:0};
+function _verHash(s){let a=0x811c9dc5,b=0x9747b28c;for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);a=Math.imul(a^c,0x01000193)>>>0;b=Math.imul(b+c+i,0x85ebca6b)>>>0;b^=b>>>13;}
+  return a.toString(16)+'.'+(b>>>0).toString(16);}
+function _verThumbFrame(){
+  clearTimeout(_verT.idle);
+  if(_verT.ready)return _verT.ready;
+  const f=document.createElement('iframe');f.setAttribute('aria-hidden','true');f.tabIndex=-1;f.title='version thumbnail renderer';
+  f.style.cssText='position:fixed;left:0;top:0;width:640px;height:480px;border:0;opacity:0;pointer-events:none;z-index:-1';
+  f.src=location.pathname+'?csrender=1';document.body.appendChild(f);_verT.frame=f;
+  _verT.ready=new Promise((res,rej)=>{const t0=performance.now();const tick=()=>{
+    if(_verT.frame!==f)return rej(new Error('renderer closed'));
+    let w=null;try{w=f.contentWindow;}catch(_){}
+    if(w&&typeof w.csRenderEditPreview==='function')return res(w);
+    if(performance.now()-t0>60000)return rej(new Error('renderer did not boot'));setTimeout(tick,100);};tick();});
+  _verT.ready.catch(()=>_verThumbDrop());
+  return _verT.ready;
+}
+function _verThumbDrop(){clearTimeout(_verT.idle);if(_verT.frame)_verT.frame.remove();_verT.frame=null;_verT.ready=null;}
+// The current photo as a JPEG a few times the thumbnail size (cached per source image).
+async function _verThumbSource(){
+  const it=curItem(),img=it&&it.img;if(!img)throw new Error('no photo');
+  if(_verT.srcImg===img&&_verT.src)return _verT.src;
+  if(!_verT.ids.has(img))_verT.ids.set(img,++_verT.n);
+  const w0=img.naturalWidth||img.width,h0=img.naturalHeight||img.height,k=Math.min(1,VER_THUMB_EDGE*3/Math.max(w0,h0));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w0*k));c.height=Math.max(1,Math.round(h0*k));
+  const g=c.getContext('2d');g.imageSmoothingQuality='high';g.drawImage(img,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));if(!blob)throw new Error('encode failed');
+  _verT.srcImg=img;_verT.srcId=_verT.ids.get(img);_verT.src=await blob.arrayBuffer();return _verT.src;
+}
+/// Object URL of `recipeB64` rendered on the current photo. Cached; renders queue one at a time.
+function verThumb(recipeB64){
+  const it=curItem(),img=it&&it.img;if(!img)return Promise.resolve(null);
+  if(!_verT.ids.has(img))_verT.ids.set(img,++_verT.n);
+  const key=_verT.ids.get(img)+':'+_verHash(recipeB64);
+  if(_verT.cache.has(key))return _verT.cache.get(key);
+  const p=_verT.chain.then(async()=>{
+    const src=await _verThumbSource(),w=await _verThumbFrame();
+    const out=await w.csRenderEditPreview(src.slice(0),recipeB64,VER_THUMB_EDGE);
+    return URL.createObjectURL(new Blob([out],{type:'image/jpeg'}));
+  });
+  _verT.chain=p.catch(()=>{}).then(()=>{clearTimeout(_verT.idle);_verT.idle=setTimeout(_verThumbDrop,60000);});
+  p.catch(()=>_verT.cache.delete(key));
+  _verT.cache.set(key,p);
+  if(_verT.cache.size>48){const [k0,old]=_verT.cache.entries().next().value;_verT.cache.delete(k0);old.then(u=>u&&URL.revokeObjectURL(u)).catch(()=>{});}
+  return p;
 }
 async function verSaveNew(){const api=window.chromasmithVersions;if(!api)return;
   const name=(await askTextModal('Save as new version','The current edit stays as it is; the new version starts as a copy of it.')||'').trim();if(!name)return;
