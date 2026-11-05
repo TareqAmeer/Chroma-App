@@ -120,17 +120,61 @@ function cropSetGrid(v){cropGrid=v;const sel=document.getElementById('sel-crop-g
 //   'blend'       ramps clipped pixels toward neutral at their brightest channel's value
 //                 (from 80% of the clip threshold up to it) — removes the magenta/cyan cast only.
 //   'propagate'   colour propagation: the chromaticity (channel / channel-mean) of unclipped
-//                 pixels diffuses into each clipped region by repeated 8-neighbour averaging
-//                 (Jacobi, deterministic); each clipped channel becomes ratio * level, the level
+//                 pixels is filled into each clipped region by a push-pull mip-pyramid
+//                 (hlPushPull: one linear pass, holes of any size, deterministic); each clipped channel becomes ratio * level, the level
 //                 taken from the unclipped channels (or, all clipped, the largest lower bound).
-//   'opposed'     inpaint opposed: per channel, the mean cube-root difference between it and the
-//                 mean of the two opposed channels, measured on unclipped pixels within 2px of
-//                 clipped ones, is added back to the opposed mean wherever that channel clipped.
+//   'opposed'     inpaint opposed: per channel AND per connected clipped region, the mean cube-root
+//                 difference between it and the mean of the two opposed channels, measured on
+//                 unclipped pixels within 2px of that region, is added back to the opposed mean wherever that channel clipped.
 // A reconstructed channel never drops below its recorded (clipped) value.
 function hlClippedMask(rgb,n,clip,thr){
   const m=new Uint8Array(n);let any=0;
   for(let i=0;i<n;i++){let k=0;for(let c=0;c<3;c++)if(rgb[3*i+c]>=clip[c]*thr)k|=1<<c;m[i]=k;if(k)any=1;}
   return any?m:null;
+}
+// Push-pull (mip-pyramid) fill of a 3-channel field K where known[i]==0 (Gortler et al. 1996
+// "pull-push"): push sums value*weight and weight over 2x2 blocks up to 1x1; pull walks back down
+// and every unknown pixel takes the bilinear sample of the filled level above. One linear pass
+// (~4/3 n work) fills holes of any size; known pixels are never touched. Sets known[i]=1 for every
+// pixel it fills (all of them, unless nothing at all was known).
+function hlPushPull(K,known,w,h){
+  const S=[],W=[],dims=[];
+  let s=new Float32Array(K),wt=new Float32Array(w*h),lw=w,lh=h;
+  for(let i=0;i<w*h;i++){if(known[i])wt[i]=1;else s[3*i]=s[3*i+1]=s[3*i+2]=0;}
+  S.push(s);W.push(wt);dims.push([lw,lh]);
+  while(lw>1||lh>1){
+    const nw=Math.ceil(lw/2),nh=Math.ceil(lh/2),ns=new Float32Array(3*nw*nh),nwt=new Float32Array(nw*nh);
+    for(let y=0;y<lh;y++)for(let x=0;x<lw;x++){const i=y*lw+x,j=(y>>1)*nw+(x>>1);if(!wt[i])continue;nwt[j]+=wt[i];ns[3*j]+=s[3*i];ns[3*j+1]+=s[3*i+1];ns[3*j+2]+=s[3*i+2];}
+    s=ns;wt=nwt;lw=nw;lh=nh;S.push(s);W.push(wt);dims.push([lw,lh]);
+  }
+  if(!W[W.length-1][0])return; // nothing known anywhere
+  // Normalise every level to a value field V (where weight>0), then pull top-down.
+  let V=new Float32Array(3);for(let c=0;c<3;c++)V[c]=S[S.length-1][c]/W[W.length-1][0];
+  for(let l=S.length-2;l>=0;l--){
+    const [cw,ch]=dims[l],[pw,ph]=dims[l+1],sl=S[l],wl=W[l],nv=new Float32Array(3*cw*ch),last=l===0;
+    for(let y=0;y<ch;y++){
+      const fy=Math.min(ph-1,Math.max(0,(y+0.5)/2-0.5)),y0=Math.floor(fy),y1=Math.min(ph-1,y0+1),ty=fy-y0;
+      for(let x=0;x<cw;x++){
+        const i=y*cw+x;
+        if(wl[i]){const iw=1/wl[i];nv[3*i]=sl[3*i]*iw;nv[3*i+1]=sl[3*i+1]*iw;nv[3*i+2]=sl[3*i+2]*iw;continue;}
+        const fx=Math.min(pw-1,Math.max(0,(x+0.5)/2-0.5)),x0=Math.floor(fx),x1=Math.min(pw-1,x0+1),tx=fx-x0;
+        const a=y0*pw+x0,b=y0*pw+x1,c2=y1*pw+x0,d=y1*pw+x1;
+        for(let c=0;c<3;c++)nv[3*i+c]=(V[3*a+c]*(1-tx)+V[3*b+c]*tx)*(1-ty)+(V[3*c2+c]*(1-tx)+V[3*d+c]*tx)*ty;
+        if(last){K[3*i]=nv[3*i];K[3*i+1]=nv[3*i+1];K[3*i+2]=nv[3*i+2];known[i]=1;}
+      }
+    }
+    V=nv;
+  }
+}
+// 8-connected components of a nonzero mask: Int32Array labels (0 = background, 1..count).
+function hlLabel(M,w,h){
+  const L=new Int32Array(w*h),st=new Int32Array(w*h);let count=0;
+  for(let s0=0;s0<w*h;s0++){
+    if(!M[s0]||L[s0])continue;count++;let sp=0;st[sp++]=s0;L[s0]=count;
+    while(sp){const p=st[--sp],px=p%w,py=(p/w)|0;
+      for(let dy=-1;dy<=1;dy++){const yy=py+dy;if(yy<0||yy>=h)continue;for(let dx=-1;dx<=1;dx++){const xx=px+dx;if(xx<0||xx>=w)continue;const q=yy*w+xx;if(M[q]&&!L[q]){L[q]=count;st[sp++]=q;}}}}
+  }
+  return{L,count};
 }
 function hlReconstruct(rgb,w,h,clip,mode,opts){
   opts=opts||{};const n=w*h,thr=opts.threshold||0.995;
@@ -152,18 +196,7 @@ function hlReconstruct(rgb,w,h,clip,mode,opts){
   if(mode==='propagate'){
     const K=new Float32Array(3*n),known=new Uint8Array(n);
     for(let i=0;i<n;i++)if(!M[i]){const s=(rgb[3*i]+rgb[3*i+1]+rgb[3*i+2])/3;if(s>0){for(let c=0;c<3;c++)K[3*i+c]=rgb[3*i+c]/s;known[i]=1;}}
-    const passes=opts.passes||64;
-    for(let p=0;p<passes;p++){
-      const nk=known.slice(),nK=K.slice();let filled=0,left=0;
-      for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-        const i=y*w+x;if(known[i])continue;
-        let a0=0,a1=0,a2=0,cnt=0;
-        for(let dy=-1;dy<=1;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-1;dx<=1;dx++){const xx=x+dx;if((!dx&&!dy)||xx<0||xx>=w)continue;const j=yy*w+xx;if(known[j]){a0+=K[3*j];a1+=K[3*j+1];a2+=K[3*j+2];cnt++;}}}
-        if(cnt){nK[3*i]=a0/cnt;nK[3*i+1]=a1/cnt;nK[3*i+2]=a2/cnt;nk[i]=1;filled++;}else left++;
-      }
-      known.set(nk);K.set(nK);
-      if(!left||!filled)break;
-    }
+    hlPushPull(K,known,w,h);
     for(let i=0;i<n;i++){
       const k=M[i];if(!k)continue;
       const kr=known[i]?[K[3*i],K[3*i+1],K[3*i+2]]:[1,1,1];
@@ -175,20 +208,26 @@ function hlReconstruct(rgb,w,h,clip,mode,opts){
     return out;
   }
   if(mode==='opposed'){
-    const cb=Math.cbrt,sum=[0,0,0],cnt=[0,0,0];
+    // darktable's segmentation idea: each connected clipped region gets its OWN chroma offset from
+    // its own 2px border, so differently coloured clipped lights do not share one compromise
+    // colour. A region whose border has too few samples for a channel (<8) falls back to the
+    // image-global estimate.
+    const cb=Math.cbrt,{L,count}=hlLabel(M,w,h),gs=[0,0,0],gc=[0,0,0];
+    const rs=new Float64Array(3*(count+1)),rc=new Float64Array(3*(count+1)),seen=new Int32Array(count+1);let stamp=0;
     for(let y=0;y<h;y++)for(let x=0;x<w;x++){
       const i=y*w+x;if(M[i])continue;
-      let near=0;
-      for(let dy=-2;dy<=2;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-2;dx<=2;dx++){const xx=x+dx;if(xx>=0&&xx<w)near|=M[yy*w+xx];}}
+      let near=0;stamp++;const labs=[];
+      for(let dy=-2;dy<=2;dy++){const yy=y+dy;if(yy<0||yy>=h)continue;for(let dx=-2;dx<=2;dx++){const xx=x+dx;if(xx<0||xx>=w)continue;const j=yy*w+xx;if(M[j]){near|=M[j];const l=L[j];if(seen[l]!==stamp){seen[l]=stamp;labs.push(l);}}}}
       if(!near)continue;
       const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])];
-      for(let c=0;c<3;c++)if(near&(1<<c)){sum[c]+=q[c]-(q[(c+1)%3]+q[(c+2)%3])/2;cnt[c]++;}
+      for(let c=0;c<3;c++)if(near&(1<<c)){const v=q[c]-(q[(c+1)%3]+q[(c+2)%3])/2;gs[c]+=v;gc[c]++;for(const l of labs){rs[3*l+c]+=v;rc[3*l+c]++;}}
     }
-    const chroma=sum.map((s,c)=>cnt[c]?s/cnt[c]:0);
+    const chroma=new Float64Array(3*(count+1));
+    for(let l=1;l<=count;l++)for(let c=0;c<3;c++)chroma[3*l+c]=rc[3*l+c]>=8?rs[3*l+c]/rc[3*l+c]:(gc[c]?gs[c]/gc[c]:0);
     for(let i=0;i<n;i++){
       const k=M[i];if(!k)continue;
-      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])];
-      for(let c=0;c<3;c++)if(k&(1<<c)){const e=(q[(c+1)%3]+q[(c+2)%3])/2+chroma[c];out[3*i+c]=Math.max(rgb[3*i+c],e>0?e*e*e:0);}
+      const q=[cb(rgb[3*i]),cb(rgb[3*i+1]),cb(rgb[3*i+2])],l=L[i];
+      for(let c=0;c<3;c++)if(k&(1<<c)){const e=(q[(c+1)%3]+q[(c+2)%3])/2+chroma[3*l+c];out[3*i+c]=Math.max(rgb[3*i+c],e>0?e*e*e:0);}
     }
     return out;
   }

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { load } from './extract.mjs';
 
-const app = load(['hlClippedMask', 'hlReconstruct', 'drcRetinexHalo', 'drcGaussBlur', 'drcRetinex'],
+const app = load(['hlClippedMask', 'hlPushPull', 'hlLabel', 'hlReconstruct', 'drcRetinexHalo', 'drcGaussBlur', 'drcRetinex'],
   { Uint8Array, Error });
 
 const CLIP = [1, 1, 1];
@@ -82,6 +82,43 @@ test('coloured edge: a clipped spot inside the red half takes red, not the blue 
   const out = app.hlReconstruct(rgb, w, h, CLIP, 'propagate');
   const i = 3 * (10 * w + 8);
   assert.ok(out[i] > 3 * out[i + 2], 'clipped spot stays red');
+});
+
+test('propagate fills a clipped region far wider than the old 64-pass reach', () => {
+  // 300x40 strip, all channels clipped except a 4px warm border: the old Jacobi fill stopped
+  // 64px in and left the middle neutral; the pyramid reaches every pixel in one pass.
+  const w = 300, h = 40, rgb = new Float32Array(w * h * 3);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = 3 * (y * w + x), edge = x < 4 || x >= w - 4;
+    rgb.set(edge ? [0.9, 0.6, 0.3] : [1, 1, 1], i);
+  }
+  const out = app.hlReconstruct(rgb, w, h, CLIP, 'propagate'), c = 3 * (20 * w + 150);
+  assert.ok(out[c] > out[c + 1] && out[c + 1] > out[c + 2], 'centre took the warm border hue');
+});
+
+test('pushPull: known pixels untouched, holes take the nearby value', () => {
+  const w = 9, h = 5, K = new Float32Array(3 * w * h), known = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < 2 || x > 6) { known[y * w + x] = 1; K.set(x < 2 ? [2, 1, 0] : [0, 1, 2], 3 * (y * w + x)); }
+  const before = K.slice();
+  app.hlPushPull(K, known, w, h);
+  for (let i = 0; i < w * h; i++) assert.equal(known[i], 1);
+  for (let y = 0; y < h; y++) { for (const x of [0, 1, 7, 8]) assert.equal(K[3 * (y * w + x)], before[3 * (y * w + x)]);
+    assert.ok(K[3 * (y * w + 2)] > K[3 * (y * w + 6)], 'left hole leans left colour'); }
+});
+
+test('opposed: two clipped lights of different colour each get their own chroma', () => {
+  // Left light pale (R just over clip, G/B high), right light deep red (G/B low). One global chroma
+  // (the old behaviour) took the deep red's offset into the pale light: 53.9% mean R error there.
+  // Per region: 2.6% / 7.3%.
+  const w = 80, h = 30, rgb = new Float32Array(w * h * 3), truth = new Float32Array(w * h * 3);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const left = x < 40, cx = left ? 20 : 60, col = left ? [1.3, 0.9, 0.7] : [1.3, 0.25, 0.1];
+    const s = Math.max(0.5, 1 - Math.hypot(x - cx, y - 15) / 20);
+    for (let c = 0; c < 3; c++) { truth[3 * (y * w + x) + c] = col[c] * s; rgb[3 * (y * w + x) + c] = Math.min(1, col[c] * s); }
+  }
+  const out = app.hlReconstruct(rgb, w, h, CLIP, 'opposed');
+  const err = (x0, x1) => { let e = 0, n = 0; for (let y = 0; y < h; y++) for (let x = x0; x < x1; x++) { const i = 3 * (y * w + x); if (rgb[i] >= 0.995) { e += Math.abs(out[i] - truth[i]) / truth[i]; n++; } } return e / n; };
+  assert.ok(err(0, 40) < 0.05 && err(40, 80) < 0.1, `per-region errors ${err(0, 40).toFixed(3)} / ${err(40, 80).toFixed(3)}`);
 });
 
 test('unknown mode throws', () => {
