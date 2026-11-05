@@ -39,27 +39,39 @@ Samples come from [raw.pixls.us `/data-unique/`](https://raw.pixls.us/data-uniqu
 
 | Format | Camera (sample) | Size | Decode | Output (full) | Output (half / proxy) | Full decode time | Colour path taken |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| CR2 | Canon EOS 40D | 5.8 MB | OK | 1944×1296 ¹ | 1944×1296 ¹ | 3.1 s | LibRaw sRGB fallback |
-| NEF | Nikon D7200 | 22.7 MB | OK | 6016×4016 | 3008×2008 | 14.3 s | LibRaw sRGB fallback |
-| ARW | Sony ILCE-7S | 6.2 MB | OK | 2784×1872 | 1392×936 | 4.1 s | LibRaw sRGB fallback |
-| RAF (X-Trans III) | Fujifilm X-Pro2 | 26.8 MB | OK | 6032×4028 | 3016×2014 | **58.1 s** ² | LibRaw sRGB fallback |
-| ORF | Olympus XZ-1 | 10.8 MB | OK | 3680×2760 | 1840×1380 | 7.3 s | LibRaw sRGB fallback |
-| RW2 | Panasonic DC-GH5S | 19.2 MB | OK | 3704×2776 | 1852×1388 | 8.7 s | LibRaw sRGB fallback (no DC-GH5S DCP) |
-| PEF | Pentax K10D | 9.6 MB | OK | 3896×2616 | 1948×1308 | 6.5 s | LibRaw sRGB fallback |
-| 3FR | Hasselblad H3D (reports H3DII-39) | 53.6 MB | OK | 7247×5444 | 3623×2722 | 17.4 s | Embedded profile, parsed as a DNG profile ³ |
-| IIQ | Phase One P65+ | 71.9 MB | OK ⁴ | 8984×6732 | 4492×3366 | **41.4 s** ² | LibRaw sRGB fallback |
-| DNG | Canon EOS 5D Mark III via Adobe DNG Converter (lossless) | 23.2 MB | OK | 5796×3870 | 2898×1935 | 9.2 s | Embedded DNG profile |
+| CR2 | Canon EOS 40D | 5.8 MB | OK | 1944×1296 ¹ | 1944×1296 ¹ | 1.7 s | LibRaw sRGB fallback |
+| NEF | Nikon D7200 | 22.7 MB | OK | 6016×4016 | 3008×2008 | 9.8 s | LibRaw sRGB fallback |
+| ARW | Sony ILCE-7S | 6.2 MB | OK | 2784×1872 | 1392×936 | 2.5 s | LibRaw sRGB fallback |
+| RAF (X-Trans III) | Fujifilm X-Pro2 | 26.8 MB | OK | 6032×4028 | 3016×2014 | 34.9 s ² | LibRaw sRGB fallback |
+| ORF | Olympus XZ-1 | 10.8 MB | OK | 3680×2760 | 1840×1380 | 4.9 s | LibRaw sRGB fallback |
+| RW2 | Panasonic DC-GH5S | 19.2 MB | OK | 3704×2776 | 1852×1388 | 6.4 s | LibRaw sRGB fallback (no DC-GH5S DCP) |
+| PEF | Pentax K10D | 9.6 MB | OK | 3896×2616 | 1948×1308 | 4.2 s | LibRaw sRGB fallback |
+| 3FR | Hasselblad H3D (reports H3DII-39) | 53.6 MB | OK | 7247×5444 | 3623×2722 | 24.4 s | Embedded profile, parsed as a DNG profile ³ |
+| IIQ | Phase One P65+ | 71.9 MB | OK, edge rows corrupt ⁴ | 8984×6732 | 4492×3366 | 28.8 s ² | LibRaw sRGB fallback |
+| DNG | Canon EOS 5D Mark III via Adobe DNG Converter (lossless) | 23.2 MB | OK | 5796×3870 | 2898×1935 | 11.9 s | Embedded DNG profile |
 
-Times are `loadRw2`'s own decode time on this machine, which has a slow container CPU. Treat them as relative, not as user-facing figures.
+Times are the probe's wall time per `loadRw2` call after the single-decode change (note 2), on a slow, shared container CPU. Treat them as relative, not as user-facing figures. The 3FR and DNG rows did not change path; their spread is machine noise.
 
 **Orientation.** libraw-wasm's `metadata()` has no flip/orientation field. LibRaw applies the EXIF orientation itself (`userFlip:-1`). All 10 samples are landscape, and none came out turned 90° relative to the sensor `width`/`height`. That means no sample exercised a rotated file, so **orientation handling is still unverified**. A 180° turn could not be detected this way at all.
 
 Notes:
 
 1. LibRaw reports 1944×1296 for this 40D file even on a full decode, which is half the 40D's 3888×2592 sensor. The file is small (5.8 MB), which is consistent with an sRAW capture. Not otherwise verified.
-2. With no bundled DCP for the camera, `loadRw2` decodes twice: first linear for the DCP path, then the sRGB fallback. Each decode has its own 45 s per-worker deadline. The full-size X-Pro2 RAF (58 s in total) and P65+ IIQ (41 s) are close to that limit on this CPU. The half-size proxy decode, which is what opens on screen, took 12.3 s and 26.7 s.
-3. The 3FR is TIFF-based, and `parseDngEmbeddedProfile` found a usable profile in it, so it took the "profile embedded in the DNG" branch. Its thumbnail shows a faint magenta cast; colour accuracy was not assessed.
-4. The IIQ render has a one-pixel row of coloured noise along the top edge. The rest of the frame looks correct.
+2. **Fixed: one decode instead of two.** `loadRw2` used to decode linear first, for the DCP path. Only then did LibRaw's metadata show that no bundled DCP matched, so it decoded again for the LibRaw sRGB fallback. It now reads make/model from the file header (`rawSniffMakeModel`: TIFF IFDs, RAF header). When no bundled DCP can match and the file has no embedded DNG profile, it decodes once, straight to the fallback settings. LibRaw's own make/model is still checked after the decode, and a wrong hint falls back to a linear re-decode. CR3 and X3F have no TIFF/RAF header, so they keep the old two-decode path. Probe timings, same machine and session, before → after, full size: CR2 4.2 → 1.7 s, NEF 24.0 → 9.8 s, ARW 5.0 → 2.5 s, RAF 73.6 → 34.9 s, ORF 10.5 → 4.9 s, RW2 14.0 → 6.4 s, PEF 9.2 → 4.2 s, IIQ 61.7 → 28.8 s. Half size: RAF 16.8 → 8.5 s, IIQ 45.2 → 20.6 s. The full-resolution pixel SHA-256 is identical before and after for all 10 samples, at full and half size. The per-worker deadline is `withRawDecodeTimeout`'s 180 s; it was 45 s when these samples were first measured.
+3. **The 3FR's magenta cast comes from the scene and the camera's as-shot white balance, not from a profile error.** The 3FR is TIFF-based. It carries ColorMatrix1 and AsShotNeutral, with no ForwardMatrix and no illuminant tag. `parseDngEmbeddedProfile` builds a profile from the colour matrix, so the file takes the "profile embedded in the DNG" branch. Mean colour of the top 40 % (overcast sky), as R−G / B−G in 8-bit sRGB:
+   - the camera's own embedded preview: +10.2 / +19.2
+   - LibRaw 0.22.2's sRGB render (rawpy): +10.2 / +20.3
+   - Chromasmith's embedded-profile render: +5.8 / +19.0
+
+   The app's render is slightly *less* magenta than the camera's own preview, so nothing was changed.
+4. **The IIQ edge noise is a libraw-wasm 1.1.2 bug, not the app's crop or orientation.**
+   - **What it looks like.** Roughly 10 rows at the top *and* roughly 10 at the bottom of the full-size frame are coloured noise (about 6 of each at half size). It is not a one-pixel row.
+   - **The crop is right.** LibRaw reads `top_margin` 6 and `left_margin` 36 from the file's own IIQ tags. That is the same active area rawler 0.7.2 uses (`p65.toml`: `[36, 6, 16, 46]`). Decoding with `userFlip:0` gives the same rows.
+   - **Native LibRaw is clean.** LibRaw 0.21.3 and 0.22.2 (rawpy) decode the same file with clean edges.
+   - **Cause.** The vendored wrapper's `open()` copies the file into a local `std::vector` and hands that pointer to `open_buffer()`. The copy is freed when `open()` returns, but LibRaw reads the file again during `unpack()` inside `imageData()`. It is reading freed memory.
+   - **Upstream has fixed it.** Upstream `libraw_wrapper.cpp` now keeps the buffer as a class member. Decoding with the npm `libraw-wasm@1.6.0` build (tested from a scratch copy, not vendored) gives clean edges.
+   - **The output also depends on call order.** Any allocation between `open()` and `imageData()` changes the result. Calling `metadata()` first changed pixels across the whole IIQ frame, not just the edges.
+   - **Not fixed here.** The fix is upgrading `vendor/libraw`. That changes the decoder for every camera, so the wasm linearisation fit (`GAIN`/`PW` in `loadRw2`, see raw-dcp.md) would need re-checking.
 
 **Not covered.** The CC0 set has no Canon CR3, Leica DNG/RWL, Sigma X3F or OM System file, so those remain **unknown**. Pixel correctness was checked only by looking at thumbnails and by mean/spread of luma, not against a reference render.
 
