@@ -301,3 +301,6 @@ async function loadFXImages(fileList,opts){
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.
+// Runs once per photo load: installFXImages clears _bwDetectDone, and the first detect (or a
+// restored/pasted recipe via applyUISnapshot) sets it. Later full-quality swaps of the SAME photo
+// call this again — they must not overwrite a White glow setting the recipe already chose.

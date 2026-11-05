@@ -1,3 +1,19 @@
+async function genBlindLUT(settings,pfId){
+  const lut=new Float32Array(SZ*SZ*SZ*3);
+  for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[or,og,ob]=applyGrade(r/32,g/32,b/32,settings),i=li(r,g,b);lut[i]=or;lut[i+1]=og;lut[i+2]=ob}
+  if(r%5===4){setP(pfId,r/32*100);await yd()}}
+  setP(pfId,100);return lut;
+}
+
+// ═══════════════════════════
+// WEBGL FX RENDERER
+// ═══════════════════════════
+// Lightroom-style GPU preference. WebGL is already the editor's display, image-processing,
+// and still-export pipeline, so these are deliberately ONE renderer preference rather than
+// three misleading independent toggles. `powerPreference` is a user-agent hint (not a promise
+// to select a particular adapter); Windows Graphics settings remains the authoritative place
+// to bind the app to a discrete GPU.
+const GPU_PREF_KEY='chromasmithGpuPreference';
 function gpuPreference(){
   try{
     const v=localStorage.getItem(GPU_PREF_KEY);

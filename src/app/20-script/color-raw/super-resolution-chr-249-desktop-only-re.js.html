@@ -41,7 +41,15 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     // Sub-phase times for the export's EXPORT_DIAG line (renderer._p2cTimes, read by exportFX).
     const T={},now=()=>performance.now();let t=now();renderer._p2cTimes=T;
-    renderer.setImage(src);T.upload=now()-t;t=now();
+    // Film negative: a 16-bit PNG/TIFF <img> uploaded straight to WebGL rounds to 8 bits differently
+    // from the 2D-canvas copy renderTiled uploads; the inversion amplifies that 1 level to ~40, so
+    // single-shot and tiled exports of a real scan disagreed (CHR-262). Upload the same canvas decode.
+    let upSrc=src;
+    if(P.filmNeg&&P.filmNeg.enabled&&typeof HTMLImageElement!=='undefined'&&src instanceof HTMLImageElement){
+      upSrc=document.createElement('canvas');upSrc.width=src.naturalWidth||src.width;upSrc.height=src.naturalHeight||src.height;
+      upSrc.getContext('2d').drawImage(src,0,0);
+    }
+    renderer.setImage(upSrc);T.upload=now()-t;t=now();
     fxSetCapturedExportDepth(renderer,P);
     renderer.render(P,iw,ih,{glowScale:fxGlowScale(),...fxStillQualityOpts(iw,ih,false)});T.submit=now()-t;t=now();
     // WebKit (the Mac app): fence-polled readback so the UI stays live while the GPU finishes. Chromium

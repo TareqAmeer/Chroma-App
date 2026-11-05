@@ -255,13 +255,3 @@ async function buildCorrLUT(srcPx,dstPx,w,h,pfId,p0=10,p1=75){
   for(let i=0;i<SZ*SZ*SZ;i++){if(pop[i]===1){lut[i*3]=acc[i*3]/cnt[i];lut[i*3+1]=acc[i*3+1]/cnt[i];lut[i*3+2]=acc[i*3+2]/cnt[i]}}
   return lut;
 }
-async function propFill(lut,pop,pfId,p0,p1){
-  const f=new Uint8Array(pop);let ch=true,it=0;
-  while(ch&&it<SZ*2){ch=false;it++;const tf=[];
-    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(f[idx])continue;let sr=0,sg=0,sb=0,c=0;
-      for(const[dr,dg,db] of[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]]){const nr=r+dr,ng=g+dg,nb=b+db;if(nr<0||nr>=SZ||ng<0||ng>=SZ||nb<0||nb>=SZ)continue;const ni=nr*S2+ng*SZ+nb;if(f[ni]){sr+=lut[ni*3];sg+=lut[ni*3+1];sb+=lut[ni*3+2];c++}}
-      if(c>0){tf.push(idx,sr/c,sg/c,sb/c);ch=true}}
-    for(let i=0;i<tf.length;i+=4){const idx=tf[i];lut[idx*3]=tf[i+1];lut[idx*3+1]=tf[i+2];lut[idx*3+2]=tf[i+3];f[idx]=1}
-    if(it%4===0){setP(pfId,p0+(p1-p0)*(it/(SZ*2)));await yd()}}
-  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(!f[idx]){lut[idx*3]=r/32;lut[idx*3+1]=g/32;lut[idx*3+2]=b/32}}
-}
