@@ -50,9 +50,30 @@ function matchSeriesClear(){
 }
 let _adjSharpMaskPreview=false;
 let _mskSharpMaskPreview=false;
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','skin','dehaze','texture'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','mix-rr','mix-rg','mix-rb','mix-gr','mix-gg','mix-gb','mix-br','mix-bg','mix-bb','lab-l','lab-con','lab-chroma','tone-sa','tone-sb','tone-ha','tone-hb','skin','dehaze','texture'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
-function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(f==='sharp-detail'?50:(f==='sharp-radius'?1:0));if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+// Non-zero slider defaults; a missing key (older recipes/snapshots) falls back to these.
+const ADJ_DEFAULTS={'sharp-detail':50,'sharp-radius':1,'mix-rr':100,'mix-gg':100,'mix-bb':100};
+// CHR-291/CHR-290: channel mixer, Lab adjustments and colour toning. Pure: slider values (percent)
+// -> render block. Mixer rows are output R/G/B, each a fraction of input R,G,B (RawTherapee
+// stores the same per-mille, identity 1000/0/0 per row). Lab values are -1..1.
+function rtColourBlock(v){
+  const g=(k)=>{const x=v&&v[k]!=null?Number(v[k]):(ADJ_DEFAULTS[k]||0);return isFinite(x)?x:(ADJ_DEFAULTS[k]||0);};
+  return{mix:['rr','rg','rb','gr','gg','gb','br','bg','bb'].map(k=>g('mix-'+k)/100),
+    lab:{lightness:g('lab-l')/100,contrast:g('lab-con')/100,chroma:g('lab-chroma')/100},
+    tone:{sa:g('tone-sa')/100,sb:g('tone-sb')/100,ha:g('tone-ha')/100,hb:g('tone-hb')/100}};
+}
+// Shader uniforms for the block, each stage identity-gated so an untouched (or disabled) Tone card
+// does no Lab conversion and stays byte-identical to before these tools existed.
+function rtColourUniforms(rt,enabled){
+  const I=[1,0,0,0,1,0,0,0,1],m=(rt&&rt.mix)||I,L=(rt&&rt.lab)||{},T=(rt&&rt.tone)||{};
+  const mixOn=!!enabled&&m.some((x,i)=>x!==I[i]);
+  const lab=[L.lightness||0,L.contrast||0,L.chroma||0],tone=[T.sa||0,T.sb||0,T.ha||0,T.hb||0];
+  const labOn=!!enabled&&(lab.some(x=>x!==0)||tone.some(x=>x!==0));
+  return{rtMixOn:mixOn?1:0,rtMixR:m.slice(0,3),rtMixG:m.slice(3,6),rtMixB:m.slice(6,9),
+    rtLabOn:labOn?1:0,rtLab:lab,rtToneS:tone.slice(0,2),rtToneH:tone.slice(2,4)};
+}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(ADJ_DEFAULTS[f]||0);if(sl)sl.value=val;if(vl)vl.textContent=val;});}
 function computeAdjustBlock(v){
   v=v||domAdjustVals();
   return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
@@ -64,6 +85,7 @@ function computeAdjustBlock(v){
     vibrance:(v.vib||0)/100, saturation:(v.sat||0)/100,
     sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpRadius:(v['sharp-radius']==null?1:Math.max(0.5,Math.min(3,v['sharp-radius']))), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
+    rtColour:rtColourBlock(v),
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride,contextOverride){return{
