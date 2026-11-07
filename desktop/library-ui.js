@@ -9327,7 +9327,7 @@
       // The editor's filename field auto-fills with the OPEN photo's name; a Library/drag-out export of
       // other photos must name files after their own sources, so neutralise a non-pattern value.
       const fnEl = document.getElementById('fx-fname');
-      if (fnEl && !fnEl.value.includes('{')) { fnPrev = fnEl.value; fnEl.value = 'photo'; }
+      if (fnEl && !fnEl.value.includes('{')) { fnPrev = fnEl.value; fnEl.value = ''; }
       await exportFX({ items, clickedAt });
     } finally {
       { const fnEl = document.getElementById('fx-fname'); if (fnEl && fnPrev !== null) fnEl.value = fnPrev; }
