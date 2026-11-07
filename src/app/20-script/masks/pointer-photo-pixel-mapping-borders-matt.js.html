@@ -73,9 +73,13 @@ function _pickAvgRGB(e,fromCanvas){
   const sy=Math.min(sh-1,Math.max(0,Math.round(cy*sh/FX.cv.height)));
   const K=5,half=(K-1)/2;
   const bx=Math.min(sw-K,Math.max(0,sx-half)),by=Math.min(sh-K,Math.max(0,sy-half));
-  const tc=document.createElement('canvas');tc.width=K;tc.height=K;
-  tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
-  const d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  let d5=null;
+  if(src===FX.cv)d5=fxReadCanvasRGBA(src,bx,by,K,K);   // GL readback (same reader as the hover loupe)
+  if(!d5){
+    const tc=document.createElement('canvas');tc.width=K;tc.height=K;
+    tc.getContext('2d').drawImage(src,bx,by,K,K,0,0,K,K);
+    d5=tc.getContext('2d').getImageData(0,0,K,K).data;
+  }
   let ar=0,ag=0,ab=0;const n5=K*K;
   for(let i=0;i<d5.length;i+=4){ar+=d5[i];ag+=d5[i+1];ab+=d5[i+2];}
   return[ar/n5,ag/n5,ab/n5];
@@ -101,7 +105,7 @@ function pcRebuild(){
   (fxState.pointColors||[]).forEach((pt,i)=>{
     const bt=document.createElement('button');bt.className='pc-chip'+(i===pcSel?' on':'');
     bt.style.background=`rgb(${pt.rgb[0]},${pt.rgb[1]},${pt.rgb[2]})`;
-    bt.title=`Point ${i+1}`;
+    bt.title=pcName(pt,i)+(pt.enabled===false?' (off)':'');bt.setAttribute('aria-label',bt.title);if(pt.enabled===false)bt.style.opacity='.35';
     bt.onclick=()=>{pcSel=i;pcRebuild();pcSyncUI();};
     row.appendChild(bt);
   });
@@ -111,24 +115,90 @@ function pcSyncUI(){
   const ctl=document.getElementById('pc-ctl');if(ctl)ctl.style.display=pt?'flex':'none';
   const hint=document.getElementById('pc-empty-hint');if(hint)hint.style.display=(fxState.pointColors&&fxState.pointColors.length)?'none':'block';
   if(!pt)return;
-  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm']].forEach(([k,sfx])=>{
+  [['hue','h'],['sat','s'],['lum','l'],['range','r'],['smoothness','sm'],['lumLo','llo'],['lumHi','lhi']].forEach(([k,sfx])=>{
     const sl=document.getElementById('sl-pc-'+sfx),vl=document.getElementById('vl-pc-'+sfx);
-    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:0);
+    const v=pt[k]!=null?pt[k]:(k==='smoothness'?50:k==='lumHi'?100:0);
     if(sl)sl.value=v;if(vl)vl.textContent=v;
   });
+  const nm=document.getElementById('in-pc-name');if(nm){nm.value=pt.name||'';nm.placeholder='Point '+(pcSel+1);}
+  pcShowSelActive();pcShowSelSyncBtn();
+  const en=document.getElementById('btn-pc-enable');if(en)en.textContent=pt.enabled===false?'Turn on':'Turn off';
 }
 function pcSlider(key,v){
   const pt=fxState.pointColors[pcSel];if(!pt)return;
   pt[key]=parseFloat(v)||0;
-  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm'}[key];
+  if(key==='lumLo')pt.lumLo=Math.min(pt.lumLo,pt.lumHi==null?100:pt.lumHi);
+  if(key==='lumHi')pt.lumHi=Math.max(pt.lumHi,pt.lumLo||0);
+  const sfx={hue:'h',sat:'s',lum:'l',range:'r',smoothness:'sm',lumLo:'llo',lumHi:'lhi'}[key];
   const vl=document.getElementById('vl-pc-'+(sfx||key[0]));if(vl)vl.textContent=pt[key];
   bakeHsl();fxUpdate();
+}
+// CHR-259: each range can carry a user name (pt.name, saved with the recipe like every other
+// point field). Blank = no name, shown as "Point N". Names never affect the selection or render.
+function pcName(pt,i){return(pt&&typeof pt.name==='string'&&pt.name.trim())?pt.name.trim():'Point '+(i+1);}
+function pcRename(v){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const name=String(v==null?'':v).replace(/\s+/g,' ').trim().slice(0,40);
+  if((pt.name||'')===name)return;
+  if(name)pt.name=name;else delete pt.name;
+  pcRebuild();pcSyncUI();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+// CHR-259: a range can be switched off (kept, selects nothing) and duplicated to start a variant.
+function pcToggleEnabled(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  pt.enabled=pt.enabled===false;if(pt.enabled)delete pt.enabled;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
+}
+function pcDuplicate(){
+  const pt=fxState.pointColors[pcSel];if(!pt)return;
+  const dup=JSON.parse(JSON.stringify(pt));if(dup.name)dup.name=(dup.name+' copy').slice(0,40);
+  fxState.pointColors.splice(pcSel+1,0,dup);pcSel++;
+  pcRebuild();pcSyncUI();bakeHsl();fxUpdate();if(typeof fxHistoryPush==='function')fxHistoryPush();
 }
 function pcDelete(){
   if(pcSel<0||!fxState.pointColors[pcSel])return;
   fxState.pointColors.splice(pcSel,1);
   pcSel=Math.min(pcSel,fxState.pointColors.length-1);
   pcRebuild();pcSyncUI();bakeHsl();fxUpdate();
+}
+// CHR-259 "Show selection": view-only overlay of the SELECTED range's weight, drawn by the lut
+// shader's selection-view path (same style/colour/opacity settings as the mask overlay). It is UI
+// state only: never in fxState, history, recipes or exports (render() only honours it with the
+// private preview token). It is tied to the exact point object it was turned on for, so picking
+// another range, adding/duplicating/deleting one, undo or opening another photo switches it off.
+let _pcShowSelPt=null;
+function pcShowSelActive(){
+  const pt=_pcShowSelPt;if(!pt)return false;
+  const tg=document.getElementById('tg-pointcolor');
+  if(!tg||!tg.classList.contains('on')||!fxState.pointColors||fxState.pointColors[pcSel]!==pt){_pcShowSelPt=null;pcShowSelSyncBtn();return false;}
+  return true;
+}
+function pcShowSelSyncBtn(){
+  const b=document.getElementById('btn-pc-showsel');if(!b)return;
+  const on=!!_pcShowSelPt;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));
+}
+function pcToggleShowSel(force){
+  const pt=fxState.pointColors&&fxState.pointColors[pcSel];
+  const on=force!=null?!!force:!_pcShowSelPt;
+  _pcShowSelPt=on&&pt?pt:null;
+  pcShowSelSyncBtn();fxUpdate();
+}
+// The weight cube for the selected range, on the same 33^3 grid and input space as bakeHsl's cube:
+// bakeHsl applies the Color Mixer first and evaluates the points on ITS output, so the weight is
+// measured there too. Re-baked only when an input changes; uploaded to the preview renderer only.
+function pcSelBake(){
+  const pt=_pcShowSelPt;if(!pt||!FX.ok)return;
+  const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
+  const H=fxState.hsl,S=33,S2=S*S,hA={},sA={},lA={};
+  if(hslOn)HSL_BANDS.forEach(b=>{hA[b]=(H.hue[b]||0)*0.45;sA[b]=H.sat[b]||0;lA[b]=H.lum[b]||0;});
+  const key=JSON.stringify([hA,sA,lA,pt],(k,v)=>k==='name'?undefined:v);
+  if(pcSelBake._key===key&&FX.pcSelTx)return;
+  const d=new Uint8Array(S*S*S);
+  for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
+    const[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
+    const[h,s,v]=r2hsv(R,G,B);
+    d[bi*S2+g*S+r]=Math.max(0,Math.min(1,pcWeight(h,s,pt,v)))*255+.5|0;}
+  FX.setPcSelLUT(d);pcSelBake._key=key;
 }
 function pcResetAll(){fxState.pointColors=[];pcSel=-1;pcRebuild();pcSyncUI();bakeHsl();fxUpdate();}
 

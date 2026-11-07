@@ -198,6 +198,11 @@ function _mskRebuildInner(){
     if(_lg.shared[i])depth=1;
     else while(cur&&cur.composeOp&&cur.operandId&&!seenIds.has(cur.id)&&depth<2){seenIds.add(cur.id);cur=fxState.masks.find(x=>x.id===cur.operandId);if(cur)depth++;}
     if(depth)b.dataset.depth=String(depth);
+    // Group rail: every member of a shared-adjustment group gets the same coloured left rail and the
+    // root row says how many parts it has, so stacked masks read as one layer with its components.
+    {const gr=_lg.root[i],members=gr>=0?_lg.root.reduce((n,r,k)=>n+((r===gr&&_lg.shared[k])?1:0),0):0;
+      if(gr>=0&&members>0){b.dataset.gr=String(gr);b.style.setProperty('--grp','hsl('+((gr*67+200)%360)+' 62% 56%)');
+        if(gr===i){const c=document.createElement('span');c.className='msk-tag msk-grp-tag';c.textContent='Group \u00b7 '+(members+1);c.title='This mask and '+members+' component'+(members>1?'s':'')+' share one set of adjustments';b.insertBefore(c,b.children[2]||null);}}}
     if(m.muted)b.classList.add('msk-row-muted');
     b.title=m.muted?'Muted — click to select, then the eye button to unmute. Drag to reorder — composition references stay attached to their masks.':'Click to edit this mask. Drag to reorder — composition references stay attached to their masks.';
     b.onclick=()=>{mskSel=i;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();};
@@ -245,6 +250,10 @@ function _mskRebuildInner(){
     +(m.intersect?'<span class="msk-tag">Intersecting</span>':'')
     +(m.invert?'<span class="msk-tag">Inverted</span>':'')
     +'<button class="db-btn msk-more" onclick="mskMoreMenu(event)" title="Rename, reorder, mute, solo, eraser, delete">'+icon('more',16)+'</button></div>'
+    +(()=>{const ri=mskAdjIdx(mskSel),rm=fxState.masks[ri];
+      if(ri!==mskSel&&rm)return '';   // a component: the Adjustments hint below already names the group
+      const g=_mskGroups(_mskEnsureIds(fxState.masks)),n=g.root.reduce((c,r,k)=>c+((r===mskSel&&g.shared[k])?1:0),0);
+      return n?'<div class="msk-edit-note" role="note">Group of <b>'+(n+1)+'</b> shapes. Adjustments apply to the combined shape.</div>':'';})()
     +(m.origin==='manual-teeth'?'<div class="msk-hint" role="note">Manual Brush mask: paint tooth enamel only. Use <b>Erase</b> around lips and gums. The app does not detect teeth automatically.</div>':'')
     +(m.isExclude?'<div class="msk-hint">This mask only removes area from the others — its own Adjust sliders do nothing.</div>':'')
     +(mskAdjIdx(mskSel)!==mskSel?'<div class="msk-hint msk-group-hint">Adjustments below apply to the whole \u201c'+String((mskAdjMask().name||mskAutoLabel(mskAdjMask(),mskAdjIdx(mskSel)))).replace(/[<>&"]/g,'')+'\u201d mask.</div>':'')

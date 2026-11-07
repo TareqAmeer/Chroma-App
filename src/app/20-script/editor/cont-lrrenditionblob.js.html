@@ -1,3 +1,13 @@
+async function lrRenditionBlob(assetId,type){
+  const tok=await lrAuth();
+  const buf=await window.__TAURI__.core.invoke('download_url_native',
+    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
+     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
+  return new Blob([buf],{type:'image/jpeg'});
+}
+// The untouched ORIGINAL (for these assets, the RW2) via the master endpoint. ⚠️ Adobe's
+// partner API commonly returns 403 here on non-elevated tiers (documented limitation) — the
+// caller surfaces that as "original download not permitted, use Edited full-size instead".
 async function lrMasterBlob(assetId){
   const tok=await lrAuth();
   const buf=await window.__TAURI__.core.invoke('download_url_native',

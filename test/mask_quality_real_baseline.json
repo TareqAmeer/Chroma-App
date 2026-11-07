@@ -1,0 +1,604 @@
+{
+ "note": "CHR-297 real-photo baseline (public datasets, see test/fixtures/mask-quality/realset.json). Regenerate: node test/mask_quality_real.mjs --update",
+ "tolerance": 0.02,
+ "rows": [
+  {
+   "category": "portrait",
+   "task": "subject",
+   "model": "MODNet Auto Subject",
+   "n": 10,
+   "iou": 0.9667,
+   "bf": 0.9208,
+   "mae": 0.013
+  },
+  {
+   "category": "portrait",
+   "task": "click",
+   "model": "EdgeSAM 1 click",
+   "n": 10,
+   "iou": 0.8315,
+   "bf": 0.7919,
+   "mae": 0.0583
+  },
+  {
+   "category": "object",
+   "task": "subject",
+   "model": "MODNet Auto Subject",
+   "n": 8,
+   "iou": 0.7049,
+   "bf": 0.7654,
+   "mae": 0.0675
+  },
+  {
+   "category": "object",
+   "task": "click",
+   "model": "EdgeSAM 1 click",
+   "n": 8,
+   "iou": 0.7307,
+   "bf": 0.6632,
+   "mae": 0.0455
+  },
+  {
+   "category": "fine-edge",
+   "task": "subject",
+   "model": "MODNet Auto Subject",
+   "n": 6,
+   "iou": 0.2056,
+   "bf": 0.287,
+   "mae": 0.1722
+  },
+  {
+   "category": "fine-edge",
+   "task": "click",
+   "model": "EdgeSAM 1 click",
+   "n": 6,
+   "iou": 0.1215,
+   "bf": 0.1637,
+   "mae": 0.1654
+  },
+  {
+   "category": "sky",
+   "task": "sky",
+   "model": "UperNet sky",
+   "n": 8,
+   "iou": 0.9266,
+   "bf": 0.7856,
+   "mae": 0.0259
+  },
+  {
+   "category": "face",
+   "task": "face-skin",
+   "model": "SegFormer skin",
+   "n": 8,
+   "iou": 0.9012,
+   "bf": 0.9154,
+   "mae": 0.0345
+  },
+  {
+   "category": "face",
+   "task": "face-hair",
+   "model": "SegFormer hair",
+   "n": 8,
+   "iou": 0.8898,
+   "bf": 0.8218,
+   "mae": 0.0446
+  }
+ ],
+ "fixtures": [
+  {
+   "id": "portrait-001",
+   "task": "subject",
+   "iou": 0.9883,
+   "bf": 0.9905,
+   "mae": 0.0086
+  },
+  {
+   "id": "portrait-001",
+   "task": "click",
+   "iou": 0.9854,
+   "bf": 0.982,
+   "mae": 0.0079
+  },
+  {
+   "id": "portrait-002",
+   "task": "subject",
+   "iou": 0.9682,
+   "bf": 0.8546,
+   "mae": 0.0161
+  },
+  {
+   "id": "portrait-002",
+   "task": "click",
+   "iou": 0.9846,
+   "bf": 0.9136,
+   "mae": 0.0073
+  },
+  {
+   "id": "portrait-003",
+   "task": "subject",
+   "iou": 0.9895,
+   "bf": 1,
+   "mae": 0.0026
+  },
+  {
+   "id": "portrait-003",
+   "task": "click",
+   "iou": 0.9783,
+   "bf": 0.9859,
+   "mae": 0.0035
+  },
+  {
+   "id": "portrait-004",
+   "task": "subject",
+   "iou": 0.9532,
+   "bf": 0.8806,
+   "mae": 0.0262
+  },
+  {
+   "id": "portrait-004",
+   "task": "click",
+   "iou": 0.4404,
+   "bf": 0.3524,
+   "mae": 0.284
+  },
+  {
+   "id": "portrait-005",
+   "task": "subject",
+   "iou": 0.9952,
+   "bf": 0.9991,
+   "mae": 0.0013
+  },
+  {
+   "id": "portrait-005",
+   "task": "click",
+   "iou": 0.9843,
+   "bf": 0.9863,
+   "mae": 0.004
+  },
+  {
+   "id": "portrait-006",
+   "task": "subject",
+   "iou": 0.9878,
+   "bf": 0.9887,
+   "mae": 0.0041
+  },
+  {
+   "id": "portrait-006",
+   "task": "click",
+   "iou": 0.0181,
+   "bf": 0,
+   "mae": 0.2485
+  },
+  {
+   "id": "portrait-007",
+   "task": "subject",
+   "iou": 0.9811,
+   "bf": 0.9136,
+   "mae": 0.0082
+  },
+  {
+   "id": "portrait-007",
+   "task": "click",
+   "iou": 0.9838,
+   "bf": 0.8805,
+   "mae": 0.0053
+  },
+  {
+   "id": "portrait-008",
+   "task": "subject",
+   "iou": 0.9738,
+   "bf": 0.8757,
+   "mae": 0.012
+  },
+  {
+   "id": "portrait-008",
+   "task": "click",
+   "iou": 0.9906,
+   "bf": 1,
+   "mae": 0.0046
+  },
+  {
+   "id": "portrait-009",
+   "task": "subject",
+   "iou": 0.8424,
+   "bf": 0.7401,
+   "mae": 0.0436
+  },
+  {
+   "id": "portrait-009",
+   "task": "click",
+   "iou": 0.9803,
+   "bf": 0.9366,
+   "mae": 0.005
+  },
+  {
+   "id": "portrait-010",
+   "task": "subject",
+   "iou": 0.9877,
+   "bf": 0.9647,
+   "mae": 0.0071
+  },
+  {
+   "id": "portrait-010",
+   "task": "click",
+   "iou": 0.9695,
+   "bf": 0.8819,
+   "mae": 0.0128
+  },
+  {
+   "id": "object-001",
+   "task": "subject",
+   "iou": 0.9419,
+   "bf": 0.9079,
+   "mae": 0.0273
+  },
+  {
+   "id": "object-001",
+   "task": "click",
+   "iou": 0.9375,
+   "bf": 0.7815,
+   "mae": 0.0305
+  },
+  {
+   "id": "object-002",
+   "task": "subject",
+   "iou": 0.2193,
+   "bf": 0.4858,
+   "mae": 0.1715
+  },
+  {
+   "id": "object-002",
+   "task": "click",
+   "iou": 0.1412,
+   "bf": 0.1941,
+   "mae": 0.1894
+  },
+  {
+   "id": "object-003",
+   "task": "subject",
+   "iou": 0.7282,
+   "bf": 0.7043,
+   "mae": 0.0937
+  },
+  {
+   "id": "object-003",
+   "task": "click",
+   "iou": 0.9699,
+   "bf": 0.9814,
+   "mae": 0.0106
+  },
+  {
+   "id": "object-004",
+   "task": "subject",
+   "iou": 0.9932,
+   "bf": 1,
+   "mae": 0.0035
+  },
+  {
+   "id": "object-004",
+   "task": "click",
+   "iou": 0.9825,
+   "bf": 0.9325,
+   "mae": 0.0059
+  },
+  {
+   "id": "object-005",
+   "task": "subject",
+   "iou": 0.0161,
+   "bf": 0.1611,
+   "mae": 0.2117
+  },
+  {
+   "id": "object-005",
+   "task": "click",
+   "iou": 0.798,
+   "bf": 0.3719,
+   "mae": 0.0678
+  },
+  {
+   "id": "object-006",
+   "task": "subject",
+   "iou": 0.8374,
+   "bf": 0.9584,
+   "mae": 0.0102
+  },
+  {
+   "id": "object-006",
+   "task": "click",
+   "iou": 0.0599,
+   "bf": 0.0671,
+   "mae": 0.0492
+  },
+  {
+   "id": "object-007",
+   "task": "subject",
+   "iou": 0.9853,
+   "bf": 0.9973,
+   "mae": 0.0059
+  },
+  {
+   "id": "object-007",
+   "task": "click",
+   "iou": 0.9871,
+   "bf": 0.9984,
+   "mae": 0.0042
+  },
+  {
+   "id": "object-008",
+   "task": "subject",
+   "iou": 0.9177,
+   "bf": 0.9088,
+   "mae": 0.0163
+  },
+  {
+   "id": "object-008",
+   "task": "click",
+   "iou": 0.9691,
+   "bf": 0.979,
+   "mae": 0.006
+  },
+  {
+   "id": "fine-edge-001",
+   "task": "subject",
+   "iou": 0.3699,
+   "bf": 0.2434,
+   "mae": 0.3746
+  },
+  {
+   "id": "fine-edge-001",
+   "task": "click",
+   "iou": 0.1768,
+   "bf": 0.3067,
+   "mae": 0.4765
+  },
+  {
+   "id": "fine-edge-002",
+   "task": "subject",
+   "iou": 0.1275,
+   "bf": 0.294,
+   "mae": 0.1709
+  },
+  {
+   "id": "fine-edge-002",
+   "task": "click",
+   "iou": 0.0261,
+   "bf": 0,
+   "mae": 0.1229
+  },
+  {
+   "id": "fine-edge-003",
+   "task": "subject",
+   "iou": 0.056,
+   "bf": 0.1722,
+   "mae": 0.1157
+  },
+  {
+   "id": "fine-edge-003",
+   "task": "click",
+   "iou": 0.0556,
+   "bf": 0.1529,
+   "mae": 0.0829
+  },
+  {
+   "id": "fine-edge-004",
+   "task": "subject",
+   "iou": 0.0438,
+   "bf": 0.1508,
+   "mae": 0.15
+  },
+  {
+   "id": "fine-edge-004",
+   "task": "click",
+   "iou": 0.311,
+   "bf": 0.4029,
+   "mae": 0.1062
+  },
+  {
+   "id": "fine-edge-005",
+   "task": "subject",
+   "iou": 0.5808,
+   "bf": 0.5215,
+   "mae": 0.0235
+  },
+  {
+   "id": "fine-edge-005",
+   "task": "click",
+   "iou": 0.1544,
+   "bf": 0.1196,
+   "mae": 0.0461
+  },
+  {
+   "id": "fine-edge-006",
+   "task": "subject",
+   "iou": 0.0554,
+   "bf": 0.3398,
+   "mae": 0.1986
+  },
+  {
+   "id": "fine-edge-006",
+   "task": "click",
+   "iou": 0.0049,
+   "bf": 0,
+   "mae": 0.1577
+  },
+  {
+   "id": "sky-001",
+   "task": "sky",
+   "iou": 0.9646,
+   "bf": 0.6701,
+   "mae": 0.0118
+  },
+  {
+   "id": "sky-002",
+   "task": "sky",
+   "iou": 0.7079,
+   "bf": 0.4725,
+   "mae": 0.1057
+  },
+  {
+   "id": "sky-003",
+   "task": "sky",
+   "iou": 0.9865,
+   "bf": 0.8707,
+   "mae": 0.0057
+  },
+  {
+   "id": "sky-004",
+   "task": "sky",
+   "iou": 0.981,
+   "bf": 0.8298,
+   "mae": 0.0065
+  },
+  {
+   "id": "sky-005",
+   "task": "sky",
+   "iou": 0.953,
+   "bf": 0.898,
+   "mae": 0.0095
+  },
+  {
+   "id": "sky-006",
+   "task": "sky",
+   "iou": 0.9117,
+   "bf": 0.8003,
+   "mae": 0.0074
+  },
+  {
+   "id": "sky-007",
+   "task": "sky",
+   "iou": 0.9787,
+   "bf": 0.9815,
+   "mae": 0.0048
+  },
+  {
+   "id": "sky-008",
+   "task": "sky",
+   "iou": 0.9296,
+   "bf": 0.7617,
+   "mae": 0.0561
+  },
+  {
+   "id": "face-001",
+   "task": "face-skin",
+   "iou": 0.9351,
+   "bf": 0.9556,
+   "mae": 0.0264
+  },
+  {
+   "id": "face-001",
+   "task": "face-hair",
+   "iou": 0.9357,
+   "bf": 0.8632,
+   "mae": 0.0525
+  },
+  {
+   "id": "face-002",
+   "task": "face-skin",
+   "iou": 0.925,
+   "bf": 0.9488,
+   "mae": 0.0301
+  },
+  {
+   "id": "face-002",
+   "task": "face-hair",
+   "iou": 0.9283,
+   "bf": 0.8496,
+   "mae": 0.0158
+  },
+  {
+   "id": "face-003",
+   "task": "face-skin",
+   "iou": 0.6919,
+   "bf": 0.7427,
+   "mae": 0.0904
+  },
+  {
+   "id": "face-003",
+   "task": "face-hair",
+   "iou": 0.7914,
+   "bf": 0.6325,
+   "mae": 0.127
+  },
+  {
+   "id": "face-004",
+   "task": "face-skin",
+   "iou": 0.9401,
+   "bf": 0.9697,
+   "mae": 0.0186
+  },
+  {
+   "id": "face-004",
+   "task": "face-hair",
+   "iou": 0.8854,
+   "bf": 0.8235,
+   "mae": 0.0154
+  },
+  {
+   "id": "face-005",
+   "task": "face-skin",
+   "iou": 0.9533,
+   "bf": 0.9635,
+   "mae": 0.0247
+  },
+  {
+   "id": "face-005",
+   "task": "face-hair",
+   "iou": 0.7706,
+   "bf": 0.8368,
+   "mae": 0.0246
+  },
+  {
+   "id": "face-006",
+   "task": "face-skin",
+   "iou": 0.9198,
+   "bf": 0.9137,
+   "mae": 0.0313
+  },
+  {
+   "id": "face-006",
+   "task": "face-hair",
+   "iou": 0.9412,
+   "bf": 0.8877,
+   "mae": 0.0199
+  },
+  {
+   "id": "face-007",
+   "task": "face-skin",
+   "iou": 0.9376,
+   "bf": 0.9523,
+   "mae": 0.0252
+  },
+  {
+   "id": "face-007",
+   "task": "face-hair",
+   "iou": 0.9391,
+   "bf": 0.893,
+   "mae": 0.0474
+  },
+  {
+   "id": "face-008",
+   "task": "face-skin",
+   "iou": 0.9069,
+   "bf": 0.8767,
+   "mae": 0.0295
+  },
+  {
+   "id": "face-008",
+   "task": "face-hair",
+   "iou": 0.9265,
+   "bf": 0.7882,
+   "mae": 0.0543
+  }
+ ],
+ "timingsThisMachine": {
+  "cpu": 4,
+  "onnxruntime": "1.29.0",
+  "median_s": {
+   "modnet": 6.403,
+   "edgesam-encoder": 3.107,
+   "edgesam-decoder": 0.539,
+   "landscape": 17.558,
+   "faceparse": 23.962
+  }
+ }
+}

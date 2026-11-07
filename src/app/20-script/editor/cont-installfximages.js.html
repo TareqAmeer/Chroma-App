@@ -64,7 +64,7 @@ function installFXImages(entries,loadKey,opts){
   // (library-ui.js's applyUISnapshot, if this photo has a saved edit) runs AFTER installFXImages
   // returns, so this baseline correctly predates it — Reset always goes back to true defaults,
   // not back to whatever was last saved.
-  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=0.9;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
+  _resetZoom(); if(isNewPhoto&&fxImages[0].kind!=='video'){fxZoom=FX_FIT;_applyZoom();} // new photos open at 90% (a margin around the frame); double-click still fits to 100%
   window.__pm&&window.__pm('ifx-zoom');
   fxHistory=[{j:JSON.stringify(getUISnapshot()),rasters:[],label:'Start',ts:Date.now()}]; fxHistIdx=0; // history entries — see fxHistoryPush (rasters:[] matches fxHistoryPush's own shape — a later push whose snapshot happens to equal 'Start' byte-for-byte used to crash reading .length off a missing key here)
   if(typeof fxSyncTopbarDisabled==='function')fxSyncTopbarDisabled(); // fresh photo: fxHistIdx=0 -> Undo starts disabled, Redo too
@@ -301,3 +301,6 @@ async function loadFXImages(fileList,opts){
 }
 // Detect a black-and-white / monochrome photo (near-zero mean saturation) and default the
 // "White glow" halation switch accordingly. The user can still toggle it afterward.
+// Runs once per photo load: installFXImages clears _bwDetectDone, and the first detect (or a
+// restored/pasted recipe via applyUISnapshot) sets it. Later full-quality swaps of the SAME photo
+// call this again — they must not overwrite a White glow setting the recipe already chose.

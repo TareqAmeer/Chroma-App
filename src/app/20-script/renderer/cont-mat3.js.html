@@ -551,6 +551,14 @@ void main(){
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
+  // CHR-259 Point Colour selection-view cube: SZ^3 single-channel weight bytes, same layout as setHslLUT.
+  setPcSelLUT(d){const gl=this.gl;this._pcSelSnapshot=new Uint8Array(d);if(!this.pcSelTx)this.pcSelTx=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_3D,this.pcSelTx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.R8,SZ,SZ,SZ,0,gl.RED,gl.UNSIGNED_BYTE,d);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE);}
   // Tone-curve table: 256x1 RGBA8 (R/G/B columns = the three baked per-channel curves).
   // Per-mask tone curves: 256x8 RGBA8, row i = mask i. Rebuilt only when a curve actually changes.
   setMaskCurves(MK){const gl=this.gl;
@@ -626,6 +634,8 @@ void main(){
     this.setPrintLUT(source._printLutSnapshot);
     if(source._hslSnapshot)this.setHslLUT(source._hslSnapshot);
     else{if(this.hslTx)this.gl.deleteTexture(this.hslTx);this.hslTx=null;this._hslSnapshot=null;}
+    if(source._pcSelSnapshot)this.setPcSelLUT(source._pcSelSnapshot);
+    else{if(this.pcSelTx)this.gl.deleteTexture(this.pcSelTx);this.pcSelTx=null;this._pcSelSnapshot=null;}
     if(source._curveSnapshot)this.setCurveTex(source._curveSnapshot);
     else{if(this.curveTx)this.gl.deleteTexture(this.curveTx);this.curveTx=null;this._curveSnapshot=null;}
     if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
@@ -634,14 +644,14 @@ void main(){
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -687,7 +697,7 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     const lns0=P.lens||{},nr0=P.nr||{},dc0=P.deconv||{},db0=P.depthBlur||{},ts0=P.tiltShift||{};
     const masks0=P.masks||[],anyGate0=masks0.some(m=>m.crOn&&m.crSamples&&m.crSamples.length);
     this._initBufs(w,h,gs,(opts&&(opts.hdrIntermediate||opts.gamutWarn))||tonemapOn,{
-      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||(lns0.scale!=null&&lns0.scale!==1)),
+      lens:!!(lns0.dist||lns0.vig||lns0.ca||lns0.defringe||lns0.pv||lns0.ph||lns0.rot||lns0.asp||lns0.ox||lns0.oy||(lns0.scale!=null&&lns0.scale!==1)),
       nr:!!(nr0.luma>0||nr0.color>0||nr0.hlDesat>0),
       deconv:!!(dc0.amount>0),
       dof:!!((db0&&db0.enabled)||(ts0&&ts0.enabled)),
@@ -841,11 +851,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     // CA — see the lens shader). Chain: img -> [lens] -> [nr] -> lut, each stage conditionally
     // skipped (reading straight from the previous stage's output name) so the default
     // no-correction path never touches these buffers.
-    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||(lnsP.scale!=null&&lnsP.scale!==1)));
+    const lnsP=P.lens, lnsOn=!!(lnsP&&(lnsP.dist||lnsP.vig||lnsP.ca||lnsP.defringe||lnsP.pv||lnsP.ph||lnsP.rot||lnsP.asp||lnsP.ox||lnsP.oy||(lnsP.scale!=null&&lnsP.scale!==1)));
     if(lnsOn){
       this._stagePass('lens',
         {img:0,lnsDist:lnsP.dist||0,lnsVig:lnsP.vig||0,lnsCA:lnsP.ca||0,lnsDefr:lnsP.defringe||0,
-         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,
+         lnsPV:lnsP.pv||0,lnsPH:lnsP.ph||0,lnsRot:lnsP.rot||0,lnsScale:lnsP.scale!=null?lnsP.scale:1,lnsAsp:lnsP.asp||0,lnsOff:[lnsP.ox||0,lnsP.oy||0],
          texSize:[1/this.imgW,1/this.imgH],
          aspect:this.imgW>=this.imgH?[1,this.imgH/this.imgW]:[this.imgW/this.imgH,1]},[[0,'img',false]],'img',opts);
     }
@@ -937,6 +947,8 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       vidBreath:(P.filmMotion&&P.filmMotion.breath!=null)?P.filmMotion.breath:1.0,
       curveTex:2,useCurve:(P.curves&&this.curveTx)?1:0,
       hslLut:3,useHsl:(P.hsl&&this.hslTx)?1:0,
+      // CHR-259: Point Colour selection view — preview token only, so export/tile renders never show it.
+      pcSelLut:11,pcShowSel:(opts&&opts.previewOnly===MSK_PREVIEW_RENDER_TOKEN&&opts.showPcSel&&this.pcSelTx)?1:0,
       useCDL:P.cdl?1:0,cdlSlope:(P.cdlSOP||{slope:[1,1,1]}).slope,cdlOffset:(P.cdlSOP||{offset:[0,0,0]}).offset,cdlPower:(P.cdlSOP||{power:[1,1,1]}).power,
       maskTex:4,maskTex2:7,mskCrvTex:10,
       stockShoulderTex:8,useStockShoulder:useShoulderNow?1:0,
@@ -970,10 +982,11 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
+      ...rtColourUniforms(A.rtColour,A.enabled),
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]};
-    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false]],lutSrc,opts,anyGate);
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the

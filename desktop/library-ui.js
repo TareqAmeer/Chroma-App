@@ -212,6 +212,72 @@
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, Math.round(c.height * 0.1));
     return (await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
   }
+  // Browser stand-in for desktop/src-tauri/src/raw_review_jobs.rs (see libtestInvoke): the same
+  // Job / Item / Summary shapes and status transitions, kept in memory.
+  const ltRawJobs = [];
+  function libtestRawReviewJobs(cmd, A) {
+    const now = () => Math.floor(Date.now() / 1000);
+    const copy = (j) => structuredClone(j);
+    if (cmd === 'raw_review_jobs_create') {
+      const items = A.items || [];
+      if (!items.length || items.length > 50000) throw new Error('Select between 1 and 50000 RAWs');
+      if (new Set(items.map((i) => i.path)).size !== items.length) throw new Error('RAW review jobs cannot contain the same source path twice');
+      const t = now(), id = ltRawJobs.reduce((m, j) => Math.max(m, j.id), 0) + 1;
+      const job = { id, label: String(A.label || ''), status: 'running', createdAt: t, updatedAt: t,
+        items: items.map((i, index) => ({ index, path: i.path, recipeKey: i.recipeKey, settingsJson: i.settingsJson, sourceMtimeNs: '1700000000000000000', sourceSize: 1000, status: 'pending', error: null })) };
+      ltRawJobs.push(job);
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_list') {
+      return ltRawJobs.slice().sort((a, b) => b.id - a.id).slice(0, 100).map((j) => ({
+        id: j.id, label: j.label, status: j.status, createdAt: j.createdAt, updatedAt: j.updatedAt,
+        total: j.items.length, completed: j.items.filter((i) => i.status === 'completed').length,
+        pending: j.items.filter((i) => i.status === 'pending' || i.status === 'working').length,
+        failed: j.items.filter((i) => i.status === 'failed').length,
+        failedItems: j.items.filter((i) => i.status === 'failed').slice(0, 20).map((i) => `${i.path}: ${i.error || 'failed'}`.slice(0, 240)),
+      }));
+    }
+    const job = ltRawJobs.find((x) => x.id === A.id);
+    if (!job) throw new Error('Query returned no rows');
+    if (cmd === 'raw_review_jobs_get') return copy(job);
+    if (cmd === 'raw_review_jobs_checkpoint') {
+      if (!['working', 'completed', 'failed'].includes(A.status)) throw new Error('Invalid RAW review checkpoint');
+      const item = job.items.find((i) => i.index === A.index);
+      if (!item) throw new Error('Query returned no rows');
+      if (job.status !== 'running' || (item.status === 'completed' && A.status !== 'completed')) throw new Error('RAW review job is no longer running');
+      item.status = A.status; item.error = A.error == null ? null : String(A.error).slice(0, 2048);
+      job.updatedAt = now();
+      return copy(item);
+    }
+    if (cmd === 'raw_review_jobs_finish') {
+      if (job.status !== 'running') throw new Error('RAW review job is not running');
+      if (job.items.some((i) => i.status === 'pending' || i.status === 'working')) throw new Error('RAW review job still has unfinished items');
+      job.status = job.items.some((i) => i.status === 'failed') ? 'partial' : 'completed'; job.updatedAt = now();
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_cancel') {
+      if (!['running', 'interrupted'].includes(job.status)) throw new Error('RAW review job cannot be cancelled in its current state');
+      job.status = 'cancelled'; job.updatedAt = now();
+      for (const i of job.items) if (i.status === 'pending' || i.status === 'working') i.status = 'cancelled';
+      return copy(job);
+    }
+    if (cmd === 'raw_review_jobs_interrupt') {
+      if (job.status !== 'running') throw new Error('RAW review job is not running');
+      job.status = 'interrupted'; job.updatedAt = now();
+      for (const i of job.items) if (i.status === 'working') { i.status = 'pending'; i.error = null; }
+      return copy(job);
+    }
+    // raw_review_jobs_resume: libtest sources never change and no review cache exists, so an item
+    // resumes as pending unless the caller's expected recipe key no longer matches.
+    if (job.status === 'running') throw new Error('RAW review job is already running');
+    const expected = new Map((A.expectedRecipeKeys || []).map((k) => [k.index, k.recipeKey]));
+    for (const i of job.items) {
+      if (expected.has(i.index) && expected.get(i.index) !== i.recipeKey) { i.status = 'failed'; i.error = 'RAW review settings changed; prepare this RAW again'; }
+      else { i.status = 'pending'; i.error = null; }
+    }
+    job.status = 'running'; job.updatedAt = now();
+    return copy(job);
+  }
   function libtestInvoke(cmd, args) {
     const A = args || {};
     if (LIBTEST && (cmd === 'queue_offline_edit' || cmd === 'set_sidecar')) {
@@ -502,7 +568,6 @@
         }));
       }
       case 'eject_volume': return Promise.resolve();
-      case 'trash_file': (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]); return Promise.resolve(true);
       case 'trash_file_with_undo': {
         (window.__libtestCalls = window.__libtestCalls || []).push(['trash_file', A]);
         const receipt = { photo: { originalPath: A.path, receiptId: `libtest-trash:${A.path}` }, sidecar: null, warning: null };
@@ -950,6 +1015,7 @@
       case 'catalog_photo_ids_for_paths': return Promise.resolve((A.paths || []).map((p) => parseInt((/(\d+)\.\w+$/.exec(p) || [])[1] || '0', 10) - 1000));
       case 'collage_output_path': return Promise.resolve(String(A.firstSource || '/test/AllPhotos/x.jpg').replace(/[^/]*$/, 'Collage.jpg'));
       case 'take_pending_open_path': return Promise.resolve([]);
+      case 'take_pending_oauth_callback': return Promise.resolve(null);
       // Decode caches: the real commands return Err on a miss, which every caller already treats
       // as "decode it yourself" — a permanent miss exercises that path.
       case 'cache_raw_decode': case 'get_cached_raw_decode': case 'get_decode_cache': case 'get_decode_cache_path': case 'hdr_headroom_clear': case 'get_hdr_companion':
@@ -1023,6 +1089,37 @@
       case 'subject_merge': case 'subject_remove_ref':
         return Promise.resolve({ id: A.keepId || A.id, name: 'Subject', prototype: [], refs: [], encoder: 'libtest' });
       case 'subject_locate_multi': return Promise.resolve([{ x: 0.5, y: 0.5, score: 0.9 }]);
+      // ── CHR-233 follow-up stand-ins (shapes from the Rust; see each command's source).
+      // Optional ONNX models are absent in the browser, exactly like an install without them:
+      // matte.rs matte_models -> [], main.rs landscape_available / superres_available -> false,
+      // and the model-backed runs fail (every caller gates on availability or catches).
+      case 'matte_models': return Promise.resolve([]);
+      case 'landscape_available': case 'superres_available': case 'native_jpeg_flag': return Promise.resolve(false);
+      case 'matte_run': case 'landscape_run': case 'superres_run': case 'scene_detect': case 'sam2_warm':
+      case 'encode_jpeg_rgba': case 'catalog_raw_face_detail':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      // sam_box / sam2_box need a prior sam_encode / sam2_encode, which libtest never answers.
+      case 'sam_box': case 'sam2_box': return Promise.reject(new Error(cmd + ': no photo encoded yet'));
+      // library.rs get_decode_cache_dims: Err on a cache miss when the RAW header can't be
+      // read either — libtest's ".RW2" files are PNG bytes (the caller catches -> null).
+      case 'get_decode_cache_dims': return Promise.reject(new Error('libtest: not cached'));
+      // main.rs read_export_sidecar: Ok(None) when no sidecar sits beside the file.
+      case 'read_export_sidecar': return Promise.resolve(null);
+      // catalog.rs SidecarSweepResult { dirs, changed }.
+      case 'catalog_sync_sidecars':
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        return Promise.resolve({ dirs: 1, changed: 0 });
+      // inpaint.rs: the MI-GAN model is never installed in the browser (inpaint_model_status ->
+      // false); the install download and every job command are native-only, and with no job ever
+      // started, inpaint_job / inpaint_cancel answer like Rust does for an id it never issued.
+      case 'inpaint_model_status': return Promise.resolve(false);
+      case 'inpaint_model_install': case 'inpaint_start': case 'inpaint_accept': case 'inpaint_resolve': case 'inpaint_export_bundle':
+        return Promise.reject(new Error('libtest: native-only ' + cmd));
+      case 'inpaint_job': case 'inpaint_cancel': return Promise.reject(new Error('Unknown inpainting job'));
+      case 'raw_review_jobs_create': case 'raw_review_jobs_list': case 'raw_review_jobs_get':
+      case 'raw_review_jobs_checkpoint': case 'raw_review_jobs_finish': case 'raw_review_jobs_cancel':
+      case 'raw_review_jobs_interrupt': case 'raw_review_jobs_resume':
+        try { return Promise.resolve(libtestRawReviewJobs(cmd, A)); } catch (e) { return Promise.reject(e); }
       default: return Promise.reject(new Error('libtest: no mock for ' + cmd));
     }
   }
@@ -4182,6 +4279,7 @@
         if (card) seen = { path: card.dataset.path, off: card.getBoundingClientRect().top - vt };
         anchor = Math.max(0, scroller.scrollTop - g.offsetTop) / o.rowH * o.cols;
       }
+      if (!g.clientWidth) return; // hidden while the settle timer ran: see the ResizeObserver guard
       const raw = virtMetrics(g);
       if (!raw || !o.cardW) { if (raw) { state._virtMetrics = raw; state._virtRange = null; virtUpdate(true); } return; }
       // Same card width = not a resize: the live row pitch IS the truth. Scaling the old height
@@ -7622,6 +7720,12 @@
   // lay the selected sequence out on a fixed A4-ratio page with room for filename/rating labels.
   // CHR-177 contact-sheet geometry begin
   const CONTACT_SHEET_MAX_PHOTOS = 12;
+  // 300 dpi pixel sizes plus PDF points (1/72 in) for the page sizes Lightroom's Page Setup
+  // most commonly starts from. The PDF places each composed page at exactly this physical size.
+  const CONTACT_SHEET_PAPERS = Object.freeze({
+    a4: Object.freeze({ label: 'A4', width: 2480, height: 3508, ptWidth: 595.28, ptHeight: 841.89 }),
+    letter: Object.freeze({ label: 'US Letter', width: 2550, height: 3300, ptWidth: 612, ptHeight: 792 }),
+  });
   function contactSheetOrder(paths, entries) {
     const unique = [...new Set(paths)];
     const order = new Map((entries || []).map((entry, index) => [entry.path, index]));
@@ -7629,13 +7733,42 @@
       .sort((a, b) => (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) || a.index - b.index)
       .map((item) => item.path);
   }
-  function contactSheetLayout(count) {
-    if (!Number.isInteger(count) || count < 1 || count > CONTACT_SHEET_MAX_PHOTOS) throw new RangeError(`Select 1–${CONTACT_SHEET_MAX_PHOTOS} photos for one contact sheet`);
-    const width = 2480, height = 3508, margin = 120, header = 144, footer = 80, gutter = 36, caption = 76;
+  // Settings as saved in a template. columns/rows 0 = automatic grid (up to 12 per page); a
+  // fixed grid needs both, like Lightroom's Page Grid rows x columns.
+  function contactSheetNormalize(options) {
+    const o = options && typeof options === 'object' ? options : {};
+    const int = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || 0));
+    let columns = int(o.columns, 0, 8), rows = int(o.rows, 0, 10);
+    if (!columns || !rows) columns = rows = 0;
+    return {
+      paper: Object.hasOwn(CONTACT_SHEET_PAPERS, o.paper) ? o.paper : 'a4',
+      orientation: o.orientation === 'landscape' ? 'landscape' : 'portrait',
+      columns, rows,
+      filename: o.filename !== false, rating: o.rating !== false, pageNumbers: o.pageNumbers !== false,
+      format: o.format === 'png' ? 'png' : 'pdf',
+      title: String(o.title ?? 'Contact Sheet').slice(0, 120),
+    };
+  }
+  function contactSheetPerPage(options) {
+    const o = contactSheetNormalize(options);
+    return o.columns ? o.columns * o.rows : CONTACT_SHEET_MAX_PHOTOS;
+  }
+  function contactSheetPages(paths, options) {
+    const per = contactSheetPerPage(options), pages = [];
+    for (let i = 0; i < paths.length; i += per) pages.push(paths.slice(i, i + per));
+    return pages;
+  }
+  function contactSheetLayout(count, options) {
+    const o = contactSheetNormalize(options), perPage = contactSheetPerPage(o);
+    if (!Number.isInteger(count) || count < 1 || count > perPage) throw new RangeError(`Select 1–${perPage} photos for one contact sheet`);
+    const paper = CONTACT_SHEET_PAPERS[o.paper], landscape = o.orientation === 'landscape';
+    const width = landscape ? paper.height : paper.width, height = landscape ? paper.width : paper.height;
+    const margin = 120, header = 144, footer = 80, gutter = 36;
+    const caption = o.filename || o.rating ? 76 : 0;
     const bodyTop = margin + header, bodyHeight = height - bodyTop - margin - footer;
     const usableWidth = width - margin * 2;
-    const columns = Math.max(1, Math.ceil(Math.sqrt(count * usableWidth / bodyHeight)));
-    const rows = Math.ceil(count / columns);
+    const columns = o.columns || Math.max(1, Math.ceil(Math.sqrt(count * usableWidth / bodyHeight)));
+    const rows = o.rows || Math.ceil(count / columns);
     const cellWidth = (usableWidth - gutter * (columns - 1)) / columns;
     const cellHeight = (bodyHeight - gutter * (rows - 1)) / rows;
     const cells = Array.from({ length: count }, (_, index) => {
@@ -7645,13 +7778,66 @@
         image: { x: x + 16, y: y + 12, width: cellWidth - 32, height: cellHeight - caption - 24 },
         caption: { x: x + 12, y: y + cellHeight - caption, width: cellWidth - 24, height: caption } };
     });
-    return { width, height, margin, header, columns, rows, cells };
+    return { width, height, margin, header, footer, columns, rows, cells,
+      ptWidth: landscape ? paper.ptHeight : paper.ptWidth, ptHeight: landscape ? paper.ptWidth : paper.ptHeight };
   }
   function contactSheetContainRect(sourceWidth, sourceHeight, box) {
     if (!(sourceWidth > 0 && sourceHeight > 0 && box.width > 0 && box.height > 0)) throw new RangeError('Image and contact-sheet cell dimensions must be positive');
     const scale = Math.min(box.width / sourceWidth, box.height / sourceHeight);
     const width = sourceWidth * scale, height = sourceHeight * scale;
     return { x: box.x + (box.width - width) / 2, y: box.y + (box.height - height) / 2, width, height };
+  }
+  // Minimal PDF 1.4 writer: one full-page baseline JPEG (DCTDecode, DeviceRGB) per page, placed at
+  // the page's physical size in points. The pixels are the already-composed graded page, so the
+  // PDF adds no second layout engine. No ICC output intent yet (CHR-236 owns print profiles).
+  function contactSheetPdf(pages, info) {
+    if (!Array.isArray(pages) || !pages.length) throw new RangeError('A contact-sheet PDF needs at least one page');
+    const enc = new TextEncoder(), chunks = [], offsets = [];
+    let size = 0;
+    const push = (part) => { const b = typeof part === 'string' ? enc.encode(part) : part; chunks.push(b); size += b.length; };
+    const num = (v) => String(Math.round(v * 100) / 100);
+    push('%PDF-1.4\n'); push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+    offsets[1] = size; push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    offsets[2] = size; push(`2 0 obj\n<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] /Count ${pages.length} >>\nendobj\n`);
+    pages.forEach((page, i) => {
+      const jpeg = page && page.jpeg;
+      if (!(jpeg instanceof Uint8Array) || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) throw new TypeError(`Contact-sheet page ${i + 1} is not a JPEG`);
+      if (!(page.width > 0 && page.height > 0 && page.ptWidth > 0 && page.ptHeight > 0)) throw new RangeError(`Contact-sheet page ${i + 1} has no size`);
+      const pn = 3 + 3 * i, W = num(page.ptWidth), H = num(page.ptHeight), content = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+      offsets[pn] = size; push(`${pn} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${pn + 2} 0 R >> >> /Contents ${pn + 1} 0 R >>\nendobj\n`);
+      offsets[pn + 1] = size; push(`${pn + 1} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+      offsets[pn + 2] = size; push(`${pn + 2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${Math.round(page.width)} /Height ${Math.round(page.height)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+      push(jpeg); push('\nendstream\nendobj\n');
+    });
+    // /Info dictionary (Title, Producer) so viewers and Finder show a real document name. Strings are
+    // PDF literal strings: escape \ ( ) and drop control chars; non-ASCII becomes '?' (PDFDocEncoding-safe).
+    const pdfStr = (v) => '(' + String(v).replace(/[^\x20-\x7e]/g, '?').replace(/[\\()]/g, (c) => '\\' + c) + ')';
+    const title = (info && info.title) || 'Contact sheet', producer = (info && info.producer) || 'Chromasmith';
+    const infoN = 3 + 3 * pages.length;
+    offsets[infoN] = size; push(`${infoN} 0 obj\n<< /Title ${pdfStr(title)} /Producer ${pdfStr(producer)} >>\nendobj\n`);
+    const count = infoN + 1, xref = size;
+    let tail = `xref\n0 ${count}\n0000000000 65535 f \n`;
+    for (let n = 1; n < count; n++) tail += `${String(offsets[n]).padStart(10, '0')} 00000 n \n`;
+    push(`${tail}trailer\n<< /Size ${count} /Root 1 0 R /Info ${infoN} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    const out = new Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+  // Named settings templates/presets kept under one storage key (localStorage in the app; any
+  // getItem/setItem object in tests). Shared by contact-sheet templates and web-gallery presets.
+  function libNamedPresets(storage, key, normalize) {
+    const read = () => { try { const v = JSON.parse(storage.getItem(key) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; } };
+    return {
+      names: () => Object.keys(read()).sort((a, b) => a.localeCompare(b)),
+      get: (name) => { const all = read(); return Object.hasOwn(all, name) ? normalize(all[name]) : null; },
+      save: (name, settings) => {
+        const n = String(name || '').trim().slice(0, 60);
+        if (!n) throw new RangeError('Name the preset before saving it');
+        const all = read(); all[n] = normalize(settings); storage.setItem(key, JSON.stringify(all)); return n;
+      },
+      remove: (name) => { const all = read(); delete all[name]; storage.setItem(key, JSON.stringify(all)); },
+    };
   }
   // CHR-177 contact-sheet geometry end
   function collageTemplateModal(n) {
@@ -7749,17 +7935,108 @@
     } catch (e) { prog.fail(humanizeErr('create collage', e)); }
   }
 
-  // A bounded, print-oriented contact-sheet export from the same Library selection action as
-  // Collage. Each saved edit is freshly parsed and rendered in isolation through the existing
-  // graded renderer; unlike a preview/thumb grid, the output page is composed only from those
-  // final pixels and has an explicit per-photo filename/rating caption.
-  async function createContactSheet(paths) {
+  // Settings dialog shared by the contact-sheet and web-gallery exports: a <dialog> with a preset
+  // picker (load / save / delete named settings), the caller's fields, and Cancel / OK. Field
+  // values are only ever assigned through .value/.checked, never interpolated into markup.
+  function libExportSettingsDialog({ id, title, fieldsHtml, okLabel, presets, read, write }) {
+    return new Promise((resolve) => {
+      document.getElementById(id)?.remove();
+      const dlg = document.createElement('dialog');
+      dlg.id = id;
+      dlg.className = 'lib-export-settings';
+      dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:460px;width:92vw;font:13px/1.4 var(--sans);box-shadow:var(--lift-2)';
+      dlg.innerHTML = `<form method="dialog" style="display:grid;gap:10px"><div style="font-size:14px;font-weight:600"></div>`
+        + '<div style="display:flex;gap:6px;align-items:center"><select data-preset style="flex:1"><option value="">Presets…</option></select>'
+        + '<button type="button" class="btn bgh" data-preset-save>Save…</button><button type="button" class="btn bgh" data-preset-delete>Delete</button></div>'
+        + `<div data-fields style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center">${fieldsHtml}</div>`
+        + '<div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" class="btn bgh" data-cancel>Cancel</button><button type="submit" class="btn" data-ok></button></div></form>';
+      dlg.querySelector('div').textContent = title;
+      dlg.querySelector('[data-ok]').textContent = okLabel;
+      document.body.appendChild(dlg);
+      const sel = dlg.querySelector('[data-preset]');
+      const fill = () => { sel.length = 1; for (const name of presets.names()) sel.add(new Option(name, name)); };
+      fill();
+      write(dlg);
+      sel.onchange = () => { const s = sel.value && presets.get(sel.value); if (s) write(dlg, s); };
+      dlg.querySelector('[data-preset-save]').onclick = () => {
+        const name = window.prompt('Preset name', sel.value || '');
+        if (name == null) return;
+        try { const saved = presets.save(name, read(dlg)); fill(); sel.value = saved; } catch (e) { toast(e.message, 'err'); }
+      };
+      dlg.querySelector('[data-preset-delete]').onclick = () => { if (!sel.value) return; presets.remove(sel.value); fill(); };
+      const finish = (v) => { if (dlg.open) dlg.close(); dlg.remove(); resolve(v); };
+      dlg.querySelector('[data-cancel]').onclick = () => finish(null);
+      dlg.querySelector('form').onsubmit = (e) => { e.preventDefault(); finish(read(dlg)); };
+      dlg.oncancel = (e) => { e.preventDefault(); finish(null); };
+      dlg.showModal();
+    });
+  }
+  function libPresetStorage() {
+    try { if (window.localStorage) return window.localStorage; } catch {}
+    const mem = new Map();
+    return { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  }
+  const CONTACT_SHEET_LAST_KEY = 'cs-contact-sheet-last';
+  function contactSheetSettingsDialog(count) {
+    const store = libPresetStorage();
+    const presets = libNamedPresets(store, 'cs-contact-sheet-templates', contactSheetNormalize);
+    const field = (label, html) => `<label>${label}</label>${html}`;
+    const fieldsHtml = field('Title', '<input name="title" maxlength="120">')
+      + field('Paper', `<select name="paper">${Object.entries(CONTACT_SHEET_PAPERS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join('')}</select>`)
+      + field('Orientation', '<select name="orientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>')
+      + field('Grid', '<span><select name="grid"><option value="auto">Automatic (up to 12 per page)</option><option value="fixed">Fixed</option></select> <input name="columns" type="number" min="1" max="8" style="width:48px" aria-label="Columns"> × <input name="rows" type="number" min="1" max="10" style="width:48px" aria-label="Rows"></span>')
+      + field('Captions', '<span><label><input type="checkbox" name="filename"> Filename</label> <label><input type="checkbox" name="rating"> Rating</label> <label><input type="checkbox" name="pageNumbers"> Page numbers</label></span>')
+      + field('Format', '<select name="format"><option value="pdf">PDF (all pages in one file)</option><option value="png">PNG (one file per page)</option></select>')
+      + `<span></span><span data-summary style="opacity:.7"></span>`;
+    const q = (dlg, n) => dlg.querySelector(`[name="${n}"]`);
+    const read = (dlg) => contactSheetNormalize({
+      title: q(dlg, 'title').value, paper: q(dlg, 'paper').value, orientation: q(dlg, 'orientation').value,
+      columns: q(dlg, 'grid').value === 'fixed' ? q(dlg, 'columns').value : 0, rows: q(dlg, 'grid').value === 'fixed' ? q(dlg, 'rows').value : 0,
+      filename: q(dlg, 'filename').checked, rating: q(dlg, 'rating').checked, pageNumbers: q(dlg, 'pageNumbers').checked, format: q(dlg, 'format').value,
+    });
+    const summarize = (dlg) => {
+      const s = read(dlg), pages = Math.ceil(count / contactSheetPerPage(s));
+      q(dlg, 'columns').disabled = q(dlg, 'rows').disabled = q(dlg, 'grid').value !== 'fixed';
+      dlg.querySelector('[data-summary]').textContent = `${count} photo${count === 1 ? '' : 's'} → ${pages} page${pages === 1 ? '' : 's'}`;
+    };
+    const write = (dlg, settings) => {
+      let s = settings;
+      if (!s) { try { s = contactSheetNormalize(JSON.parse(store.getItem(CONTACT_SHEET_LAST_KEY) || 'null')); } catch { s = contactSheetNormalize(); } }
+      q(dlg, 'title').value = s.title; q(dlg, 'paper').value = s.paper; q(dlg, 'orientation').value = s.orientation;
+      q(dlg, 'grid').value = s.columns ? 'fixed' : 'auto'; q(dlg, 'columns').value = s.columns || 3; q(dlg, 'rows').value = s.rows || 4;
+      q(dlg, 'filename').checked = s.filename; q(dlg, 'rating').checked = s.rating; q(dlg, 'pageNumbers').checked = s.pageNumbers; q(dlg, 'format').value = s.format;
+      if (!dlg.__csSummary) { dlg.__csSummary = true; dlg.addEventListener('input', () => summarize(dlg)); dlg.addEventListener('change', () => summarize(dlg)); }
+      summarize(dlg);
+    };
+    return libExportSettingsDialog({ id: 'lib-contact-sheet-modal', title: 'Contact sheet', fieldsHtml, okLabel: 'Export', presets, read, write })
+      .then((s) => { if (s) store.setItem(CONTACT_SHEET_LAST_KEY, JSON.stringify(s)); return s; });
+  }
+
+  // Renders one Library photo to final graded pixels, in isolation: the file is decoded anew and
+  // only ITS saved recipe is applied, so a recipe never leaks to the next photo. Unedited
+  // non-RAW photos are decoded directly (their pixels are already final).
+  async function libRenderGradedPhoto(file, path, sc, maxEdge) {
+    const needsRenderer = !!(sc && sc.recipe) || RAW_EXT_RE.test(path);
+    if (!needsRenderer) return createImageBitmap(file);
+    if (typeof window.chromasmithRenderCurrentGraded !== 'function') throw new Error(`Cannot render ${baseName(path)} at full photo quality`);
+    await libLoadFX([file]);
+    if (sc && sc.recipe) await applyUISnapshot(snapshotFromB64(sc.recipe));
+    if (typeof applyRawDefaults === 'function') applyRawDefaults();
+    const bitmap = await window.chromasmithRenderCurrentGraded(maxEdge);
+    if (!bitmap || !(bitmap.width > 0 && bitmap.height > 0)) throw new Error(`Photo render failed for ${baseName(path)}`);
+    return bitmap;
+  }
+
+  // A print-oriented contact-sheet export from the same Library selection action as Collage. Each
+  // photo goes through libRenderGradedPhoto (never a preview/thumb) and the pages are composed
+  // only from those final pixels with per-photo filename/rating captions. Selections larger than
+  // one page flow onto further pages (Lightroom's contact-sheet behaviour); PDF puts all pages in
+  // one document at the chosen paper size, PNG writes one 300 dpi file per page.
+  async function createContactSheet(paths, presetSettings) {
     const ordered = contactSheetOrder(paths, state.entries || []);
     if (!ordered.length) return;
-    if (ordered.length > CONTACT_SHEET_MAX_PHOTOS) {
-      toast(`Contact sheets support up to ${CONTACT_SHEET_MAX_PHOTOS} photos per page`, false);
-      return;
-    }
+    const settings = presetSettings ? contactSheetNormalize(presetSettings) : await contactSheetSettingsDialog(ordered.length);
+    if (!settings) return;
     const prog = toastProgress(`Building contact sheet from ${ordered.length} photos…`);
     const previousOpen = state.openedPath;
     let touchedEditor = false;
@@ -7767,62 +8044,327 @@
       const files = await readPathsAsFiles(ordered);
       if (!files.length) { prog.fail('Could not read any selected photos'); return; }
       const okPaths = files.okPaths || ordered;
+      const fileByPath = new Map(okPaths.map((p, i) => [p, files[i]]));
       await getSidecarsBatch(okPaths);
-      const layout = contactSheetLayout(okPaths.length);
-      const canvas = document.createElement('canvas'); canvas.width = layout.width; canvas.height = layout.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Could not create the contact-sheet canvas');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, layout.width, layout.height);
-      ctx.fillStyle = '#202124'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-      ctx.font = '600 46px system-ui, sans-serif'; ctx.fillText('Contact Sheet', layout.margin, layout.margin + 35);
-      ctx.fillStyle = '#666'; ctx.font = '26px system-ui, sans-serif';
-      ctx.fillText(`${okPaths.length} photos · A4 ratio · ${layout.width} × ${layout.height} px`, layout.margin, layout.margin + 92);
-
-      for (let i = 0; i < files.length; i++) {
-        const path = okPaths[i], sc = await getSidecar(path);
-        let bitmap = null;
-        try {
-          const needsRenderer = !!(sc && sc.recipe) || RAW_EXT_RE.test(path);
-          if (needsRenderer) {
-            if (typeof window.chromasmithRenderCurrentGraded !== 'function') throw new Error(`Cannot render ${baseName(path)} at full photo quality`);
-            prog.update && prog.update(`Rendering photo ${i + 1}/${files.length}…`);
-            touchedEditor = true;
-            await libLoadFX([files[i]]);
-            // Decode anew per path: a recipe snapshot is never allowed to leak to the next photo.
-            if (sc && sc.recipe) await applyUISnapshot(snapshotFromB64(sc.recipe));
-            if (typeof applyRawDefaults === 'function') applyRawDefaults();
-            bitmap = await window.chromasmithRenderCurrentGraded(1600);
-            if (!bitmap || !(bitmap.width > 0 && bitmap.height > 0)) throw new Error(`Photo render failed for ${baseName(path)}`);
-          } else {
-            bitmap = await createImageBitmap(files[i]);
-          }
-          const cell = layout.cells[i], image = contactSheetContainRect(bitmap.width, bitmap.height, cell.image);
-          ctx.fillStyle = '#f5f5f5'; ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
-          ctx.drawImage(bitmap, image.x, image.y, image.width, image.height);
-          ctx.strokeStyle = '#d8dadd'; ctx.lineWidth = 2; ctx.strokeRect(cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
-          ctx.fillStyle = '#202124'; ctx.font = '24px system-ui, sans-serif'; ctx.textBaseline = 'middle';
-          ctx.fillText(baseName(path), cell.caption.x, cell.caption.y + 24, cell.caption.width);
-          if (sc.rating > 0) {
-            ctx.fillStyle = '#9b6a00'; ctx.font = '24px system-ui, sans-serif';
-            ctx.fillText('★'.repeat(Math.min(5, sc.rating)), cell.caption.x, cell.caption.y + 56, cell.caption.width);
-          }
-        } finally {
-          if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+      const pagePaths = contactSheetPages(okPaths, settings);
+      const outputs = [];
+      let done = 0;
+      for (let pageIndex = 0; pageIndex < pagePaths.length; pageIndex++) {
+        const pathsOnPage = pagePaths[pageIndex];
+        const layout = contactSheetLayout(pathsOnPage.length, settings);
+        const canvas = document.createElement('canvas'); canvas.width = layout.width; canvas.height = layout.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Could not create the contact-sheet canvas');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, layout.width, layout.height);
+        ctx.fillStyle = '#202124'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+        ctx.font = '600 46px system-ui, sans-serif'; ctx.fillText(settings.title || 'Contact Sheet', layout.margin, layout.margin + 35, layout.width - layout.margin * 2);
+        ctx.fillStyle = '#666'; ctx.font = '26px system-ui, sans-serif';
+        ctx.fillText(`${okPaths.length} photos · ${CONTACT_SHEET_PAPERS[settings.paper].label} ${settings.orientation} · ${layout.width} × ${layout.height} px`, layout.margin, layout.margin + 92);
+        if (settings.pageNumbers) {
+          ctx.textAlign = 'right';
+          ctx.fillText(`Page ${pageIndex + 1} of ${pagePaths.length}`, layout.width - layout.margin, layout.height - layout.margin - layout.footer / 2);
+          ctx.textAlign = 'left';
         }
+        for (let i = 0; i < pathsOnPage.length; i++) {
+          const path = pathsOnPage[i], sc = await getSidecar(path);
+          let bitmap = null;
+          try {
+            prog.update && prog.update(`Rendering photo ${++done}/${okPaths.length}…`);
+            if (!!(sc && sc.recipe) || RAW_EXT_RE.test(path)) touchedEditor = true;
+            bitmap = await libRenderGradedPhoto(fileByPath.get(path), path, sc, 1600);
+            const cell = layout.cells[i], image = contactSheetContainRect(bitmap.width, bitmap.height, cell.image);
+            ctx.fillStyle = '#f5f5f5'; ctx.fillRect(cell.x, cell.y, cell.width, cell.height);
+            ctx.drawImage(bitmap, image.x, image.y, image.width, image.height);
+            ctx.strokeStyle = '#d8dadd'; ctx.lineWidth = 2; ctx.strokeRect(cell.x + 1, cell.y + 1, cell.width - 2, cell.height - 2);
+            ctx.font = '24px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+            let line = cell.caption.y + 24;
+            if (settings.filename) { ctx.fillStyle = '#202124'; ctx.fillText(baseName(path), cell.caption.x, line, cell.caption.width); line += 32; }
+            if (settings.rating && sc.rating > 0) {
+              ctx.fillStyle = '#9b6a00';
+              ctx.fillText('★'.repeat(Math.min(5, sc.rating)), cell.caption.x, line, cell.caption.width);
+            }
+          } finally {
+            if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+          }
+        }
+        const mime = settings.format === 'pdf' ? 'image/jpeg' : 'image/png';
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.92));
+        canvas.width = canvas.height = 0;
+        if (!blob) throw new Error('Could not encode the contact-sheet page');
+        outputs.push({ bytes: new Uint8Array(await blob.arrayBuffer()), layout });
       }
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      canvas.width = canvas.height = 0;
-      if (!blob) throw new Error('Could not encode the contact-sheet PNG');
       const stem = baseName(okPaths[0]).replace(/\.[^.]+$/, '') || 'photos';
-      const receipt = await saveFiles([{ content: new Uint8Array(await blob.arrayBuffer()), fname: `${stem}-contact-sheet.png`, mime: 'image/png' }]);
+      const items = settings.format === 'pdf'
+        ? [{ content: contactSheetPdf(outputs.map((o) => ({ jpeg: o.bytes, width: o.layout.width, height: o.layout.height, ptWidth: o.layout.ptWidth, ptHeight: o.layout.ptHeight })), { title: `${stem} contact sheet`, producer: 'Chromasmith' }), fname: `${stem}-contact-sheet.pdf`, mime: 'application/pdf' }]
+        : outputs.map((o, i) => ({ content: o.bytes, fname: outputs.length === 1 ? `${stem}-contact-sheet.png` : `${stem}-contact-sheet-p${String(i + 1).padStart(2, '0')}.png`, mime: 'image/png' }));
+      const receipt = await saveFiles(items);
       if (Array.isArray(receipt) && receipt.some((r) => !r.ok)) throw new Error(receipt.find((r) => !r.ok)?.err || 'Save failed');
-      prog.resolve('Contact sheet exported');
+      prog.resolve(`Contact sheet exported (${outputs.length} page${outputs.length === 1 ? '' : 's'})`);
+      return items;
     } catch (e) {
       prog.fail(humanizeErr('export contact sheet', e));
     } finally {
       if (touchedEditor && previousOpen) openInEditor(previousOpen).catch((e) => console.error('restore editor after contact sheet', e));
     }
   }
+
+  // CHR-239 web-gallery plan begin
+  // Settings mirror Lightroom Classic's Web module panels: Site Info (title, collection title,
+  // description, contact), Color Palette, Appearance (layout template + grid columns), Image Info
+  // (caption fields), Output Settings (image size, JPEG quality, watermark, copyright line).
+  const WEB_GALLERY_MANIFEST = 'chromasmith-gallery.json';
+  function webGalleryNormalize(options) {
+    const o = options && typeof options === 'object' ? options : {};
+    const int = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+    const text = (v, max) => String(v ?? '').slice(0, max);
+    return {
+      title: text(o.title ?? 'Photo gallery', 120), collectionTitle: text(o.collectionTitle, 160), description: text(o.description, 600), contact: text(o.contact, 200),
+      template: ['grid', 'filmstrip', 'minimal'].includes(o.template) ? o.template : 'grid',
+      palette: ['light', 'dark', 'grey'].includes(o.palette) ? o.palette : 'light',
+      columns: int(o.columns, 1, 8, 3), size: int(o.size, 320, 4096, 2048), quality: int(o.quality, 40, 100, 85),
+      watermark: text(o.watermark, 120), watermarkOpacity: int(o.watermarkOpacity, 5, 100, 55),
+      captionFilename: o.captionFilename !== false, captionRating: o.captionRating === true,
+      copyright: text(o.copyright, 200), captionCopyright: o.captionCopyright === true,
+    };
+  }
+  // FNV-1a over UTF-16 code units, two seeds -> 16 hex chars. Stable across runs and machines;
+  // a change detector, not a security hash.
+  function webGalleryHash(value) {
+    const s = String(value);
+    let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      a = Math.imul(a ^ c, 0x01000193) >>> 0;
+      b = Math.imul(b ^ c, 0x5bd1e995) >>> 0; b ^= b >>> 13;
+    }
+    return a.toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
+  }
+  // File name from the photo's name plus a short hash of its full source path: stable when the
+  // selection is reordered, distinct for same-named photos in different folders, and it never
+  // writes the source path itself into a published folder.
+  function webGalleryAssetName(path) {
+    const stem = String(path).split(/[\\/]/).pop().replace(/\.[^.]*$/, '');
+    const slug = stem.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 60) || 'photo';
+    return `${slug}-${webGalleryHash(path).slice(0, 8)}.jpg`;
+  }
+  // Only what changes the image pixels: caption/title/palette edits rewrite index.html alone.
+  function webGalleryFingerprint(path, recipe, mtime, settings) {
+    const s = webGalleryNormalize(settings);
+    return webGalleryHash(JSON.stringify([path, recipe || '', Number(mtime) || 0, s.size, s.quality, s.watermark, s.watermark ? s.watermarkOpacity : 0]));
+  }
+  // Incremental re-export plan. items: [{path, fingerprint}] in gallery order; manifest: the
+  // previous export's chromasmith-gallery.json (or null). A photo is re-rendered only when its
+  // file is new or its fingerprint differs; files the previous export wrote that the new one no
+  // longer references are reported as stale (never deleted here).
+  function webGalleryPlan(items, manifest) {
+    const previous = manifest && manifest.version === 1 && manifest.photos && typeof manifest.photos === 'object' ? manifest.photos : {};
+    const seen = new Set();
+    const entries = items.map((item) => {
+      const file = webGalleryAssetName(item.path);
+      if (seen.has(file)) throw new Error(`Two photos map to the same gallery file: ${file}`);
+      seen.add(file);
+      const prior = Object.hasOwn(previous, file) ? previous[file] : null;
+      const reuse = !!(prior && prior.fingerprint === item.fingerprint && prior.width > 0 && prior.height > 0);
+      return { path: item.path, file, fingerprint: item.fingerprint, render: !reuse, width: reuse ? prior.width : 0, height: reuse ? prior.height : 0 };
+    });
+    const stale = Object.keys(previous).filter((file) => !seen.has(file)).sort();
+    return { entries, stale };
+  }
+  function webGalleryManifest(settings, entries) {
+    const photos = {};
+    for (const e of entries) photos[e.file] = { fingerprint: e.fingerprint, width: e.width, height: e.height };
+    return { version: 1, generator: 'Chromasmith web gallery', settings: webGalleryNormalize(settings), order: entries.map((e) => e.file), photos };
+  }
+  function webGalleryCaption(path, sidecar, settings) {
+    const s = webGalleryNormalize(settings), lines = [];
+    if (s.captionFilename) lines.push(String(path).split(/[\\/]/).pop());
+    const rating = Math.max(0, Math.min(5, Math.round(Number(sidecar && sidecar.rating) || 0)));
+    if (s.captionRating && rating) lines.push('★'.repeat(rating));
+    if (s.captionCopyright && s.copyright.trim()) lines.push(s.copyright.trim());
+    return lines.join('\n');
+  }
+  // CHR-239 web-gallery plan end
+
+  const LIB_SCRIPT_URL = (document.currentScript && document.currentScript.src) || location.href;
+  let staticGalleryModule = null;
+  function loadStaticGalleryBuilder() {
+    staticGalleryModule ||= import(new URL('static-gallery.mjs', LIB_SCRIPT_URL).href);
+    return staticGalleryModule;
+  }
+  function libJoinPath(dir, name) {
+    const sep = /\\/.test(dir) && !/\//.test(dir) ? '\\' : '/';
+    return dir.endsWith(sep) ? dir + name : dir + sep + name;
+  }
+  async function libReadOptionalBytes(path) {
+    try { const buf = await invoke('read_file_bytes', { path }); return buf ? new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer || buf) : null; } catch { return null; }
+  }
+  function webGallerySettingsDialog(count) {
+    const store = libPresetStorage();
+    const presets = libNamedPresets(store, 'cs-web-gallery-presets', webGalleryNormalize);
+    const field = (label, html) => `<label>${label}</label>${html}`;
+    const fieldsHtml = field('Site title', '<input name="title" maxlength="120">')
+      + field('Collection title', '<input name="collectionTitle" maxlength="160">')
+      + field('Description', '<textarea name="description" rows="2" maxlength="600"></textarea>')
+      + field('Contact', '<input name="contact" maxlength="200" placeholder="Email or https:// link">')
+      + field('Layout', '<select name="template"><option value="grid">Grid</option><option value="filmstrip">Filmstrip</option><option value="minimal">Minimal</option></select>')
+      + field('Palette', '<select name="palette"><option value="light">Light</option><option value="dark">Dark</option><option value="grey">Grey</option></select>')
+      + field('Grid columns', '<input name="columns" type="number" min="1" max="8">')
+      + field('Image size', '<span><input name="size" type="number" min="320" max="4096" step="16" style="width:80px"> px long edge</span>')
+      + field('JPEG quality', '<input name="quality" type="number" min="40" max="100">')
+      + field('Watermark', '<span><input name="watermark" maxlength="120" style="width:60%"> <input name="watermarkOpacity" type="number" min="5" max="100" style="width:56px" aria-label="Watermark opacity"> %</span>')
+      + field('Copyright', '<input name="copyright" maxlength="200">')
+      + field('Captions', '<span><label><input type="checkbox" name="captionFilename"> Filename</label> <label><input type="checkbox" name="captionRating"> Rating</label> <label><input type="checkbox" name="captionCopyright"> Copyright</label></span>')
+      + `<span></span><span style="opacity:.7">${count} photo${count === 1 ? '' : 's'} · choose a folder next</span>`;
+    const keys = ['title', 'collectionTitle', 'description', 'contact', 'template', 'palette', 'columns', 'size', 'quality', 'watermark', 'watermarkOpacity', 'copyright'];
+    const checks = ['captionFilename', 'captionRating', 'captionCopyright'];
+    const q = (dlg, n) => dlg.querySelector(`[name="${n}"]`);
+    const read = (dlg) => webGalleryNormalize(Object.fromEntries([...keys.map((k) => [k, q(dlg, k).value]), ...checks.map((k) => [k, q(dlg, k).checked])]));
+    const write = (dlg, settings) => {
+      let s = settings;
+      if (!s) { try { s = webGalleryNormalize(JSON.parse(store.getItem('cs-web-gallery-last') || 'null')); } catch { s = webGalleryNormalize(); } }
+      for (const k of keys) q(dlg, k).value = s[k];
+      for (const k of checks) q(dlg, k).checked = s[k];
+    };
+    return libExportSettingsDialog({ id: 'lib-web-gallery-modal', title: 'Web gallery', fieldsHtml, okLabel: 'Choose folder & export', presets, read, write })
+      .then((s) => { if (s) store.setItem('cs-web-gallery-last', JSON.stringify(s)); return s; });
+  }
+
+  // CHR-239: Library -> static web gallery. Every image is a final graded render (same isolated
+  // per-photo path as the contact sheet), resized to the long edge, watermarked with the export
+  // panel's own applyWatermark, and JPEG-encoded. index.html comes from desktop/static-gallery.mjs.
+  // A chromasmith-gallery.json manifest in the folder makes the next export to it incremental.
+  async function createWebGallery(paths, options = {}) {
+    const ordered = contactSheetOrder(paths, state.entries || []);
+    if (!ordered.length) return null;
+    const settings = options.settings ? webGalleryNormalize(options.settings) : await webGallerySettingsDialog(ordered.length);
+    if (!settings) return null;
+    let dir = options.dir;
+    if (!dir) {
+      try { dir = await invoke('plugin:dialog|open', { options: { directory: true, multiple: false, title: 'Choose a folder for the web gallery' } }); } catch (e) { console.error('web gallery folder', e); }
+    }
+    if (!dir || typeof dir !== 'string') return null;
+    const manifestPath = libJoinPath(dir, WEB_GALLERY_MANIFEST);
+    const manifestBytes = await libReadOptionalBytes(manifestPath);
+    let manifest = null;
+    if (manifestBytes) { try { manifest = JSON.parse(new TextDecoder().decode(manifestBytes)); } catch { manifest = null; } }
+    if (!manifest && await libReadOptionalBytes(libJoinPath(dir, 'index.html'))
+      && !window.confirm('This folder already has an index.html that Chromasmith did not create. Replace it with the gallery?')) return null;
+    const prog = toastProgress(`Building web gallery from ${ordered.length} photos…`);
+    const previousOpen = state.openedPath;
+    let touchedEditor = false;
+    const written = new Map();
+    try {
+      const [{ buildStaticGallery }, files] = await Promise.all([loadStaticGalleryBuilder(), readPathsAsFiles(ordered)]);
+      if (!files.length) { prog.fail('Could not read any selected photos'); return null; }
+      const okPaths = files.okPaths || ordered;
+      await getSidecarsBatch(okPaths);
+      const scByPath = new Map();
+      for (const p of okPaths) scByPath.set(p, await getSidecar(p));
+      const mtimeByPath = new Map((state.entries || []).map((e) => [e.path, e.mtime || 0]));
+      const plan = webGalleryPlan(okPaths.map((path) => ({ path, fingerprint: webGalleryFingerprint(path, scByPath.get(path)?.recipe, mtimeByPath.get(path), settings) })), manifest);
+      const todo = plan.entries.filter((e) => e.render);
+      let done = 0;
+      for (const entry of todo) {
+        const i = okPaths.indexOf(entry.path), sc = scByPath.get(entry.path) || await getSidecar(entry.path);
+        prog.update && prog.update(`Rendering photo ${++done}/${todo.length}…`);
+        if (!!(sc && sc.recipe) || RAW_EXT_RE.test(entry.path)) touchedEditor = true;
+        let bitmap = await libRenderGradedPhoto(files[i], entry.path, sc, settings.size);
+        try {
+          const k = Math.min(1, settings.size / Math.max(bitmap.width, bitmap.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(bitmap.width * k)); canvas.height = Math.max(1, Math.round(bitmap.height * k));
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          if (settings.watermark.trim() && typeof applyWatermark === 'function') applyWatermark(canvas, { text: settings.watermark, opacity: settings.watermarkOpacity / 100 });
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', settings.quality / 100));
+          entry.width = canvas.width; entry.height = canvas.height;
+          canvas.width = canvas.height = 0;
+          if (!blob) throw new Error(`Could not encode ${baseName(entry.path)}`);
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          await invoke('write_file_bytes', { path: libJoinPath(dir, entry.file), dataB64: bytesToBase64(bytes) });
+          written.set(entry.file, bytes);
+        } finally {
+          if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+          bitmap = null;
+        }
+      }
+      const html = buildStaticGallery({
+        title: settings.title, collectionTitle: settings.collectionTitle, description: settings.description, contact: settings.contact,
+        footer: settings.copyright, template: settings.template, palette: settings.palette, columns: settings.columns,
+        photos: plan.entries.map((e) => ({ src: e.file, width: e.width, height: e.height, alt: baseName(e.path), caption: webGalleryCaption(e.path, scByPath.get(e.path), settings) })),
+      });
+      await invoke('write_file_bytes', { path: libJoinPath(dir, 'index.html'), dataB64: bytesToBase64(new TextEncoder().encode(html)) });
+      // Manifest last: an interrupted export leaves the previous manifest, so the next run redoes the work.
+      await invoke('write_file_bytes', { path: manifestPath, dataB64: bytesToBase64(new TextEncoder().encode(JSON.stringify(webGalleryManifest(settings, plan.entries), null, 1))) });
+      const reused = plan.entries.length - todo.length;
+      prog.resolve(`Web gallery exported — ${todo.length} rendered, ${reused} unchanged${plan.stale.length ? `, ${plan.stale.length} old file${plan.stale.length === 1 ? '' : 's'} left in the folder` : ''}`);
+      const result = { dir, html, rendered: todo.map((e) => e.file), reused: plan.entries.filter((e) => !e.render).map((e) => e.file), stale: plan.stale, written };
+      if (!options.settings) webGalleryResultDialog(result);
+      return result;
+    } catch (e) {
+      prog.fail(humanizeErr('export web gallery', e));
+      return null;
+    } finally {
+      if (touchedEditor && previousOpen) openInEditor(previousOpen).catch((e) => console.error('restore editor after web gallery', e));
+    }
+  }
+  // Preview of the export just written: the SAME index.html string in an iframe, with each image
+  // URL pointed at the JPEG bytes that were written (or read back from the folder for unchanged
+  // photos). Desktop / phone widths check the responsive layout.
+  async function webGalleryPreview(result, width) {
+    document.getElementById('lib-web-gallery-preview')?.remove();
+    const dlg = document.createElement('dialog');
+    dlg.id = 'lib-web-gallery-preview';
+    dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:10px;width:96vw;height:92vh;max-width:none;max-height:none;font:13px var(--sans)';
+    dlg.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><strong style="flex:1">Gallery preview</strong><button type="button" class="btn bgh" data-w="0">Desktop</button><button type="button" class="btn bgh" data-w="390">Phone</button><button type="button" class="btn bgh" data-close>Close</button></div><div style="height:calc(100% - 40px);display:flex;justify-content:center"><iframe title="Gallery preview" style="border:1px solid var(--bdr);background:#fff;height:100%"></iframe></div>';
+    document.body.appendChild(dlg);
+    const frame = dlg.querySelector('iframe');
+    const urls = [];
+    const setWidth = (w) => { frame.style.width = w ? `${w}px` : '100%'; };
+    setWidth(width || 0);
+    dlg.querySelectorAll('[data-w]').forEach((b) => { b.onclick = () => setWidth(Number(b.dataset.w)); });
+    const close = () => { if (dlg.open) dlg.close(); dlg.remove(); urls.forEach((u) => URL.revokeObjectURL(u)); };
+    dlg.querySelector('[data-close]').onclick = close;
+    dlg.oncancel = (e) => { e.preventDefault(); close(); };
+    frame.onload = async () => {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const urlFor = new Map();
+      for (const el of doc.querySelectorAll('[data-gallery-image]')) {
+        const file = decodeURIComponent(el.getAttribute('href') || '');
+        if (!urlFor.has(file)) {
+          const bytes = result.written.get(file) || await libReadOptionalBytes(libJoinPath(result.dir, file));
+          const url = bytes ? URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' })) : '';
+          if (url) urls.push(url);
+          urlFor.set(file, url);
+        }
+        const url = urlFor.get(file);
+        if (!url) continue;
+        el.setAttribute('href', url);
+        el.querySelector('img')?.setAttribute('src', url);
+      }
+    };
+    frame.srcdoc = result.html;
+    dlg.showModal();
+    return dlg;
+  }
+  function webGalleryResultDialog(result) {
+    document.getElementById('lib-web-gallery-done')?.remove();
+    const dlg = document.createElement('dialog');
+    dlg.id = 'lib-web-gallery-done';
+    dlg.style.cssText = 'border:1px solid var(--bdr);border-radius:10px;background:var(--bg);color:var(--txt);padding:16px;max-width:420px;width:90vw;font:13px/1.4 var(--sans)';
+    dlg.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Web gallery exported</div><div data-msg></div><div data-stale style="opacity:.75;margin-top:6px"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button type="button" class="btn bgh" data-reveal>Show folder</button><button type="button" class="btn bgh" data-preview>Preview</button><button type="button" class="btn" data-close>Done</button></div>';
+    dlg.querySelector('[data-msg]').textContent = `${result.rendered.length} photo${result.rendered.length === 1 ? '' : 's'} rendered, ${result.reused.length} unchanged, in ${result.dir}`;
+    if (result.stale.length) dlg.querySelector('[data-stale]').textContent = `Not deleted (no longer in the gallery): ${result.stale.join(', ')}`;
+    document.body.appendChild(dlg);
+    const close = () => { if (dlg.open) dlg.close(); dlg.remove(); };
+    dlg.querySelector('[data-close]').onclick = close;
+    dlg.querySelector('[data-preview]').onclick = () => { close(); webGalleryPreview(result); };
+    dlg.querySelector('[data-reveal]').onclick = () => invoke('reveal_in_finder', { path: libJoinPath(result.dir, 'index.html') }).catch((e) => console.error('reveal gallery', e));
+    dlg.showModal();
+  }
+  if (LIBTEST) Object.assign(window, { __libtestCreateWebGallery: createWebGallery, __libtestWebGalleryPreview: webGalleryPreview, __libtestCreateContactSheet: createContactSheet });
 
   // Shared batch-open: reads paths, loads them into the editor, and registers each in Recents
   // (touch_recent) — batch opens used to skip this entirely, so an externally-opened or
@@ -9212,6 +9754,7 @@
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
+    exportMenu.subItem('Web gallery…', () => createWebGallery(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (libExportRunning()) return;
@@ -9338,6 +9881,11 @@
       let roW = -1;
       _virtRO = new ResizeObserver(() => {
         const w = grid.clientWidth;
+        // Hidden grid (Survey/Cull/Compare cover it with display:none): no layout box, so every card reads
+        // offsetTop 0 / width 0 and virtMetrics() would report "all cards in one row, 16px pitch". Re-windowing
+        // on that mounted a fresh card set whose thumbnails then forced a ~100ms style recalc each, freezing a
+        // 50k Library for minutes after entering Cull (test/library_cull_50k.mjs). Keep the last real metrics.
+        if (!w) return;
         const live = virtMetrics(grid), measured = state._virtMetrics;
         const geometryChanged = live && measured && (live.cols !== measured.cols || Math.abs(live.rowH - measured.rowH) > 0.5);
         if (((roW >= 0 && w !== roW) || geometryChanged) && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure();

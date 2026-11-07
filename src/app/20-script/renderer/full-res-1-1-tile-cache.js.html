@@ -16,7 +16,7 @@ function _fxTileCacheStats(){return{tiles:_fxTiles.map.size,bytes:_fxTiles.bytes
 function _fxTileModeOK(P,src){
   if(!FX.gl||typeof FX.gl.blitFramebuffer!=='function'||(src&&src._sceneLinearPresent))return false;
   const lns=P.lens||{},nr=P.nr||{},dc=P.deconv||{};
-  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||(lns.scale!=null&&lns.scale!==1)
+  return !(P.tonemap||P.filmMotion||lns.dist||lns.vig||lns.ca||lns.defringe||lns.pv||lns.ph||lns.rot||lns.asp||lns.ox||lns.oy||(lns.scale!=null&&lns.scale!==1)
     ||nr.luma>0||nr.color>0||nr.hlDesat>0||dc.amount>0||(P.depthBlur&&P.depthBlur.enabled)||(P.tiltShift&&P.tiltShift.enabled));
 }
 // Glow/blur scale for a zoomed crop rendered at `sq` output px per working-image px. Halation, bloom and skin blurs are sized

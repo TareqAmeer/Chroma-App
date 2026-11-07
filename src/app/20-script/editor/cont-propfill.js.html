@@ -1,3 +1,13 @@
+async function propFill(lut,pop,pfId,p0,p1){
+  const f=new Uint8Array(pop);let ch=true,it=0;
+  while(ch&&it<SZ*2){ch=false;it++;const tf=[];
+    for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(f[idx])continue;let sr=0,sg=0,sb=0,c=0;
+      for(const[dr,dg,db] of[[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]]){const nr=r+dr,ng=g+dg,nb=b+db;if(nr<0||nr>=SZ||ng<0||ng>=SZ||nb<0||nb>=SZ)continue;const ni=nr*S2+ng*SZ+nb;if(f[ni]){sr+=lut[ni*3];sg+=lut[ni*3+1];sb+=lut[ni*3+2];c++}}
+      if(c>0){tf.push(idx,sr/c,sg/c,sb/c);ch=true}}
+    for(let i=0;i<tf.length;i+=4){const idx=tf[i];lut[idx*3]=tf[i+1];lut[idx*3+1]=tf[i+2];lut[idx*3+2]=tf[i+3];f[idx]=1}
+    if(it%4===0){setP(pfId,p0+(p1-p0)*(it/(SZ*2)));await yd()}}
+  for(let r=0;r<SZ;r++)for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const idx=r*S2+g*SZ+b;if(!f[idx]){lut[idx*3]=r/32;lut[idx*3+1]=g/32;lut[idx*3+2]=b/32}}
+}
 async function composeLUTs(corr,base,pfId,p0=78,p1=100){
   const fin=new Float32Array(SZ*SZ*SZ*3);
   for(let r=0;r<SZ;r++){for(let g=0;g<SZ;g++)for(let b=0;b<SZ;b++){const[br,bg,bb]=sampleLUT(base,r/32,g/32,b/32),[cr,cg,cb]=sampleLUT(corr,br,bg,bb),i=li(r,g,b);fin[i]=Math.max(0,Math.min(1,cr));fin[i+1]=Math.max(0,Math.min(1,cg));fin[i+2]=Math.max(0,Math.min(1,cb))}
@@ -240,23 +250,3 @@ function cpPairPick(which,e){
   cpPairsRender();
   if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}
 }
-function cpSampleAverage(frame,x,y){
-  const {px,w,h}=frame;let r=0,g=0,b=0,n=0;
-  for(let yy=Math.max(0,y-2);yy<=Math.min(h-1,y+2);yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(w-1,x+2);xx++){
-    const i=(yy*w+xx)*4;r+=px[i];g+=px[i+1];b+=px[i+2];n++;
-  }
-  return[Math.round(r/n),Math.round(g/n),Math.round(b/n)];
-}
-function cpPairsRender(){
-  const box=document.getElementById('cp-pairs'),list=document.getElementById('cp-pairs-list');if(!box||!list)return;
-  box.style.display=(_cpPoints.length||_cpPending)?'block':'none';list.innerHTML='';
-  _cpPoints.forEach((p,i)=>{
-    const item=document.createElement('span');item.style.cssText='display:inline-flex;align-items:center;gap:5px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:11px';
-    const swatch=(rgb)=>{const s=document.createElement('i');s.style.cssText=`width:15px;height:15px;border-radius:50%;background:rgb(${rgb.join(',')});border:1px solid rgba(128,128,128,.5)`;s.title=`RGB ${rgb.join(', ')}`;return s;};
-    item.append(`Pair ${i+1}`,swatch(p.source.rgb),document.createTextNode('→'),swatch(p.reference.rgb));
-    const rm=document.createElement('button');rm.type='button';rm.className='btn bgh';rm.textContent='×';rm.title=`Remove pair ${i+1}`;rm.setAttribute('aria-label',`Remove pair ${i+1}`);rm.style.cssText='padding:0 4px;min-width:0';rm.onclick=()=>{_cpPoints.splice(i,1);cpPairsRender();if(typeof cpPairsApply==='function'){cpPairsApply();if(typeof cpPreviewUpdate==='function')cpPreviewUpdate();}};item.appendChild(rm);list.appendChild(item);
-  });
-}
-// CHR-222: sparse pairs -> smooth LUT correction. The automatic LUT stays the default; with pairs
-// we add a Gaussian-weighted residual field (sigma 0.16 in RGB, ridge lambda so it fades to zero away
-// from the pins), iterated 3x so each pinned source colour lands close to its reference colour.

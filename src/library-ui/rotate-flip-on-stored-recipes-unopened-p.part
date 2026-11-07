@@ -768,6 +768,7 @@
     // quality/scope/etc can be changed first).
     const exportMenu = submenu(`Export${n > 1 ? ` (${n})` : ''}`);
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
+    exportMenu.subItem('Web gallery…', () => createWebGallery(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
     exportMenu.subItem('Export custom…', async () => {
       if (libExportRunning()) return;
@@ -894,6 +895,11 @@
       let roW = -1;
       _virtRO = new ResizeObserver(() => {
         const w = grid.clientWidth;
+        // Hidden grid (Survey/Cull/Compare cover it with display:none): no layout box, so every card reads
+        // offsetTop 0 / width 0 and virtMetrics() would report "all cards in one row, 16px pitch". Re-windowing
+        // on that mounted a fresh card set whose thumbnails then forced a ~100ms style recalc each, freezing a
+        // 50k Library for minutes after entering Cull (test/library_cull_50k.mjs). Keep the last real metrics.
+        if (!w) return;
         const live = virtMetrics(grid), measured = state._virtMetrics;
         const geometryChanged = live && measured && (live.cols !== measured.cols || Math.abs(live.rowH - measured.rowH) > 0.5);
         if (((roW >= 0 && w !== roW) || geometryChanged) && !document.body.classList.contains('lib-dock-dragging')) virtRemeasure();

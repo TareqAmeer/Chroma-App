@@ -19,8 +19,11 @@ try {
     await loadFXImages([new File([bytes], 'portrait.png', { type: 'image/png' })]);
     document.body.classList.add('fx-single');
     document.getElementById('panel-fx')?.classList.add('active');
-    fxSplit = true;
-    initSplitDrag();
+    // Enter split through the real control path (toggleSplit -> initSplitDrag + renderPreview, which is
+    // what shows #fx-canvas-orig). Setting fxSplit=true directly relied on some unrelated render landing
+    // later; under load none did and the before-canvas clip read '' (flaky).
+    fxSplit = false;
+    toggleSplit();
   }, image);
   const divider = page.locator('#fx-split-line');
   await page.evaluate(() => { fxSplitAxis = 'vertical'; fxSplitPos = .5; _applySplitPos(); });
@@ -56,7 +59,7 @@ try {
   await page.mouse.up();
   const horizontalDragPos = await page.evaluate(() => fxSplitPos);
   assert.ok(horizontalDragPos > .52, 'pointer drag moves the horizontal divider with the photo');
-  await page.waitForFunction(() => document.getElementById('fx-canvas-orig')?.style.display !== 'none', null, { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => document.getElementById('fx-canvas-orig')?.style.display === 'block', null, { timeout: 30000 });
   await page.evaluate(() => _applySplitPos());
   const clips = await page.evaluate(() => ({ pos: fxSplitPos, before: document.getElementById('fx-canvas-orig').style.clipPath, after: FX.cv.style.clipPath }));
   assert.match(clips.before, new RegExp(`${(100 - clips.pos * 100).toFixed(1)}%`), 'before canvas clipping follows the dragged divider');

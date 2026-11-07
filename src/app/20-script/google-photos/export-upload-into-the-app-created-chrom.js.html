@@ -98,12 +98,17 @@ async function lrAuthNative(cid){
     client_id:cid,redirect_uri:LR_REDIRECT_URI,response_type:'code',
     scope:LR_SCOPES,state:'lrcb',code_challenge:challenge,code_challenge_method:'S256'}).toString();
   const invoke=(...args)=>window.__TAURI__.core.invoke(...args);
+  // main.rs stashes every callback URL in PendingOAuth as well as emitting the event. Drain a
+  // stale one from an earlier attempt first, then poll the stash as a fallback for a callback
+  // that lands before the listener is registered (or while the webview was reloading).
+  await invoke('take_pending_oauth_callback').catch(()=>null);
   const callbackPromise=new Promise((resolve,reject)=>{
-    let unlisten=null;
-    const timeout=setTimeout(()=>{if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
-    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>{
-      clearTimeout(timeout);if(unlisten)unlisten();resolve(e.payload);
-    }).then(un=>{unlisten=un;});
+    let unlisten=null,done=false,poll=null;
+    const finish=(url)=>{if(done)return;done=true;clearTimeout(timeout);clearInterval(poll);if(unlisten)unlisten();
+      invoke('take_pending_oauth_callback').catch(()=>null);resolve(url);};
+    const timeout=setTimeout(()=>{done=true;clearInterval(poll);if(unlisten)unlisten();reject(new Error('Sign-in timed out — try again'));},180000);
+    poll=setInterval(()=>{invoke('take_pending_oauth_callback').then(u=>{if(u)finish(u);}).catch(()=>{});},1000);
+    window.__TAURI__.event.listen('adobe-oauth-callback',(e)=>finish(e.payload)).then(un=>{if(done)un();else unlisten=un;});
   });
   try{await invoke('open_url_native',{url:authUrl})}
   catch(e){throw new Error('Could not open the sign-in page: '+(e&&e.message||e))}
@@ -245,13 +250,3 @@ function lrAssetMeta(p){
 }
 // Binary rendition GET via download_url_native (same no-CORS reasoning as lrApiGet; the extra
 // headers param carries Lightroom's required X-API-Key). Throws "HTTP nnn" on a non-2xx.
-async function lrRenditionBlob(assetId,type){
-  const tok=await lrAuth();
-  const buf=await window.__TAURI__.core.invoke('download_url_native',
-    {url:`${LR_API}/catalogs/${lrCatalogId}/assets/${assetId}/renditions/${type}`,
-     bearer:tok.at,headers:[['X-API-Key',tok.cid]]});
-  return new Blob([buf],{type:'image/jpeg'});
-}
-// The untouched ORIGINAL (for these assets, the RW2) via the master endpoint. ⚠️ Adobe's
-// partner API commonly returns 403 here on non-elevated tiers (documented limitation) — the
-// caller surfaces that as "original download not permitted, use Edited full-size instead".

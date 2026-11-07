@@ -46,6 +46,13 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(__dirname, 'baselines');
 const BASELINE = path.join(OUT_DIR, 'ui_audit_baseline.json');
 const WRITE_BASELINE = process.argv.includes('--baseline');
+// The topbar-parity pass loads the Library from desktop/dist/ (gitignored, built by
+// tools/scripts/build-desktop.mjs). Without it every parity probe reads NaN and the run reports
+// 5 misleading "PARITY-MISSING … selector missing" findings — say what's actually wrong instead.
+if (!existsSync(path.join(ROOT, 'desktop/dist/index.html'))) {
+  console.error('ui_audit: desktop/dist/ is missing — run `node tools/scripts/build-desktop.mjs` first (the Library parity pass needs it).');
+  process.exit(2);
+}
 const DUMP_JSON = process.argv.includes('--json');
 
 // Every rail section key in FX_SECTIONS, plus the deskx group keys those collapse into.

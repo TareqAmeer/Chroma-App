@@ -63,22 +63,28 @@ function mskPinDown(e){
   window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
 }
 // Click-to-select on the photo: a click (not a drag) on a mask's covered area selects that mask, topmost first.
+// Does mask m cover the top-down photo point (nx,ny)? Shared by click-select and drag-to-move.
+function _mskHitOne(m,nx,ny){
+  if(!m||m.muted||m.isExclude||m.composeOp==='subtract')return false;
+  if(m.type==='radial'){
+    const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
+    const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
+    return (lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1;
+  }
+  if(m.type==='linear'){
+    const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
+    if(!(L>0))return false;
+    const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;return t>=0&&t<=1;
+  }
+  if(m.px&&m.mtW&&m.mtH&&m.px.length){
+    const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
+    return m.px[y*m.mtW+x]>64;
+  }
+  return false;
+}
 function mskHitTest(nx,ny){
   const ms=fxState.masks;
-  for(let i=ms.length-1;i>=0;i--){
-    const m=ms[i];if(!m||m.muted||m.isExclude||m.composeOp==='subtract')continue;
-    if(m.type==='radial'){
-      const a=m.ar>0?m.ar:1,rot=m.rot||0,cr=Math.cos(rot),sr=Math.sin(rot),dx=(nx-m.cx)*a,dy=(1-ny)-m.cy; // shape y is bottom-up
-      const lx=dx*cr+dy*sr,ly=-dx*sr+dy*cr;
-      if((lx/Math.max(.01,m.rx*a))**2+(ly/Math.max(.01,m.ry))**2<=1)return i;
-    }else if(m.type==='linear'){
-      const a=m.ar>0?m.ar:1,ax=(m.x1-m.x0)*a,ay=m.y1-m.y0,L=ax*ax+ay*ay;
-      if(L>0){const t=((nx-m.x0)*a*ax+((1-ny)-m.y0)*ay)/L;if(t>=0&&t<=1)return i;}
-    }else if(m.px&&m.mtW&&m.mtH&&m.px.length){
-      const x=Math.min(m.mtW-1,Math.floor(nx*m.mtW)),y=Math.min(m.mtH-1,Math.floor(ny*m.mtH));
-      if(m.px[y*m.mtW+x]>64)return i;
-    }
-  }
+  for(let i=ms.length-1;i>=0;i--)if(_mskHitOne(ms[i],nx,ny))return i;
   return -1;
 }
 function mskPhotoClick(e){
@@ -122,12 +128,26 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_mskDrawFor){_mskDr
 function mskHandleDown(e){
   if(e.button!==0)return;
   e.stopPropagation();e.preventDefault();
-  const svg=document.getElementById('fx-mask-overlay'),m=fxState.masks[mskSel];if(!m)return;
+  const svg=document.getElementById('fx-mask-overlay');let m=fxState.masks[mskSel];if(!m)return;
+  // The full-photo "under" rect moves the selected shape wherever you press. If the press is on a
+  // DIFFERENT radial/linear mask and outside the selected one, select that mask first and drag it,
+  // so grabbing a mask always moves that mask (was: it moved the selected one and ignored the target).
+  let which=e.currentTarget.dataset.h;
+  if((which==='move'||which==='lmove')&&e.currentTarget.tagName==='rect'){
+    const pn=fxPointerToPhotoNorm(e);
+    if(pn&&!_mskHitOne(m,pn.nx,pn.ny)){
+      const j=mskHitTest(pn.nx,pn.ny);
+      if(j>=0&&j!==mskSel&&(fxState.masks[j].type==='radial'||fxState.masks[j].type==='linear')){
+        mskSel=j;if(mskSolo!=null){mskSolo=null;fxUpdate();}mskRebuild();m=fxState.masks[j];
+        which=m.type==='radial'?'move':'lmove';
+      }
+    }
+  }
   const[px,py]=mskHandlePos(e);
   mskAdoptTrueShape(m);
   // Snapshot of the shape at grab time: moves and rotations apply as deltas from it, so grabbing
   // off-centre never makes the shape jump to the pointer.
-  _mskDrag={which:e.currentTarget.dataset.h,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
+  _mskDrag={which,svg,px,py,m0:{cx:m.cx,cy:m.cy,rx:m.rx,ry:m.ry,rot:m.rot||0,feather:m.feather,x0:m.x0,y0:m.y0,x1:m.x1,y1:m.y1}};
   if(_mskDrag.which==='draw'){_mskDrawFor=null;_mskDrag.draw=true;}
   // Lock history for the drag: mskHandleUp pushes exactly one undo snapshot on release.
   _fxHistLocked=true;
@@ -219,9 +239,9 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
   'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
-  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale',
+  'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
   // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can

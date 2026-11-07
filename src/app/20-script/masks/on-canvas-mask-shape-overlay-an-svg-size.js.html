@@ -154,8 +154,9 @@ function mskIsEmptyRaster(m){
 // capped glow kernels relative to this (see render()'s capK).
 function fxExportWidth(){try{const w=fxWork||fxImg;if(!w)return 0;return (w.naturalWidth||w.width)*fxFullScale();}catch(e){return 0;}}
 function mskPreviewRenderOptions(extra={}){
+  const showPcSel=typeof pcShowSelActive==='function'&&pcShowSelActive();if(showPcSel)pcSelBake();
   return {...extra,hideMasks:mskHideAll,showSel:mskShowSelIdx(),showSelOpacity:mskSelViewOpacity,showSelOutline:mskSelViewOutline,
-    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),
+    showSelMode:MSK_SELVIEW_MODE_NUM[mskSelViewStyle]!=null?MSK_SELVIEW_MODE_NUM[mskSelViewStyle]:1,showSelColor:mskSelViewRgb(),showPcSel:showPcSel,
     showSharpMask:_mskSharpMaskPreview&&mskSel>=0?mskGroupTailIdx(mskSel):-1,previewOnly:MSK_PREVIEW_RENDER_TOKEN,truncRefW:fxExportWidth(),
     // Settled previews render with the same float intermediates + half-LSB dither as a still export, so the halation/bloom
     // emission and the final quantisation match it (drags keep the cheaper 8-bit chain).

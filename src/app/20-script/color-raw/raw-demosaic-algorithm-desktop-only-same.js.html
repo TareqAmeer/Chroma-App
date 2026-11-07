@@ -32,7 +32,7 @@ let fxSplit=false, fxSplitPos=0.5, fxSplitAxis='vertical'; // split before/after
 // — default 'orig' means zero-interaction behaviour is byte-identical to the pre-B3 hardcoded original.
 let fxPinned=null, fxSplitSrc='orig';
 let fxHistOn=false;                        // live histogram toggle
-const FX_FIT=0.9; // displayed 100% = whole photo fits the canvas with a margin (room for a border)
+const FX_FIT=0.95; // displayed 100% = whole photo fits the canvas with a margin (room for a border). CHR-264: 0.9 -> 0.95 (+11% photo area at 1280/1440; revisit if borders look cramped)
 let fxZoom=1, fxPanX=0, fxPanY=0;        // CSS-zoom/pan state (upscales the preview buffer)
 let fxLoupe=false, loupeCX=0.5, loupeCY=0.5, fxLoupeSeed=Math.random()*100; // true 1:1 native-res loupe
 // Full-res preview: unlike the 1:1 loupe (a fixed cropped zoom for pixel-peeping), this swaps

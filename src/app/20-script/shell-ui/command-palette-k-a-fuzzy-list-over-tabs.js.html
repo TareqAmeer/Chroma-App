@@ -52,10 +52,60 @@ function _cpCommands(){
     if(linked.has(a.id)||!csShortcutHandlers[a.id]||!a.contexts.includes('editor')||['editor.compare','editor.search'].includes(a.id))return;
     add('Action',a.label,()=>{if(csShortcutHandlers[a.id]({})===false&&typeof toast==='function')toast('Not available right now: '+a.label+' needs an open photo or a different view');});sc(a.id);
   });
+  _cpAnnotate(cmds);
   return cmds;
 }
+// CHR-196: context, read live at open (like the list itself). Commands about the tool card(s)
+// that are open now rank first, and an action that cannot run says WHY in its row before it is
+// chosen (greyed, reason inline, the way native menus grey an item), not only in a toast after.
+function _cpActiveSections(){return new Set([...document.querySelectorAll('.fx-ctrl.sec-active[data-fxsec]')].map(c=>c.dataset.fxsec));}
+// Which open tool card(s) make a command contextual, by palette group or registry id.
+function _cpContextSections(c){
+  if(c.group==='Mask'||(c.sc&&c.sc.startsWith('editor.mask-')))return['local'];
+  // Look / Print entries are deliberately never "Suggested": the Looks card already shows that
+  // whole gallery, and 100+ look names would bury every other suggestion.
+  if(c.sc&&/^editor\.(crop|crop-grid|rotate-left|rotate-right|flip-h|flip-v)$/.test(c.sc))return['crop','rotate','straighten'];
+  if(c.sc==='editor.export'||c.label==='Manage presets')return['export','exppreset','style','wm','share'];
+  if(c.sc&&/^editor\.(wb-eyedrop|auto-enhance)$/.test(c.sc))return['adjust'];
+  if(c.sc==='editor.reshuffle-artifacts')return['art'];
+  return[];
+}
+// Reasons mirror each registry handler's own "return false" conditions (the csShortcutRegister
+// calls in the accessibility section): a command is only shown unavailable when its handler refuses.
+function _cpWhyUnavailable(id){
+  const photo=typeof fxImages!=='undefined'&&fxImages.length>0;
+  const panel=typeof _mskKeyOn==='function'&&_mskKeyOn();
+  const masks=(typeof fxState!=='undefined'&&fxState.masks)||[],sel=typeof mskSel!=='undefined'?masks[mskSel]:null;
+  const PANEL='Open the Masks panel first';
+  switch(id){
+    case'editor.mask-panel':case'editor.crop-grid':return photo?'':'Open a photo first';
+    case'editor.mask-add-radial':case'editor.mask-add-linear':case'editor.mask-add-brush':
+      return!photo?'Open a photo first':masks.length>=MSK_MAX?'Mask limit reached ('+MSK_MAX+')':'';
+    case'editor.mask-overlay':case'editor.mask-overlay-style':case'editor.mask-pins':return panel?'':PANEL;
+    case'editor.mask-delete':case'editor.mask-delete-alt':case'editor.mask-duplicate':case'editor.mask-invert':
+      return!panel?PANEL:(typeof healMode!=='undefined'&&healMode)?'Finish retouching first':(typeof cropMode!=='undefined'&&cropMode)?'Finish cropping first':!sel?'Select a mask first':'';
+    case'editor.mask-prev':case'editor.mask-next':return!panel?PANEL:masks.length<2?'Needs two or more masks':'';
+    case'editor.mask-brush':case'editor.mask-brush-erase':case'editor.mask-brush-slot':
+      return!panel?PANEL:(!sel||sel.type!=='brush')?'Select a Brush mask first':'';
+    case'editor.next':case'editor.previous':return(typeof fxImages!=='undefined'&&fxImages.length>1)?'':'Open more than one photo';
+    case'editor.crop':return(typeof cropMode!=='undefined'&&cropMode)?'Crop is already on':'';
+    case'editor.focus-mode':return document.body.classList.contains('deskx')?'':'Only in the desktop layout';
+  }
+  return'';
+}
+function _cpAnnotate(cmds){
+  const act=_cpActiveSections();
+  cmds.forEach(c=>{
+    c.ctx=_cpContextSections(c).some(k=>act.has(k));
+    c.why=c.sc?_cpWhyUnavailable(c.sc):'';
+    if(c.why)c.run=()=>{if(typeof toast==='function')toast(c.label+': '+c.why);};
+  });
+}
 function _cpFilter(cmds,q){
-  q=q.trim().toLowerCase();if(!q){const rk=c=>c.group==='Action'?0:c.group==='Section'?1:c.group==='Tab'?2:3;return cmds.map((c,i)=>[rk(c),i,c]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(x=>x[2]);}
+  q=q.trim().toLowerCase();
+  // Empty query: runnable commands for the open tool first ("Suggested"), then actions,
+  // sections, tabs, the rest; commands that cannot run right now sink to the bottom.
+  if(!q){const rk=c=>(c.why?10:c.ctx?-10:0)+(c.group==='Action'?0:c.group==='Section'?1:c.group==='Tab'?2:3);return cmds.map((c,i)=>[rk(c),i,c]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).slice(0,60).map(x=>x[2]);}
   // Simple subsequence fuzzy match (like most command palettes): every char of q must appear
   // in order somewhere in the label, not necessarily contiguous. Ranks exact substring first.
   const scored=[];
@@ -63,7 +113,8 @@ function _cpFilter(cmds,q){
     const hay=(c.group+' '+c.label+(c.sc&&csShortcutBinding(c.sc)?' '+csShortcutLabel(csShortcutBinding(c.sc)):'')).toLowerCase();
     const sub=hay.indexOf(q);
     // CHR-196: tools and actions outrank the 113 look names; an alias hit counts as a match.
-    const pri=(c.group==='Section'||c.group==='Action')?0:500;
+    // CHR-196: within a tier, the open tool's commands lead and unavailable ones trail.
+    const pri=((c.group==='Section'||c.group==='Action')?0:500)+(c.why?100:c.ctx?-50:0);
     if(sub>=0){scored.push([sub+pri,c]);continue;}
     if(c.aliases&&c.aliases.includes(q)){scored.push([200+pri,c]);continue;}
     let qi=0;for(let i=0;i<hay.length&&qi<q.length;i++)if(hay[i]===q[qi])qi++;
@@ -89,8 +140,8 @@ function cpOpen(){
   function render(){
     const filtered=_cpFilter(cmds,input.value);
     if(_cpIdx>=filtered.length)_cpIdx=Math.max(0,filtered.length-1);
-    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}" style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}">`
-      +`<span>${c.label}</span><span style="display:flex;align-items:center;gap:8px"><kbd class="cp-kbd" style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.sc&&csShortcutBinding(c.sc)?csShortcutLabel(csShortcutBinding(c.sc)):''}</kbd><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></span></div>`).join('')
+    list.innerHTML=filtered.map((c,i)=>`<div class="cp-row" data-i="${i}"${c.why?' aria-disabled="true"':''}${c.ctx&&!c.why?' data-ctx="1"':''} style="padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px;font-size:13px;${i===_cpIdx?'background:var(--acc);color:#fff':'color:var(--txt)'}${c.why?';opacity:.6':''}">`
+      +`<span>${c.label}</span>${c.why?`<span class="cp-why" style="flex:1;min-width:0;font-size:11px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_pmEsc(c.why)}</span>`:c.ctx?'<span class="cp-ctx" style="flex:1;font-size:10px;opacity:var(--op-4);text-align:right">Suggested</span>':''}<span style="display:flex;align-items:center;gap:8px"><kbd class="cp-kbd" style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.sc&&csShortcutBinding(c.sc)?csShortcutLabel(csShortcutBinding(c.sc)):''}</kbd><span style="font-family:var(--mono);font-size:10px;opacity:var(--op-4)">${c.group}</span></span></div>`).join('')
       ||'<div style="padding:14px;font-size:12px;color:var(--mut);font-family:var(--mono)">No matches</div>';
     list.querySelectorAll('.cp-row').forEach(row=>{
       row.onmouseenter=()=>{_cpIdx=parseInt(row.dataset.i,10);render();};

@@ -23,7 +23,9 @@ const registered = new Set(
     .slice('generate_handler!['.length).split(',').map((s) => s.trim().split('::').pop()).filter(Boolean),
 );
 
-const FRONTEND = ['chromasmith-22.html', 'desktop/library-ui.js', 'desktop/desktop-native.js'];
+// Every desktop/*.js the shell loads makes native calls (inpaint-ui.js alone owns the inpaint_* set).
+const FRONTEND = ['chromasmith-22.html', 'desktop/library-ui.js', 'desktop/desktop-native.js',
+  'desktop/inpaint-ui.js', 'desktop/header-menus.js', 'desktop/second-display.js'];
 // A call's first argument may be a literal or a ternary of literals (invoke(a?'x':'y', ...)).
 const callRe = /\b(?:invoke|_samFramedInvoke|framedInvoke|invokeNative|tauriInvoke)\(([^,)]*)/g;
 const called = new Map();
@@ -54,7 +56,8 @@ const unmocked = [...called.keys()].filter((c) => !mocked.has(c)).sort();
 const neverCalled = [...registered].filter((c) => !called.has(c)).sort();
 
 if (process.argv.includes('--update')) {
-  writeFileSync(ACCEPTED, JSON.stringify({ note: 'Called by the frontend but not yet answered by the ?libtest=1 stand-in. May only shrink.', unmocked }, null, 2) + '\n');
+  const prevNever = (existsSync(ACCEPTED) && JSON.parse(read(ACCEPTED)).neverCalled) || {};
+  writeFileSync(ACCEPTED, JSON.stringify({ note: 'Called by the frontend but not yet answered by the ?libtest=1 stand-in. May only shrink.', unmocked, neverCalled: prevNever }, null, 2) + '\n');
   console.log(`native:contract — wrote ${ACCEPTED} (${unmocked.length} unmocked)`);
   process.exit(0);
 }
@@ -78,6 +81,21 @@ if (newUnmocked.length) {
   fail = true;
   console.log(`  FAIL: new native call(s) with no browser stand-in — add a case to libtestInvoke:`);
   for (const c of newUnmocked) console.log(`    ${c}  (${[...called.get(c)].join(', ')})`);
+}
+// CHR-233: every registered-but-never-called command needs a written reason in ACCEPTED's
+// neverCalled map (backend foundation awaiting UI, etc.); a dead command is deleted instead.
+// A noted command that is now called must have its note removed, so the map can only shrink.
+const neverNotes = (existsSync(ACCEPTED) && JSON.parse(read(ACCEPTED)).neverCalled) || {};
+const unexplained = neverCalled.filter((c) => !neverNotes[c]);
+const staleNotes = Object.keys(neverNotes).filter((c) => !neverCalled.includes(c));
+if (unexplained.length) {
+  fail = true;
+  console.log(`  FAIL: registered but never called, with no note in ${ACCEPTED} (delete it if dead, or add a reason):`);
+  for (const c of unexplained) console.log(`    ${c}`);
+}
+if (staleNotes.length) {
+  fail = true;
+  console.log(`  FAIL: noted as never-called but now called or unregistered; remove from ${ACCEPTED}: ${staleNotes.join(', ')}`);
 }
 if (nowMocked.length) {
   fail = true;

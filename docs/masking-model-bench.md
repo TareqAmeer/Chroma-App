@@ -9,13 +9,14 @@ are synthetic, so model masks on them would mean nothing; real-photo labels are 
 |---|---|---|---|---|---|
 | EdgeSAM enc+dec | point/box prompts | yes (`vendor/sam`) | 22.1 + 15.9 MB | NTU S-Lab 1.0, **non-commercial** | enc 0.29 s, dec 0.04 s, 378 MB |
 | SAM 2.1 Hiera-Tiny enc+dec | point prompts | yes (`vendor/sam2`) | 134.3 + 20.6 MB | Apache-2.0 | enc 1.91 s, dec 0.07 s, 1556 MB |
-| face-parsing SegFormer | skin/eyes/lips/hair | yes (`vendor/faceparse`) | 89.4 MB | NVIDIA SegFormer, **non-commercial** | to measure |
+| face-parsing SegFormer | skin/eyes/lips/hair | yes (`vendor/faceparse`) | 89.4 MB | NVIDIA SegFormer, **non-commercial** | Intel Mac speed: to measure. Quality (CelebAMask-HQ, 8 faces): skin IoU 0.901 / BF 0.915, hair IoU 0.890 / BF 0.822 |
 | Depth Anything V2 Small | depth range | yes (`vendor/depth`) | 27.3 MB | Apache-2.0 | to measure |
 | MobileSAM (`PulpCut/mobilesam-onnx`) | point/box prompts | no | 28.2 + 16.5 MB | Apache-2.0 (upstream repo LICENSE confirmed; the ONNX re-export repo declares no licence) | enc 0.70 s, dec 0.04 s, 667 MB |
 | sam2-lite (distilled) | point prompts | no | ~74 MB | **CC-BY-NC-4.0 (HF repo) — exclude; earlier research claim of Apache-2.0 was wrong** | not downloaded |
 | BiRefNet_lite (`onnx-community`, fp32, 1024px) | hair matting, salient subject | no | 224 MB | MIT (upstream LICENSE + HF card confirmed) | **30.9 s cold / 69.9 s warm**, 3351 MB |
 | Florence-2 / Grounding DINO | text prompts | no | unverified | MIT / Apache-2.0 reported | to measure |
 | SegFormer/OneFormer ADE20K | landscape classes | no | unverified | per-checkpoint, often non-commercial | needs licence-clean checkpoint |
+| UperNet ConvNeXt-T ADE20K (bundled landscape model) | sky/water/vegetation/... | yes (`vendor/landscape`) | 59.8 MB | MIT weights | Intel Mac speed: ~2.5 s (README). Quality (ADE20K val, 8 sky photos): sky IoU 0.927 / BF 0.786 |
 | RMBG-1.4 | matting | no | — | **non-commercial — exclude** | — |
 | SAM 3 | concept prompts | no | large | Meta SAM licence | likely too heavy for Intel CPU |
 
@@ -55,3 +56,32 @@ Whole-image models, run once per photo, scored against the reviewed labels. Alph
 - **Tier 1, older/CPU-only machines:** MODNet (26 MB, ~0.6 s). Default.
 - **Tier 2, modern machines with a GPU / Apple Silicon:** ISNet or BiRefNet at full size through a GPU execution provider (CoreML/DirectML/CUDA), selectable in settings; auto-picked by a one-time speed test.
 - Keep EdgeSAM/SAM 2.1 for click-to-select and Add/Subtract refinement.
+
+## Real-photo quality on public datasets (CHR-297/298, 2026-11-05)
+40 public labelled photos, `npm run mask:quality:real` (`test/mask_quality_real.mjs`; list in
+`test/fixtures/mask-quality/realset.json`, photos fetched into gitignored `test/output/mask-realset/` by
+`tools/scripts/mask_realset_fetch.py`). Ground truth comes from the datasets, not from a model, so unlike the
+22-photo table above no column is biased. Models run through `tools/scripts/mask_realset_run.py`, which mirrors
+the Rust ORT pre/post-processing (`sam.rs`, `matte.rs`, `landscape.rs`, `faceparse.rs`). IoU at alpha 0.5,
+boundary F at 0.75% of the diagonal (higher is better), alpha MAE (lower is better).
+
+| Category (source, n) | MODNet Auto Subject IoU / BF / MAE | EdgeSAM 1 click* IoU / BF / MAE | Other |
+|---|---|---|---|
+| portrait (P3M-500-NP, 10) | 0.967 / 0.921 / 0.013 | 0.832 / 0.792 / 0.058 | |
+| salient object (AIM-500 non-portrait, 8) | 0.705 / 0.765 / 0.068 | 0.731 / 0.663 / 0.045 | |
+| fine-edge object (DIS5K TE1, 6) | 0.206 / 0.287 / 0.172 | 0.121 / 0.164 / 0.165 | |
+| sky (ADE20K val, 8) | | | UperNet sky 0.927 / 0.786 / 0.026 |
+| face (CelebAMask-HQ, 8)** | | | SegFormer skin 0.901 / 0.915 / 0.035; hair 0.890 / 0.822 / 0.045 |
+
+\* One positive click at the ground truth's deepest interior point (a fair "user clicks the middle" stand-in).
+\*\* The face-parsing model was fine-tuned on CelebAMask-HQ, so these numbers are optimistic (in-distribution).
+
+**Reading it:** MODNet is excellent on portraits and beats a single EdgeSAM click there, but it only finds
+people-like salient subjects (object-005: IoU 0.02 where one click gets 0.80). Both fail on thin, wiry
+structures (ladders, frames, bags with handles: IoU 0.1-0.2), which is the DIS case ISNet was trained for:
+benching ISNet on this set is the obvious next run. Sky and face parsing are solid.
+
+**Speed on this set** was measured on a 4-vCPU **Linux cloud VM shared with other jobs** (onnxruntime 1.29,
+CPU EP), so it is noisy and not comparable with the Intel Mac rows above: median MODNet 6.4 s, EdgeSAM encoder
+3.1 s / decoder 0.54 s, UperNet 17.6 s, SegFormer face 24.0 s per call. **Intel Mac latency/RAM for face
+parsing, depth and the landscape model is still open.**

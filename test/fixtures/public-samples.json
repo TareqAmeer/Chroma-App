@@ -1,0 +1,90 @@
+{
+  "note": "Real-photo samples for tickets whose acceptance needs real photos. Fetched into test/fixtures/public-samples/ (gitignored), never committed. URLs are pinned to a commit.",
+  "dir": "test/fixtures/public-samples",
+  "sources": {
+    "CHR-245": "github.com/leimao/Auto-Red-Eye-Remover images/ (real flash red-eye photos + one with no red-eye)",
+    "CHR-262": "github.com/gyt1Kf/cs566-autoneg data/samples/ (BlueNeg colour-negative scans with lab-print/preview positives as references)"
+  },
+  "samples": [
+    {
+      "id": "redeye-two-boys",
+      "ticket": "CHR-245",
+      "url": "https://raw.githubusercontent.com/leimao/Auto-Red-Eye-Remover/384caddb76523516c6f1b9754a57434a58dc708b/images/sample_3.jpg",
+      "file": "redeye/two-boys.jpg",
+      "sha256": "8ba68ad3d462eed7115afdc2325cbd63d7336608067869af6c3d9d087e724571",
+      "size": 175901
+    },
+    {
+      "id": "redeye-closeup",
+      "ticket": "CHR-245",
+      "url": "https://raw.githubusercontent.com/leimao/Auto-Red-Eye-Remover/384caddb76523516c6f1b9754a57434a58dc708b/images/sample_2.jpg",
+      "file": "redeye/closeup.jpg",
+      "sha256": "d4878d2f995986de6baa3309d9dbc8cf3c4df77518d6db3bd49f1c0bb7e048b8",
+      "size": 1668462
+    },
+    {
+      "id": "redeye-small-pupils",
+      "ticket": "CHR-245",
+      "url": "https://raw.githubusercontent.com/leimao/Auto-Red-Eye-Remover/384caddb76523516c6f1b9754a57434a58dc708b/images/sample_1.jpg",
+      "file": "redeye/small-pupils.jpg",
+      "sha256": "04fdc83984b944c3f448c73235e1d6fcfcd6a35c8e7aa4179bed334ce6223e39",
+      "size": 49402
+    },
+    {
+      "id": "redeye-none-three-women",
+      "ticket": "CHR-245",
+      "url": "https://raw.githubusercontent.com/leimao/Auto-Red-Eye-Remover/384caddb76523516c6f1b9754a57434a58dc708b/images/sample_4.jpg",
+      "file": "redeye/no-redeye.jpg",
+      "sha256": "c9cef2592f196dcbad6f2f5dda36e6ad8de8a4e8e52b4fe39ccc0155a7a25209",
+      "size": 93057
+    },
+    {
+      "id": "neg-hk",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/negative/19930125-05-hk.png",
+      "file": "filmneg/hk.neg.png",
+      "sha256": "c74b02e02306207f0664ba09f8e704271e81d031280642231cf87ab6ddedd3a4",
+      "size": 1957232
+    },
+    {
+      "id": "neg-hk-ref",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/reference/19930125-05-hk.preview.png",
+      "file": "filmneg/hk.ref.png",
+      "sha256": "4c1a1425d8c470887216fe247779fa189c57292fe48dd9330922da16bfe6568e",
+      "size": 1723897
+    },
+    {
+      "id": "neg-tokyo",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/negative/19941217A-13-tokyo.png",
+      "file": "filmneg/tokyo.neg.png",
+      "sha256": "1e5ac4f1fc8654a656be7900fa027da3c8b72e8eff63e4a72836414db21ac6df",
+      "size": 1875938
+    },
+    {
+      "id": "neg-tokyo-ref",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/preview/19941217A-13-tokyo.preview.png",
+      "file": "filmneg/tokyo.ref.png",
+      "sha256": "9baa76845b5ff0b5fc003b4203da019d317a99d64672734025d4d3da21620247",
+      "size": 1010629
+    },
+    {
+      "id": "neg-golden-gate",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/negative/19960815F-37-golden-gate.png",
+      "file": "filmneg/golden-gate.neg.png",
+      "sha256": "2d1b3dd4f508b253c5b2c0676aebc8f7b17fd23a75a0008a5881ccf53ebe9d07",
+      "size": 1954433
+    },
+    {
+      "id": "neg-golden-gate-ref",
+      "ticket": "CHR-262",
+      "url": "https://raw.githubusercontent.com/gyt1Kf/cs566-autoneg/5e998a68eb447227d1dfd1a54049d312fcd44fba/data/samples/preview/19960815F-37-golden-gate.preview.png",
+      "file": "filmneg/golden-gate.ref.png",
+      "sha256": "60b6598a627ed86401ac99b579a4130152d9a04061199f9dc4bae5bb8cbbe2fa",
+      "size": 1203516
+    }
+  ]
+}
