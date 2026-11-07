@@ -9310,6 +9310,7 @@
     // would be pushed as an edit — and written to the sidecar — of whatever photo the editor has
     // open (same guard renderSnapshotTo uses for its temporary swap).
     const editorSnapshot = typeof getUISnapshot === 'function' ? getUISnapshot() : null;
+    let fnPrev = null;
     const canLock = typeof _fxHistLocked !== 'undefined', wasLocked = canLock && _fxHistLocked;
     if (canLock) _fxHistLocked = true;
     try {
@@ -9323,8 +9324,13 @@
           if (typeof applyRawDefaults === 'function') applyRawDefaults();
         }
       } catch (e) { console.error('seed shared FX for batch export', e); }
+      // The editor's filename field auto-fills with the OPEN photo's name; a Library/drag-out export of
+      // other photos must name files after their own sources, so neutralise a non-pattern value.
+      const fnEl = document.getElementById('fx-fname');
+      if (fnEl && !fnEl.value.includes('{')) { fnPrev = fnEl.value; fnEl.value = 'photo'; }
       await exportFX({ items, clickedAt });
     } finally {
+      { const fnEl = document.getElementById('fx-fname'); if (fnEl && fnPrev !== null) fnEl.value = fnPrev; }
       if (editorSnapshot) { try { await applyUISnapshot(editorSnapshot); } catch (e) { console.error('restore editor after export', e); } }
       if (typeof _fxHistPushTimer !== 'undefined' && _fxHistPushTimer) { clearTimeout(_fxHistPushTimer); _fxHistPushTimer = null; }
       if (canLock) _fxHistLocked = wasLocked;
