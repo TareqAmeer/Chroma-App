@@ -539,6 +539,9 @@
         deferEditorRender = !!(fullAssetPath || fullCachedEntry || fullPendingDecode) && diskCached.img.naturalWidth < 4000;
         deferredDisplayRender = deferEditorRender;
         const installT0 = performance.now();
+        // Cache-served RAW opens carried only ext, so every `it.rawFile` gate (NR tier row, Denoise now,
+        // Full cleanup, High export) read them as non-RAW. Attach a path-backed File (arrayBuffer reads on demand).
+        if (isRaw && !diskCached.rawFile) diskCached.rawFile = makePathRawFile(path, new Uint8Array(0), 0, '');
         installFXImages([diskCached], loadKey, { deferRender: deferEditorRender });
         rawPerf('open-display-install', path, { ms: performance.now() - installT0, deferred: deferEditorRender });
         // Keep the in-memory reopen source at the display tier. The active entry is promoted
