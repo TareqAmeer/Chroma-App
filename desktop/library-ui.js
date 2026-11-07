@@ -9164,6 +9164,88 @@
     libExportBusy = true;
     try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
   }
+  // ── CHR-188: Option-drag a thumbnail (or the whole selection) out to Finder / Mail / Messages ──
+  // Renders the graded export with the LAST export settings (the same exportFX path, so format,
+  // quality, size and the photo's saved recipe all apply) into a unique temp folder, waits until
+  // the files are fully written (save_export_file_raw returns only after the write completes),
+  // then hands the closed files to the native OS drag. The recipe/settings are snapshotted by
+  // exportFX's own per-photo capture; a prepared set is cached by (paths, recipes, export
+  // settings) so a repeat drag is instant and a changed edit/setting re-renders. Plain drag keeps
+  // the in-app "drop on a collection" gesture.
+  const dragOut = { cache: new Map(), inflight: new Map(), seq: 0 };
+  const dragOutSig = async (paths) => {
+    const sig = [];
+    for (const p of paths) { let sc = {}; try { sc = await getSidecar(p) || {}; } catch (e) { /* none */ } sig.push(p + '\u0001' + (sc.recipe || '')); }
+    const ids = ['sel-exp-fmt', 'sl-exp-q', 'sel-exp-size', 'sel-exp-sharp', 'fx-fname'];
+    for (const id of ids) { const el = document.getElementById(id); sig.push(id + '=' + (el ? el.value : '')); }
+    return sig.join('\u0002');
+  };
+  function dragOutDiscard(entry) { if (entry && entry.dir) { try { invoke('drag_export_discard', { dir: entry.dir }); } catch (e) { /* best effort */ } } }
+  async function libDragOutPrepare(paths) {
+    if (!window.__TAURI__ || !paths.length) return null;
+    const key = await dragOutSig(paths);
+    const hit = dragOut.cache.get(key);
+    if (hit) return hit;
+    if (dragOut.inflight.has(key)) return dragOut.inflight.get(key);
+    if (libExportRunning()) return null; // never mutate the export dir under a running export
+    const job = (async () => {
+      libExportBusy = true;
+      let dir = null, prev = '';
+      try {
+        dir = await invoke('drag_export_dir');
+        try { prev = localStorage.getItem('cs-export-dir') || ''; } catch (e) { /* none */ }
+        await invoke('set_export_dir', { path: dir });
+        window.__csDragOut = { paths: [] };
+        await libExportPathsInner(paths);
+        const out = window.__csDragOut.paths.slice();
+        if (!out.length) { try { invoke('drag_export_discard', { dir }); } catch (e) { /* ignore */ } return null; }
+        // Newer prepared sets replace older ones (bounded temp use: keep the last 3).
+        const entry = { files: out, dir, key };
+        dragOut.cache.set(key, entry);
+        while (dragOut.cache.size > 3) { const k = dragOut.cache.keys().next().value; dragOutDiscard(dragOut.cache.get(k)); dragOut.cache.delete(k); }
+        return entry;
+      } catch (e) {
+        console.error('drag-out export', e);
+        toast('Could not prepare the drag-out export: ' + (e && e.message || e), false);
+        if (dir) { try { invoke('drag_export_discard', { dir }); } catch (e2) { /* ignore */ } }
+        return null;
+      } finally {
+        window.__csDragOut = null;
+        try { await invoke('set_export_dir', { path: prev }); } catch (e) { console.error('restore export dir after drag-out', e); }
+        libExportBusy = false;
+        dragOut.inflight.delete(key);
+      }
+    })();
+    dragOut.inflight.set(key, job);
+    return job;
+  }
+  // Called from a card's dragstart with Option held. Prepares (or reuses) the export, then starts the
+  // native drag if the mouse is still down; otherwise the finished export waits for the next drag.
+  async function libDragOutStart(paths, card) {
+    let down = true;
+    const up = () => { down = false; };
+    window.addEventListener('pointerup', up, { once: true, capture: true });
+    window.addEventListener('mouseup', up, { once: true, capture: true });
+    const cached = dragOut.cache.get(await dragOutSig(paths));
+    if (!cached) toast(`Preparing ${paths.length > 1 ? paths.length + ' photos' : 'photo'} for drag-out…`);
+    const entry = await libDragOutPrepare(paths);
+    if (!entry) return;
+    if (!down) { toast('Export ready — Option-drag again to drop it'); return; }
+    try {
+      const img = card && card.querySelector('img');
+      let icon = null;
+      if (img && img.naturalWidth) {
+        const c = document.createElement('canvas'); const k = 96 / Math.max(img.naturalWidth, img.naturalHeight);
+        c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); icon = c.toDataURL('image/png');
+      }
+      if (!icon) icon = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+      const ch = new window.__TAURI__.core.Channel();
+      ch.onmessage = (m) => { window.__csDragOutLast = m; };
+      await invoke('plugin:drag|start_drag', { item: entry.files, image: icon, onEvent: ch });
+    } catch (e) { console.error('start_drag', e); toast('Drag-out failed: ' + (e && e.message || e), false); }
+  }
+  window.chromasmithDragOut = { prepare: libDragOutPrepare, start: libDragOutStart, cache: dragOut.cache };
   async function libExportPathsInner(paths) {
     const clickedAt = performance.now();
     const n = paths.length;
@@ -10137,6 +10219,7 @@
       card.draggable = true;
       card.ondragstart = (e) => {
         const paths = state.selected.has(entry.path) ? Array.from(state.selected) : [entry.path];
+        if (e.altKey && window.__TAURI__ && !LIBTEST) { e.preventDefault(); void libDragOutStart(paths, card); return; } // CHR-188
         e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
         e.dataTransfer.effectAllowed = 'copy';
       };
@@ -16678,7 +16761,10 @@
   if (!LIBTEST || /[?&]libtestBatchRecovery=1/.test(location.search))
     setTimeout(() => recoverInterruptedRecipeBatch().catch(e => console.error('batch recovery', e)), 0);
   if (!LIBTEST) _rawReviewRecovery = recoverRawReviewJobs().catch(e => console.error('RAW preparation recovery', e));
-  window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
+  // CHR-183: an export started after another one finished reused the previous job's stage 'done'
+  // (a patch without a stage keeps the old one), so the running export's control read "Dismiss"
+  // instead of "Cancel". Every in-progress export update is an explicit 'working'.
+  window.libActivityJob = function (job, patch) { activityUpdate(job, job === 'export' && patch && patch.stage === undefined ? { ...patch, stage: 'working' } : (patch || {})); };
   window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };
 
   // ── N3.3: shared blocking-wait modal — the FALLBACK UI ──────────────────────────────────────

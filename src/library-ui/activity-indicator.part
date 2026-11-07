@@ -711,5 +711,8 @@
   if (!LIBTEST || /[?&]libtestBatchRecovery=1/.test(location.search))
     setTimeout(() => recoverInterruptedRecipeBatch().catch(e => console.error('batch recovery', e)), 0);
   if (!LIBTEST) _rawReviewRecovery = recoverRawReviewJobs().catch(e => console.error('RAW preparation recovery', e));
-  window.libActivityJob = function (job, patch) { activityUpdate(job, patch || {}); };
+  // CHR-183: an export started after another one finished reused the previous job's stage 'done'
+  // (a patch without a stage keeps the old one), so the running export's control read "Dismiss"
+  // instead of "Cancel". Every in-progress export update is an explicit 'working'.
+  window.libActivityJob = function (job, patch) { activityUpdate(job, job === 'export' && patch && patch.stage === undefined ? { ...patch, stage: 'working' } : (patch || {})); };
   window.libActivityJobDone = function (job, extra) { activityUpdate(job, { stage: 'done', ...(extra || {}) }); };

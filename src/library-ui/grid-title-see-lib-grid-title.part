@@ -220,6 +220,7 @@
       card.draggable = true;
       card.ondragstart = (e) => {
         const paths = state.selected.has(entry.path) ? Array.from(state.selected) : [entry.path];
+        if (e.altKey && window.__TAURI__ && !LIBTEST) { e.preventDefault(); void libDragOutStart(paths, card); return; } // CHR-188
         e.dataTransfer.setData('application/x-chromasmith-paths', JSON.stringify(paths));
         e.dataTransfer.effectAllowed = 'copy';
       };

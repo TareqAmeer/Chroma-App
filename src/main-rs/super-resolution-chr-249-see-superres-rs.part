@@ -6,6 +6,68 @@ fn superres_available() -> bool { superres::model_available() }
 #[tauri::command(async)]
 fn superres_cancel() { superres::request_cancel(); }
 
+/// CHR-188: a fresh, unique temp folder for one drag-out export (so duplicate photo names can never
+/// collide and a half-written file is never in a shared folder). Folders older than an hour are
+/// removed on every call and stale ones are swept at startup (see setup), so nothing lingers.
+#[tauri::command]
+fn drag_export_dir() -> Result<String, String> {
+    let root = std::env::temp_dir().join("chromasmith-drag");
+    std::fs::create_dir_all(&root).map_err(|e| format!("create drag temp: {e}"))?;
+    drag_cleanup_older_than(&root, std::time::Duration::from_secs(3600));
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let dir = root.join(format!("{ts}-{n}"));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create drag dir: {e}"))?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+fn drag_cleanup_older_than(root: &Path, age: std::time::Duration) {
+    if let Ok(rd) = std::fs::read_dir(root) {
+        for e in rd.flatten() {
+            let old = e.metadata().and_then(|m| m.modified()).ok()
+                .and_then(|t| t.elapsed().ok()).map(|el| el >= age).unwrap_or(false);
+            if old { let _ = std::fs::remove_dir_all(e.path()); }
+        }
+    }
+}
+
+/// Remove one drag temp folder (JS calls this when a prepared export is superseded or the Library
+/// closes). Refuses anything outside the drag temp root.
+#[tauri::command]
+fn drag_export_discard(dir: String) {
+    let root = std::env::temp_dir().join("chromasmith-drag");
+    let d = PathBuf::from(&dir);
+    if d.starts_with(&root) && d != root && !dir.contains("..") { let _ = std::fs::remove_dir_all(d); }
+}
+
+/// CHR-183: export-complete banner whose CLICK reveals the file in Finder. tauri-plugin-notification's
+/// JS `Notification` shim returns undefined on desktop (no onclick), so the click can't be seen from
+/// JS; mac-notification-sys's wait_for_click reports it here. The wait blocks a pool thread until the
+/// banner is clicked or dismissed, so only a few waits may be pending; beyond that the banner is sent
+/// fire-and-forget (still delivered, just not clickable).
+#[tauri::command]
+fn notify_export_done(title: String, body: String, path: String) {
+    #[cfg(target_os = "macos")]
+    {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static PENDING: AtomicUsize = AtomicUsize::new(0);
+        let wait = PENDING.fetch_add(1, Ordering::SeqCst) < 3;
+        tauri::async_runtime::spawn_blocking(move || {
+            let _ = mac_notification_sys::set_application("com.tareq.chromasmith");
+            let mut n = mac_notification_sys::Notification::new();
+            n.wait_for_click(wait);
+            let r = n.title(&title).message(&body).send();
+            PENDING.fetch_sub(1, Ordering::SeqCst);
+            if let Ok(mac_notification_sys::NotificationResponse::Click) = r {
+                let _ = platform::reveal_in_file_manager(&path);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (title, body, path); }
+}
+
 #[tauri::command(async)]
 fn superres_run(app: tauri::AppHandle, request: tauri::ipc::Request) -> Result<tauri::ipc::Response, String> {
     let (json, payload) = parse_framed(request.body())?;

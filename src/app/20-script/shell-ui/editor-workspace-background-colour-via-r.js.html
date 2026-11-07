@@ -102,6 +102,7 @@ function expCollideSet(v){try{localStorage.setItem('cs-export-collide',v);}catch
 function expDestLabel(){let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}return tauriNative()?(d||'Downloads folder'):"your browser's download folder";}
 function expPolicyLabel(){const p=expCollidePolicy();return p==='skip'?'skip existing files':p==='overwrite'?'overwrite existing files':'add a number to the name';}
 function csExportResultKeep(saved,failed,path){
+  if(window.__csDragOut)return;
   const el=document.getElementById('exp-last');if(!el)return;el.hidden=false;el.textContent='';
   window._expSavedSum=(window._expSavedSum||0)+saved;
   const fails=window._expFail||[],t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),tot=window._expAccumulate?window._expSavedSum:saved;
@@ -164,6 +165,7 @@ async function expRetry(which){
   toast(window._expFail.length?`Retried: ${saved} saved, ${window._expFail.length} still failing`:`Retry complete: ${saved} saved`,!window._expFail.length);
 }
 function csExportDone(n,path,firstEdit){
+  if(window.__csDragOut)return; // CHR-188: a drag-out render is not a user-visible export result
   const old=document.getElementById('cs-export-done');if(old)old.remove();
   const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
   const dir=String(path).replace(/[\\/][^\\/]*$/,'');

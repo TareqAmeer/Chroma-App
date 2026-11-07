@@ -165,7 +165,7 @@ async function saveFilesNative(items){
     try{
       const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname)),'x-collision':expCollidePolicy()}});
       if(r&&r.bytes===0&&bytes.length>0){out.push({ok:true,path:r.path||it.fname,skipped:true});log(`Skipped ${it.fname} (already exists)`,'warn');}
-      else{out.push({ok:true,path:r&&r.path||it.fname});log(`Saved ${r&&r.path||it.fname}`,'ok');}
+      else{out.push({ok:true,path:r&&r.path||it.fname});if(window.__csDragOut&&r&&r.path)window.__csDragOut.paths.push(r.path);log(`Saved ${r&&r.path||it.fname}`,'ok');}
     }catch(e){
       const msg=e&&e.message||String(e);
       // Older native shell without the command compiled in: bail out entirely so the caller

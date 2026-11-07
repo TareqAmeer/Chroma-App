@@ -58,13 +58,11 @@
     if (!_exportNotificationAllowed || !path || !window.Notification) return;
     const directory = String(path).replace(/[\\/][^\\/]*$/, '').split(/[\\/]/).pop() || 'export folder';
     try {
-      const notice = new window.Notification('Export complete', {
-        body: `${count} photo${count === 1 ? '' : 's'} saved to ${directory}. Select to Show in Finder.`,
-        tag: 'chromasmith-export-complete',
-      });
-      // Tauri's cross-platform notification actions are mobile-only. Clicking the macOS
-      // notification therefore performs the same reveal as the in-app Show in Finder button.
-      notice.onclick = () => { void invoke('reveal_in_finder', { path }).catch((e) => console.error('reveal_in_finder', e)); };
+      const title = 'Export complete';
+      const body = `${count} photo${count === 1 ? '' : 's'} saved to ${directory}. Select to Show in Finder.`;
+      // The plugin's JS Notification shim has no onclick on desktop, so macOS delivery + the
+      // click-to-reveal go through the native command (main.rs notify_export_done).
+      void invoke('notify_export_done', { title, body, path }).catch((e) => console.error('notify_export_done', e));
     } catch (e) { console.error('export completion notification', e); }
   };
   // END CHR183_EXPORT_NOTIFICATIONS

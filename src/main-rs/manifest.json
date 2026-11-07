@@ -69,42 +69,42 @@
   {
    "file": "super-resolution-chr-249-see-superres-rs.part",
    "firstLine": 980,
-   "lines": 49
+   "lines": 111
   },
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
-   "firstLine": 1029,
+   "firstLine": 1091,
    "lines": 778
   },
   {
    "file": "raw-face-detail-crops-one-shot-develop-f.part",
-   "firstLine": 1807,
+   "firstLine": 1869,
    "lines": 640
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2447,
+   "firstLine": 2509,
    "lines": 530
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 2977,
+   "firstLine": 3039,
    "lines": 192
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 3169,
+   "firstLine": 3231,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 3276,
+   "firstLine": 3338,
    "lines": 117
   },
   {
    "file": "app-entry-point-builder-plugins-setup-ho.part",
-   "firstLine": 3393,
-   "lines": 1332
+   "firstLine": 3455,
+   "lines": 1336
   }
  ]
 }

@@ -734,6 +734,7 @@ dependencies = [
  "linfa",
  "linfa-clustering",
  "log",
+ "mac-notification-sys",
  "mime_guess",
  "ndarray",
  "objc2",

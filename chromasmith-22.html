@@ -7627,7 +7627,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1107A';
+const BUILD='1.1107B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -15962,6 +15962,7 @@ function expCollideSet(v){try{localStorage.setItem('cs-export-collide',v);}catch
 function expDestLabel(){let d='';try{d=localStorage.getItem('cs-export-dir')||'';}catch(e){}return tauriNative()?(d||'Downloads folder'):"your browser's download folder";}
 function expPolicyLabel(){const p=expCollidePolicy();return p==='skip'?'skip existing files':p==='overwrite'?'overwrite existing files':'add a number to the name';}
 function csExportResultKeep(saved,failed,path){
+  if(window.__csDragOut)return;
   const el=document.getElementById('exp-last');if(!el)return;el.hidden=false;el.textContent='';
   window._expSavedSum=(window._expSavedSum||0)+saved;
   const fails=window._expFail||[],t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),tot=window._expAccumulate?window._expSavedSum:saved;
@@ -16024,6 +16025,7 @@ async function expRetry(which){
   toast(window._expFail.length?`Retried: ${saved} saved, ${window._expFail.length} still failing`:`Retry complete: ${saved} saved`,!window._expFail.length);
 }
 function csExportDone(n,path,firstEdit){
+  if(window.__csDragOut)return; // CHR-188: a drag-out render is not a user-visible export result
   const old=document.getElementById('cs-export-done');if(old)old.remove();
   const d=document.createElement('div');d.id='cs-export-done';d.setAttribute('role','status');
   const dir=String(path).replace(/[\\/][^\\/]*$/,'');
@@ -32116,7 +32118,7 @@ async function saveFilesNative(items){
     try{
       const r=await window.__TAURI__.core.invoke('save_export_file_raw',bytes,{headers:{'x-filename':_u8b64(new TextEncoder().encode(it.fname)),'x-collision':expCollidePolicy()}});
       if(r&&r.bytes===0&&bytes.length>0){out.push({ok:true,path:r.path||it.fname,skipped:true});log(`Skipped ${it.fname} (already exists)`,'warn');}
-      else{out.push({ok:true,path:r&&r.path||it.fname});log(`Saved ${r&&r.path||it.fname}`,'ok');}
+      else{out.push({ok:true,path:r&&r.path||it.fname});if(window.__csDragOut&&r&&r.path)window.__csDragOut.paths.push(r.path);log(`Saved ${r&&r.path||it.fname}`,'ok');}
     }catch(e){
       const msg=e&&e.message||String(e);
       // Older native shell without the command compiled in: bail out entirely so the caller
