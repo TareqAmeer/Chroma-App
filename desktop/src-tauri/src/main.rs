@@ -472,6 +472,41 @@ fn store_dcp_lut(request: tauri::ipc::Request) -> Result<(), String> {
 /// handler's own gate) so the close this triggers doesn't immediately re-block itself, then exits
 /// for real via `app.exit()` — NOT `window.close()`, which would just re-fire the same
 /// CloseRequested event and loop.
+#[derive(serde::Deserialize)]
+struct MenuSyncItem {
+    id: String,
+    enabled: bool,
+    accel: Option<String>,
+    text: Option<String>,
+}
+
+/// CHR-196: JS pushes enabled-state, shortcut accelerators (from the user-remappable registry)
+/// and label text for native macOS menu items. Returns ids whose accelerator was rejected so JS
+/// can fall back to a text hint in the label.
+#[tauri::command]
+fn menu_sync(app: tauri::AppHandle, items: Vec<MenuSyncItem>) -> Vec<String> {
+    let mut failed = Vec::new();
+    let Some(menu) = app.menu() else { return failed };
+    fn walk(kinds: Vec<tauri::menu::MenuItemKind<tauri::Wry>>, out: &mut Vec<tauri::menu::MenuItem<tauri::Wry>>) {
+        for k in kinds {
+            match k {
+                tauri::menu::MenuItemKind::MenuItem(m) => out.push(m),
+                tauri::menu::MenuItemKind::Submenu(s) => { if let Ok(c) = s.items() { walk(c, out); } }
+                _ => {}
+            }
+        }
+    }
+    let mut all = Vec::new();
+    if let Ok(top) = menu.items() { walk(top, &mut all); }
+    for it in items {
+        let Some(m) = all.iter().find(|m| m.id().0 == it.id) else { continue };
+        let _ = m.set_enabled(it.enabled);
+        if let Some(t) = &it.text { let _ = m.set_text(t); }
+        if m.set_accelerator(it.accel.as_deref()).is_err() { failed.push(it.id.clone()); }
+    }
+    failed
+}
+
 #[tauri::command]
 fn hq_offline_force_quit(app: tauri::AppHandle) {
     use tauri::Manager;
@@ -3652,6 +3687,7 @@ fn main() {
         ;
     let builder = with_log_plugin(builder);
     builder.invoke_handler(tauri::generate_handler![
+            menu_sync,
             lightroom_preset_import::preview_lightroom_xmp_preset,
             recipe_batch::recipe_batch_create, recipe_batch::recipe_batch_get, recipe_batch::recipe_batch_list,
             recipe_batch::recipe_batch_apply_item, recipe_batch::recipe_batch_cancel, recipe_batch::recipe_batch_resume, recipe_batch::recipe_batch_undo,

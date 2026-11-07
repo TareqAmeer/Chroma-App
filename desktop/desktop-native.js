@@ -869,6 +869,83 @@
   wire('menu-guide', () => typeof switchTab === 'function' && switchTab('guide'));
   wire('menu-whatsnew', () => typeof window.chromasmithShowWhatsNew === 'function' && window.chromasmithShowWhatsNew());
   wire('menu-tour', () => typeof window.chromasmithShowTour === 'function' && window.chromasmithShowTour());
+
+  // CHR-196: push enabled-state + shortcut hints to the native macOS menu (Rust menu_sync).
+  // Accelerators come from the user-remappable registry; bare keys, edit-sensitive keys and
+  // keys macOS already owns (Cmd+H/M/W/Q) stay JS-only and show as a text hint in the label.
+  (() => {
+    if (!/Mac/.test(navigator.platform)) return;
+    const base = {
+      'menu-open': ['Open Photo…', 'editor.open'], 'menu-export': ['Export…', 'editor.export'],
+      'menu-open-recent': ['Open Recent…', 'library.open-recent'], 'menu-library': ['Library…', 'library.toggle'],
+      'menu-save-session': ['Save Session', 'editor.save-session'], 'menu-load-session': ['Load Session', 'editor.load-session'],
+      'menu-undo': ['Undo', 'editor.undo'], 'menu-redo': ['Redo', 'editor.redo'],
+      'menu-reject': ['Reject', 'library.reject'], 'menu-pick': ['Pick (Flag)', 'library.pick'], 'menu-clear-flag': ['Clear Flag', 'library.clear-flag'],
+      'menu-reset-edit': ['Reset Edit', 'editor.reset-edit'], 'menu-rotate-left': ['Rotate Left', 'editor.rotate-left'], 'menu-rotate-right': ['Rotate Right', 'editor.rotate-right'],
+      'menu-flip-h': ['Flip Horizontal', 'editor.flip-h'], 'menu-flip-v': ['Flip Vertical', 'editor.flip-v'], 'menu-crop': ['Crop / Straighten', 'editor.crop'],
+      'menu-copy-edit': ['Copy Edit', 'editor.copy'], 'menu-paste-edit': ['Paste Edit', 'editor.paste'],
+      'menu-auto-enhance': ['Auto Enhance', 'editor.auto-enhance'], 'menu-wb-eyedrop': ['White Balance Eyedropper', 'editor.wb-eyedrop'],
+      'menu-reshuffle-artifacts': ['Reshuffle Film Artifacts', 'editor.reshuffle-artifacts'],
+      'menu-zoom-in': ['Zoom In', 'editor.zoom-in'], 'menu-zoom-out': ['Zoom Out', 'editor.zoom-out'], 'menu-zoom-fit': ['Zoom to Fit', 'editor.zoom-fit'], 'menu-zoom-100': ['Zoom to 100%', 'editor.zoom-100'],
+      'menu-split': ['Toggle Before/After Split', 'editor.split'], 'menu-histogram': ['Toggle Histogram', 'editor.histogram'], 'menu-loupe': ['Toggle 1:1 Loupe', 'editor.loupe'],
+      'menu-expand-library': ['Toggle Full Library', 'library.expand'],
+      'menu-search': ['Search…', 'editor.search'], 'menu-shortcuts': ['Keyboard Shortcuts…', 'editor.shortcuts'], 'menu-guide': ['Chromasmith Guide', 'editor.guide'],
+      'menu-whatsnew': ["What's New", 'editor.whatsnew'], 'menu-tour': ['Welcome Tour', 'editor.tour'], 'menu-settings': ['Settings…', 'editor.settings'],
+    };
+    const textOnly = new Set(['menu-undo', 'menu-redo', 'menu-copy-edit', 'menu-paste-edit', 'menu-histogram']);
+    const needsTarget = new Set(['menu-export', 'menu-copy-edit', 'menu-reject', 'menu-pick', 'menu-clear-flag', 'menu-paste-edit']);
+    const photoOnly = new Set(['menu-undo', 'menu-redo', 'menu-reset-edit', 'menu-save-session', 'menu-rotate-left', 'menu-rotate-right', 'menu-flip-h', 'menu-flip-v', 'menu-crop', 'menu-auto-enhance', 'menu-wb-eyedrop', 'menu-reshuffle-artifacts', 'menu-zoom-in', 'menu-zoom-out', 'menu-zoom-fit', 'menu-zoom-100', 'menu-split', 'menu-histogram', 'menu-loupe']);
+    const accelOf = b => {
+      if (!b || !/(Cmd|Ctrl|CmdOrCtrl)\+/.test(b)) return null; // modifier required
+      return b.replace(/\bBracketLeft\b/, '[').replace(/\bBracketRight\b/, ']').replace(/\bBackslash\b/, '\\').replace(/\bSlash\b/, '/').replace(/\bComma\b/, ',').replace(/\bMinus\b/, '-').replace(/\bPlus\b/, '=');
+    };
+    const macReserved = /^(CmdOrCtrl|Cmd)\+(H|M|W|Q)$/i;
+    let last = '', busy = false;
+    // A native accelerator already runs the action via the menu event; the webview still
+    // receives the same keydown, so swallow it before the JS shortcut registry double-fires.
+    let nativeBindings = [];
+    window.addEventListener('keydown', e => {
+      if (e.repeat && !nativeBindings.length) return;
+      for (const b of nativeBindings) {
+        if (typeof csShortcutMatch === 'function' && csShortcutMatch(e, b)) { e.stopImmediatePropagation(); return; }
+      }
+    }, true);
+    async function sync() {
+      if (busy) return; busy = true;
+      try {
+        const reg = window.chromasmithShortcutRegistry;
+        const ctx = window.chromasmithMenuContext?.() || {};
+        const gallery = !!ctx.galleryFull;
+        const photo = !gallery && typeof fxImages !== 'undefined' && fxImages.length > 0;
+        const targets = gallery ? (ctx.selectionCount || 0) > 0 : photo;
+        const items = [];
+        for (const [id, [label, sid]] of Object.entries(base)) {
+          let enabled = true;
+          if (needsTarget.has(id) && !targets) enabled = false;
+          if (id === 'menu-paste-edit' && !window.__copiedRecipe) enabled = false;
+          if (photoOnly.has(id) && !photo) enabled = false;
+          const b = reg?.binding?.(sid) || null;
+          const useAccel = !!b && !textOnly.has(id) && !macReserved.test(b);
+          const accel = useAccel ? accelOf(b) : null;
+          const hint = b && !accel ? reg.label(b) : '';
+          items.push({ id, enabled, accel, text: hint ? `${label}    ${hint}` : label });
+        }
+        const sig = JSON.stringify(items);
+        if (sig === last) return;
+        last = sig;
+        const failed = await window.__TAURI__.core.invoke('menu_sync', { items }) || [];
+        nativeBindings = items.filter(i => i.accel && !failed.includes(i.id)).map(i => reg.binding(base[i.id][1]));
+        if (failed?.length) {
+          const retry = items.filter(i => failed.includes(i.id)).map(i => {
+            const [label, sid] = base[i.id]; const b = reg.binding(sid);
+            return { ...i, accel: null, text: b ? `${label}    ${reg.label(b)}` : label };
+          });
+          await window.__TAURI__.core.invoke('menu_sync', { items: retry });
+        }
+      } catch (e) { console.warn('menu_sync', e); } finally { busy = false; }
+    }
+    setInterval(sync, 700); setTimeout(sync, 1500);
+  })();
   // Windows Edit > Settings opens preferences; the existing native Mac/About route is retained.
   wire('menu-preferences', () => typeof settingsToggle === 'function' && settingsToggle());
   wire('menu-settings', () => typeof window.csAbout === 'function' && window.csAbout());
