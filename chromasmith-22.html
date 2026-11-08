@@ -1091,6 +1091,8 @@ body.mobile-fx.sheet-open .fx-act-ic{font-size:var(--fs-4)}
    confirm step by design, so this is the "discard just this section" half instead of a full
    commit/cancel pair. Hidden outside the mobile sheet — desktop already has fxResetAll(). */
 .fx-ctrl-title-reset{display:none}
+.fx-mod-dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-left:6px;flex:none}
+.fx-ctrl:has(.fx-row.fx-mod)>.fx-ctrl-title>.fx-mod-dot,.fx-ctrl.fx-has-heal>.fx-ctrl-title>.fx-mod-dot{display:inline-block}
 /* T12 (editor_ux_spec.json): this used to show the mobile reset icon unconditionally whenever the
    sheet was open, with no :has(.fx-row.fx-mod)/fx-has-heal gate at all — every section's Reset
    was visible at rest on mobile, not just after an actual edit, unlike the desktop rule below
@@ -7669,7 +7671,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108N';
+const BUILD='1.1108O';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16509,7 +16511,9 @@ const CS_LEVEL_KEY='chromasmith_ui_level';
 const CS_LEVELS={simple:['Simple','Six tools, essentials only'],standard:['Standard','Every tool, Advanced folded'],pro:['Pro','Everything, Advanced open']};
 const CS_LEVEL_SIMPLE=['looks','adjust','hsl','local','crop','export']; // Looks, Exposure & Tone, Colour Mixer, Masks, Crop, Output
 // Existing users who never chose get Standard, so nothing disappears on upgrade.
-function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v;}catch(e){}return 'standard';}
+// P7: below 700px the default is Simple (nothing stored yet) and Pro is not offered (a stored Pro reads as Standard there).
+function csLevelNarrow(){return window.innerWidth<700;}
+function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v==='pro'&&csLevelNarrow()?'standard':v;}catch(e){}return csLevelNarrow()?'simple':'standard';}
 function csLevelCss(){
   const S=CS_LEVEL_SIMPLE,gs=Object.keys(FX_GROUPS).filter(g=>FX_GROUPS[g].members.some(m=>S.includes(m)));
   const keep=(attr,list)=>list.map(k=>`[${attr}="${k}"]`).join(',')+',.lvl-peek';
@@ -16551,8 +16555,8 @@ function csLevelReveal(key,fold){
   return true;
 }
 function csLevelSet(level,opts){
-  if(!CS_LEVELS[level])level='standard';
-  try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}
+  if(!CS_LEVELS[level]||(level==='pro'&&csLevelNarrow()))level='standard';
+  if(!(opts&&opts.auto)){try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}}
   document.body.dataset.level=level;
   document.querySelectorAll('.lvl-peek').forEach(e=>e.classList.remove('lvl-peek'));
   if(level==='pro'){window._csLevelOpening=true;document.querySelectorAll('details.fx-adv').forEach(d=>{d.open=true;});setTimeout(()=>{window._csLevelOpening=false;},120);}
@@ -16564,11 +16568,11 @@ function csLevelSet(level,opts){
 }
 window.csLevelSet=csLevelSet;window.csLevelGet=csLevelGet;window.csLevelCardHidden=csLevelCardHidden;window.csLevelReveal=csLevelReveal;
 function csLevelPickHtml(){const cur=csLevelGet();
-  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
+  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).filter(([k])=>!(k==='pro'&&csLevelNarrow())).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
 (function(){
   const init=()=>{
     if(!document.getElementById('cs-level-css')){const st=document.createElement('style');st.id='cs-level-css';st.textContent=csLevelCss();document.head.appendChild(st);}
-    csLevelSet(csLevelGet(),{quiet:true});
+    csLevelSet(csLevelGet(),{quiet:true,auto:true});
     const tg=document.getElementById('tg-filmneg');if(tg&&window.MutationObserver)new MutationObserver(csLevelFnegSync).observe(tg,{attributes:true,attributeFilter:['class']});
     setInterval(csLevelFnegSync,1500);
   };
@@ -16654,10 +16658,14 @@ function _cpCommands(){
   });
   // Progressive disclosure P1/P5: every control inside an Advanced fold is its own palette entry.
   // Running it opens the card and the fold, scrolls to the control and focuses it.
-  document.querySelectorAll('.fx-ctrl[data-fxsec] details.fx-adv').forEach(fold=>{
-    const card=fold.closest('.fx-ctrl[data-fxsec]'),key=card.dataset.fxsec,seen=new Set();
-    fold.querySelectorAll('input,select,textarea,button').forEach(control=>{
+  // P5: Essentials are indexed too (sliders, selects, checkboxes); buttons only inside Advanced folds.
+  document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(card=>{
+    const key=card.dataset.fxsec,seen=new Set();
+    card.querySelectorAll('input,select,textarea,button').forEach(control=>{
       if(control.classList.contains('fx-info-i'))return;
+      const fold=control.closest('details.fx-adv');
+      if(!fold&&(control.tagName==='BUTTON'||control.type==='hidden'||control.type==='file'||control.type==='color'))return;
+      if(!fold&&!control.closest('.fx-row'))return;
       const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
       const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
       if(!lab||seen.has(lab))return;seen.add(lab);
@@ -16665,7 +16673,7 @@ function _cpCommands(){
         // CHR-304: the Export-family cards live inside the Export drawer's "More" fold on desktop; open the drawer and that fold before the card's own Advanced fold.
         const drawer=card.closest('#sk2-export');
         if(drawer&&typeof sk2ExportOpen==='function'){if(!document.body.classList.contains('sk2-exp-open'))sk2ExportOpen();const mf=drawer.querySelector('details.sk2x-more');if(mf)mf.open=true;}
-        card.classList.remove('fx-sec-collapsed');fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},drawer?320:60);});
+        card.classList.remove('fx-sec-collapsed');if(fold)fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},drawer?320:60);});
     });
   });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
@@ -35541,6 +35549,7 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
     const sep=document.createElement('span');sep.className='fx-ctrl-title-reset-sep';sep.setAttribute('aria-hidden','true');sep.textContent='|';
     right.appendChild(scoped);right.appendChild(sep);
   }
+  const dot=document.createElement('span');dot.className='fx-mod-dot';dot.setAttribute('aria-hidden','true');dot.title='Edited';title.insertBefore(dot,right);
   right.appendChild(b);
   if(toggle)right.appendChild(toggle);
 });

@@ -1048,6 +1048,8 @@ body.mobile-fx.sheet-open .fx-act-ic{font-size:var(--fs-4)}
    confirm step by design, so this is the "discard just this section" half instead of a full
    commit/cancel pair. Hidden outside the mobile sheet — desktop already has fxResetAll(). */
 .fx-ctrl-title-reset{display:none}
+.fx-mod-dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-left:6px;flex:none}
+.fx-ctrl:has(.fx-row.fx-mod)>.fx-ctrl-title>.fx-mod-dot,.fx-ctrl.fx-has-heal>.fx-ctrl-title>.fx-mod-dot{display:inline-block}
 /* T12 (editor_ux_spec.json): this used to show the mobile reset icon unconditionally whenever the
    sheet was open, with no :has(.fx-row.fx-mod)/fx-has-heal gate at all — every section's Reset
    was visible at rest on mobile, not just after an actual edit, unlike the desktop rule below

@@ -7,7 +7,9 @@ const CS_LEVEL_KEY='chromasmith_ui_level';
 const CS_LEVELS={simple:['Simple','Six tools, essentials only'],standard:['Standard','Every tool, Advanced folded'],pro:['Pro','Everything, Advanced open']};
 const CS_LEVEL_SIMPLE=['looks','adjust','hsl','local','crop','export']; // Looks, Exposure & Tone, Colour Mixer, Masks, Crop, Output
 // Existing users who never chose get Standard, so nothing disappears on upgrade.
-function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v;}catch(e){}return 'standard';}
+// P7: below 700px the default is Simple (nothing stored yet) and Pro is not offered (a stored Pro reads as Standard there).
+function csLevelNarrow(){return window.innerWidth<700;}
+function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v==='pro'&&csLevelNarrow()?'standard':v;}catch(e){}return csLevelNarrow()?'simple':'standard';}
 function csLevelCss(){
   const S=CS_LEVEL_SIMPLE,gs=Object.keys(FX_GROUPS).filter(g=>FX_GROUPS[g].members.some(m=>S.includes(m)));
   const keep=(attr,list)=>list.map(k=>`[${attr}="${k}"]`).join(',')+',.lvl-peek';
@@ -49,8 +51,8 @@ function csLevelReveal(key,fold){
   return true;
 }
 function csLevelSet(level,opts){
-  if(!CS_LEVELS[level])level='standard';
-  try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}
+  if(!CS_LEVELS[level]||(level==='pro'&&csLevelNarrow()))level='standard';
+  if(!(opts&&opts.auto)){try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}}
   document.body.dataset.level=level;
   document.querySelectorAll('.lvl-peek').forEach(e=>e.classList.remove('lvl-peek'));
   if(level==='pro'){window._csLevelOpening=true;document.querySelectorAll('details.fx-adv').forEach(d=>{d.open=true;});setTimeout(()=>{window._csLevelOpening=false;},120);}
@@ -62,11 +64,11 @@ function csLevelSet(level,opts){
 }
 window.csLevelSet=csLevelSet;window.csLevelGet=csLevelGet;window.csLevelCardHidden=csLevelCardHidden;window.csLevelReveal=csLevelReveal;
 function csLevelPickHtml(){const cur=csLevelGet();
-  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
+  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).filter(([k])=>!(k==='pro'&&csLevelNarrow())).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
 (function(){
   const init=()=>{
     if(!document.getElementById('cs-level-css')){const st=document.createElement('style');st.id='cs-level-css';st.textContent=csLevelCss();document.head.appendChild(st);}
-    csLevelSet(csLevelGet(),{quiet:true});
+    csLevelSet(csLevelGet(),{quiet:true,auto:true});
     const tg=document.getElementById('tg-filmneg');if(tg&&window.MutationObserver)new MutationObserver(csLevelFnegSync).observe(tg,{attributes:true,attributeFilter:['class']});
     setInterval(csLevelFnegSync,1500);
   };

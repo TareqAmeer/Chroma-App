@@ -141,6 +141,7 @@ document.querySelectorAll('.fx-ctrl[data-fxsec] > .fx-ctrl-title').forEach(title
     const sep=document.createElement('span');sep.className='fx-ctrl-title-reset-sep';sep.setAttribute('aria-hidden','true');sep.textContent='|';
     right.appendChild(scoped);right.appendChild(sep);
   }
+  const dot=document.createElement('span');dot.className='fx-mod-dot';dot.setAttribute('aria-hidden','true');dot.title='Edited';title.insertBefore(dot,right);
   right.appendChild(b);
   if(toggle)right.appendChild(toggle);
 });

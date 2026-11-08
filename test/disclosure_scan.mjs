@@ -106,11 +106,12 @@ const reach = await p2.evaluate((keys) => {
 const unreached = reach.filter((k) => !/^[a-z]+:(button|input|select|textarea):/.test(k) || true);
 if (unreached.length) fail(`not reachable from palette (${unreached.length}): ${unreached.slice(0, 8).join(', ')}`);
 // run one palette entry per card: fold must open
-const opened = await p2.evaluate(async () => {
+const advLab = Object.fromEntries(advKeys.map(([k, v]) => [k.split(':')[0], v.label]).reverse());
+const opened = await p2.evaluate(async (advLab) => {
   const res = {}; const cmds = _cpCommands();
   for (const sec of ['adjust', 'nr', 'straighten', 'borders', 'retouch', 'export']) {
     const d = document.getElementById('fx-adv-' + sec); d.open = false;
-    const c = cmds.find((x) => x.group === 'Control' && x.label.startsWith((CS_NAMES[sec] || sec) + ': ') && d.contains(document.querySelector('[id]')) || x.group === 'Control' && x.label.startsWith((CS_NAMES[sec] || sec) + ': '));
+    const c = cmds.find((x) => x.group === 'Control' && x.label === (CS_NAMES[sec] || sec) + ': ' + advLab[sec]);
     if (!c) { res[sec] = 'no-entry'; continue; }
     c.run(); await new Promise((r) => setTimeout(r, 600));
     res[sec] = d.open;
@@ -120,7 +121,7 @@ const opened = await p2.evaluate(async () => {
     }
   }
   return res;
-});
+}, advLab);
 for (const [s, o] of Object.entries(opened)) if (o !== true) fail(`palette entry did not open Advanced fold on ${s}: ${o}`);
 
 // 6. modified badge truth + persistence
@@ -134,6 +135,67 @@ const badge = await p2.evaluate(async () => {
 });
 if (!badge.before || badge.after !== '1 changed' || !badge.cleared || badge.stored !== true) fail('modified badge/persistence: ' + JSON.stringify(badge));
 
+// 3b. every labelled slider/select (essential too) is a palette entry
+const essMissing = await p2.evaluate(() => {
+  const cmds = _cpCommands(), bad = [];
+  document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach((card) => card.querySelectorAll('input.fx-slider[type=range],select.fx-select').forEach((el) => {
+    if (el.closest('details.fx-adv') || !el.closest('.fx-row')) return;
+    const lab = (el.closest('.fx-row').querySelector('.fx-label')?.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 48);
+    if (!lab) return;
+    const k = card.dataset.fxsec;
+    if (!cmds.some((c) => c.group === 'Control' && c.label === (CS_NAMES[k] || k) + ': ' + lab)) bad.push(k + ':' + lab);
+  }));
+  return bad;
+});
+if (essMissing.length) fail(`essential controls not in palette (${essMissing.length}): ${essMissing.slice(0, 8).join(', ')}`);
+const essRun = await p2.evaluate(async () => {
+  const c = _cpCommands().find((x) => x.group === 'Control' && x.label === 'Exposure & Tone: Exposure');
+  if (!c) return 'no-entry';
+  document.querySelector('.fx-ctrl[data-fxsec="adjust"]').classList.add('fx-sec-collapsed');
+  c.run(); await new Promise((r) => setTimeout(r, 400));
+  const card = document.querySelector('.fx-ctrl[data-fxsec="adjust"]');
+  return !card.classList.contains('fx-sec-collapsed') && card.contains(document.activeElement);
+});
+if (essRun !== true) fail('essential palette entry did not open card + focus: ' + essRun);
+
+// 4b. modified dot truth: edit one slider per card -> header dot shows; restoring clears it
+const dots = await p2.evaluate(async () => {
+  const out = { bad: [], tested: 0 };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const vis = (d) => getComputedStyle(d).display !== 'none';
+  out.idleDotted = [...document.querySelectorAll('.fx-ctrl[data-fxsec]')].filter((c) => { const d = c.querySelector(':scope>.fx-ctrl-title>.fx-mod-dot'); return d && vis(d); }).map((c) => c.dataset.fxsec);
+  for (const card of document.querySelectorAll('.fx-ctrl[data-fxsec]')) {
+    const k = card.dataset.fxsec, dot = card.querySelector(':scope>.fx-ctrl-title>.fx-mod-dot');
+    const sl = [...card.querySelectorAll('input.fx-slider[type=range]')].find((x) => !x.disabled && x.id.replace(/^sl-/, '') in ((typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault || {}).sliders || {}));
+    if (!dot || !sl || k === 'filmneg') continue;
+    out.tested++;
+    const orig = sl.value, mn = parseFloat(sl.min), mx = parseFloat(sl.max);
+    const fire = () => { sl.dispatchEvent(new Event('input', { bubbles: true })); sl.dispatchEvent(new Event('change', { bubbles: true })); };
+    sl.value = Math.abs(parseFloat(orig) - mx) > (mx - mn) / 4 ? mx : mn; fire(); await wait(450);
+    const on = vis(dot);
+    sl.value = orig; fire(); await wait(450);
+    const off = !vis(dot);
+    if (!on || !off) out.bad.push(k + (on ? '' : ':no-dot') + (off ? '' : ':stuck'));
+  }
+  return out;
+});
+if (dots.tested < 10) fail('modified dot test covered only ' + dots.tested + ' cards');
+if (dots.bad.length) fail('modified dot truth: ' + dots.bad.join(', '));
+if (dots.idleDotted.length) fail('cards dotted with no edit (false positive): ' + dots.idleDotted.join(', '));
+
+await p2.evaluate(() => { localStorage.removeItem('chromasmith_fneg_seen'); csLevelFnegSync(); });
+
+// 7b. mobile default (P7): below 700px a fresh profile is Simple and Pro is not offered; wide stays Standard
+const mobRes = {};
+for (const [w, exp] of [[390, 'simple'], [699, 'simple'], [700, 'standard'], [1024, 'standard']]) {
+  await p2.setViewportSize({ width: w, height: 800 });
+  mobRes[w] = await p2.evaluate(() => { const k = 'chromasmith_ui_level', old = localStorage.getItem(k); localStorage.removeItem(k); const r = { fresh: csLevelGet() }; localStorage.setItem(k, 'pro'); r.pro = csLevelGet(); r.pick = csLevelPickHtml().includes('data-level="pro"'); if (old) localStorage.setItem(k, old); else localStorage.removeItem(k); return r; });
+  if (mobRes[w].fresh !== exp) fail(`mobile default at ${w}px: ${mobRes[w].fresh} != ${exp}`);
+  if (w < 700 && (mobRes[w].pro !== 'standard' || mobRes[w].pick)) fail(`Pro offered below 700px: ${JSON.stringify(mobRes[w])}`);
+  if (w >= 700 && (mobRes[w].pro !== 'pro' || !mobRes[w].pick)) fail(`Pro missing at ${w}px`);
+}
+await p2.setViewportSize({ width: 1440, height: 900 });
+
 // 7. Editor level (Simple/Standard/Pro): CSS-only hiding. Nothing lost, Simple stays small, every hidden tool reachable from the palette.
 const levelReport = {};
 await p2.evaluate(() => csLevelSet('standard', { quiet: true }));
@@ -146,7 +208,7 @@ for (const level of ['simple', 'standard', 'pro']) {
   const have = new Set(Object.keys(keys).map(norm));
   const lostL = Object.keys(refScan).filter((k) => !have.has(norm(k)) && !/mask|msk/i.test(k));
   if (lostL.length) fail(`level ${level}: ${lostL.length} controls vanished from the DOM (${lostL.slice(0, 4).join(', ')})`);
-  const r = await p2.evaluate(async (level) => {
+  const r = await p2.evaluate(async ([level, advLab]) => {
     const out = { hiddenCards: [], css: [], unreachable: [], visibleNonButton: 0, visibleSliders: 0, foldBad: [] };
     const cards = [...document.querySelectorAll('.fx-ctrl[data-fxsec]')];
     for (const c of cards) {
@@ -177,14 +239,14 @@ for (const level of ['simple', 'standard', 'pro']) {
     }
     if (level === 'simple') for (const k of ['adjust', 'export']) {
       const fold = document.getElementById('fx-adv-' + k), cmds = _cpCommands();
-      const hit = cmds.find((x) => x.group === 'Control' && x.label.startsWith((CS_NAMES[k] || k) + ': '));
+      const hit = cmds.find((x) => x.group === 'Control' && x.label === (CS_NAMES[k] || k) + ': ' + advLab[k]);
       if (!hit) { out.foldBad.push(k + ':no-entry'); continue; }
       hit.run(); await new Promise((r) => setTimeout(r, 400));
       if (getComputedStyle(fold).display === 'none') out.foldBad.push(k);
     }
     if (level === 'pro') out.foldsOpen = [...document.querySelectorAll('details.fx-adv')].every((d) => d.open);
     return out;
-  }, level);
+  }, [level, advLab]);
   levelReport[level] = { hiddenCards: r.hiddenCards.length, visibleNonButton: r.visibleNonButton, visibleSliders: r.visibleSliders };
   if (r.css.length) fail(`level ${level}: CSS did not hide ${r.css.join(',')}`);
   if (r.unreachable.length) fail(`level ${level}: hidden tools not reachable from palette: ${r.unreachable.join(',')}`);
@@ -196,7 +258,7 @@ for (const level of ['simple', 'standard', 'pro']) {
 await p2.evaluate(() => csLevelSet('standard', { quiet: true }));
 await b2.close();
 
-const report = { levels: levelReport, controls: Object.keys(cur).length, perCard, adjustDefaultVisibleSliders: adjVisSliders, badge, opened, failures: fails };
+const report = { levels: levelReport, controls: Object.keys(cur).length, perCard, adjustDefaultVisibleSliders: adjVisSliders, badge, opened, dots, mobRes, essMissing: essMissing.length, failures: fails };
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else { console.log(`controls ${report.controls}; Exposure&Tone default-visible sliders ${adjVisSliders}`); console.table(perCard); }
 if (fails.length) { console.log('FAIL\n' + fails.join('\n')); process.exit(1); }
