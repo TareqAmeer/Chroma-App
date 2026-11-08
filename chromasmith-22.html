@@ -3218,6 +3218,9 @@ body.sk2.mobile-fx .fx-ctrl>.fx-ctrl-title>.fx-toggle-lb{margin-left:auto}
 /* Phone: Info is just Metadata — Keywords / Tags are a desktop Library thing */
 body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part:not([open]){display:none!important}
 body.mobile-fx .fx-ctrl[data-fxsec="info"] .fx-info-part[open]>summary{display:none}
+.fx-vid-only{display:none}
+body.fx-cur-video .fx-vid-only{display:block}
+body.fx-cur-video .fx-still-only{display:none!important}
 .exp-plain{display:flex;flex-direction:column;gap:4px;margin:0 0 6px}
 .exp-plain-b{display:flex;align-items:baseline;gap:6px;text-align:left;border:1px solid var(--bdr);border-radius:0;background:none;color:var(--k-color-ink,#f2f0ea);font:13px var(--sans);padding:9px 10px;cursor:pointer}
 .exp-plain-b span{color:var(--k-color-muted,#8d8b85);font-size:12px}
@@ -3585,10 +3588,11 @@ function sk2ExportBuild(){
   let sh=document.getElementById('sk2-export');if(sh)return sh;
   sh=document.createElement('aside');sh.id='sk2-export';sh.setAttribute('aria-label','Export');sh.setAttribute('aria-hidden','true');
   sh.innerHTML=`<div class="sk2x-hd"><h2>Export</h2><button type="button" class="sk2x-close" aria-label="Close export" title="Close (Esc)">×</button></div>
-    <div class="sk2x-body"><div class="sk2x-cap">Size</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-size"></div>
-    <div class="sk2x-cap">Format</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-fmt"></div>
-    <section class="sk2x-proof" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
-    <div class="sk2x-scope"></div>
+    <div class="sk2x-body"><div class="sk2x-cap fx-vid-only">Video export</div><div class="sk2x-vidslot"></div>
+    <div class="sk2x-cap fx-still-only">Size</div><div class="sk2x-opts chip-tap fx-still-only" data-sel="sel-exp-size"></div>
+    <div class="sk2x-cap fx-still-only">Format</div><div class="sk2x-opts chip-tap fx-still-only" data-sel="sel-exp-fmt"></div>
+    <section class="sk2x-proof fx-still-only" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
+    <div class="sk2x-scope fx-still-only"></div>
     <details class="sk2-more sk2x-more"><summary>More</summary><div class="sk2x-cards"></div></details></div>
     <div class="sk2x-go"><button type="button" class="sk2x-btn">Export <span>→</span></button></div>`;
   document.body.appendChild(sh);
@@ -3597,6 +3601,8 @@ function sk2ExportBuild(){
     const draw=()=>{box.innerHTML=[...sel.options].filter(o=>!o.hidden&&!o.disabled).map(o=>`<button type="button" class="btn bgh${o.value===sel.value?' on':''}" data-v="${o.value}">${lbl[o.value]||o.textContent}</button>`).join('');};
     draw();sel.addEventListener('change',draw);box._draw=draw;
     box.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;sel.value=b.dataset.v;sel.dispatchEvent(new Event('change',{bubbles:true}));draw();});});
+  const vslot=sh.querySelector('.sk2x-vidslot'),vexp=document.getElementById('fx-vid-export');
+  if(vslot&&vexp)vslot.appendChild(vexp); // video export controls sit at the top of the drawer, where Size/Format are for stills
   const cards=sh.querySelector('.sk2x-cards');
   ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
   sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
@@ -3610,7 +3616,9 @@ function sk2ExportOpen(){
   if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
   const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
   const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
-  sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  const _isVid=!!(curItem()&&curItem().kind==='video');
+  if(_isVid)fxVideoExportSummary();
+  sh.querySelector('.sk2x-btn').firstChild.textContent=_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
   const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
   document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
   _fxSoftProofBefore=false;fxSoftProofSchedule();
@@ -4985,11 +4993,42 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
       <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Output</div>
         <!-- Plain export choices (set the size/quality/format controls below — those stay editable). -->
-        <div id="exp-plain" class="exp-plain"></div>
-        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
+        <div id="exp-plain" class="exp-plain fx-still-only"></div>
+        <div id="exp-est" class="fx-still-only" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
         <div id="exp-last" style="font-size:12px;color:var(--mut);margin:-4px 0 8px" hidden></div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
-        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
+        <!-- VIDEO EXPORT (shown only while a video is current; the still controls below carry .fx-still-only
+             and hide at the same time). Every control here is read directly by fxVideoExportSmall. -->
+        <div class="fx-vid-only" id="fx-vid-export">
+          <div class="fx-row" style="margin-top:8px"><div class="fx-label">Container</div><div style="font-size:12px;color:var(--mut)">MP4</div></div>
+          <div class="fx-row" title="H.264 plays everywhere. HEVC is smaller but falls back to H.264 automatically if this browser cannot encode it."><div class="fx-label">Codec</div>
+            <select class="fx-select" id="sel-vid-codec" onchange="fxVideoExportSummary()">
+              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
+            </select></div>
+          <div class="fx-row" title="Encode bitrate. Higher survives film grain better, at a larger file."><div class="fx-label">Quality</div>
+            <select class="fx-select" id="sel-vid-quality" onchange="fxVideoExportSummary()">
+              <option value="draft">Draft</option><option value="standard">Standard</option>
+              <option value="high" selected>High</option><option value="max">Maximum</option>
+            </select></div>
+          <div class="fx-row" title="Caps the export's long edge. Never upscales past the source."><div class="fx-label">Resolution</div>
+            <select class="fx-select" id="sel-vid-resolution" onchange="fxVideoExportSummary()">
+              <option value="source">Source</option><option value="2160">4K</option>
+              <option value="1080" selected>1080p</option><option value="720">720p</option>
+            </select></div>
+          <div class="fx-row" title="Drops frames toward the target. Never interpolates up."><div class="fx-label">Frame rate</div>
+            <select class="fx-select" id="sel-vid-fps" onchange="fxVideoExportSummary()">
+              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
+            </select></div>
+          <div class="fx-row" title="Original audio is copied through untouched (AAC only). Mute exports picture only."><div class="fx-label">Audio</div>
+            <select class="fx-select" id="sel-vid-audio" onchange="fxVideoAudioSelChanged(this.value)">
+              <option value="keep" selected>Keep original</option><option value="mute">Mute</option>
+            </select></div>
+          <div class="fx-row" title="Fade from/to black, in seconds (picture only)"><div class="fx-label">Fade in / out</div>
+            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds"> 
+            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds"> <span style="font-size:10px;color:var(--mut)">s</span></div>
+          <div id="vid-exp-summary" style="font-size:12px;color:var(--mut);margin:6px 0 8px;line-height:1.5"></div>
+        </div>
+        <div class="fx-row fx-still-only" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
+        <div class="fx-row fx-still-only" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
             <option value="auto">Auto (match source)</option>
             <option value="jpg">JPG</option>
@@ -5000,7 +5039,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
              detail the sharpening was judged on, so resampling without re-sharpening always
              looks soft. Full size + Off is the default and leaves the export byte-identical. -->
-        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
+        <div class="fx-row fx-still-only" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
           <select class="fx-select" id="sel-exp-size">
             <option value="0">Full size</option>
             <option value="4096">4096 px</option>
@@ -5054,7 +5093,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="overwrite">Overwrite it</option>
           </select>
         </div>
-        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
+        <div class="fx-row fx-still-only" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
           <div class="fx-label">Super Resolution</div>
           <select class="fx-select" id="sel-exp-sr">
             <option value="0">Off</option>
@@ -5062,7 +5101,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="4">4x (16x the pixels)</option>
           </select>
         </div>
-        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+        <div class="fx-row fx-still-only" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
           <select class="fx-select" id="sel-exp-sharp">
             <option value="0">Off</option>
             <option value="1">Low</option>
@@ -5070,20 +5109,20 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="3">High</option>
           </select>
         </div>
-        <div class="fx-row" id="fx-hdr-row" style="display:none"
+        <div class="fx-row fx-still-only" id="fx-hdr-row" style="display:none"
              title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
           <div class="fx-label">HDR (gain map)</div>
           <input type="checkbox" id="tg-exp-hdr">
         </div>
-        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
-        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+        <div class="msk-hint fx-still-only" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-still-only" id="fx-match-series-row" style="margin-top:8px;display:none">
           <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
           <div style="display:flex;gap:6px">
             <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
             <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
           </div>
         </div>
-        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
+        <label class="fx-row fx-still-only" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
           <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
           <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
         </label>
@@ -5108,7 +5147,7 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
            saved/recalled by name — distinct from Styles (the full edit recipe) below and from
            Save session above (one auto-restored slot). The common case this exists for: "small
            JPG for the web" vs "full-res PNG for print" as one click instead of four each time. -->
-      <div class="fx-ctrl" data-fxsec="exppreset">
+      <div class="fx-ctrl fx-still-only" data-fxsec="exppreset">
         <div class="fx-ctrl-title">Export Presets</div>
         <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
           <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
@@ -5338,54 +5377,12 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself.">Capture frame</button>
           <button class="btn bgh" id="btn-vid-guides" onclick="fxVideoGuidesToggle()" title="Rule-of-thirds + safe-area guides over the preview">Guides</button>
         </div>
-        <!-- Fades: picture only (see fxVideoExportSmall's own comment) — passthrough audio can't
-             be faded without a decode/re-encode pass, which is out of scope. -->
+        <!-- Preview proxy only (export-side fades/quality/codec/etc. live in the Output card, see .fx-vid-only). -->
         <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Fade in</span>
-            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds (picture only)">
-            <span style="font-size:10px;color:var(--mut)">s</span>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Fade out</span>
-            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds (picture only)">
-            <span style="font-size:10px;color:var(--mut)">s</span>
-          </div>
           <div class="fx-row" style="align-items:center;gap:4px;width:auto">
             <span style="font-size:10px;color:var(--mut)">Preview</span>
             <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
               <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
-            </select>
-          </div>
-        </div>
-        <!-- Export settings: quality controls bitrate, resolution/fps cap the encode (never
-             upscale/interpolate), codec is probed at export time and silently falls back to H.264
-             if HEVC isn't encodable in this browser. All read directly by fxVideoExportSmall. -->
-        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Quality</span>
-            <select id="sel-vid-quality" title="Encode bitrate — higher survives film grain better, at a larger file">
-              <option value="draft">Draft</option><option value="standard">Standard</option>
-              <option value="high" selected>High</option><option value="max">Maximum</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Resolution</span>
-            <select id="sel-vid-resolution" title="Caps the export's long edge — never upscales past the source">
-              <option value="source">Source</option><option value="2160">4K</option>
-              <option value="1080" selected>1080p</option><option value="720">720p</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Codec</span>
-            <select id="sel-vid-codec" title="HEVC falls back to H.264 automatically if this browser can't encode it">
-              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Frame rate</span>
-            <select id="sel-vid-fps" title="Decimates toward the target — never interpolates up">
-              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
             </select>
           </div>
         </div>
@@ -7671,7 +7668,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108Q';
+const BUILD='1.1108R';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13292,21 +13289,50 @@ async function loadFXVideoFile(file){
 // — not the clip's real, possibly-irregular frame count. Verified against a real 29.97fps HEVC
 // iPhone clip and a genuinely irregular synthetic one; see probeVfr's own comment for the
 // separate bug (now fixed) in DETECTING variable spacing, which is orthogonal to this.
-let _fxSeekGen=0;
-async function fxVideoSeekTo(it,frameIndex){
-  if(!it||it.kind!=='video'||!it._mbSampleSink)return;
+let _fxSeekGen=0,_fxSeekBusy=false,_fxSeekQueued=null;
+// Draw a decoded sample into the item's source canvas and re-render. Shared by exact seeks and the
+// sequential playback reader so both paths present a frame identically.
+function _fxVideoPresent(it,sample,frameIndex){
+  const ctx=it.img.getContext('2d');
+  ctx.clearRect(0,0,it.img.width,it.img.height);
+  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
+  it._shownFrame=frameIndex;
+  updateWork();renderPreview();
+}
+// Exact-frame seek. Scrubbing fires this far faster than a keyframe-seek+decode can finish, so
+// requests are COALESCED: while one decode is in flight only the newest target is kept (every
+// waiter resolves once that final frame is on screen) instead of decoding each stale position and
+// throwing the result away. A seek to the frame already shown is a no-op.
+function fxVideoSeekTo(it,frameIndex){
+  if(!it||it.kind!=='video'||!it._mbSampleSink)return Promise.resolve();
+  _fxPlayClose(); // any manual seek invalidates the sequential playback reader
+  if(_fxSeekBusy){
+    return new Promise(res=>{
+      if(_fxSeekQueued){_fxSeekQueued.it=it;_fxSeekQueued.frame=frameIndex;_fxSeekQueued.waiters.push(res);}
+      else _fxSeekQueued={it,frame:frameIndex,waiters:[res]};
+    });
+  }
+  return _fxSeekRun(it,frameIndex);
+}
+async function _fxSeekRun(it,frameIndex){
+  _fxSeekBusy=true;
+  try{await _fxSeekDecode(it,frameIndex);}
+  catch(e){console.error('video seek failed',e);}
+  finally{_fxSeekBusy=false;}
+  const q=_fxSeekQueued;
+  if(q){_fxSeekQueued=null;_fxSeekRun(q.it,q.frame).then(()=>q.waiters.forEach(r=>r()));}
+}
+async function _fxSeekDecode(it,frameIndex){
+  if(it._shownFrame===frameIndex&&it.curFrame===frameIndex)return;
   const myGen=++_fxSeekGen;
   const t=frameIndex/(it.fps||30);
   let sample=null;
   for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}
-  if(myGen!==_fxSeekGen){if(sample)sample.close();return;} // a newer seek already won — drop this stale result
+  if(myGen!==_fxSeekGen||curItem()!==it){if(sample)sample.close();return;} // item switched / newer seek won — drop this stale result
   if(!sample)return;
-  const ctx=it.img.getContext('2d');
-  ctx.clearRect(0,0,it.img.width,it.img.height);
-  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  _fxVideoPresent(it,sample,frameIndex);
   sample.close();
-  it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
-  updateWork();renderPreview();
 }
 // Deterministic hash of an integer -> [0,1): the standard GLSL-style sin/fract trick, in JS.
 // frameIndex+1 avoids the degenerate sin(0)=0 case landing every clip's frame 0 at hash 0.
@@ -13341,6 +13367,52 @@ function fxVideoGrainMotionChanged(v){
 // renders every frame regardless of how long each one takes — playback and export are
 // deliberately different code paths with different tradeoffs, not the same loop reused.
 let _fxPlayRAF=null,_fxPlayStartMs=0,_fxPlayStartFrame=0,_fxPlayFrameTimes=[],fxVideoLoop=false;
+// Sequential playback reader: ONE decoder session walks forward through the clip and each tick
+// presents the newest frame whose timestamp has arrived (earlier ones are decoded but dropped).
+// The old per-tick samples(t) did a keyframe seek + decode-forward every frame, which is O(GOP)
+// work per frame and the main source of stutter on long-GOP footage. If playback falls more than
+// _FX_PLAY_RESYNC_S behind the clock, the reader jumps (one keyframe seek) instead of crawling.
+let _fxPlayIter=null,_fxPlayAhead=null,_fxPlayItem=null;
+const _FX_PLAY_RESYNC_S=1.0;
+function _fxPlayClose(){
+  if(_fxPlayAhead){try{_fxPlayAhead.close();}catch(e){}_fxPlayAhead=null;}
+  const i=_fxPlayIter;_fxPlayIter=null;_fxPlayItem=null;
+  if(i&&i.return){try{i.return();}catch(e){}}
+}
+// Returns the frame index presented, or -1 when no new frame was due.
+async function _fxPlayAdvance(it,tS){
+  const fps=it.fps||30;
+  if(_fxPlayItem!==it||!_fxPlayIter){
+    _fxPlayClose();
+    _fxPlayIter=it._mbSampleSink.samples(Math.max(0,tS))[Symbol.asyncIterator]();_fxPlayItem=it;
+  }
+  const iter=_fxPlayIter;
+  let best=null;
+  const eps=0.5/fps; // a frame is due once the clock is within half a frame of its timestamp
+  for(;;){
+    if(!_fxPlayAhead){
+      const r=await iter.next();
+      if(iter!==_fxPlayIter||curItem()!==it){if(r&&r.value)try{r.value.close();}catch(e){}if(best)best.close();return -1;}
+      if(r.done)break;
+      _fxPlayAhead=r.value;
+    }
+    if(_fxPlayAhead.timestamp<=tS+eps){
+      if(best)best.close();
+      best=_fxPlayAhead;_fxPlayAhead=null;
+      if(tS-best.timestamp>_FX_PLAY_RESYNC_S){ // hopelessly behind: jump to the clock
+        _fxPlayClose();_fxPlayIter=it._mbSampleSink.samples(tS)[Symbol.asyncIterator]();_fxPlayItem=it;
+        const r=await _fxPlayIter.next();
+        if(r.value){best.close();best=r.value;}
+        break;
+      }
+    }else break; // lookahead is in the future — keep it for a later tick
+  }
+  if(!best)return -1;
+  const fi=Math.min(it.frameCount-1,Math.max(0,Math.round(best.timestamp*fps)));
+  _fxVideoPresent(it,best,fi);
+  best.close();
+  return fi;
+}
 function fxVideoLoopToggle(){
   fxVideoLoop=!fxVideoLoop;
   const btn=document.getElementById('btn-vid-loop');
@@ -13361,16 +13433,38 @@ function _fxAudioStart(it,offsetSec){
   _fxAudioStop();
   if(fxVideoMuted||!it._audioBuffer)return;
   const ctx=fxAudioCtx();
+  if(ctx.state==='suspended')ctx.resume().catch(()=>{}); // a suspended context's clock never advances -> frozen picture
   const src=ctx.createBufferSource();
   src.buffer=it._audioBuffer;
   src.connect(ctx.destination);
   const clamped=Math.max(0,Math.min(it._audioBuffer.duration-0.001,offsetSec));
   src.start(0,clamped);
   src.onended=()=>{if(_fxPlayAudioSrc===src)_fxPlayAudioSrc=null;}; // clip runs past its own audio (video is usually a hair longer) — fine, just stop tracking it
-  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime-clamped;
+  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime; // elapsed = PLAYED time only; fxVideoPlayTick adds _fxPlayStartFrame itself (the old '-clamped' double-counted the start offset when playing from mid-clip)
+}
+function fxVideoAudioSelChanged(v){if((v==='mute')!==fxVideoMuted)fxVideoMuteToggle();}
+// One-line "what will this export produce" under the Output card's video controls. Mirrors the
+// size/fps/bitrate math in fxVideoExportSmall (same constants) so the line matches the file.
+function fxVideoExportSummary(){
+  const el=document.getElementById('vid-exp-summary');if(!el)return;
+  const it=curItem();
+  if(!it||it.kind!=='video'){el.textContent='';return;}
+  const g=id=>(document.getElementById(id)||{}).value;
+  const cap=g('sel-vid-resolution')==='source'?Infinity:parseInt(g('sel-vid-resolution'),10)||1080;
+  const gw=it.img.width,gh=it.img.height;
+  const sc=Math.min(1,cap/Math.max(gw,gh));
+  const ow=Math.max(2,Math.round(gw*sc/2)*2),oh=Math.max(2,Math.round(gh*sc/2)*2);
+  const srcFps=it.fps||30,fps=g('sel-vid-fps')==='source'?srcFps:Math.min(srcFps,parseInt(g('sel-vid-fps'),10)||srcFps);
+  const f0=it.trimInFrame||0,f1=it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1;
+  const dur=Math.max(1,f1-f0+1)/srcFps;
+  const mult={draft:0.3,standard:0.6,high:1.0,max:1.8}[g('sel-vid-quality')]||1;
+  const br=20e6*(ow*oh)/(1920*1080)*(fps/30)*mult;
+  const mb=br*dur/8/1048576;
+  el.textContent=`${ow}×${oh} · ${fps%1?fps.toFixed(2):fps} fps · ${dur.toFixed(1)} s · about ${mb<10?mb.toFixed(1):Math.round(mb)} MB`+(it.trimInFrame||f1<it.frameCount-1?' (trimmed)':'');
 }
 function fxVideoMuteToggle(){
   fxVideoMuted=!fxVideoMuted;
+  {const sa=document.getElementById('sel-vid-audio');if(sa)sa.value=fxVideoMuted?'mute':'keep';}
   const btn=document.getElementById('btn-vid-mute');if(btn)btn.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
   const it=curItem();
   if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
@@ -13395,12 +13489,14 @@ function fxVideoPlayToggle(){
   _fxPlayStartMs=performance.now();
   _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
   _fxPlayFrameTimes=[];
+  _fxPlayClose();
   _fxAudioStart(it,_fxPlayStartFrame/(it.fps||30));
   _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoPause(){
   if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;
+  _fxPlayClose();
   _fxAudioStop();
   const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('play',18);
 }
@@ -13419,13 +13515,20 @@ async function fxVideoPlayTick(nowMs){
       targetFrame=loopIn;
       _fxPlayStartMs=nowMs;_fxPlayStartFrame=loopIn; // resync the wall-clock baseline to the loop-in point
       _fxAudioStart(it,loopIn/(it.fps||30));
+      _fxPlayClose(); // reader restarts at loop-in
     }else{fxVideoPause();return;}
   }
   const scrub=document.getElementById('vid-scrub');
   if(+scrub.value!==targetFrame){
-    scrub.value=targetFrame;
-    document.getElementById('vid-time').textContent=fxVideoTimeLabel(targetFrame,it.fps);
-    await fxVideoSeekTo(it,targetFrame); // may still be resolving when the next tick fires — the seek generation counter handles that
+    // Present the newest frame that is due on the clock (sequential decode, see _fxPlayAdvance).
+    // The RAF below only re-arms after this resolves, so a slow frame can never queue a backlog.
+    const clockS=_fxPlayStartFrame/(it.fps||30)+elapsedS;
+    let shown=-1;
+    try{shown=await _fxPlayAdvance(it,clockS);}catch(e){console.error('playback decode failed',e);fxVideoPause();return;}
+    if(!_fxPlayRAF||curItem()!==it)return;
+    if(shown<0){_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);return;} // nothing new due yet
+    scrub.value=shown;
+    document.getElementById('vid-time').textContent=fxVideoTimeLabel(shown,it.fps);
     _fxPlayFrameTimes.push(nowMs);
     if(_fxPlayFrameTimes.length>30)_fxPlayFrameTimes.shift();
     if(_fxPlayFrameTimes.length>1){
@@ -13454,6 +13557,7 @@ function fxSyncTransportUI(){
   // Every video-only row hides together — one list so a new one can't be added to the show path
   // and forgotten in the hide path, which is how a control ends up stranded on a still photo.
   const vidRows=['row-grain-motion','row-gate-weave','row-film-breath'].map(id=>document.getElementById(id));
+  document.body.classList.toggle('fx-cur-video',!!(it&&it.kind==='video')); // swaps the Output card between still and video export controls (.fx-still-only / .fx-vid-only)
   if(!it||it.kind!=='video'){bar.style.display='none';vidRows.forEach(r=>{if(r)r.style.display='none';});return;}
   bar.style.display='';
   vidRows.forEach(r=>{if(r)r.style.display='';});
@@ -13471,7 +13575,12 @@ function fxSyncTransportUI(){
     if(sl){sl.value=it.grainMotion!=null?it.grainMotion:75;
       document.getElementById('vl-grain-motion').textContent=sl.value;}
   }
-  const mb=document.getElementById('btn-vid-mute');if(mb)mb.textContent=fxVideoMuted?'🔇':'🔊';
+  const mb=document.getElementById('btn-vid-mute');if(mb)mb.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
+  const asel=document.getElementById('sel-vid-audio');
+  if(asel){asel.value=fxVideoMuted?'mute':'keep';
+    // No audio track / not AAC: say so instead of offering a choice that does nothing.
+    asel.disabled=!it._mbAudioTrack;if(!it._mbAudioTrack)asel.title='This clip has no audio track';}
+  fxVideoExportSummary();
   if(typeof fxVideoBuildThumbs==='function')fxVideoBuildThumbs(it); // fire-and-forget — fills in #vid-thumbstrip as frames decode
 }
 // Thumbnail strip (B3): N evenly-spaced low-res frames under the scrubber, Premiere/Resolve-
@@ -13506,6 +13615,7 @@ async function fxVideoBuildThumbs(it){
   }
 }
 function fxVideoScrubInput(v){
+  if(_fxPlayRAF)fxVideoPause(); // scrubbing takes over from playback (the clock would otherwise snap the playhead back)
   document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
   fxVideoSeekTo(curItem(),+v);
 }
@@ -13557,6 +13667,7 @@ function fxVideoTrimChanged(){
   if(a>b){[a,b]=[b,a];trimIn.value=a;trimOut.value=b;}
   trimIn.max=b;trimOut.min=a;
   it.trimInFrame=a;it.trimOutFrame=b;
+  fxVideoExportSummary();
   const full=a===0&&b>=it.frameCount-1;
   document.getElementById('vid-trim-lb').textContent=full?'full clip':`${fxVideoTimeLabel(a,it.fps)}–${fxVideoTimeLabel(b,it.fps)}`;
   // Visual range fill on the scrub track — a background gradient from 0..a (dimmed, outside the
@@ -31025,13 +31136,18 @@ async function exportFX(...a){
 // decodes it only when the export reaches it — so a batch never pre-decodes every photo up front.
 async function _exportFXRun(opts){
   const optItems=opts&&Array.isArray(opts.items)?opts.items:null;
+  // A video has no still "full-quality promotion" step: the readiness flag below belongs to whichever
+  // photo was opened last and would wrongly cancel a video export, so it is skipped for a current video.
+  const _curVid=!optItems&&fxImages[fxCurIdx]&&fxImages[fxCurIdx].kind==='video';
   if(!optItems){
   if(!fxImages.length){log('No image loaded','warn');return}
-  await fxEnsureFullQuality(); // never export the display-tier stand-in
-  if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
+  if(!_curVid)await fxEnsureFullQuality(); // never export the display-tier stand-in
+  if(!_curVid&&window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   }
-  const scope=fxImages.length>1?fxExportScope:'all';
-  const items=optItems||window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
+  const scope=fxImages.length>1&&!_curVid?fxExportScope:'all';
+  // Current item is a video: export exactly that clip (the "all photos" batch is the still pipeline and can't take a video).
+  // Otherwise a batch skips any video items rather than failing the whole run on them.
+  const items=optItems||window._expOnlyItems||(_curVid?[fxImages[fxCurIdx]]:scope==='current'?[fxImages[fxCurIdx]]:fxImages.filter(i=>i.kind!=='video'));
   // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
   // photos and videos in one batch isn't a designed use case (Library integration explicitly
   // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export

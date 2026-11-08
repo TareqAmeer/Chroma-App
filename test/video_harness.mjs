@@ -333,6 +333,59 @@ async function main() {
     check('export with a film frame produces an MP4', !!frameResult.saved && frameResult.saved.size > 200,
       JSON.stringify(frameResult.saved));
 
+    // [8] Export UI is video-specific + export goes through the REAL entry (exportFX) even when the
+    // photo "full-quality ready" flag is false (it belongs to the last photo, not a video).
+    console.log('\n[8] Video export panel + exportFX entry');
+    const ui = await page.evaluate(async () => {
+      const it = curItem();
+      document.getElementById('vid-trim-in').value = 2; document.getElementById('vid-trim-out').value = 4; fxVideoTrimChanged();
+      fxSyncTransportUI();
+      const shown = (el) => !!el && getComputedStyle(el).display !== 'none';
+      const out = {
+        bodyClass: document.body.classList.contains('fx-cur-video'),
+        stillQualityHidden: !shown(document.getElementById('sl-exp-q').closest('.fx-row')),
+        stillFormatHidden: !shown(document.getElementById('sel-exp-fmt').closest('.fx-row')),
+        stillSizeHidden: !shown(document.getElementById('sel-exp-size').closest('.fx-row')),
+        stillSharpHidden: !shown(document.getElementById('sel-exp-sharp').closest('.fx-row')),
+        vidBlockShown: shown(document.getElementById('fx-vid-export')),
+        summary: document.getElementById('vid-exp-summary').textContent,
+      };
+      window.chromasmithFullQualityReady = false;
+      let saved = null; const orig = window.saveFile;
+      window.saveFile = async (c, f) => { saved = { size: c.size ?? c.byteLength, fname: f }; };
+      let err = null; try { await exportFX(); } catch (e) { err = String(e && e.message || e); }
+      window.saveFile = orig; window.chromasmithFullQualityReady = undefined;
+      out.saved = saved; out.err = err;
+      return out;
+    });
+    check('video current: body.fx-cur-video set', ui.bodyClass);
+    check('still Quality/Format/Size/Sharpen rows hidden for a video',
+      ui.stillQualityHidden && ui.stillFormatHidden && ui.stillSizeHidden && ui.stillSharpHidden, JSON.stringify(ui));
+    check('video export block shown with a summary line', ui.vidBlockShown && /fps/.test(ui.summary), JSON.stringify(ui));
+    check('exportFX exports a video even when the photo quality flag is false', !!ui.saved && ui.saved.size > 200 && ui.err === null, JSON.stringify(ui));
+
+    // [9] Playback + scrub behaviour
+    console.log('\n[9] Playback pacing + scrub coalescing');
+    const pb = await page.evaluate(async () => {
+      const it = curItem();
+      document.getElementById('vid-trim-in').value = 0; document.getElementById('vid-trim-out').value = it.frameCount - 1; fxVideoTrimChanged();
+      await fxVideoSeekTo(it, 0);
+      const seen = [];
+      fxVideoPlayToggle();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 700) { seen.push(it.curFrame); await new Promise((r) => requestAnimationFrame(r)); }
+      fxVideoPause();
+      const last = it.curFrame;
+      // scrub storm: 10 un-awaited seeks, last one must win and be on screen when the promise resolves
+      let ps = []; for (let f = 0; f < 10; f++) ps.push(fxVideoSeekTo(it, f));
+      await Promise.all(ps);
+      return { seen, last, afterStorm: it.curFrame };
+    });
+    const mono = pb.seen.every((v, i) => i === 0 || v >= pb.seen[i - 1]);
+    check('playback advanced ~7 frames in 0.7s (frame pacing on the clock)', pb.last >= 5 && pb.last <= 9, JSON.stringify(pb));
+    check('playback frames never go backwards', mono, JSON.stringify(pb.seen));
+    check('scrub storm lands on the final frame', pb.afterStorm === 9, JSON.stringify(pb));
+
   } finally {
     await browser.close();
     server.close();

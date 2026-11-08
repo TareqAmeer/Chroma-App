@@ -940,11 +940,42 @@
       <div class="fx-ctrl" data-fxsec="export">
         <div class="fx-ctrl-title">Output</div>
         <!-- Plain export choices (set the size/quality/format controls below — those stay editable). -->
-        <div id="exp-plain" class="exp-plain"></div>
-        <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
+        <div id="exp-plain" class="exp-plain fx-still-only"></div>
+        <div id="exp-est" class="fx-still-only" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
         <div id="exp-last" style="font-size:12px;color:var(--mut);margin:-4px 0 8px" hidden></div>
-        <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
-        <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
+        <!-- VIDEO EXPORT (shown only while a video is current; the still controls below carry .fx-still-only
+             and hide at the same time). Every control here is read directly by fxVideoExportSmall. -->
+        <div class="fx-vid-only" id="fx-vid-export">
+          <div class="fx-row" style="margin-top:8px"><div class="fx-label">Container</div><div style="font-size:12px;color:var(--mut)">MP4</div></div>
+          <div class="fx-row" title="H.264 plays everywhere. HEVC is smaller but falls back to H.264 automatically if this browser cannot encode it."><div class="fx-label">Codec</div>
+            <select class="fx-select" id="sel-vid-codec" onchange="fxVideoExportSummary()">
+              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
+            </select></div>
+          <div class="fx-row" title="Encode bitrate. Higher survives film grain better, at a larger file."><div class="fx-label">Quality</div>
+            <select class="fx-select" id="sel-vid-quality" onchange="fxVideoExportSummary()">
+              <option value="draft">Draft</option><option value="standard">Standard</option>
+              <option value="high" selected>High</option><option value="max">Maximum</option>
+            </select></div>
+          <div class="fx-row" title="Caps the export's long edge. Never upscales past the source."><div class="fx-label">Resolution</div>
+            <select class="fx-select" id="sel-vid-resolution" onchange="fxVideoExportSummary()">
+              <option value="source">Source</option><option value="2160">4K</option>
+              <option value="1080" selected>1080p</option><option value="720">720p</option>
+            </select></div>
+          <div class="fx-row" title="Drops frames toward the target. Never interpolates up."><div class="fx-label">Frame rate</div>
+            <select class="fx-select" id="sel-vid-fps" onchange="fxVideoExportSummary()">
+              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
+            </select></div>
+          <div class="fx-row" title="Original audio is copied through untouched (AAC only). Mute exports picture only."><div class="fx-label">Audio</div>
+            <select class="fx-select" id="sel-vid-audio" onchange="fxVideoAudioSelChanged(this.value)">
+              <option value="keep" selected>Keep original</option><option value="mute">Mute</option>
+            </select></div>
+          <div class="fx-row" title="Fade from/to black, in seconds (picture only)"><div class="fx-label">Fade in / out</div>
+            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds"> 
+            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds"> <span style="font-size:10px;color:var(--mut)">s</span></div>
+          <div id="vid-exp-summary" style="font-size:12px;color:var(--mut);margin:6px 0 8px;line-height:1.5"></div>
+        </div>
+        <div class="fx-row fx-still-only" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
+        <div class="fx-row fx-still-only" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
             <option value="auto">Auto (match source)</option>
             <option value="jpg">JPG</option>
@@ -955,7 +986,7 @@
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
              detail the sharpening was judged on, so resampling without re-sharpening always
              looks soft. Full size + Off is the default and leaves the export byte-identical. -->
-        <div class="fx-row" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
+        <div class="fx-row fx-still-only" style="margin-top:8px" title="Never enlarges — a target above the photo's own long edge is ignored."><div class="fx-label">Resize (long edge)</div>
           <select class="fx-select" id="sel-exp-size">
             <option value="0">Full size</option>
             <option value="4096">4096 px</option>
@@ -1009,7 +1040,7 @@
             <option value="overwrite">Overwrite it</option>
           </select>
         </div>
-        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
+        <div class="fx-row fx-still-only" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
           <div class="fx-label">Super Resolution</div>
           <select class="fx-select" id="sel-exp-sr">
             <option value="0">Off</option>
@@ -1017,7 +1048,7 @@
             <option value="4">4x (16x the pixels)</option>
           </select>
         </div>
-        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+        <div class="fx-row fx-still-only" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
           <select class="fx-select" id="sel-exp-sharp">
             <option value="0">Off</option>
             <option value="1">Low</option>
@@ -1025,20 +1056,20 @@
             <option value="3">High</option>
           </select>
         </div>
-        <div class="fx-row" id="fx-hdr-row" style="display:none"
+        <div class="fx-row fx-still-only" id="fx-hdr-row" style="display:none"
              title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
           <div class="fx-label">HDR (gain map)</div>
           <input type="checkbox" id="tg-exp-hdr">
         </div>
-        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
-        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+        <div class="msk-hint fx-still-only" id="fx-hdr-note" style="display:none"></div>
+        <div class="fx-still-only" id="fx-match-series-row" style="margin-top:8px;display:none">
           <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
           <div style="display:flex;gap:6px">
             <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
             <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
           </div>
         </div>
-        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
+        <label class="fx-row fx-still-only" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
           <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
           <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
         </label>
@@ -1063,7 +1094,7 @@
            saved/recalled by name — distinct from Styles (the full edit recipe) below and from
            Save session above (one auto-restored slot). The common case this exists for: "small
            JPG for the web" vs "full-res PNG for print" as one click instead of four each time. -->
-      <div class="fx-ctrl" data-fxsec="exppreset">
+      <div class="fx-ctrl fx-still-only" data-fxsec="exppreset">
         <div class="fx-ctrl-title">Export Presets</div>
         <div class="fx-row" style="margin-top:0"><div class="fx-label">Export preset</div>
           <select class="fx-select" id="sel-exp-preset" onchange="if(this.value)exportPresetApply(this.value)">
@@ -1293,54 +1324,12 @@
           <button class="btn bgh" onclick="fxVideoCaptureFrame()" title="Exports the CURRENT frame through the full-res still export path, graded exactly like the video preview. Only as large as the video itself.">Capture frame</button>
           <button class="btn bgh" id="btn-vid-guides" onclick="fxVideoGuidesToggle()" title="Rule-of-thirds + safe-area guides over the preview">Guides</button>
         </div>
-        <!-- Fades: picture only (see fxVideoExportSmall's own comment) — passthrough audio can't
-             be faded without a decode/re-encode pass, which is out of scope. -->
+        <!-- Preview proxy only (export-side fades/quality/codec/etc. live in the Output card, see .fx-vid-only). -->
         <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Fade in</span>
-            <input type="number" id="vid-fade-in" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade in from black, in seconds (picture only)">
-            <span style="font-size:10px;color:var(--mut)">s</span>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Fade out</span>
-            <input type="number" id="vid-fade-out" min="0" max="10" step="0.1" value="0" style="width:52px" title="Fade out to black, in seconds (picture only)">
-            <span style="font-size:10px;color:var(--mut)">s</span>
-          </div>
           <div class="fx-row" style="align-items:center;gap:4px;width:auto">
             <span style="font-size:10px;color:var(--mut)">Preview</span>
             <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
               <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
-            </select>
-          </div>
-        </div>
-        <!-- Export settings: quality controls bitrate, resolution/fps cap the encode (never
-             upscale/interpolate), codec is probed at export time and silently falls back to H.264
-             if HEVC isn't encodable in this browser. All read directly by fxVideoExportSmall. -->
-        <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Quality</span>
-            <select id="sel-vid-quality" title="Encode bitrate — higher survives film grain better, at a larger file">
-              <option value="draft">Draft</option><option value="standard">Standard</option>
-              <option value="high" selected>High</option><option value="max">Maximum</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Resolution</span>
-            <select id="sel-vid-resolution" title="Caps the export's long edge — never upscales past the source">
-              <option value="source">Source</option><option value="2160">4K</option>
-              <option value="1080" selected>1080p</option><option value="720">720p</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Codec</span>
-            <select id="sel-vid-codec" title="HEVC falls back to H.264 automatically if this browser can't encode it">
-              <option value="avc" selected>H.264</option><option value="hevc">HEVC</option>
-            </select>
-          </div>
-          <div class="fx-row" style="align-items:center;gap:4px;width:auto">
-            <span style="font-size:10px;color:var(--mut)">Frame rate</span>
-            <select id="sel-vid-fps" title="Decimates toward the target — never interpolates up">
-              <option value="source" selected>Source</option><option value="30">30</option><option value="24">24</option>
             </select>
           </div>
         </div>

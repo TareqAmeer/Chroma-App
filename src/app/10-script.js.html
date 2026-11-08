@@ -85,10 +85,11 @@ function sk2ExportBuild(){
   let sh=document.getElementById('sk2-export');if(sh)return sh;
   sh=document.createElement('aside');sh.id='sk2-export';sh.setAttribute('aria-label','Export');sh.setAttribute('aria-hidden','true');
   sh.innerHTML=`<div class="sk2x-hd"><h2>Export</h2><button type="button" class="sk2x-close" aria-label="Close export" title="Close (Esc)">×</button></div>
-    <div class="sk2x-body"><div class="sk2x-cap">Size</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-size"></div>
-    <div class="sk2x-cap">Format</div><div class="sk2x-opts chip-tap" data-sel="sel-exp-fmt"></div>
-    <section class="sk2x-proof" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
-    <div class="sk2x-scope"></div>
+    <div class="sk2x-body"><div class="sk2x-cap fx-vid-only">Video export</div><div class="sk2x-vidslot"></div>
+    <div class="sk2x-cap fx-still-only">Size</div><div class="sk2x-opts chip-tap fx-still-only" data-sel="sel-exp-size"></div>
+    <div class="sk2x-cap fx-still-only">Format</div><div class="sk2x-opts chip-tap fx-still-only" data-sel="sel-exp-fmt"></div>
+    <section class="sk2x-proof fx-still-only" aria-label="Export preview"><canvas width="600" height="400" aria-label="Export preview"></canvas><div class="sk2x-proof-meta"><span class="sk2x-proof-est" aria-live="polite">Choose a still photo</span><button type="button" class="sk2x-proof-toggle">Show original</button></div></section>
+    <div class="sk2x-scope fx-still-only"></div>
     <details class="sk2-more sk2x-more"><summary>More</summary><div class="sk2x-cards"></div></details></div>
     <div class="sk2x-go"><button type="button" class="sk2x-btn">Export <span>→</span></button></div>`;
   document.body.appendChild(sh);
@@ -97,6 +98,8 @@ function sk2ExportBuild(){
     const draw=()=>{box.innerHTML=[...sel.options].filter(o=>!o.hidden&&!o.disabled).map(o=>`<button type="button" class="btn bgh${o.value===sel.value?' on':''}" data-v="${o.value}">${lbl[o.value]||o.textContent}</button>`).join('');};
     draw();sel.addEventListener('change',draw);box._draw=draw;
     box.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;sel.value=b.dataset.v;sel.dispatchEvent(new Event('change',{bubbles:true}));draw();});});
+  const vslot=sh.querySelector('.sk2x-vidslot'),vexp=document.getElementById('fx-vid-export');
+  if(vslot&&vexp)vslot.appendChild(vexp); // video export controls sit at the top of the drawer, where Size/Format are for stills
   const cards=sh.querySelector('.sk2x-cards');
   ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
   sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
@@ -110,7 +113,9 @@ function sk2ExportOpen(){
   if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
   const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
   const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
-  sh.querySelector('.sk2x-btn').firstChild.textContent=n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  const _isVid=!!(curItem()&&curItem().kind==='video');
+  if(_isVid)fxVideoExportSummary();
+  sh.querySelector('.sk2x-btn').firstChild.textContent=_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
   const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
   document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
   _fxSoftProofBefore=false;fxSoftProofSchedule();

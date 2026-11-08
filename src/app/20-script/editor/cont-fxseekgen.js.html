@@ -1,18 +1,47 @@
-let _fxSeekGen=0;
-async function fxVideoSeekTo(it,frameIndex){
-  if(!it||it.kind!=='video'||!it._mbSampleSink)return;
+let _fxSeekGen=0,_fxSeekBusy=false,_fxSeekQueued=null;
+// Draw a decoded sample into the item's source canvas and re-render. Shared by exact seeks and the
+// sequential playback reader so both paths present a frame identically.
+function _fxVideoPresent(it,sample,frameIndex){
+  const ctx=it.img.getContext('2d');
+  ctx.clearRect(0,0,it.img.width,it.img.height);
+  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
+  it._shownFrame=frameIndex;
+  updateWork();renderPreview();
+}
+// Exact-frame seek. Scrubbing fires this far faster than a keyframe-seek+decode can finish, so
+// requests are COALESCED: while one decode is in flight only the newest target is kept (every
+// waiter resolves once that final frame is on screen) instead of decoding each stale position and
+// throwing the result away. A seek to the frame already shown is a no-op.
+function fxVideoSeekTo(it,frameIndex){
+  if(!it||it.kind!=='video'||!it._mbSampleSink)return Promise.resolve();
+  _fxPlayClose(); // any manual seek invalidates the sequential playback reader
+  if(_fxSeekBusy){
+    return new Promise(res=>{
+      if(_fxSeekQueued){_fxSeekQueued.it=it;_fxSeekQueued.frame=frameIndex;_fxSeekQueued.waiters.push(res);}
+      else _fxSeekQueued={it,frame:frameIndex,waiters:[res]};
+    });
+  }
+  return _fxSeekRun(it,frameIndex);
+}
+async function _fxSeekRun(it,frameIndex){
+  _fxSeekBusy=true;
+  try{await _fxSeekDecode(it,frameIndex);}
+  catch(e){console.error('video seek failed',e);}
+  finally{_fxSeekBusy=false;}
+  const q=_fxSeekQueued;
+  if(q){_fxSeekQueued=null;_fxSeekRun(q.it,q.frame).then(()=>q.waiters.forEach(r=>r()));}
+}
+async function _fxSeekDecode(it,frameIndex){
+  if(it._shownFrame===frameIndex&&it.curFrame===frameIndex)return;
   const myGen=++_fxSeekGen;
   const t=frameIndex/(it.fps||30);
   let sample=null;
   for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}
-  if(myGen!==_fxSeekGen){if(sample)sample.close();return;} // a newer seek already won — drop this stale result
+  if(myGen!==_fxSeekGen||curItem()!==it){if(sample)sample.close();return;} // item switched / newer seek won — drop this stale result
   if(!sample)return;
-  const ctx=it.img.getContext('2d');
-  ctx.clearRect(0,0,it.img.width,it.img.height);
-  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  _fxVideoPresent(it,sample,frameIndex);
   sample.close();
-  it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
-  updateWork();renderPreview();
 }
 // Deterministic hash of an integer -> [0,1): the standard GLSL-style sin/fract trick, in JS.
 // frameIndex+1 avoids the degenerate sin(0)=0 case landing every clip's frame 0 at hash 0.
@@ -47,6 +76,52 @@ function fxVideoGrainMotionChanged(v){
 // renders every frame regardless of how long each one takes — playback and export are
 // deliberately different code paths with different tradeoffs, not the same loop reused.
 let _fxPlayRAF=null,_fxPlayStartMs=0,_fxPlayStartFrame=0,_fxPlayFrameTimes=[],fxVideoLoop=false;
+// Sequential playback reader: ONE decoder session walks forward through the clip and each tick
+// presents the newest frame whose timestamp has arrived (earlier ones are decoded but dropped).
+// The old per-tick samples(t) did a keyframe seek + decode-forward every frame, which is O(GOP)
+// work per frame and the main source of stutter on long-GOP footage. If playback falls more than
+// _FX_PLAY_RESYNC_S behind the clock, the reader jumps (one keyframe seek) instead of crawling.
+let _fxPlayIter=null,_fxPlayAhead=null,_fxPlayItem=null;
+const _FX_PLAY_RESYNC_S=1.0;
+function _fxPlayClose(){
+  if(_fxPlayAhead){try{_fxPlayAhead.close();}catch(e){}_fxPlayAhead=null;}
+  const i=_fxPlayIter;_fxPlayIter=null;_fxPlayItem=null;
+  if(i&&i.return){try{i.return();}catch(e){}}
+}
+// Returns the frame index presented, or -1 when no new frame was due.
+async function _fxPlayAdvance(it,tS){
+  const fps=it.fps||30;
+  if(_fxPlayItem!==it||!_fxPlayIter){
+    _fxPlayClose();
+    _fxPlayIter=it._mbSampleSink.samples(Math.max(0,tS))[Symbol.asyncIterator]();_fxPlayItem=it;
+  }
+  const iter=_fxPlayIter;
+  let best=null;
+  const eps=0.5/fps; // a frame is due once the clock is within half a frame of its timestamp
+  for(;;){
+    if(!_fxPlayAhead){
+      const r=await iter.next();
+      if(iter!==_fxPlayIter||curItem()!==it){if(r&&r.value)try{r.value.close();}catch(e){}if(best)best.close();return -1;}
+      if(r.done)break;
+      _fxPlayAhead=r.value;
+    }
+    if(_fxPlayAhead.timestamp<=tS+eps){
+      if(best)best.close();
+      best=_fxPlayAhead;_fxPlayAhead=null;
+      if(tS-best.timestamp>_FX_PLAY_RESYNC_S){ // hopelessly behind: jump to the clock
+        _fxPlayClose();_fxPlayIter=it._mbSampleSink.samples(tS)[Symbol.asyncIterator]();_fxPlayItem=it;
+        const r=await _fxPlayIter.next();
+        if(r.value){best.close();best=r.value;}
+        break;
+      }
+    }else break; // lookahead is in the future — keep it for a later tick
+  }
+  if(!best)return -1;
+  const fi=Math.min(it.frameCount-1,Math.max(0,Math.round(best.timestamp*fps)));
+  _fxVideoPresent(it,best,fi);
+  best.close();
+  return fi;
+}
 function fxVideoLoopToggle(){
   fxVideoLoop=!fxVideoLoop;
   const btn=document.getElementById('btn-vid-loop');
@@ -67,16 +142,38 @@ function _fxAudioStart(it,offsetSec){
   _fxAudioStop();
   if(fxVideoMuted||!it._audioBuffer)return;
   const ctx=fxAudioCtx();
+  if(ctx.state==='suspended')ctx.resume().catch(()=>{}); // a suspended context's clock never advances -> frozen picture
   const src=ctx.createBufferSource();
   src.buffer=it._audioBuffer;
   src.connect(ctx.destination);
   const clamped=Math.max(0,Math.min(it._audioBuffer.duration-0.001,offsetSec));
   src.start(0,clamped);
   src.onended=()=>{if(_fxPlayAudioSrc===src)_fxPlayAudioSrc=null;}; // clip runs past its own audio (video is usually a hair longer) — fine, just stop tracking it
-  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime-clamped;
+  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime; // elapsed = PLAYED time only; fxVideoPlayTick adds _fxPlayStartFrame itself (the old '-clamped' double-counted the start offset when playing from mid-clip)
+}
+function fxVideoAudioSelChanged(v){if((v==='mute')!==fxVideoMuted)fxVideoMuteToggle();}
+// One-line "what will this export produce" under the Output card's video controls. Mirrors the
+// size/fps/bitrate math in fxVideoExportSmall (same constants) so the line matches the file.
+function fxVideoExportSummary(){
+  const el=document.getElementById('vid-exp-summary');if(!el)return;
+  const it=curItem();
+  if(!it||it.kind!=='video'){el.textContent='';return;}
+  const g=id=>(document.getElementById(id)||{}).value;
+  const cap=g('sel-vid-resolution')==='source'?Infinity:parseInt(g('sel-vid-resolution'),10)||1080;
+  const gw=it.img.width,gh=it.img.height;
+  const sc=Math.min(1,cap/Math.max(gw,gh));
+  const ow=Math.max(2,Math.round(gw*sc/2)*2),oh=Math.max(2,Math.round(gh*sc/2)*2);
+  const srcFps=it.fps||30,fps=g('sel-vid-fps')==='source'?srcFps:Math.min(srcFps,parseInt(g('sel-vid-fps'),10)||srcFps);
+  const f0=it.trimInFrame||0,f1=it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1;
+  const dur=Math.max(1,f1-f0+1)/srcFps;
+  const mult={draft:0.3,standard:0.6,high:1.0,max:1.8}[g('sel-vid-quality')]||1;
+  const br=20e6*(ow*oh)/(1920*1080)*(fps/30)*mult;
+  const mb=br*dur/8/1048576;
+  el.textContent=`${ow}×${oh} · ${fps%1?fps.toFixed(2):fps} fps · ${dur.toFixed(1)} s · about ${mb<10?mb.toFixed(1):Math.round(mb)} MB`+(it.trimInFrame||f1<it.frameCount-1?' (trimmed)':'');
 }
 function fxVideoMuteToggle(){
   fxVideoMuted=!fxVideoMuted;
+  {const sa=document.getElementById('sel-vid-audio');if(sa)sa.value=fxVideoMuted?'mute':'keep';}
   const btn=document.getElementById('btn-vid-mute');if(btn)btn.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
   const it=curItem();
   if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
@@ -101,12 +198,14 @@ function fxVideoPlayToggle(){
   _fxPlayStartMs=performance.now();
   _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
   _fxPlayFrameTimes=[];
+  _fxPlayClose();
   _fxAudioStart(it,_fxPlayStartFrame/(it.fps||30));
   _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoPause(){
   if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;
+  _fxPlayClose();
   _fxAudioStop();
   const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('play',18);
 }
@@ -125,13 +224,20 @@ async function fxVideoPlayTick(nowMs){
       targetFrame=loopIn;
       _fxPlayStartMs=nowMs;_fxPlayStartFrame=loopIn; // resync the wall-clock baseline to the loop-in point
       _fxAudioStart(it,loopIn/(it.fps||30));
+      _fxPlayClose(); // reader restarts at loop-in
     }else{fxVideoPause();return;}
   }
   const scrub=document.getElementById('vid-scrub');
   if(+scrub.value!==targetFrame){
-    scrub.value=targetFrame;
-    document.getElementById('vid-time').textContent=fxVideoTimeLabel(targetFrame,it.fps);
-    await fxVideoSeekTo(it,targetFrame); // may still be resolving when the next tick fires — the seek generation counter handles that
+    // Present the newest frame that is due on the clock (sequential decode, see _fxPlayAdvance).
+    // The RAF below only re-arms after this resolves, so a slow frame can never queue a backlog.
+    const clockS=_fxPlayStartFrame/(it.fps||30)+elapsedS;
+    let shown=-1;
+    try{shown=await _fxPlayAdvance(it,clockS);}catch(e){console.error('playback decode failed',e);fxVideoPause();return;}
+    if(!_fxPlayRAF||curItem()!==it)return;
+    if(shown<0){_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);return;} // nothing new due yet
+    scrub.value=shown;
+    document.getElementById('vid-time').textContent=fxVideoTimeLabel(shown,it.fps);
     _fxPlayFrameTimes.push(nowMs);
     if(_fxPlayFrameTimes.length>30)_fxPlayFrameTimes.shift();
     if(_fxPlayFrameTimes.length>1){
@@ -144,115 +250,3 @@ async function fxVideoPlayTick(nowMs){
 }
 // HH:MM:SS:FF (frames, not tenths) — I/O trim points are frame-accurate, so the readout should
 // be too, matching the Shotcut/Resolve convention rather than a tenths-of-a-second display.
-function fxVideoTimeLabel(frameIndex,fps){
-  fps=fps||30;
-  const totalSec=Math.floor(frameIndex/fps);
-  const h=Math.floor(totalSec/3600),m=Math.floor((totalSec%3600)/60),s=totalSec%60;
-  const f=Math.round(frameIndex-totalSec*fps);
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}:${String(f).padStart(2,'0')}`;
-}
-// Wires the transport bar's ranges to the current video's frameCount/trim, and shows/hides the
-// whole bar — called from fxSyncVideoUI on every photo/video switch, same as the Clip info row.
-function fxSyncTransportUI(){
-  const bar=document.getElementById('fx-transport');if(!bar)return;
-  fxVideoPause(); // switching photo/video (or between videos) must not leave a RAF loop targeting the OUTGOING item
-  const it=curItem();
-  // Every video-only row hides together — one list so a new one can't be added to the show path
-  // and forgotten in the hide path, which is how a control ends up stranded on a still photo.
-  const vidRows=['row-grain-motion','row-gate-weave','row-film-breath'].map(id=>document.getElementById(id));
-  if(!it||it.kind!=='video'){bar.style.display='none';vidRows.forEach(r=>{if(r)r.style.display='none';});return;}
-  bar.style.display='';
-  vidRows.forEach(r=>{if(r)r.style.display='';});
-  const scrub=document.getElementById('vid-scrub'),trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
-  const maxFrame=Math.max(0,it.frameCount-1);
-  scrub.max=maxFrame;trimIn.max=maxFrame;trimOut.max=maxFrame;
-  scrub.value=it.curFrame||0;
-  document.getElementById('vid-time').textContent=fxVideoTimeLabel(it.curFrame||0,it.fps);
-  trimIn.value=it.trimInFrame||0;trimOut.value=it.trimOutFrame!=null?it.trimOutFrame:maxFrame;
-  document.getElementById('vid-time-total').textContent=fxVideoTimeLabel(maxFrame,it.fps);
-  document.getElementById('vid-fps-readout').textContent='—';
-  fxVideoTrimChanged();
-  {  // visibility is handled by vidRows above; this only restores the per-clip value
-    const sl=document.getElementById('sl-grain-motion');
-    if(sl){sl.value=it.grainMotion!=null?it.grainMotion:75;
-      document.getElementById('vl-grain-motion').textContent=sl.value;}
-  }
-  const mb=document.getElementById('btn-vid-mute');if(mb)mb.textContent=fxVideoMuted?'🔇':'🔊';
-  if(typeof fxVideoBuildThumbs==='function')fxVideoBuildThumbs(it); // fire-and-forget — fills in #vid-thumbstrip as frames decode
-}
-// Thumbnail strip (B3): N evenly-spaced low-res frames under the scrubber, Premiere/Resolve-
-// style. Built once per item (it._thumbsBuilt guards re-entry — fxSyncTransportUI calls this on
-// every switch back to an already-thumbnailed clip) and abandons early if the user switches to a
-// different item mid-build, since drawing into a strip that's no longer on screen would just be
-// wasted decode work racing whatever the newly-selected item is doing.
-async function fxVideoBuildThumbs(it){
-  if(!it||it.kind!=='video'||it._thumbsBuilt||!it._mbSampleSink)return;
-  it._thumbsBuilt=true;
-  const strip=document.getElementById('vid-thumbstrip');if(!strip)return;
-  strip.innerHTML='';
-  const N=16,maxFrame=Math.max(0,it.frameCount-1),fps=it.fps||30;
-  const sw=it.img.width,sh=it.img.height;
-  const canvases=[];
-  for(let i=0;i<N;i++){
-    const c=document.createElement('canvas');c.style.cssText='flex:1;height:100%;min-width:0';
-    strip.appendChild(c);canvases.push(c);
-  }
-  for(let i=0;i<N;i++){
-    if(curItem()!==it)return; // switched away — the strip for this item is gone, stop decoding for it
-    const t=Math.round(i/(N-1)*maxFrame)/fps;
-    let sample=null;
-    try{for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}}catch(e){}
-    if(!sample||curItem()!==it){if(sample)sample.close();continue;}
-    const c=canvases[i],tw=48,th=28;c.width=tw;c.height=th;
-    const ctx=c.getContext('2d');
-    const s=Math.max(tw/sw,th/sh); // cover-fit, same centering math canvasCompose/buildFilmstrip use
-    sample.draw(ctx,(tw-sw*s)/2,(th-sh*s)/2,sw*s,sh*s);
-    sample.close();
-    await new Promise(r=>requestAnimationFrame(r)); // yield so scrubbing/playback stays responsive while the strip builds
-  }
-}
-function fxVideoScrubInput(v){
-  document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
-  fxVideoSeekTo(curItem(),+v);
-}
-function fxVideoScrubCommit(v){fxVideoSeekTo(curItem(),+v);} // exact final seek on release — the drag-time seeks above may have been superseded/dropped
-// Frame-step + I/O trim-set — shared by the transport buttons and the keyboard map below.
-function fxVideoStep(delta){
-  const it=curItem();if(!it||it.kind!=='video')return;
-  fxVideoPause();
-  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
-  const maxFrame=Math.max(0,it.frameCount-1);
-  const v=Math.max(0,Math.min(maxFrame,(+scrub.value||0)+delta));
-  scrub.value=v;
-  document.getElementById('vid-time').textContent=fxVideoTimeLabel(v,it.fps);
-  fxVideoSeekTo(it,v);
-}
-function fxVideoGoToTrim(which){
-  const it=curItem();if(!it||it.kind!=='video')return;
-  fxVideoPause();
-  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
-  const v=which==='in'?(it.trimInFrame||0):(it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1);
-  scrub.value=v;
-  document.getElementById('vid-time').textContent=fxVideoTimeLabel(v,it.fps);
-  fxVideoSeekTo(it,v);
-}
-function fxVideoSetTrimAtPlayhead(which){
-  const it=curItem();if(!it||it.kind!=='video')return;
-  const scrub=document.getElementById('vid-scrub');if(!scrub)return;
-  const v=+scrub.value||0;
-  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
-  if(which==='in')trimIn.value=v;else trimOut.value=v;
-  fxVideoTrimChanged();
-}
-function fxVideoClearTrim(which){
-  const it=curItem();if(!it||it.kind!=='video')return;
-  const maxFrame=Math.max(0,it.frameCount-1);
-  const trimIn=document.getElementById('vid-trim-in'),trimOut=document.getElementById('vid-trim-out');
-  if(which==='in')trimIn.value=0;else trimOut.value=maxFrame;
-  fxVideoTrimChanged();
-}
-// A2: the two trim sliders can no longer cross a handle PAST the other one — each slider's own
-// min/max is clamped to the other's current value every time either one moves, so a drag simply
-// stops at the opposite handle instead of swapping past it (Shotcut/Kdenlive convention). The
-// swap-after-the-fact fallback stays as a belt-and-braces guard for the (now unreachable in the
-// UI, but still possible via the keyboard Set-In/Out path) case of a still-inverted pair.

@@ -178,13 +178,18 @@ async function exportFX(...a){
 // decodes it only when the export reaches it — so a batch never pre-decodes every photo up front.
 async function _exportFXRun(opts){
   const optItems=opts&&Array.isArray(opts.items)?opts.items:null;
+  // A video has no still "full-quality promotion" step: the readiness flag below belongs to whichever
+  // photo was opened last and would wrongly cancel a video export, so it is skipped for a current video.
+  const _curVid=!optItems&&fxImages[fxCurIdx]&&fxImages[fxCurIdx].kind==='video';
   if(!optItems){
   if(!fxImages.length){log('No image loaded','warn');return}
-  await fxEnsureFullQuality(); // never export the display-tier stand-in
-  if(window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
+  if(!_curVid)await fxEnsureFullQuality(); // never export the display-tier stand-in
+  if(!_curVid&&window.chromasmithFullQualityReady===false){toast('Full-resolution photo could not be loaded — export cancelled. Reopen the photo and try again.',false);return}
   }
-  const scope=fxImages.length>1?fxExportScope:'all';
-  const items=optItems||window._expOnlyItems||(scope==='current'?[fxImages[fxCurIdx]]:fxImages);
+  const scope=fxImages.length>1&&!_curVid?fxExportScope:'all';
+  // Current item is a video: export exactly that clip (the "all photos" batch is the still pipeline and can't take a video).
+  // Otherwise a batch skips any video items rather than failing the whole run on them.
+  const items=optItems||window._expOnlyItems||(_curVid?[fxImages[fxCurIdx]]:scope==='current'?[fxImages[fxCurIdx]]:fxImages.filter(i=>i.kind!=='video'));
   // Video export is a completely different pipeline (VideoEncoder/mux vs toBlob) — mixing
   // photos and videos in one batch isn't a designed use case (Library integration explicitly
   // keeps video out for now, see CLAUDE.md §12), so route a single video item to its own export
