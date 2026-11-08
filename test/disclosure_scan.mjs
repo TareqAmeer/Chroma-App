@@ -133,9 +133,70 @@ const badge = await p2.evaluate(async () => {
   return r;
 });
 if (!badge.before || badge.after !== '1 changed' || !badge.cleared || badge.stored !== true) fail('modified badge/persistence: ' + JSON.stringify(badge));
+
+// 7. Editor level (Simple/Standard/Pro): CSS-only hiding. Nothing lost, Simple stays small, every hidden tool reachable from the palette.
+const levelReport = {};
+await p2.evaluate(() => csLevelSet('standard', { quiet: true }));
+const refScan = await p2.evaluate(scan); // reference at Standard (palette runs above moved the export scope row into the drawer)
+for (const level of ['simple', 'standard', 'pro']) {
+  await p2.evaluate((l) => csLevelSet(l, { quiet: true }), level);
+  await p2.waitForTimeout(100);
+  const keys = await p2.evaluate(scan);
+  const norm = (k) => k.replace(/\s*\(.*$/, '');
+  const have = new Set(Object.keys(keys).map(norm));
+  const lostL = Object.keys(refScan).filter((k) => !have.has(norm(k)) && !/mask|msk/i.test(k));
+  if (lostL.length) fail(`level ${level}: ${lostL.length} controls vanished from the DOM (${lostL.slice(0, 4).join(', ')})`);
+  const r = await p2.evaluate(async (level) => {
+    const out = { hiddenCards: [], css: [], unreachable: [], visibleNonButton: 0, visibleSliders: 0, foldBad: [] };
+    const cards = [...document.querySelectorAll('.fx-ctrl[data-fxsec]')];
+    for (const c of cards) {
+      const k = c.dataset.fxsec;
+      if (!csLevelCardHidden(k)) continue;
+      out.hiddenCards.push(k);
+      if (getComputedStyle(c).display !== 'none') out.css.push(k); // the rule must really hide it
+    }
+    for (const c of cards) {
+      const k = c.dataset.fxsec;
+      if (k === 'diag' || !csLevelCardHidden(k)) continue;
+      const cmds = _cpCommands();
+      const hit = cmds.find((x) => x.group === 'Section' && x.label.endsWith(CS_NAMES[k]));
+      if (!hit) { out.unreachable.push(k + ':no-entry'); continue; }
+      hit.run(); await new Promise((r) => setTimeout(r, 120));
+      if (csLevelCardHidden(k)) out.unreachable.push(k + ':still-hidden');
+    }
+    // visible non-button controls in default-visible cards (looks gallery tiles excluded)
+    await new Promise((r) => setTimeout(r, 50));
+    document.querySelectorAll('.lvl-peek').forEach((e) => e.classList.remove('lvl-peek'));
+    for (const c of cards) {
+      const k = c.dataset.fxsec;
+      if (k === 'looks' || k === 'diag' || csLevelCardHidden(k)) continue;
+      c.querySelectorAll('input:not(.fx-info-i),select,textarea').forEach((el) => {
+        if (el.closest('details.fx-adv') && level === 'simple') return;
+        if (el.type === 'range' || el.tagName === 'SELECT' || el.type === 'checkbox') { out.visibleNonButton++; if (el.type === 'range') out.visibleSliders++; }
+      });
+    }
+    if (level === 'simple') for (const k of ['adjust', 'export']) {
+      const fold = document.getElementById('fx-adv-' + k), cmds = _cpCommands();
+      const hit = cmds.find((x) => x.group === 'Control' && x.label.startsWith((CS_NAMES[k] || k) + ': '));
+      if (!hit) { out.foldBad.push(k + ':no-entry'); continue; }
+      hit.run(); await new Promise((r) => setTimeout(r, 400));
+      if (getComputedStyle(fold).display === 'none') out.foldBad.push(k);
+    }
+    if (level === 'pro') out.foldsOpen = [...document.querySelectorAll('details.fx-adv')].every((d) => d.open);
+    return out;
+  }, level);
+  levelReport[level] = { hiddenCards: r.hiddenCards.length, visibleNonButton: r.visibleNonButton, visibleSliders: r.visibleSliders };
+  if (r.css.length) fail(`level ${level}: CSS did not hide ${r.css.join(',')}`);
+  if (r.unreachable.length) fail(`level ${level}: hidden tools not reachable from palette: ${r.unreachable.join(',')}`);
+  if (r.foldBad.length) fail(`level ${level}: palette did not reveal Advanced fold: ${r.foldBad.join(',')}`);
+  if (level === 'pro' && (r.hiddenCards.length || !r.foldsOpen)) fail(`pro level must hide nothing and open every Advanced fold (hidden: ${r.hiddenCards.join(',')}, foldsOpen: ${r.foldsOpen})`);
+  if (level === 'standard' && r.hiddenCards.join() !== 'filmneg') fail(`standard hides only Film Negative until a negative is detected (hidden: ${r.hiddenCards.join(',')})`);
+  if (level === 'simple' && r.visibleNonButton > 40) fail(`simple level shows ${r.visibleNonButton} sliders/selects/checkboxes > 40`);
+}
+await p2.evaluate(() => csLevelSet('standard', { quiet: true }));
 await b2.close();
 
-const report = { controls: Object.keys(cur).length, perCard, adjustDefaultVisibleSliders: adjVisSliders, badge, opened, failures: fails };
+const report = { levels: levelReport, controls: Object.keys(cur).length, perCard, adjustDefaultVisibleSliders: adjVisSliders, badge, opened, failures: fails };
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else { console.log(`controls ${report.controls}; Exposure&Tone default-visible sliders ${adjVisSliders}`); console.table(perCard); }
 if (fails.length) { console.log('FAIL\n' + fails.join('\n')); process.exit(1); }

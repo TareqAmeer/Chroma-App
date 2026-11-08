@@ -86,6 +86,9 @@ function viewMenuBuild(){
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
   h+='<div class="fx-ovf-sep"></div>';
+  h+='<div class="fx-ovf-grp-label">Editor level</div>';
+  Object.entries(CS_LEVELS).forEach(([k,v])=>{h+=`<button class="fx-ovf-item${csLevelGet()===k?' on':''}" onclick="csLevelSet('${k}');viewMenuBuild()" title="${v[1]}"><span>${v[0]}</span>${chk}</button>`;});
+  h+='<div class="fx-ovf-sep"></div>';
   h+='<div class="fx-ovf-grp-label">Tool bar</div>';
   h+=`<button class="fx-ovf-item${fxRailFlat()?' on':''}" onclick="fxRailFlatToggle()"><span>Every tool in the bar</span>${chk}</button>`;
   m.innerHTML=h;
@@ -245,44 +248,3 @@ function _csWorkspaceApply(){
   if(document.body.classList.contains('mobile-fx'))buildSecNav();else if(document.body.classList.contains('deskx'))buildToolRail();
 }
 function _csWorkspaceSave(state){try{localStorage.setItem(CS_WORKSPACE_LAYOUT_KEY,JSON.stringify(state));}catch(_){toast('Could not save workspace controls',false);return false;}_csWorkspaceApply();return true;}
-function _csWorkspaceMove(list,index,delta){const target=index+delta;if(target<0||target>=list.length)return list;const next=list.slice();[next[index],next[target]]=[next[target],next[index]];return next;}
-function csWorkspaceCustomizeOpen(){
-  if(!Array.isArray(FX_SECTIONS)){toast('Workspace controls are not ready',false);return;}
-  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const nameFor=key=>(CS_NAMES&&CS_NAMES[key])||key;
-  _csModal('Customize workspace','<p style="margin:0 0 10px;color:var(--mut);font-size:12px">Hide or reorder tools and control rows. Search the command palette (⌘K / Ctrl+K) to bring hidden controls back.</p>'
-    +'<input id="cs-workspace-search" type="search" placeholder="Find a tool or control…" aria-label="Find a tool or control" style="box-sizing:border-box;width:100%;padding:8px 10px;margin-bottom:8px;background:var(--bg);color:var(--txt);border:1px solid var(--bdr);font:inherit">'
-    +'<div id="cs-workspace-list" style="max-height:55vh;overflow:auto"></div>'
-    +'<div class="btn-row" style="justify-content:space-between;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn bgh" id="cs-workspace-reset">Reset control layout</button><button type="button" class="btn bgh" id="cs-workspace-reset-all">Reset default layout</button><button type="button" class="btn bpri" id="cs-workspace-close">Close</button></div>');
-  const ov=document.getElementById('cs-modal-ov'),list=ov&&ov.querySelector('#cs-workspace-list'),search=ov&&ov.querySelector('#cs-workspace-search');if(!list||!search)return;
-  const render=()=>{
-    const state=csWorkspaceLayoutGet(),query=search.value.trim().toLowerCase(),order=_csWorkspaceOrder(state.sectionOrder,FX_SECTIONS.map(x=>x[0]));
-    list.innerHTML=order.map((key,index)=>{
-      const card=_fxSectionCard(key),sectionName=nameFor(key),rows=_csWorkspaceRows(card),controls=rows.map(row=>{const siblings=rows.filter(x=>x.parentElement===row.parentElement);return{id:_csWorkspaceRowId(row),label:_csWorkspaceRowLabel(row),index:siblings.indexOf(row),count:siblings.length};});
-      if(query&&!sectionName.toLowerCase().includes(query)&&!controls.some(c=>c.label.toLowerCase().includes(query)))return'';
-      const hidden=state.hiddenSections.includes(key),controlRows=controls.map(c=>{
-        if(query&&!sectionName.toLowerCase().includes(query)&&!c.label.toLowerCase().includes(query))return'';
-        const off=state.hiddenControls.includes(c.id),disable=!!query;
-        return `<div data-ws-control="${esc(c.id)}" style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 20px;font-size:12px"><label style="display:flex;align-items:center;gap:7px;flex:1;min-width:0;cursor:pointer"><input type="checkbox" data-ws-show-control="${esc(c.id)}"${off?'':' checked'}><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.label)}</span></label><button type="button" class="btn bgh" data-ws-control-move="-1" data-ws-control-id="${esc(c.id)}" aria-label="Move ${esc(c.label)} up"${disable||c.index===0?' disabled':''}>↑</button><button type="button" class="btn bgh" data-ws-control-move="1" data-ws-control-id="${esc(c.id)}" aria-label="Move ${esc(c.label)} down"${disable||c.index===c.count-1?' disabled':''}>↓</button></div>`;
-      }).join('');
-      return `<section data-ws-section="${esc(key)}" style="border-bottom:1px solid var(--bdr);padding:5px 0"><div style="display:flex;align-items:center;gap:6px"><label style="display:flex;align-items:center;gap:7px;flex:1;cursor:pointer"><input type="checkbox" data-ws-show-section="${esc(key)}"${hidden?'':' checked'}><strong>${esc(sectionName)}</strong></label><button type="button" class="btn bgh" data-ws-section-move="-1" data-ws-section-id="${esc(key)}" aria-label="Move ${esc(sectionName)} up"${query||index===0?' disabled':''}>↑</button><button type="button" class="btn bgh" data-ws-section-move="1" data-ws-section-id="${esc(key)}" aria-label="Move ${esc(sectionName)} down"${query||index===order.length-1?' disabled':''}>↓</button></div>${controlRows}</section>`;
-    }).join('')||'<div style="padding:12px;color:var(--mut)">No matching tools or controls</div>';
-  };
-  search.oninput=render;
-  list.addEventListener('change',e=>{
-    const input=e.target;if(!(input instanceof HTMLInputElement))return;const state=csWorkspaceLayoutGet();
-    if(input.dataset.wsShowSection){const key=input.dataset.wsShowSection;state.hiddenSections=state.hiddenSections.filter(x=>x!==key);if(!input.checked)state.hiddenSections.push(key);_csWorkspaceSave(state);}
-    if(input.dataset.wsShowControl){const id=input.dataset.wsShowControl;state.hiddenControls=state.hiddenControls.filter(x=>x!==id);if(!input.checked)state.hiddenControls.push(id);_csWorkspaceSave(state);}
-    render();
-  });
-  list.addEventListener('click',e=>{
-    const button=e.target.closest('button');if(!button)return;const state=csWorkspaceLayoutGet();
-    if(button.dataset.wsSectionMove){const ids=_csWorkspaceOrder(state.sectionOrder,FX_SECTIONS.map(x=>x[0]));state.sectionOrder=_csWorkspaceMove(ids,ids.indexOf(button.dataset.wsSectionId),Number(button.dataset.wsSectionMove));_csWorkspaceSave(state);render();return;}
-    if(button.dataset.wsControlMove){const id=button.dataset.wsControlId,container=button.closest('[data-ws-section]'),key=container&&container.dataset.wsSection,card=key&&_fxSectionCard(key),row=_csWorkspaceRows(card).find(x=>_csWorkspaceRowId(x)===id);if(!row)return;
-      const ids=_csWorkspaceRows(card).filter(x=>x.parentElement===row.parentElement).map(_csWorkspaceRowId),next=_csWorkspaceMove(ids,ids.indexOf(id),Number(button.dataset.wsControlMove));state.controlOrder[key]=[...new Set([...(state.controlOrder[key]||[]).filter(x=>!ids.includes(x)),...next])];_csWorkspaceSave(state);render();
-    }
-  });
-  ov.querySelector('#cs-workspace-reset').onclick=()=>{try{localStorage.removeItem(CS_WORKSPACE_LAYOUT_KEY);}catch(_){}location.reload();};
-  ov.querySelector('#cs-workspace-reset-all').onclick=()=>{ov.remove();csLayoutReset();};
-  ov.querySelector('#cs-workspace-close').onclick=()=>ov.remove();render();
-}

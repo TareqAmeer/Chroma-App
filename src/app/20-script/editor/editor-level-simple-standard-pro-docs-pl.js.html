@@ -1,0 +1,74 @@
+// ── Editor level: Simple / Standard / Pro (docs/plans/ux-progressive-disclosure.md P2 + P3) ──────────
+// CSS-only: body[data-level] hides cards, rail/sub-tab buttons and Advanced folds; no node is removed or
+// moved, so FX_GROUPS, session save, undo and the workspace-layout hiding are untouched. The injected
+// stylesheet is generated from CS_LEVEL_SIMPLE below (one source of truth). Hidden tools stay findable:
+// the palette runs csLevelReveal(), which adds .lvl-peek to the card/fold/buttons until the level changes.
+const CS_LEVEL_KEY='chromasmith_ui_level';
+const CS_LEVELS={simple:['Simple','Six tools, essentials only'],standard:['Standard','Every tool, Advanced folded'],pro:['Pro','Everything, Advanced open']};
+const CS_LEVEL_SIMPLE=['looks','adjust','hsl','local','crop','export']; // Looks, Exposure & Tone, Colour Mixer, Masks, Crop, Output
+// Existing users who never chose get Standard, so nothing disappears on upgrade.
+function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v;}catch(e){}return 'standard';}
+function csLevelCss(){
+  const S=CS_LEVEL_SIMPLE,gs=Object.keys(FX_GROUPS).filter(g=>FX_GROUPS[g].members.some(m=>S.includes(m)));
+  const keep=(attr,list)=>list.map(k=>`[${attr}="${k}"]`).join(',')+',.lvl-peek';
+  const B='body[data-level="simple"]';
+  return `${B} .fx-ctrl[data-fxsec]:not(${keep('data-fxsec',S)}),${B} #sk2-export .fx-ctrl[data-fxsec]:not(${keep('data-fxsec',S)}),${B} details.fx-adv:not(.lvl-peek),`
+   +`${B} .fx-rail-btn[data-sec]:not(${keep('data-sec',[...S,...gs])}),${B} #sk2-sub button[data-k]:not(${keep('data-k',S)})`
+   +`{display:none!important}`
+   +`body[data-level="standard"]:not(.lvl-fneg) :is(.fx-ctrl[data-fxsec="filmneg"],.fx-rail-btn[data-sec="filmneg"],#sk2-sub button[data-k="filmneg"]):not(.lvl-peek){display:none!important}`
+   +`.cs-level-pick{display:flex;gap:6px;flex-wrap:wrap}.cs-level-pick .btn{flex:1 1 120px;text-align:left;display:flex;flex-direction:column;gap:2px}.cs-level-pick .btn small{color:var(--mut);font-size:var(--fs-1)}.cs-level-pick .btn.on{border-color:var(--acc);color:var(--acc)}`;
+}
+function csLevelCardHidden(key){
+  const card=document.querySelector('.fx-ctrl[data-fxsec="'+key+'"]');if(!card||card.classList.contains('lvl-peek'))return false;
+  const L=csLevelGet();
+  if(L==='simple')return !CS_LEVEL_SIMPLE.includes(key);
+  if(L==='standard')return key==='filmneg'&&!document.body.classList.contains('lvl-fneg');
+  return false;
+}
+function csLevelSecHidden(sec){ // sec is a card key or a rail group id
+  const G=FX_GROUPS[sec];return G?G.members.every(csLevelCardHidden):csLevelCardHidden(sec);
+}
+// A negative was detected (or the user turned Film Negative on): keep the card in Standard from now on.
+window.csLevelNegativeDetected=function(on){try{if(on)localStorage.setItem('chromasmith_fneg_seen','1');}catch(e){}document.body.classList.toggle('lvl-fneg',!!on||csLevelFnegSticky());};
+function csLevelFnegSticky(){try{return localStorage.getItem('chromasmith_fneg_seen')==='1';}catch(e){return false;}}
+function csLevelFnegSync(){
+  const tg=document.getElementById('tg-filmneg'),it=typeof curItem==='function'?curItem():null;
+  const on=!!(tg&&tg.classList.contains('on'))||!!(it&&it.secOverride&&it.secOverride.filmneg);
+  if(on)csLevelNegativeDetected(true);else document.body.classList.toggle('lvl-fneg',csLevelFnegSticky());
+}
+// Show a level-hidden tool (and its Advanced fold) for now; says which level shows it for good.
+function csLevelReveal(key,fold){
+  const card=document.querySelector('.fx-ctrl[data-fxsec="'+key+'"]');if(!card)return false;
+  const L=csLevelGet(),cardHid=csLevelCardHidden(key),foldHid=!!fold&&L==='simple'&&!fold.classList.contains('lvl-peek');
+  if(!cardHid&&!foldHid)return false;
+  const peek=el=>el&&el.classList.add('lvl-peek');
+  peek(card);peek(fold);
+  document.querySelectorAll('.fx-rail-btn[data-sec="'+key+'"],.fx-rail-btn[data-sec="'+(FX_GROUP_OF[key]||'-')+'"],#sk2-sub button[data-k="'+key+'"]').forEach(peek);
+  const need=(L==='standard')?'Pro, or automatically once a film negative is open':'Standard and Pro';
+  if(typeof toast==='function')toast((CS_NAMES[key]||key)+' is shown for now. The '+need+' level'+(L==='standard'?'':'s')+' show it always (View menu, Editor level).');
+  return true;
+}
+function csLevelSet(level,opts){
+  if(!CS_LEVELS[level])level='standard';
+  try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}
+  document.body.dataset.level=level;
+  document.querySelectorAll('.lvl-peek').forEach(e=>e.classList.remove('lvl-peek'));
+  if(level==='pro'){window._csLevelOpening=true;document.querySelectorAll('details.fx-adv').forEach(d=>{d.open=true;});setTimeout(()=>{window._csLevelOpening=false;},120);}
+  csLevelFnegSync();
+  const act=typeof _activeSec==='function'?_activeSec():null;
+  if(act&&csLevelSecHidden(act)&&typeof fxSection==='function')fxSection(FX_GROUPS.look?'look':'looks',true);
+  document.querySelectorAll('.cs-level-pick').forEach(b=>b.querySelectorAll('[data-level]').forEach(x=>x.classList.toggle('on',x.dataset.level===level)));
+  if(!(opts&&opts.quiet)&&typeof toast==='function')toast('Editor level: '+CS_LEVELS[level][0]);
+}
+window.csLevelSet=csLevelSet;window.csLevelGet=csLevelGet;window.csLevelCardHidden=csLevelCardHidden;window.csLevelReveal=csLevelReveal;
+function csLevelPickHtml(){const cur=csLevelGet();
+  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
+(function(){
+  const init=()=>{
+    if(!document.getElementById('cs-level-css')){const st=document.createElement('style');st.id='cs-level-css';st.textContent=csLevelCss();document.head.appendChild(st);}
+    csLevelSet(csLevelGet(),{quiet:true});
+    const tg=document.getElementById('tg-filmneg');if(tg&&window.MutationObserver)new MutationObserver(csLevelFnegSync).observe(tg,{attributes:true,attributeFilter:['class']});
+    setInterval(csLevelFnegSync,1500);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();

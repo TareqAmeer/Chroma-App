@@ -7669,7 +7669,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108L';
+const BUILD='1.1108M';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16398,6 +16398,7 @@ function tourHtml(){
       ${browseLabel?`<button type="button" class="btn bgh" data-tour-action="folder">${browseLabel}</button>`:''}
       <button type="button" class="btn bgh" data-tour-action="sample">Try a sample</button>
     </div>
+    <div style="margin:12px 0 4px;color:var(--mut);font-size:12px">How much do you want to see? Change it any time in the View menu.</div>${csLevelPickHtml()}
     <p style="margin:8px 0 14px;color:var(--mut);font-size:11px">${sampleCredit}. The sample opens as a separate copy; exporting it never overwrites the bundled image.</p>
     <div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn bgh" data-tour-action="guide">Guide my first edit</button>
@@ -16411,6 +16412,7 @@ function tourBind(){
   const close=()=>ov.__csClose?ov.__csClose():ov.remove();
   ov.querySelector('[data-tour-action="open"]').onclick=()=>{close();fxPickPhotos();};
   ov.querySelector('[data-tour-action="sample"]').onclick=()=>csTourTrySample();
+  ov.querySelectorAll('.cs-level-pick [data-level]').forEach(x=>x.onclick=()=>csLevelSet(x.dataset.level));
   const folder=ov.querySelector('[data-tour-action="folder"]');
   if(folder)folder.onclick=()=>csTourBrowseFolder();
   ov.querySelector('[data-tour-action="guide"]').onclick=()=>{
@@ -16498,6 +16500,80 @@ function tourMaybeShow(){
 }
 window.chromasmithShowTour=function(){_csModal('Welcome to <span class="cs-nowrap">CHRO-MA-SMITH</span>',tourHtml());tourBind();}; // manual replay (Help menu / palette) — bypasses the once-only flag
 window.chromasmithShowShortcuts=csOpenShortcuts;
+// ── Editor level: Simple / Standard / Pro (docs/plans/ux-progressive-disclosure.md P2 + P3) ──────────
+// CSS-only: body[data-level] hides cards, rail/sub-tab buttons and Advanced folds; no node is removed or
+// moved, so FX_GROUPS, session save, undo and the workspace-layout hiding are untouched. The injected
+// stylesheet is generated from CS_LEVEL_SIMPLE below (one source of truth). Hidden tools stay findable:
+// the palette runs csLevelReveal(), which adds .lvl-peek to the card/fold/buttons until the level changes.
+const CS_LEVEL_KEY='chromasmith_ui_level';
+const CS_LEVELS={simple:['Simple','Six tools, essentials only'],standard:['Standard','Every tool, Advanced folded'],pro:['Pro','Everything, Advanced open']};
+const CS_LEVEL_SIMPLE=['looks','adjust','hsl','local','crop','export']; // Looks, Exposure & Tone, Colour Mixer, Masks, Crop, Output
+// Existing users who never chose get Standard, so nothing disappears on upgrade.
+function csLevelGet(){try{const v=localStorage.getItem(CS_LEVEL_KEY);if(CS_LEVELS[v])return v;}catch(e){}return 'standard';}
+function csLevelCss(){
+  const S=CS_LEVEL_SIMPLE,gs=Object.keys(FX_GROUPS).filter(g=>FX_GROUPS[g].members.some(m=>S.includes(m)));
+  const keep=(attr,list)=>list.map(k=>`[${attr}="${k}"]`).join(',')+',.lvl-peek';
+  const B='body[data-level="simple"]';
+  return `${B} .fx-ctrl[data-fxsec]:not(${keep('data-fxsec',S)}),${B} #sk2-export .fx-ctrl[data-fxsec]:not(${keep('data-fxsec',S)}),${B} details.fx-adv:not(.lvl-peek),`
+   +`${B} .fx-rail-btn[data-sec]:not(${keep('data-sec',[...S,...gs])}),${B} #sk2-sub button[data-k]:not(${keep('data-k',S)})`
+   +`{display:none!important}`
+   +`body[data-level="standard"]:not(.lvl-fneg) :is(.fx-ctrl[data-fxsec="filmneg"],.fx-rail-btn[data-sec="filmneg"],#sk2-sub button[data-k="filmneg"]):not(.lvl-peek){display:none!important}`
+   +`.cs-level-pick{display:flex;gap:6px;flex-wrap:wrap}.cs-level-pick .btn{flex:1 1 120px;text-align:left;display:flex;flex-direction:column;gap:2px}.cs-level-pick .btn small{color:var(--mut);font-size:var(--fs-1)}.cs-level-pick .btn.on{border-color:var(--acc);color:var(--acc)}`;
+}
+function csLevelCardHidden(key){
+  const card=document.querySelector('.fx-ctrl[data-fxsec="'+key+'"]');if(!card||card.classList.contains('lvl-peek'))return false;
+  const L=csLevelGet();
+  if(L==='simple')return !CS_LEVEL_SIMPLE.includes(key);
+  if(L==='standard')return key==='filmneg'&&!document.body.classList.contains('lvl-fneg');
+  return false;
+}
+function csLevelSecHidden(sec){ // sec is a card key or a rail group id
+  const G=FX_GROUPS[sec];return G?G.members.every(csLevelCardHidden):csLevelCardHidden(sec);
+}
+// A negative was detected (or the user turned Film Negative on): keep the card in Standard from now on.
+window.csLevelNegativeDetected=function(on){try{if(on)localStorage.setItem('chromasmith_fneg_seen','1');}catch(e){}document.body.classList.toggle('lvl-fneg',!!on||csLevelFnegSticky());};
+function csLevelFnegSticky(){try{return localStorage.getItem('chromasmith_fneg_seen')==='1';}catch(e){return false;}}
+function csLevelFnegSync(){
+  const tg=document.getElementById('tg-filmneg'),it=typeof curItem==='function'?curItem():null;
+  const on=!!(tg&&tg.classList.contains('on'))||!!(it&&it.secOverride&&it.secOverride.filmneg);
+  if(on)csLevelNegativeDetected(true);else document.body.classList.toggle('lvl-fneg',csLevelFnegSticky());
+}
+// Show a level-hidden tool (and its Advanced fold) for now; says which level shows it for good.
+function csLevelReveal(key,fold){
+  const card=document.querySelector('.fx-ctrl[data-fxsec="'+key+'"]');if(!card)return false;
+  const L=csLevelGet(),cardHid=csLevelCardHidden(key),foldHid=!!fold&&L==='simple'&&!fold.classList.contains('lvl-peek');
+  if(!cardHid&&!foldHid)return false;
+  const peek=el=>el&&el.classList.add('lvl-peek');
+  peek(card);peek(fold);
+  document.querySelectorAll('.fx-rail-btn[data-sec="'+key+'"],.fx-rail-btn[data-sec="'+(FX_GROUP_OF[key]||'-')+'"],#sk2-sub button[data-k="'+key+'"]').forEach(peek);
+  const need=(L==='standard')?'Pro, or automatically once a film negative is open':'Standard and Pro';
+  if(typeof toast==='function')toast((CS_NAMES[key]||key)+' is shown for now. The '+need+' level'+(L==='standard'?'':'s')+' show it always (View menu, Editor level).');
+  return true;
+}
+function csLevelSet(level,opts){
+  if(!CS_LEVELS[level])level='standard';
+  try{localStorage.setItem(CS_LEVEL_KEY,level);}catch(e){}
+  document.body.dataset.level=level;
+  document.querySelectorAll('.lvl-peek').forEach(e=>e.classList.remove('lvl-peek'));
+  if(level==='pro'){window._csLevelOpening=true;document.querySelectorAll('details.fx-adv').forEach(d=>{d.open=true;});setTimeout(()=>{window._csLevelOpening=false;},120);}
+  csLevelFnegSync();
+  const act=typeof _activeSec==='function'?_activeSec():null;
+  if(act&&csLevelSecHidden(act)&&typeof fxSection==='function')fxSection(FX_GROUPS.look?'look':'looks',true);
+  document.querySelectorAll('.cs-level-pick').forEach(b=>b.querySelectorAll('[data-level]').forEach(x=>x.classList.toggle('on',x.dataset.level===level)));
+  if(!(opts&&opts.quiet)&&typeof toast==='function')toast('Editor level: '+CS_LEVELS[level][0]);
+}
+window.csLevelSet=csLevelSet;window.csLevelGet=csLevelGet;window.csLevelCardHidden=csLevelCardHidden;window.csLevelReveal=csLevelReveal;
+function csLevelPickHtml(){const cur=csLevelGet();
+  return '<div class="cs-level-pick" role="group" aria-label="Editor level">'+Object.entries(CS_LEVELS).map(([k,v])=>`<button type="button" class="btn bgh${k===cur?' on':''}" data-level="${k}">${v[0]}<small>${v[1]}</small></button>`).join('')+'</div>';}
+(function(){
+  const init=()=>{
+    if(!document.getElementById('cs-level-css')){const st=document.createElement('style');st.id='cs-level-css';st.textContent=csLevelCss();document.head.appendChild(st);}
+    csLevelSet(csLevelGet(),{quiet:true});
+    const tg=document.getElementById('tg-filmneg');if(tg&&window.MutationObserver)new MutationObserver(csLevelFnegSync).observe(tg,{attributes:true,attributeFilter:['class']});
+    setInterval(csLevelFnegSync,1500);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
 // ── First-timer aids ─────────────────────────────────────────────────────────────────────
 // (1) Advanced tabs (Match & Refine / Color Copy / Collage) stay hidden for a brand-new user until
 // they explicitly ask (welcome tour / Help). Export no longer unlocks them by surprise. Returning
@@ -16566,7 +16642,7 @@ function _cpCommands(){
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   // CHR-196: every tool card, named as it is everywhere else, with its aliases searchable.
   const SECTIONS={};document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>{const k=c.dataset.fxsec;if(CS_NAMES[k]&&!SECTIONS[k])SECTIONS[k]=(['export','wm','exppreset','share'].includes(k)?'Export: ':'')+CS_NAMES[k];});
-  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
+  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);csLevelReveal(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
   // Hidden workspace rows remain discoverable by their normal control label. Running the result
   // unhides the original row and opens its existing section; no shadow control is created.
   const workspace=csWorkspaceLayoutGet(),hiddenRows=new Set(workspace.hiddenControls),hiddenSections=new Set(workspace.hiddenSections);
@@ -16585,7 +16661,7 @@ function _cpCommands(){
       const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
       const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
       if(!lab||seen.has(lab))return;seen.add(lab);
-      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);csLevelReveal(key,fold);switchTab('fx');fxSection(key);
         // CHR-304: the Export-family cards live inside the Export drawer's "More" fold on desktop; open the drawer and that fold before the card's own Advanced fold.
         const drawer=card.closest('#sk2-export');
         if(drawer&&typeof sk2ExportOpen==='function'){if(!document.body.classList.contains('sk2-exp-open'))sk2ExportOpen();const mf=drawer.querySelector('details.sk2x-more');if(mf)mf.open=true;}
@@ -16617,6 +16693,7 @@ function _cpCommands(){
   add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
   add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';sc('editor.split');
   add('Action','Show welcome tour',()=>window.chromasmithShowTour());
+  Object.entries(CS_LEVELS).forEach(([k,v])=>{add('Action','Editor level: '+v[0],()=>csLevelSet(k));cmds[cmds.length-1].aliases='simple standard pro level mode advanced beginner';});
   add('Action','Show advanced tools',()=>csShowAdvancedTabs(true));
   // Every other bindable editor action appears here too, under its registry name, so the palette,
   // the shortcut guide and the key bindings can never drift apart.
@@ -29047,7 +29124,7 @@ async function fxDrcApplyFor(renderer,P,src){
   const K='chromasmith_fx_adv_open';let m={};try{m=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
   document.querySelectorAll('details.fx-adv[data-advkey]').forEach(d=>{
     if(m[d.dataset.advkey])d.open=true;
-    d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
+    d.addEventListener('toggle',()=>{if(window._csLevelOpening)return;m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
   });
   // "N changed" on the Advanced row: controls inside differing from their markup default, so an edit
   // hidden under a closed fold is never lost. Polled lightly because undo/session/snapshot set values from script.
@@ -33521,6 +33598,9 @@ function viewMenuBuild(){
   if(typeof window.chromasmithRevealLab==='function'&&(/[?&]reveallab=1/.test(location.search)||(()=>{try{return localStorage.getItem('cs_reveal_lab')==='1'}catch(e){return false}})()))h+=`<button class="fx-ovf-item" onclick="viewMenuClose();window.chromasmithRevealLab()"><span>Reveal lab…</span></button>`;
   h+='<div class="fx-ovf-sep"></div>';
   h+=`<button class="fx-ovf-item${fxGamutWarn?' on':''}" onclick="viewMenuClose();toggleGamutWarn()"><span>Show gamut warning</span>${chk}</button>`;
+  h+='<div class="fx-ovf-sep"></div>';
+  h+='<div class="fx-ovf-grp-label">Editor level</div>';
+  Object.entries(CS_LEVELS).forEach(([k,v])=>{h+=`<button class="fx-ovf-item${csLevelGet()===k?' on':''}" onclick="csLevelSet('${k}');viewMenuBuild()" title="${v[1]}"><span>${v[0]}</span>${chk}</button>`;});
   h+='<div class="fx-ovf-sep"></div>';
   h+='<div class="fx-ovf-grp-label">Tool bar</div>';
   h+=`<button class="fx-ovf-item${fxRailFlat()?' on':''}" onclick="fxRailFlatToggle()"><span>Every tool in the bar</span>${chk}</button>`;

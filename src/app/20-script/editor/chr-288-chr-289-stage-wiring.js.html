@@ -85,7 +85,7 @@ async function fxDrcApplyFor(renderer,P,src){
   const K='chromasmith_fx_adv_open';let m={};try{m=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
   document.querySelectorAll('details.fx-adv[data-advkey]').forEach(d=>{
     if(m[d.dataset.advkey])d.open=true;
-    d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
+    d.addEventListener('toggle',()=>{if(window._csLevelOpening)return;m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
   });
   // "N changed" on the Advanced row: controls inside differing from their markup default, so an edit
   // hidden under a closed fold is never lost. Polled lightly because undo/session/snapshot set values from script.

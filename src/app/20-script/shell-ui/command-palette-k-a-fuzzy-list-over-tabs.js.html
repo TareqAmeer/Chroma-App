@@ -9,7 +9,7 @@ function _cpCommands(){
   Object.entries(TABS).forEach(([k,label])=>add('Tab','Go to '+label,()=>switchTab(k)));
   // CHR-196: every tool card, named as it is everywhere else, with its aliases searchable.
   const SECTIONS={};document.querySelectorAll('.fx-ctrl[data-fxsec]').forEach(c=>{const k=c.dataset.fxsec;if(CS_NAMES[k]&&!SECTIONS[k])SECTIONS[k]=(['export','wm','exppreset','share'].includes(k)?'Export: ':'')+CS_NAMES[k];});
-  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
+  Object.entries(SECTIONS).forEach(([k,label])=>{add('Section',label,()=>{csWorkspaceRevealSection(k);csLevelReveal(k);switchTab('fx');fxSection(k);});cmds[cmds.length-1].aliases=CS_ALIASES[k]||'';});
   // Hidden workspace rows remain discoverable by their normal control label. Running the result
   // unhides the original row and opens its existing section; no shadow control is created.
   const workspace=csWorkspaceLayoutGet(),hiddenRows=new Set(workspace.hiddenControls),hiddenSections=new Set(workspace.hiddenSections);
@@ -28,7 +28,7 @@ function _cpCommands(){
       const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
       const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
       if(!lab||seen.has(lab))return;seen.add(lab);
-      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);csLevelReveal(key,fold);switchTab('fx');fxSection(key);
         // CHR-304: the Export-family cards live inside the Export drawer's "More" fold on desktop; open the drawer and that fold before the card's own Advanced fold.
         const drawer=card.closest('#sk2-export');
         if(drawer&&typeof sk2ExportOpen==='function'){if(!document.body.classList.contains('sk2-exp-open'))sk2ExportOpen();const mf=drawer.querySelector('details.sk2x-more');if(mf)mf.open=true;}
@@ -60,6 +60,7 @@ function _cpCommands(){
   add('Action','Edit history',()=>{if(typeof fxToggleTimelinePopover==='function')fxToggleTimelinePopover();});cmds[cmds.length-1].aliases='history undo steps versions';
   add('Action','Compare before / after',()=>{if(typeof toggleSplit==='function')toggleSplit();});cmds[cmds.length-1].aliases='split compare original';sc('editor.split');
   add('Action','Show welcome tour',()=>window.chromasmithShowTour());
+  Object.entries(CS_LEVELS).forEach(([k,v])=>{add('Action','Editor level: '+v[0],()=>csLevelSet(k));cmds[cmds.length-1].aliases='simple standard pro level mode advanced beginner';});
   add('Action','Show advanced tools',()=>csShowAdvancedTabs(true));
   // Every other bindable editor action appears here too, under its registry name, so the palette,
   // the shortcut guide and the key bindings can never drift apart.

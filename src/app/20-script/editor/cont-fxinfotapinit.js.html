@@ -139,6 +139,7 @@ function tourHtml(){
       ${browseLabel?`<button type="button" class="btn bgh" data-tour-action="folder">${browseLabel}</button>`:''}
       <button type="button" class="btn bgh" data-tour-action="sample">Try a sample</button>
     </div>
+    <div style="margin:12px 0 4px;color:var(--mut);font-size:12px">How much do you want to see? Change it any time in the View menu.</div>${csLevelPickHtml()}
     <p style="margin:8px 0 14px;color:var(--mut);font-size:11px">${sampleCredit}. The sample opens as a separate copy; exporting it never overwrites the bundled image.</p>
     <div style="border-top:1px solid var(--bdr);padding-top:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button type="button" class="btn bgh" data-tour-action="guide">Guide my first edit</button>
@@ -152,6 +153,7 @@ function tourBind(){
   const close=()=>ov.__csClose?ov.__csClose():ov.remove();
   ov.querySelector('[data-tour-action="open"]').onclick=()=>{close();fxPickPhotos();};
   ov.querySelector('[data-tour-action="sample"]').onclick=()=>csTourTrySample();
+  ov.querySelectorAll('.cs-level-pick [data-level]').forEach(x=>x.onclick=()=>csLevelSet(x.dataset.level));
   const folder=ov.querySelector('[data-tour-action="folder"]');
   if(folder)folder.onclick=()=>csTourBrowseFolder();
   ov.querySelector('[data-tour-action="guide"]').onclick=()=>{
