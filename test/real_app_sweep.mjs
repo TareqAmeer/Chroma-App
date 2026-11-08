@@ -186,6 +186,7 @@ console.log('\nsurface    found  changed  inert  selected  skipped  unreach  err
 for (const [s, r] of Object.entries(report)) {
   const v = Object.values(r), n = (st) => v.filter((x) => x.status === st).length;
   console.log(`${s.padEnd(9)} ${[v.length, n('changed'), n('inert'), n('selected'), n('skipped'), n('unreach'), n('error')].map((x, i) => String(x).padStart([6, 8, 6, 9, 8, 8, 6][i])).join(' ')}`);
+  if (!v.length) { fail = true; console.log(`  ERROR ${s}: enumerated 0 controls — hidden window or display asleep (document.visibilityState must be visible; wake the display, e.g. caffeinate -u -d)`); }
   for (const [k, x] of Object.entries(r)) if (x.status === 'error') { fail = true; console.log(`  ERROR ${s} ${k}\n    ${x.errors.join('\n    ')}`); }
 }
 console.log(fail ? 'real:sweep — FAIL' : 'real:sweep — PASS');
