@@ -286,5 +286,11 @@
     "match": "atom count: wireframe 24 vs app 25",
     "exact": false,
     "reason": "Seeded 2026-09-09 alongside the icon entry above; tracked as 3.4.12. One extra atom in the app's tool panel. Probably the same root cause as 3.4.11 (text where the wireframe has an icon) rather than an independent defect \u2014 diff the two atom lists before treating it as separate work. Remove under 3.4.12."
+  },
+  {
+    "zone": "panel",
+    "match": "text:\"Advanced\"   (app has 1, wireframe has 0)",
+    "exact": false,
+    "reason": "Deliberate progressive-disclosure fold (docs/plans/ux-progressive-disclosure.md P1, CHR-304): secondary controls move under one remembered Advanced row per card; no control removed, verified by test/disclosure_scan.mjs."
   }
 ]
