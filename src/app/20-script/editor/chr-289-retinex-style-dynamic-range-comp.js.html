@@ -67,12 +67,19 @@ function drcBuildMap(rgba,w,h){
   for(let i=0;i<n;i++)L[i]-=m;
   return{data:L,w,h};
 }
-// CHR-288 wiring: display-referred highlight reconstruction on an 8-bit sRGB RGBA frame. A channel
-// at 255 is "clipped" (clip level 1.0 in linear light). Windows of 1536 px with 96 px of context
-// bound memory on huge frames; only the window core is written, so results do not depend on order.
-// A pixel whose reconstructed channels exceed white is scaled down to fit (hue recovered at white;
-// the 8-bit working pipeline has no headroom to carry the excess). Returns the new RGBA buffer and
-// the changed-pixel count. Self-contained for the pixel worker.
+// CHR-288 wiring: display-referred highlight reconstruction on an 8-bit sRGB RGBA frame. Evidence (real
+// RAWs in the desktop app): the desktop decode already clips to white before demosaic, so a developed
+// frame has no per-channel clip pattern left. Applying the modes to every pixel with a channel at 255
+// washed blue skies to white and filled big clouds with hue taken from distant bricks. So this stage is
+// deliberately conservative: only pixels with TWO OR MORE channels at 255 (a blown, near-white pixel
+// whose third channel carries a cast; a single channel at 255 is just a saturated colour) are
+// candidates, and the correction fades out with distance from unclipped pixels (full within R/2, none
+// beyond R, R = 0.5% of the long edge) so a large blown area cannot borrow a far-away hue. A true
+// pre-demosaic stage needs the native decode to keep unclipped data (not wired; ticket stays open).
+// Windows of 1536 px with 96 px of context bound memory on huge frames; only the window core is
+// written, so results do not depend on order. A pixel whose reconstructed channels exceed white is
+// scaled down to fit (the 8-bit working pipeline has no headroom for the excess). Returns the new RGBA
+// buffer and the changed-pixel count. Self-contained for the pixel worker.
 function hlRGBA(rgba,w,h,mode){
   const WIN=1536,OV=96,lin=new Float32Array(256);
   for(let i=0;i<256;i++){const c=i/255;lin[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
@@ -88,11 +95,21 @@ function hlRGBA(rgba,w,h,mode){
     for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){const o=4*((y0+y)*w+x0+x),j=3*(y*ww+x);f[j]=lin[rgba[o]];f[j+1]=lin[rgba[o+1]];f[j+2]=lin[rgba[o+2]];}
     const r=hlReconstruct(f,ww,wh,[1,1,1],mode,{threshold:0.995});
     if(r===f)continue;
+    // distance (city block) from each pixel to the nearest pixel with no channel at 255
+    const dist=new Uint16Array(ww*wh),BIG=65000;
+    for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){const o=4*((y0+y)*w+x0+x);dist[y*ww+x]=(rgba[o]===255||rgba[o+1]===255||rgba[o+2]===255)?BIG:0;}
+    for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){const i=y*ww+x;if(!dist[i])continue;let d=dist[i];if(x>0&&dist[i-1]+1<d)d=dist[i-1]+1;if(y>0&&dist[i-ww]+1<d)d=dist[i-ww]+1;dist[i]=d;}
+    for(let y=wh-1;y>=0;y--)for(let x=ww-1;x>=0;x--){const i=y*ww+x;let d=dist[i];if(x<ww-1&&dist[i+1]+1<d)d=dist[i+1]+1;if(y<wh-1&&dist[i+ww]+1<d)d=dist[i+ww]+1;dist[i]=d;}
+    const R=Math.max(6,0.005*Math.max(w,h));
     for(let y=cy;y<cy1;y++)for(let x=cx;x<cx1;x++){
-      const j=3*((y-y0)*ww+(x-x0));
+      const j=3*((y-y0)*ww+(x-x0)),o=4*(y*w+x);
       if(r[j]===f[j]&&r[j+1]===f[j+1]&&r[j+2]===f[j+2])continue;
-      let a=r[j],b=r[j+1],c=r[j+2];const mx=Math.max(a,b,c);if(mx>1){a/=mx;b/=mx;c/=mx;}
-      const o=4*(y*w+x),na=enc(a),nb=enc(b),nc=enc(c);
+      if((rgba[o]===255)+(rgba[o+1]===255)+(rgba[o+2]===255)<2)continue;
+      const d=dist[(y-y0)*ww+(x-x0)],k=d<=R/2?1:d>=R?0:(R-d)/(R/2);
+      if(k<=0)continue;
+      let a=f[j]+(r[j]-f[j])*k,b=f[j+1]+(r[j+1]-f[j+1])*k,c=f[j+2]+(r[j+2]-f[j+2])*k;
+      const mx=Math.max(a,b,c);if(mx>1){a/=mx;b/=mx;c/=mx;}
+      const na=enc(a),nb=enc(b),nc=enc(c);
       if(na!==out[o]||nb!==out[o+1]||nc!==out[o+2]){out[o]=na;out[o+1]=nb;out[o+2]=nc;changed++;}
     }
   }

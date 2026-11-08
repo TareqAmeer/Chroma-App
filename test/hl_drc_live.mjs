@@ -116,7 +116,7 @@ try {
     for (const [k, m] of [['blend', 1], ['propagate', 2], ['opposed', 3]]) {
       T.set('sl-adj-hl-mode', m);
       const a = await T.render(false);
-      const o = 4 * (700 * W + 1650); // blob centre
+      const o = 4 * (700 * W + 1650 + 176); // 4 px inside the blob edge (the stage fades out beyond ~0.5% of the long edge from unclipped pixels)
       const far = 4 * (200 * W + 300);  // far shadow pixel
       let changedFar = 0, changedBlob = 0;
       for (let y = 0; y < 1400; y += 3) for (let x = 0; x < W; x += 3) { const q = 4 * (y * W + x); const d = Math.abs(a[q] - off[q]) + Math.abs(a[q + 1] - off[q + 1]) + Math.abs(a[q + 2] - off[q + 2]); const rr = Math.hypot(x - 1650, y - 700); if (d > 3) { if (rr < 260) changedBlob++; else changedFar++; } }
@@ -138,7 +138,7 @@ try {
     check(`HL ${k}: tiled export == single-shot export`, r.tiled <= 1, `max ${r.tiled}`);
     void spread; void spreadOff;
   }
-  check('HL blend reduces the magenta cast at the blob centre', Math.abs(hl.blend.centre[0] - hl.blend.centre[1]) < Math.abs(hl.blend.centreOff[0] - hl.blend.centreOff[1]), `${hl.blend.centreOff} -> ${hl.blend.centre}`);
+  check('HL blend reduces the magenta cast near the blob edge', Math.abs(hl.blend.centre[0] - hl.blend.centre[1]) < Math.abs(hl.blend.centreOff[0] - hl.blend.centreOff[1]), `${hl.blend.centreOff} -> ${hl.blend.centre}`);
   check('HL back to Off is byte-identical to the untouched render', hl.backSig === hl.offSig && hl.offSig === base);
 
   // ---- preview path uses the same reconstructed frame as export ----
