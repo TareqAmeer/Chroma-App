@@ -28,7 +28,11 @@ function _cpCommands(){
       const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
       const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
       if(!lab||seen.has(lab))return;seen.add(lab);
-      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},60);});
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);
+        // CHR-304: the Export-family cards live inside the Export drawer's "More" fold on desktop; open the drawer and that fold before the card's own Advanced fold.
+        const drawer=card.closest('#sk2-export');
+        if(drawer&&typeof sk2ExportOpen==='function'){if(!document.body.classList.contains('sk2-exp-open'))sk2ExportOpen();const mf=drawer.querySelector('details.sk2x-more');if(mf)mf.open=true;}
+        card.classList.remove('fx-sec-collapsed');fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},drawer?320:60);});
     });
   });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never

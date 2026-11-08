@@ -112,8 +112,12 @@ const opened = await p2.evaluate(async () => {
     const d = document.getElementById('fx-adv-' + sec); d.open = false;
     const c = cmds.find((x) => x.group === 'Control' && x.label.startsWith((CS_NAMES[sec] || sec) + ': ') && d.contains(document.querySelector('[id]')) || x.group === 'Control' && x.label.startsWith((CS_NAMES[sec] || sec) + ': '));
     if (!c) { res[sec] = 'no-entry'; continue; }
-    c.run(); await new Promise((r) => setTimeout(r, 150));
+    c.run(); await new Promise((r) => setTimeout(r, 600));
     res[sec] = d.open;
+    if (sec === 'export' && d.closest('#sk2-export')) { // desktop: drawer + its More fold must be open and the control focused
+      const mf = document.querySelector('#sk2-export details.sk2x-more');
+      res[sec] = d.open && document.body.classList.contains('sk2-exp-open') && !!mf && mf.open && d.contains(document.activeElement);
+    }
   }
   return res;
 });

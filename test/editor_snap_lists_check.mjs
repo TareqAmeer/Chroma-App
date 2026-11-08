@@ -47,7 +47,6 @@ const KNOWN_EXCLUSIONS = {
     'preset-str': 'temporary strength control for the most recently applied style; the resulting photo settings are tracked by their own recipe fields',
     'inpaint-size': 'AI-erase brush-tool setting, not persisted photo state (see heal-size)',
     'heal-size': 'Retouch brush-tool setting, not persisted photo state — see healSyncUI\'s own comment on why brush settings are tracked separately from spots',
-    'heal-feather': 'see heal-size',
     'heal-opacity': 'see heal-size',
     'heal-dust': 'Visualise-spots sensitivity is a preview-only overlay setting (never exported, never part of the recipe) - see healDustSync',
     'redeye-size': 'tracked per eye in s.redeye; the slider edits the selected eye operation, not a flat photo-wide value',

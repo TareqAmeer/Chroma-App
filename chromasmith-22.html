@@ -7669,7 +7669,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108J';
+const BUILD='1.1108K';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16585,7 +16585,11 @@ function _cpCommands(){
       const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
       const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
       if(!lab||seen.has(lab))return;seen.add(lab);
-      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},60);});
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);
+        // CHR-304: the Export-family cards live inside the Export drawer's "More" fold on desktop; open the drawer and that fold before the card's own Advanced fold.
+        const drawer=card.closest('#sk2-export');
+        if(drawer&&typeof sk2ExportOpen==='function'){if(!document.body.classList.contains('sk2-exp-open'))sk2ExportOpen();const mf=drawer.querySelector('details.sk2x-more');if(mf)mf.open=true;}
+        card.classList.remove('fx-sec-collapsed');fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},drawer?320:60);});
     });
   });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
@@ -23642,7 +23646,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // header-reset mechanism — see resetDeconv() and _fxSectionResetOverride) — added 2026-09-10
   // (Detail panel redesign, D1) so its header Reset button, gated on :has(.fx-row.fx-mod), can
   // ever actually appear; resetDeconv() itself already worked, only the visibility signal didn't.
-  'deconv-amt','deconv-rad',
+  'deconv-amt','deconv-rad','upright-amt','heal-feather',
   'grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r',
   'b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos','vig','lut-mix'];
 // nr/deconv added 2026-09-15 (found by the Editor snap-list cross-check hook) — same gap the
@@ -23838,6 +23842,7 @@ function applyUISnapshot(s,opts){
   if(s.inpaint!==undefined){const hit=curItem();if(hit){hit.inpaint=s.inpaint?_clone(s.inpaint):[];if(window.chromasmithInpaintRestore)_inpaintPromise=window.chromasmithInpaintRestore(hit);else if(hit.inpaint.some(p=>p.enabled!==false))hit._inpaintError='Accepted erase repairs need the desktop app and their asset folder';}}
   if(s.redeye!==undefined){const hit=curItem();if(hit)hit.redeye=s.redeye?_clone(s.redeye):[];if(typeof redeyeSyncUI==='function')redeyeSyncUI();}
   _FX_SNAP_SLIDERS.forEach(id=>{const el=document.getElementById('sl-'+id);if(el&&s.sliders[id]!==undefined)el.value=s.sliders[id];});
+  {if(typeof _upAmtLabel==='function')_upAmtLabel();const hf=document.getElementById('sl-heal-feather'),hv=document.getElementById('vl-heal-feather');if(hf&&hv){hv.textContent=hf.value;if(typeof fxPaintSlider==='function')fxPaintSlider(hf);}}
   if(s.sliders&&s.sliders['lut-mix']!==undefined)fxState.lutMix=parseFloat(s.sliders['lut-mix'])/100;
   _FX_SNAP_TOGGLES.forEach(id=>{const el=document.getElementById('tg-'+id);const ff=document.getElementById('ff-'+id);const on=!!s.toggles[id];if(el){el.classList.toggle('on',on);if(ff){ff.style.display='';ff.classList.toggle('ff-off',!on);}}});
   // A saved/pasted/undone edit now owns the White glow switch: stop a later full-quality swap's
@@ -26167,6 +26172,7 @@ const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
   'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-mix-rr','sl-adj-mix-rg','sl-adj-mix-rb','sl-adj-mix-gr','sl-adj-mix-gg','sl-adj-mix-gb','sl-adj-mix-br','sl-adj-mix-bg','sl-adj-mix-bb','sl-adj-lab-l','sl-adj-lab-con','sl-adj-lab-chroma','sl-adj-tone-sa','sl-adj-tone-sb','sl-adj-tone-ha','sl-adj-tone-hb','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-adj-hl-mode','sl-adj-drc-sh','sl-adj-drc-hl','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale','sl-lens-asp','sl-lens-ox','sl-lens-oy',
+  'sl-upright-amt','sl-heal-feather',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
 const _SESS_TOGGLES=['tg-filmneg','tg-adjust','tg-curves','tg-hsl','tg-wheels','tg-pointcolor','tg-local','tg-nr','tg-deconv','tg-grain','tg-art','tg-hal','tg-hal-white','tg-hal-noremjet','tg-hal-extreme','tg-bloom','tg-vig','tg-borders','tg-canvas'];
@@ -26233,6 +26239,7 @@ function loadSession(userTriggered){
     const s=JSON.parse(raw);
     if(s['sl-adj-exp']!=null&&s._ver!==2)s['sl-adj-exp']=Math.max(-100,Math.min(100,parseFloat(s['sl-adj-exp'])*(20/50)));
     _SESS_SLIDERS.forEach(id=>{const el=document.getElementById(id);if(el&&s[id]!=null)el.value=s[id];});
+    {if(typeof _upAmtLabel==='function')_upAmtLabel();const hf=document.getElementById('sl-heal-feather'),hv=document.getElementById('vl-heal-feather');if(hf&&hv){hv.textContent=hf.value;if(typeof fxPaintSlider==='function')fxPaintSlider(hf);}}
     _SESS_TOGGLES.forEach(id=>{
       const el=document.getElementById(id);if(!el||s[id]==null)return;
       el.classList.toggle('on',!!s[id]);
