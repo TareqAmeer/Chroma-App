@@ -19,6 +19,18 @@ function _cpCommands(){
     const label=(row.querySelector('.fx-label')?.textContent||control.getAttribute('aria-label')||control.title||id).trim().replace(/\s+/g,' ');
     add('Control','Show control: '+label,()=>csWorkspaceRevealControl(id));
   });
+  // Progressive disclosure P1/P5: every control inside an Advanced fold is its own palette entry.
+  // Running it opens the card and the fold, scrolls to the control and focuses it.
+  document.querySelectorAll('.fx-ctrl[data-fxsec] details.fx-adv').forEach(fold=>{
+    const card=fold.closest('.fx-ctrl[data-fxsec]'),key=card.dataset.fxsec,seen=new Set();
+    fold.querySelectorAll('input,select,textarea,button').forEach(control=>{
+      if(control.classList.contains('fx-info-i'))return;
+      const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
+      const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
+      if(!lab||seen.has(lab))return;seen.add(lab);
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},60);});
+    });
+  });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
   // point at a preset that doesn't actually exist in this build.
   const lutSel=document.getElementById('sel-lut');

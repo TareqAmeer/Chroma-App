@@ -92,6 +92,7 @@
     "editor:cvd-check": "node test/editor_cvd_check.mjs",
     "editor:surface-coverage": "node test/surface_coverage_check.mjs",
     "editor:gates": "node test/editor_gates.mjs",
+    "disclosure:scan": "node test/disclosure_scan.mjs",
     "editor:gates:visual": "node test/editor_gates.mjs --only=visual,layout,render",
     "editor:gates:tokens": "node test/editor_gates.mjs --only=tokens",
     "editor:gates:a11y": "node test/editor_gates.mjs --only=a11y",

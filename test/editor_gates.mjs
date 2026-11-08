@@ -207,6 +207,7 @@ const GATES = [
   // capture pipeline never saw the clipped tool rail. Advisory only until S6b adds those
   // entries; then remove it from ADVISORY_GATES so a new region can never go uninventoried.
   { name: 'editor:surface-coverage', cmd: ['node', 'test/surface_coverage_check.mjs'] },
+  { name: 'editor:disclosure', cmd: ['node', 'test/disclosure_scan.mjs'] },
   { name: 'editor:cvd-check', cmd: ['node', 'test/editor_cvd_check.mjs', '--strict'] },
   // Token generator drift gate (S3/S4/"Token generator gates" session): design/tokens.json is
   // the source of truth for chromasmith-22.html's :root/body.light and library-ui.js's DS block;
@@ -267,6 +268,7 @@ const GATE_TAGS = {
   'editor:long-string-check': ['layout'],
   'editor:hidpi-check': ['render'],
   'editor:surface-coverage': ['structural', 'wireframe'],
+  'editor:disclosure': ['structural'],
   'editor:cvd-check': ['a11y'],
   'editor:tokens-check': ['tokens'],
   'editor:components-check': ['structural', 'tokens'],

@@ -378,6 +378,11 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
   padding:6px 8px;font-size:var(--fs-2);color:var(--mut)}
 .fx-hint-x>summary::-webkit-details-marker{display:none}
 .fx-adv-body{padding:0 8px 8px}
+.fx-adv>summary{justify-content:flex-start}
+.fx-adv>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--dur-1) ease;flex:none;margin:0 3px 0 1px}
+.fx-adv[open]>summary::before{transform:rotate(45deg)}
+.fx-adv-n{margin-left:auto;font-size:var(--fs-1);color:var(--acc)}
+.fx-adv-n::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:5px;vertical-align:1px}
 .fx-hint-x p{padding:0 8px 8px;font-size:var(--fs-2);color:var(--mut);line-height:var(--lh-base)}
 /* Groups controls that only apply conditionally (e.g. High-tier NR strength/Denoise job UI,
    shown only while RAW Noise Reduction = High) — dashed top border sets it apart from the

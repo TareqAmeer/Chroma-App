@@ -87,6 +87,16 @@ async function fxDrcApplyFor(renderer,P,src){
     if(m[d.dataset.advkey])d.open=true;
     d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
   });
+  // "N changed" on the Advanced row: controls inside differing from their markup default, so an edit
+  // hidden under a closed fold is never lost. Polled lightly because undo/session/snapshot set values from script.
+  window.fxAdvChanged=function(d){let n=0;d.querySelectorAll('input[id],select[id]').forEach(el=>{
+    if(el.type==='checkbox'||el.type==='radio'){if(el.checked!==el.defaultChecked)n++;}
+    else if(el.tagName==='SELECT'){const o=[...el.options].find(x=>x.defaultSelected)||el.options[0];if(o&&el.value!==o.value)n++;}
+    else if(el.value!==el.defaultValue)n++;});return n;};
+  function upd(){document.querySelectorAll('details.fx-adv').forEach(d=>{const b=d.querySelector('summary .fx-adv-n');if(!b)return;const n=window.fxAdvChanged(d);const t=n?n+' changed':'';if(b.textContent!==t){b.textContent=t;b.hidden=!n;}});}
+  window.fxAdvUpdate=upd;
+  document.addEventListener('input',upd,true);document.addEventListener('change',upd,true);
+  setInterval(()=>{if(!document.hidden)upd();},900);upd();
 })();
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){

@@ -421,6 +421,11 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
   padding:6px 8px;font-size:var(--fs-2);color:var(--mut)}
 .fx-hint-x>summary::-webkit-details-marker{display:none}
 .fx-adv-body{padding:0 8px 8px}
+.fx-adv>summary{justify-content:flex-start}
+.fx-adv>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--dur-1) ease;flex:none;margin:0 3px 0 1px}
+.fx-adv[open]>summary::before{transform:rotate(45deg)}
+.fx-adv-n{margin-left:auto;font-size:var(--fs-1);color:var(--acc)}
+.fx-adv-n::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:5px;vertical-align:1px}
 .fx-hint-x p{padding:0 8px 8px;font-size:var(--fs-2);color:var(--mut);line-height:var(--lh-base)}
 /* Groups controls that only apply conditionally (e.g. High-tier NR strength/Denoise job UI,
    shown only while RAW Noise Reduction = High) — dashed top border sets it apart from the
@@ -4379,6 +4384,13 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="fx-row"><div class="fx-label">Tint</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-tint" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tint">0</div></div>
           <div class="fx-row"><div class="fx-label">Vibrance</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-vib" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-vib">0</div></div>
           <div class="fx-row"><div class="fx-label">Saturation</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#888,#ff5b5b,#ffd43b,#51cf66,#3bc9db,#9775fa)" type="range" min="-100" max="100" value="0" id="sl-adj-sat" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sat">0</div></div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
+          </div>
+          <!-- CHR-288 / CHR-289: collapsed by default (docs/plans/ux-progressive-disclosure.md P1/P3). Open state is remembered per card in chromasmith_fx_adv_open. -->
+          <details class="fx-hint-x fx-adv" id="fx-adv-adjust" data-advkey="adjust">
+            <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+            <div class="fx-adv-body">
           <div class="fx-row" title="Warms (or cools) skin/orange tones only — everything else is unaffected. Dial to taste; not a color-accuracy control."><div class="fx-label">Skin Warmth</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ff9f43)" type="range" min="-100" max="100" value="0" id="sl-adj-skin" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-skin">0</div></div>
           <div class="fx-sub">Multiscale detail contrast</div>
           <div class="fx-row" title="Contrast in the finest source detail band (approximately 1–2 pixels). Zero leaves the image unchanged."><div class="fx-label">Fine</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-adj-wavelet-1" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-wavelet-1">0</div></div>
@@ -4408,13 +4420,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="fx-row" title="Highlights a*: negative greener, positive more magenta."><div class="fx-label">Highlights a*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#51cf66,#e64980)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-ha" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-ha">0</div></div>
           <div class="fx-row" title="Highlights b*: negative bluer, positive more yellow."><div class="fx-label">Highlights b*</div><input class="fx-slider fx-slider-grad" style="--sl-grad:linear-gradient(to right,#4d8bff,#ffd43b)" type="range" min="-100" max="100" value="0" id="sl-adj-tone-hb" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-tone-hb">0</div></div>
           </div>
-          <div class="btn-row" style="margin-top:4px">
-            <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
-          </div>
-          <!-- CHR-288 / CHR-289: collapsed by default (docs/plans/ux-progressive-disclosure.md P1/P3). Open state is remembered per card in chromasmith_fx_adv_open. -->
-          <details class="fx-hint-x fx-adv" id="fx-adv-adjust" data-advkey="adjust">
-            <summary>Advanced</summary>
-            <div class="fx-adv-body">
           <div class="fx-sub" title="Rebuilds channels that clipped to white so bright areas keep a believable colour instead of a magenta or cyan cast. Off leaves the image unchanged. Display-referred: it works on the developed frame, so it recovers hue at white, not extra brightness.">Highlight reconstruction</div>
           <div class="fx-row" title="0 Off, 1 Blend (neutralise the cast), 2 Colour propagation (fill hue from the surroundings), 3 Inpaint opposed (estimate from the other two channels, per clipped region)."><div class="fx-label">Mode</div><input class="fx-slider" type="range" min="0" max="3" step="1" value="0" id="sl-adj-hl-mode" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hl-mode">Off</div></div>
           <div class="fx-sub" title="Retinex-style dynamic-range compression: an edge-aware illumination estimate (guided filter, three scales) is compressed about the photo's own average brightness, in linear light, before the look and exposure. Zero leaves the image unchanged.">Dynamic range (Retinex)</div>
@@ -4450,12 +4455,16 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <div style="height:4px;border-radius:2px;background:var(--sur2);overflow:hidden"><div id="nr-high-progress-bar" style="height:100%;width:0%;background:var(--acc);transition:width var(--dur-1)"></div></div>
           </div>
         </div>
-        <div class="fx-row" id="row-raw-demosaic">
-          <div class="fx-label">RAW demosaic <button class="fx-info-i" title="Choose the decode-time method for this photo. AHD, VNG and MHC support Bayer sensors. Markesteijn 1-pass and 3-pass support standard X-Trans layouts. An incompatible choice is rejected by the decoder. Requires reopening this photo to take effect. Desktop only.">i</button></div><select class="fx-select" id="sel-demosaic-algo" onchange="fxDemosaicAlgoChanged(this.value)" aria-label="RAW demosaic method"><option value="">Standard (PPG)</option><option value="ahd">AHD (Bayer)</option><option value="vng">VNG (Bayer)</option><option value="mhc">MHC (Bayer)</option><option value="markesteijn1">Markesteijn 1-pass (X-Trans)</option><option value="markesteijn3">Markesteijn 3-pass (X-Trans)</option></select>
-        </div>
         <div class="fx-row"><div class="fx-label">Luminance</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-lum" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-lum">0</div></div>
         <div class="fx-row"><div class="fx-label">Color</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-col" oninput="fxUpdate();nrSyncGate()"><div class="fx-val" id="vl-nr-col">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-det"><div class="fx-label" title="Higher = preserve more fine detail/edges (less smoothing)">Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-det" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-det">50</div></div>
+        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+        <details class="fx-hint-x fx-adv" id="fx-adv-nr" data-advkey="nr">
+          <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+          <div class="fx-adv-body">
+        <div class="fx-row" id="row-raw-demosaic">
+          <div class="fx-label">RAW demosaic <button class="fx-info-i" title="Choose the decode-time method for this photo. AHD, VNG and MHC support Bayer sensors. Markesteijn 1-pass and 3-pass support standard X-Trans layouts. An incompatible choice is rejected by the decoder. Requires reopening this photo to take effect. Desktop only.">i</button></div><select class="fx-select" id="sel-demosaic-algo" onchange="fxDemosaicAlgoChanged(this.value)" aria-label="RAW demosaic method"><option value="">Standard (PPG)</option><option value="ahd">AHD (Bayer)</option><option value="vng">VNG (Bayer)</option><option value="mhc">MHC (Bayer)</option><option value="markesteijn1">Markesteijn 1-pass (X-Trans)</option><option value="markesteijn3">Markesteijn 3-pass (X-Trans)</option></select>
+        </div>
         <div class="fx-row nr-gated" id="row-nr-con"><div class="fx-label" title="Higher = retain more local luminance contrast while reducing noise">Contrast</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-con" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-con">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-color-detail"><div class="fx-label" title="Higher values preserve fine colour edges; lower values smooth chroma more strongly">Color Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-color-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-color-detail">50</div></div>
         <div class="fx-row nr-gated" id="row-nr-smooth"><div class="fx-label" title="Higher values use a wider chroma-smoothing radius">Smoothness</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-nr-smooth" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-smooth">50</div></div>
@@ -4464,7 +4473,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row" title="Balances edge-only sharpening at lower values against fine texture at higher values. The default 50 preserves today's sharpening exactly."><div class="fx-label">Sharpen Detail</div><input class="fx-slider" type="range" min="0" max="100" value="50" id="sl-adj-sharp-detail" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-sharp-detail">50</div></div>
         <div class="fx-row" title="Protect smooth areas from sharpening. Hold Alt to preview white sharpened edges and black protected areas."><div class="fx-label">Sharpen Mask</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-sharp-mask" oninput="fxUpdate()" aria-label="Sharpen Mask; hold Alt to preview"><div class="fx-val" id="vl-adj-sharp-mask">0</div></div>
         <div class="fx-row nr-gated" id="row-nr-hldesat"><div class="fx-label">Highlight Desaturation <button class="fx-info-i" title="Bright specular highlights (sunlit water, glints) sometimes show green/magenta demosaic false-color that no amount of Luminance/Color NR fully removes. Since real highlight color is usually near-neutral anyway, this fades Cb/Cr toward zero from mid-tones (~45%) up through highlights — reaches far enough to cover where the fringing actually sits, so it WILL flatten real color in bright areas too at high amounts. Per-photo only, so it never touches other images.">i</button></div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-nr-hldesat" oninput="fxUpdate()"><div class="fx-val" id="vl-nr-hldesat">0</div></div>
-        <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="nr-gate-hint">Tames RAW sensor noise (esp. high ISO) before the film look.</div>
+          </div>
+        </details>
         </div>
       </div>
       <!-- DECONVOLUTION SHARPENING (ROADMAP.md R6) — models the lens/sensor blur as a small
@@ -4757,14 +4767,19 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <button class="btn bgh" id="btn-upright-level" onclick="uprightLevel()" title="Upright Level: finds the photo's straight lines and rotates so horizontals and verticals are square to the frame.">Level</button>
           <button class="btn bgh" id="btn-upright-vertical" onclick="uprightVertical()" title="Upright Vertical: finds near-vertical lines and sets Vertical and Rotate so they come out parallel and upright.">Vertical</button>
         </div>
-        <div class="fx-row" title="How much of the detected correction Level and Vertical apply. About 85% usually looks more natural than a full correction; 100% makes the lines exactly square."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="85" id="sl-upright-amt" oninput="_upAmtLabel()"><div class="fx-val" id="vl-upright-amt">85%</div></div>
         <div class="fx-row" title="Corrects converging verticals while preserving perspective spacing."><div class="fx-label">Vertical</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-pv" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-pv">0</div></div>
         <div class="fx-row" title="Corrects horizontal perspective for a wall or facade photographed from one side."><div class="fx-label">Horizontal</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ph" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ph">0</div></div>
+        <details class="fx-hint-x fx-adv" id="fx-adv-straighten" data-advkey="straighten">
+          <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+          <div class="fx-adv-body">
+        <div class="fx-row" title="How much of the detected correction Level and Vertical apply. About 85% usually looks more natural than a full correction; 100% makes the lines exactly square."><div class="fx-label">Amount</div><input class="fx-slider" type="range" min="0" max="100" value="85" id="sl-upright-amt" oninput="_upAmtLabel()"><div class="fx-val" id="vl-upright-amt">85%</div></div>
         <div class="fx-row" title="Fine perspective rotation, in tenths of a degree."><div class="fx-label">Rotate</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-rot" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-rot">0</div></div>
         <div class="fx-row" title="Scales the perspective-corrected photo to hide empty frame edges."><div class="fx-label">Scale</div><input class="fx-slider" type="range" min="0" max="60" value="0" id="sl-lens-scale" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-scale">0</div></div>
         <div class="fx-row" title="Stretches the photo horizontally (positive) or vertically (negative) to undo the squash a strong perspective correction leaves."><div class="fx-label">Aspect</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-asp" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-asp">0</div></div>
         <div class="fx-row" title="Shifts the corrected photo left or right inside the frame."><div class="fx-label">X Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-ox" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-ox">0</div></div>
         <div class="fx-row" title="Shifts the corrected photo up or down inside the frame."><div class="fx-label">Y Offset</div><input class="fx-slider" type="range" min="-100" max="100" value="0" id="sl-lens-oy" oninput="fxUpdate()"><div class="fx-val" id="vl-lens-oy">0</div></div>
+          </div>
+        </details>
       </div>
       <!-- GRAIN -->
       <div class="fx-ctrl" data-fxsec="grain">
@@ -4849,7 +4864,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         </div>
         <div class="fx-row"><div class="fx-label">Inner colour</div><input type="color" class="fx-color" id="cl-b1" value="#000000" oninput="fxUpdate()"></div>
         <div class="fx-row"><div class="fx-label">Inner size</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="1" id="sl-b1-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-t">1%</div></div>
-        <div class="fx-row"><div class="fx-label">Inner grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-g">0</div></div>
         <div class="fx-row" data-film-row="b1" hidden><div class="fx-label">Source</div>
           <select class="fx-select" id="sel-b1-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
         </div>
@@ -4860,12 +4874,16 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         </div>
         <div class="fx-row"><div class="fx-label">Outer colour</div><input type="color" class="fx-color" id="cl-b2" value="#ffffff" oninput="fxUpdate()"></div>
         <div class="fx-row"><div class="fx-label">Outer size</div><input class="fx-slider" type="range" min="0" max="10" step="0.1" value="2" id="sl-b2-t" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-t">2%</div></div>
-        <div class="fx-row"><div class="fx-label">Outer grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-g">0</div></div>
         <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Source</div>
           <select class="fx-select" id="sel-b2-src" onchange="fxUpdate()" style="flex:1"><option value="all">All scans</option></select>
         </div>
         <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Position</div><input class="fx-slider" type="range" min="-100" max="100" step="1" value="0" id="sl-b2-pos" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-pos">0</div></div>
         <div class="fx-row" data-film-row="b2" hidden><div class="fx-label">Edge glow</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-glow" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-glow">0</div></div>
+        <details class="fx-hint-x fx-adv" id="fx-adv-borders" data-advkey="borders">
+          <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+          <div class="fx-adv-body">
+        <div class="fx-row"><div class="fx-label">Inner grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b1-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b1-g">0</div></div>
+        <div class="fx-row"><div class="fx-label">Outer grain</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="0" id="sl-b2-g" oninput="fxUpdate()"><div class="fx-val" id="vl-b2-g">0</div></div>
         <div class="fx-row"><div class="fx-label">Film variation</div><button class="fx-btn" id="btn-frame-shuffle" type="button" onclick="frameShuffle()" style="flex:1">Shuffle</button></div>
         <div class="fx-row"><div class="fx-label">Overlay <button class="fx-info-i" title="Load frame… lays any frame PNG you have over the photo, on top of the border layers.">i</button></div>
           <select class="fx-select" id="sel-film-frame" onchange="filmFrameChanged(this.value)" style="flex:1">
@@ -4873,6 +4891,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="custom">Load frame…</option>
           </select>
         </div>
+          </div>
+        </details>
         </div>
       </div>
       <!-- RETOUCH (heal / clone) -->
@@ -4884,8 +4904,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="seg" id="seg-heal-mode" style="flex:1"></div>
         </div>
         <div class="fx-row"><div class="fx-label">Size</div><input class="fx-slider" type="range" min="1" max="20" step="0.5" value="4" id="sl-heal-size" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-size">4%</div></div>
-        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-feather">50</div></div>
-        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
         <!-- "Retouch" is the tool's actual primary action (arms paint mode), so it gets the
              filled/primary treatment and its own full-width row — panel redesign, feedback
              "kept" note in test/panel_proposals.mjs on why an earlier draft that dropped this
@@ -4898,10 +4916,17 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         </div>
         <div style="font-size:var(--fs-1);color:var(--mut);font-family:var(--sans);margin-top:4px" id="heal-count">No spots yet — click a blemish to remove it, or drag to brush an area. Shift-click first to pick the source yourself.</div>
         <div id="heal-list" role="listbox" aria-label="Retouch spots" style="display:flex;flex-direction:column;gap:2px;margin-top:4px;max-height:132px;overflow:auto"></div>
+        <details class="fx-hint-x fx-adv" id="fx-adv-retouch" data-advkey="retouch">
+          <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+          <div class="fx-adv-body">
+        <div class="fx-row"><div class="fx-label">Feather</div><input class="fx-slider" type="range" min="0" max="100" step="1" value="50" id="sl-heal-feather" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-feather">50</div></div>
+        <div class="fx-row"><div class="fx-label">Opacity</div><input class="fx-slider" type="range" min="10" max="100" step="1" value="100" id="sl-heal-opacity" oninput="healControlInput()" onchange="healControlCommit()"><div class="fx-val" id="vl-heal-opacity">100</div></div>
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-del" style="flex:1" onclick="healDeleteSel()" disabled>Delete spot</button><button class="btn bgh" style="flex:1" onclick="healClear()">Clear all spots</button></div>
         <div class="btn-row" style="margin-top:6px"><button class="btn bgh" id="btn-heal-dust" style="flex:1" onclick="healDustToggle()" aria-pressed="false" title="Preview-only overlay that highlights dust and small blemishes. Never exported.">Visualise spots</button></div>
         <div class="fx-row" id="row-heal-dust" style="display:none"><div class="fx-label">Sensitivity</div><input class="fx-slider" type="range" min="1" max="100" step="1" value="40" id="sl-heal-dust" oninput="healDustRender()"><div class="fx-val" id="vl-heal-dust">40</div></div>
         <div style="margin-top:12px"><div class="fx-label">Local AI erase</div><p style="font-size:11px;line-height:1.5">Desktop · optional 28 MB model · photos stay local. Review candidates before keeping a repair.</p><div class="fx-row"><label class="fx-label" for="sl-inpaint-size">Brush size</label><input class="fx-slider" id="sl-inpaint-size" type="range" min="0.2" max="8" step="0.2" value="1"></div><div class="btn-row"><button class="btn bgh" id="btn-inpaint-draw" onclick="window.chromasmithInpaintDraw?chromasmithInpaintDraw():toast('Local AI erase requires the desktop app')">Brush object to erase</button><button class="btn bgh" id="btn-inpaint-generate" onclick="window.chromasmithInpaintGenerate&&chromasmithInpaintGenerate()" disabled>Generate candidates</button></div><div id="inpaint-accepted" role="group" aria-label="Accepted erase repairs"></div></div>
+          </div>
+        </details>
         </div>
       </div>
       <!-- RED-EYE: source-coordinate pupil ellipses are corrected after the normal grade. -->
@@ -4961,19 +4986,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div id="exp-plain" class="exp-plain"></div>
         <div id="exp-est" style="font-size:12px;color:var(--mut);margin:2px 0 8px;line-height:1.5"></div>
         <div id="exp-last" style="font-size:12px;color:var(--mut);margin:-4px 0 8px" hidden></div>
-        <div class="vrow">
-          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
-          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
-          <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
-          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
-        </div>
-        <div class="fx-row" style="margin-top:8px" title="What happens when a file with the same name is already in the destination. Overwrite needs the desktop app; a browser's download folder always adds a number."><div class="fx-label">If file exists</div>
-          <select class="fx-select" id="sel-exp-collide" onchange="expCollideSet(this.value)">
-            <option value="suffix">Add a number</option>
-            <option value="skip">Skip it</option>
-            <option value="overwrite">Overwrite it</option>
-          </select>
-        </div>
         <div class="fx-row" style="margin-top:8px"><div class="fx-label">Quality</div><input class="fx-slider" type="range" min="80" max="100" value="99" id="sl-exp-q" oninput="document.getElementById('vl-exp-q').textContent=this.value"><div class="fx-val" id="vl-exp-q">99</div></div>
         <div class="fx-row" style="margin-top:6px" title="JPG is never fully lossless, even at 100. PNG is lossless but files are much larger."><div class="fx-label">Format</div>
           <select class="fx-select" id="sel-exp-fmt">
@@ -4981,14 +4993,6 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="jpg">JPG</option>
             <option value="png">PNG (lossless)</option>
             <option value="webp">WebP</option>
-          </select>
-        </div>
-        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
-          <div class="fx-label">Super Resolution</div>
-          <select class="fx-select" id="sel-exp-sr">
-            <option value="0">Off</option>
-            <option value="2">2x (4x the pixels)</option>
-            <option value="4">4x (16x the pixels)</option>
           </select>
         </div>
         <!-- Resize + output sharpening. These belong together: any downscale throws away the
@@ -5004,35 +5008,10 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
             <option value="1080">1080 px (social)</option>
           </select>
         </div>
-        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
-          <select class="fx-select" id="sel-exp-sharp">
-            <option value="0">Off</option>
-            <option value="1">Low</option>
-            <option value="2">Standard</option>
-            <option value="3">High</option>
-          </select>
-        </div>
         <!-- HDR (gain map). Hidden unless the ORIGINAL file actually carries HDR headroom — a gain
              map over an SDR source encodes nothing, so offering it there would be a lie. Shown by
              fxSyncHdrOption() after source_has_hdr comes back. Desktop only: it needs Core Image. -->
-        <div class="fx-row" id="fx-hdr-row" style="display:none"
-             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
-          <div class="fx-label">HDR (gain map)</div>
-          <input type="checkbox" id="tg-exp-hdr">
-        </div>
-        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
-        <div id="fx-match-series-row" style="margin-top:8px;display:none">
-          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
-          <div style="display:flex;gap:6px">
-            <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
-            <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
-          </div>
-        </div>
         <div class="fx-sub">Export</div>
-        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
-          <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
-          <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
-        </label>
         <div class="fx-row" id="fx-exportdir-row" style="display:none" title="Where exported photos are saved">
           <div class="fx-label">Save to</div>
           <button class="btn bgh" id="fx-exportdir-btn" type="button" onclick="fxChooseExportDir()" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Downloads</button>
@@ -5057,10 +5036,61 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
                bar that just reads "done" whether 1 or all-but-one photos actually saved. -->
           <div id="fx-export-photolist" style="display:none;margin-top:6px;max-height:140px;overflow-y:auto;font-family:var(--mono);font-size:10px"></div>
         </div>
+        <details class="fx-hint-x fx-adv" id="fx-adv-export" data-advkey="export">
+          <summary>Advanced<span class="fx-adv-n" hidden></span></summary>
+          <div class="fx-adv-body">
+        <div class="vrow">
+          <div class="vlb">Filename <button class="fx-info-i" title="Batch tokens: {name} source name, {seq} number in batch, {date} YYYY-MM-DD. Add {nover} to drop the version suffix.">i</button></div>
+          <input class="vinput" id="fx-fname" value="photo" placeholder="photo" style="width:140px">
+          <span id="fx-fname-spin" style="display:none;animation:fxspin 0.8s linear infinite;color:var(--mut)" title="Loading…">⟳</span>
+          <div class="vlb" id="fx-ver" style="color:var(--acc)">v1.0</div>
+        </div>
+        <div class="fx-row" style="margin-top:8px" title="What happens when a file with the same name is already in the destination. Overwrite needs the desktop app; a browser's download folder always adds a number."><div class="fx-label">If file exists</div>
+          <select class="fx-select" id="sel-exp-collide" onchange="expCollideSet(this.value)">
+            <option value="suffix">Add a number</option>
+            <option value="skip">Skip it</option>
+            <option value="overwrite">Overwrite it</option>
+          </select>
+        </div>
+        <div class="fx-row" id="exp-sr-row" style="margin-top:8px;display:none" title="Enlarges the finished photo with a local AI model (Real-ESRGAN, runs on this computer, nothing is uploaded). Applied before borders and the Resize option below. Large photos take a while; 4x of a big photo can exceed the size limit.">
+          <div class="fx-label">Super Resolution</div>
+          <select class="fx-select" id="sel-exp-sr">
+            <option value="0">Off</option>
+            <option value="2">2x (4x the pixels)</option>
+            <option value="4">4x (16x the pixels)</option>
+          </select>
+        </div>
+        <div class="fx-row" title="Applied last, after the resize — the only point at which the right amount is knowable."><div class="fx-label">Output sharpening</div>
+          <select class="fx-select" id="sel-exp-sharp">
+            <option value="0">Off</option>
+            <option value="1">Low</option>
+            <option value="2">Standard</option>
+            <option value="3">High</option>
+          </select>
+        </div>
+        <div class="fx-row" id="fx-hdr-row" style="display:none"
+             title="Writes a HEIC whose base image is this grade and whose gain map carries the highlight detail the camera captured. HDR displays show the extra range; everything else sees the normal SDR image.">
+          <div class="fx-label">HDR (gain map)</div>
+          <input type="checkbox" id="tg-exp-hdr">
+        </div>
+        <div class="msk-hint" id="fx-hdr-note" style="display:none"></div>
+        <div id="fx-match-series-row" style="margin-top:8px;display:none">
+          <div class="fx-sub">Match series <button class="fx-info-i" title="Batch only. Solves each photo's own exposure and white balance so the set matches the one you're previewing. Your look is untouched.">i</button></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn bgh" onclick="matchSeriesToReference()">Match to this photo</button>
+            <button class="btn bgh" onclick="matchSeriesClear()">Clear</button>
+          </div>
+        </div>
+        <label class="fx-row" style="gap:7px;align-items:center" title="Applies to Save to Lightroom TIFF handoffs. Other metadata remains unchanged.">
+          <div class="fx-label" style="width:auto;flex:1">Keep location (GPS)</div>
+          <input type="checkbox" id="tg-exp-gps" checked aria-label="Keep GPS location when saving to Lightroom">
+        </label>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn bgh" onclick="saveSession()" title="Save all slider settings to localStorage">Save session</button>
           <button class="btn bgh" onclick="loadSession(true)" title="Restore saved slider settings">Load session</button>
         </div>
+          </div>
+        </details>
       </div>
       <!-- WATERMARK — split out of the old single Export card. -->
       <div class="fx-ctrl" data-fxsec="wm">
@@ -7639,7 +7669,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108F';
+const BUILD='1.1108G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -16545,6 +16575,18 @@ function _cpCommands(){
     const id=control.id,key=card.dataset.fxsec;if(!hiddenRows.has(id)&&!hiddenSections.has(key))return;
     const label=(row.querySelector('.fx-label')?.textContent||control.getAttribute('aria-label')||control.title||id).trim().replace(/\s+/g,' ');
     add('Control','Show control: '+label,()=>csWorkspaceRevealControl(id));
+  });
+  // Progressive disclosure P1/P5: every control inside an Advanced fold is its own palette entry.
+  // Running it opens the card and the fold, scrolls to the control and focuses it.
+  document.querySelectorAll('.fx-ctrl[data-fxsec] details.fx-adv').forEach(fold=>{
+    const card=fold.closest('.fx-ctrl[data-fxsec]'),key=card.dataset.fxsec,seen=new Set();
+    fold.querySelectorAll('input,select,textarea,button').forEach(control=>{
+      if(control.classList.contains('fx-info-i'))return;
+      const row=control.closest('.fx-row,.btn-row,.vrow,label')||control;
+      const lab=(row.querySelector('.fx-label,.vlb')?.textContent||control.getAttribute('aria-label')||control.textContent||control.title||control.id||'').trim().replace(/\s+/g,' ').slice(0,48);
+      if(!lab||seen.has(lab))return;seen.add(lab);
+      add('Control',(CS_NAMES[key]||key)+': '+lab,()=>{csWorkspaceRevealSection(key);switchTab('fx');fxSection(key);fold.open=true;setTimeout(()=>{control.scrollIntoView({block:'center'});try{control.focus();}catch(e){}},60);});
+    });
   });
   // Looks/LUTs and Print profiles are read live from their <select>s so a palette entry can never
   // point at a preset that doesn't actually exist in this build.
@@ -29000,6 +29042,16 @@ async function fxDrcApplyFor(renderer,P,src){
     if(m[d.dataset.advkey])d.open=true;
     d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
   });
+  // "N changed" on the Advanced row: controls inside differing from their markup default, so an edit
+  // hidden under a closed fold is never lost. Polled lightly because undo/session/snapshot set values from script.
+  window.fxAdvChanged=function(d){let n=0;d.querySelectorAll('input[id],select[id]').forEach(el=>{
+    if(el.type==='checkbox'||el.type==='radio'){if(el.checked!==el.defaultChecked)n++;}
+    else if(el.tagName==='SELECT'){const o=[...el.options].find(x=>x.defaultSelected)||el.options[0];if(o&&el.value!==o.value)n++;}
+    else if(el.value!==el.defaultValue)n++;});return n;};
+  function upd(){document.querySelectorAll('details.fx-adv').forEach(d=>{const b=d.querySelector('summary .fx-adv-n');if(!b)return;const n=window.fxAdvChanged(d);const t=n?n+' changed':'';if(b.textContent!==t){b.textContent=t;b.hidden=!n;}});}
+  window.fxAdvUpdate=upd;
+  document.addEventListener('input',upd,true);document.addEventListener('change',upd,true);
+  setInterval(()=>{if(!document.hidden)upd();},900);upd();
 })();
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
