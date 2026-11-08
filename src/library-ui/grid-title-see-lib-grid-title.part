@@ -141,7 +141,7 @@
         ? `<div class="lib-dupe-badge" title="${dupeSize} similar photos (a RAW and its JPEG sibling clustering together is expected)">⧉${dupeSize}</div>`
         : '';
       const syncedBadge = state.syncedPaths.has(entry.path) ? `<div class="lib-synced-badge" title="Synced to Google Photos">☁</div>` : '';
-      const offlineBadge = entry.offline ? OFFLINE_BADGE_HTML : '';
+      const offlineBadge = (entry.offline ? OFFLINE_BADGE_HTML : '') + (dropStagedSet.has(entry.path) ? '<div class="lib-wait-badge" title="Saved on this Mac — will copy to the library drive when it is connected">Waiting for drive</div>' : '');
       if (isList) {
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');

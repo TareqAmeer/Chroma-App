@@ -303,7 +303,7 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}" role="button" tabindex="0">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] ?? ''}</span>
-      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
+      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + dropWaitingRowHtml() + rawVideoShortcutRows();
     // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
     // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
     // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN
@@ -379,6 +379,8 @@
         await openCatalogView('all');
       };
     });
+    const dropWaitRow = host2.querySelector('[data-drop-waiting]');
+    if (dropWaitRow) dropWaitRow.onclick = () => { if (dropQueue.staging_dir) openFolder(dropQueue.staging_dir); };
     const facesPendingRow = host2.querySelector('[data-faces-pending]');
     if (facesPendingRow) {
       facesPendingRow.onclick = async () => {

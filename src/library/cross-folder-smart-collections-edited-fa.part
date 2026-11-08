@@ -24,6 +24,32 @@ fn registry_write(name: &str, list: &[String]) {
         let _ = std::fs::write(registry_path(name), text);
     }
 }
+/// Rewrites every path-keyed store (registries + albums) from `old` to `new` — used when a file
+/// is physically moved (CHR-303: staged drop copied to the library drive) so edited/flagged/
+/// favourite/album membership follows it. Best-effort; returns how many stores changed.
+pub(crate) fn repoint_path_keyed(old: &str, new: &str) -> usize {
+    let mut changed = 0;
+    for name in ["edited", "favorites", "flagged", "rejected", "gphotos", "duplicates", "recents"] {
+        let mut list = registry_read(name);
+        if list.iter().any(|p| p == old) {
+            for p in list.iter_mut() {
+                if p == old { *p = new.to_string(); }
+            }
+            registry_write(name, &list);
+            changed += 1;
+        }
+    }
+    let _guard = ALBUMS_MUTATION_LOCK.lock();
+    let mut albums = albums_read();
+    let mut touched = false;
+    for a in albums.iter_mut() {
+        for p in a.paths.iter_mut() {
+            if p == old { *p = new.to_string(); touched = true; }
+        }
+    }
+    if touched && albums_write(&albums).is_ok() { changed += 1; }
+    changed
+}
 /// JS-facing entry point for registries beyond the fixed set (`edited`/`favorites`/`flagged`/
 /// `rejected`) written internally by set_sidecar above — used for the C2 "duplicates" and C3
 /// "gphotos" (Google-Photos-synced) smart collections, which are driven from library-ui.js/

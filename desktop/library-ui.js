@@ -2430,6 +2430,8 @@
     .lib-dupe-badge{position:absolute;bottom:4px;left:4px;min-width:18px;height:18px;padding:0 4px;
       border-radius:9px;background:rgba(0,0,0,.6);color:#e8c15a;font-size:9px;font-weight:700;
       display:flex;align-items:center;justify-content:center;z-index:2}
+    .lib-wait-badge{position:absolute;top:4px;left:4px;z-index:3;padding:2px 6px;border-radius:9px;font-size:10px;line-height:1.3;background:rgba(0,0,0,.65);color:#fff;pointer-events:auto;white-space:nowrap}
+    #lib-grid.list-view .lib-wait-badge{position:static;display:inline-block;margin-left:6px}
     .lib-synced-badge{position:absolute;bottom:4px;right:4px;width:18px;height:18px;border-radius:50%;
       background:rgba(0,0,0,.6);color:#7ec4e8;font-size:10px;display:flex;align-items:center;
       justify-content:center;z-index:2}
@@ -3758,6 +3760,10 @@
   // Shared by both the DOM fallback above and the native listener below.
   async function handleLibraryDrop(paths) {
     if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+    // CHR-303: with the Library open a Finder drop COPIES into the library folder (drive when
+    // mounted, local staging queue otherwise). With it closed, keep the old open-in-editor path.
+    const libOv = document.getElementById('lib-overlay');
+    if (!LIBTEST && window.__TAURI__ && libOv && libOv.style.display !== 'none' && dropDestDir()) { await importDroppedToLibrary(paths); return; }
     if (paths.length === 1) {
       try {
         const listing = await invoke('list_dir', { path: paths[0] });
@@ -3765,6 +3771,120 @@
       } catch (err) { /* not a directory — fall through to opening it as a photo */ }
     }
     await openPathsInEditor(paths);
+  }
+  // ── CHR-303: Finder drop -> library folder (drive) with an offline staging queue ──────────
+  // Rust side: dropimport.rs (drop_import / drop_sync / drop_retry / drop_queue_list). Staged
+  // files live in one flat local folder; the sidebar's "Waiting for drive" row opens it and
+  // cards in it carry a badge. The queue is durable in Rust; this side only polls it.
+  let dropQueue = { staging_dir: '', entries: [] };
+  let dropStagedSet = new Set();
+  let dropSyncBusy = false;
+  let dropFailuresReported = false;
+  function dropDestDir() {
+    const root = state.root;
+    if (!root) return '';
+    let cur = state.source === 'folder' && state.currentFolder ? state.currentFolder : root;
+    if (dropQueue.staging_dir && (cur === dropQueue.staging_dir || cur.startsWith(dropQueue.staging_dir + '/'))) cur = root;
+    if (!(cur === root || cur.startsWith(root.replace(/\/$/, '') + '/'))) cur = root;
+    return cur;
+  }
+  async function refreshDropQueue() {
+    if (LIBTEST || !window.__TAURI__) return dropQueue;
+    try {
+      const q = await invoke('drop_queue_list');
+      const sig = (d) => d.entries.length + ':' + d.entries.map((e) => e.status).join();
+      const before = sig(dropQueue);
+      dropQueue = q || { staging_dir: '', entries: [] };
+      dropStagedSet = new Set(dropQueue.entries.map((e) => e.staged));
+      if (before !== sig(dropQueue)) { renderCollections(); renderGrid(); }
+    } catch (e) { /* best-effort */ }
+    return dropQueue;
+  }
+  function dropWaitingRowHtml() {
+    const n = dropQueue.entries.length;
+    if (!n) return '';
+    const failed = dropQueue.entries.filter((e) => e.status === 'failed').length;
+    return `<div class="lib-coll-row${state.currentFolder === dropQueue.staging_dir && state.source === 'folder' ? ' on' : ''}" data-drop-waiting="1" role="button" tabindex="0" title="Dropped photos saved on this Mac until the library drive is connected${failed ? ` (${failed} failed — retry from the Jobs panel)` : ''}">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Waiting for drive</span>
+        <span class="lib-coll-count">${n}</span>
+      </div>`;
+  }
+  async function indexDroppedDest(dirs) {
+    for (const dir of dirs) {
+      try {
+        const root = await invoke('catalog_add_root', { path: dir, kind: 'browse' });
+        if (root) await invoke('catalog_scan', { volumeId: root.volume_id });
+      } catch (e) { console.error('index dropped dest', dir, e); }
+    }
+    refreshCatalogCounts();
+    if (state.source === 'folder' && state.currentFolder && dirs.some((d) => d === state.currentFolder || d.startsWith(state.currentFolder + '/'))) {
+      await openFolder(state.currentFolder);
+    }
+  }
+  const dropDirOf = (p) => p.slice(0, p.lastIndexOf('/'));
+  async function importDroppedToLibrary(paths) {
+    const dest = dropDestDir();
+    const folderName = dest.split('/').filter(Boolean).pop() || dest;
+    activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'copy', done: 0, total: 0, current: 'Preparing import' });
+    let r;
+    try { r = await invoke('drop_import', { paths, destDir: dest }); }
+    catch (err) {
+      activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'done', done: 0, total: 0, failed: [String(err)] });
+      toast(`Could not import the drop: ${err}`, false);
+      return;
+    }
+    const n = r.copied.length + r.staged.length;
+    activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'done', done: n, total: n + r.failed.length,
+      current: r.staged.length ? `${r.copied.length} copied, ${r.staged.length} waiting for drive` : `${r.copied.length} copied to ${folderName}`, failed: r.failed.length ? r.failed : undefined });
+    if (!n && !r.failed.length) { toast('Nothing to import — the drop had no supported photos.', false); return; }
+    const parts = [];
+    if (r.copied.length) parts.push(`Imported ${r.copied.length} photo${r.copied.length > 1 ? 's' : ''} to ${folderName}`);
+    if (r.staged.length) parts.push(`${r.staged.length} saved locally — waiting for the library drive`);
+    if (r.failed.length) parts.push(`${r.failed.length} failed`);
+    toast(parts.join('. ') + '.', !r.failed.length);
+    if (r.copied.length) await indexDroppedDest([...new Set(r.copied.map(([, d]) => dropDirOf(d)))]);
+    if (r.staged.length) {
+      await refreshDropQueue();
+      if (!r.copied.length && dropQueue.staging_dir) await openFolder(dropQueue.staging_dir);
+    }
+  }
+  function reportDropFailures() {
+    const failed = dropQueue.entries.filter((e) => e.status === 'failed');
+    if (!failed.length || dropFailuresReported) return;
+    dropFailuresReported = true;
+    activityUpdate('drop-sync', { jobId: 'drop-sync', label: 'Copying waiting photos to the library drive', stage: 'done', done: 0, total: failed.length,
+      current: 'Copy to the drive failed — retry', failed: failed.map((e) => `${e.name}: ${e.error}`), dropRetry: true });
+  }
+  async function dropSyncTick(manual) {
+    if (LIBTEST || !window.__TAURI__ || dropSyncBusy) return;
+    dropSyncBusy = true;
+    try {
+      await refreshDropQueue();
+      reportDropFailures();
+      const need = dropQueue.entries.some((e) => e.status === 'waiting' || (manual && e.status === 'failed'));
+      if (!need) return;
+      if (manual) dropFailuresReported = false;
+      const r = await invoke(manual ? 'drop_retry' : 'drop_sync');
+      if (r.busy) return;
+      if (r.moved.length || r.failed.length) {
+        activityUpdate('drop-sync', { jobId: 'drop-sync', label: 'Copying waiting photos to the library drive', stage: 'done', done: r.moved.length, total: r.moved.length + r.failed.length,
+          current: `${r.moved.length} copied to the drive`, failed: r.failed.length ? r.failed : undefined, dropRetry: r.failed.length > 0 });
+      }
+      if (r.moved.length) {
+        toast(`${r.moved.length} waiting photo${r.moved.length > 1 ? 's' : ''} copied to the library drive.`, true);
+        const wasStaging = state.currentFolder === dropQueue.staging_dir;
+        await refreshDropQueue();
+        await indexDroppedDest([...new Set(r.moved.map(([, d]) => dropDirOf(d)))]);
+        if (wasStaging && state.source === 'folder') await openFolder(dropQueue.entries.length ? dropQueue.staging_dir : state.root);
+      }
+      await refreshDropQueue();
+    } catch (e) { console.error('drop sync', e); }
+    finally { dropSyncBusy = false; }
+  }
+  window.chromasmithDropSync = dropSyncTick;
+  if (!LIBTEST && window.__TAURI__) {
+    setTimeout(() => dropSyncTick(false), 3000);
+    setInterval(() => { if (dropQueue.entries.length) dropSyncTick(false); }, 5000);
   }
   // ── Native OS file drag&drop bridge ───────────────────────────────────────────────────────
   // dragDropEnabled:true (tauri.conf.json) makes Tauri itself watch the OS-level drag session
@@ -10146,7 +10266,7 @@
         ? `<div class="lib-dupe-badge" title="${dupeSize} similar photos (a RAW and its JPEG sibling clustering together is expected)">⧉${dupeSize}</div>`
         : '';
       const syncedBadge = state.syncedPaths.has(entry.path) ? `<div class="lib-synced-badge" title="Synced to Google Photos">☁</div>` : '';
-      const offlineBadge = entry.offline ? OFFLINE_BADGE_HTML : '';
+      const offlineBadge = (entry.offline ? OFFLINE_BADGE_HTML : '') + (dropStagedSet.has(entry.path) ? '<div class="lib-wait-badge" title="Saved on this Mac — will copy to the library drive when it is connected">Waiting for drive</div>' : '');
       if (isList) {
         const m = state.meta.get(entry.path) || {};
         const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -16141,7 +16261,7 @@
     const status = job.outcome === 'cancelled' || job.stage === 'cancelled' ? 'Cancelled' : job.outcome === 'interrupted' || job.stage === 'interrupted' ? 'Interrupted' : job.outcome === 'partial' ? 'Partial' : job.outcome === 'failed' || job.stage === 'failed' || (job.failed && job.failed.length) ? 'Failed' : 'Completed';
     const id = job.rawReviewJobId ? `raw-review-job-${job.rawReviewJobId}` : String(job.jobId || job.batchId || job.id || job.kind || 'background-job');
     const failedItems = Array.isArray(job.failed) ? job.failed.filter(item => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 240)) : [];
-    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Number(job.finishedAt) || Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, rawReviewJobId: Number.isSafeInteger(job.rawReviewJobId) && job.rawReviewJobId > 0 ? job.rawReviewJobId : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery) };
+    const row = { id, label: String(job.label || job.kind || 'Background job'), status, finishedAt: Number(job.finishedAt) || Date.now(), done: Number(job.done || 0), total: Number(job.total || 0), failedCount: Number(job.failedCount || (Array.isArray(job.failed) ? job.failed.length : 0)), failedItems, batchId: Number.isSafeInteger(Number(job.batchId)) && Number(job.batchId) > 0 ? Number(job.batchId) : null, rawReviewJobId: Number.isSafeInteger(job.rawReviewJobId) && job.rawReviewJobId > 0 ? job.rawReviewJobId : null, detail: String(job.current || '').slice(0, 160), revealPath: typeof job.revealPath === 'string' ? job.revealPath : '', recovery: normalizeCatalogRecovery(job.recovery), dropRetry: job.dropRetry === true };
     const existing = activityHistory.findIndex(item => item.id === id);
     if (existing >= 0) activityHistory.splice(existing, 1);
     activityHistory.unshift(row); activityHistory.splice(ACTIVITY_HISTORY_LIMIT); saveActivityHistory();
@@ -16445,6 +16565,9 @@
         if (row?.batchId) recipeBatchResults(row.batchId).catch((err) => toast(humanizeErr('open batch results', err), 'err'));
       };
     });
+    container.querySelectorAll('[data-job-drop-retry]').forEach((button) => {
+      button.onclick = (e) => { e.preventDefault(); e.stopPropagation(); dropSyncTick(true); };
+    });
     container.querySelectorAll('[data-job-index-resume-id]').forEach((button) => {
       button.onclick = (e) => {
         e.preventDefault(); e.stopPropagation();
@@ -16465,7 +16588,7 @@
     if (!activityHistory.length) return '';
     return `<details class="lib-act-history" aria-label="Recent job history" ${open ? 'open' : ''} style="padding:8px 11px;border-top:1px solid var(--bdr)">
       <summary style="font-size:11px;font-weight:600;margin-bottom:4px;cursor:pointer">Recent jobs (${activityHistory.length})</summary>${activityHistory.slice(0, 8).map(row =>
-        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.rawReviewJobId && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-raw-resume-id="${esc(row.id)}">Resume RAW preparation</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
+        `<div class="lib-act-stage" data-job-history-id="${esc(row.id)}"><span>${esc(row.status)}</span><span>${esc(row.label)}${row.failedCount ? ` · ${row.failedCount} failed` : ''}${row.failedItems?.length ? `<details style="margin-top:3px"><summary style="cursor:pointer">Failed items</summary>${row.failedItems.map(item => `<div style="font-size:10px;color:var(--mut);padding:1px 0;overflow-wrap:anywhere">${esc(item)}</div>`).join('')}${row.failedCount > row.failedItems.length ? `<div style="font-size:10px;color:var(--mut)">…and ${row.failedCount - row.failedItems.length} more</div>` : ''}</details>` : ''}${row.detail ? `<div class="lib-act-history-detail" style="font-size:10px;color:var(--mut);padding-top:2px">${esc(row.detail)}</div>` : ''}</span><span class="lib-act-stage-n">${row.total ? `${row.done}/${row.total}` : ''}</span>${row.batchId ? `<button type="button" class="btn bgh" data-job-batch-results-id="${esc(row.id)}">Results / resume</button>` : ''}${row.rawReviewJobId && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-raw-resume-id="${esc(row.id)}">Resume RAW preparation</button>` : ''}${row.dropRetry && row.status !== 'Completed' ? `<button type="button" class="btn bgh" data-job-drop-retry="1" title="Try copying the waiting photos to the library drive again">Retry copy</button>` : ''}${row.recovery ? `<button type="button" class="btn bgh" data-job-index-resume-id="${esc(row.id)}" title="Retries marker-backed phases only; other phases continue during a normal library scan">Retry supported phases</button>` : ''}${row.revealPath ? `<button type="button" class="btn bgh" data-job-reveal-id="${esc(row.id)}" title="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}" aria-label="Show exported file in ${esc(window.CS_PLATFORM?.revealLabel || 'Finder')}">Show</button>` : ''}</div>`
       ).join('')}</details>`;
   }
 
@@ -18249,7 +18372,7 @@
       <div class="lib-coll-row${state.source === c.name ? ' on' : ''}" data-coll="${c.name}" role="button" tabindex="0">
         <span class="lib-coll-ic">${c.icon}</span><span class="lib-coll-lb">${c.label}</span>
         <span class="lib-coll-count">${collectionCounts[c.name] ?? ''}</span>
-      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + rawVideoShortcutRows();
+      </div>`).join('') + reviewRowHtml() + facesPendingRowHtml() + dropWaitingRowHtml() + rawVideoShortcutRows();
     // Sidebar section order (UI_SPEC.md wireframe order): All Photos (catalogSectionHtml) →
     // By Date (dateSectionHtml, its own top-level section) → Collections → People & Pets →
     // Albums → Drives → Devices → Folders → Cloud. Each section function supplies its OWN
@@ -18325,6 +18448,8 @@
         await openCatalogView('all');
       };
     });
+    const dropWaitRow = host2.querySelector('[data-drop-waiting]');
+    if (dropWaitRow) dropWaitRow.onclick = () => { if (dropQueue.staging_dir) openFolder(dropQueue.staging_dir); };
     const facesPendingRow = host2.querySelector('[data-faces-pending]');
     if (facesPendingRow) {
       facesPendingRow.onclick = async () => {

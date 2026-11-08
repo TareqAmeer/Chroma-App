@@ -1,0 +1,114 @@
+  // ── CHR-303: Finder drop -> library folder (drive) with an offline staging queue ──────────
+  // Rust side: dropimport.rs (drop_import / drop_sync / drop_retry / drop_queue_list). Staged
+  // files live in one flat local folder; the sidebar's "Waiting for drive" row opens it and
+  // cards in it carry a badge. The queue is durable in Rust; this side only polls it.
+  let dropQueue = { staging_dir: '', entries: [] };
+  let dropStagedSet = new Set();
+  let dropSyncBusy = false;
+  let dropFailuresReported = false;
+  function dropDestDir() {
+    const root = state.root;
+    if (!root) return '';
+    let cur = state.source === 'folder' && state.currentFolder ? state.currentFolder : root;
+    if (dropQueue.staging_dir && (cur === dropQueue.staging_dir || cur.startsWith(dropQueue.staging_dir + '/'))) cur = root;
+    if (!(cur === root || cur.startsWith(root.replace(/\/$/, '') + '/'))) cur = root;
+    return cur;
+  }
+  async function refreshDropQueue() {
+    if (LIBTEST || !window.__TAURI__) return dropQueue;
+    try {
+      const q = await invoke('drop_queue_list');
+      const sig = (d) => d.entries.length + ':' + d.entries.map((e) => e.status).join();
+      const before = sig(dropQueue);
+      dropQueue = q || { staging_dir: '', entries: [] };
+      dropStagedSet = new Set(dropQueue.entries.map((e) => e.staged));
+      if (before !== sig(dropQueue)) { renderCollections(); renderGrid(); }
+    } catch (e) { /* best-effort */ }
+    return dropQueue;
+  }
+  function dropWaitingRowHtml() {
+    const n = dropQueue.entries.length;
+    if (!n) return '';
+    const failed = dropQueue.entries.filter((e) => e.status === 'failed').length;
+    return `<div class="lib-coll-row${state.currentFolder === dropQueue.staging_dir && state.source === 'folder' ? ' on' : ''}" data-drop-waiting="1" role="button" tabindex="0" title="Dropped photos saved on this Mac until the library drive is connected${failed ? ` (${failed} failed — retry from the Jobs panel)` : ''}">
+        <span class="lib-coll-ic">${ic('image', 14)}</span><span class="lib-coll-lb">Waiting for drive</span>
+        <span class="lib-coll-count">${n}</span>
+      </div>`;
+  }
+  async function indexDroppedDest(dirs) {
+    for (const dir of dirs) {
+      try {
+        const root = await invoke('catalog_add_root', { path: dir, kind: 'browse' });
+        if (root) await invoke('catalog_scan', { volumeId: root.volume_id });
+      } catch (e) { console.error('index dropped dest', dir, e); }
+    }
+    refreshCatalogCounts();
+    if (state.source === 'folder' && state.currentFolder && dirs.some((d) => d === state.currentFolder || d.startsWith(state.currentFolder + '/'))) {
+      await openFolder(state.currentFolder);
+    }
+  }
+  const dropDirOf = (p) => p.slice(0, p.lastIndexOf('/'));
+  async function importDroppedToLibrary(paths) {
+    const dest = dropDestDir();
+    const folderName = dest.split('/').filter(Boolean).pop() || dest;
+    activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'copy', done: 0, total: 0, current: 'Preparing import' });
+    let r;
+    try { r = await invoke('drop_import', { paths, destDir: dest }); }
+    catch (err) {
+      activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'done', done: 0, total: 0, failed: [String(err)] });
+      toast(`Could not import the drop: ${err}`, false);
+      return;
+    }
+    const n = r.copied.length + r.staged.length;
+    activityUpdate('drop-import', { jobId: 'drop-import', label: 'Importing dropped photos', stage: 'done', done: n, total: n + r.failed.length,
+      current: r.staged.length ? `${r.copied.length} copied, ${r.staged.length} waiting for drive` : `${r.copied.length} copied to ${folderName}`, failed: r.failed.length ? r.failed : undefined });
+    if (!n && !r.failed.length) { toast('Nothing to import — the drop had no supported photos.', false); return; }
+    const parts = [];
+    if (r.copied.length) parts.push(`Imported ${r.copied.length} photo${r.copied.length > 1 ? 's' : ''} to ${folderName}`);
+    if (r.staged.length) parts.push(`${r.staged.length} saved locally — waiting for the library drive`);
+    if (r.failed.length) parts.push(`${r.failed.length} failed`);
+    toast(parts.join('. ') + '.', !r.failed.length);
+    if (r.copied.length) await indexDroppedDest([...new Set(r.copied.map(([, d]) => dropDirOf(d)))]);
+    if (r.staged.length) {
+      await refreshDropQueue();
+      if (!r.copied.length && dropQueue.staging_dir) await openFolder(dropQueue.staging_dir);
+    }
+  }
+  function reportDropFailures() {
+    const failed = dropQueue.entries.filter((e) => e.status === 'failed');
+    if (!failed.length || dropFailuresReported) return;
+    dropFailuresReported = true;
+    activityUpdate('drop-sync', { jobId: 'drop-sync', label: 'Copying waiting photos to the library drive', stage: 'done', done: 0, total: failed.length,
+      current: 'Copy to the drive failed — retry', failed: failed.map((e) => `${e.name}: ${e.error}`), dropRetry: true });
+  }
+  async function dropSyncTick(manual) {
+    if (LIBTEST || !window.__TAURI__ || dropSyncBusy) return;
+    dropSyncBusy = true;
+    try {
+      await refreshDropQueue();
+      reportDropFailures();
+      const need = dropQueue.entries.some((e) => e.status === 'waiting' || (manual && e.status === 'failed'));
+      if (!need) return;
+      if (manual) dropFailuresReported = false;
+      const r = await invoke(manual ? 'drop_retry' : 'drop_sync');
+      if (r.busy) return;
+      if (r.moved.length || r.failed.length) {
+        activityUpdate('drop-sync', { jobId: 'drop-sync', label: 'Copying waiting photos to the library drive', stage: 'done', done: r.moved.length, total: r.moved.length + r.failed.length,
+          current: `${r.moved.length} copied to the drive`, failed: r.failed.length ? r.failed : undefined, dropRetry: r.failed.length > 0 });
+      }
+      if (r.moved.length) {
+        toast(`${r.moved.length} waiting photo${r.moved.length > 1 ? 's' : ''} copied to the library drive.`, true);
+        const wasStaging = state.currentFolder === dropQueue.staging_dir;
+        await refreshDropQueue();
+        await indexDroppedDest([...new Set(r.moved.map(([, d]) => dropDirOf(d)))]);
+        if (wasStaging && state.source === 'folder') await openFolder(dropQueue.entries.length ? dropQueue.staging_dir : state.root);
+      }
+      await refreshDropQueue();
+    } catch (e) { console.error('drop sync', e); }
+    finally { dropSyncBusy = false; }
+  }
+  window.chromasmithDropSync = dropSyncTick;
+  if (!LIBTEST && window.__TAURI__) {
+    setTimeout(() => dropSyncTick(false), 3000);
+    setInterval(() => { if (dropQueue.entries.length) dropSyncTick(false); }, 5000);
+  }

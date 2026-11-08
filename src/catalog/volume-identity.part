@@ -92,7 +92,7 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
 /// the mount point (needed by the caller to compute `rel_path`). `last_path`/`last_seen`/
 /// `total_bytes` are refreshed on every call — they're a CACHE of where the volume was last
 /// seen, never its identity.
-fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, String)> {
+pub(crate) fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, String)> {
     let (uuid, mount_point, is_local) = volume_identity(path);
     let label = if is_local {
         "This Mac".to_string()

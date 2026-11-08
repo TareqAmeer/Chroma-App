@@ -79,6 +79,7 @@ mod videothumb;
 mod winvideothumb;
 mod subject;
 mod ingest;
+mod dropimport;
 mod catalog;
 mod smart_albums;
 mod catalog_backup;
@@ -3823,6 +3824,10 @@ fn main() {
             ingest::ingest_copy,
             ingest::ingest_cancel,
             ingest::eject_volume,
+            dropimport::drop_import,
+            dropimport::drop_sync,
+            dropimport::drop_retry,
+            dropimport::drop_queue_list,
             session::session_create,
             catalog::catalog_volumes,
             catalog::queue_offline_edit,

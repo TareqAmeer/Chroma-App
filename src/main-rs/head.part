@@ -79,6 +79,7 @@ mod videothumb;
 mod winvideothumb;
 mod subject;
 mod ingest;
+mod dropimport;
 mod catalog;
 mod smart_albums;
 mod catalog_backup;

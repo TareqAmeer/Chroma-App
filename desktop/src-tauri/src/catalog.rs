@@ -1049,7 +1049,7 @@ fn volume_identity(path: &Path) -> (String, String, bool) {
 /// the mount point (needed by the caller to compute `rel_path`). `last_path`/`last_seen`/
 /// `total_bytes` are refreshed on every call — they're a CACHE of where the volume was last
 /// seen, never its identity.
-fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, String)> {
+pub(crate) fn upsert_volume(conn: &Connection, path: &Path) -> rusqlite::Result<(i64, String)> {
     let (uuid, mount_point, is_local) = volume_identity(path);
     let label = if is_local {
         "This Mac".to_string()
@@ -9880,7 +9880,7 @@ pub fn registry_paths_outside_library(conn: &Connection, paths: &[String]) -> st
     out
 }
 
-fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
+pub(crate) fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
     let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
     let mut volumes: Vec<(i64, String, bool)> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)))

@@ -99,6 +99,10 @@
   // Shared by both the DOM fallback above and the native listener below.
   async function handleLibraryDrop(paths) {
     if (state.source === 'lr') return; // cloud album view has nowhere local to import into
+    // CHR-303: with the Library open a Finder drop COPIES into the library folder (drive when
+    // mounted, local staging queue otherwise). With it closed, keep the old open-in-editor path.
+    const libOv = document.getElementById('lib-overlay');
+    if (!LIBTEST && window.__TAURI__ && libOv && libOv.style.display !== 'none' && dropDestDir()) { await importDroppedToLibrary(paths); return; }
     if (paths.length === 1) {
       try {
         const listing = await invoke('list_dir', { path: paths[0] });

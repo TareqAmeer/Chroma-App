@@ -243,7 +243,7 @@ pub fn registry_paths_outside_library(conn: &Connection, paths: &[String]) -> st
     out
 }
 
-fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
+pub(crate) fn find_photo_by_abs_path(conn: &Connection, path: &str) -> Option<i64> {
     let mut stmt = conn.prepare("SELECT id, last_path, is_local FROM volumes").ok()?;
     let mut volumes: Vec<(i64, String, bool)> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, i64>(2)? != 0)))

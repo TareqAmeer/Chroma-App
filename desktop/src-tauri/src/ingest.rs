@@ -226,7 +226,7 @@ fn ext_lower(p: &Path) -> String {
 /// truth — see that module's doc comment) plus video, which media_kind doesn't classify.
 /// Sidecars are deliberately NOT here: they ride along with their photo rather than being
 /// importable alone.
-fn media_kind(ext: &str) -> Option<&'static str> {
+pub(crate) fn media_kind(ext: &str) -> Option<&'static str> {
     if crate::formats::is_video_ext(ext) {
         return Some("video");
     }
@@ -510,7 +510,7 @@ struct DestinationIndex {
     candidates: std::collections::HashMap<(u64, String), Vec<PathBuf>>,
     hashes: std::collections::HashMap<PathBuf, Option<blake3::Hash>>,
 }
-fn media_hash(path: &Path) -> Option<blake3::Hash> {
+pub(crate) fn media_hash(path: &Path) -> Option<blake3::Hash> {
     let mut file = std::fs::File::open(path).ok()?;
     let mut hash = blake3::Hasher::new();
     hash.update_reader(&mut file).ok()?;
@@ -646,7 +646,7 @@ fn generated_output_name(f: &CardFile, options: &IngestOptions, sequence: usize)
     }
 }
 
-fn planned_unique_dest(dir: &Path, name: &str, reserved: &mut std::collections::HashSet<String>) -> PathBuf {
+pub(crate) fn planned_unique_dest(dir: &Path, name: &str, reserved: &mut std::collections::HashSet<String>) -> PathBuf {
     let base = Path::new(name);
     let stem = base.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
     let ext = base.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
@@ -716,7 +716,7 @@ pub async fn ingest_preview(files: Vec<CardFile>, options: IngestOptions, duplic
 
 /// Copies one file and verifies the result by size, removing a partial write so a failed copy can
 /// never leave a truncated file that later looks importable.
-fn copy_verified(src: &Path, dest: &Path) -> Result<u64, String> {
+pub(crate) fn copy_verified(src: &Path, dest: &Path) -> Result<u64, String> {
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
@@ -743,7 +743,7 @@ fn copy_verified(src: &Path, dest: &Path) -> Result<u64, String> {
 
 /// Sidecars sharing a photo's stem, in the same directory (`.xmp`, `.rrdata` — including
 /// Panasonic's `NAME.RW2.rrdata` double extension).
-fn sidecars_for(src: &Path) -> Vec<PathBuf> {
+pub(crate) fn sidecars_for(src: &Path) -> Vec<PathBuf> {
     let Some(dir) = src.parent() else { return Vec::new() };
     let Some(stem) = src.file_stem().and_then(|s| s.to_str()) else { return Vec::new() };
     let full = src.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -760,7 +760,7 @@ fn sidecars_for(src: &Path) -> Vec<PathBuf> {
 
 /// Copies the sidecars paired to `src` beside its final destination path. Reused for the primary
 /// and optional second copy so XMP/rrdata follow the photo consistently through renaming.
-fn copy_sidecars_to(src: &Path, dest: &Path) -> Vec<(String, String)> {
+pub(crate) fn copy_sidecars_to(src: &Path, dest: &Path) -> Vec<(String, String)> {
     let Some(dir) = dest.parent() else { return Vec::new() };
     let source_stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("photo");
     let source_ext = src.extension().and_then(|s| s.to_str()).unwrap_or("");
