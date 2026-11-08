@@ -201,8 +201,10 @@ fn progress(app: Option<&tauri::AppHandle>, job: &str, label: &str, done: usize,
 }
 
 #[tauri::command(async)]
-pub fn drop_import(app: tauri::AppHandle, paths: Vec<String>, dest_dir: String) -> Result<DropImportResult, String> {
-    drop_import_run(Some(&app), paths, dest_dir)
+pub fn drop_import(app: tauri::AppHandle, paths: Vec<String>, dest_dir: String, cat: tauri::State<CatalogState>) -> Result<DropImportResult, String> {
+    let res = drop_import_run(Some(&app), paths, dest_dir)?;
+    invalidate_walked(Some(&cat), res.copied.iter().filter_map(|(_, d)| Path::new(d).parent().map(|p| p.to_path_buf())));
+    Ok(res)
 }
 
 fn drop_import_run(app: Option<&tauri::AppHandle>, paths: Vec<String>, dest_dir: String) -> Result<DropImportResult, String> {
@@ -253,6 +255,27 @@ fn drop_import_run(app: Option<&tauri::AppHandle>, paths: Vec<String>, dest_dir:
     }
     progress(app, "drop-import", "Importing dropped photos", total, total, "");
     Ok(res)
+}
+
+/// The catalog's launch scan skips a root whose directories' mtimes look unchanged, and some
+/// external filesystems (exFAT via fskit, observed on the library drive) do not bump a directory's
+/// mtime when a file is added to it. Forget the stored baseline for the folders we just wrote so the
+/// next scan re-walks them and indexes the new files.
+fn invalidate_walked(cat: Option<&CatalogState>, dirs: impl Iterator<Item = PathBuf>) {
+    let Some(cat) = cat else { return };
+    let Ok(conn) = cat.conn.lock() else { return };
+    let mut seen = std::collections::HashSet::new();
+    for dir in dirs {
+        if !seen.insert(dir.clone()) { continue; }
+        let Ok(canon) = dunce::canonicalize(&dir) else { continue };
+        let Ok((vol, mount)) = crate::catalog::upsert_volume(&conn, &canon) else { continue };
+        let cs = canon.to_string_lossy().into_owned();
+        let rel = cs.strip_prefix(&mount).unwrap_or(&cs).trim_start_matches(['/', '\\']).replace('\\', "/");
+        let _ = conn.execute(
+            "DELETE FROM walked_dirs WHERE root_id IN (SELECT id FROM roots WHERE volume_id = ?1) AND (rel_dir = ?2 OR rel_dir LIKE ?3)",
+            rusqlite::params![vol, rel, format!("{rel}/%")],
+        );
+    }
 }
 
 fn repoint_catalog(cat: Option<&CatalogState>, old: &str, new: &str) {
@@ -321,6 +344,7 @@ fn run_sync(app: Option<&tauri::AppHandle>, cat: Option<&CatalogState>, force_fa
         }
         queue_write(&q)?;
     }
+    invalidate_walked(cat, res.moved.iter().filter_map(|(_, d)| Path::new(d).parent().map(|p| p.to_path_buf())));
     if total > 0 {
         progress(app, "drop-sync", "Copying waiting photos to the library drive", total, total, "");
     }
