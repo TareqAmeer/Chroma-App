@@ -18,7 +18,7 @@ window.chromasmithRenderCurrentGraded=async function(maxEdge){
   const savedMasks=fxState.masks;fxState.masks=it.masks||savedMasks;
   const P=getFXParams(it.adjustOverride||undefined);
   fxState.masks=savedMasks;
-  const src=geomCanvas(it);
+  const src=geomCanvas(await fxHlItemFor(it,P));
   const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
   const proc=await processToCanvas(P,src,iw,ih,()=>{});
   const k=Math.min(1,(maxEdge||2400)/Math.max(proc.width,proc.height));
@@ -398,7 +398,7 @@ async function _exportFXRun(opts){
         const P=_expPs[idx];
         if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
         tm.geom0=performance.now();
-        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);
+        const src=geomCanvas(await fxHlItemFor(decodedJpeg?{...it,img:decodedJpeg}:it,P));
         tm.geom1=performance.now();   // apply this image's rotate/flip/straighten/crop first
         if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;

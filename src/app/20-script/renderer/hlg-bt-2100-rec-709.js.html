@@ -578,6 +578,12 @@ if(adjOn>.5&&adjTexture!=0.){
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
 if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
+// CHR-289 Retinex DRC: scene-linear gain from the illumination map, after the input transform and before the look LUT and exposure. Gain is applied in linear light (hue preserving); maxGain is 4 (+-2 stops).
+if(drcOn>.5){
+  float drcD=texture(drcMap,uvOffL+uv*uvScaleL).r;
+  float drcG=exp(clamp(-(drcD<0.0?drcSh:drcHl)*drcD,-1.3862944,1.3862944));
+  c.rgb=vec3(l2sp(s2lp(c.r)*drcG),l2sp(s2lp(c.g)*drcG),l2sp(s2lp(c.b)*drcG));
+}
 if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,c.rgb*sc+of).rgb;
   if(useStockShoulder>.5){
     // Per-channel: only headroom past white gets replaced (log2<=0 => c.rgb<=1.0 => identity,

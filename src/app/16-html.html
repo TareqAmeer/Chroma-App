@@ -373,6 +373,17 @@
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
           </div>
+          <!-- CHR-288 / CHR-289: collapsed by default (docs/plans/ux-progressive-disclosure.md P1/P3). Open state is remembered per card in chromasmith_fx_adv_open. -->
+          <details class="fx-hint-x fx-adv" id="fx-adv-adjust" data-advkey="adjust">
+            <summary>Advanced</summary>
+            <div class="fx-adv-body">
+          <div class="fx-sub" title="Rebuilds channels that clipped to white so bright areas keep a believable colour instead of a magenta or cyan cast. Off leaves the image unchanged. Display-referred: it works on the developed frame, so it recovers hue at white, not extra brightness.">Highlight reconstruction</div>
+          <div class="fx-row" title="0 Off, 1 Blend (neutralise the cast), 2 Colour propagation (fill hue from the surroundings), 3 Inpaint opposed (estimate from the other two channels, per clipped region)."><div class="fx-label">Mode</div><input class="fx-slider" type="range" min="0" max="3" step="1" value="0" id="sl-adj-hl-mode" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hl-mode">Off</div></div>
+          <div class="fx-sub" title="Retinex-style dynamic-range compression: an edge-aware illumination estimate (guided filter, three scales) is compressed about the photo's own average brightness, in linear light, before the look and exposure. Zero leaves the image unchanged.">Dynamic range (Retinex)</div>
+          <div class="fx-row" title="Lifts the dark side of the illumination, up to +2 stops. Zero leaves the image unchanged."><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-drc-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-drc-sh">0</div></div>
+          <div class="fx-row" title="Pulls down the bright side of the illumination, up to -2 stops. Zero leaves the image unchanged."><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-drc-hl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-drc-hl">0</div></div>
+            </div>
+          </details>
         </div>
       </div>
       <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a

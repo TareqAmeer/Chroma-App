@@ -291,3 +291,26 @@ function healApply(img,ops){
   return out;
 }
 // Dab centres (image px) for one retouch op: just the spot centre, or a path resampled every r/2.
+function healStrokeDabs(op,w,h,r){
+  if(!op.pts||op.pts.length<2)return[[op.x*w,op.y*h]];
+  const step=Math.max(1,r*0.5),out=[[op.pts[0][0]*w,op.pts[0][1]*h]];
+  let acc=0;
+  for(let i=1;i<op.pts.length&&out.length<600;i++){
+    let ax=op.pts[i-1][0]*w,ay=op.pts[i-1][1]*h;const bx=op.pts[i][0]*w,by=op.pts[i][1]*h;
+    let seg=Math.hypot(bx-ax,by-ay);
+    while(acc+seg>=step&&out.length<600){
+      const t=(step-acc)/seg;ax+=(bx-ax)*t;ay+=(by-ay)*t;out.push([ax,ay]);seg=Math.hypot(bx-ax,by-ay);acc=0;
+    }
+    acc+=seg;
+  }
+  return out;
+}
+function geomCanvas(item){
+  const g=item.geom||defGeom();
+  const patches=(item.inpaint||[]).some(p=>p.enabled!==false);
+  if(patches&&!window.chromasmithInpaintApply)throw Error('Accepted erase repair assets require the desktop app');
+  const healed=healApply(item.img,item.heal);
+  const source=patches?window.chromasmithInpaintApply(healed,item):healed;
+  const identity=!item.heal&&!patches&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
+  return identity?item.img:applyGeomTo(source,g);
+}

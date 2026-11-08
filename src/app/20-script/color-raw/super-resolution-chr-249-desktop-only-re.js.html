@@ -38,6 +38,7 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
   if(renderer===FX&&typeof _fxTilesClear==='function')_fxTilesClear();
   if(typeof renderer.releaseBufferPool==='function')renderer.releaseBufferPool();
   try{
+    await fxDrcApplyFor(renderer,P,src);
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     // Sub-phase times for the export's EXPORT_DIAG line (renderer._p2cTimes, read by exportFX).
     const T={},now=()=>performance.now();let t=now();renderer._p2cTimes=T;

@@ -627,6 +627,17 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.hasDepthTx=true;}
+  // CHR-289: per-photo Retinex illumination map (R16F, d = log illumination - log anchor), uploaded once per
+  // photo/geometry like the depth map; strengths are uniforms, so slider moves never re-upload it.
+  setDrcTex(d,w,h,identity=d){const gl=this.gl;this._drcSnapshot={d:new Float32Array(d),w,h,identity};this._drcIdentity=identity;if(!this.drcTx)this.drcTx=gl.createTexture();
+    this.drcTx.__v=(this.drcTx.__v||0)+1;
+    gl.bindTexture(gl.TEXTURE_2D,this.drcTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.R16F,w,h,0,gl.RED,gl.FLOAT,d);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  clearDrcTex(){if(this.drcTx){this.gl.deleteTexture(this.drcTx);this.drcTx=null;}this._drcSnapshot=null;this._drcIdentity=null;}
   clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this._depthSourceIdentity=null;this._depthMapVersion=(this._depthMapVersion||0)+1;this._mskDepthCoverageCache=null;this.hasDepthTx=false;}
   resetTextureSnapshotFrom(source){
     if(source._lutSnapshot)this.setLUT(source._lutSnapshot);
@@ -641,17 +652,18 @@ void main(){
     if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
     else{if(this.txs.stockShoulder)this.gl.deleteTexture(this.txs.stockShoulder);this.txs.stockShoulder=null;this._stockShoulderSnapshot=null;}
     this.clearDepthTex();
+    if(source._drcSnapshot){const q=source._drcSnapshot;this.setDrcTex(q.d,q.w,q.h,q.identity);}else this.clearDrcTex();
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='drcTx'){gl.bindTexture(gl.TEXTURE_2D,this.drcTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,drcMap:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -980,13 +992,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
+      drcMap:12,drcOn:(A.enabled&&A.drc&&(A.drc.shadows||A.drc.highlights)&&this.drcTx)?1:0,drcSh:(A.drc&&A.drc.shadows)||0,drcHl:(A.drc&&A.drc.highlights)||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       ...rtColourUniforms(A.rtColour,A.enabled),
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]};
-    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true]],lutSrc,opts,anyGate);
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true],[12,'drcTx',false]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the

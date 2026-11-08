@@ -32,15 +32,69 @@ function drcGuided(I,w,h,r,eps){
   for(let i=0;i<n;i++)q[i]=ma[i]*I[i]+mb[i];
   return q;
 }
+// The illumination estimate on its own (log domain, before any strength is applied): mean over the
+// scales of the guided-filtered log luminance. Independent of shadows/highlights, so a caller can
+// compute it ONCE per photo and re-derive the gain on the GPU for every slider move.
+function drcRetinexBase(Y,w,h,o){
+  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,ge=o.gfEps||0.04;
+  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
+  const L=new Float32Array(w*h);
+  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
+  return L;
+}
 function drcRetinex(Y,w,h,o){
   const sh=o.shadows||0,hl=o.highlights||0;
   if(!sh&&!hl)return null;
   if(!(o.anchor>0))throw new Error('drcRetinex: anchor (whole-image statistic) required');
-  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor),ge=o.gfEps||0.04;
-  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
-  const L=new Float32Array(w*h);
-  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
+  const lim=Math.log(o.maxGain||4),la=Math.log(o.anchor);
+  const L=drcRetinexBase(Y,w,h,o);
   const g=new Float32Array(w*h);
   for(let i=0;i<g.length;i++){const d=L[i]-la;let lg=-(d<0?sh:hl)*d;lg=lg>lim?lim:lg<-lim?-lim:lg;g[i]=Math.exp(lg);}
   return g;
+}
+// CHR-289 wiring: the whole-image map the lut pass reads. Input is a small (long edge ~384) sRGB RGBA
+// proxy of the finished source (after geometry and highlight reconstruction). Returns d = L - mean(log
+// (Y+eps)) per proxy pixel: the anchor is the geometric-mean luminance of the whole image, so it is
+// one number per photo and tiles/loupe/export cannot disagree about it. Scales are fractions of the
+// image width (the 15/80/250 px defaults of a 6000 px frame), so every resolution gets the same
+// relative reach. Runs in the pixel worker (_cpuFns), so it is self-contained.
+function drcBuildMap(rgba,w,h){
+  const n=w*h,lin=new Float32Array(256),Y=new Float32Array(n);
+  for(let i=0;i<256;i++){const c=i/255;lin[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+  for(let i=0;i<n;i++)Y[i]=0.2126*lin[rgba[4*i]]+0.7152*lin[rgba[4*i+1]]+0.0722*lin[rgba[4*i+2]];
+  const eps=1e-4;let m=0;for(let i=0;i<n;i++)m+=Math.log(Y[i]+eps);m/=n;
+  const L=drcRetinexBase(Y,w,h,{sigmas:[0.0025*w,0.0133*w,0.04*w],eps});
+  for(let i=0;i<n;i++)L[i]-=m;
+  return{data:L,w,h};
+}
+// CHR-288 wiring: display-referred highlight reconstruction on an 8-bit sRGB RGBA frame. A channel
+// at 255 is "clipped" (clip level 1.0 in linear light). Windows of 1536 px with 96 px of context
+// bound memory on huge frames; only the window core is written, so results do not depend on order.
+// A pixel whose reconstructed channels exceed white is scaled down to fit (hue recovered at white;
+// the 8-bit working pipeline has no headroom to carry the excess). Returns the new RGBA buffer and
+// the changed-pixel count. Self-contained for the pixel worker.
+function hlRGBA(rgba,w,h,mode){
+  const WIN=1536,OV=96,lin=new Float32Array(256);
+  for(let i=0;i<256;i++){const c=i/255;lin[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+  const enc=v=>{const c=v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;return c<=0?0:c>=1?255:Math.round(c*255);};
+  const out=new Uint8ClampedArray(rgba);let changed=0;
+  for(let cy=0;cy<h;cy+=WIN)for(let cx=0;cx<w;cx+=WIN){
+    const cx1=Math.min(w,cx+WIN),cy1=Math.min(h,cy+WIN);
+    let any=false;
+    for(let y=cy;y<cy1&&!any;y++)for(let x=cx;x<cx1;x++){const o=4*(y*w+x);if(rgba[o]===255||rgba[o+1]===255||rgba[o+2]===255){any=true;break;}}
+    if(!any)continue;
+    const x0=Math.max(0,cx-OV),y0=Math.max(0,cy-OV),x1=Math.min(w,cx1+OV),y1=Math.min(h,cy1+OV),ww=x1-x0,wh=y1-y0;
+    const f=new Float32Array(3*ww*wh);
+    for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){const o=4*((y0+y)*w+x0+x),j=3*(y*ww+x);f[j]=lin[rgba[o]];f[j+1]=lin[rgba[o+1]];f[j+2]=lin[rgba[o+2]];}
+    const r=hlReconstruct(f,ww,wh,[1,1,1],mode,{threshold:0.995});
+    if(r===f)continue;
+    for(let y=cy;y<cy1;y++)for(let x=cx;x<cx1;x++){
+      const j=3*((y-y0)*ww+(x-x0));
+      if(r[j]===f[j]&&r[j+1]===f[j+1]&&r[j+2]===f[j+2])continue;
+      let a=r[j],b=r[j+1],c=r[j+2];const mx=Math.max(a,b,c);if(mx>1){a/=mx;b/=mx;c/=mx;}
+      const o=4*(y*w+x),na=enc(a),nb=enc(b),nc=enc(c);
+      if(na!==out[o]||nb!==out[o+1]||nc!==out[o+2]){out[o]=na;out[o+1]=nb;out[o+2]=nc;changed++;}
+    }
+  }
+  return{data:out,changed};
 }

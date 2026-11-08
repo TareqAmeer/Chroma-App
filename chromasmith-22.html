@@ -420,6 +420,7 @@ body.mobile-fx .fx-toggle::after{width:var(--ctl-toggle-h);height:var(--ctl-togg
 .fx-hint-x>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;
   padding:6px 8px;font-size:var(--fs-2);color:var(--mut)}
 .fx-hint-x>summary::-webkit-details-marker{display:none}
+.fx-adv-body{padding:0 8px 8px}
 .fx-hint-x p{padding:0 8px 8px;font-size:var(--fs-2);color:var(--mut);line-height:var(--lh-base)}
 /* Groups controls that only apply conditionally (e.g. High-tier NR strength/Denoise job UI,
    shown only while RAW Noise Reduction = High) — dashed top border sets it apart from the
@@ -4410,6 +4411,17 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
           <div class="btn-row" style="margin-top:4px">
             <button class="btn bgh" onclick="wbEyedropper()" id="btn-wb-eye" title="Click a neutral (grey/white) area to auto-correct white balance">WB Eyedropper</button>
           </div>
+          <!-- CHR-288 / CHR-289: collapsed by default (docs/plans/ux-progressive-disclosure.md P1/P3). Open state is remembered per card in chromasmith_fx_adv_open. -->
+          <details class="fx-hint-x fx-adv" id="fx-adv-adjust" data-advkey="adjust">
+            <summary>Advanced</summary>
+            <div class="fx-adv-body">
+          <div class="fx-sub" title="Rebuilds channels that clipped to white so bright areas keep a believable colour instead of a magenta or cyan cast. Off leaves the image unchanged. Display-referred: it works on the developed frame, so it recovers hue at white, not extra brightness.">Highlight reconstruction</div>
+          <div class="fx-row" title="0 Off, 1 Blend (neutralise the cast), 2 Colour propagation (fill hue from the surroundings), 3 Inpaint opposed (estimate from the other two channels, per clipped region)."><div class="fx-label">Mode</div><input class="fx-slider" type="range" min="0" max="3" step="1" value="0" id="sl-adj-hl-mode" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-hl-mode">Off</div></div>
+          <div class="fx-sub" title="Retinex-style dynamic-range compression: an edge-aware illumination estimate (guided filter, three scales) is compressed about the photo's own average brightness, in linear light, before the look and exposure. Zero leaves the image unchanged.">Dynamic range (Retinex)</div>
+          <div class="fx-row" title="Lifts the dark side of the illumination, up to +2 stops. Zero leaves the image unchanged."><div class="fx-label">Shadows</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-drc-sh" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-drc-sh">0</div></div>
+          <div class="fx-row" title="Pulls down the bright side of the illumination, up to -2 stops. Zero leaves the image unchanged."><div class="fx-label">Highlights</div><input class="fx-slider" type="range" min="0" max="100" value="0" id="sl-adj-drc-hl" oninput="fxUpdate()"><div class="fx-val" id="vl-adj-drc-hl">0</div></div>
+            </div>
+          </details>
         </div>
       </div>
       <!-- NOISE REDUCTION — split out of Basic Adjustments so it reads as its own tool, not a
@@ -7627,7 +7639,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108A';
+const BUILD='1.1108B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8574,7 +8586,7 @@ class FXR{
   _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
     const tx=this.txs;
     return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
-      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx),id(this.drcTx)].join(','):'');}
   _stagePass(name,u,b,srcName,opts,uncacheable){
     const tx=this.txs[name];let key=null;
     if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
@@ -8778,6 +8790,8 @@ uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see 
 uniform vec4 mskL[8];     // x: local Sharpen amount (-1..1); y: smooth-area protection (0..1); zw reserved.
 uniform float mskShowSharpMask; // selected mask edge-protection preview index, -1 when inactive
 uniform vec2 uvOffL,uvScaleL;
+// CHR-289 Retinex DRC: drcMap is a per-photo R16F map of d = (log illumination - log anchor), read in GLOBAL uv so preview, loupe and tiled export agree. drcOn gates everything; shadows/highlights are strengths 0..1.
+uniform sampler2D drcMap;uniform float drcOn,drcSh,drcHl;
 // ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
 // (0..1, same range-gate convention as mskD's lumLo/lumHi); w: signed local Vibrance (-1..1).
 // depthTx is the per-photo
@@ -9380,6 +9394,12 @@ if(adjOn>.5&&adjTexture!=0.){
 // for all 5 taps; log-space unsharp is fine). With V-Log in and no LUT the image is neutral Rec.709.
 if(useHlg>.5)c.rgb=hlg2rec709(c.rgb,hlgLw);
 if(useVlog>.5)c.rgb=vlog2rec709(clamp(c.rgb,0.0,1.0));
+// CHR-289 Retinex DRC: scene-linear gain from the illumination map, after the input transform and before the look LUT and exposure. Gain is applied in linear light (hue preserving); maxGain is 4 (+-2 stops).
+if(drcOn>.5){
+  float drcD=texture(drcMap,uvOffL+uv*uvScaleL).r;
+  float drcG=exp(clamp(-(drcD<0.0?drcSh:drcHl)*drcD,-1.3862944,1.3862944));
+  c.rgb=vec3(l2sp(s2lp(c.r)*drcG),l2sp(s2lp(c.g)*drcG),l2sp(s2lp(c.b)*drcG));
+}
 if(useLut>.5){float sc=32./33.,of=.5/33.;vec3 lb=c.rgb;vec3 graded=texture(lut3,c.rgb*sc+of).rgb;
   if(useStockShoulder>.5){
     // Per-channel: only headroom past white gets replaced (log2<=0 => c.rgb<=1.0 => identity,
@@ -10603,6 +10623,17 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
     this.hasDepthTx=true;}
+  // CHR-289: per-photo Retinex illumination map (R16F, d = log illumination - log anchor), uploaded once per
+  // photo/geometry like the depth map; strengths are uniforms, so slider moves never re-upload it.
+  setDrcTex(d,w,h,identity=d){const gl=this.gl;this._drcSnapshot={d:new Float32Array(d),w,h,identity};this._drcIdentity=identity;if(!this.drcTx)this.drcTx=gl.createTexture();
+    this.drcTx.__v=(this.drcTx.__v||0)+1;
+    gl.bindTexture(gl.TEXTURE_2D,this.drcTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.R16F,w,h,0,gl.RED,gl.FLOAT,d);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);}
+  clearDrcTex(){if(this.drcTx){this.gl.deleteTexture(this.drcTx);this.drcTx=null;}this._drcSnapshot=null;this._drcIdentity=null;}
   clearDepthTex(){if(this.depthTx){this.gl.deleteTexture(this.depthTx);this.depthTx=null;}this._depthSnapshot=null;this._depthSourceIdentity=null;this._depthMapVersion=(this._depthMapVersion||0)+1;this._mskDepthCoverageCache=null;this.hasDepthTx=false;}
   resetTextureSnapshotFrom(source){
     if(source._lutSnapshot)this.setLUT(source._lutSnapshot);
@@ -10617,17 +10648,18 @@ void main(){
     if(source._stockShoulderSnapshot)this.setStockShoulderTex(source._stockShoulderSnapshot);
     else{if(this.txs.stockShoulder)this.gl.deleteTexture(this.txs.stockShoulder);this.txs.stockShoulder=null;this._stockShoulderSnapshot=null;}
     this.clearDepthTex();
+    if(source._drcSnapshot){const q=source._drcSnapshot;this.setDrcTex(q.d,q.w,q.h,q.identity);}else this.clearDrcTex();
   }
   _pass(prog,fb,uniforms,bindings,vp){
     const gl=this.gl;gl.bindFramebuffer(gl.FRAMEBUFFER,fb);gl.viewport(0,0,vp?vp[0]:this.w,vp?vp[1]:this.h);gl.useProgram(prog);
-    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
+    bindings.forEach(([unit,name,is3d])=>{gl.activeTexture(gl.TEXTURE0+unit);if(is3d){gl.bindTexture(gl.TEXTURE_3D,name==='hsl'?(this.hslTx||this.lutTx):name==='pcSel'?(this.pcSelTx||this.lutTx):this.lutTx)}else if(name==='img'){gl.bindTexture(gl.TEXTURE_2D,this.imgTx)}else if(name==='curve'){gl.bindTexture(gl.TEXTURE_2D,this.curveTx||this.imgTx)}else if(name==='maskTex'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx||this.imgTx)}else if(name==='maskTex2'){gl.bindTexture(gl.TEXTURE_2D,this.maskTx2||this.imgTx)}else if(name==='stockShoulder'){gl.bindTexture(gl.TEXTURE_2D,this.txs.stockShoulder||this.imgTx)}else if(name==='depthTx'){gl.bindTexture(gl.TEXTURE_2D,this.depthTx||this.imgTx)}else if(name==='drcTx'){gl.bindTexture(gl.TEXTURE_2D,this.drcTx||this.imgTx)}else if(name==='mskCrv'){gl.bindTexture(gl.TEXTURE_2D,this.mskCrvTx||this.imgTx)}else{gl.bindTexture(gl.TEXTURE_2D,this.txs[name])}});
     // CRITICAL: sampler uniforms need uniform1i (texture-unit index); ALL other scalars
     // are `uniform float` in GLSL and MUST use uniform1f — even when the value is an
     // integer like mode=1 or norm=0. The old code keyed off Number.isInteger(v), which
     // wrongly set float uniforms (mode/useLut/thr/norm) with uniform1i → INVALID_OPERATION,
     // leaving them stuck at 0. That silently broke mode switching (bloom/outer halation
     // never ran) and LUT toggling. Distinguish by sampler-name instead.
-    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,obs:1,est:1,reblur:1,depthTx:1};
+    const SAMPLERS={img:1,lut3:1,base:1,hGlow:1,bGlow:1,curveTex:1,hslLut:1,pcSelLut:1,maskTex:1,maskTex2:1,mskCrvTex:1,skinLum:1,skinCol:1,stockShoulderTex:1,drcMap:1,obs:1,est:1,reblur:1,depthTx:1};
     Object.entries(uniforms).forEach(([k,v])=>{
     const loc = gl.getUniformLocation(prog,k);
 
@@ -10956,13 +10988,14 @@ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
       // grade-after-print order) — zero them here so they aren't applied twice.
       adjTint:A.tint||0,adjVib:0,adjSat:0,
       adjSharp:A.sharpness||0,adjSharpDetail:(A.sharpDetail==null?0.5:A.sharpDetail),adjSharpRadius:(A.sharpRadius==null?1:A.sharpRadius),adjSharpMask:A.sharpMask||0,adjSharpMaskPreview:_adjSharpMaskPreview?1:0,adjClarity:A.clarity||0,adjSkin:A.skin||0,adjDehaze:A.dehaze||0,adjTexture:A.texture||0,
+      drcMap:12,drcOn:(A.enabled&&A.drc&&(A.drc.shadows||A.drc.highlights)&&this.drcTx)?1:0,drcSh:(A.drc&&A.drc.shadows)||0,drcHl:(A.drc&&A.drc.highlights)||0,
       adjWavelet1:(A.wavelet&&A.wavelet.fine)||0,adjWavelet2:(A.wavelet&&A.wavelet.small)||0,
       adjWavelet3:(A.wavelet&&A.wavelet.medium)||0,adjWaveletResidual:(A.wavelet&&A.wavelet.residual)||0,
       ...rtColourUniforms(A.rtColour,A.enabled),
       fnOn:(P.filmNeg&&P.filmNeg.enabled&&P.filmNeg.domain!=='camera-linear16-v1')?1:0,fnOut:P.filmNeg?P.filmNeg.out:0.02,fnBW:(P.filmNeg&&P.filmNeg.bw)?1:0,
       fnRef:P.filmNeg?P.filmNeg.ref:[1,1,1],fnExp:P.filmNeg?P.filmNeg.exp:[1,1,1],
       texSize:[1/this.imgW,1/this.imgH]};
-    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true]],lutSrc,opts,anyGate);
+    this._stagePass('lut',lutU,[[0,lutSrc,false],[1,'',true],[2,'curve',false],[3,'hsl',true],[4,'maskTex',false],[5,'sklo_a',false],[6,'skbox',false],[7,'maskTex2',false],[8,'stockShoulder',false],[9,'depthTx',false],[10,'mskCrv',false],[11,'pcSel',true],[12,'drcTx',false]],lutSrc,opts,anyGate);
 
     // EMISSION IS COMPUTED AT FULL RES only when a glow effect is active, then DOWNSAMPLED into
     // buffers. Computing emit ON a downsampled base (the old gs>1 path) is wrong: the
@@ -12058,17 +12091,71 @@ function drcGuided(I,w,h,r,eps){
   for(let i=0;i<n;i++)q[i]=ma[i]*I[i]+mb[i];
   return q;
 }
+// The illumination estimate on its own (log domain, before any strength is applied): mean over the
+// scales of the guided-filtered log luminance. Independent of shadows/highlights, so a caller can
+// compute it ONCE per photo and re-derive the gain on the GPU for every slider move.
+function drcRetinexBase(Y,w,h,o){
+  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,ge=o.gfEps||0.04;
+  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
+  const L=new Float32Array(w*h);
+  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
+  return L;
+}
 function drcRetinex(Y,w,h,o){
   const sh=o.shadows||0,hl=o.highlights||0;
   if(!sh&&!hl)return null;
   if(!(o.anchor>0))throw new Error('drcRetinex: anchor (whole-image statistic) required');
-  const sig=o.sigmas||[15,80,250],eps=o.eps||1e-4,lim=Math.log(o.maxGain||4),la=Math.log(o.anchor),ge=o.gfEps||0.04;
-  const I=new Float32Array(w*h);for(let i=0;i<I.length;i++)I[i]=Math.log(Y[i]+eps);
-  const L=new Float32Array(w*h);
-  for(const s of sig){const b=drcGuided(I,w,h,Math.max(1,Math.round(s)),ge);for(let i=0;i<L.length;i++)L[i]+=b[i]/sig.length;}
+  const lim=Math.log(o.maxGain||4),la=Math.log(o.anchor);
+  const L=drcRetinexBase(Y,w,h,o);
   const g=new Float32Array(w*h);
   for(let i=0;i<g.length;i++){const d=L[i]-la;let lg=-(d<0?sh:hl)*d;lg=lg>lim?lim:lg<-lim?-lim:lg;g[i]=Math.exp(lg);}
   return g;
+}
+// CHR-289 wiring: the whole-image map the lut pass reads. Input is a small (long edge ~384) sRGB RGBA
+// proxy of the finished source (after geometry and highlight reconstruction). Returns d = L - mean(log
+// (Y+eps)) per proxy pixel: the anchor is the geometric-mean luminance of the whole image, so it is
+// one number per photo and tiles/loupe/export cannot disagree about it. Scales are fractions of the
+// image width (the 15/80/250 px defaults of a 6000 px frame), so every resolution gets the same
+// relative reach. Runs in the pixel worker (_cpuFns), so it is self-contained.
+function drcBuildMap(rgba,w,h){
+  const n=w*h,lin=new Float32Array(256),Y=new Float32Array(n);
+  for(let i=0;i<256;i++){const c=i/255;lin[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+  for(let i=0;i<n;i++)Y[i]=0.2126*lin[rgba[4*i]]+0.7152*lin[rgba[4*i+1]]+0.0722*lin[rgba[4*i+2]];
+  const eps=1e-4;let m=0;for(let i=0;i<n;i++)m+=Math.log(Y[i]+eps);m/=n;
+  const L=drcRetinexBase(Y,w,h,{sigmas:[0.0025*w,0.0133*w,0.04*w],eps});
+  for(let i=0;i<n;i++)L[i]-=m;
+  return{data:L,w,h};
+}
+// CHR-288 wiring: display-referred highlight reconstruction on an 8-bit sRGB RGBA frame. A channel
+// at 255 is "clipped" (clip level 1.0 in linear light). Windows of 1536 px with 96 px of context
+// bound memory on huge frames; only the window core is written, so results do not depend on order.
+// A pixel whose reconstructed channels exceed white is scaled down to fit (hue recovered at white;
+// the 8-bit working pipeline has no headroom to carry the excess). Returns the new RGBA buffer and
+// the changed-pixel count. Self-contained for the pixel worker.
+function hlRGBA(rgba,w,h,mode){
+  const WIN=1536,OV=96,lin=new Float32Array(256);
+  for(let i=0;i<256;i++){const c=i/255;lin[i]=c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);}
+  const enc=v=>{const c=v<=0.0031308?v*12.92:1.055*Math.pow(v,1/2.4)-0.055;return c<=0?0:c>=1?255:Math.round(c*255);};
+  const out=new Uint8ClampedArray(rgba);let changed=0;
+  for(let cy=0;cy<h;cy+=WIN)for(let cx=0;cx<w;cx+=WIN){
+    const cx1=Math.min(w,cx+WIN),cy1=Math.min(h,cy+WIN);
+    let any=false;
+    for(let y=cy;y<cy1&&!any;y++)for(let x=cx;x<cx1;x++){const o=4*(y*w+x);if(rgba[o]===255||rgba[o+1]===255||rgba[o+2]===255){any=true;break;}}
+    if(!any)continue;
+    const x0=Math.max(0,cx-OV),y0=Math.max(0,cy-OV),x1=Math.min(w,cx1+OV),y1=Math.min(h,cy1+OV),ww=x1-x0,wh=y1-y0;
+    const f=new Float32Array(3*ww*wh);
+    for(let y=0;y<wh;y++)for(let x=0;x<ww;x++){const o=4*((y0+y)*w+x0+x),j=3*(y*ww+x);f[j]=lin[rgba[o]];f[j+1]=lin[rgba[o+1]];f[j+2]=lin[rgba[o+2]];}
+    const r=hlReconstruct(f,ww,wh,[1,1,1],mode,{threshold:0.995});
+    if(r===f)continue;
+    for(let y=cy;y<cy1;y++)for(let x=cx;x<cx1;x++){
+      const j=3*((y-y0)*ww+(x-x0));
+      if(r[j]===f[j]&&r[j+1]===f[j+1]&&r[j+2]===f[j+2])continue;
+      let a=r[j],b=r[j+1],c=r[j+2];const mx=Math.max(a,b,c);if(mx>1){a/=mx;b/=mx;c/=mx;}
+      const o=4*(y*w+x),na=enc(a),nb=enc(b),nc=enc(c);
+      if(na!==out[o]||nb!==out[o+1]||nc!==out[o+2]){out[o]=na;out[o+1]=nb;out[o+2]=nc;changed++;}
+    }
+  }
+  return{data:out,changed};
 }
 // ── DPI read/write + metadata preservation (Exif/ICC/IPTC/XMP/pHYs) ─────────
 // Cameras/Lightroom often write resolution into Exif IFD0 (XResolution/
@@ -13716,7 +13803,7 @@ function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4
 // after dispatch rejects, and its caller decides.
 let _cpuWorker,_cpuJobSeq=0;
 const _cpuJobs=new Map();
-function _cpuFns(){return{bakeDcpLUT,unsharpRGBA,_mskGuidedFilter,_boxFilterJS};} // the only functions the worker exposes
+function _cpuFns(){return{bakeDcpLUT,unsharpRGBA,_mskGuidedFilter,_boxFilterJS,hlClippedMask,hlPushPull,hlLabel,hlReconstruct,hlRGBA,drcBoxMean,drcGuided,drcRetinexBase,drcBuildMap};} // the only functions the worker exposes
 function _cpuGetWorker(){
   if(_cpuWorker!==undefined)return _cpuWorker;      // null = permanently unavailable
   _cpuWorker=null;
@@ -14840,8 +14927,9 @@ const _FF_VIEW_ONLY_SEL='.hsl-hist-zone,.hsl-chip,.crv-chip,.crv-mode-chip,.phon
 const _FF_VIEW_ONLY_FN=/^\s*(?:window\.)?(mskSetPreviewMode|mskAddMenu|pcEyedropper|wbEyedropper|fnPickBase|healToggle|healEraseToggle|healDustToggle|redeyeToggle|chromasmithInpaint)/;
 document.addEventListener('pointerdown',(e)=>{const b=e.target.closest&&e.target.closest('.fx-fields.ff-off button:not(.fx-info-i),.fx-fields.ff-off .fx-toggle');if(!b)return;if(b.matches(_FF_VIEW_ONLY_SEL)||_FF_VIEW_ONLY_FN.test(b.getAttribute('onclick')||''))return;_ffAutoEnable(e);},true);
 function fxUpdate(){
+  fxHlLabelSync();
   ['grain-a','grain-sz','art-du','art-sc','art-lk','hal-a','hal-r','hal-p','bloom-a','bloom-th','bloom-r','b1-t','b2-t','b1-g','b2-g','b1-glow','b2-glow','b1-pos','b2-pos',
-    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
+    'adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','adj-drc-sh','adj-drc-hl','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat','fneg-exp','fneg-red','fneg-blue','deconv-amt','deconv-rad','lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy','gate-weave','film-breath','vig','lut-mix'].forEach(id=>{
     const sl=document.getElementById('sl-'+id),vl=document.getElementById('vl-'+id);
     if(sl&&vl){const v=parseFloat(sl.value);let txt=v.toString();if(id.endsWith('-t')&&!id.startsWith('adj'))txt=v+'%';vl.textContent=txt}
   });
@@ -14926,7 +15014,7 @@ function fxScheduleRender(){
     renderPreview();
   },180);
 }
-const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin'];
+const ADJ_RESET_FIELDS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-hl-mode','adj-drc-sh','adj-drc-hl'];
 function resetAdjust(){
   ADJ_RESET_FIELDS.forEach(id=>{const sl=document.getElementById('sl-'+id);if(sl)sl.value=parseFloat(sl.defaultValue||0);});
   fxPaintAllSliders(document.querySelector('.fx-ctrl[data-fxsec="adjust"]'));
@@ -23488,7 +23576,7 @@ const _FX_SNAP_SLIDERS=['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl',
   // against the DOM's real sl- ids found it 2026-09-10) — present in _SESS_SLIDERS (session
   // save/restore) but absent from the undo-history/copy-paste/.fx-mod snapshot, same class of
   // gap as deconv-amt/deconv-rad before DT1.
-  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
+  'adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','adj-hl-mode','adj-drc-sh','adj-drc-hl','nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat',
   'fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source',
   'lens-dist','lens-vig','lens-ca','lens-defr','lens-pv','lens-ph','lens-rot','lens-scale','lens-asp','lens-ox','lens-oy',
   // deconv-amt/deconv-rad were never in this list (Deconvolution predates the shared fx-mod/
@@ -23576,7 +23664,7 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','adj-hl-mode','adj-drc-sh','adj-drc-hl'],toggles:['tg-adjust'],selects:[]},
   {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
@@ -23761,6 +23849,7 @@ function applyUISnapshot(s,opts){
   // rather than only on user interaction.
   if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
+  if(typeof fxHlLabelSync==='function')fxHlLabelSync();
   return _inpaintPromise?Promise.all([_lutPromise,_inpaintPromise]):_lutPromise;
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by
@@ -26017,7 +26106,7 @@ function exportPresetListRefresh(selectName){
 // ── Session save / restore ──────────────────────────────────────────────────────
 const _SESS_KEY='chromasmith-session-v1';
 const _SESS_SLIDERS=['sl-adj-exp','sl-adj-con','sl-adj-hi','sl-adj-sh','sl-adj-wh','sl-adj-bl',
-  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-mix-rr','sl-adj-mix-rg','sl-adj-mix-rb','sl-adj-mix-gr','sl-adj-mix-gg','sl-adj-mix-gb','sl-adj-mix-br','sl-adj-mix-bg','sl-adj-mix-bb','sl-adj-lab-l','sl-adj-lab-con','sl-adj-lab-chroma','sl-adj-tone-sa','sl-adj-tone-sb','sl-adj-tone-ha','sl-adj-tone-hb','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
+  'sl-adj-temp','sl-adj-tint','sl-adj-vib','sl-adj-sat','sl-adj-clarity','sl-adj-sharp','sl-adj-sharp-radius','sl-adj-sharp-detail','sl-adj-sharp-mask','sl-adj-wavelet-1','sl-adj-wavelet-2','sl-adj-wavelet-3','sl-adj-wavelet-res','sl-adj-mix-rr','sl-adj-mix-rg','sl-adj-mix-rb','sl-adj-mix-gr','sl-adj-mix-gg','sl-adj-mix-gb','sl-adj-mix-br','sl-adj-mix-bg','sl-adj-mix-bb','sl-adj-lab-l','sl-adj-lab-con','sl-adj-lab-chroma','sl-adj-tone-sa','sl-adj-tone-sb','sl-adj-tone-ha','sl-adj-tone-hb','sl-adj-skin','sl-adj-dehaze','sl-adj-texture','sl-adj-hl-mode','sl-adj-drc-sh','sl-adj-drc-hl','sl-fneg-exp','sl-fneg-red','sl-fneg-blue','sl-fneg-br','sl-fneg-bg','sl-fneg-bb','sl-fneg-bx','sl-fneg-by','sl-fneg-domain','sl-fneg-source','sl-nr-lum','sl-nr-col','sl-nr-det','sl-nr-con','sl-nr-color-detail','sl-nr-smooth','sl-nr-hldesat','sl-deconv-amt','sl-deconv-rad',
   'sl-lens-dist','sl-lens-vig','sl-lens-ca','sl-lens-defr','sl-lens-pv','sl-lens-ph','sl-lens-rot','sl-lens-scale','sl-lens-asp','sl-lens-ox','sl-lens-oy',
   'sl-grain-a','sl-grain-sz','sl-art-du','sl-art-sc','sl-art-lk','sl-hal-a','sl-hal-r','sl-hal-p','sl-bloom-a','sl-bloom-th','sl-bloom-r',
   'sl-b1-t','sl-b2-t','sl-b1-g','sl-b2-g','sl-b1-glow','sl-b2-glow','sl-b1-pos','sl-b2-pos','sl-canvas-z','sl-vig','sl-exp-q'];
@@ -26725,7 +26814,7 @@ function matchSeriesClear(){
 }
 let _adjSharpMaskPreview=false;
 let _mskSharpMaskPreview=false;
-const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','mix-rr','mix-rg','mix-rb','mix-gr','mix-gg','mix-gb','mix-br','mix-bg','mix-bb','lab-l','lab-con','lab-chroma','tone-sa','tone-sb','tone-ha','tone-hb','skin','dehaze','texture'];
+const ADJ_FIELDS=['exp','con','hi','sh','wh','bl','temp','tint','vib','sat','clarity','sharp','sharp-radius','sharp-detail','sharp-mask','wavelet-1','wavelet-2','wavelet-3','wavelet-res','mix-rr','mix-rg','mix-rb','mix-gr','mix-gg','mix-gb','mix-br','mix-bg','mix-bb','lab-l','lab-con','lab-chroma','tone-sa','tone-sb','tone-ha','tone-hb','skin','dehaze','texture','hl-mode','drc-sh','drc-hl'];
 function domAdjustVals(){const o={};ADJ_FIELDS.forEach(f=>o[f]=adjVal('sl-adj-'+f));return o;}
 // Non-zero slider defaults; a missing key (older recipes/snapshots) falls back to these.
 const ADJ_DEFAULTS={'sharp-detail':50,'sharp-radius':1,'mix-rr':100,'mix-gg':100,'mix-bb':100};
@@ -26748,7 +26837,7 @@ function rtColourUniforms(rt,enabled){
   return{rtMixOn:mixOn?1:0,rtMixR:m.slice(0,3),rtMixG:m.slice(3,6),rtMixB:m.slice(6,9),
     rtLabOn:labOn?1:0,rtLab:lab,rtToneS:tone.slice(0,2),rtToneH:tone.slice(2,4)};
 }
-function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(ADJ_DEFAULTS[f]||0);if(sl)sl.value=val;if(vl)vl.textContent=val;});}
+function applyAdjustVals(v){ADJ_FIELDS.forEach(f=>{const sl=document.getElementById('sl-adj-'+f),vl=document.getElementById('vl-adj-'+f);const val=(v&&v[f]!=null)?v[f]:(ADJ_DEFAULTS[f]||0);if(sl)sl.value=val;if(vl)vl.textContent=val;});if(typeof fxHlLabelSync==='function')fxHlLabelSync();}
 function computeAdjustBlock(v){
   v=v||domAdjustVals();
   return{enabled:(document.getElementById('tg-adjust')||{classList:{contains:()=>false}}).classList.contains('on'),
@@ -26761,6 +26850,8 @@ function computeAdjustBlock(v){
     sharpness:(v.sharp||0)/500, sharpDetail:(v['sharp-detail']==null?0.5:(v['sharp-detail']/100)), sharpRadius:(v['sharp-radius']==null?1:Math.max(0.5,Math.min(3,v['sharp-radius']))), sharpMask:(v['sharp-mask']||0)/100, clarity:(v.clarity||0)/500, texture:(v.texture||0)/400,
     wavelet:{fine:(v['wavelet-1']||0)/100,small:(v['wavelet-2']||0)/100,medium:(v['wavelet-3']||0)/100,residual:(v['wavelet-res']||0)/100},
     rtColour:rtColourBlock(v),
+    hlMode:['clip','blend','propagate','opposed'][Math.max(0,Math.min(3,Math.round(v['hl-mode']||0)))],
+    drc:{shadows:(v['drc-sh']||0)/100,highlights:(v['drc-hl']||0)/100},
     skin:(v.skin||0)/100, dehaze:(v.dehaze||0)/100};
 }
 function getFXParams(adjValsOverride,contextOverride){return{
@@ -27432,6 +27523,8 @@ function renderPreview(){
   fxSoftProofSchedule();
   // Video export keeps the original main renderer because its encoder streams frames through FX.
   if(window.__csVideoExporting)return;
+  if(fxHlStale())updateWork();
+  fxDrcPreviewSync();
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
   if(cropMode)return;            // crop overlay owns the canvas while active
@@ -28801,13 +28894,103 @@ function geomCanvas(item){
   const identity=!item.heal&&!patches&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
   return identity?item.img:applyGeomTo(source,g);
 }
+// ── CHR-288 / CHR-289 stage wiring ───────────────────────────────────────────────────────────────
+// Stage order (declared): decode -> geometry -> [highlight reconstruction: a CPU pass that replaces the
+// SOURCE frame, so preview, 1:1 loupe tiles and tiled export all read the same pixels] -> shader chain:
+// V-Log/HLG input transform -> [Retinex DRC gain, linear light] -> look LUT -> exposure/tone -> ... Both
+// stages are off at default (mode 0, strengths 0): no copy, no worker job, no texture, no shader branch.
+// Highlight reconstruction is display-referred (channels at 255 are "clipped"); see the control's tooltip.
+const _hlCache=new WeakMap(),_drcCache=new WeakMap();
+let _hlShownMode=null;
+function fxHlLabelSync(){const sl=document.getElementById('sl-adj-hl-mode'),vl=document.getElementById('vl-adj-hl-mode');if(sl&&vl)vl.textContent=['Off','Blend','Propagate','Opposed'][Math.max(0,Math.min(3,Math.round(+sl.value||0)))];}
+// The three advanced values for a photo: its own override when it has one, else the live controls.
+function fxAdvState(it){
+  const ov=it&&it.adjustOverride,g=f=>ov&&ov[f]!=null?(+ov[f]||0):adjVal('sl-adj-'+f);
+  const tg=document.getElementById('tg-adjust'),on=!!(tg&&tg.classList.contains('on'));
+  return{on,hl:['clip','blend','propagate','opposed'][Math.max(0,Math.min(3,Math.round(g('hl-mode'))))],sh:g('drc-sh'),hi:g('drc-hl')};
+}
+function fxHlDesiredMode(it){const a=fxAdvState(it);return a.on&&a.hl!=='clip'?a.hl:null;}
+function fxHlStale(){const it=typeof curItem==='function'?curItem():null;return !!it&&it.kind!=='video'&&fxHlDesiredMode(it)!==_hlShownMode;}
+async function fxHlBuild(img,mode){
+  const ent=_hlCache.get(img)||{};_hlCache.set(img,ent);
+  if(ent.mode===mode&&ent.out!==undefined)return ent.out;
+  if(ent.pendingMode===mode&&ent.pending)return ent.pending;
+  ent.pendingMode=mode;
+  ent.pending=(async()=>{
+    const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);
+    const id=cx.getImageData(0,0,w,h);
+    let out=null;
+    try{
+      const r=await _cpuRun('hlRGBA',[id.data,w,h,mode],[id.data.buffer]);
+      if(r&&r.changed>0){cx.putImageData(new ImageData(r.data,w,h),0,0);out=c;}
+    }finally{if(!out)c.width=c.height=0;ent.mode=mode;ent.out=out;ent.pending=null;}
+    return out;
+  })();
+  return ent.pending;
+}
+// Item whose img is the reconstructed frame (or the item itself when off / nothing clipped / still computing).
+function fxHlItem(it){
+  if(!it||it.kind==='video'||!it.img){_hlShownMode=null;return it;}
+  const mode=fxHlDesiredMode(it);_hlShownMode=mode;
+  if(!mode)return it;
+  const ent=_hlCache.get(it.img);
+  if(ent&&ent.mode===mode&&ent.out!==undefined)return ent.out?{...it,img:ent.out}:it;
+  fxHlBuild(it.img,mode).then(()=>{if(curItem()===it&&fxHlDesiredMode(it)===mode){updateWork();renderPreview();}}).catch(e=>log('Highlight reconstruction failed: '+errStr(e),'warn'));
+  return it;
+}
+async function fxHlItemFor(it,P){
+  const A=P&&P.adjust,mode=A&&A.enabled&&A.hlMode&&A.hlMode!=='clip'?A.hlMode:null;
+  if(!mode||!it||!it.img||it.kind==='video')return it;
+  const out=await fxHlBuild(it.img,mode);
+  return out?{...it,img:out}:it;
+}
+function fxDrcActive(P){const A=P&&P.adjust;return !!(A&&A.enabled&&A.drc&&(A.drc.shadows||A.drc.highlights));}
+// Whole-image illumination map of a finished source frame (one per frame, cached on it).
+async function fxDrcMapFor(src){
+  let ent=_drcCache.get(src);if(!ent){ent={};_drcCache.set(src,ent);}
+  if(ent.map)return ent.map;
+  if(ent.pending)return ent.pending;
+  ent.pending=(async()=>{
+    const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,k=Math.min(1,384/Math.max(w,h));
+    const pw=Math.max(8,Math.round(w*k)),ph=Math.max(8,Math.round(h*k));
+    const c=document.createElement('canvas');c.width=pw;c.height=ph;
+    const cx=c.getContext('2d',{willReadFrequently:true});cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,pw,ph);
+    const id=cx.getImageData(0,0,pw,ph);c.width=c.height=0;
+    const m=await _cpuRun('drcBuildMap',[id.data,pw,ph],[id.data.buffer]);
+    ent.map=m;return m;
+  })().finally(()=>{ent.pending=null;});
+  return ent.pending;
+}
+function fxDrcPreviewSync(){
+  const work=fxWork||fxImg,it=typeof curItem==='function'?curItem():null;
+  if(!work||!FX.ok)return;
+  const a=fxAdvState(it);
+  if(!(a.on&&(a.sh||a.hi))){if(FX._drcSnapshot)FX.clearDrcTex();return;}
+  const ent=_drcCache.get(work);
+  if(ent&&ent.map){if(FX._drcIdentity!==ent.map)FX.setDrcTex(ent.map.data,ent.map.w,ent.map.h,ent.map);return;}
+  if(FX._drcSnapshot)FX.clearDrcTex(); // never apply another photo's / geometry's map
+  fxDrcMapFor(work).then(()=>{if((fxWork||fxImg)===work)renderPreview();}).catch(e=>log('Dynamic range map failed: '+errStr(e),'warn'));
+}
+async function fxDrcApplyFor(renderer,P,src){
+  if(fxDrcActive(P)){const m=await fxDrcMapFor(src);if(renderer._drcIdentity!==m)renderer.setDrcTex(m.data,m.w,m.h,m);}
+  else if(renderer._drcSnapshot)renderer.clearDrcTex();
+}
+(function(){ // Advanced folds: open state remembered per card (docs/plans/ux-progressive-disclosure.md P1)
+  const K='chromasmith_fx_adv_open';let m={};try{m=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
+  document.querySelectorAll('details.fx-adv[data-advkey]').forEach(d=>{
+    if(m[d.dataset.advkey])d.open=true;
+    d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
+  });
+})();
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
   if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(it);
   if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
-  fxWork=it?geomCanvas(it):null;
+  fxWork=it?geomCanvas(fxHlItem(it)):null;
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(FX,it);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry
@@ -30246,6 +30429,7 @@ async function processToCanvas(P,src,iw,ih,onTile,renderer=FX){
   if(renderer===FX&&typeof _fxTilesClear==='function')_fxTilesClear();
   if(typeof renderer.releaseBufferPool==='function')renderer.releaseBufferPool();
   try{
+    await fxDrcApplyFor(renderer,P,src);
     if(shouldTile(iw,ih))return await renderTiled(P,src,iw,ih,onTile,renderer);
     // Sub-phase times for the export's EXPORT_DIAG line (renderer._p2cTimes, read by exportFX).
     const T={},now=()=>performance.now();let t=now();renderer._p2cTimes=T;
@@ -30496,7 +30680,7 @@ window.chromasmithRenderCurrentGraded=async function(maxEdge){
   const savedMasks=fxState.masks;fxState.masks=it.masks||savedMasks;
   const P=getFXParams(it.adjustOverride||undefined);
   fxState.masks=savedMasks;
-  const src=geomCanvas(it);
+  const src=geomCanvas(await fxHlItemFor(it,P));
   const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
   const proc=await processToCanvas(P,src,iw,ih,()=>{});
   const k=Math.min(1,(maxEdge||2400)/Math.max(proc.width,proc.height));
@@ -30876,7 +31060,7 @@ async function _exportFXRun(opts){
         const P=_expPs[idx];
         if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
         tm.geom0=performance.now();
-        const src=geomCanvas(decodedJpeg?{...it,img:decodedJpeg}:it);
+        const src=geomCanvas(await fxHlItemFor(decodedJpeg?{...it,img:decodedJpeg}:it,P));
         tm.geom1=performance.now();   // apply this image's rotate/flip/straighten/crop first
         if(decodedJpeg){decodedGeometry=src;src._nativeJpegFull=true;}
         const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
@@ -33286,7 +33470,7 @@ function csLayoutMenuHtml(){let h='';
   return h;
 }
 const CS_WORKSPACE_LAYOUT_KEY='cs_workspace_controls_v1';
-const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
+const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_fx_adv_open','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
 function _csLayoutKeys(){return CS_LAYOUT_KEYS.concat(typeof LS_EDITOR_BG!=='undefined'?[LS_EDITOR_BG]:[]);}
 function csLayoutsList(){try{const list=JSON.parse(localStorage.getItem('cs_layouts')||'[]');return Array.isArray(list)?list:[]}catch(e){return[]}}
 const CS_LAYOUT_FILE_FORMAT='chromasmith-workspaces';
@@ -35529,7 +35713,7 @@ const CS_CONTROL_UNIT_SPECS={
   'cp-str':'%','cp-sh':'%','cp-md':'%','cp-hl':'%','sl-lut-mix':'%',
   'sl-adj-exp':{unit:' EV',scale:.05,precision:2,sign:true},
   'sl-adj-con':'%','sl-adj-hi':'%','sl-adj-sh':'%','sl-adj-wh':'%','sl-adj-bl':'%',
-  'sl-adj-vib':'%','sl-adj-sat':'%','sl-adj-skin':'%','sl-adj-clarity':'%','sl-adj-sharp':'%','sl-adj-sharp-detail':'%','sl-adj-sharp-mask':'%','sl-adj-dehaze':'%','sl-adj-texture':'%',
+  'sl-adj-vib':'%','sl-adj-sat':'%','sl-adj-skin':'%','sl-adj-clarity':'%','sl-adj-sharp':'%','sl-adj-sharp-detail':'%','sl-adj-sharp-mask':'%','sl-adj-dehaze':'%','sl-adj-texture':'%','sl-adj-drc-sh':'%','sl-adj-drc-hl':'%',
   'sl-nr-high-strength':'%','sl-nr-lum':'%','sl-nr-col':'%','sl-nr-det':'%','sl-nr-con':'%','sl-nr-color-detail':'%','sl-nr-smooth':'%','sl-nr-hldesat':'%','sl-deconv-amt':'%',
   'sl-deconv-rad':{unit:' px',map:'deconv-radius',precision:1},
   'sl-crv-s':'%','sl-crv-d':'%','sl-crv-l':'%','sl-crv-h':'%',

@@ -113,7 +113,7 @@ function csLayoutMenuHtml(){let h='';
   return h;
 }
 const CS_WORKSPACE_LAYOUT_KEY='cs_workspace_controls_v1';
-const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
+const CS_LAYOUT_KEYS=['cs_panelw','cs_railmode','cs_rail_flat','chromasmith_fx_sec_collapsed','chromasmith_fx_adv_open','chromasmith_lib_side_w','chromasmith_lib_dock_w','chromasmith_lib_dock_collapsed','chromasmith_lib_sidebar','chromasmith_lib_info_pos','chromasmith_lib_thumbsize','chromasmith_lib_cols','cs-tool-order-fx-quicknav','cs-tool-order-fx-tool-grid',CS_WORKSPACE_LAYOUT_KEY];
 function _csLayoutKeys(){return CS_LAYOUT_KEYS.concat(typeof LS_EDITOR_BG!=='undefined'?[LS_EDITOR_BG]:[]);}
 function csLayoutsList(){try{const list=JSON.parse(localStorage.getItem('cs_layouts')||'[]');return Array.isArray(list)?list:[]}catch(e){return[]}}
 const CS_LAYOUT_FILE_FORMAT='chromasmith-workspaces';

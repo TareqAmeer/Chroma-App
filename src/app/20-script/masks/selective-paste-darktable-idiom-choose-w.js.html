@@ -6,7 +6,7 @@ const PASTE_CATEGORIES=[
   {key:'lut',label:'Look (LUT + Print profile)',sliders:['lut-mix'],toggles:[],selects:['sel-lut','sel-print']},
   {key:'curves',label:'Curves + Color Mixer',sliders:[],toggles:['tg-curves','tg-hsl','tg-pointcolor'],selects:[],extra:['curves','curveMode','curveParam','hsl','pointColors']},
   {key:'wheels',label:'Colour Wheels',sliders:[],toggles:['tg-wheels'],selects:[],extra:['wheels']},
-  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture'],toggles:['tg-adjust'],selects:[]},
+  {key:'adjust',label:'Tone',sliders:['adj-exp','adj-con','adj-hi','adj-sh','adj-wh','adj-bl','adj-temp','adj-tint','adj-vib','adj-sat','adj-clarity','adj-sharp','adj-sharp-radius','adj-sharp-detail','adj-sharp-mask','adj-wavelet-1','adj-wavelet-2','adj-wavelet-3','adj-wavelet-res','adj-mix-rr','adj-mix-rg','adj-mix-rb','adj-mix-gr','adj-mix-gg','adj-mix-gb','adj-mix-br','adj-mix-bg','adj-mix-bb','adj-lab-l','adj-lab-con','adj-lab-chroma','adj-tone-sa','adj-tone-sb','adj-tone-ha','adj-tone-hb','adj-skin','adj-dehaze','adj-texture','adj-hl-mode','adj-drc-sh','adj-drc-hl'],toggles:['tg-adjust'],selects:[]},
   {key:'filmneg',label:'Film Negative',sliders:['fneg-exp','fneg-red','fneg-blue','fneg-br','fneg-bg','fneg-bb','fneg-bx','fneg-by','fneg-domain','fneg-source'],toggles:['tg-filmneg'],selects:['sel-fneg-mode']},
   {key:'nr',label:'Noise Reduction',sliders:['nr-lum','nr-col','nr-det','nr-con','nr-color-detail','nr-smooth','nr-hldesat'],toggles:['tg-nr'],selects:[]},
   {key:'deconv',label:'Deconvolution',sliders:['deconv-amt','deconv-rad'],toggles:['tg-deconv'],selects:[]},
@@ -191,6 +191,7 @@ function applyUISnapshot(s,opts){
   // rather than only on user interaction.
   if(typeof fxMarkModifiedSliders==='function')fxMarkModifiedSliders();
   if(typeof syncAdjResetBtn==='function')syncAdjResetBtn();
+  if(typeof fxHlLabelSync==='function')fxHlLabelSync();
   return _inpaintPromise?Promise.all([_lutPromise,_inpaintPromise]):_lutPromise;
 }
 // History entries are stored as JSON STRINGS, not parsed objects. Two reasons, both driven by

@@ -1,33 +1,100 @@
-function healStrokeDabs(op,w,h,r){
-  if(!op.pts||op.pts.length<2)return[[op.x*w,op.y*h]];
-  const step=Math.max(1,r*0.5),out=[[op.pts[0][0]*w,op.pts[0][1]*h]];
-  let acc=0;
-  for(let i=1;i<op.pts.length&&out.length<600;i++){
-    let ax=op.pts[i-1][0]*w,ay=op.pts[i-1][1]*h;const bx=op.pts[i][0]*w,by=op.pts[i][1]*h;
-    let seg=Math.hypot(bx-ax,by-ay);
-    while(acc+seg>=step&&out.length<600){
-      const t=(step-acc)/seg;ax+=(bx-ax)*t;ay+=(by-ay)*t;out.push([ax,ay]);seg=Math.hypot(bx-ax,by-ay);acc=0;
-    }
-    acc+=seg;
-  }
-  return out;
+// ── CHR-288 / CHR-289 stage wiring ───────────────────────────────────────────────────────────────
+// Stage order (declared): decode -> geometry -> [highlight reconstruction: a CPU pass that replaces the
+// SOURCE frame, so preview, 1:1 loupe tiles and tiled export all read the same pixels] -> shader chain:
+// V-Log/HLG input transform -> [Retinex DRC gain, linear light] -> look LUT -> exposure/tone -> ... Both
+// stages are off at default (mode 0, strengths 0): no copy, no worker job, no texture, no shader branch.
+// Highlight reconstruction is display-referred (channels at 255 are "clipped"); see the control's tooltip.
+const _hlCache=new WeakMap(),_drcCache=new WeakMap();
+let _hlShownMode=null;
+function fxHlLabelSync(){const sl=document.getElementById('sl-adj-hl-mode'),vl=document.getElementById('vl-adj-hl-mode');if(sl&&vl)vl.textContent=['Off','Blend','Propagate','Opposed'][Math.max(0,Math.min(3,Math.round(+sl.value||0)))];}
+// The three advanced values for a photo: its own override when it has one, else the live controls.
+function fxAdvState(it){
+  const ov=it&&it.adjustOverride,g=f=>ov&&ov[f]!=null?(+ov[f]||0):adjVal('sl-adj-'+f);
+  const tg=document.getElementById('tg-adjust'),on=!!(tg&&tg.classList.contains('on'));
+  return{on,hl:['clip','blend','propagate','opposed'][Math.max(0,Math.min(3,Math.round(g('hl-mode'))))],sh:g('drc-sh'),hi:g('drc-hl')};
 }
-function geomCanvas(item){
-  const g=item.geom||defGeom();
-  const patches=(item.inpaint||[]).some(p=>p.enabled!==false);
-  if(patches&&!window.chromasmithInpaintApply)throw Error('Accepted erase repair assets require the desktop app');
-  const healed=healApply(item.img,item.heal);
-  const source=patches?window.chromasmithInpaintApply(healed,item):healed;
-  const identity=!item.heal&&!patches&&!g.crop&&!g.rot&&!g.flipH&&!g.flipV&&!g.angle;
-  return identity?item.img:applyGeomTo(source,g);
+function fxHlDesiredMode(it){const a=fxAdvState(it);return a.on&&a.hl!=='clip'?a.hl:null;}
+function fxHlStale(){const it=typeof curItem==='function'?curItem():null;return !!it&&it.kind!=='video'&&fxHlDesiredMode(it)!==_hlShownMode;}
+async function fxHlBuild(img,mode){
+  const ent=_hlCache.get(img)||{};_hlCache.set(img,ent);
+  if(ent.mode===mode&&ent.out!==undefined)return ent.out;
+  if(ent.pendingMode===mode&&ent.pending)return ent.pending;
+  ent.pendingMode=mode;
+  ent.pending=(async()=>{
+    const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);
+    const id=cx.getImageData(0,0,w,h);
+    let out=null;
+    try{
+      const r=await _cpuRun('hlRGBA',[id.data,w,h,mode],[id.data.buffer]);
+      if(r&&r.changed>0){cx.putImageData(new ImageData(r.data,w,h),0,0);out=c;}
+    }finally{if(!out)c.width=c.height=0;ent.mode=mode;ent.out=out;ent.pending=null;}
+    return out;
+  })();
+  return ent.pending;
 }
+// Item whose img is the reconstructed frame (or the item itself when off / nothing clipped / still computing).
+function fxHlItem(it){
+  if(!it||it.kind==='video'||!it.img){_hlShownMode=null;return it;}
+  const mode=fxHlDesiredMode(it);_hlShownMode=mode;
+  if(!mode)return it;
+  const ent=_hlCache.get(it.img);
+  if(ent&&ent.mode===mode&&ent.out!==undefined)return ent.out?{...it,img:ent.out}:it;
+  fxHlBuild(it.img,mode).then(()=>{if(curItem()===it&&fxHlDesiredMode(it)===mode){updateWork();renderPreview();}}).catch(e=>log('Highlight reconstruction failed: '+errStr(e),'warn'));
+  return it;
+}
+async function fxHlItemFor(it,P){
+  const A=P&&P.adjust,mode=A&&A.enabled&&A.hlMode&&A.hlMode!=='clip'?A.hlMode:null;
+  if(!mode||!it||!it.img||it.kind==='video')return it;
+  const out=await fxHlBuild(it.img,mode);
+  return out?{...it,img:out}:it;
+}
+function fxDrcActive(P){const A=P&&P.adjust;return !!(A&&A.enabled&&A.drc&&(A.drc.shadows||A.drc.highlights));}
+// Whole-image illumination map of a finished source frame (one per frame, cached on it).
+async function fxDrcMapFor(src){
+  let ent=_drcCache.get(src);if(!ent){ent={};_drcCache.set(src,ent);}
+  if(ent.map)return ent.map;
+  if(ent.pending)return ent.pending;
+  ent.pending=(async()=>{
+    const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height,k=Math.min(1,384/Math.max(w,h));
+    const pw=Math.max(8,Math.round(w*k)),ph=Math.max(8,Math.round(h*k));
+    const c=document.createElement('canvas');c.width=pw;c.height=ph;
+    const cx=c.getContext('2d',{willReadFrequently:true});cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,pw,ph);
+    const id=cx.getImageData(0,0,pw,ph);c.width=c.height=0;
+    const m=await _cpuRun('drcBuildMap',[id.data,pw,ph],[id.data.buffer]);
+    ent.map=m;return m;
+  })().finally(()=>{ent.pending=null;});
+  return ent.pending;
+}
+function fxDrcPreviewSync(){
+  const work=fxWork||fxImg,it=typeof curItem==='function'?curItem():null;
+  if(!work||!FX.ok)return;
+  const a=fxAdvState(it);
+  if(!(a.on&&(a.sh||a.hi))){if(FX._drcSnapshot)FX.clearDrcTex();return;}
+  const ent=_drcCache.get(work);
+  if(ent&&ent.map){if(FX._drcIdentity!==ent.map)FX.setDrcTex(ent.map.data,ent.map.w,ent.map.h,ent.map);return;}
+  if(FX._drcSnapshot)FX.clearDrcTex(); // never apply another photo's / geometry's map
+  fxDrcMapFor(work).then(()=>{if((fxWork||fxImg)===work)renderPreview();}).catch(e=>log('Dynamic range map failed: '+errStr(e),'warn'));
+}
+async function fxDrcApplyFor(renderer,P,src){
+  if(fxDrcActive(P)){const m=await fxDrcMapFor(src);if(renderer._drcIdentity!==m)renderer.setDrcTex(m.data,m.w,m.h,m);}
+  else if(renderer._drcSnapshot)renderer.clearDrcTex();
+}
+(function(){ // Advanced folds: open state remembered per card (docs/plans/ux-progressive-disclosure.md P1)
+  const K='chromasmith_fx_adv_open';let m={};try{m=JSON.parse(localStorage.getItem(K)||'{}')||{};}catch(e){}
+  document.querySelectorAll('details.fx-adv[data-advkey]').forEach(d=>{
+    if(m[d.dataset.advkey])d.open=true;
+    d.addEventListener('toggle',()=>{m[d.dataset.advkey]=d.open;try{localStorage.setItem(K,JSON.stringify(m));}catch(e){}});
+  });
+})();
 // Recompute the working image after any geometry change and upload it to the GL renderer.
 function updateWork(){
   const it=curItem();
   if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(it);
   if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
-  fxWork=it?geomCanvas(it):null;
+  fxWork=it?geomCanvas(fxHlItem(it)):null;
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(FX,it);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry

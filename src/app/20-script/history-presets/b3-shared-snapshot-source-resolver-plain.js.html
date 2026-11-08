@@ -92,6 +92,8 @@ function renderPreview(){
   fxSoftProofSchedule();
   // Video export keeps the original main renderer because its encoder streams frames through FX.
   if(window.__csVideoExporting)return;
+  if(fxHlStale())updateWork();
+  fxDrcPreviewSync();
   const work=fxWork||fxImg;
   if(!work||!FX.ok)return;
   if(cropMode)return;            // crop overlay owns the canvas while active

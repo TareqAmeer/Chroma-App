@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { load } from './extract.mjs';
 
-const app = load(['hlClippedMask', 'hlPushPull', 'hlLabel', 'hlReconstruct', 'drcRetinexHalo', 'drcBoxMean', 'drcGuided', 'drcRetinex'],
+const app = load(['hlClippedMask', 'hlPushPull', 'hlLabel', 'hlReconstruct', 'drcRetinexHalo', 'drcBoxMean', 'drcGuided', 'drcRetinexBase', 'drcRetinex', 'drcBuildMap', 'hlRGBA'],
   { Uint8Array, Error });
 
 const CLIP = [1, 1, 1];
@@ -201,4 +201,35 @@ test('tile seam exact across a strong edge (guided base, multi-scale)', () => {
   for (let y = 0; y < h; y++) for (let x = 0; x < tw; x++) T[y * tw + x] = Y[y * w + x0 + x];
   const gt = app.drcRetinex(T, tw, h, o);
   for (let y = 0; y < h; y++) for (let x = 50; x < 90; x++) assert.equal(gt[y * tw + x - x0], full[y * w + x]);
+});
+
+// ---- CHR-288/289 wiring cores (hlRGBA on 8-bit frames, drcBuildMap proxy map) ----
+test('hlRGBA: a frame with no channel at 255 is returned unchanged (changed 0)', () => {
+  const w = 16, h = 16, a = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) { a[4 * i] = 200; a[4 * i + 1] = 150; a[4 * i + 2] = 100; a[4 * i + 3] = 255; }
+  const r = app.hlRGBA(a, w, h, 'propagate');
+  assert.equal(r.changed, 0);
+  assert.deepEqual(Array.from(r.data), Array.from(a));
+});
+test('hlRGBA: only the clipped region changes; alpha preserved; deterministic', () => {
+  const w = 64, h = 64, a = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) { a[4 * i] = 190; a[4 * i + 1] = 160; a[4 * i + 2] = 110; a[4 * i + 3] = 255; }
+  for (let y = 28; y < 36; y++) for (let x = 28; x < 36; x++) { const o = 4 * (y * w + x); a[o] = 255; a[o + 1] = 230; a[o + 2] = 255; }
+  const r1 = app.hlRGBA(a, w, h, 'opposed'), r2 = app.hlRGBA(a, w, h, 'opposed');
+  assert.ok(r1.changed > 0);
+  assert.deepEqual(Array.from(r1.data), Array.from(r2.data));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = 4 * (y * w + x), inBlob = x >= 28 && x < 36 && y >= 28 && y < 36;
+    assert.equal(r1.data[o + 3], 255);
+    if (!inBlob) assert.ok(r1.data[o] === a[o] && r1.data[o + 1] === a[o + 1] && r1.data[o + 2] === a[o + 2]);
+  }
+});
+test('drcBuildMap: flat image gives a ~zero map; map is bright-positive / dark-negative', () => {
+  const w = 48, h = 32, a = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) { a[4 * i] = a[4 * i + 1] = a[4 * i + 2] = 120; a[4 * i + 3] = 255; }
+  const flat = app.drcBuildMap(a, w, h);
+  assert.ok(flat.data.every((v) => Math.abs(v) < 1e-3));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = 4 * (y * w + x), v = x < w / 2 ? 20 : 220; a[o] = a[o + 1] = a[o + 2] = v; }
+  const m = app.drcBuildMap(a, w, h);
+  assert.ok(m.data[5 * w + 3] < -0.5 && m.data[5 * w + w - 4] > 0.5);
 });

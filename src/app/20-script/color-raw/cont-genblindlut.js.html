@@ -76,7 +76,7 @@ class FXR{
   _stageKey(u,name,srcName,srcSig){const id=(t)=>{if(!t)return 0;if(!t.__id)t.__id=(FXR._tid=(FXR._tid||0)+1);return t.__id+'.'+(t.__v||0);};
     const tx=this.txs;
     return name+'|'+JSON.stringify(u,(k,v)=>v instanceof Float32Array?Array.from(v):v)+'|'+[this.w,this.h,srcName,srcName==='img'?id(this.imgTx):srcSig,id(tx[name]),this.imgW,this.imgH].join(',')
-      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx)].join(','):'');}
+      +(name==='lut'?'|'+[id(this.lutTx),id(this.hslTx),id(this.pcSelTx),id(this.curveTx),id(this.maskTx),id(this.maskTx2),id(tx.stockShoulder),id(this.depthTx),id(this.mskCrvTx),id(this.drcTx)].join(','):'');}
   _stagePass(name,u,b,srcName,opts,uncacheable){
     const tx=this.txs[name];let key=null;
     if(tx&&opts&&opts.lutCache===true&&!uncacheable&&!opts.outFb&&!this._lost){
@@ -280,6 +280,8 @@ uniform vec4 mskK[8];     // x: Noise Reduction strength 0..1 (unipolar — see 
 uniform vec4 mskL[8];     // x: local Sharpen amount (-1..1); y: smooth-area protection (0..1); zw reserved.
 uniform float mskShowSharpMask; // selected mask edge-protection preview index, -1 when inactive
 uniform vec2 uvOffL,uvScaleL;
+// CHR-289 Retinex DRC: drcMap is a per-photo R16F map of d = (log illumination - log anchor), read in GLOBAL uv so preview, loupe and tiled export agree. drcOn gates everything; shadows/highlights are strengths 0..1.
+uniform sampler2D drcMap;uniform float drcOn,drcSh,drcHl;
 // ROADMAP R7 — Depth Range gate (colRangeWeight's sibling): x: gate on 0/1, y: depLo, z: depHi
 // (0..1, same range-gate convention as mskD's lumLo/lumHi); w: signed local Vibrance (-1..1).
 // depthTx is the per-photo
