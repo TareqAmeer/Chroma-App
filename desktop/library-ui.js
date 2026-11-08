@@ -9369,9 +9369,10 @@
   async function libExportPathsInner(paths) {
     const clickedAt = performance.now();
     const n = paths.length;
+    window.__csExportPreCancel = false;
     // Show the export as started at once: the steps below (sidecars, camera peek) take a moment,
     // and a silent gap after the click is what made people click Export again.
-    if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting', done: 0, total: n, current: 'Preparing…' });
+    if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting', done: 0, total: n, current: 'Preparing…', cancelFn: () => { window.__csExportPreCancel = true; } });
     // Lazy batch: nothing is decoded up front and the editor is left alone. Each photo is decoded
     // ONCE, at export quality, only when the export reaches it (item._exportLoad, see exportFX).
     // This used to load the whole selection into the editor first — an interactive-quality decode

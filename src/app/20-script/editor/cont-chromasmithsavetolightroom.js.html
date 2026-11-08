@@ -245,7 +245,7 @@ async function _exportFXRun(opts){
   const btn=document.getElementById('btn-fx-export');if(btn)btn.disabled=true;
   const prompt=document.getElementById('fx-save-prompt');if(prompt)prompt.innerHTML='';
   const N=items.length;
-  fxExportCancel=false;
+  fxExportCancel=!!window.__csExportPreCancel;window.__csExportPreCancel=false; // a Cancel clicked during the Library's "Preparing…" phase must not be swallowed
   const cancelBtn=document.getElementById('btn-fx-cancel');
   const progBox=document.getElementById('fx-export-prog'),progBar=document.getElementById('fx-export-prog-bar'),progTxt=document.getElementById('fx-export-prog-txt');
   if(N>1){if(cancelBtn)cancelBtn.style.display='';if(progBox)progBox.style.display='block';}
