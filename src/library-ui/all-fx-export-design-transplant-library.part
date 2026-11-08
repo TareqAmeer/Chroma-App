@@ -17,4 +17,4 @@
     } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
   };
   const exportBtn = overlay.querySelector('#lib-export-btn');
-  if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
+  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return t.length > 1 ? libExportCustom(t) : libExportPaths(t); };

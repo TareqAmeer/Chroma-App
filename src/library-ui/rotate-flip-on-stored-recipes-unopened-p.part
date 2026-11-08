@@ -172,6 +172,18 @@
     toast('An export is already running');
     return true;
   }
+  // Opens the photo(s) in the editor and reveals the Export section so settings can be chosen
+  // before exporting (used by "Export custom…" and by the top-bar Export button for batches).
+  async function libExportCustom(paths) {
+    if (libExportRunning() || !paths.length) return;
+    if (paths.length <= 1) await openInEditor(paths[0]);
+    else await openPathsInEditor(paths);
+    const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
+    if (card) {
+      card.classList.remove('fx-sec-collapsed');
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
   async function libExportPaths(paths) {
     if (!paths.length) return;
     if (libExportRunning()) return;

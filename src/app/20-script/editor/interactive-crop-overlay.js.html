@@ -162,10 +162,30 @@ function cropCustomChanged(){cropAR=_cropCustomAR();if(cropMode){cropN=cropDefau
 // displayed frame like the crop — so carry them with the image. f maps a displayed point.
 // Radial: a 90° turn swaps the ellipse axes (rx is width-normalised, ry height-normalised); a
 // mirror negates its rotation. Brush/AI rasters are not remapped here.
+// Raster masks (brush/AI/skin: m.px, TOP-origin, row-major) live in the DISPLAYED frame like the
+// analytic ones, so a flip / turn / crop has to carry the pixels too, not just radial/linear coords.
+// Always writes a NEW array (history holds the old one by reference — copy-on-write).
+function mskRemapRaster(m,kind,crop){
+  if(!m||!m.px||!m.px.length||!m.mtW||!m.mtH||m.origin==='depth')return;
+  const w=m.mtW,h=m.mtH,src=m.px;if(src.length!==w*h)return;
+  let nw=w,nh=h,out;
+  if(kind==='crop'){
+    const{x,y,w:cw,h:ch}=crop;out=new Uint8ClampedArray(w*h);
+    for(let j=0;j<h;j++){const sy=Math.min(h-1,Math.max(0,Math.floor((y+(j+0.5)/h*ch)*h)));
+      for(let i=0;i<w;i++){const sx=Math.min(w-1,Math.max(0,Math.floor((x+(i+0.5)/w*cw)*w)));out[j*w+i]=src[sy*w+sx];}}
+  }else if(kind==='mx'){out=new Uint8ClampedArray(w*h);for(let j=0;j<h;j++)for(let i=0;i<w;i++)out[j*w+i]=src[j*w+(w-1-i)];}
+  else if(kind==='my'){out=new Uint8ClampedArray(w*h);for(let j=0;j<h;j++)out.set(src.subarray((h-1-j)*w,(h-j)*w),j*w);}
+  else{
+    nw=h;nh=w;out=new Uint8ClampedArray(w*h);
+    for(let j=0;j<nh;j++)for(let i=0;i<nw;i++)out[j*nw+i]=kind==='cw'?src[(nw-1-i)*w+j]:src[i*w+(w-1-j)];
+  }
+  m.px=out;m._pxFrozen=false;m.mtW=nw;m.mtH=nh;_mskTexDirty=true;
+}
 function mskRemapForGeom(kind){
   // Mask y is bottom-up, so a clockwise turn maps (x,y)->(y,1-x) here (top-down it would be (1-y,x)).
   const f=kind==='cw'?(x,y)=>[y,1-x]:kind==='ccw'?(x,y)=>[1-y,x]:kind==='mx'?(x,y)=>[1-x,y]:(x,y)=>[x,1-y];
   (fxState.masks||[]).forEach(m=>{
+    mskRemapRaster(m,kind);
     if((kind==='cw'||kind==='ccw')&&m.ar>0)m.ar=1/m.ar; // the frame turns, so its width/height flips
     if(m.type==='radial'){
       [m.cx,m.cy]=f(m.cx,m.cy);
@@ -181,6 +201,7 @@ function mskRemapForCrop(crop){
   if(!(w>0)||!(h>0))return;
   const yb=1-y-h; // the crop rect is top-down, mask y is bottom-up
   (fxState.masks||[]).forEach(m=>{
+    mskRemapRaster(m,'crop',crop);
     if(m.ar>0&&(m.type==='radial'||m.type==='linear'))m.ar*=w/h;
     if(m.type==='radial'){
       m.cx=(m.cx-x)/w;m.cy=(m.cy-yb)/h;m.rx=m.rx/w;m.ry=m.ry/h;

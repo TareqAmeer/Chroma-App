@@ -9278,6 +9278,18 @@
     toast('An export is already running');
     return true;
   }
+  // Opens the photo(s) in the editor and reveals the Export section so settings can be chosen
+  // before exporting (used by "Export custom…" and by the top-bar Export button for batches).
+  async function libExportCustom(paths) {
+    if (libExportRunning() || !paths.length) return;
+    if (paths.length <= 1) await openInEditor(paths[0]);
+    else await openPathsInEditor(paths);
+    const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
+    if (card) {
+      card.classList.remove('fx-sec-collapsed');
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
   async function libExportPaths(paths) {
     if (!paths.length) return;
     if (libExportRunning()) return;
@@ -9391,7 +9403,7 @@
       if (snap) {
         if (snap.geom !== undefined) item.geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
         if (snap.masks) item.masks = JSON.parse(JSON.stringify(snap.masks));
-        if (snap.adjustIndependent && snap.sliders) { const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
+        if (snap.sliders) { const v = {}; /* each Library photo keeps its OWN saved adjustments, not the first photo's */ ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
       }
       const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p });
       const loadPrivate = async () => {
@@ -9965,16 +9977,7 @@
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
     exportMenu.subItem('Web gallery…', () => createWebGallery(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
-    exportMenu.subItem('Export custom…', async () => {
-      if (libExportRunning()) return;
-      if (n <= 1) await openInEditor(paths[0]);
-      else await openPathsInEditor(paths);
-      const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
-      if (card) {
-        card.classList.remove('fx-sec-collapsed');
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
+    exportMenu.subItem('Export custom…', () => libExportCustom(paths));
     sep();
     // Was prefixed with a 🗑️ emoji — every other row in this same menu is plain text, and
     // CLAUDE.md §3b is explicit: no emoji in desktop chrome, they render per-platform and never
@@ -13720,7 +13723,7 @@
     } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
   };
   const exportBtn = overlay.querySelector('#lib-export-btn');
-  if (exportBtn) exportBtn.onclick = () => libExportPaths(cmKbTargets());
+  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return t.length > 1 ? libExportCustom(t) : libExportPaths(t); };
 
   // ── Top-bar icon-only collapse in .full mode (Library View.html's fitTopbar()) — stays ONE
   // row and hides labels instead of wrapping to a second one. Docked (:not(.full)) mode is
@@ -18712,8 +18715,15 @@
         c.classList.toggle('multi', set.has(key));
       });
       if (typeof syncSelCount === 'function') syncSelCount();
+      if (!cloud && !main._mqRaf) main._mqRaf = requestAnimationFrame(() => { main._mqRaf = 0; syncMarqueeChrome(); });
     });
+    function syncMarqueeChrome() {
+      if (state.source === 'lr') return;
+      if (typeof renderBatchBar === 'function') renderBatchBar();
+      if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+    }
     document.addEventListener('pointerup', () => {
+      if (active) syncMarqueeChrome();
       // A plain click (no drag) that started on empty grid background clears the selection —
       // clicking away from the photos is the expected way to deselect, same as most file
       // browsers/galleries. Only fires when the pointerdown itself began off any card (bgDown)

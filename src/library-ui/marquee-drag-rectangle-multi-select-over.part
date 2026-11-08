@@ -60,8 +60,15 @@
         c.classList.toggle('multi', set.has(key));
       });
       if (typeof syncSelCount === 'function') syncSelCount();
+      if (!cloud && !main._mqRaf) main._mqRaf = requestAnimationFrame(() => { main._mqRaf = 0; syncMarqueeChrome(); });
     });
+    function syncMarqueeChrome() {
+      if (state.source === 'lr') return;
+      if (typeof renderBatchBar === 'function') renderBatchBar();
+      if (typeof syncLibActionButtons === 'function') syncLibActionButtons();
+    }
     document.addEventListener('pointerup', () => {
+      if (active) syncMarqueeChrome();
       // A plain click (no drag) that started on empty grid background clears the selection —
       // clicking away from the photos is the expected way to deselect, same as most file
       // browsers/galleries. Only fires when the pointerdown itself began off any card (bgDown)

@@ -105,7 +105,7 @@
       if (snap) {
         if (snap.geom !== undefined) item.geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
         if (snap.masks) item.masks = JSON.parse(JSON.stringify(snap.masks));
-        if (snap.adjustIndependent && snap.sliders) { const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
+        if (snap.sliders) { const v = {}; /* each Library photo keeps its OWN saved adjustments, not the first photo's */ ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
       }
       const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p });
       const loadPrivate = async () => {
@@ -679,16 +679,7 @@
     exportMenu.subItem('Contact sheet…', () => createContactSheet(paths));
     exportMenu.subItem('Web gallery…', () => createWebGallery(paths));
     exportMenu.subItem('Quick export', () => libExportPaths(paths), kbd([], 'E'));
-    exportMenu.subItem('Export custom…', async () => {
-      if (libExportRunning()) return;
-      if (n <= 1) await openInEditor(paths[0]);
-      else await openPathsInEditor(paths);
-      const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
-      if (card) {
-        card.classList.remove('fx-sec-collapsed');
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
+    exportMenu.subItem('Export custom…', () => libExportCustom(paths));
     sep();
     // Was prefixed with a 🗑️ emoji — every other row in this same menu is plain text, and
     // CLAUDE.md §3b is explicit: no emoji in desktop chrome, they render per-platform and never
