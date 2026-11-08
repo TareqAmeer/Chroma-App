@@ -7669,7 +7669,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1108I';
+const BUILD='1.1108J';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -29045,9 +29045,12 @@ async function fxDrcApplyFor(renderer,P,src){
   // "N changed" on the Advanced row: controls inside differing from their markup default, so an edit
   // hidden under a closed fold is never lost. Polled lightly because undo/session/snapshot set values from script.
   window.fxAdvChanged=function(d){let n=0;d.querySelectorAll('input[id],select[id]').forEach(el=>{
+    // Not edits: the export filename is auto-filled from the photo; a RAW opens with Sharpen at its own default 40;
+    // a select with no matching option (selectedIndex -1) is an unset state, not a user choice.
+    if(el.id==='fx-fname')return;
     if(el.type==='checkbox'||el.type==='radio'){if(el.checked!==el.defaultChecked)n++;}
-    else if(el.tagName==='SELECT'){const o=[...el.options].find(x=>x.defaultSelected)||el.options[0];if(o&&el.value!==o.value)n++;}
-    else if(el.value!==el.defaultValue)n++;});return n;};
+    else if(el.tagName==='SELECT'){if(el.selectedIndex<0)return;const o=[...el.options].find(x=>x.defaultSelected)||el.options[0];if(o&&el.value!==o.value)n++;}
+    else{let dv=el.defaultValue;if(el.id==='sl-adj-sharp'){const it=typeof curItem==='function'?curItem():null;if(it&&typeof RAW_FILE_EXT_RE!=='undefined'&&RAW_FILE_EXT_RE.test('.'+(it.ext||'')))dv='40';}if(el.value!==dv)n++;}});return n;};
   function upd(){document.querySelectorAll('details.fx-adv').forEach(d=>{const b=d.querySelector('summary .fx-adv-n');if(!b)return;const n=window.fxAdvChanged(d);const t=n?n+' changed':'';if(b.textContent!==t){b.textContent=t;b.hidden=!n;}});}
   window.fxAdvUpdate=upd;
   document.addEventListener('input',upd,true);document.addEventListener('change',upd,true);
