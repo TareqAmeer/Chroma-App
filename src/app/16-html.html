@@ -1331,6 +1331,8 @@
             <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Live preview only — export is always full quality. Auto: preview-sized source (fast playback). Full: full-resolution source frames.">
               <option value="auto">Auto</option><option value="full">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
             </select>
+            <span id="vid-proxy-status" style="display:none;font-family:var(--mono);font-size:10px;color:var(--mut)" title="Building a small, fast-seeking copy of this clip so playback and scrubbing stay smooth. Export always uses the original."></span>
+            <button class="btn bgh" id="btn-vid-proxy-cancel" style="display:none;padding:1px 8px;font-size:10px" onclick="fxVideoProxyCancel()">Cancel</button>
           </div>
         </div>
       </div>

@@ -11,8 +11,127 @@ function fxVideoProxyDims(it){
   if(long<=tgt)return null;
   const k=tgt/long;return{w:Math.max(2,Math.round(W*k)),h:Math.max(2,Math.round(H*k))};
 }
+// ---- Preview proxy (smooth playback/scrub for big clips) ----------------------------------------------
+// Decoding a 4K H.264 frame costs ~100 ms (draw+flush) regardless of the destination size, so a big clip tops out
+// ~3 fps however small the preview is. For sources with a long edge > FX_PROXY_MIN_LONG we transcode ONCE (WebCodecs via
+// mediabunny's Conversion) a small short-GOP H.264 proxy (video only: playback audio comes from the decoded
+// AudioBuffer, export remuxes the original packets) and let scrub/playback/thumbnails read it through fxVideoPvSink.
+// Export, Capture Frame and Preview: Full / Full-res NEVER read the proxy: they keep it._mbSampleSink (the original).
+// One build at a time; switching clips cancels it; finished proxies are cached in IndexedDB (LRU, size-capped).
+const FX_PROXY_VER=1,FX_PROXY_MIN_LONG=1920,FX_PROXY_LONG=1280,FX_PROXY_CACHE_MAX=600*1024*1024,FX_PROXY_CACHE_N=24;
+let _fxProxyJob=null; // {it,conv,cancelled} - the single in-flight build
+function fxVideoPvSink(it){return(it&&it._pvSink&&!fxFullResPreview&&fxVideoPreviewQualityMode!=='full')?it._pvSink:(it&&it._mbSampleSink);}
+let _fxProxyDBp=null;
+function _fxProxyDB(){return _fxProxyDBp||(_fxProxyDBp=new Promise((res,rej)=>{const rq=indexedDB.open('chromasmith-vproxy',1);
+  rq.onupgradeneeded=()=>rq.result.createObjectStore('p',{keyPath:'key'});
+  rq.onsuccess=()=>res(rq.result);rq.onerror=()=>{_fxProxyDBp=null;rej(rq.error);};}));}
+function _fxProxyReq(db,mode,fn){return new Promise((res,rej)=>{const tx=db.transaction('p',mode),r=fn(tx.objectStore('p'));
+  tx.oncomplete=()=>res(r&&r.result);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});}
+async function _fxProxyCacheGet(key){
+  try{const db=await _fxProxyDB();const rec=await _fxProxyReq(db,'readonly',s=>s.get(key));
+    if(rec&&rec.data){rec.t=Date.now();_fxProxyReq(db,'readwrite',s=>s.put(rec)).catch(()=>{});return new Blob([rec.data],{type:'video/mp4'});}}catch(e){}
+  return null;
+}
+async function _fxProxyCachePut(key,blob){
+  try{const db=await _fxProxyDB();const data=await blob.arrayBuffer(); // ArrayBuffer, not Blob: WKWebView hands back IndexedDB Blobs whose later reads throw NotFoundError
+    await _fxProxyReq(db,'readwrite',s=>s.put({key,data,size:data.byteLength,t:Date.now()}));
+    const all=await _fxProxyReq(db,'readonly',s=>s.getAll());
+    all.sort((a,b)=>b.t-a.t);let total=0;const drop=[];
+    all.forEach((r,i)=>{total+=r.size;if(i>0&&(total>FX_PROXY_CACHE_MAX||i>=FX_PROXY_CACHE_N))drop.push(r.key);}); // newest entry always survives
+    if(drop.length)await _fxProxyReq(db,'readwrite',s=>{drop.forEach(k=>s.delete(k));return null;});
+  }catch(e){}
+}
+function _fxProxyStatus(txt,busy){
+  const el=document.getElementById('vid-proxy-status'),cb=document.getElementById('btn-vid-proxy-cancel');
+  if(el){el.textContent=txt||'';el.style.display=txt?'':'none';}
+  if(cb)cb.style.display=busy?'':'none';
+}
+function fxVideoProxyCancel(){const j=_fxProxyJob;if(!j)return;j.cancelled=true;try{j.conv&&j.conv.cancel();}catch(e){}}
+// Attach a finished proxy blob to the item (validates it decodes and has the source's aspect ratio).
+async function _fxProxyAttach(it,blob,MB){
+  const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(blob)});
+  const tr=await input.getPrimaryVideoTrack();
+  if(!tr||!(await tr.canDecode()))return false;
+  const probeSink=new MB.VideoSampleSink(tr);
+  try{let got=false;for await(const smp of probeSink.samples(0)){got=true;smp.close();break;}if(!got)return false;}catch(e){return false;} // a proxy that cannot actually be read is never used
+  const w=await tr.getDisplayWidth(),h=await tr.getDisplayHeight(),ar=it.img.width/it.img.height;
+  if(Math.abs(w/h-ar)>0.02*ar)return false; // wrong aspect/rotation: never show it
+  it._pvSink=new MB.VideoSampleSink(tr);it._pvInfo={w,h,bytes:blob.size};
+  _fxPlayClose();it._shownFrame=-1; // playback/seek re-open on the proxy
+  return true;
+}
+// Build (or load from cache) the proxy for `it`. Resolves true when it._pvSink is ready.
+// opts: force (ignore the size threshold), long (proxy long edge), noCache (tests).
+async function fxVideoProxyBuild(it,opts){
+  opts=opts||{};
+  if(!it||it.kind!=='video'||!it.videoFile)return false;
+  if(it._pvSink)return true;
+  const W=it.img.width,H=it.img.height,srcLong=Math.max(W,H),tgtLong=opts.long||FX_PROXY_LONG;
+  if(!opts.force&&(srcLong<=FX_PROXY_MIN_LONG||srcLong<=tgtLong))return false;
+  if(_fxProxyJob)return false; // bounded: one build at a time
+  const job=_fxProxyJob={it,conv:null,cancelled:false};
+  try{
+    const MB=await getMediabunny();
+    const k=Math.min(1,tgtLong/srcLong),pw=Math.max(2,Math.round(W*k/2)*2),ph=Math.max(2,Math.round(H*k/2)*2);
+    const key=`${it.name}|${it.fileSize}|${it.durationUs}|${it.clipSeed}|v${FX_PROXY_VER}|${pw}x${ph}`;
+    if(!opts.noCache){
+      const cached=await _fxProxyCacheGet(key);
+      if(cached&&!job.cancelled&&await _fxProxyAttach(it,cached,MB))return true;
+    }
+    if(job.cancelled)return false;
+    const fps=it.fps||30,bitrate=Math.max(300000,Math.round(pw*ph*Math.min(60,fps)*0.15));
+    const vopt={width:pw,height:ph,fit:'fill',codec:'avc',bitrate,keyFrameInterval:0.5,latencyMode:'realtime',hardwareAcceleration:'prefer-hardware',forceTranscode:true};
+    const mk=async()=>{
+      const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(it.videoFile)});
+      const target=new MB.BufferTarget();
+      const output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
+      return{target,conv:await MB.Conversion.init({input,output,video:vopt,audio:{discard:true}})};
+    };
+    let hwOK=false;try{hwOK=await MB.canEncodeVideo('avc',{width:pw,height:ph,bitrate,hardwareAcceleration:'prefer-hardware'});}catch(e){}
+    if(!hwOK)delete vopt.hardwareAcceleration; // hint unsupported here -> plain request
+    const r=await mk();
+    if(!r.conv.isValid)return false;
+    job.conv=r.conv;
+    r.conv.onProgress=p=>{if(curItem()===it&&!job.cancelled)_fxProxyStatus(`Building preview… ${Math.round(p*100)}%`,true);};
+    if(curItem()===it)_fxProxyStatus('Building preview… 0%',true);
+    await r.conv.execute();
+    if(job.cancelled||!r.target.buffer)return false;
+    const blob=new Blob([r.target.buffer],{type:'video/mp4'});
+    if(!(await _fxProxyAttach(it,blob,MB)))return false;
+    if(!opts.noCache)_fxProxyCachePut(key,blob);
+    return true;
+  }catch(e){
+    if(!job.cancelled)console.warn('video preview proxy failed',e);
+    return false;
+  }finally{
+    _fxProxyJob=null;
+    if(job.cancelled)it._pvTried=false; // dropped (clip switched): a later visit may build again
+    _fxProxyStatus('');
+  }
+}
+// Called when a clip becomes current (fxSyncTransportUI) and from playback when it can't hold fps.
+function fxVideoProxyMaybe(it,opts){
+  if(_fxProxyJob&&_fxProxyJob.it!==it)fxVideoProxyCancel(); // switched clips: drop the old build
+  if(!it||it.kind!=='video'||it._pvSink||it._pvTried)return;
+  it._pvTried=true;
+  setTimeout(()=>{ // let the first frame paint before decode competes for the CPU
+    let n=0;
+    const go=()=>{
+      if(curItem()!==it||n++>120){it._pvTried=false;return;}
+      if(_fxProxyJob){setTimeout(go,500);return;} // previous (cancelling) build still unwinding
+      fxVideoProxyBuild(it,opts).then(ok=>{
+        if(ok&&curItem()===it){if(!_fxPlayRAF){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);}}
+      });
+    };
+    go();
+  },400);
+}
 function _fxVideoPresent(it,sample,frameIndex){
-  const d=fxVideoProxyDims(it);
+  let d=fxVideoProxyDims(it);
+  if(d&&it._pvSink&&fxVideoPvSink(it)===it._pvSink){ // proxy source: keep its native size when smaller than the target
+    const sw=sample.displayWidth||sample.codedWidth||0,sh=sample.displayHeight||sample.codedHeight||0;
+    if(sw&&sh&&sw<d.w)d={w:sw,h:sh};
+  }
   if(d){
     if(!it._pvImg||it._pvImg.width!==d.w||it._pvImg.height!==d.h){it._pvImg=document.createElement('canvas');it._pvImg.width=d.w;it._pvImg.height=d.h;}
     const pc=it._pvImg.getContext('2d');
@@ -57,7 +176,7 @@ async function _fxSeekDecode(it,frameIndex){
   const myGen=++_fxSeekGen;
   const t=frameIndex/(it.fps||30);
   let sample=null;
-  for await(const s of it._mbSampleSink.samples(t)){sample=s;break;}
+  for await(const s of fxVideoPvSink(it).samples(t)){sample=s;break;}
   if(myGen!==_fxSeekGen||curItem()!==it){if(sample)sample.close();return;} // item switched / newer seek won — drop this stale result
   if(!sample)return;
   _fxVideoPresent(it,sample,frameIndex);
@@ -113,7 +232,7 @@ async function _fxPlayAdvance(it,tS){
   const fps=it.fps||30;
   if(_fxPlayItem!==it||!_fxPlayIter){
     _fxPlayClose();
-    _fxPlayIter=it._mbSampleSink.samples(Math.max(0,tS))[Symbol.asyncIterator]();_fxPlayItem=it;
+    _fxPlayIter=fxVideoPvSink(it).samples(Math.max(0,tS))[Symbol.asyncIterator]();_fxPlayItem=it;
   }
   const iter=_fxPlayIter;
   let best=null;
@@ -129,7 +248,7 @@ async function _fxPlayAdvance(it,tS){
       if(best)best.close();
       best=_fxPlayAhead;_fxPlayAhead=null;
       if(tS-best.timestamp>_FX_PLAY_RESYNC_S){ // hopelessly behind: jump to the clock
-        _fxPlayClose();_fxPlayIter=it._mbSampleSink.samples(tS)[Symbol.asyncIterator]();_fxPlayItem=it;
+        _fxPlayClose();_fxPlayIter=fxVideoPvSink(it).samples(tS)[Symbol.asyncIterator]();_fxPlayItem=it;
         const r=await _fxPlayIter.next();
         if(r.value){best.close();best=r.value;}
         break;
@@ -142,136 +261,3 @@ async function _fxPlayAdvance(it,tS){
   best.close();
   return fi;
 }
-function fxVideoLoopToggle(){
-  fxVideoLoop=!fxVideoLoop;
-  const btn=document.getElementById('btn-vid-loop');
-  if(btn)btn.classList.toggle('bsec',fxVideoLoop);
-}
-// In-playback audio: an AudioBufferSourceNode re-created on every play/seek-while-playing/loop —
-// a source node is one-shot by the Web Audio spec (can't be re-started or re-offset once
-// created), so "restart" always means stop the old one and make a fresh one. Once playing, its
-// own AudioContext clock (fxAudioCtx().currentTime) becomes the playback clock instead of
-// performance.now() — tighter A/V sync than a wall-clock RAF loop drifting independently of
-// whatever the audio hardware is actually doing.
-let fxVideoMuted=false,_fxPlayAudioSrc=null,_fxPlayAudioCtxStart=0;
-function _fxAudioStop(){
-  if(_fxPlayAudioSrc){try{_fxPlayAudioSrc.stop();}catch(e){}try{_fxPlayAudioSrc.disconnect();}catch(e){}}
-  _fxPlayAudioSrc=null;
-}
-function _fxAudioStart(it,offsetSec){
-  _fxAudioStop();
-  if(fxVideoMuted||!it._audioBuffer)return;
-  const ctx=fxAudioCtx();
-  if(ctx.state==='suspended')ctx.resume().catch(()=>{}); // a suspended context's clock never advances -> frozen picture
-  const src=ctx.createBufferSource();
-  src.buffer=it._audioBuffer;
-  src.connect(ctx.destination);
-  const clamped=Math.max(0,Math.min(it._audioBuffer.duration-0.001,offsetSec));
-  src.start(0,clamped);
-  src.onended=()=>{if(_fxPlayAudioSrc===src)_fxPlayAudioSrc=null;}; // clip runs past its own audio (video is usually a hair longer) — fine, just stop tracking it
-  _fxPlayAudioSrc=src;_fxPlayAudioCtxStart=ctx.currentTime; // elapsed = PLAYED time only; fxVideoPlayTick adds _fxPlayStartFrame itself (the old '-clamped' double-counted the start offset when playing from mid-clip)
-}
-function fxVideoAudioSelChanged(v){if((v==='mute')!==fxVideoMuted)fxVideoMuteToggle();}
-// One-line "what will this export produce" under the Output card's video controls. Mirrors the
-// size/fps/bitrate math in fxVideoExportSmall (same constants) so the line matches the file.
-function fxVideoExportSummary(){
-  const el=document.getElementById('vid-exp-summary');if(!el)return;
-  const it=curItem();
-  if(!it||it.kind!=='video'){el.textContent='';return;}
-  const g=id=>(document.getElementById(id)||{}).value;
-  const cap=g('sel-vid-resolution')==='source'?Infinity:parseInt(g('sel-vid-resolution'),10)||1080;
-  const gw=it.img.width,gh=it.img.height;
-  const sc=Math.min(1,cap/Math.max(gw,gh));
-  const ow=Math.max(2,Math.round(gw*sc/2)*2),oh=Math.max(2,Math.round(gh*sc/2)*2);
-  const srcFps=it.fps||30,fps=g('sel-vid-fps')==='source'?srcFps:Math.min(srcFps,parseInt(g('sel-vid-fps'),10)||srcFps);
-  const f0=it.trimInFrame||0,f1=it.trimOutFrame!=null?it.trimOutFrame:it.frameCount-1;
-  const dur=Math.max(1,f1-f0+1)/srcFps;
-  const mult={draft:0.3,standard:0.6,high:1.0,max:1.8}[g('sel-vid-quality')]||1;
-  const br=20e6*(ow*oh)/(1920*1080)*(fps/30)*mult;
-  const mb=br*dur/8/1048576;
-  el.textContent=`${ow}×${oh} · ${fps%1?fps.toFixed(2):fps} fps · ${dur.toFixed(1)} s · about ${mb<10?mb.toFixed(1):Math.round(mb)} MB`+(it.trimInFrame||f1<it.frameCount-1?' (trimmed)':'');
-}
-function fxVideoMuteToggle(){
-  fxVideoMuted=!fxVideoMuted;
-  {const sa=document.getElementById('sel-vid-audio');if(sa)sa.value=fxVideoMuted?'mute':'keep';}
-  const btn=document.getElementById('btn-vid-mute');if(btn)btn.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
-  const it=curItem();
-  if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
-    if(fxVideoMuted)_fxAudioStop();
-    else _fxAudioStart(it,(+document.getElementById('vid-scrub').value||0)/(it.fps||30));
-  }
-}
-function fxVideoGuidesToggle(){
-  const ov=document.getElementById('fx-guides-overlay');if(!ov)return;
-  const on=ov.style.display==='none';
-  ov.style.display=on?'block':'none';fxPlacePhotoOverlay(ov);
-  const btn=document.getElementById('btn-vid-guides');if(btn)btn.classList.toggle('bsec',on);
-}
-// Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at
-// full quality regardless of this setting.
-let fxVideoPreviewQuality=1,fxVideoPreviewQualityMode='auto'; // 'auto' = proxy source at <=1920; 'full' = full-res source; ½/¼ = proxy x quality
-function fxVideoPreviewQualityChanged(v){
-  fxVideoPreviewQualityMode=v==='full'?'full':(v==='auto'?'auto':'q');
-  fxVideoPreviewQuality=(v==='full'||v==='auto')?1:(+v||1);
-  const it=curItem();
-  if(it&&it.kind==='video'&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);}else renderPreview();
-}
-function fxVideoPlayToggle(){
-  const it=curItem();if(!it||it.kind!=='video')return;
-  if(_fxPlayRAF){fxVideoPause();return;}
-  const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('pause',18);
-  _fxPlayStartMs=performance.now();
-  _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
-  _fxPlayFrameTimes=[];
-  _fxPlayClose();
-  _fxAudioStart(it,_fxPlayStartFrame/(it.fps||30));
-  _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
-}
-function fxVideoPause(){
-  if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
-  _fxPlayRAF=null;
-  _fxPlayClose();
-  _fxAudioStop();
-  const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('play',18);
-}
-async function fxVideoPlayTick(nowMs){
-  const it=curItem();
-  if(!it||it.kind!=='video'||!_fxPlayRAF){fxVideoPause();return;}
-  // Prefer the audio clock once a source is actually running — see _fxAudioStart's comment.
-  const elapsedS=_fxPlayAudioSrc?(fxAudioCtx().currentTime-_fxPlayAudioCtxStart):(nowMs-_fxPlayStartMs)/1000;
-  let targetFrame=_fxPlayStartFrame+Math.round(elapsedS*(it.fps||30));
-  const maxFrame=it.frameCount-1;
-  // Loop within the trim window (or the whole clip when untrimmed) instead of always stopping
-  // at the end — the V1 "stop" behaviour is now just fxVideoLoop=false.
-  const loopIn=it.trimInFrame||0,loopOut=it.trimOutFrame!=null?Math.min(it.trimOutFrame,maxFrame):maxFrame;
-  if(targetFrame>loopOut){
-    if(fxVideoLoop&&loopOut>loopIn){
-      targetFrame=loopIn;
-      _fxPlayStartMs=nowMs;_fxPlayStartFrame=loopIn; // resync the wall-clock baseline to the loop-in point
-      _fxAudioStart(it,loopIn/(it.fps||30));
-      _fxPlayClose(); // reader restarts at loop-in
-    }else{fxVideoPause();return;}
-  }
-  const scrub=document.getElementById('vid-scrub');
-  if(+scrub.value!==targetFrame){
-    // Present the newest frame that is due on the clock (sequential decode, see _fxPlayAdvance).
-    // The RAF below only re-arms after this resolves, so a slow frame can never queue a backlog.
-    const clockS=_fxPlayStartFrame/(it.fps||30)+elapsedS;
-    let shown=-1;
-    try{shown=await _fxPlayAdvance(it,clockS);}catch(e){console.error('playback decode failed',e);fxVideoPause();return;}
-    if(!_fxPlayRAF||curItem()!==it)return;
-    if(shown<0){_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);return;} // nothing new due yet
-    scrub.value=shown;
-    document.getElementById('vid-time').textContent=fxVideoTimeLabel(shown,it.fps);
-    _fxPlayFrameTimes.push(nowMs);
-    if(_fxPlayFrameTimes.length>30)_fxPlayFrameTimes.shift();
-    if(_fxPlayFrameTimes.length>1){
-      const dtAvg=(_fxPlayFrameTimes[_fxPlayFrameTimes.length-1]-_fxPlayFrameTimes[0])/(_fxPlayFrameTimes.length-1);
-      const readout=document.getElementById('vid-fps-readout');
-      if(readout&&dtAvg>0)readout.textContent=(1000/dtAvg).toFixed(1)+' fps';
-    }
-  }
-  if(_fxPlayRAF)_fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
-}
-// HH:MM:SS:FF (frames, not tenths) — I/O trim points are frame-accurate, so the readout should
-// be too, matching the Shotcut/Resolve convention rather than a tenths-of-a-second display.
