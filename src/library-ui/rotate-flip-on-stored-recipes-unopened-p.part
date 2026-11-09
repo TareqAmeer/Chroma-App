@@ -176,6 +176,10 @@
   // before exporting (used by "Export custom…" and by the top-bar Export button for batches).
   async function libExportCustom(paths) {
     if (libExportRunning() || !paths.length) return;
+    const sk2 = document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function';
+    // Show the drawer at once: loading a batch of RAWs takes many seconds and a silent gap reads as "nothing happened".
+    if (sk2 && paths.length > 1) { try { sk2ExportOpen(); } catch (e) { console.error('sk2ExportOpen early', e); } }
+    if (paths.length > 1) toast(`Loading ${paths.length} photos for export…`, true);
     if (paths.length <= 1) await openInEditor(paths[0]);
     else await openPathsInEditor(paths);
     if (document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function') { try { if (typeof switchTab === 'function') switchTab('fx'); sk2ExportOpen(); return; } catch (e) { console.error('sk2ExportOpen', e); } }
