@@ -53,6 +53,7 @@ function fxFullResPreviewToggle(){
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
   if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
   if(fxFullResPreview){const it0=curItem();if(it0)it0._fullResKicked=false;}   // re-arm: the next render asks for the real frame
+  {const v0=curItem();if(v0&&v0.kind==='video'&&v0._mbSampleSink&&typeof fxVideoSeekTo==='function'){v0._shownFrame=-1;fxVideoSeekTo(v0,v0.curFrame||0);}} // video: swap proxy/full-res source
   fxRenderPreviewViewOnly();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no

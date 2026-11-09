@@ -1,10 +1,30 @@
 let _fxSeekGen=0,_fxSeekBusy=false,_fxSeekQueued=null;
 // Draw a decoded sample into the item's source canvas and re-render. Shared by exact seeks and the
 // sequential playback reader so both paths present a frame identically.
+// Live-preview proxy: the preview canvas is a fraction of a 4K frame, and uploading the full frame to the GPU
+// texture cost ~240ms/frame (11 fps). Unless the user picked Preview: Full (or the Full-res button), the decoded
+// frame is scaled into a smaller canvas (it._pvImg, long edge <=1920 x quality) that updateWork feeds the renderer.
+// it.img stays the full-res poster canvas (export + Capture Frame never read the proxy; capture re-decodes it).
+function fxVideoProxyDims(it){
+  if(fxVideoPreviewQualityMode==='full'||fxFullResPreview)return null;
+  const W=it.img.width,H=it.img.height,long=Math.max(W,H),tgt=Math.max(320,Math.round(1920*fxVideoPreviewQuality));
+  if(long<=tgt)return null;
+  const k=tgt/long;return{w:Math.max(2,Math.round(W*k)),h:Math.max(2,Math.round(H*k))};
+}
 function _fxVideoPresent(it,sample,frameIndex){
-  const ctx=it.img.getContext('2d');
-  ctx.clearRect(0,0,it.img.width,it.img.height);
-  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  const d=fxVideoProxyDims(it);
+  if(d){
+    if(!it._pvImg||it._pvImg.width!==d.w||it._pvImg.height!==d.h){it._pvImg=document.createElement('canvas');it._pvImg.width=d.w;it._pvImg.height=d.h;}
+    const pc=it._pvImg.getContext('2d');
+    pc.clearRect(0,0,d.w,d.h);
+    sample.draw(pc,0,0,d.w,d.h);
+    it._imgStale=true;
+  }else{
+    it._pvImg=null;it._imgStale=false;
+    const ctx=it.img.getContext('2d');
+    ctx.clearRect(0,0,it.img.width,it.img.height);
+    sample.draw(ctx,0,0,it.img.width,it.img.height);
+  }
   it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
   it._shownFrame=frameIndex;
   updateWork();renderPreview();
@@ -189,8 +209,13 @@ function fxVideoGuidesToggle(){
 }
 // Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at
 // full quality regardless of this setting.
-let fxVideoPreviewQuality=1;
-function fxVideoPreviewQualityChanged(v){fxVideoPreviewQuality=+v||1;renderPreview();}
+let fxVideoPreviewQuality=1,fxVideoPreviewQualityMode='auto'; // 'auto' = proxy source at <=1920; 'full' = full-res source; ½/¼ = proxy x quality
+function fxVideoPreviewQualityChanged(v){
+  fxVideoPreviewQualityMode=v==='full'?'full':(v==='auto'?'auto':'q');
+  fxVideoPreviewQuality=(v==='full'||v==='auto')?1:(+v||1);
+  const it=curItem();
+  if(it&&it.kind==='video'&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);}else renderPreview();
+}
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}

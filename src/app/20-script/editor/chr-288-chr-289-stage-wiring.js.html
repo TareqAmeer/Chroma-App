@@ -107,7 +107,7 @@ function updateWork(){
   if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(it);
   if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
-  fxWork=it?geomCanvas(fxHlItem(it)):null;
+  {const wi=it?fxHlItem(it):null;fxWork=wi?geomCanvas(wi.kind==='video'&&wi._pvImg?{...wi,img:wi._pvImg}:wi):null;}
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(FX,it);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry

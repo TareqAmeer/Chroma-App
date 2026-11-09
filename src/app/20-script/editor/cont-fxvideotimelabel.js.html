@@ -145,6 +145,9 @@ async function fxVideoCaptureFrame(){
   const it=curItem();
   if(!it||it.kind!=='video'){toast('No video loaded',false);return;}
   const P=getFXParams(it.adjustOverride||undefined);
+  if(it._imgStale&&it._mbSampleSink){ // preview shows a proxy: decode the shown frame at full res into it.img for the capture
+    for await(const s of it._mbSampleSink.samples((it.curFrame||0)/(it.fps||30))){const c=it.img.getContext('2d');c.clearRect(0,0,it.img.width,it.img.height);s.draw(c,0,0,it.img.width,it.img.height);s.close();break;}
+  }
   const src=geomCanvas(it);
   const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
   const proc=await processToCanvas(P,src,iw,ih);

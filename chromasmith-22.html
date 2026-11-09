@@ -5381,8 +5381,8 @@ if(!(window.Capacitor&&window.Capacitor.getPlatform&&window.Capacitor.getPlatfor
         <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
           <div class="fx-row" style="align-items:center;gap:4px;width:auto">
             <span style="font-size:10px;color:var(--mut)">Preview</span>
-            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
-              <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
+            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Live preview only — export is always full quality. Auto: preview-sized source (fast playback). Full: full-resolution source frames.">
+              <option value="auto">Auto</option><option value="full">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
             </select>
           </div>
         </div>
@@ -7668,7 +7668,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1109F';
+const BUILD='1.1109G';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -11906,6 +11906,7 @@ function fxFullResPreviewToggle(){
   const b=document.getElementById('btn-fx-fullres');if(b)b.classList.toggle('on',fxFullResPreview);
   if(fxFullResPreview&&typeof toast==='function')toast('Full res preview on');
   if(fxFullResPreview){const it0=curItem();if(it0)it0._fullResKicked=false;}   // re-arm: the next render asks for the real frame
+  {const v0=curItem();if(v0&&v0.kind==='video'&&v0._mbSampleSink&&typeof fxVideoSeekTo==='function'){v0._shownFrame=-1;fxVideoSeekTo(v0,v0.curFrame||0);}} // video: swap proxy/full-res source
   fxRenderPreviewViewOnly();
 }
 // Debounced re-render while zooming with Full res on: zoom itself is pure CSS transform (no
@@ -13292,10 +13293,30 @@ async function loadFXVideoFile(file){
 let _fxSeekGen=0,_fxSeekBusy=false,_fxSeekQueued=null;
 // Draw a decoded sample into the item's source canvas and re-render. Shared by exact seeks and the
 // sequential playback reader so both paths present a frame identically.
+// Live-preview proxy: the preview canvas is a fraction of a 4K frame, and uploading the full frame to the GPU
+// texture cost ~240ms/frame (11 fps). Unless the user picked Preview: Full (or the Full-res button), the decoded
+// frame is scaled into a smaller canvas (it._pvImg, long edge <=1920 x quality) that updateWork feeds the renderer.
+// it.img stays the full-res poster canvas (export + Capture Frame never read the proxy; capture re-decodes it).
+function fxVideoProxyDims(it){
+  if(fxVideoPreviewQualityMode==='full'||fxFullResPreview)return null;
+  const W=it.img.width,H=it.img.height,long=Math.max(W,H),tgt=Math.max(320,Math.round(1920*fxVideoPreviewQuality));
+  if(long<=tgt)return null;
+  const k=tgt/long;return{w:Math.max(2,Math.round(W*k)),h:Math.max(2,Math.round(H*k))};
+}
 function _fxVideoPresent(it,sample,frameIndex){
-  const ctx=it.img.getContext('2d');
-  ctx.clearRect(0,0,it.img.width,it.img.height);
-  sample.draw(ctx,0,0,it.img.width,it.img.height);
+  const d=fxVideoProxyDims(it);
+  if(d){
+    if(!it._pvImg||it._pvImg.width!==d.w||it._pvImg.height!==d.h){it._pvImg=document.createElement('canvas');it._pvImg.width=d.w;it._pvImg.height=d.h;}
+    const pc=it._pvImg.getContext('2d');
+    pc.clearRect(0,0,d.w,d.h);
+    sample.draw(pc,0,0,d.w,d.h);
+    it._imgStale=true;
+  }else{
+    it._pvImg=null;it._imgStale=false;
+    const ctx=it.img.getContext('2d');
+    ctx.clearRect(0,0,it.img.width,it.img.height);
+    sample.draw(ctx,0,0,it.img.width,it.img.height);
+  }
   it.curFrame=frameIndex; // read by fxVideoFrameSeed so the grain seed follows whichever frame is actually on screen
   it._shownFrame=frameIndex;
   updateWork();renderPreview();
@@ -13480,8 +13501,13 @@ function fxVideoGuidesToggle(){
 }
 // Live-preview-only resolution scale (see renderPreview's own hook) — export always renders at
 // full quality regardless of this setting.
-let fxVideoPreviewQuality=1;
-function fxVideoPreviewQualityChanged(v){fxVideoPreviewQuality=+v||1;renderPreview();}
+let fxVideoPreviewQuality=1,fxVideoPreviewQualityMode='auto'; // 'auto' = proxy source at <=1920; 'full' = full-res source; ½/¼ = proxy x quality
+function fxVideoPreviewQualityChanged(v){
+  fxVideoPreviewQualityMode=v==='full'?'full':(v==='auto'?'auto':'q');
+  fxVideoPreviewQuality=(v==='full'||v==='auto')?1:(+v||1);
+  const it=curItem();
+  if(it&&it.kind==='video'&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);}else renderPreview();
+}
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
@@ -13688,6 +13714,9 @@ async function fxVideoCaptureFrame(){
   const it=curItem();
   if(!it||it.kind!=='video'){toast('No video loaded',false);return;}
   const P=getFXParams(it.adjustOverride||undefined);
+  if(it._imgStale&&it._mbSampleSink){ // preview shows a proxy: decode the shown frame at full res into it.img for the capture
+    for await(const s of it._mbSampleSink.samples((it.curFrame||0)/(it.fps||30))){const c=it.img.getContext('2d');c.clearRect(0,0,it.img.width,it.img.height);s.draw(c,0,0,it.img.width,it.img.height);s.close();break;}
+  }
   const src=geomCanvas(it);
   const iw=src.naturalWidth||src.width,ih=src.naturalHeight||src.height;
   const proc=await processToCanvas(P,src,iw,ih);
@@ -29265,7 +29294,7 @@ function updateWork(){
   if(typeof mskDepthPreviewSync==='function')mskDepthPreviewSync(it);
   if(window.chromasmithInpaintSync)window.chromasmithInpaintSync();
   if(it&&(it._inpaintLoading||it._inpaintError)){fxWork=null;const message=it._inpaintError||'Loading accepted erase repair assets…';const status=document.getElementById('fx-no-img');if(status){status.textContent=message;status.style.display='block';}return;}
-  fxWork=it?geomCanvas(fxHlItem(it)):null;
+  {const wi=it?fxHlItem(it):null;fxWork=wi?geomCanvas(wi.kind==='video'&&wi._pvImg?{...wi,img:wi._pvImg}:wi):null;}
   if(fxWork)FX.setImage(fxWork);
   if(typeof fxSyncDepthTexture==='function')fxSyncDepthTexture(FX,it);
   if(typeof fxInvalidateFullBase==='function')fxInvalidateFullBase(); // coarse full-res underlay must re-render for the new image/geometry

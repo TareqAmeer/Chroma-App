@@ -1328,8 +1328,8 @@
         <div class="fx-row" style="align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
           <div class="fx-row" style="align-items:center;gap:4px;width:auto">
             <span style="font-size:10px;color:var(--mut)">Preview</span>
-            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Scales the LIVE PREVIEW resolution only — export is always full quality">
-              <option value="1">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
+            <select id="sel-vid-preview-quality" onchange="fxVideoPreviewQualityChanged(this.value)" title="Live preview only — export is always full quality. Auto: preview-sized source (fast playback). Full: full-resolution source frames.">
+              <option value="auto">Auto</option><option value="full">Full</option><option value="0.5">½</option><option value="0.25">¼</option>
             </select>
           </div>
         </div>
