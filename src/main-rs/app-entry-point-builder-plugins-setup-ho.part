@@ -1338,3 +1338,16 @@ mod raw_editor_cache_budget_tests {
         assert_eq!(big, vec![400]);
     }
 }
+
+#[cfg(test)]
+mod heavy_nr_gate_tests {
+    use super::*;
+    #[test]
+    fn background_work_waits_while_high_nr_runs_and_resumes_after() {
+        assert!(!wait_for_heavy_nr_idle(std::time::Duration::from_millis(50)));
+        let g = HeavyNrGuard::new();
+        assert!(wait_for_heavy_nr_idle(std::time::Duration::from_millis(300)), "must wait while active");
+        drop(g);
+        assert!(!wait_for_heavy_nr_idle(std::time::Duration::from_millis(50)), "must not wait once released");
+    }
+}

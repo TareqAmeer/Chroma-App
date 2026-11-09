@@ -585,6 +585,11 @@ fn cache_raw_decode(
         .and_then(|v| v.to_str())
         .unwrap_or("?")
         .to_string();
+    if background.unwrap_or(false) {
+        // Idle prep yields to a running High-tier NR pass (see HEAVY_NR_ACTIVE); bounded so it
+        // can never stall forever.
+        wait_for_heavy_nr_idle(std::time::Duration::from_secs(600));
+    }
     let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
     let mut stage_t = std::time::Instant::now();
     let ext = Path::new(&path)

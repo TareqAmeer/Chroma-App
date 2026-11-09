@@ -1711,6 +1711,11 @@ fn cache_raw_decode(
         .and_then(|v| v.to_str())
         .unwrap_or("?")
         .to_string();
+    if background.unwrap_or(false) {
+        // Idle prep yields to a running High-tier NR pass (see HEAVY_NR_ACTIVE); bounded so it
+        // can never stall forever.
+        wait_for_heavy_nr_idle(std::time::Duration::from_secs(600));
+    }
     let _raw_diag = diag::raw_op(format!("cache_raw_decode file={file_name}"));
     let mut stage_t = std::time::Instant::now();
     let ext = Path::new(&path)
@@ -2130,6 +2135,36 @@ fn decode_image_v1(request: tauri::ipc::Request) -> Result<tauri::ipc::Response,
     Ok(tauri::ipc::Response::new(out))
 }
 
+/// Count of in-flight High-tier neural NR passes. The pass is CPU-bound on every core, and idle
+/// background RAW previews (cache_raw_decode background=true) running beside it doubled its
+/// per-tile time (measured: 1.12s vs 0.525s per 512px tile, denoise_probe, app indexing vs quiet),
+/// i.e. ~125s vs ~60s per photo. Background work yields while this is non-zero.
+static HEAVY_NR_ACTIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+struct HeavyNrGuard;
+impl HeavyNrGuard {
+    fn new() -> Self {
+        HEAVY_NR_ACTIVE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        HeavyNrGuard
+    }
+}
+impl Drop for HeavyNrGuard {
+    fn drop(&mut self) {
+        HEAVY_NR_ACTIVE.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Blocks (bounded by `max`) while a High-tier NR pass is running. Returns true if it had to wait.
+fn wait_for_heavy_nr_idle(max: std::time::Duration) -> bool {
+    let t0 = std::time::Instant::now();
+    let mut waited = false;
+    while HEAVY_NR_ACTIVE.load(std::sync::atomic::Ordering::SeqCst) > 0 && t0.elapsed() < max {
+        waited = true;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    waited
+}
+
 /// Cancel flags for in-flight denoise_raw_high calls, keyed by the caller-supplied token.
 /// Entries are removed by the SAME call that inserted them once it returns (success, error, or
 /// cancelled) — cancel_denoise_high only ever flips a flag that may or may not still be there
@@ -2148,6 +2183,7 @@ fn denoise_raw_high(app: tauri::AppHandle, request: tauri::ipc::Request) -> Resu
     let (json, payload) = parse_framed(request.body())?;
     check_film_source(payload, &json)?;
     let _raw_diag = diag::raw_op(format!("denoise_raw_high bytes={}", payload.len()));
+    let _heavy_nr = HeavyNrGuard::new();
     let token = json["token"].as_str().unwrap_or("").to_string();
     let mode = json["mode"].as_str().unwrap_or("linear16");
     let auto_lens = json["autoLens"].as_bool().unwrap_or(false);
@@ -4826,5 +4862,18 @@ mod raw_editor_cache_budget_tests {
         let mut big = vec![400, 400, 400];
         assert_eq!(raw_editor_cache_trim(&mut big, 256), 2);
         assert_eq!(big, vec![400]);
+    }
+}
+
+#[cfg(test)]
+mod heavy_nr_gate_tests {
+    use super::*;
+    #[test]
+    fn background_work_waits_while_high_nr_runs_and_resumes_after() {
+        assert!(!wait_for_heavy_nr_idle(std::time::Duration::from_millis(50)));
+        let g = HeavyNrGuard::new();
+        assert!(wait_for_heavy_nr_idle(std::time::Duration::from_millis(300)), "must wait while active");
+        drop(g);
+        assert!(!wait_for_heavy_nr_idle(std::time::Duration::from_millis(50)), "must not wait once released");
     }
 }
