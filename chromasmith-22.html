@@ -7668,7 +7668,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1109E';
+const BUILD='1.1109F';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -31855,7 +31855,11 @@ async function fxVideoExportSmall(it){
   // object (fades need an off-canvas source to fade FROM, hence the two-stage draw below).
   const compCanvas=document.createElement('canvas');compCanvas.width=finalW;compCanvas.height=finalH;
   const compCtx=compCanvas.getContext('2d');
-  const frameCanvas=document.createElement('canvas');frameCanvas.width=srcW;frameCanvas.height=srcH;
+  // Without geometry the grade renders at outW×outH anyway, so decode straight into a canvas of
+  // that size: uploading a full 3840×2160 canvas to the GL texture cost ~243 ms/frame in WKWebView
+  // (vs ~20 ms at 1080p); the draw() downscale is GPU-side and filtered.
+  const fW=(!hasGeom&&scale<1)?outW:srcW,fH=(!hasGeom&&scale<1)?outH:srcH;
+  const frameCanvas=document.createElement('canvas');frameCanvas.width=fW;frameCanvas.height=fH;
   const frameCtx=frameCanvas.getContext('2d');
   const fadeInS=Math.max(0,parseFloat((document.getElementById('vid-fade-in')||{}).value)||0);
   const fadeOutS=Math.max(0,parseFloat((document.getElementById('vid-fade-out')||{}).value)||0);
@@ -31885,16 +31889,36 @@ async function fxVideoExportSmall(it){
     }
     await output.start();
 
+    // ONE sequential decode over the trim window (like playback's _fxPlayAdvance), NOT a fresh
+    // samples(t) seek per output frame: a per-frame seek restarts decoding at the preceding
+    // keyframe every time (150-1500 ms/frame on 4K H.264 in WKWebView = ~2.5 min for 5 s) and its
+    // generator closed the yielded sample at end of stream ("VideoSample is closed").
+    // pickFrame draws the latest sample due at time t into frameCanvas and holds it (the canvas
+    // keeps the pixels) when t asks for the same/earlier sample, so fps decimation and a short tail work.
+    const sIter=it._mbSampleSink.samples(trimStartS)[Symbol.asyncIterator]();
+    let sAhead=null,sDone=false,haveFrame=false;
+    const sEps=0.5/srcFps;
+    const pickFrame=async(t)=>{
+      let best=null;
+      for(;;){
+        if(!sAhead&&!sDone){const r=await sIter.next();if(r.done)sDone=true;else sAhead=r.value;}
+        if(!sAhead)break;
+        if(sAhead.timestamp<=t+sEps||(!best&&!haveFrame)){if(best)best.close();best=sAhead;sAhead=null;}
+        else break;
+      }
+      if(best){
+        frameCtx.clearRect(0,0,fW,fH);
+        best.draw(frameCtx,0,0,fW,fH);
+        best.close();haveFrame=true;
+      }
+      return haveFrame;
+    };
+    try{
     for(let f=0;f<totalFrames;f++){
       if(fxExportCancel){cancelled=true;break;}
       const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
       const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
-      let sample=null;
-      for await(const s of it._mbSampleSink.samples(srcTimeS)){sample=s;break;}
-      if(!sample)continue;
-      frameCtx.clearRect(0,0,srcW,srcH);
-      sample.draw(frameCtx,0,0,srcW,srcH);
-      sample.close();
+      if(!(await pickFrame(srcTimeS)))continue;
       const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
       FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
       const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
@@ -31918,6 +31942,10 @@ async function fxVideoExportSmall(it){
       if(typeof applyWatermark==='function')applyWatermark(compCanvas);
       await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
       setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
+    }
+    }finally{
+      if(sAhead)try{sAhead.close();}catch(e){}
+      try{await sIter.return();}catch(e){}
     }
     // Audio pass: a separate loop AFTER video (mediabunny muxes tracks correctly regardless of
     // add() call interleaving) — copies encoded packets straight through, windowed to the
