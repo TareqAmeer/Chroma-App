@@ -254,186 +254,186 @@
   {
    "file": "rotate-flip-on-stored-recipes-unopened-p.part",
    "firstLine": 9107,
-   "lines": 192
+   "lines": 193
   },
   {
    "file": "chr-188-option-drag-a-thumbnail-or-the-w.part",
-   "firstLine": 9299,
+   "firstLine": 9300,
    "lines": 831
   },
   {
    "file": "grid-title-see-lib-grid-title.part",
-   "firstLine": 10130,
+   "firstLine": 10131,
    "lines": 690
   },
   {
    "file": "c1-compare-pair-mode.part",
-   "firstLine": 10820,
+   "firstLine": 10821,
    "lines": 592
   },
   {
    "file": "cull-sources.part",
-   "firstLine": 11412,
+   "firstLine": 11413,
    "lines": 117
   },
   {
    "file": "pre-draw-render-views-the-user-is-about.part",
-   "firstLine": 11529,
+   "firstLine": 11530,
    "lines": 210
   },
   {
    "file": "roadmap-12-saved-filter-sort-views.part",
-   "firstLine": 11739,
+   "firstLine": 11740,
    "lines": 297
   },
   {
    "file": "wiring.part",
-   "firstLine": 12036,
+   "firstLine": 12037,
    "lines": 256
   },
   {
    "file": "quick-look-space.part",
-   "firstLine": 12292,
+   "firstLine": 12293,
    "lines": 674
   },
   {
    "file": "edited-look-previews-for-quick-look-spac.part",
-   "firstLine": 12966,
+   "firstLine": 12967,
    "lines": 134
   },
   {
    "file": "edited-looks-on-grid-cards.part",
-   "firstLine": 13100,
+   "firstLine": 13101,
    "lines": 137
   },
   {
    "file": "filters-panel-toggle-button-active-filte.part",
-   "firstLine": 13237,
+   "firstLine": 13238,
    "lines": 188
   },
   {
    "file": "view-options-view-mode-sort-thumb-size-m.part",
-   "firstLine": 13425,
+   "firstLine": 13426,
    "lines": 69
   },
   {
    "file": "sort-pill-popover-design-transplant-libr.part",
-   "firstLine": 13494,
+   "firstLine": 13495,
    "lines": 76
   },
   {
    "file": "gear-view-menu-popover-design-transplant.part",
-   "firstLine": 13570,
+   "firstLine": 13571,
    "lines": 137
   },
   {
    "file": "all-fx-export-design-transplant-library.part",
-   "firstLine": 13707,
+   "firstLine": 13708,
    "lines": 21
   },
   {
    "file": "top-bar-icon-only-collapse-in-full-mode.part",
-   "firstLine": 13728,
+   "firstLine": 13729,
    "lines": 18
   },
   {
    "file": "deskx-only-same-width-threshold-fold-as.part",
-   "firstLine": 13746,
+   "firstLine": 13747,
    "lines": 49
   },
   {
    "file": "docked-filmstrip-library-develop-tabs-ic.part",
-   "firstLine": 13795,
+   "firstLine": 13796,
    "lines": 29
   },
   {
    "file": "sidebar-drag-resize-design-transplant-li.part",
-   "firstLine": 13824,
+   "firstLine": 13825,
    "lines": 35
   },
   {
    "file": "docked-filmstrip-drag-resize-deskx-not-f.part",
-   "firstLine": 13859,
+   "firstLine": 13860,
    "lines": 217
   },
   {
    "file": "list-view-column-widths-drag-handles-per.part",
-   "firstLine": 14076,
+   "firstLine": 14077,
    "lines": 150
   },
   {
    "file": "drk-style-sidebar-smart-collections-abov.part",
-   "firstLine": 14226,
+   "firstLine": 14227,
    "lines": 14
   },
   {
    "file": "catalog-all-photos-library-catalog-plan.part",
-   "firstLine": 14240,
+   "firstLine": 14241,
    "lines": 20
   },
   {
    "file": "collapsible-top-level-sidebar-sections-c.part",
-   "firstLine": 14260,
+   "firstLine": 14261,
    "lines": 762
   },
   {
    "file": "people-editor-for-selected-photos-grid-r.part",
-   "firstLine": 15022,
+   "firstLine": 15023,
    "lines": 145
   },
   {
    "file": "people-pets-grid-click-the-sidebar-secti.part",
-   "firstLine": 15167,
+   "firstLine": 15168,
    "lines": 73
   },
   {
    "file": "review-mode-people-pets-wireframes-scree.part",
-   "firstLine": 15240,
+   "firstLine": 15241,
    "lines": 789
   },
   {
    "file": "guaranteed-offline-tier-hq-offline-last.part",
-   "firstLine": 16029,
+   "firstLine": 16030,
    "lines": 152
   },
   {
    "file": "activity-indicator.part",
-   "firstLine": 16181,
+   "firstLine": 16182,
    "lines": 722
   },
   {
    "file": "n3-3-shared-blocking-wait-modal-the-fall.part",
-   "firstLine": 16903,
+   "firstLine": 16904,
    "lines": 245
   },
   {
    "file": "devices-card-import-ingest-rs.part",
-   "firstLine": 17148,
+   "firstLine": 17149,
    "lines": 650
   },
   {
    "file": "cloud-sources-approved-wireframe-adobe-l.part",
-   "firstLine": 17798,
+   "firstLine": 17799,
    "lines": 276
   },
   {
    "file": "albums-user-made-collections-that-link-t.part",
-   "firstLine": 18074,
+   "firstLine": 18075,
    "lines": 582
   },
   {
    "file": "marquee-drag-rectangle-multi-select-over.part",
-   "firstLine": 18656,
+   "firstLine": 18657,
    "lines": 402
   },
   {
    "file": "deskx-home-screen-the-app-opens-to-the-f.part",
-   "firstLine": 19058,
+   "firstLine": 19059,
    "lines": 79
   },
   {
    "file": "photo-preview-chr-224-wall-chr-210-drift.part",
-   "firstLine": 19137,
+   "firstLine": 19138,
    "lines": 293
   }
  ]

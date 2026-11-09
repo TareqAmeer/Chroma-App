@@ -178,6 +178,7 @@
     if (libExportRunning() || !paths.length) return;
     if (paths.length <= 1) await openInEditor(paths[0]);
     else await openPathsInEditor(paths);
+    if (document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function') { try { if (typeof switchTab === 'function') switchTab('fx'); sk2ExportOpen(); return; } catch (e) { console.error('sk2ExportOpen', e); } }
     const card = document.querySelector('.fx-ctrl[data-fxsec="export"]');
     if (card) {
       card.classList.remove('fx-sec-collapsed');
