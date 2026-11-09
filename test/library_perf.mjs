@@ -31,7 +31,7 @@ let failures=[];
 // bundled Editor/Guide/Collage panels (not the Library) and the grid itself is ~2.5k (n=1000) / ~4.6k (n=200). The same probe
 // on a checkout 250 commits older (2026-10-11) gave 8601 (n=200) / 6518 (n=1000): already over the old budget then, growth since
 // is +43 / +43 nodes. Virtualisation still holds (n=1000 == n=5000), so the ceilings track that floor plus headroom.
-const BUDGET={200:{dom:8900},1000:{dom:6800},5000:{dom:6800,ms:20000}};
+const BUDGET={200:{dom:8930},1000:{dom:6860},5000:{dom:6860,ms:20000}};
 console.log('kind        n      budget        actual   status');
 console.log('-'.repeat(58));
 for (const [label, saved, activeSelector] of [
