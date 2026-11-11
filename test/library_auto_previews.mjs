@@ -46,6 +46,19 @@ try {
   };
   const calls = (p) => p.evaluate(() => (window.__autoCalls || []).map(c => c.args));
 
+  // Idle but an export is running: background previews stay paused (they competed with the
+  // export's own full-quality decodes for the same cores).
+  const exp = await makePage(false);
+  await exp.evaluate(() => { window.libtestAutoPreviewIdle(); document.body.classList.add('fx-exporting'); });
+  await exp.evaluate(() => window.libtestAutoPreviewTick());
+  assert.equal((await calls(exp)).length, 0, 'a running export keeps background previews paused');
+  await exp.evaluate(() => { document.body.classList.remove('fx-exporting'); window.__csLibExportBusy = true; });
+  await exp.evaluate(() => window.libtestAutoPreviewTick());
+  assert.equal((await calls(exp)).length, 0, 'the Library export preparing phase also pauses them');
+  await exp.evaluate(() => { window.__csLibExportBusy = false; });
+  await exp.evaluate(() => window.libtestAutoPreviewTick());
+  assert.ok((await calls(exp)).length > 0, 'previews resume once the export is done');
+
   // Idle + enabled: builds a display-only proxy for every RAW in view (never the videos), nearest first.
   const page = await makePage(false);
   await page.evaluate(() => window.libtestAutoPreviewTouch());
@@ -68,7 +81,7 @@ try {
   assert.equal((await calls(off)).length, 0, 'chromasmithAutoPreviews=0 disables background previews');
 
   assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-  console.log('PASS: background previews build idle-only, display-only, RAW-only, once each, and can be disabled.');
+  console.log('PASS: background previews build idle-only, pause during exports, display-only, RAW-only, once each, and can be disabled.');
 } finally {
   await browser.close();
   server.close();

@@ -8593,6 +8593,9 @@
   // lands on a cache hit instead of a 4-6s decode. Lightroom/Capture One do the same. Cancelled
   // by the next open; an open of the photo being warmed waits for it instead of decoding twice.
   // localStorage chromasmithNeighbourWarm = '0' turns it off.
+  // An export decodes every photo natively at full quality; idle previews decoding nearby RAWs
+  // beside it competed for the same cores (measured: one export decode 44 s vs ~8 s alone).
+  const exportInProgress = () => !!(window.__csLibExportBusy || document.body.classList.contains('fx-exporting'));
   let _warmToken = 0, _warmInflight = null, _lastOpenIdx = -1, _warmDir = 1;
   function warmNeighbour(path) {
     const token = ++_warmToken;
@@ -8623,6 +8626,7 @@
     setTimeout(async () => {
       for (const target of targets) {
         if (token !== _warmToken || state.openedPath !== path || _warmInflight) { rawPerf('neighbour-warm-skip', path, { reason: 'superseded' }); return; }
+        if (exportInProgress()) { rawPerf('neighbour-warm-skip', path, { reason: 'export-running' }); return; }
         if (imgCache.has(target)) continue;
         let cachedAlready = false;
         for (const k of [rawRecipeKey(false, target), rawRecipeKey(true, target)]) {
@@ -8663,7 +8667,7 @@
     try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
   }
   function autoPreviewUserBusy() {
-    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
+    return !!(exportInProgress() || openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
       || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
   }
   function autoPreviewCandidates() {
@@ -9299,8 +9303,8 @@
   async function libExportPaths(paths) {
     if (!paths.length) return;
     if (libExportRunning()) return;
-    libExportBusy = true;
-    try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
+    libExportBusy = true; window.__csLibExportBusy = true;
+    try { await libExportPathsInner(paths); } finally { libExportBusy = false; window.__csLibExportBusy = false; }
   }
   window.chromasmithLibExportPaths = libExportPaths;
   // ── CHR-188: Option-drag a thumbnail (or the whole selection) out to Finder / Mail / Messages ──

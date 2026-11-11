@@ -22,7 +22,7 @@
     try { return localStorage.getItem('chromasmithAutoPreviews') !== '0'; } catch (_) { return true; }
   }
   function autoPreviewUserBusy() {
-    return !!(openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
+    return !!(exportInProgress() || openBusy || quicklook.active || _rawReviewPrep || _cacheWarmCancel || _warmInflight || rawReviewActive || _autoPrevPointerHeld)
       || performance.now() - _autoPrevLastInput < AUTO_PREVIEW_IDLE_MS;
   }
   function autoPreviewCandidates() {

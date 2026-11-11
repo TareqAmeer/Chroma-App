@@ -193,7 +193,7 @@
   async function libExportPaths(paths) {
     if (!paths.length) return;
     if (libExportRunning()) return;
-    libExportBusy = true;
-    try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
+    libExportBusy = true; window.__csLibExportBusy = true;
+    try { await libExportPathsInner(paths); } finally { libExportBusy = false; window.__csLibExportBusy = false; }
   }
   window.chromasmithLibExportPaths = libExportPaths;
