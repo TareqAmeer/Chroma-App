@@ -9283,9 +9283,10 @@
   async function libExportCustom(paths) {
     if (libExportRunning() || !paths.length) return;
     const sk2 = document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function';
-    // Show the drawer at once: loading a batch of RAWs takes many seconds and a silent gap reads as "nothing happened".
-    if (sk2 && paths.length > 1) { try { sk2ExportOpen(); } catch (e) { console.error('sk2ExportOpen early', e); } }
-    if (paths.length > 1) toast(`Loading ${paths.length} photos for export…`, true);
+    // Batch: the drawer only chooses settings; its Export button runs the lazy per-photo export
+    // (libExportPaths) — no up-front decode of the whole selection into the editor, and every
+    // photo keeps its OWN saved recipe (flip/crop/adjustments), which the editor load lost.
+    if (sk2 && paths.length > 1) { try { sk2ExportOpen({ libPaths: paths }); return; } catch (e) { console.error('sk2ExportOpen batch', e); } }
     if (paths.length <= 1) await openInEditor(paths[0]);
     else await openPathsInEditor(paths);
     if (document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function') { try { if (typeof switchTab === 'function') switchTab('fx'); sk2ExportOpen(); return; } catch (e) { console.error('sk2ExportOpen', e); } }
@@ -9301,6 +9302,7 @@
     libExportBusy = true;
     try { await libExportPathsInner(paths); } finally { libExportBusy = false; }
   }
+  window.chromasmithLibExportPaths = libExportPaths;
   // ── CHR-188: Option-drag a thumbnail (or the whole selection) out to Finder / Mail / Messages ──
   // Renders the graded export with the LAST export settings (the same exportFX path, so format,
   // quality, size and the photo's saved recipe all apply) into a unique temp folder, waits until

@@ -2717,6 +2717,7 @@ body.sk2 .sk2x-proof-meta{display:flex;align-items:center;justify-content:space-
 body.sk2 .sk2x-proof-toggle{border:0;padding:4px 8px;background:transparent;color:var(--k-color-ink);font:inherit;cursor:pointer}
 body.sk2 .sk2x-proof-toggle:focus-visible{outline:2px solid var(--k-color-accent-a);outline-offset:2px}
 body.sk2 .sk2x-scope{margin-top:18px}
+body.sk2-lib-batch #sk2-export :is(.sk2x-proof,.sk2x-scope){display:none!important}
 body.sk2 .sk2x-more{margin-top:26px}
 body.sk2 #sk2-export .fx-ctrl{display:block!important;margin-top:18px}
 body.sk2 #sk2-export .fx-ctrl-title{position:static;font-size:17px;box-shadow:none;padding:6px 0}
@@ -3607,24 +3608,33 @@ function sk2ExportBuild(){
   ['export','wm','exppreset','style','share'].forEach(k=>{const c=document.querySelector(`.fx-ctrl[data-fxsec="${k}"]`);if(c)cards.appendChild(c);});
   sh.querySelector('.sk2x-close').onclick=sk2ExportClose;
   sh.querySelector('.sk2x-proof-toggle').onclick=()=>{_fxSoftProofBefore=!_fxSoftProofBefore;fxSoftProofSchedule();};
-  sh.querySelector('.sk2x-btn').onclick=()=>{const b=document.getElementById('btn-fx-export');if(b&&b.disabled&&!fxImages.length)return;exportFX();};
+  sh.querySelector('.sk2x-btn').onclick=()=>{const lp=_sk2LibBatch;if(lp){sk2ExportClose();if(typeof window.chromasmithLibExportPaths==='function')window.chromasmithLibExportPaths(lp);return;}const b=document.getElementById('btn-fx-export');if(b&&b.disabled&&!fxImages.length)return;exportFX();};
   ['sel-exp-size','sel-exp-fmt','sel-exp-sharp','sl-exp-q'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener(id==='sl-exp-q'?'input':'change',fxSoftProofSchedule);});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('sk2-exp-open')){e.stopPropagation();sk2ExportClose();}},true);
   return sh;
 }
-function sk2ExportOpen(){
+// Library multi-photo export: the drawer only picks settings; the photos are NOT loaded into the editor —
+// the button hands the paths to the Library's lazy per-photo export, which applies each photo's own saved
+// recipe (flip/crop/adjustments) and decodes each photo once, at export quality.
+let _sk2LibBatch=null,_sk2LibBatchVid=false;
+function sk2ExportOpen(opts){
+  const lp=opts&&Array.isArray(opts.libPaths)&&opts.libPaths.length?opts.libPaths.slice():null;
+  if(lp&&!_sk2LibBatch)_sk2LibBatchVid=document.body.classList.contains('fx-cur-video');
+  if(!lp&&_sk2LibBatch){document.body.classList.toggle('fx-cur-video',_sk2LibBatchVid);}
+  _sk2LibBatch=lp;document.body.classList.toggle('sk2-lib-batch',!!lp);
+  if(lp)document.body.classList.remove('fx-cur-video'); // the drawer shows still-photo settings for a Library batch, whatever the editor last held
   if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
   const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
   const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
-  const _isVid=!!(curItem()&&curItem().kind==='video');
+  const _isVid=!lp&&!!(curItem()&&curItem().kind==='video');
   if(_isVid)fxVideoExportSummary();
-  sh.querySelector('.sk2x-btn').firstChild.textContent=_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  sh.querySelector('.sk2x-btn').firstChild.textContent=lp?`Export ${lp.length} photos `:_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
   const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
   document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
-  _fxSoftProofBefore=false;fxSoftProofSchedule();
+  _fxSoftProofBefore=false;if(!lp)fxSoftProofSchedule();
   setTimeout(()=>sh.querySelector('.sk2x-btn').focus(),50);
 }
-function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
+function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');if(_sk2LibBatch){_sk2LibBatch=null;document.body.classList.remove('sk2-lib-batch');document.body.classList.toggle('fx-cur-video',_sk2LibBatchVid);}fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
 function sk2ExportWire(){
   if(!document.body.classList.contains('deskx'))return;
   sk2ExportBuild();
@@ -7670,7 +7680,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1109H';
+const BUILD='1.1111A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
