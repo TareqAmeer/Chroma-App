@@ -42,7 +42,7 @@ const check = (ok, msg) => { console.log((ok ? 'PASS ' : 'FAIL ') + msg); if (!o
   const winMock = { __TAURI__: {}, chromasmithApplyFullCleanup: async (it, p) => { cleanups.push(p); it.img.width = 40; it.img.height = 30; return { applied: true }; } };
   const ctx = vm.createContext({
     window: winMock, console, performance,
-    document: { body: { classList: { contains: () => false } }, createElement: () => ({ width: 300, height: 150 }) },
+    document: { body: { classList: { contains: () => false } }, createElement: () => ({ width: 300, height: 150 }), getElementById: () => null },
     state: {}, RAW_EXT_RE: /\.(rw2|nef|dng)$/i, ADJ_FIELDS: [], baseName: (p) => p.split('/').pop(), defGeom: () => ({}),
     toast: (m) => toasts.push(m),
     invoke: async (cmd) => { if (cmd === 'peek_raw_camera_path') return { make: 'Panasonic', model: 'DC-S9', lens: '' }; throw Error('unexpected ' + cmd); },

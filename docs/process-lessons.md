@@ -136,3 +136,25 @@ Learned the hard/expensive way:
     Fix: for every draft rule, read `getComputedStyle` on the real target element in its edited
     state (moved, toggled, hovered) and compare to the draft value; never substitute a token for a
     literal draft value without asking; screenshot the real section side by side with the draft.
+
+21. **Library batch export shipped broken across four "fixed" commits (Nov 8–9) — every check ran a
+    different path or state from the one the user clicks.** 3f6f68ca fixed per-photo edits in the
+    Quick-export path, and in the same commit re-routed the top-bar Export button to the OTHER path
+    (load all photos into the editor), which had none of those per-photo edits — so flips were lost
+    on exactly the button the user used. 23c609dc and e77796b3 (drawer opened before the batch loaded →
+    video controls / previous batch's count) shipped with no test at all. The video-export tests ran
+    with a video open; the Library tests ran with nothing open; nobody ran "a video was open, then
+    batch-export from the Library" or "a second batch". "Per-photo" was a hand-kept whitelist
+    (geom/masks/Basic Adjustments) under a comment saying FX are "shared across the batch by design" —
+    true for an editor batch, wrong for Library photos that each have their own recipe — and no test
+    ever compared a batch output with the same photo exported alone. The safety net was also down:
+    `probe_batch_export_memory.mjs` had been failing since 6daf4995 (Nov 7) unnoticed because none of
+    the 94 `test/probe_*.mjs` is in any suite, `.git/.skip-editor-gates` has disabled the pre-commit
+    Editor gates since Sep 13, and none of the four commits was tried in the rebuilt app.
+    Rules: (a) a test drives the user's actual entry point (the button), not the inner function the
+    fix touched; (b) any change to who-calls-what (routing) needs its own test, separately from the
+    fix; (c) for batch/export work the oracle is "batch output == single export of each photo";
+    (d) test the transition states — previous item was a video, second run, mixed batch;
+    (e) a new regression test goes into an npm suite, never left as a standalone probe.
+    Now gated: `test/probe_lib_batch_export_drawer.mjs` + `test/export_batch_per_photo_recipe.mjs`
+    in `npm run library:batch-test`.

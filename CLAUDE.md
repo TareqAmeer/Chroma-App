@@ -192,7 +192,7 @@ carrying it in every turn:
 
 ## 6. Process lessons
 
-20 lessons, each cost real time: [docs/process-lessons.md](docs/process-lessons.md). Read before UI/layout, test or flaky-bug work.
+21 lessons, each cost real time: [docs/process-lessons.md](docs/process-lessons.md). Read before UI/layout, test or flaky-bug work.
 Headlines: render-and-look before optimising; `overflow-x:hidden` kills sticky (use `clip`); typed arrays don't survive `JSON.stringify`; reseed before golden renders; `display:none` hides from the UI audit; never act on a flaky-bug theory without reproducing it live; completeness comes from scanning the running app, not a typed list.
 
 ---
