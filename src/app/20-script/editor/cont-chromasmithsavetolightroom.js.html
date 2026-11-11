@@ -209,7 +209,7 @@ async function _exportFXRun(opts){
   // the active look/print/HSL/curve/stock textures exactly once here.
   const exportRenderer=fxPrepareExportRenderer();
   const exportRecipeNames=_exportRecipeNames();
-  const _expPs=items.map(it=>{
+  const _expP=it=>{
     const sm=fxState.masks;fxState.masks=it.masks||[];
     const undo=typeof secScopeSwapIn==='function'?secScopeSwapIn(it):null;
     try{
@@ -220,7 +220,8 @@ async function _exportFXRun(opts){
       copy._exportDepthMap=depth&&depth.data?{data:new Uint8Array(depth.data),w:depth.w,h:depth.h}:null;
       return copy;
     }finally{fxState.masks=sm;if(undo)undo();}
-  });
+  };
+  const _expPs=items.map(_expP);
   // Lazy batch (Library Quick export): photo 1 is still decoding natively, so use that wait to
   // warm the export renderer — a tiny render with photo 1's settings makes WebKit compile the
   // export pipeline's shaders now instead of inside photo 1's render (measured 11.4 s vs ~4.5 s for
@@ -400,6 +401,13 @@ async function _exportFXRun(opts){
         // Basic Adjustments can ALSO be made per-photo (adjToggleScope/"This photo only") — pass
         // this item's own override (or undefined to fall back to the shared DOM value) so an
         // independent exposure tweak on one photo doesn't leak into the rest of the export.
+        // Library batch: each photo carries its OWN saved recipe (look, colour, curves, grain, HSL,
+        // borders...). Put it on the controls, re-copy the look textures into the export renderer
+        // and rebuild this photo's params — otherwise every photo got photo 1's look.
+        if(typeof sourceItem._applyRecipe==='function'){
+          try{await sourceItem._applyRecipe();exportRenderer.resetTextureSnapshotFrom(FX);_expPs[idx]=_expP(it);}
+          catch(e){log(`Could not apply ${it.name}'s own edits — exported with the batch settings: ${(e&&e.message)||e}`,'warn');}
+        }
         const P=_expPs[idx];
         if(fxNeedsFullAndroidJpeg(it)){setExportPhotoStatus(idx,'rendering','preparing…');setProg(idx,`Preparing ${idx+1}/${N}: ${it.name}…`);decodedJpeg=await fxDecodeFullAndroidJpeg(it);}
         tm.geom0=performance.now();

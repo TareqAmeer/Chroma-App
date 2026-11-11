@@ -9412,7 +9412,15 @@
         if (snap.masks) item.masks = JSON.parse(JSON.stringify(snap.masks));
         if (snap.sliders) { const v = {}; /* each Library photo keeps its OWN saved adjustments, not the first photo's */ ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); item.adjustOverride = v; }
       }
-      const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p });
+      // This photo's whole saved recipe goes on the controls right before it renders (exportFX
+      // calls it per photo), so look/colour/curves/grain are its own — not the first photo's.
+      // An unedited photo renders from factory defaults, not from the previous photo's look.
+      item._applyRecipe = async () => {
+        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true });
+        if (isRaw && typeof applyRawDefaults === 'function') applyRawDefaults();
+        if (snap) { await applyUISnapshot(snap, { skipRender: true }); if (isRaw && typeof applyRawDefaults === 'function') applyRawDefaults(); }
+      };
+      const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p, _applyRecipe: item._applyRecipe });
       const loadPrivate = async () => {
         const files = await readPathsAsFiles([p], { pathBackedRaw: !!window.__TAURI__ });
         if (!files.length) throw new Error('could not read ' + baseName(p));
