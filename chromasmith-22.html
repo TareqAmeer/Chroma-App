@@ -7680,7 +7680,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1111D';
+const BUILD='1.1112A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24257,7 +24257,9 @@ function applyUISnapshot(s,opts){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
     fxDemosaicSyncUI();
   }
-  if(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined){
+  // opts.noRawReload: a Library batch export swaps recipes onto the controls per photo; the editor's
+  // open photo must not be re-decoded (or lose its High pass) each time the swap changes these.
+  if(!(opts&&opts.noRawReload)&&(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined)){
     const it=curItem();if(it&&(_decodeBefore.nr!==window.chromasmithRawNr||_decodeBefore.strength!==window.chromasmithRawNrHighStrength||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo))it._nrHighApplied=false;
     const needsDecode=(_decodeBefore.nr!==window.chromasmithRawNr&&window.chromasmithRawNr!=='high')||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo;
     // These options are baked into native RAW pixels, so re-open the current source after an
@@ -31357,14 +31359,17 @@ async function _exportFXRun(opts){
   // that's what a batch export applies uniformly, exactly as the old single nativeNr boolean
   // did. Not a per-photo lookup from each item's own sidecar (that would need a native round
   // trip per RAW file before rendering even starts) — same fidelity as before, just 3-way now.
+  // A Library batch item carries its own saved tier (it._rawNr); anything else uses the open photo's.
   let exportRawNr=window.chromasmithRawNr||'fast';
-  if(exportRawNr==='high'){
-    const highCount=items.filter(it=>it.rawFile&&!it._nrHighApplied).length;
+  const nrOf=it=>(it&&it._rawNr)||exportRawNr;
+  let forceFast=false;
+  if(items.some(it=>nrOf(it)==='high')){
+    const highCount=items.filter(it=>it.rawFile&&!it._nrHighApplied&&nrOf(it)==='high').length;
     if(highCount>5){
       const proceed=await confirmModal(`${highCount} of ${items.length} photo(s) use High noise reduction (~30-90s each, several minutes total).`,'Continue with High');
       if(!proceed){
         if(!await confirmModal('Export this batch using Fast noise reduction instead?','Use Fast')){log('Export cancelled','info');toast('Export cancelled','err');return;}
-        exportRawNr='fast';
+        forceFast=true;
       }
     }
   }
@@ -31481,12 +31486,13 @@ async function _exportFXRun(opts){
         // with what is on the canvas rather than losing the export.
         const filmRecipe=_expPs[idx]._nativeFilmRecipe;
         it=await fnNativeExportItem(it,filmRecipe);
-        if(!window.chromasmithRawFullCleanup&&exportRawNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(srcPathOf(sourceItem)))&&(it.rawFile||srcPathOf(sourceItem))&&typeof window.chromasmithApplyFullCleanup==='function'){
+        const itNr=forceFast&&nrOf(sourceItem)==='high'?'fast':nrOf(sourceItem);
+        if(!window.chromasmithRawFullCleanup&&itNr!=='high'&&!it._nrHighApplied&&!it._fullCleanupApplied&&!(window.__chromasmithFullCleanupPaths&&window.__chromasmithFullCleanupPaths.has(srcPathOf(sourceItem)))&&(it.rawFile||srcPathOf(sourceItem))&&typeof window.chromasmithApplyFullCleanup==='function'){
           setExportPhotoStatus(idx,'rendering','cleaning…');
           setProg(idx,`Cleaning ${idx+1}/${N}: ${it.name}…`);
           const pre=it;useExportCopy();
           try{
-            const r=await window.chromasmithApplyFullCleanup(it,srcPathOf(sourceItem));
+            const r=await window.chromasmithApplyFullCleanup(it,srcPathOf(sourceItem),sourceItem._rawNr?{rawNr:itNr,demosaicAlgo:sourceItem._demosaicAlgo}:undefined);
             if(r&&r.applied)it._fullCleanupApplied=true;
             else if(it!==pre){dropExportCopy();it=pre;}
           }catch(e){
@@ -31500,14 +31506,14 @@ async function _exportFXRun(opts){
         // photo regardless of which one is currently selected in the editor). Skipped if the
         // interactive button already denoised this exact photo (it._nrHighApplied) — avoids
         // silently re-running a 25-90s pass the user already paid for on the current photo.
-        if(exportRawNr==='high'&&it.rawFile&&!it._nrHighApplied&&typeof window.chromasmithDenoiseHigh==='function'){
+        if(itNr==='high'&&it.rawFile&&!it._nrHighApplied&&typeof window.chromasmithDenoiseHigh==='function'){
           setExportPhotoStatus(idx,'rendering','denoising…');
           setProg(idx,`Denoising ${idx+1}/${N}: ${it.name}…`);
           const pre=it;useExportCopy();
           try{
             await window.chromasmithDenoiseHigh(it,
               (done,tot)=>{if(tot>0)setProg(idx+done/tot,`Denoising ${idx+1}/${N}: ${it.name} — ${Math.round(done/tot*100)}%…`);},
-              null);
+              null,{demosaicAlgo:sourceItem._demosaicAlgo,highStrength:sourceItem._rawNrHighStrength});
             it._nrHighApplied=true;
           }catch(e){
             if(it!==pre){dropExportCopy();it=pre;}

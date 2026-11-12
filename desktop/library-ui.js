@@ -9411,6 +9411,18 @@
       const stub = document.createElement('canvas'); stub.width = stub.height = 1;
       const item = { img: stub, name: baseName(p).replace(/\.[^.]+$/, ''), ext, dpi: 240, bytes: null, _srcPath: p, geom: defGeom() };
       const snap = snapOf(sidecars[i]);
+      // RAW decode options are baked into the pixels, so each photo carries its OWN saved tier
+      // (Off/Fast/High), High strength and demosaic — not whichever photo the editor has open.
+      if (isRaw) {
+        let nr = 'fast', dem = '';
+        try { nr = localStorage.getItem('chromasmithRawNr') || (localStorage.getItem('chromasmithNativeNr') === '0' ? 'off' : 'fast'); dem = localStorage.getItem('chromasmithDemosaicAlgo') || ''; } catch (e) {}
+        if (snap) {
+          if (snap.rawNr !== undefined) nr = snap.rawNr; else if (snap.nativeNr !== undefined) nr = snap.nativeNr ? 'fast' : 'off';
+          if (snap.demosaicAlgo !== undefined) dem = snap.demosaicAlgo;
+          if (snap.rawNrHighStrength >= 0 && snap.rawNrHighStrength <= 100) item._rawNrHighStrength = snap.rawNrHighStrength;
+        }
+        item._rawNr = nr; item._demosaicAlgo = dem;
+      }
       if (snap) {
         if (snap.geom !== undefined) item.geom = snap.geom ? JSON.parse(JSON.stringify(snap.geom)) : defGeom();
         if (snap.masks) item.masks = JSON.parse(JSON.stringify(snap.masks));
@@ -9420,11 +9432,11 @@
       // calls it per photo), so look/colour/curves/grain are its own — not the first photo's.
       // An unedited photo renders from factory defaults, not from the previous photo's look.
       item._applyRecipe = async () => {
-        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true });
+        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true, noRawReload: true });
         if (isRaw && typeof applyRawDefaults === 'function') applyRawDefaults();
-        if (snap) { await applyUISnapshot(snap, { skipRender: true }); if (isRaw && typeof applyRawDefaults === 'function') applyRawDefaults(); }
+        if (snap) { await applyUISnapshot(snap, { skipRender: true, noRawReload: true }); if (isRaw && typeof applyRawDefaults === 'function') applyRawDefaults(); }
       };
-      const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p, _applyRecipe: item._applyRecipe });
+      const perPhoto = () => ({ geom: item.geom, masks: item.masks, adjustOverride: item.adjustOverride, _srcPath: p, _applyRecipe: item._applyRecipe, _rawNr: item._rawNr, _rawNrHighStrength: item._rawNrHighStrength, _demosaicAlgo: item._demosaicAlgo });
       const loadPrivate = async () => {
         const files = await readPathsAsFiles([p], { pathBackedRaw: !!window.__TAURI__ });
         if (!files.length) throw new Error('could not read ' + baseName(p));
@@ -9444,7 +9456,7 @@
         // decode exportFX's cleanup pass ran on top of the editor's earlier one.
         item._exportLoad = async (opts) => {
           const it = { ...item, img: document.createElement('canvas') }; delete it._exportLoad;
-          const r = await window.chromasmithApplyFullCleanup(it, p, { ...(opts || {}), uploadSrc: true });
+          const r = await window.chromasmithApplyFullCleanup(it, p, { ...(opts || {}), uploadSrc: true, rawNr: item._rawNr, demosaicAlgo: item._demosaicAlgo });
           if (!r || !r.applied) { it.img.width = it.img.height = 0; return loadPrivate(); }
           it._fullCleanupApplied = true;
           return it;
@@ -9467,12 +9479,12 @@
     if (canLock) _fxHistLocked = true;
     try {
       try {
-        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true });
+        if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true, noRawReload: true });
         const anyRaw = items.some((it) => RAW_EXT_RE.test(it._srcPath));
         if (anyRaw && typeof applyRawDefaults === 'function') applyRawDefaults();
         const firstSnap = snapOf(sidecars[paths.indexOf(items[0]._srcPath)]);
         if (firstSnap) {
-          await applyUISnapshot(firstSnap); // resolves once the look's LUT has loaded
+          await applyUISnapshot(firstSnap, { noRawReload: true }); // resolves once the look's LUT has loaded
           if (typeof applyRawDefaults === 'function') applyRawDefaults();
         }
       } catch (e) { console.error('seed shared FX for batch export', e); }
@@ -9483,7 +9495,7 @@
       await exportFX({ items, clickedAt });
     } finally {
       { const fnEl = document.getElementById('fx-fname'); if (fnEl && fnPrev !== null) fnEl.value = fnPrev; }
-      if (editorSnapshot) { try { await applyUISnapshot(editorSnapshot); } catch (e) { console.error('restore editor after export', e); } }
+      if (editorSnapshot) { try { await applyUISnapshot(editorSnapshot, { noRawReload: true }); } catch (e) { console.error('restore editor after export', e); } }
       if (typeof _fxHistPushTimer !== 'undefined' && _fxHistPushTimer) { clearTimeout(_fxHistPushTimer); _fxHistPushTimer = null; }
       if (canLock) _fxHistLocked = wasLocked;
     }

@@ -546,7 +546,7 @@
   // identity bail-out below is skipped: export already owns the iteration (its own cancel
   // button stops the batch loop, not this), so there's no concurrent-photo-switch race to
   // guard against the way there is for the interactive button.
-  window.chromasmithDenoiseHigh = async function (targetItem, onProgress, onToken) {
+  window.chromasmithDenoiseHigh = async function (targetItem, onProgress, onToken, over) {
     const it = targetItem || ((typeof curItem === 'function') ? curItem() : null);
     if (!it || !it.rawFile) throw new Error('No RAW photo selected — High-tier noise reduction only applies to RAW files.');
     const c = it.img; // canvas identity, re-checked after the async round trip — same guard refine()'s caller uses
@@ -559,7 +559,8 @@
       ({ mode, lutKey } = await resolveRawLut(ident, profile, it.rawFile.__csSourcePath ? { path: it.rawFile.__csSourcePath } : { bytes })); // CHR-162: same resolver as open()
     }
     const autoLens = !!window.chromasmithAutoLens;
-    const demosaicAlgo = window.chromasmithDemosaicAlgo || '';
+    // over: a batch export's per-photo demosaic/strength — otherwise the open photo's.
+    const demosaicAlgo = (over && typeof over.demosaicAlgo === 'string') ? over.demosaicAlgo : (window.chromasmithDemosaicAlgo || '');
     const lensOverride = window.chromasmithLensOverride || '';
     const lensOverrideFocal = window.chromasmithLensOverrideFocal || 0;
     const token = 'nrh-' + Date.now() + '-' + Math.random().toString(36).slice(2);
@@ -575,7 +576,7 @@
     }
     // 0-100, blend-toward-original amount — see chromasmith-22.html's sl-nr-high-strength /
     // rawdenoise.rs's `strength` param doc comment for why this exists.
-    const highStrength = (typeof window.chromasmithRawNrHighStrength === 'number') ? window.chromasmithRawNrHighStrength : 70;
+    const highStrength = (over && typeof over.highStrength === 'number') ? over.highStrength : (typeof window.chromasmithRawNrHighStrength === 'number') ? window.chromasmithRawNrHighStrength : 70;
     let buf;
     try {
       const req = mode === 'lut'
@@ -659,8 +660,10 @@
       ({ mode, lutKey } = await resolveRawLut(ident, profile, byPath ? { path: byPath } : { bytes })); // CHR-162: same resolver as open()
     }
     const req = {
-      mode, autoLens: !!window.chromasmithAutoLens, rawNr: 'fast', fast: false,
-      demosaicAlgo: window.chromasmithDemosaicAlgo || '',
+      // opts.rawNr / opts.demosaicAlgo: a batch export passes each photo's OWN saved values. 'high'
+      // decodes at Fast here; the export runs the High pass on top.
+      mode, autoLens: !!window.chromasmithAutoLens, rawNr: (opts && opts.rawNr === 'off') ? 'off' : 'fast', fast: false,
+      demosaicAlgo: (opts && typeof opts.demosaicAlgo === 'string') ? opts.demosaicAlgo : (window.chromasmithDemosaicAlgo || ''),
       lensOverride: window.chromasmithLensOverride || '', lensOverrideFocal: window.chromasmithLensOverrideFocal || 0,
     };
     req.filmNegative = typeof fnNativeRecipe === 'function' ? fnNativeRecipe(it) : null;

@@ -178,7 +178,9 @@ function applyUISnapshot(s,opts){
     window.chromasmithDemosaicAlgo=s.demosaicAlgo;
     fxDemosaicSyncUI();
   }
-  if(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined){
+  // opts.noRawReload: a Library batch export swaps recipes onto the controls per photo; the editor's
+  // open photo must not be re-decoded (or lose its High pass) each time the swap changes these.
+  if(!(opts&&opts.noRawReload)&&(s.rawNr!==undefined||s.rawNrHighStrength!==undefined||s.demosaicAlgo!==undefined)){
     const it=curItem();if(it&&(_decodeBefore.nr!==window.chromasmithRawNr||_decodeBefore.strength!==window.chromasmithRawNrHighStrength||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo))it._nrHighApplied=false;
     const needsDecode=(_decodeBefore.nr!==window.chromasmithRawNr&&window.chromasmithRawNr!=='high')||_decodeBefore.demosaic!==window.chromasmithDemosaicAlgo;
     // These options are baked into native RAW pixels, so re-open the current source after an
