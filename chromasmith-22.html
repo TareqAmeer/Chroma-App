@@ -7680,7 +7680,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1112B';
+const BUILD='1.1112C';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -8574,12 +8574,37 @@ function gpuPreference(){
 function gpuContextOptions(){
   return{preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false,powerPreference:gpuPreference()};
 }
+// WebKit (Safari, the macOS/iOS app's WKWebView) answers gl.getUniformLocation with a synchronous
+// round trip to its GPU process, ~0.7 ms each on an Intel Mac. render() asks ~200 times per call,
+// so 150 ms of a 160 ms grade was these lookups (measured live: video export spent ~2x per frame
+// on them). A program's locations never change once linked, so remember them per program.
+function glCacheUniformLocations(gl){
+  if(!gl||gl.__csUlocCache)return;
+  const raw=gl.getUniformLocation.bind(gl),byProg=new WeakMap();
+  gl.getUniformLocation=(prog,name)=>{
+    if(!prog)return raw(prog,name);
+    let m=byProg.get(prog);if(!m){m=new Map();byProg.set(prog,m);}
+    let loc=m.get(name);if(loc===undefined){loc=raw(prog,name);m.set(name,loc);}
+    return loc;
+  };
+  // getAttribLocation is the same synchronous round trip (~2.5 ms each, 11 per render).
+  const rawA=gl.getAttribLocation.bind(gl),attrByProg=new WeakMap();
+  gl.getAttribLocation=(prog,name)=>{
+    if(!prog)return rawA(prog,name);
+    let m=attrByProg.get(prog);if(!m){m=new Map();attrByProg.set(prog,m);}
+    let loc=m.get(name);if(loc===undefined){loc=rawA(prog,name);m.set(name,loc);}
+    return loc;
+  };
+  const link=gl.linkProgram.bind(gl);gl.linkProgram=prog=>{byProg.delete(prog);attrByProg.delete(prog);return link(prog);}; // a relink invalidates
+  gl.__csUlocCache=true;
+}
 class FXR{
   constructor(canvas){
     this.cv=canvas||document.getElementById('fx-canvas')||document.createElement('canvas');
     const options=gpuContextOptions();
     this.gl=this.cv.getContext('webgl2',options)||this.cv.getContext('experimental-webgl2',options);
     this.ok=!!this.gl;if(!this.ok)return;
+    glCacheUniformLocations(this.gl);
     // A browser may later discard a high-performance context to conserve power. Persist Auto
     // for the next renderer creation instead of repeatedly asking for a context that just lost.
     this.cv.addEventListener('webglcontextlost',e=>{
@@ -8603,6 +8628,7 @@ class FXR{
     for(const k of Object.keys(this))if(k!=='cv')delete this[k];
     this.cv=cv;this.gl=cv.getContext('webgl2',gpuContextOptions());this.ok=!!this.gl;
     if(!this.ok)throw new Error('no WebGL2 context after restore');
+    glCacheUniformLocations(this.gl);
     this._rc=rc;this.onRestored=cb;this._lost=false;
     this._init();
     this.resetTextureSnapshotFrom(snap);
