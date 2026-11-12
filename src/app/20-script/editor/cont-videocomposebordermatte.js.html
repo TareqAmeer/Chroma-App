@@ -202,19 +202,27 @@ async function fxVideoExportSmall(it){
       }
       return haveFrame;
     };
+    // VIDEO_DIAG: per-stage wall time across the clip, written to the desktop log at the end.
+    const vT={pick:0,upload:0,render:0,blit:0,compose:0,encode:0},vT0=performance.now();let vTa=vT0;
+    const vLap=k=>{const n=performance.now();vT[k]+=n-vTa;vTa=n;};
     try{
     for(let f=0;f<totalFrames;f++){
       if(fxExportCancel){cancelled=true;break;}
+      vTa=performance.now();
       const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
       const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
       if(!(await pickFrame(srcTimeS)))continue;
+      vLap('pick');
       const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
       FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      vLap('upload');
       const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
       const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrameApprox}):undefined;
       FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
+      vLap('render');
       gradeCtx.clearRect(0,0,outW,outH);
       gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      vLap('blit');
       const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
       // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
       // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
@@ -229,10 +237,15 @@ async function fxVideoExportSmall(it){
         compCtx.clearRect(0,0,finalW,finalH);compCtx.drawImage(composed,0,0);
       }
       if(typeof applyWatermark==='function')applyWatermark(compCanvas);
+      vLap('compose');
       await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
+      vLap('encode');
       setProg((f+1)/totalFrames,`Encoding frame ${f+1}/${totalFrames}…`);
     }
     }finally{
+      try{const n=Math.max(1,totalFrames),ms=Math.round(performance.now()-vT0),per=Object.entries(vT).map(([k,v])=>`${k}=${(v/n).toFixed(1)}`).join(' ');
+        const m=`VIDEO_DIAG frames=${totalFrames} src=${srcW}x${srcH} decodeTo=${fW}x${fH} out=${finalW}x${finalH} codec=${codec} hw=${hwOK?1:0} stream=${streamTarget?1:0} loop_ms=${ms} per_frame_ms{${per}}`;
+        console.log(m);window.__TAURI__?.log?.info?.(m);}catch(_){}
       if(sAhead)try{sAhead.close();}catch(e){}
       try{await sIter.return();}catch(e){}
     }
