@@ -32,7 +32,16 @@ try {
     open(paths.slice(0, 2));
     const label2 = sh.querySelector('.sk2x-btn').textContent.trim();
     sk2ExportClose();
-    return { o1, afterClick, label2, calls, fxBefore, fxAfter: fxImages.length };
+    // Videos: a video batch shows VIDEO settings, a mix shows both (the batch used to always show photo settings).
+    const vids = ['/lib/clipA.MP4', '/lib/clipB.mov'];
+    open(vids);
+    const ov = { label: sh.querySelector('.sk2x-btn').textContent.trim(), vid: vis('.sk2x-cap.fx-vid-only'), still: vis('.sk2x-opts[data-sel="sel-exp-fmt"]') };
+    sk2ExportClose();
+    open([paths[0], vids[0]]);
+    const om = { label: sh.querySelector('.sk2x-btn').textContent.trim(), vid: vis('.sk2x-cap.fx-vid-only'), still: vis('.sk2x-opts[data-sel="sel-exp-fmt"]') };
+    sk2ExportClose();
+    const mixedCleared = !document.body.classList.contains('sk2-lib-mixed');
+    return { o1, afterClick, label2, calls, fxBefore, fxAfter: fxImages.length, ov, om, mixedCleared };
   });
   console.log(JSON.stringify(r));
   check(r.o1.open, 'drawer opens');
@@ -43,5 +52,8 @@ try {
   check(!r.afterClick.open && r.afterClick.vidRestored, 'drawer closes, editor video state restored');
   check(r.label2 === 'Export 2 photos →', 'second batch shows its own count: ' + r.label2);
   check(r.fxAfter === r.fxBefore, 'nothing loaded into the editor');
+  check(r.ov.vid && !r.ov.still && r.ov.label === 'Export 2 videos →', 'video batch shows video settings: ' + r.ov.label);
+  check(r.om.vid && r.om.still && r.om.label === 'Export 1 photo + 1 video →', 'mixed batch shows both: ' + r.om.label);
+  check(r.mixedCleared, 'closing the drawer clears the mixed state');
 } finally { await b.close(); server.close(); }
 if (fails.length) { console.log(`\n${fails.length} FAIL`); process.exit(1); } else console.log('\nALL PASS');

@@ -2718,6 +2718,7 @@ body.sk2 .sk2x-proof-toggle{border:0;padding:4px 8px;background:transparent;colo
 body.sk2 .sk2x-proof-toggle:focus-visible{outline:2px solid var(--k-color-accent-a);outline-offset:2px}
 body.sk2 .sk2x-scope{margin-top:18px}
 body.sk2-lib-batch #sk2-export :is(.sk2x-proof,.sk2x-scope){display:none!important}
+body.sk2-lib-mixed #sk2-export .fx-vid-only{display:block}
 body.sk2 .sk2x-more{margin-top:26px}
 body.sk2 #sk2-export .fx-ctrl{display:block!important;margin-top:18px}
 body.sk2 #sk2-export .fx-ctrl-title{position:static;font-size:17px;box-shadow:none;padding:6px 0}
@@ -3622,19 +3623,25 @@ function sk2ExportOpen(opts){
   if(lp&&!_sk2LibBatch)_sk2LibBatchVid=document.body.classList.contains('fx-cur-video');
   if(!lp&&_sk2LibBatch){document.body.classList.toggle('fx-cur-video',_sk2LibBatchVid);}
   _sk2LibBatch=lp;document.body.classList.toggle('sk2-lib-batch',!!lp);
-  if(lp)document.body.classList.remove('fx-cur-video'); // the drawer shows still-photo settings for a Library batch, whatever the editor last held
+  // A Library batch shows the settings for what it holds: still settings for photos, video settings
+  // for videos, both for a mix — whatever the editor last held.
+  const lpVids=lp?lp.filter(p=>VID_EXT_RE.test(p)).length:0,lpStills=lp?lp.length-lpVids:0;
+  if(lp)document.body.classList.toggle('fx-cur-video',!lpStills&&lpVids>0);
+  document.body.classList.toggle('sk2-lib-mixed',!!(lp&&lpVids&&lpStills));
   if(tauriNative()){let destination='';try{destination=localStorage.getItem('cs-export-dir')||'';}catch(e){}fxExportDirUI(destination);}
   const sh=sk2ExportBuild();sh.querySelectorAll('.sk2x-opts').forEach(b=>b._draw&&b._draw());
   const n=(typeof fxImages!=='undefined'&&fxImages.length)||0,scope=document.getElementById('fx-export-scope-row');
   const _isVid=!lp&&!!(curItem()&&curItem().kind==='video');
+  const vs=document.getElementById('vid-exp-summary');if(vs&&lp&&lpVids)vs.textContent=''; // per-clip sizes vary across a batch
   if(_isVid)fxVideoExportSummary();
-  sh.querySelector('.sk2x-btn').firstChild.textContent=lp?`Export ${lp.length} photos `:_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
+  const _pl=(k,w)=>`${k} ${w}${k===1?'':'s'}`;
+  sh.querySelector('.sk2x-btn').firstChild.textContent=lp?`Export ${[lpStills?_pl(lpStills,'photo'):'',lpVids?_pl(lpVids,'video'):''].filter(Boolean).join(' + ')} `:_isVid?'Export video ':n>1&&(typeof fxExportScope==='undefined'||fxExportScope!=='current')?`Export ${n} photos `:'Export ';
   const sc=sh.querySelector('.sk2x-scope');if(scope&&sc&&scope.parentElement!==sc)sc.appendChild(scope);
   document.body.classList.add('sk2-exp-open');sh.setAttribute('aria-hidden','false');
   _fxSoftProofBefore=false;if(!lp)fxSoftProofSchedule();
   setTimeout(()=>sh.querySelector('.sk2x-btn').focus(),50);
 }
-function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');if(_sk2LibBatch){_sk2LibBatch=null;document.body.classList.remove('sk2-lib-batch');document.body.classList.toggle('fx-cur-video',_sk2LibBatchVid);}fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
+function sk2ExportClose(){const sh=document.getElementById('sk2-export');document.body.classList.remove('sk2-exp-open');if(_sk2LibBatch){_sk2LibBatch=null;document.body.classList.remove('sk2-lib-batch','sk2-lib-mixed');document.body.classList.toggle('fx-cur-video',_sk2LibBatchVid);}fxSoftProofInvalidate();if(sh)sh.setAttribute('aria-hidden','true');}
 function sk2ExportWire(){
   if(!document.body.classList.contains('deskx'))return;
   sk2ExportBuild();
@@ -7680,7 +7687,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1113A';
+const BUILD='1.1113B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13245,7 +13252,7 @@ function fxNeedsHlgTransform(trackColorSpace,videoFrame){
   // Engine relabelled to SDR without converting -> we convert.
   return framePrim==='bt709'||frameTrc==='iec61966-2-1'||frameTrc==='bt709';
 }
-async function loadFXVideoFile(file){
+async function loadFXVideoFile(file,opts){
   const MB=await getMediabunny();
   const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
   const track=await input.getPrimaryVideoTrack();
@@ -13293,7 +13300,7 @@ async function loadFXVideoFile(file){
   // instead, but that's real scope beyond what playback needs today. Never let a decode failure
   // block loading the clip — video-only playback with a "no audio" note is still useful.
   let audioBuffer=null;
-  if(audioTrack){
+  if(audioTrack&&!(opts&&opts.forExport)){ // export remuxes the encoded packets; the decoded buffer is for playback only
     try{
       const buf=await file.arrayBuffer();
       audioBuffer=await fxAudioCtx().decodeAudioData(buf.slice(0));
@@ -32272,6 +32279,7 @@ async function fxVideoExportSmall(it){
     if(btn)btn.disabled=false;
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
+    window.__csLastVideoExport={cancelled:cancelled||fxExportCancel,failed:videoExportFailed}; // read by the Library's multi-video export
     fxExportCancel=false;
     if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'cancelled':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
     // The export loop drove FX with EXPORT-resolution frames — restore the live preview to

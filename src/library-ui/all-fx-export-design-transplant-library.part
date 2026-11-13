@@ -17,4 +17,6 @@
     } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
   };
   const exportBtn = overlay.querySelector('#lib-export-btn');
-  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return t.length > 1 ? libExportCustom(t) : libExportPaths(t); };
+  // A single PHOTO quick-exports with the last settings; anything else (a video, or a selection) opens the
+  // export drawer — a lone video used to go down the photo quick-export and fail.
+  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return (t.length > 1 || t.some((p) => LIB_VID_RE.test(p))) ? libExportCustom(t) : libExportPaths(t); };

@@ -247,7 +247,7 @@ function fxNeedsHlgTransform(trackColorSpace,videoFrame){
   // Engine relabelled to SDR without converting -> we convert.
   return framePrim==='bt709'||frameTrc==='iec61966-2-1'||frameTrc==='bt709';
 }
-async function loadFXVideoFile(file){
+async function loadFXVideoFile(file,opts){
   const MB=await getMediabunny();
   const input=new MB.Input({formats:MB.ALL_FORMATS,source:new MB.BlobSource(file)});
   const track=await input.getPrimaryVideoTrack();
@@ -295,7 +295,7 @@ async function loadFXVideoFile(file){
   // instead, but that's real scope beyond what playback needs today. Never let a decode failure
   // block loading the clip — video-only playback with a "no audio" note is still useful.
   let audioBuffer=null;
-  if(audioTrack){
+  if(audioTrack&&!(opts&&opts.forExport)){ // export remuxes the encoded packets; the decoded buffer is for playback only
     try{
       const buf=await file.arrayBuffer();
       audioBuffer=await fxAudioCtx().decodeAudioData(buf.slice(0));

@@ -9284,6 +9284,7 @@
   }
   // Opens the photo(s) in the editor and reveals the Export section so settings can be chosen
   // before exporting (used by "Export custom…" and by the top-bar Export button for batches).
+  const LIB_VID_RE = /\.(mp4|mov|m4v)$/i;
   async function libExportCustom(paths) {
     if (libExportRunning() || !paths.length) return;
     const sk2 = document.body.classList.contains('sk2') && typeof sk2ExportOpen === 'function';
@@ -9390,6 +9391,60 @@
   }
   window.chromasmithDragOut = { prepare: libDragOutPrepare, start: libDragOutStart, cache: dragOut.cache };
   async function libExportPathsInner(paths) {
+    // Videos export one by one through the video encoder (libExportVideosInner), each with its own
+    // saved edits; photos keep the lazy per-photo batch below. Drag-out prepares stills only.
+    const vids = window.__csDragOut ? [] : paths.filter((p) => LIB_VID_RE.test(p));
+    paths = paths.filter((p) => !LIB_VID_RE.test(p));
+    if (!paths.length) { if (vids.length) await libExportVideosInner(vids); return; }
+    try { await libExportStillsInner(paths); } finally { if (vids.length && !window.__csExportPreCancel) await libExportVideosInner(vids); }
+  }
+  async function libExportVideosInner(vids) {
+    if (typeof loadFXVideoFile !== 'function' || typeof fxVideoExportSmall !== 'function') { toast('Video export is not available here', false); return; }
+    const snapOf = (sc) => { try { return sc && sc.recipe ? snapshotFromB64(sc.recipe) : null; } catch (e) { return null; } };
+    // Same guard as the photo batch: the controls temporarily hold each clip's look, so history
+    // and autosave are locked and the editor's own settings are put back afterwards.
+    const editorSnapshot = typeof getUISnapshot === 'function' ? getUISnapshot() : null;
+    const canLock = typeof _fxHistLocked !== 'undefined', wasLocked = canLock && _fxHistLocked;
+    if (canLock) _fxHistLocked = true;
+    window.__csExportPreCancel = false;
+    let done = 0, failed = 0, cancelled = false;
+    try {
+      for (let i = 0; i < vids.length; i++) {
+        const p = vids[i];
+        if (window.__csExportPreCancel) { cancelled = true; break; }
+        if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting video', done: 0, total: 100, current: `Opening ${baseName(p)} (${i + 1}/${vids.length})…`, cancelFn: () => { window.__csExportPreCancel = true; } });
+        let it;
+        try {
+          const files = await readPathsAsFiles([p]);
+          if (!files.length) throw new Error('could not read ' + baseName(p));
+          it = await loadFXVideoFile(files[0], { forExport: true });
+        } catch (e) { failed++; log(`Could not open ${baseName(p)} for export: ${(e && e.message) || e}`, 'warn'); continue; }
+        it.path = p; it._srcPath = p; it.geom = defGeom();
+        let snap = null; try { snap = snapOf(await getSidecar(p)); } catch (e) { snap = null; }
+        try {
+          if (typeof _fxPristineDefault !== 'undefined' && _fxPristineDefault) await applyUISnapshot(_fxPristineDefault, { skipRender: true, noRawReload: true });
+          if (snap) {
+            await applyUISnapshot(snap, { skipRender: true, noRawReload: true });
+            if (snap.geom) it.geom = JSON.parse(JSON.stringify(snap.geom));
+            if (snap.masks) it.masks = JSON.parse(JSON.stringify(snap.masks));
+            if (snap.sliders) { const v = {}; ADJ_FIELDS.forEach((f) => { v[f] = snap.sliders['adj-' + f]; }); it.adjustOverride = v; }
+          }
+        } catch (e) { log(`Could not apply ${baseName(p)}'s own edits — exported with defaults: ${(e && e.message) || e}`, 'warn'); }
+        window.__csLastVideoExport = null;
+        await fxVideoExportSmall(it);
+        const r = window.__csLastVideoExport || {};
+        if (r.cancelled) { cancelled = true; break; }
+        if (r.failed) failed++; else done++;
+      }
+    } finally {
+      if (editorSnapshot) { try { await applyUISnapshot(editorSnapshot, { noRawReload: true }); } catch (e) { console.error('restore editor after video export', e); } }
+      if (typeof _fxHistPushTimer !== 'undefined' && _fxHistPushTimer) { clearTimeout(_fxHistPushTimer); _fxHistPushTimer = null; }
+      if (canLock) _fxHistLocked = wasLocked;
+      try { if (typeof updateWork === 'function') updateWork(); if (typeof renderPreview === 'function') renderPreview(); } catch (e) { /* preview refresh only */ }
+    }
+    if (vids.length > 1) toast(cancelled ? `Video export cancelled after ${done} of ${vids.length}` : failed ? `Exported ${done} of ${vids.length} videos — ${failed} failed (see log)` : `Exported ${done} videos ✓`, !failed && !cancelled);
+  }
+  async function libExportStillsInner(paths) {
     const clickedAt = performance.now();
     const n = paths.length;
     window.__csExportPreCancel = false;
@@ -13754,7 +13809,9 @@
     } catch (e) { toast(humanizeErr('apply All FX', e), 'err'); }
   };
   const exportBtn = overlay.querySelector('#lib-export-btn');
-  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return t.length > 1 ? libExportCustom(t) : libExportPaths(t); };
+  // A single PHOTO quick-exports with the last settings; anything else (a video, or a selection) opens the
+  // export drawer — a lone video used to go down the photo quick-export and fail.
+  if (exportBtn) exportBtn.onclick = () => { const t = cmKbTargets(); return (t.length > 1 || t.some((p) => LIB_VID_RE.test(p))) ? libExportCustom(t) : libExportPaths(t); };
 
   // ── Top-bar icon-only collapse in .full mode (Library View.html's fitTopbar()) — stays ONE
   // row and hides labels instead of wrapping to a second one. Docked (:not(.full)) mode is

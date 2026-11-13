@@ -356,6 +356,7 @@ async function fxVideoExportSmall(it){
     if(btn)btn.disabled=false;
     if(cancelBtn)cancelBtn.style.display='none';
     if(progBox)progBox.style.display='none';
+    window.__csLastVideoExport={cancelled:cancelled||fxExportCancel,failed:videoExportFailed}; // read by the Library's multi-video export
     fxExportCancel=false;
     if(typeof window.libActivityJobDone==='function')window.libActivityJobDone('export',{label:'Exporting video',outcome:cancelled||fxExportCancel?'cancelled':videoExportFailed?'failed':'completed',failedCount:videoExportFailed?1:0});
     // The export loop drove FX with EXPORT-resolution frames — restore the live preview to
