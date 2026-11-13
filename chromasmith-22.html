@@ -7680,7 +7680,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1112C';
+const BUILD='1.1113A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10548,7 +10548,8 @@ void main(){
   // (see loadFXVideoFile/fxVideoSeekTo/fxVideoExportSmall). A canvas source needs EXACTLY the
   // same flip setImage() already applies to photo canvases, or every video frame uploads
   // vertically mirrored — this was shipping as "the export comes out upside down" until fixed.
-  setVideoFrame(src,w,h){const gl=this.gl;
+  // flipY=false: `src` is a raw RGBA buffer already stored bottom-up (videodecode.rs's native export frames).
+  setVideoFrame(src,w,h,flipY=true){const gl=this.gl;
     const needAlloc=!this.vidTx||this.vidW!==w||this.vidH!==h;
     if(needAlloc){
       if(this.vidTx)gl.deleteTexture(this.vidTx);
@@ -10562,7 +10563,7 @@ void main(){
     }else{
       gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
     }
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,!!flipY);
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,src);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     // Delete a stale one-shot photo texture before aliasing over it (mirrors setImage's own guard).
@@ -32047,8 +32048,6 @@ async function fxVideoExportSmall(it){
   const composeDims={gradedW:outW,gradedH:outH,b1t,b2t,borderedW,borderedH,
                      framedW,framedH,hasFrame,filmFrame:P.filmFrame,finalW,finalH,hasMatte,borderSeed:borderSeed(it,P)};
 
-  const gradeCanvas=document.createElement('canvas');gradeCanvas.width=outW;gradeCanvas.height=outH;
-  const gradeCtx=gradeCanvas.getContext('2d');
   const borderedCanvas=bordersAny(P,b1t,b2t)?Object.assign(document.createElement('canvas'),{width:borderedW,height:borderedH}):null;
   const finalCanvas=hasMatte?Object.assign(document.createElement('canvas'),{width:finalW,height:finalH}):null;
   const framedCanvas=hasFrame?Object.assign(document.createElement('canvas'),{width:framedW,height:framedH}):null;
@@ -32073,7 +32072,15 @@ async function fxVideoExportSmall(it){
     output=new MB.Output({format:new MB.Mp4OutputFormat(),target});
     // Prefer the hardware encoder (VideoToolbox/MediaFoundation); if the browser reports that config unsupported, request it plainly.
     let hwOK=false;try{hwOK=await MB.canEncodeVideo(codec,{width:finalW,height:finalH,bitrate:BITRATE,hardwareAcceleration:'prefer-hardware'});}catch(e){}
-    const videoSource=new MB.CanvasSource(compCanvas,hwOK?{codec,bitrate:BITRATE,hardwareAcceleration:'prefer-hardware'}:{codec,bitrate:BITRATE});
+    // The encoder reads straight from whichever canvas already holds the finished frame (the
+    // renderer's own canvas, or the border/frame/matte canvas) when nothing is drawn on top of it
+    // afterwards — saves a full-frame copy into compCanvas per frame. Fades and the watermark still
+    // need compCanvas, and so does an odd-sized composite (the encoder needs even dimensions).
+    const wmEl=document.getElementById('tg-exp-wm');
+    const wmOn=!!(wmEl&&wmEl.classList.contains('on')&&((document.getElementById('exp-wm-text')||{}).value||'').trim());
+    const lastStage=finalCanvas||framedCanvas||borderedCanvas||FX.cv;
+    const encSrc=(fadeInS>0||fadeOutS>0||wmOn||lastStage.width!==finalW||lastStage.height!==finalH)?compCanvas:lastStage;
+    const videoSource=new MB.CanvasSource(encSrc,hwOK?{codec,bitrate:BITRATE,hardwareAcceleration:'prefer-hardware'}:{codec,bitrate:BITRATE});
     output.addVideoTrack(videoSource,{frameRate:fps});
     // Audio passthrough (V4): re-mux the ORIGINAL encoded packets unchanged — no decode, no
     // re-encode, so there's no quality loss and no AudioEncoder dependency (which also sidesteps
@@ -32099,7 +32106,34 @@ async function fxVideoExportSmall(it){
     // generator closed the yielded sample at end of stream ("VideoSample is closed").
     // pickFrame draws the latest sample due at time t into frameCanvas and holds it (the canvas
     // keeps the pixels) when t asks for the same/earlier sample, so fps decimation and a short tail work.
-    const sIter=it._mbSampleSink.samples(trimStartS)[Symbol.asyncIterator]();
+    // Desktop (macOS): frames come from the native media engine already decoded AND scaled to the
+    // export size (videodecode.rs) — the WebView path's canvas draw + upload cost ~120 ms/frame in
+    // WKWebView, a raw buffer uploads in ~4 ms. SDR clips without crop/rotate/straighten only (those
+    // still need the canvas geometry pass); anything that fails to open falls back to WebCodecs.
+    let nat=null;
+    const natInvoke=window.__TAURI__&&window.__TAURI__.core&&window.__TAURI__.core.invoke;
+    if(natInvoke&&it.path&&!hasGeom&&!it.isHdr&&!it.needsHlg&&!window.__csNoNativeVideoDecode){
+      const rot=((it.rotation||0)%360+360)%360,swap=rot===90||rot===270;
+      try{
+        const id=await natInvoke('video_dec_open',{path:it.path,startS:trimStartS,endS:trimStartS+trimDurationS,decodeW:swap?fH:fW,decodeH:swap?fW:fH,rotation:rot});
+        // A container whose timeline doesn't start at 0 would otherwise hold the first frame for
+        // the whole export (pickFrame compares against trim-relative clip time): re-anchor if the
+        // first timestamp is implausibly far from the in-point.
+        let tsOff=null;
+        const fetchNext=()=>natInvoke('video_dec_next',{id}).then(b=>{
+          if(!b||!b.byteLength)return null;
+          const dv=new DataView(b);const w=dv.getUint32(8,true),h=dv.getUint32(12,true);
+          let ts=dv.getFloat64(0,true);
+          if(tsOff===null)tsOff=Math.abs(ts-trimStartS)>1?trimStartS-ts:0;
+          return{timestamp:ts+tsOff,w,h,data:new Uint8Array(b,16,w*h*4),close(){}};
+        });
+        let inflight=fetchNext();
+        nat={id,next:async()=>{const r=await inflight;inflight=r?fetchNext():Promise.resolve(null);return r;}};
+      }catch(e){log('Native video decode unavailable for this clip — using the browser decoder: '+((e&&e.message)||e),'info');nat=null;}
+    }
+    let natPx=null;
+    const sIter=nat?{next:async()=>{const v=await nat.next();return v?{done:false,value:v}:{done:true};},return:async()=>{try{await natInvoke('video_dec_close',{id:nat.id});}catch(e){}}}
+      :it._mbSampleSink.samples(trimStartS)[Symbol.asyncIterator]();
     let sAhead=null,sDone=false,haveFrame=false;
     const sEps=0.5/srcFps;
     const pickFrame=async(t)=>{
@@ -32111,8 +32145,11 @@ async function fxVideoExportSmall(it){
         else break;
       }
       if(best){
-        frameCtx.clearRect(0,0,fW,fH);
-        best.draw(frameCtx,0,0,fW,fH);
+        if(nat){natPx=best;}
+        else{
+          frameCtx.clearRect(0,0,fW,fH);
+          best.draw(frameCtx,0,0,fW,fH);
+        }
         best.close();haveFrame=true;
       }
       return haveFrame;
@@ -32120,25 +32157,35 @@ async function fxVideoExportSmall(it){
     // VIDEO_DIAG: per-stage wall time across the clip, written to the desktop log at the end.
     const vT={pick:0,upload:0,render:0,blit:0,compose:0,encode:0},vT0=performance.now();let vTa=vT0;
     const vLap=k=>{const n=performance.now();vT[k]+=n-vTa;vTa=n;};
+    let nextPick=null;
     try{
     for(let f=0;f<totalFrames;f++){
       if(fxExportCancel){cancelled=true;break;}
       vTa=performance.now();
       const outTimeS=f/fps; // rebased output timeline — 0 at trim-in
       const srcTimeS=trimStartS+outTimeS; // time on the CLIP's own timeline — drives both sampling and the grain seed below
-      if(!(await pickFrame(srcTimeS)))continue;
+      // The frame for f was requested while the GPU graded f-1 (see below).
+      const have=await (nextPick||pickFrame(srcTimeS));nextPick=null;
+      if(!have){if(f+1<totalFrames)nextPick=pickFrame(trimStartS+(f+1)/fps);continue;}
       vLap('pick');
-      const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
-      FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      if(nat)FX.setVideoFrame(natPx.data,natPx.w,natPx.h,false);
+      else{
+        const geomFrame=hasGeom?applyGeomTo(frameCanvas,it.geom):frameCanvas;
+        FX.setVideoFrame(geomFrame,geomFrame.width,geomFrame.height);
+      }
       vLap('upload');
       const srcFrameApprox=Math.round(srcTimeS*srcFps); // for the grain seed only — sampling itself is time-based, see above
       const seed=(typeof fxVideoFrameSeed==='function')?fxVideoFrameSeed({...it,curFrame:srcFrameApprox}):undefined;
       FX.render(P,outW,outH,{glowScale:1,seed,hdrIntermediate:true,dither:true});
       vLap('render');
-      gradeCtx.clearRect(0,0,outW,outH);
-      gradeCtx.drawImage(FX.cv,0,0,outW,outH); // GPU-side blit — see the function's own doc comment
+      // Fetch the next frame now, while the GPU is still grading this one: its pixels only reach
+      // the renderer's texture at the NEXT upload, after this frame has been composed and encoded.
+      if(f+1<totalFrames)nextPick=pickFrame(trimStartS+(f+1)/fps);
       vLap('blit');
-      const composed=_videoComposeBorderMatte(gradeCanvas,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
+      // Compose straight from the renderer's canvas (outW×outH, preserveDrawingBuffer): the old
+      // intermediate copy into a 2D "grade" canvas was a whole extra WebGL->2D readback per frame
+      // before borders/matte/encode copied it again.
+      const composed=_videoComposeBorderMatte(FX.cv,P,composeDims,borderedCanvas,finalCanvas,framedCanvas);
       // Fade in/out (B5): picture only — passthrough audio can't be faded without a decode/
       // re-encode pass (out of scope, see the plan's non-goals). Skip the extra full-frame copy
       // entirely when neither fade is configured (the common case).
@@ -32148,10 +32195,10 @@ async function fxVideoExportSmall(it){
       if(alpha<1){
         compCtx.fillStyle='#000';compCtx.fillRect(0,0,finalW,finalH);
         compCtx.globalAlpha=alpha;compCtx.drawImage(composed,0,0);compCtx.globalAlpha=1;
-      }else if(composed!==compCanvas){
+      }else if(composed!==encSrc){
         compCtx.clearRect(0,0,finalW,finalH);compCtx.drawImage(composed,0,0);
       }
-      if(typeof applyWatermark==='function')applyWatermark(compCanvas);
+      if(wmOn&&typeof applyWatermark==='function')applyWatermark(compCanvas);
       vLap('compose');
       await videoSource.add(outTimeS,1/fps); // awaiting respects encoder/writer backpressure
       vLap('encode');
@@ -32159,8 +32206,9 @@ async function fxVideoExportSmall(it){
     }
     }finally{
       try{const n=Math.max(1,totalFrames),ms=Math.round(performance.now()-vT0),per=Object.entries(vT).map(([k,v])=>`${k}=${(v/n).toFixed(1)}`).join(' ');
-        const m=`VIDEO_DIAG frames=${totalFrames} src=${srcW}x${srcH} decodeTo=${fW}x${fH} out=${finalW}x${finalH} codec=${codec} hw=${hwOK?1:0} stream=${streamTarget?1:0} loop_ms=${ms} per_frame_ms{${per}}`;
+        const m=`VIDEO_DIAG native=${nat?1:0} frames=${totalFrames} src=${srcW}x${srcH} decodeTo=${fW}x${fH} out=${finalW}x${finalH} codec=${codec} hw=${hwOK?1:0} stream=${streamTarget?1:0} loop_ms=${ms} per_frame_ms{${per}}`;
         console.log(m);window.__TAURI__?.log?.info?.(m);}catch(_){}
+      if(nextPick)try{await nextPick;}catch(e){} // a cancel can leave one request in flight
       if(sAhead)try{sAhead.close();}catch(e){}
       try{await sIter.return();}catch(e){}
     }

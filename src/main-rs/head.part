@@ -75,6 +75,8 @@ mod fastthumb;
 mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
+#[cfg(target_os = "macos")]
+mod videodecode;
 #[cfg(windows)]
 mod winvideothumb;
 mod subject;

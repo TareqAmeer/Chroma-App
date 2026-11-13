@@ -211,6 +211,12 @@ fn main() {
             publish::publish_collection_write_output,
             publish::publish_collection_apply_deletions,
             #[cfg(target_os = "macos")]
+            video_dec_open,
+            #[cfg(target_os = "macos")]
+            video_dec_next,
+            #[cfg(target_os = "macos")]
+            video_dec_close,
+            #[cfg(target_os = "macos")]
             write_gainmap_heic,
             #[cfg(target_os = "macos")]
             write_gainmap_heic_from_map,

@@ -24,87 +24,87 @@
   {
    "file": "head.part",
    "firstLine": 1,
-   "lines": 146
+   "lines": 148
   },
   {
    "file": "native-rw2-decode-develop-no-base64-anyw.part",
-   "firstLine": 147,
+   "firstLine": 149,
    "lines": 373
   },
   {
    "file": "ai-tap-to-select-masks-panel-see-sam-rs.part",
-   "firstLine": 520,
+   "firstLine": 522,
    "lines": 131
   },
   {
    "file": "sam-2-1-phase-3-background-quality-upgra.part",
-   "firstLine": 651,
+   "firstLine": 653,
    "lines": 54
   },
   {
    "file": "named-subjects-remember-this-dog-see-sub.part",
-   "firstLine": 705,
+   "firstLine": 707,
    "lines": 170
   },
   {
    "file": "face-detection-ai-stack-phase-a-see-scrf.part",
-   "firstLine": 875,
+   "firstLine": 877,
    "lines": 22
   },
   {
    "file": "face-feature-auto-exclusion-skin-selecto.part",
-   "firstLine": 897,
+   "firstLine": 899,
    "lines": 38
   },
   {
    "file": "depth-estimation-roadmap-r7-see-depth-rs.part",
-   "firstLine": 935,
+   "firstLine": 937,
    "lines": 53
   },
   {
    "file": "landscape-categories-sky-water-vegetatio.part",
-   "firstLine": 988,
+   "firstLine": 990,
    "lines": 28
   },
   {
    "file": "super-resolution-chr-249-see-superres-rs.part",
-   "firstLine": 1016,
+   "firstLine": 1018,
    "lines": 111
   },
   {
    "file": "hdr-merge-focus-stacking-roadmap-r12.part",
-   "firstLine": 1127,
+   "firstLine": 1129,
    "lines": 783
   },
   {
    "file": "raw-face-detail-crops-one-shot-develop-f.part",
-   "firstLine": 1910,
+   "firstLine": 1912,
    "lines": 671
   },
   {
    "file": "gain-map-hdr-export-iso-21496-1.part",
-   "firstLine": 2581,
-   "lines": 530
+   "firstLine": 2583,
+   "lines": 560
   },
   {
    "file": "normal-photo-export.part",
-   "firstLine": 3111,
+   "firstLine": 3143,
    "lines": 192
   },
   {
    "file": "streaming-save-for-large-video-exports-v.part",
-   "firstLine": 3303,
+   "firstLine": 3335,
    "lines": 107
   },
   {
    "file": "google-oauth-for-the-desktop-shell-the-w.part",
-   "firstLine": 3410,
+   "firstLine": 3442,
    "lines": 117
   },
   {
    "file": "app-entry-point-builder-plugins-setup-ho.part",
-   "firstLine": 3527,
-   "lines": 1354
+   "firstLine": 3559,
+   "lines": 1360
   }
  ]
 }

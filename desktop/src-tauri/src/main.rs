@@ -75,6 +75,8 @@ mod fastthumb;
 mod winthumb;
 #[cfg(target_os = "macos")]
 mod videothumb;
+#[cfg(target_os = "macos")]
+mod videodecode;
 #[cfg(windows)]
 mod winvideothumb;
 mod subject;
@@ -2584,6 +2586,36 @@ fn read_file_head(path: String, len: u32) -> Result<tauri::ipc::Response, String
 // gainmap.rs for why this shape was chosen over an extended-range render pipeline.
 //
 // Returns false when the source has no HDR headroom, so the caller can fall back to a normal
+// Video export frame source (videodecode.rs): hardware decode + scale on the media engine, one
+// prefetching thread per export. The front end falls back to WebCodecs when these are missing
+// (Windows) or `video_dec_open` fails for a clip.
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+fn video_dec_open(path: String, start_s: f64, end_s: f64, decode_w: u32, decode_h: u32, rotation: u32) -> Result<u64, String> {
+    videodecode::open(videodecode::OpenArgs { path, start_s, end_s, decode_w, decode_h, rotation })
+}
+/// Body: [pts f64 LE][w u32 LE][h u32 LE][RGBA, bottom-up]; an EMPTY body means end of range.
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+fn video_dec_next(id: u64) -> Result<tauri::ipc::Response, String> {
+    match videodecode::next(id)? {
+        None => Ok(tauri::ipc::Response::new(Vec::new())),
+        Some(f) => {
+            let mut out = Vec::with_capacity(16 + f.rgba.len());
+            out.extend_from_slice(&f.pts.to_le_bytes());
+            out.extend_from_slice(&f.w.to_le_bytes());
+            out.extend_from_slice(&f.h.to_le_bytes());
+            out.extend_from_slice(&f.rgba);
+            Ok(tauri::ipc::Response::new(out))
+        }
+    }
+}
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+fn video_dec_close(id: u64) {
+    videodecode::close(id);
+}
 // export instead of writing a gain map that encodes nothing.
 #[cfg(target_os = "macos")]
 #[tauri::command(async)]
@@ -3736,6 +3768,12 @@ fn main() {
             publish::publish_collection_sync_photos,
             publish::publish_collection_write_output,
             publish::publish_collection_apply_deletions,
+            #[cfg(target_os = "macos")]
+            video_dec_open,
+            #[cfg(target_os = "macos")]
+            video_dec_next,
+            #[cfg(target_os = "macos")]
+            video_dec_close,
             #[cfg(target_os = "macos")]
             write_gainmap_heic,
             #[cfg(target_os = "macos")]

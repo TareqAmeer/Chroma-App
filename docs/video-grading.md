@@ -213,3 +213,21 @@ missing). Phases V0 ("play it") → V4 ("trim + audio"), V5 opportunistic polish
 
 - **Preview proxy (smooth playback/scrub for big clips).** `fxVideoProxyBuild` (chromasmith-22.html, next to `fxVideoProxyDims`) transcodes ONCE per clip a 1280-long-edge, 0.5 s-GOP, video-only H.264 proxy with mediabunny `Conversion` (WebCodecs, `prefer-hardware` when `canEncodeVideo` says so, `latencyMode:'realtime'`), for sources with long edge > 1920 (or any >1280 clip whose live playback stays under ~80% of its fps). Preview reads it through `fxVideoPvSink(it)` (seek, `_fxPlayAdvance`, thumbnails); **export, Capture Frame, Preview: Full and Full-res always use `it._mbSampleSink` (the original)**, so grade/export parity is untouched. One build at a time (`_fxProxyJob`), switching clips/photos cancels it (`fxVideoProxyMaybe` / `fxSyncTransportUI`), status + Cancel live in the Preview row (`#vid-proxy-status`). Cache: IndexedDB `chromasmith-vproxy` (LRU, 600 MB / 24 entries). ⚠️ Store the proxy as an **ArrayBuffer**, not a Blob: in WKWebView a Blob read back from IndexedDB passes the metadata read, then throws `NotFoundError` on later sample reads (everything silently showed no frames). `_fxProxyAttach` therefore decodes one sample before accepting any proxy. `test/probe_video_proxy.mjs` covers build, original-sink isolation, frame luma, the cache round trip.
 - Measured on P_TM7608 (3840x2160 H.264, 152 frames, Intel Mac): playback Full 2.1 fps, Auto 3.1 fps, Auto+proxy 5.9-6.5 fps; scrub per seek Full ~520 ms, Auto ~400 ms, proxy ~200 ms; proxy build 28 s once, then 0.25-0.5 s from cache. What is left per frame is the grade itself (`FX.render` ~70-90 ms, the lut pass; ~flat from 1280 to 1808 px, so lowering the render size did NOT help and was dropped) plus `updateWork` ~55 ms (canvas->GL). Direct VideoFrame->texture upload was not done: `fxWork`/`_pvImg` canvases feed histogram, masks and geometry, and the HLG fix is canvas-path specific.
+
+### Export speed (desktop) — measured 2026-11-12/13, 11 s 4K HEVC clip, Intel Mac
+`VIDEO_DIAG` (desktop log) prints per-stage ms per frame for every video export. History: 119 s →
+83 s (WebGL uniform/attrib location cache, `glCacheUniformLocations` — WebKit answers each lookup
+with a ~0.7 ms GPU-process round trip and `render()` made ~220 per call) → ~47 s (native decode).
+- **Native decode** (`desktop/src-tauri/src/videodecode.rs`, macOS): AVAssetReader decodes AND
+  scales to the export size on the media engine, one prefetching thread per export, frames reach
+  the renderer as bottom-up RGBA (`video_dec_open/next/close`, `FX.setVideoFrame(buf,w,h,false)`).
+  The WebView path's canvas draw + texture upload cost ~120 ms/frame in WKWebView; a buffer
+  uploads in ~2-4 ms. Output matches the WebCodecs path in colour (mean within 0.2 levels) and
+  timing (frame-aligned), and is slightly sharper (Apple's scaler). Falls back to WebCodecs for HDR/
+  HLG clips, any crop/rotate/straighten (geometry still runs on a 2D canvas), Windows, or any open
+  failure. `window.__csNoNativeVideoDecode=true` forces the old path for A/B checks.
+- The grade composes and encodes straight from the renderer's canvas (no intermediate 2D copy),
+  and the next frame is fetched while the GPU grades the current one.
+- What's left is hardware: ~47 ms GPU grade + ~50 ms native decode per 4K frame on the Intel iGPU,
+  which share the same chip. Beyond this needs a fully native (Metal/VideoToolbox) grade — a
+  renderer rewrite, not a tweak.

@@ -485,7 +485,8 @@ void main(){
   // (see loadFXVideoFile/fxVideoSeekTo/fxVideoExportSmall). A canvas source needs EXACTLY the
   // same flip setImage() already applies to photo canvases, or every video frame uploads
   // vertically mirrored — this was shipping as "the export comes out upside down" until fixed.
-  setVideoFrame(src,w,h){const gl=this.gl;
+  // flipY=false: `src` is a raw RGBA buffer already stored bottom-up (videodecode.rs's native export frames).
+  setVideoFrame(src,w,h,flipY=true){const gl=this.gl;
     const needAlloc=!this.vidTx||this.vidW!==w||this.vidH!==h;
     if(needAlloc){
       if(this.vidTx)gl.deleteTexture(this.vidTx);
@@ -499,7 +500,7 @@ void main(){
     }else{
       gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
     }
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,!!flipY);
     gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,src);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
     // Delete a stale one-shot photo texture before aliasing over it (mirrors setImage's own guard).
