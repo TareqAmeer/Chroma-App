@@ -7687,7 +7687,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1115D';
+const BUILD='1.1115E';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -10333,7 +10333,12 @@ void main(){
   }
   _bufPoolBudget(){
     if(FXR.BUF_POOL_BYTES!=null)return FXR.BUF_POOL_BYTES;
-    return (typeof isMemoryConstrained==='function'&&isMemoryConstrained())?48e6:256e6;
+    const constrained=typeof isMemoryConstrained==='function'&&isMemoryConstrained();
+    // Desktop preview renderer: a 9 MP settle set (RGBA16F lut + scratch) is >1/6 of the 256 MB budget, so it was freed on
+    // every draft<->settle switch and re-allocated at the next settle (measured live, Intel Iris: settle 800-1300 ms vs 400 ms
+    // with the set kept; draft after settle 95-215 ms vs 35-50 ms). Keep up to 768 MB (the full all-effects 9 MP set measured 606 MB; at 512 MB the LRU evicted part of it and the settle stayed 700-950 ms, at 768 MB 510-560 ms / 90 ms with the lut stage cached) parked for FX only.
+    if(this._previewPool&&!constrained)return 768e6;
+    return constrained?48e6:256e6;
   }
   _bufTrim(budget){const gl=this.gl,pool=this._bufPool;if(!pool)return;
     let idle=0;pool.forEach(e=>{idle+=e.bytes;});
@@ -10384,7 +10389,7 @@ void main(){
     const keepShoulder=this.txs.stockShoulder;
     this.fbs={};this.txs={};this._bufLive={};
     if(keepShoulder)this.txs.stockShoulder=keepShoulder;
-    if(w*h>8e6)this._bufTrim(0); // export-size frame: give it all the memory, as before pooling
+    if(w*h>(this._previewPool&&this._bufPoolBudget()>256e6?16e6:8e6))this._bufTrim(0); // export-size frame: give it all the memory, as before pooling (the desktop preview renderer keeps its 9 MP settle set parked)
     const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
     this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
     if(resources.lens)this._allocTex('lens',w,h);                         // lens-corrected source (only used when Lens on)
@@ -11428,6 +11433,7 @@ FXR.CAL={
                    '35mm':{cellPx:3.0,scale:1.00}, '65mm':{cellPx:3.0,scale:0.52} }}
 };
 const FX=new FXR();
+FX._previewPool=true; // the on-screen preview renderer: parks its big settle buffers (see _bufPoolBudget)
 FX.onRestored=()=>{try{if(typeof fxInvalidateTiles==='function')fxInvalidateTiles();const w=fxWork||fxImg;if(w)FX.setImage(w);renderPreview();}catch(e){console.error(e);}};
 // Video still renders through FX itself, so it retains the narrow texture-update queue needed
 // to keep an in-flight video grade coherent. Still exports never enter this lock: they render on
@@ -13477,6 +13483,7 @@ function fxVideoProxyMaybe(it,opts){
   setTimeout(()=>{ // let the first frame paint before decode competes for the CPU
     let n=0;
     const go=()=>{
+      if(curItem()===it&&(_fxVe||_fxPlayRAF===-1)){setTimeout(go,1000);return;} // never transcode while the clip plays (starves playback); not counted against the retry cap
       if(curItem()!==it||n++>120){it._pvTried=false;return;}
       if(_fxProxyJob){setTimeout(go,500);return;} // previous (cancelling) build still unwinding
       fxVideoProxyBuild(it,opts).then(ok=>{
@@ -13739,7 +13746,9 @@ function _fxVeEligible(it){
   if((it.isHdr||it.needsHlg)&&!/Mac/.test(navigator.platform||''))return false;
   if(typeof HTMLVideoElement==='undefined'||typeof HTMLVideoElement.prototype.requestVideoFrameCallback!=='function')return false;
   const g=it.geom||defGeom();
-  if(it.heal||(it.inpaint||[]).some(p=>p.enabled!==false)||g.crop||g.rot||g.flipH||g.flipV||g.angle)return false;
+  // healOps() leaves an EMPTY array on the item as soon as the Retouch panel syncs, so test for actual spots (measured live: with `[]` this
+  // was always false and every clip played on the 0.2-6 fps JS path).
+  if((it.heal&&it.heal.length)||(it.inpaint||[]).some(p=>p.enabled!==false)||g.crop||g.rot||g.flipH||g.flipV||g.angle)return false;
   if(fxCompare||fxSplit||fxComparePreviousSnapshot!==null||fxLoupe||cropMode)return false;
   return true;
 }
@@ -13792,6 +13801,10 @@ function _fxVeAdapt(run,ms,fps,dt){
   window.__fxVeStats={scale:run.scale,gpuMs:ms,fps:fps};
 }
 function _fxVeStart(it){
+  // The preview-proxy transcode (WebCodecs encode) saturates the GPU/CPU and starved playback to zero frames for its whole duration
+  // (measured live, 4K HEVC: no frame for 24 s, build 11% after 28 s); the element path never reads the proxy. Drop the build now,
+  // fxVideoPause re-offers it once playback stops.
+  if(_fxProxyJob&&_fxProxyJob.it===it){fxVideoProxyCancel();it._pvTried=false;}
   const e=it._ve,v=e.v,fps=it.fps||30,maxFrame=it.frameCount-1;
   const loopIn=it.trimInFrame||0,loopOut=it.trimOutFrame!=null?Math.min(it.trimOutFrame,maxFrame):maxFrame;
   const scrub=document.getElementById('vid-scrub');
@@ -13908,6 +13921,7 @@ function fxVideoPause(){
     // A played element is replaced, not reused: its frame callbacks were observed to stop for good after a few play/pause
     // cycles in WKWebView. A fresh one loads in ~0.2 s; preload it a moment later (not while the exact-frame decode runs).
     const it=ve.it;_fxVeDrop(it);
+    setTimeout(()=>{if(curItem()===it&&!_fxVe&&!_fxPlayRAF)fxVideoProxyMaybe(it);},1500); // resume the build cancelled by playback (scrub/thumbnail benefit)
     setTimeout(()=>{if(curItem()===it&&!_fxVe&&_fxVeEligible(it))_fxVeEnsure(it);},600);
     if(curItem()===it&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);} // paused frame = the normal full-quality path
   }

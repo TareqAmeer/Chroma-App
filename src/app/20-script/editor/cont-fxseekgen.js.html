@@ -117,6 +117,7 @@ function fxVideoProxyMaybe(it,opts){
   setTimeout(()=>{ // let the first frame paint before decode competes for the CPU
     let n=0;
     const go=()=>{
+      if(curItem()===it&&(_fxVe||_fxPlayRAF===-1)){setTimeout(go,1000);return;} // never transcode while the clip plays (starves playback); not counted against the retry cap
       if(curItem()!==it||n++>120){it._pvTried=false;return;}
       if(_fxProxyJob){setTimeout(go,500);return;} // previous (cancelling) build still unwinding
       fxVideoProxyBuild(it,opts).then(ok=>{

@@ -263,7 +263,12 @@ void main(){
   }
   _bufPoolBudget(){
     if(FXR.BUF_POOL_BYTES!=null)return FXR.BUF_POOL_BYTES;
-    return (typeof isMemoryConstrained==='function'&&isMemoryConstrained())?48e6:256e6;
+    const constrained=typeof isMemoryConstrained==='function'&&isMemoryConstrained();
+    // Desktop preview renderer: a 9 MP settle set (RGBA16F lut + scratch) is >1/6 of the 256 MB budget, so it was freed on
+    // every draft<->settle switch and re-allocated at the next settle (measured live, Intel Iris: settle 800-1300 ms vs 400 ms
+    // with the set kept; draft after settle 95-215 ms vs 35-50 ms). Keep up to 768 MB (the full all-effects 9 MP set measured 606 MB; at 512 MB the LRU evicted part of it and the settle stayed 700-950 ms, at 768 MB 510-560 ms / 90 ms with the lut stage cached) parked for FX only.
+    if(this._previewPool&&!constrained)return 768e6;
+    return constrained?48e6:256e6;
   }
   _bufTrim(budget){const gl=this.gl,pool=this._bufPool;if(!pool)return;
     let idle=0;pool.forEach(e=>{idle+=e.bytes;});
@@ -314,7 +319,7 @@ void main(){
     const keepShoulder=this.txs.stockShoulder;
     this.fbs={};this.txs={};this._bufLive={};
     if(keepShoulder)this.txs.stockShoulder=keepShoulder;
-    if(w*h>8e6)this._bufTrim(0); // export-size frame: give it all the memory, as before pooling
+    if(w*h>(this._previewPool&&this._bufPoolBudget()>256e6?16e6:8e6))this._bufTrim(0); // export-size frame: give it all the memory, as before pooling (the desktop preview renderer keeps its 9 MP settle set parked)
     const w2=Math.max(1,Math.ceil(w/gs)),h2=Math.max(1,Math.ceil(h/gs));
     this._allocTex('lut',w,h,hdrIntermediate);                            // full-res graded base — RGBA16F only when requested+supported
     if(resources.lens)this._allocTex('lens',w,h);                         // lens-corrected source (only used when Lens on)

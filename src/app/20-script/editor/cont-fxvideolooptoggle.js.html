@@ -93,7 +93,9 @@ function _fxVeEligible(it){
   if((it.isHdr||it.needsHlg)&&!/Mac/.test(navigator.platform||''))return false;
   if(typeof HTMLVideoElement==='undefined'||typeof HTMLVideoElement.prototype.requestVideoFrameCallback!=='function')return false;
   const g=it.geom||defGeom();
-  if(it.heal||(it.inpaint||[]).some(p=>p.enabled!==false)||g.crop||g.rot||g.flipH||g.flipV||g.angle)return false;
+  // healOps() leaves an EMPTY array on the item as soon as the Retouch panel syncs, so test for actual spots (measured live: with `[]` this
+  // was always false and every clip played on the 0.2-6 fps JS path).
+  if((it.heal&&it.heal.length)||(it.inpaint||[]).some(p=>p.enabled!==false)||g.crop||g.rot||g.flipH||g.flipV||g.angle)return false;
   if(fxCompare||fxSplit||fxComparePreviousSnapshot!==null||fxLoupe||cropMode)return false;
   return true;
 }
@@ -146,6 +148,10 @@ function _fxVeAdapt(run,ms,fps,dt){
   window.__fxVeStats={scale:run.scale,gpuMs:ms,fps:fps};
 }
 function _fxVeStart(it){
+  // The preview-proxy transcode (WebCodecs encode) saturates the GPU/CPU and starved playback to zero frames for its whole duration
+  // (measured live, 4K HEVC: no frame for 24 s, build 11% after 28 s); the element path never reads the proxy. Drop the build now,
+  // fxVideoPause re-offers it once playback stops.
+  if(_fxProxyJob&&_fxProxyJob.it===it){fxVideoProxyCancel();it._pvTried=false;}
   const e=it._ve,v=e.v,fps=it.fps||30,maxFrame=it.frameCount-1;
   const loopIn=it.trimInFrame||0,loopOut=it.trimOutFrame!=null?Math.min(it.trimOutFrame,maxFrame):maxFrame;
   const scrub=document.getElementById('vid-scrub');
@@ -262,6 +268,7 @@ function fxVideoPause(){
     // A played element is replaced, not reused: its frame callbacks were observed to stop for good after a few play/pause
     // cycles in WKWebView. A fresh one loads in ~0.2 s; preload it a moment later (not while the exact-frame decode runs).
     const it=ve.it;_fxVeDrop(it);
+    setTimeout(()=>{if(curItem()===it&&!_fxVe&&!_fxPlayRAF)fxVideoProxyMaybe(it);},1500); // resume the build cancelled by playback (scrub/thumbnail benefit)
     setTimeout(()=>{if(curItem()===it&&!_fxVe&&_fxVeEligible(it))_fxVeEnsure(it);},600);
     if(curItem()===it&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);} // paused frame = the normal full-quality path
   }
