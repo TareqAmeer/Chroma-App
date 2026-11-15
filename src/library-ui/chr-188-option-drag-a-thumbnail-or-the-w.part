@@ -487,9 +487,9 @@
     // renamed from "Rate & flag" and given a hearting row — favorite was previously only
     // reachable from the flag icons on the card itself / the deskbar's flag button, not here).
     const rateMenu = submenu('Rate');
-    rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
-    rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
-    rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+    rateMenu.subItem('Reject', () => setLabelsBatch(paths, 'Red'), 'X');
+    rateMenu.subItem('Pick', () => setLabelsBatch(paths, 'Green'), 'P');
+    rateMenu.subItem('Clear flag', () => setLabelsBatch(paths, ''), 'U');
     if (COLOR_LABELS_ENABLED) {
       const colorMenu = submenu('Colour label');
       COLOR_LABELS.forEach((color) => colorMenu.subItem(color, () => Promise.all(paths.map((p) => setColorLabel(p, color)))));
@@ -498,7 +498,7 @@
     rateMenu.subSep();
     const allFavorited = paths.every((p) => (state.sidecars.get(p) || {}).favorite);
     rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
-      () => Promise.all(paths.map((p) => setFavorite(p, !allFavorited))));
+      () => setFavoritesBatch(paths, !allFavorited));
 
     // ── Rotate & flip ▸ — the OPEN photo goes through the editor's own geomRotate/geomFlip
     // (chromasmith-22.html: history, crop/mask remap, autosave); every other selected photo gets
@@ -625,7 +625,7 @@
     // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
     // reset can be partially undone: reset 3, then export 1, then undo the other 2).
     const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), kbd([], 'Z'));
-    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
+    if (!paths.some((p) => { const s = state.sidecars.get(p) || {}; return s.last_reset_recipe || s._light; })) {
       undoResetItem.style.opacity = '.4';
       undoResetItem.style.pointerEvents = 'none';
     }

@@ -293,8 +293,89 @@ pub fn set_sidecar(
     // ⚠️ try_lock, not lock: a blocking lock here would stall a rating/flag CLICK for the entire
     // duration of a running catalog scan, which holds this same connection for a full walk —
     // this write is a nice-to-have freshness sync, not something worth making the UI wait on.
-    let catalog_conn = catalog_state.conn.try_lock().ok();
+    let catalog_conn = catalog_try_lock(&catalog_state);
     set_sidecar_run(path, rating, label, edited, recipe, favorite, catalog_conn.as_deref())
+}
+
+/// try_lock on the catalog connection with ONE short retry. A single miss used to silently skip
+/// the catalog write-through, leaving the catalog's rating/flag columns stale (server-side filters
+/// then disagreed with the grid until the next scan). A scan that holds the connection for a full
+/// walk still wins — then the sidecar file stays the source of truth and the scan's own sidecar
+/// sync catches up — but the common brief contention (another write-through, a short query) now
+/// resolves on the retry.
+fn catalog_try_lock<'a>(
+    state: &'a tauri::State<crate::catalog::CatalogState>,
+) -> Option<std::sync::MutexGuard<'a, rusqlite::Connection>> {
+    if let Ok(g) = state.conn.try_lock() {
+        return Some(g);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    state.conn.try_lock().ok()
+}
+
+/// Only the field(s) that changed — a `None` field keeps whatever each photo already has.
+#[derive(Deserialize, Default)]
+pub struct SidecarPatch {
+    pub rating: Option<i32>,
+    pub label: Option<String>,
+    pub favorite: Option<bool>,
+}
+
+/// One IPC for a flag/rating/favorite change on many photos (a multi-selection used to cost one
+/// `set_sidecar` IPC + XMP write + registry rewrite + catalog write per photo). The per-photo XMP
+/// writes run on the capped rayon pool; the registries are updated ONCE for the whole batch and the
+/// catalog write-through takes the connection once, in one transaction. Returns one entry per input
+/// path, aligned by index: "" on success, the error text otherwise.
+#[tauri::command(async)]
+pub fn set_sidecar_batch(
+    paths: Vec<String>,
+    patch: SidecarPatch,
+    catalog_state: tauri::State<crate::catalog::CatalogState>,
+) -> Result<Vec<String>, String> {
+    struct Done { prev_label: String, prev_fav: bool, rating: i32, label: String, color: String, edited: bool, fav: bool }
+    let done: Vec<Result<Done, String>> = paths
+        .par_iter()
+        .map(|path| {
+            let ex = get_sidecar(path.clone());
+            let rating = patch.rating.unwrap_or(ex.rating).clamp(-1, 5);
+            let label = match patch.label.as_deref() {
+                Some(l @ ("Red" | "Green" | "Star")) => l.to_string(),
+                Some(_) => String::new(),
+                None => ex.label.clone(),
+            };
+            let fav = patch.favorite.unwrap_or(ex.favorite);
+            let unchanged = ex.rating == rating && ex.label == label && ex.favorite == fav && sidecar_path(path).exists();
+            if !unchanged {
+                set_sidecar_run_inner(path.clone(), rating, label.clone(), ex.edited, None, Some(fav), None, false)?;
+            }
+            Ok(Done { prev_label: ex.label, prev_fav: ex.favorite, rating, label, color: ex.color_label, edited: ex.edited, fav })
+        })
+        .collect();
+    // Registries: one read/write per registry for the whole batch.
+    let (mut fav_on, mut fav_off, mut green_on, mut green_off, mut red_on, mut red_off) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for (path, d) in paths.iter().zip(done.iter()) {
+        let Ok(d) = d else { continue };
+        if d.prev_fav != d.fav { if d.fav { fav_on.push(path.clone()) } else { fav_off.push(path.clone()) } }
+        if (d.prev_label == "Green") != (d.label == "Green") { if d.label == "Green" { green_on.push(path.clone()) } else { green_off.push(path.clone()) } }
+        if (d.prev_label == "Red") != (d.label == "Red") { if d.label == "Red" { red_on.push(path.clone()) } else { red_off.push(path.clone()) } }
+    }
+    for (name, on, off) in [("favorites", fav_on, fav_off), ("flagged", green_on, green_off), ("rejected", red_on, red_off)] {
+        if !on.is_empty() || !off.is_empty() {
+            let _ = registry_apply_many(name, on, off);
+        }
+    }
+    // Catalog write-through: one lock (with retry), one transaction.
+    if let Some(conn) = catalog_try_lock(&catalog_state) {
+        let tx = conn.unchecked_transaction().ok();
+        for (path, d) in paths.iter().zip(done.iter()) {
+            if let Ok(d) = d {
+                crate::catalog::sync_sidecar_fields_run(&conn, path, d.rating, &d.label, &d.color, d.edited, d.fav);
+            }
+        }
+        if let Some(tx) = tx { let _ = tx.commit(); }
+    }
+    Ok(done.into_iter().map(|r| r.err().unwrap_or_default()).collect())
 }
 
 /// Split out of the `#[tauri::command]` wrapper so every existing sidecar-writing test (there

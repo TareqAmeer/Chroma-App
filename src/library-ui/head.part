@@ -417,6 +417,17 @@
         }
         persist(); return Promise.resolve();
       }
+      case 'set_sidecar_batch': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        for (const path of A.paths || []) {
+          const current = ltBatchSidecars.get(path) || ltSidecars.get(path) || { color_label: '' };
+          const updated = { ...current, ...A.patch };
+          if (ltBatchSidecars.has(path)) ltBatchSidecars.set(path, updated);
+          ltSidecars.set(path, updated);
+        }
+        return Promise.resolve((A.paths || []).map(() => ''));
+      }
       case 'set_color_label': {
         if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
         const cur = ltBatchSidecars.get(A.path) || { rating: 0, label: '', color_label: '', favorite: false, edited: false };

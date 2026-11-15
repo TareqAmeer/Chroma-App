@@ -117,8 +117,11 @@
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     {
       const paths = entries.filter((e) => !e.offline).map((e) => e.path);
-      await getSidecarsBatch(paths);
+      // L2: rating/label/favorite/edited come from the catalog rows; only unparsed rows read sidecars.
+      const staleSc = seedLightSidecars(entries.filter((e) => !e.offline));
+      if (staleSc.length) await getSidecarsBatch(staleSc);
       updateBootSplashProgress({ phase: 'cache', done: 0, total: 0 });
+      upgradeEditedSidecars(entries, openToken).then((any) => { if (any && state._openToken === openToken && state.source === 'catalog') renderGrid(); }).catch(() => {});
       getMetaBatch(paths).then(() => {
         if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
         refreshFacetSelects();

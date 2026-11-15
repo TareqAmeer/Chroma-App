@@ -93,11 +93,34 @@ function fxHistoryPush(opts){
   // The persistence hooks below DO need the raster — a sidecar or saved session without it would
   // silently lose the mask. Only pay the base64 encode when a raster actually exists.
   if(typeof window.chromasmithOnEdit==='function'||typeof sessionAutosave==='function'){
-    const full=rasters.some(Boolean)?getUISnapshot():snap;
-    if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
-    if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+    // E7: the rasters are frozen (immutable) now, so the snapshot can be assembled later from `snap` + `rasters`
+    // with no staleness. A raster whose base64 is already memoised makes this cheap -> persist synchronously as
+    // before; a first-time encode (new paint stroke) is deferred to idle time (timeout-bounded) and flushed
+    // early on photo switch / window hide so the edit is attributed to the right photo and never lost.
+    const persist=()=>{
+      const full=rasters.some(Boolean)?Object.assign({},snap,{masks:snap.masks.map((mk,i)=>rasters[i]?Object.assign({},mk,{pxb64:_pxToB64(rasters[i],true)}):mk)}):snap;
+      if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
+      if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+    };
+    _fxEditFlush(); // an older deferred persist must land before this newer one
+    if(rasters.some(p=>p&&!_pxB64Has(p))){
+      _fxEditPending=persist;
+      if(typeof requestIdleCallback==='function')_fxEditIdle=requestIdleCallback(_fxEditFlush,{timeout:150});
+      else _fxEditTimer=setTimeout(_fxEditFlush,50);
+    }else persist();
   }
 }
+let _fxEditPending=null,_fxEditIdle=0,_fxEditTimer=0;
+function _pxB64Has(p){return _pxB64Memo.has(p);}
+function _fxEditFlush(){
+  const f=_fxEditPending;if(!f)return;
+  _fxEditPending=null;
+  if(_fxEditIdle&&typeof cancelIdleCallback==='function')cancelIdleCallback(_fxEditIdle);
+  clearTimeout(_fxEditTimer);_fxEditIdle=0;_fxEditTimer=0;
+  try{f();}catch(e){console.error('deferred edit persist failed',e);}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')_fxEditFlush();});
+window.addEventListener('pagehide',_fxEditFlush);
 // Restores one history entry. applyUISnapshot rebuilds the mask objects from the raster-less
 // JSON, so the shared rasters have to be re-attached afterwards — and re-frozen, because the
 // entry still points at them.

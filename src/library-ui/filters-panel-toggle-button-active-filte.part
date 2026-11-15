@@ -89,7 +89,7 @@
     const paths = [...state.selected];
     if (!paths.length) return;
     const clear = paths.every((p) => ((state.sidecars.get(p) || {}).label || '') === label);
-    await Promise.all(paths.map((p) => setLabel(p, clear ? '' : label)));
+    await setLabelsBatch(paths, clear ? '' : label);
     syncLibActionButtons();
   };
   overlay.querySelector('#lib-flag-reject').onclick = () => applySelectionLabel('Red');
@@ -98,7 +98,7 @@
     const paths = [...state.selected];
     if (!paths.length) return;
     const allFavorited = paths.every((p) => !!(state.sidecars.get(p) || {}).favorite);
-    await Promise.all(paths.map((p) => setFavorite(p, !allFavorited)));
+    await setFavoritesBatch(paths, !allFavorited);
     syncLibActionButtons();
   };
   syncLibActionButtons();
@@ -171,7 +171,15 @@
   const searchInput = overlay.querySelector('#lib-search');
   searchInput.oninput = (e) => {
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); renderSearchSuggest(e.target.value); }, 150);
+    // L5: paged catalog views search the whole catalog server-side (250 ms debounce, stale
+    // responses dropped); every other view keeps the instant client-side filter.
+    const val = e.target.value;
+    const serverSide = searchIsServerSide();
+    searchDebounce = setTimeout(() => {
+      state.search = val.toLowerCase();
+      if (serverSide && searchIsServerSide()) catalogApplySearch(); else renderGrid();
+      renderSearchSuggest(val);
+    }, serverSide ? 250 : 150);
   };
   searchInput.onfocus = () => { if (!placeList.length) refreshPlaces(); renderSearchSuggest(searchInput.value); };
   searchInput.onblur = () => { const b = document.getElementById('lib-search-suggest'); if (b) b.hidden = true; };

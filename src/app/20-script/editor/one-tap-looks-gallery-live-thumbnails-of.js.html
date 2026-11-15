@@ -20,9 +20,20 @@ let fxLookCatFilter=window.__TAURI__?'User Looks':'All',fxLookSearch=''; // desk
 // Free-text filter beside the chips. At 113 looks the categories alone stopped being enough —
 // finding "portra 800" meant knowing it lives under C41 Still and then reading the whole group.
 // Subsequence match on the pretty name, same forgiving rule the ⌘K palette uses.
+let _lookSearchT=0;
 function fxLookSearchChanged(v){
   fxLookSearch=(v||'').trim().toLowerCase();
-  buildLookGallery();
+  clearTimeout(_lookSearchT);_lookSearchT=setTimeout(buildLookGallery,120); // E6: one rebuild per typing burst, not per keystroke
+}
+// E6: rendered thumbnails survive gallery rebuilds. Keyed by look key inside a cache that is tied to the
+// current source pixels (size + content hash of the 132px thumbnail source), so a photo switch, crop or
+// geometry change produces a different signature and starts a fresh cache.
+let _lookThumbCache={sig:'',map:new Map()};
+function _lookThumbs(px,w,h){
+  let hh=2166136261;for(let i=0;i<px.length;i++)hh=Math.imul(hh^px[i],16777619);
+  const sig=w+'x'+h+':'+(hh>>>0);
+  if(_lookThumbCache.sig!==sig)_lookThumbCache={sig,map:new Map()};
+  return _lookThumbCache.map;
 }
 function _lookMatches(key){
   if(!fxLookSearch)return true;
@@ -56,7 +67,7 @@ function buildLookGallery(){
   ctrl.style.display='block';host.innerHTML='';
   buildLookCatChips();
   let pxd;try{pxd=getPx(work,132);}catch(e){ctrl.style.display='none';return;}
-  const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'';
+  const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'',thumbs=_lookThumbs(px,w,h);
   // entries: mix of ['val','label'] cells and ['__hdr__','Category Name'] section dividers.
   // 'All' interleaves a header before each category; a specific filter shows just that group
   // (no headers needed, there's only one).
@@ -137,7 +148,9 @@ function buildLookGallery(){
         try{
           const out=job.val?applyLUTtoPx(px,await presetLut(job.val.slice(2))):px;
           if(gen!==buildLookGallery._gen){pumping=false;return;}
-          job.cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out),w,h),0,0);
+          const od=new Uint8ClampedArray(out);
+          job.cv.getContext('2d').putImageData(new ImageData(od,w,h),0,0);
+          if(job.val){thumbs.set(job.val,od);if(thumbs.size>300)thumbs.delete(thumbs.keys().next().value);}
         }catch(e){
           // A vendor/luts fetch can fail (offline before the warm-up finished). Leave the cell
           // blank and label it rather than killing the rest of the queue.
@@ -167,6 +180,8 @@ function buildLookGallery(){
       fxPickLookCell(cell,val);};
     host.appendChild(cell);
     cell._lookJob={val,cv};
+    const cached=val&&thumbs.get(val);
+    if(cached){cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(cached),w,h),0,0);cell._lookDone=true;return;} // E6: already rendered for these pixels
     // ⚠️ observe AFTER appendChild — an unattached element never intersects anything, so
     // observing first would leave every cell permanently blank.
     if(io)io.observe(cell);else{cell._lookDone=true;queue.push(cell._lookJob);}

@@ -54,7 +54,19 @@ const CR_MAX_SAMPLES=8;   // must match mskCS's 2-per-vec4 packing and colRangeW
 // Deep copy for plain state (curves/HSL/geometry/canvas). structuredClone is available in every
 // engine this app runs in; the JSON fallback keeps an ancient WKWebView from throwing.
 const _clone=(v)=>{try{return structuredClone(v);}catch(e){return JSON.parse(JSON.stringify(v));}};
-function _pxToB64(px){
+// E7: `frozen` = the caller says px is not mutated in place (history rasters / masks with _pxFrozen: mskPxForWrite
+// clones before any write). Only then is the encoding memoised per array, and the hit is re-validated by a
+// full-array word hash (~1ms per 2.8MB vs ~10ms+ for btoa) so a stray in-place write can never serve stale bytes.
+const _pxB64Memo=new WeakMap();
+function _pxHash(px){
+  let h=2166136261>>>0;const n=px.length>>2;
+  if(!(px.byteOffset&3)){const w=new Uint32Array(px.buffer,px.byteOffset,n);for(let i=0;i<n;i++)h=Math.imul(h^w[i],16777619);}
+  else for(let i=0;i<n*4;i++)h=Math.imul(h^px[i],16777619);
+  for(let i=n*4;i<px.length;i++)h=Math.imul(h^px[i],16777619);
+  return h>>>0;
+}
+function _pxToB64(px,frozen){
+  if(frozen){const c=_pxB64Memo.get(px),h=_pxHash(px);if(c&&c.h===h&&c.n===px.length)return c.r;const r=_pxToB64(px);_pxB64Memo.set(px,{h,n:px.length,r});return r;}
   let bin='';const CH=0x8000;                      // chunked: apply() blows the stack on ~2.8M args
   for(let i=0;i<px.length;i+=CH)bin+=String.fromCharCode.apply(null,px.subarray(i,Math.min(i+CH,px.length)));
   return btoa(bin);
@@ -78,7 +90,7 @@ function _mskToSnap(m,skipRaster){
   if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
   if(m.crv)o.crv=m.crv.map(p=>p.slice());
   if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
-  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
+  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px,m._pxFrozen===true);
   return o;
 }
 function _mskFromSnap(o){

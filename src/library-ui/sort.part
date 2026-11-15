@@ -105,7 +105,7 @@
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
     if (state.facesFilter === 'indexed' && !entry.faces_scanned) return false;
     if (state.facesFilter === 'pending' && entry.faces_scanned) return false;
-    if (state.search && !entryMatchesSearch(entry, sc, state.search)) return false;
+    if (state.search && !searchIsServerSide() && !entryMatchesSearch(entry, sc, state.search)) return false;
     // "N or more", except '0' which means exactly unrated — the two useful questions.
     if (state.ratingFilter !== 'all') {
       const want = parseInt(state.ratingFilter, 10);

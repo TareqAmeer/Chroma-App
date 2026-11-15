@@ -12,7 +12,7 @@ function resolveSplitSnapshot(src){
     // _fxHistoryRestore — so the raster-less history JSON has to be re-hydrated here or the
     // "before" side of a split would render that step WITHOUT its brush masks.
     const snap=JSON.parse(e.j);
-    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p);});
+    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p,true);});
     return snap;
   }
   if(src.style!==undefined){

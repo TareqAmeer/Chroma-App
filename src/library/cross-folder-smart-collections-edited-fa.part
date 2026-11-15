@@ -95,9 +95,19 @@ pub fn registry_set_many(
     if !matches!(name.as_str(), "duplicates" | "gphotos" | "edited") {
         return Err(format!("registry_set_many: unknown registry '{name}'"));
     }
+    registry_apply_many(&name, present, absent)
+}
+
+/// Body of `registry_set_many` (name already validated by the caller) — also used by
+/// `set_sidecar_batch` for the edited/favorites/flagged/rejected registries.
+pub(crate) fn registry_apply_many(
+    name: &str,
+    present: Vec<String>,
+    absent: Vec<String>,
+) -> Result<(), String> {
     // Durable recipe completion must never treat an unreadable registry as an empty one.
     if name == "edited" {
-        match std::fs::read_to_string(registry_path(&name)) {
+        match std::fs::read_to_string(registry_path(name)) {
             Ok(text) => {
                 serde_json::from_str::<Vec<String>>(&text)
                     .map_err(|e| format!("read registry: {e}"))?;
@@ -107,7 +117,7 @@ pub fn registry_set_many(
         }
     }
     use crate::canon::canonical_key as ck;
-    let mut map: HashMap<String, String> = registry_read(&name)
+    let mut map: HashMap<String, String> = registry_read(name)
         .into_iter()
         .map(|p| (ck(&p), p))
         .collect();
@@ -125,7 +135,7 @@ pub fn registry_set_many(
     list.sort();
     let text = serde_json::to_string(&list).map_err(|e| format!("serialize registry: {e}"))?;
     use std::io::Write;
-    let dest = registry_path(&name);
+    let dest = registry_path(name);
     let tmp = dest.with_extension(format!(
         "json.{}.{}.tmp",
         std::process::id(),

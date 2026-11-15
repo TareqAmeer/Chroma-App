@@ -267,6 +267,30 @@
     await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
     return { done, attempted, total };
   }
+  /// L1: the scan that ran in the background after openFolder painted from the existing catalog
+  /// rows. When it added or removed photos, re-query the same view (same filters, at least as many
+  /// rows as are loaded) and swap the entries in; renderGrid keeps the scroll position (first-visible
+  /// -card anchor) and selection is path-based so it survives. Nothing changed = no work at all.
+  async function catalogMergeAfterScan(path, token, r) {
+    const same = () => state._openToken === token && state.currentFolder === path && state.source === 'folder' && state._catalogPaged && state._catalogBaseQuery;
+    if (!r || !same()) return;
+    if (_catalogBgPending) { _catalogBgPending = false; firstPaintReady(15000).then(() => catalogRunBackgroundPhases()); }
+    if (!(r.added > 0 || r.marked_absent > 0)) return;
+    try {
+      const q = { ...state._catalogBaseQuery, offset: 0, limit: Math.max(CATALOG_PAGE_SIZE, state.entries.length) };
+      const page = await invoke('catalog_query', { q });
+      if (!same()) return;
+      const stale = seedLightSidecars(page.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+      if (!same()) return;
+      state.entries = page.entries.filter((e) => e.is_image || e.is_video);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      renderLibOfflineBar(state.entries.length > 0 && !!state.entries[0].offline);
+      renderGrid();
+      getMetaBatch(state.entries.map((e) => e.path)).catch(() => {});
+    } catch (e) { /* the grid already shows the saved catalog; the next open re-queries */ }
+  }
   async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
@@ -275,15 +299,16 @@
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = libSkeletonHtml();
     let entries;
+    let bgScan = null;
     try {
-      // The catalog is now the grid's own data source, not a side-effect kicked off after a
-      // separate live filesystem walk — see catalogRegisterFolder's doc comment and the plan's
-      // Fix 1. Awaited (not fire-and-forget): the catalog_query right below depends on it having
-      // actually registered/scanned this folder. Still captured on `window` so the cold-boot
-      // sequence can await the same promise it always has.
+      // The catalog is the grid's own data source (see catalogRegisterFolder's doc comment). L1:
+      // registering is cheap and awaited; the scan is NOT — the grid paints from the rows already
+      // in the DB and the scan's changes are merged in when it lands (catalogMergeAfterScan).
+      // Only a root with nothing in the DB yet (first visit) waits for the scan, behind the skeleton.
+      // Still captured on `window` so the cold-boot sequence can await the same promise it always has.
       const regPromise = catalogRegisterFolder(path);
       window._lastCatalogRegisterPromise = regPromise;
-      const reg = await regPromise;
+      let reg = await regPromise;
       state._folderScope = reg
         ? { volumeId: reg.volumeId, relDir: reg.relDir }
         : { path };
@@ -293,12 +318,21 @@
       if (reg) {
         const q = { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders },
           limit: CATALOG_PAGE_SIZE, offset: 0, ...catalogFilterFields() };
-        const page = await invoke('catalog_query', { q });
+        let page = await invoke('catalog_query', { q });
+        bgScan = reg.scan;
+        if (bgScan && page.total === 0) {
+          // First visit to this root: nothing to show yet, so wait for the scan (skeleton stays up).
+          const r = await bgScan; bgScan = null;
+          if (r) page = await invoke('catalog_query', { q });
+          else reg = null; // scan failed on an empty root: fall back to the live listing below
+        }
+        if (reg) {
         entries = page.entries;
         state._catalogPaged = true;
         state._catalogBaseQuery = { ...q, offset: undefined };
         state._catalogTotal = page.total;
         state._catalogCapped = page.capped;
+        } else { state._catalogPaged = false; entries = state.includeSubfolders ? await listDirRecursive(path) : await invoke('list_dir', { path }); }
       } else {
         // Fallback only: the catalog couldn't register this folder (e.g. a permissions error a
         // plain read_dir would also hit) — fall back to the live walk so the grid still shows
@@ -343,7 +377,15 @@
     // "Loading…" until the last file finished — a big folder took tens of seconds before
     // showing anything. Render immediately instead and let meta land in the background, then
     // refresh filters + grid once so sort-by-ISO/camera-filter pick it up.
-    await getSidecarsBatch(state.entries.map((e) => e.path));
+    // L2: a catalog-backed view seeds rating/label/favorite/edited from the rows themselves (no
+    // sidecar reads off the drive before first paint); only rows whose sidecar the catalog has not
+    // parsed yet — and every non-catalog view — still read the real sidecars up front.
+    if (state._catalogPaged) {
+      const stale = seedLightSidecars(state.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+    } else {
+      await getSidecarsBatch(state.entries.map((e) => e.path));
+    }
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
@@ -374,6 +416,14 @@
     // only ever block when the user explicitly asks for it, not silently gate ordinary browsing.
     loadSyncedForFolder(state.entries, openToken);
     markFolderSyncedIfGphotosDownloads(path, state.entries);
+    if (state._catalogPaged) {
+      // Edited photos need their recipe for thumbnail rotation / edited looks: fetch just those, in
+      // the background, then repaint once.
+      upgradeEditedSidecars(state.entries, openToken).then((any) => {
+        if (any && state._openToken === openToken && state.currentFolder === path && state.source === 'folder') renderGrid();
+      }).catch(() => {});
+    }
+    if (bgScan) bgScan.then((r) => catalogMergeAfterScan(path, openToken, r)).catch(() => {});
     getMetaBatch(state.entries.map((e) => e.path)).then(() => {
       // source check: without it, opening a folder then clicking a Lightroom album while this
       // background meta pass was still running clobbered the cloud grid seconds later.

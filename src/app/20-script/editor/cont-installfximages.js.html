@@ -1,4 +1,5 @@
 function installFXImages(entries,loadKey,opts){
+  _fxEditFlush(); // E7
   opts=opts||{};
   if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
 
@@ -154,6 +155,7 @@ function fxWorkCanvasFromRGBA(work,fullW){
 }
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
 async function loadFXImages(fileList,opts){
+  _fxEditFlush(); // E7
   opts=opts||{};
   const privateEntries=!!opts.privateEntries;
   if(!privateEntries){

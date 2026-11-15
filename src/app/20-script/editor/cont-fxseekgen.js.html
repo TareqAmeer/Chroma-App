@@ -175,12 +175,35 @@ async function _fxSeekDecode(it,frameIndex){
   if(it._shownFrame===frameIndex&&it.curFrame===frameIndex)return;
   const myGen=++_fxSeekGen;
   const t=frameIndex/(it.fps||30);
+  const sink=fxVideoPvSink(it);
+  const hit=_fxFrameCacheGet(it,frameIndex,sink);
+  if(hit){_fxVideoPresent(it,hit,frameIndex);return;}
   let sample=null;
-  for await(const s of fxVideoPvSink(it).samples(t)){sample=s;break;}
+  for await(const s of sink.samples(t)){sample=s;break;}
   if(myGen!==_fxSeekGen||curItem()!==it){if(sample)sample.close();return;} // item switched / newer seek won — drop this stale result
   if(!sample)return;
   _fxVideoPresent(it,sample,frameIndex);
   sample.close();
+  if(_fxPreviewInteracting)_fxFrameCachePut(it,frameIndex,sink);
+}
+// E5: small LRU of recently decoded frames for back-and-forth scrubbing. Entries are 2D-canvas COPIES of the
+// drawn frame (never the mediabunny sample / VideoFrame, which must be closed straight away), so eviction
+// needs no close(). Keyed by integer frame index; the whole cache drops when the decode sink changes.
+const _FX_FCACHE_MAX=8,_FX_FCACHE_MAXPX=2.2e6;
+function _fxFrameCacheGet(it,frameIndex,sink){
+  const c=it._fcache;if(!c||c.sink!==sink)return null;
+  const cv=c.map.get(frameIndex);if(!cv)return null;
+  c.map.delete(frameIndex);c.map.set(frameIndex,cv); // LRU touch
+  return{displayWidth:cv.width,displayHeight:cv.height,draw:(ctx,x,y,w,h)=>ctx.drawImage(cv,x,y,w,h)};
+}
+function _fxFrameCachePut(it,frameIndex,sink){
+  const src=it._pvImg||it.img;if(!src||!src.width||src.width*src.height>_FX_FCACHE_MAXPX)return;
+  if(!it._fcache||it._fcache.sink!==sink)it._fcache={sink,map:new Map()};
+  const m=it._fcache.map;if(m.has(frameIndex))return;
+  const cv=document.createElement('canvas');cv.width=src.width;cv.height=src.height;
+  cv.getContext('2d').drawImage(src,0,0);
+  m.set(frameIndex,cv);
+  while(m.size>_FX_FCACHE_MAX){const k=m.keys().next().value;const o=m.get(k);o.width=o.height=0;m.delete(k);}
 }
 // Deterministic hash of an integer -> [0,1): the standard GLSL-style sin/fract trick, in JS.
 // frameIndex+1 avoids the degenerate sin(0)=0 case landing every clip's frame 0 at hash 0.

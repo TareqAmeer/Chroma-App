@@ -18,6 +18,9 @@
     // CatalogQuery's own doc comment on sync_sidecar_fields_run for why that write-through is
     // what makes this different from just reading the DB's (previously stale) copy.
     return {
+      // L5: the live search text is answered by the catalog (name/place/keyword/auto-tag) so it covers
+      // every photo, not just the loaded pages. Lowercased by the search box already.
+      text: state.search ? state.search : null,
       kind: state.typeFilter !== 'all' ? state.typeFilter : null,
       camera: state.cameraFilter !== 'all' ? state.cameraFilter : null,
       lens: state.lensFilter !== 'all' ? state.lensFilter : null,
@@ -57,9 +60,12 @@
       // Load the new page's sidecars (like openFolder) so cards show real stars/flags and writes
       // never start from a default. Meta streams in the background.
       const newPaths = page.entries.map((e) => e.path);
-      await getSidecarsBatch(newPaths);
+      // L2: light fields come from the rows; only rows the catalog has not parsed yet read the sidecar.
+      const staleNew = seedLightSidecars(page.entries);
+      if (staleNew.length) await getSidecarsBatch(staleNew);
       state.entries = state.entries.concat(page.entries);
       getMetaBatch(newPaths).catch(() => {});
+      upgradeEditedSidecars(page.entries).then((any) => { if (any && state._catalogPaged) renderGrid(); }).catch(() => {});
       state._catalogTotal = page.total;
       state._catalogCapped = page.capped;
       renderGrid();
@@ -100,6 +106,35 @@
   /// changed camera filter must not keep operating on the previous filter's truncated page.
   /// Everything NOT backed by catalog_query (albums, exported, Lightroom cloud) is untouched by
   /// this and keeps the old client-side-only renderGrid() behavior.
+  /// L5: true when the search text is answered by catalog_query (and so must NOT also be re-applied
+  /// client-side, where light-seeded sidecars carry no keywords).
+  function searchIsServerSide() {
+    return !!(state._catalogPaged && state._catalogBaseQuery && (state.source === 'folder' || (state.source === 'catalog' && !String(state.catalogScope || '').startsWith('search:'))));
+  }
+  /// L5: re-run the current catalog view's base query with the new search text, from offset 0.
+  /// A newer call (or a view change) makes any older in-flight response a no-op via _searchToken.
+  async function catalogApplySearch() {
+    const base = state._catalogBaseQuery;
+    if (!base) return false;
+    const token = (state._searchToken = (state._searchToken || 0) + 1);
+    const q = { ...base, text: state.search ? state.search : null, offset: 0, limit: CATALOG_PAGE_SIZE };
+    try {
+      const page = await invoke('catalog_query', { q });
+      if (token !== state._searchToken || state._catalogBaseQuery !== base) return false; // stale response
+      const stale = seedLightSidecars(page.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+      if (token !== state._searchToken || state._catalogBaseQuery !== base) return false;
+      state._catalogBaseQuery = { ...q, offset: undefined };
+      state.entries = page.entries.filter((e) => e.is_image || e.is_video);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      const libMain = document.getElementById('lib-main');
+      if (libMain) libMain.scrollTop = 0;
+      renderGrid();
+      getMetaBatch(state.entries.map((e) => e.path)).catch(() => {});
+      return true;
+    } catch (e) { return false; }
+  }
   function applyCatalogFilterChange() {
     if (state._catalogPaged) {
       if (state.source === 'catalog') { openCatalogView(state.catalogScope); return; }

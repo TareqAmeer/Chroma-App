@@ -7687,7 +7687,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1115A';
+const BUILD='1.1115B';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -13513,12 +13513,35 @@ async function _fxSeekDecode(it,frameIndex){
   if(it._shownFrame===frameIndex&&it.curFrame===frameIndex)return;
   const myGen=++_fxSeekGen;
   const t=frameIndex/(it.fps||30);
+  const sink=fxVideoPvSink(it);
+  const hit=_fxFrameCacheGet(it,frameIndex,sink);
+  if(hit){_fxVideoPresent(it,hit,frameIndex);return;}
   let sample=null;
-  for await(const s of fxVideoPvSink(it).samples(t)){sample=s;break;}
+  for await(const s of sink.samples(t)){sample=s;break;}
   if(myGen!==_fxSeekGen||curItem()!==it){if(sample)sample.close();return;} // item switched / newer seek won — drop this stale result
   if(!sample)return;
   _fxVideoPresent(it,sample,frameIndex);
   sample.close();
+  if(_fxPreviewInteracting)_fxFrameCachePut(it,frameIndex,sink);
+}
+// E5: small LRU of recently decoded frames for back-and-forth scrubbing. Entries are 2D-canvas COPIES of the
+// drawn frame (never the mediabunny sample / VideoFrame, which must be closed straight away), so eviction
+// needs no close(). Keyed by integer frame index; the whole cache drops when the decode sink changes.
+const _FX_FCACHE_MAX=8,_FX_FCACHE_MAXPX=2.2e6;
+function _fxFrameCacheGet(it,frameIndex,sink){
+  const c=it._fcache;if(!c||c.sink!==sink)return null;
+  const cv=c.map.get(frameIndex);if(!cv)return null;
+  c.map.delete(frameIndex);c.map.set(frameIndex,cv); // LRU touch
+  return{displayWidth:cv.width,displayHeight:cv.height,draw:(ctx,x,y,w,h)=>ctx.drawImage(cv,x,y,w,h)};
+}
+function _fxFrameCachePut(it,frameIndex,sink){
+  const src=it._pvImg||it.img;if(!src||!src.width||src.width*src.height>_FX_FCACHE_MAXPX)return;
+  if(!it._fcache||it._fcache.sink!==sink)it._fcache={sink,map:new Map()};
+  const m=it._fcache.map;if(m.has(frameIndex))return;
+  const cv=document.createElement('canvas');cv.width=src.width;cv.height=src.height;
+  cv.getContext('2d').drawImage(src,0,0);
+  m.set(frameIndex,cv);
+  while(m.size>_FX_FCACHE_MAX){const k=m.keys().next().value;const o=m.get(k);o.width=o.height=0;m.delete(k);}
 }
 // Deterministic hash of an integer -> [0,1): the standard GLSL-style sin/fract trick, in JS.
 // frameIndex+1 avoids the degenerate sin(0)=0 case landing every clip's frame 0 at hash 0.
@@ -13809,10 +13832,16 @@ async function fxVideoBuildThumbs(it){
 }
 function fxVideoScrubInput(v){
   if(_fxPlayRAF)fxVideoPause(); // scrubbing takes over from playback (the clock would otherwise snap the playhead back)
+  _fxPreviewInteracting=true; // E5: draft-quality renders for the duration of the drag; fxVideoScrubCommit settles
   document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
   fxVideoSeekTo(curItem(),+v);
 }
-function fxVideoScrubCommit(v){fxVideoSeekTo(curItem(),+v);} // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+function fxVideoScrubCommit(v){ // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+  const it=curItem(),f=+v,was=_fxPreviewInteracting;
+  _fxPreviewInteracting=false;
+  if(it&&it.kind==='video'&&was&&it._shownFrame===f&&it.curFrame===f){renderPreview();return;} // frame already on screen at draft quality: re-render at full
+  fxVideoSeekTo(it,f);
+}
 // Frame-step + I/O trim-set — shared by the transport buttons and the keyboard map below.
 function fxVideoStep(delta){
   const it=curItem();if(!it||it.kind!=='video')return;
@@ -14159,7 +14188,7 @@ function srgbG(x){return x<=0.0031308?12.92*x:1.055*Math.pow(Math.max(x,0),1/2.4
 // after dispatch rejects, and its caller decides.
 let _cpuWorker,_cpuJobSeq=0;
 const _cpuJobs=new Map();
-function _cpuFns(){return{bakeDcpLUT,unsharpRGBA,_mskGuidedFilter,_boxFilterJS,hlClippedMask,hlPushPull,hlLabel,hlReconstruct,hlRGBA,drcBoxMean,drcGuided,drcRetinexBase,drcBuildMap};} // the only functions the worker exposes
+function _cpuFns(){return{bakeDcpLUT,unsharpRGBA,_mskGuidedFilter,_boxFilterJS,hlClippedMask,hlPushPull,hlLabel,hlReconstruct,hlRGBA,drcBoxMean,drcGuided,drcRetinexBase,drcBuildMap,bakeHslCube,hslExpandCoarse,applyHSL,applyPointColors,pcWeight,r2hsv,hsv2r};} // the only functions the worker exposes
 function _cpuGetWorker(){
   if(_cpuWorker!==undefined)return _cpuWorker;      // null = permanently unavailable
   _cpuWorker=null;
@@ -14930,6 +14959,7 @@ async function loadRw2(file,opts){
 // entries: [{img,name,ext,dpi,bytes,exif,icc?,rawFile?}, ...]; loadKey: same "is this a
 // genuinely different photo" string loadFXImages computes from file name+size+lastModified.
 function installFXImages(entries,loadKey,opts){
+  _fxEditFlush(); // E7
   opts=opts||{};
   if(typeof fxSyncHdrOption==='function')setTimeout(fxSyncHdrOption,0); // HDR option depends on the SOURCE file, which changes with the photo
 
@@ -15085,6 +15115,7 @@ function fxWorkCanvasFromRGBA(work,fullW){
 }
 function fxFileLoadKey(file){return`${file.__csSourcePath||file.name}:${file.size}:${file.lastModified||0}`;}
 async function loadFXImages(fileList,opts){
+  _fxEditFlush(); // E7
   opts=opts||{};
   const privateEntries=!!opts.privateEntries;
   if(!privateEntries){
@@ -15891,6 +15922,23 @@ function pointColorsIdentity(){return!(fxState.pointColors&&fxState.pointColors.
 // independent toggles sharing one texture, turning Color Mixer off while Point Color stays on
 // would still silently re-apply whatever Color Mixer band values happened to be sitting in
 // fxState.hsl. ~36k evals ≈ a few ms; debounced during slider drags. Hue slider ±100 → ±45°.
+// Fill the odd nodes of an S^3 RGB byte cube whose even nodes are populated (separable midpoint average, r then g then b).
+function hslExpandCoarse(d,S){
+  const S2=S*S,av=(o,a,b)=>{d[o]=d[a]+d[b]+1>>1;d[o+1]=d[a+1]+d[b+1]+1>>1;d[o+2]=d[a+2]+d[b+2]+1>>1;};
+  for(let bi=0;bi<S;bi+=2)for(let g=0;g<S;g+=2)for(let r=1;r<S;r+=2){const o=(bi*S2+g*S+r)*3;av(o,o-3,o+3);}
+  for(let bi=0;bi<S;bi+=2)for(let g=1;g<S;g+=2)for(let r=0;r<S;r++){const o=(bi*S2+g*S+r)*3;av(o,o-S*3,o+S*3);}
+  for(let bi=1;bi<S;bi+=2)for(let g=0;g<S;g++)for(let r=0;r<S;r++){const o=(bi*S2+g*S+r)*3;av(o,o-S2*3,o+S2*3);}
+}
+// Pure (worker-safe) cube bake. step 2 = even nodes only + midpoint expansion (drag draft); step 1 = exact full cube.
+function bakeHslCube(hA,sA,lA,pts,S,step){
+  const S2=S*S,d=new Uint8Array(S*S*S*3),n=S-1;
+  for(let bi=0;bi<S;bi+=step)for(let g=0;g<S;g+=step)for(let r=0;r<S;r+=step){
+    let[R,G,B]=applyHSL(r/n,g/n,bi/n,hA,sA,lA);
+    if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
+    const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
+  if(step===2)hslExpandCoarse(d,S);
+  return d;
+}
 function bakeHsl(){
   const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
   const pcOn=!!(document.getElementById('tg-pointcolor')||{}).classList?.contains('on');
@@ -15903,16 +15951,28 @@ function bakeHsl(){
   // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
   const key=JSON.stringify([hA,sA,lA,pts],(k,v)=>k==='name'?undefined:v); // a range's name never changes the cube
   const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
+  // E2: mid-drag (_fxPreviewInteracting) bake only the even nodes (17^3 = 4.9k evals, 7x cheaper) and
+  // midpoint-expand to the 33^3 texture; a settle timer re-bakes the exact full cube once the drag ends.
+  const coarse=!!_fxPreviewInteracting&&!memo.has(key);
   let hit=memo.get(key);
-  if(!hit){
-    const d=new Uint8Array(S*S*S*3);
-    for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
-      let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
-      if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
-      const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
-    hit=d;memo.set(key,hit);
+  const tok=bakeHsl._tok=(bakeHsl._tok||0)+1; // any newer bake invalidates an in-flight worker settle
+  if(!hit&&coarse){
+    hit=bakeHslCube(hA,sA,lA,pts,S,2);clearTimeout(bakeHsl._settleT);
+    // Settle: the exact 33^3 cube is baked in the pixel worker (pure fns via _cpuFns), uploaded when it lands.
+    const settle=()=>{
+      if(_fxPreviewInteracting){bakeHsl._settleT=setTimeout(settle,150);return;}
+      _cpuRun('bakeHslCube',[hA,sA,lA,pts,S,1]).then(d=>{
+        if(bakeHsl._tok!==tok)return;
+        memo.set(key,d);if(memo.size>4)memo.delete(memo.keys().next().value);
+        if(FX.ok)FX.setHslLUT(d);fxUpdate();
+      }).catch(()=>{if(bakeHsl._tok===tok){bakeHsl();fxUpdate();}});
+    };
+    bakeHsl._settleT=setTimeout(settle,150);
+  }else if(!hit){
+    clearTimeout(bakeHsl._settleT);
+    hit=bakeHslCube(hA,sA,lA,pts,S,1);memo.set(key,hit);
     if(memo.size>4)memo.delete(memo.keys().next().value);
-  }
+  }else clearTimeout(bakeHsl._settleT);
   if(FX.ok)FX.setHslLUT(hit);
 }
 // DRK-style before/after split swatch: left half is the band's canonical hue, right half
@@ -17698,7 +17758,19 @@ const CR_MAX_SAMPLES=8;   // must match mskCS's 2-per-vec4 packing and colRangeW
 // Deep copy for plain state (curves/HSL/geometry/canvas). structuredClone is available in every
 // engine this app runs in; the JSON fallback keeps an ancient WKWebView from throwing.
 const _clone=(v)=>{try{return structuredClone(v);}catch(e){return JSON.parse(JSON.stringify(v));}};
-function _pxToB64(px){
+// E7: `frozen` = the caller says px is not mutated in place (history rasters / masks with _pxFrozen: mskPxForWrite
+// clones before any write). Only then is the encoding memoised per array, and the hit is re-validated by a
+// full-array word hash (~1ms per 2.8MB vs ~10ms+ for btoa) so a stray in-place write can never serve stale bytes.
+const _pxB64Memo=new WeakMap();
+function _pxHash(px){
+  let h=2166136261>>>0;const n=px.length>>2;
+  if(!(px.byteOffset&3)){const w=new Uint32Array(px.buffer,px.byteOffset,n);for(let i=0;i<n;i++)h=Math.imul(h^w[i],16777619);}
+  else for(let i=0;i<n*4;i++)h=Math.imul(h^px[i],16777619);
+  for(let i=n*4;i<px.length;i++)h=Math.imul(h^px[i],16777619);
+  return h>>>0;
+}
+function _pxToB64(px,frozen){
+  if(frozen){const c=_pxB64Memo.get(px),h=_pxHash(px);if(c&&c.h===h&&c.n===px.length)return c.r;const r=_pxToB64(px);_pxB64Memo.set(px,{h,n:px.length,r});return r;}
   let bin='';const CH=0x8000;                      // chunked: apply() blows the stack on ~2.8M args
   for(let i=0;i<px.length;i+=CH)bin+=String.fromCharCode.apply(null,px.subarray(i,Math.min(i+CH,px.length)));
   return btoa(bin);
@@ -17722,7 +17794,7 @@ function _mskToSnap(m,skipRaster){
   if(m.aiBox)o.aiBox=Object.assign({},m.aiBox);
   if(m.crv)o.crv=m.crv.map(p=>p.slice());
   if(m.aiProvenance)o.aiProvenance=_mskNormalizeAIProvenance(m.aiProvenance);
-  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px);
+  if(!skipRaster&&m.px&&m.px.length)o.pxb64=_pxToB64(m.px,m._pxFrozen===true);
   return o;
 }
 function _mskFromSnap(o){
@@ -24412,11 +24484,34 @@ function fxHistoryPush(opts){
   // The persistence hooks below DO need the raster — a sidecar or saved session without it would
   // silently lose the mask. Only pay the base64 encode when a raster actually exists.
   if(typeof window.chromasmithOnEdit==='function'||typeof sessionAutosave==='function'){
-    const full=rasters.some(Boolean)?getUISnapshot():snap;
-    if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
-    if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+    // E7: the rasters are frozen (immutable) now, so the snapshot can be assembled later from `snap` + `rasters`
+    // with no staleness. A raster whose base64 is already memoised makes this cheap -> persist synchronously as
+    // before; a first-time encode (new paint stroke) is deferred to idle time (timeout-bounded) and flushed
+    // early on photo switch / window hide so the edit is attributed to the right photo and never lost.
+    const persist=()=>{
+      const full=rasters.some(Boolean)?Object.assign({},snap,{masks:snap.masks.map((mk,i)=>rasters[i]?Object.assign({},mk,{pxb64:_pxToB64(rasters[i],true)}):mk)}):snap;
+      if(typeof window.chromasmithOnEdit==='function')window.chromasmithOnEdit(full); // native-shell Library auto-save hook; no-op elsewhere
+      if(typeof sessionAutosave==='function')sessionAutosave(); // browser: debounced localStorage session save so a reload mid-edit isn't a total loss
+    };
+    _fxEditFlush(); // an older deferred persist must land before this newer one
+    if(rasters.some(p=>p&&!_pxB64Has(p))){
+      _fxEditPending=persist;
+      if(typeof requestIdleCallback==='function')_fxEditIdle=requestIdleCallback(_fxEditFlush,{timeout:150});
+      else _fxEditTimer=setTimeout(_fxEditFlush,50);
+    }else persist();
   }
 }
+let _fxEditPending=null,_fxEditIdle=0,_fxEditTimer=0;
+function _pxB64Has(p){return _pxB64Memo.has(p);}
+function _fxEditFlush(){
+  const f=_fxEditPending;if(!f)return;
+  _fxEditPending=null;
+  if(_fxEditIdle&&typeof cancelIdleCallback==='function')cancelIdleCallback(_fxEditIdle);
+  clearTimeout(_fxEditTimer);_fxEditIdle=0;_fxEditTimer=0;
+  try{f();}catch(e){console.error('deferred edit persist failed',e);}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')_fxEditFlush();});
+window.addEventListener('pagehide',_fxEditFlush);
 // Restores one history entry. applyUISnapshot rebuilds the mask objects from the raster-less
 // JSON, so the shared rasters have to be re-attached afterwards — and re-frozen, because the
 // entry still points at them.
@@ -27923,7 +28018,7 @@ function resolveSplitSnapshot(src){
     // _fxHistoryRestore — so the raster-less history JSON has to be re-hydrated here or the
     // "before" side of a split would render that step WITHOUT its brush masks.
     const snap=JSON.parse(e.j);
-    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p);});
+    if(snap.masks)snap.masks.forEach((mk,i)=>{const p=e.rasters[i];if(p)mk.pxb64=_pxToB64(p,true);});
     return snap;
   }
   if(src.style!==undefined){
@@ -29090,6 +29185,7 @@ function buildFilmstrip(){
   syncBatchScopeStatus();
 }
 function fxSelectImage(idx){
+  _fxEditFlush(); // E7: land any deferred autosave against the OUTGOING photo first
   // A user switch while semantic mask work is awaiting SAM/save cancels the remaining targets.
   // Let the requested switch happen; the stale callback checks this flag before committing.
   if(_mskSemanticCopyJob&&!_mskSemanticCopyJob.internalSwitch)_mskSemanticCopyJob.cancelled=true;
@@ -30655,9 +30751,20 @@ let fxLookCatFilter=window.__TAURI__?'User Looks':'All',fxLookSearch=''; // desk
 // Free-text filter beside the chips. At 113 looks the categories alone stopped being enough —
 // finding "portra 800" meant knowing it lives under C41 Still and then reading the whole group.
 // Subsequence match on the pretty name, same forgiving rule the ⌘K palette uses.
+let _lookSearchT=0;
 function fxLookSearchChanged(v){
   fxLookSearch=(v||'').trim().toLowerCase();
-  buildLookGallery();
+  clearTimeout(_lookSearchT);_lookSearchT=setTimeout(buildLookGallery,120); // E6: one rebuild per typing burst, not per keystroke
+}
+// E6: rendered thumbnails survive gallery rebuilds. Keyed by look key inside a cache that is tied to the
+// current source pixels (size + content hash of the 132px thumbnail source), so a photo switch, crop or
+// geometry change produces a different signature and starts a fresh cache.
+let _lookThumbCache={sig:'',map:new Map()};
+function _lookThumbs(px,w,h){
+  let hh=2166136261;for(let i=0;i<px.length;i++)hh=Math.imul(hh^px[i],16777619);
+  const sig=w+'x'+h+':'+(hh>>>0);
+  if(_lookThumbCache.sig!==sig)_lookThumbCache={sig,map:new Map()};
+  return _lookThumbCache.map;
 }
 function _lookMatches(key){
   if(!fxLookSearch)return true;
@@ -30691,7 +30798,7 @@ function buildLookGallery(){
   ctrl.style.display='block';host.innerHTML='';
   buildLookCatChips();
   let pxd;try{pxd=getPx(work,132);}catch(e){ctrl.style.display='none';return;}
-  const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'';
+  const{px,w,h}=pxd,cur=(document.getElementById('sel-lut')||{}).value||'',thumbs=_lookThumbs(px,w,h);
   // entries: mix of ['val','label'] cells and ['__hdr__','Category Name'] section dividers.
   // 'All' interleaves a header before each category; a specific filter shows just that group
   // (no headers needed, there's only one).
@@ -30772,7 +30879,9 @@ function buildLookGallery(){
         try{
           const out=job.val?applyLUTtoPx(px,await presetLut(job.val.slice(2))):px;
           if(gen!==buildLookGallery._gen){pumping=false;return;}
-          job.cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(out),w,h),0,0);
+          const od=new Uint8ClampedArray(out);
+          job.cv.getContext('2d').putImageData(new ImageData(od,w,h),0,0);
+          if(job.val){thumbs.set(job.val,od);if(thumbs.size>300)thumbs.delete(thumbs.keys().next().value);}
         }catch(e){
           // A vendor/luts fetch can fail (offline before the warm-up finished). Leave the cell
           // blank and label it rather than killing the rest of the queue.
@@ -30802,6 +30911,8 @@ function buildLookGallery(){
       fxPickLookCell(cell,val);};
     host.appendChild(cell);
     cell._lookJob={val,cv};
+    const cached=val&&thumbs.get(val);
+    if(cached){cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(cached),w,h),0,0);cell._lookDone=true;return;} // E6: already rendered for these pixels
     // ⚠️ observe AFTER appendChild — an unattached element never intersects anything, so
     // observing first would leave every cell permanently blank.
     if(io)io.observe(cell);else{cell._lookDone=true;queue.push(cell._lookJob);}

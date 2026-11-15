@@ -560,20 +560,27 @@
         if (!root) return null;
         const needsScan = !_catalogScannedRoots.has(root.id);
         if (needsScan) _catalogScannedRoots.add(root.id);
-        const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
-        return scanPromise.then((scanned) => {
-          if (scanned) { refreshCatalogCounts(); _catalogBgPending = true; }
-          // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
-          // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
-          // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
-          // the rest of the library is swept in the background by catalog_scan itself.
-          // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
-          // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
-          // the catalog as soon as the sync lands and shows on the next render of that folder.
-          if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
-            .then((r) => { if (r && r.changed > 0) refreshCatalogCounts(); }).catch(() => {});
-          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
-        });
+        // L1: resolves as soon as the root is registered (cheap). The scan is returned UN-awaited as
+        // `scan` (null when this root was already scanned this session) so openFolder can paint
+        // from the rows already in the DB and merge the scan's changes in when it lands. A scan
+        // that rejects resolves to null (same "best effort" posture the old awaited chain had).
+        let scan = null;
+        if (needsScan) {
+          scan = invoke('catalog_scan', { volumeId: root.volume_id }).then((r) => {
+            refreshCatalogCounts(); _catalogBgPending = true;
+            // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
+            // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
+            // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
+            // the rest of the library is swept in the background by catalog_scan itself.
+            // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
+            // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
+            // the catalog as soon as the sync lands and shows on the next render of that folder.
+            if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
+              .then((r2) => { if (r2 && r2.changed > 0) refreshCatalogCounts(); }).catch(() => {});
+            return r || {};
+          }).catch((e) => { _catalogScannedRoots.delete(root.id); console.error('catalog_scan', path, e); return null; });
+        }
+        return { volumeId: root.volume_id, relDir: root.requested_rel_path, scan };
       })
       .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });
   }

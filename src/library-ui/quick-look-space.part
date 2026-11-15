@@ -598,15 +598,15 @@
     // recorded as shipped but never was.
     if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const n = parseInt(e.key, 10);
-      e.preventDefault(); kbTargets().forEach((p) => setRating(p, n)); return;
+      e.preventDefault(); kbTargets().length > 1 ? setRatingsBatch(kbTargets(), n) : kbTargets().forEach((p) => setRating(p, n)); return;
     }
-    if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
-    if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
+    if (e.key === 'x' || e.key === 'X') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), 'Red') : kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
+    if (e.key === 'p' || e.key === 'P') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), 'Green') : kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     // Clear flag — the context menu's "Rate & flag ▸" submenu has always documented U for this
     // (the comment right above this block already says "X/P/U"), and Quick Look/Compare both
     // bind it, but the main grid never did. Added alongside the U-labeled menu item above rather
     // than leaving the menu's own shortcut hint pointing at a key that did nothing.
-    if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
+    if (e.key === 'u' || e.key === 'U') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), '') : kbTargets().forEach((p) => setLabel(p, '')); return; }
     if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);

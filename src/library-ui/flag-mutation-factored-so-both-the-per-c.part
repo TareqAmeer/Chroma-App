@@ -18,7 +18,7 @@
   // any recipe write to the same path (see the invoke wrapper in head.part).
   const SIDECAR_DEBOUNCE_MS = 200;
   const sidecarPending = new Map(), sidecarInflight = new Map();
-  function sidecarRepaint(path) {
+  function sidecarRepaint(path, skipCounts) {
     const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
     qlBadgesRefresh(path);
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
@@ -33,7 +33,7 @@
       const holder = card.querySelector('.lib-stars');
       if (holder) holder.outerHTML = starsHtml(sc.rating || 0);
     }
-    if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
+    if (!skipCounts && typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
     // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel/setRating/setFavorite are the ONE
     // canonical write path every flag UI funnels through; tell the Editor's topbar flag buttons
     // (fxUpdateFlagBtns, chromasmith-22.html) to re-read state so flagging the CURRENTLY OPEN photo
@@ -79,6 +79,50 @@
     sidecarRepaint(path);
     return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
+  // L7: a flag/rating/favorite change on MANY photos is one `set_sidecar_batch` IPC carrying only the
+  // changed field (Rust writes the XMPs on its bounded pool, updates the registries and the catalog
+  // once) instead of one debounced `set_sidecar` per photo. One path / no-op stays on the per-photo
+  // path above, unchanged. Optimistic UI + per-photo undo records + rollback match setLabel/setRating.
+  async function setFieldBatch(paths, field, value) {
+    const one = (p) => field === 'label' ? setLabel(p, value) : field === 'rating' ? setRating(p, value) : setFavorite(p, value);
+    paths = [...new Set(paths)];
+    if (paths.length < 2) return Promise.all(paths.map(one));
+    // Never start from a made-up default: load anything not cached yet (a light catalog-seeded entry is fine — it carries these fields).
+    const uncached = paths.filter((p) => !state.sidecars.has(p));
+    if (uncached.length) await getSidecarsBatch(uncached);
+    const norm = field === 'rating' ? Math.max(0, Math.min(5, parseInt(value, 10) || 0)) : value;
+    const cur = (p) => state.sidecars.get(p) || { rating: 0, label: '', edited: false };
+    const same = (c) => field === 'label' ? (c.label || '') === (norm || '') : field === 'rating' ? (c.rating || 0) === norm : !!c.favorite === !!norm;
+    const changed = paths.filter((p) => !same(cur(p)));
+    if (!changed.length) return true;
+    // Anything still waiting in the per-photo debounce for these paths goes out first, so the batch can
+    // send just this one field without dropping an earlier change.
+    changed.forEach(sidecarFlushPath);
+    await Promise.all(changed.map((p) => sidecarInflight.get(p)).filter(Boolean));
+    const prevs = new Map();
+    for (const p of changed) {
+      const c = cur(p);
+      prevs.set(p, c);
+      libMetaRecord(field === 'label' ? { kind: 'label', path: p, prev: c.label || '' }
+        : field === 'rating' ? { kind: 'rating', path: p, prev: c.rating || 0 }
+        : { kind: 'favorite', path: p, prev: !!c.favorite });
+      state.sidecars.set(p, { ...c, [field]: norm });
+      sidecarRepaint(p, true);
+    }
+    if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // once for the whole batch
+    let errs;
+    try {
+      const patch = field === 'label' ? { label: norm || '' } : field === 'rating' ? { rating: norm } : { favorite: !!norm };
+      errs = await invoke('set_sidecar_batch', { paths: changed, patch });
+    } catch (e) { errs = changed.map(() => String(e)); }
+    let failed = 0;
+    changed.forEach((p, i) => { if (errs && errs[i]) { failed++; sidecarWriteFailed(p, prevs.get(p), errs[i]); sidecarRepaint(p, true); } });
+    if (failed && typeof renderCollectionCounts === 'function') renderCollectionCounts();
+    return failed === 0;
+  }
+  const setLabelsBatch = (paths, label) => setFieldBatch(paths, 'label', label);
+  const setRatingsBatch = (paths, n) => setFieldBatch(paths, 'rating', n);
+  const setFavoritesBatch = (paths, fav) => setFieldBatch(paths, 'favorite', fav);
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
     if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;

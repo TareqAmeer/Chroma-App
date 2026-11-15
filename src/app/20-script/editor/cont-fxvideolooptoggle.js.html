@@ -208,10 +208,16 @@ async function fxVideoBuildThumbs(it){
 }
 function fxVideoScrubInput(v){
   if(_fxPlayRAF)fxVideoPause(); // scrubbing takes over from playback (the clock would otherwise snap the playhead back)
+  _fxPreviewInteracting=true; // E5: draft-quality renders for the duration of the drag; fxVideoScrubCommit settles
   document.getElementById('vid-time').textContent=fxVideoTimeLabel(+v,curItem()&&curItem().fps);
   fxVideoSeekTo(curItem(),+v);
 }
-function fxVideoScrubCommit(v){fxVideoSeekTo(curItem(),+v);} // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+function fxVideoScrubCommit(v){ // exact final seek on release — the drag-time seeks above may have been superseded/dropped
+  const it=curItem(),f=+v,was=_fxPreviewInteracting;
+  _fxPreviewInteracting=false;
+  if(it&&it.kind==='video'&&was&&it._shownFrame===f&&it.curFrame===f){renderPreview();return;} // frame already on screen at draft quality: re-render at full
+  fxVideoSeekTo(it,f);
+}
 // Frame-step + I/O trim-set — shared by the transport buttons and the keyboard map below.
 function fxVideoStep(delta){
   const it=curItem();if(!it||it.kind!=='video')return;

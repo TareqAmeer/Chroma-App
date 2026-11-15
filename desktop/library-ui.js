@@ -417,6 +417,17 @@
         }
         persist(); return Promise.resolve();
       }
+      case 'set_sidecar_batch': {
+        if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
+        (window.__libtestCalls = window.__libtestCalls || []).push([cmd, A]);
+        for (const path of A.paths || []) {
+          const current = ltBatchSidecars.get(path) || ltSidecars.get(path) || { color_label: '' };
+          const updated = { ...current, ...A.patch };
+          if (ltBatchSidecars.has(path)) ltBatchSidecars.set(path, updated);
+          ltSidecars.set(path, updated);
+        }
+        return Promise.resolve((A.paths || []).map(() => ''));
+      }
       case 'set_color_label': {
         if (ltFailNextSidecarWrite) { ltFailNextSidecarWrite = false; return Promise.reject(new Error('Simulated sidecar write failure')); }
         const cur = ltBatchSidecars.get(A.path) || { rating: 0, label: '', color_label: '', favorite: false, edited: false };
@@ -4110,6 +4121,9 @@
     // CatalogQuery's own doc comment on sync_sidecar_fields_run for why that write-through is
     // what makes this different from just reading the DB's (previously stale) copy.
     return {
+      // L5: the live search text is answered by the catalog (name/place/keyword/auto-tag) so it covers
+      // every photo, not just the loaded pages. Lowercased by the search box already.
+      text: state.search ? state.search : null,
       kind: state.typeFilter !== 'all' ? state.typeFilter : null,
       camera: state.cameraFilter !== 'all' ? state.cameraFilter : null,
       lens: state.lensFilter !== 'all' ? state.lensFilter : null,
@@ -4149,9 +4163,12 @@
       // Load the new page's sidecars (like openFolder) so cards show real stars/flags and writes
       // never start from a default. Meta streams in the background.
       const newPaths = page.entries.map((e) => e.path);
-      await getSidecarsBatch(newPaths);
+      // L2: light fields come from the rows; only rows the catalog has not parsed yet read the sidecar.
+      const staleNew = seedLightSidecars(page.entries);
+      if (staleNew.length) await getSidecarsBatch(staleNew);
       state.entries = state.entries.concat(page.entries);
       getMetaBatch(newPaths).catch(() => {});
+      upgradeEditedSidecars(page.entries).then((any) => { if (any && state._catalogPaged) renderGrid(); }).catch(() => {});
       state._catalogTotal = page.total;
       state._catalogCapped = page.capped;
       renderGrid();
@@ -4192,6 +4209,35 @@
   /// changed camera filter must not keep operating on the previous filter's truncated page.
   /// Everything NOT backed by catalog_query (albums, exported, Lightroom cloud) is untouched by
   /// this and keeps the old client-side-only renderGrid() behavior.
+  /// L5: true when the search text is answered by catalog_query (and so must NOT also be re-applied
+  /// client-side, where light-seeded sidecars carry no keywords).
+  function searchIsServerSide() {
+    return !!(state._catalogPaged && state._catalogBaseQuery && (state.source === 'folder' || (state.source === 'catalog' && !String(state.catalogScope || '').startsWith('search:'))));
+  }
+  /// L5: re-run the current catalog view's base query with the new search text, from offset 0.
+  /// A newer call (or a view change) makes any older in-flight response a no-op via _searchToken.
+  async function catalogApplySearch() {
+    const base = state._catalogBaseQuery;
+    if (!base) return false;
+    const token = (state._searchToken = (state._searchToken || 0) + 1);
+    const q = { ...base, text: state.search ? state.search : null, offset: 0, limit: CATALOG_PAGE_SIZE };
+    try {
+      const page = await invoke('catalog_query', { q });
+      if (token !== state._searchToken || state._catalogBaseQuery !== base) return false; // stale response
+      const stale = seedLightSidecars(page.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+      if (token !== state._searchToken || state._catalogBaseQuery !== base) return false;
+      state._catalogBaseQuery = { ...q, offset: undefined };
+      state.entries = page.entries.filter((e) => e.is_image || e.is_video);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      const libMain = document.getElementById('lib-main');
+      if (libMain) libMain.scrollTop = 0;
+      renderGrid();
+      getMetaBatch(state.entries.map((e) => e.path)).catch(() => {});
+      return true;
+    } catch (e) { return false; }
+  }
   function applyCatalogFilterChange() {
     if (state._catalogPaged) {
       if (state.source === 'catalog') { openCatalogView(state.catalogScope); return; }
@@ -6632,10 +6678,40 @@
 
   // ── grid ────────────────────────────────────────────────────────────────────
   async function getSidecar(path) {
-    if (state.sidecars.has(path)) return state.sidecars.get(path);
+    const cached = state.sidecars.get(path);
+    if (cached && !cached._light) return cached; // a catalog-seeded "_light" entry (rating/label/favorite/edited only) is upgraded to the full sidecar here
     const sc = await invoke('get_sidecar', { path }).catch(() => ({ rating: 0, label: '', edited: false, recipe: '' }));
-    state.sidecars.set(path, sc);
-    return sc;
+    // A light-seeded entry may have been optimistically patched (rating/flag) while the read was in
+    // flight — keep those user-visible fields from the cache, take everything else from disk.
+    const now = state.sidecars.get(path);
+    if (now && !now._light && now !== cached) return now; // another caller already loaded/wrote the full entry
+    const merged = now && now._light ? { ...sc, rating: now.rating, label: now.label, favorite: now.favorite } : sc;
+    state.sidecars.set(path, merged);
+    return merged;
+  }
+  /// Catalog rows already carry rating/label/favorite/edited (written through from the sidecar),
+  /// so a catalog-backed grid seeds those instead of reading every sidecar off the drive. The seeded
+  /// entry is marked `_light`: it has NO recipe/keywords/versions, and getSidecar/getSidecarsBatch
+  /// replace it with the real sidecar the first time something needs more. Rows whose sidecar the
+  /// catalog has not parsed yet (sc_stale) are returned so the caller reads those for real.
+  function seedLightSidecars(entries) {
+    const stale = [];
+    for (const e of entries) {
+      if (e.rating === undefined || e.sc_stale) { stale.push(e.path); continue; }
+      if (state.sidecars.has(e.path)) continue;
+      state.sidecars.set(e.path, { rating: e.rating || 0, label: e.sc_label || '', edited: !!e.edited, favorite: !!e.favorite, color_label: e.color_label || '', _light: true });
+    }
+    return stale;
+  }
+  /// Background: edited photos need their recipe for the sync thumbnail-rotation read, so fetch the
+  /// full sidecar for just those (one batched IPC per chunk) and repaint once.
+  async function upgradeEditedSidecars(entries, token) {
+    const paths = entries.filter((e) => e.edited).map((e) => e.path).filter((p) => (state.sidecars.get(p) || {})._light);
+    for (let i = 0; i < paths.length; i += 400) {
+      if (token !== undefined && state._openToken !== token) return false;
+      await getSidecarsBatch(paths.slice(i, i + 400));
+    }
+    return paths.length > 0;
   }
   async function getMeta(path) {
     if (state.meta.has(path)) return state.meta.get(path);
@@ -6650,11 +6726,16 @@
   // per-path path (still cached individually) if the batch command itself fails, so one bad
   // call can't lose the whole folder.
   async function getSidecarsBatch(paths) {
-    const need = paths.filter((p) => !state.sidecars.has(p));
+    const need = paths.filter((p) => { const c = state.sidecars.get(p); return !c || c._light; });
     if (!need.length) return;
     try {
       const scs = await invoke('get_sidecar_batch', { paths: need });
-      need.forEach((p, i) => state.sidecars.set(p, scs[i] || { rating: 0, label: '', edited: false, recipe: '' }));
+      need.forEach((p, i) => {
+        const old = state.sidecars.get(p);
+        const sc = scs[i] || { rating: 0, label: '', edited: false, recipe: '' };
+        if (old && !old._light) return; // upgraded meanwhile
+        state.sidecars.set(p, old ? { ...sc, rating: old.rating, label: old.label, favorite: old.favorite } : sc);
+      });
     } catch (e) {
       console.warn('get_sidecar_batch failed, falling back to per-file', e);
       await Promise.all(need.map((p) => getSidecar(p)));
@@ -7137,6 +7218,30 @@
     await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, total) }, worker));
     return { done, attempted, total };
   }
+  /// L1: the scan that ran in the background after openFolder painted from the existing catalog
+  /// rows. When it added or removed photos, re-query the same view (same filters, at least as many
+  /// rows as are loaded) and swap the entries in; renderGrid keeps the scroll position (first-visible
+  /// -card anchor) and selection is path-based so it survives. Nothing changed = no work at all.
+  async function catalogMergeAfterScan(path, token, r) {
+    const same = () => state._openToken === token && state.currentFolder === path && state.source === 'folder' && state._catalogPaged && state._catalogBaseQuery;
+    if (!r || !same()) return;
+    if (_catalogBgPending) { _catalogBgPending = false; firstPaintReady(15000).then(() => catalogRunBackgroundPhases()); }
+    if (!(r.added > 0 || r.marked_absent > 0)) return;
+    try {
+      const q = { ...state._catalogBaseQuery, offset: 0, limit: Math.max(CATALOG_PAGE_SIZE, state.entries.length) };
+      const page = await invoke('catalog_query', { q });
+      if (!same()) return;
+      const stale = seedLightSidecars(page.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+      if (!same()) return;
+      state.entries = page.entries.filter((e) => e.is_image || e.is_video);
+      state._catalogTotal = page.total;
+      state._catalogCapped = page.capped;
+      renderLibOfflineBar(state.entries.length > 0 && !!state.entries[0].offline);
+      renderGrid();
+      getMetaBatch(state.entries.map((e) => e.path)).catch(() => {});
+    } catch (e) { /* the grid already shows the saved catalog; the next open re-queries */ }
+  }
   async function openFolder(path, opts) {
     if (compareState.active) exitCompareMode(); // switching folders while comparing would strand the panes on the old batch
     state.currentFolder = path;
@@ -7145,15 +7250,16 @@
     const grid = document.getElementById('lib-grid');
     grid.innerHTML = libSkeletonHtml();
     let entries;
+    let bgScan = null;
     try {
-      // The catalog is now the grid's own data source, not a side-effect kicked off after a
-      // separate live filesystem walk — see catalogRegisterFolder's doc comment and the plan's
-      // Fix 1. Awaited (not fire-and-forget): the catalog_query right below depends on it having
-      // actually registered/scanned this folder. Still captured on `window` so the cold-boot
-      // sequence can await the same promise it always has.
+      // The catalog is the grid's own data source (see catalogRegisterFolder's doc comment). L1:
+      // registering is cheap and awaited; the scan is NOT — the grid paints from the rows already
+      // in the DB and the scan's changes are merged in when it lands (catalogMergeAfterScan).
+      // Only a root with nothing in the DB yet (first visit) waits for the scan, behind the skeleton.
+      // Still captured on `window` so the cold-boot sequence can await the same promise it always has.
       const regPromise = catalogRegisterFolder(path);
       window._lastCatalogRegisterPromise = regPromise;
-      const reg = await regPromise;
+      let reg = await regPromise;
       state._folderScope = reg
         ? { volumeId: reg.volumeId, relDir: reg.relDir }
         : { path };
@@ -7163,12 +7269,21 @@
       if (reg) {
         const q = { folder: { volumeId: reg.volumeId, relDir: reg.relDir, recursive: state.includeSubfolders },
           limit: CATALOG_PAGE_SIZE, offset: 0, ...catalogFilterFields() };
-        const page = await invoke('catalog_query', { q });
+        let page = await invoke('catalog_query', { q });
+        bgScan = reg.scan;
+        if (bgScan && page.total === 0) {
+          // First visit to this root: nothing to show yet, so wait for the scan (skeleton stays up).
+          const r = await bgScan; bgScan = null;
+          if (r) page = await invoke('catalog_query', { q });
+          else reg = null; // scan failed on an empty root: fall back to the live listing below
+        }
+        if (reg) {
         entries = page.entries;
         state._catalogPaged = true;
         state._catalogBaseQuery = { ...q, offset: undefined };
         state._catalogTotal = page.total;
         state._catalogCapped = page.capped;
+        } else { state._catalogPaged = false; entries = state.includeSubfolders ? await listDirRecursive(path) : await invoke('list_dir', { path }); }
       } else {
         // Fallback only: the catalog couldn't register this folder (e.g. a permissions error a
         // plain read_dir would also hit) — fall back to the live walk so the grid still shows
@@ -7213,7 +7328,15 @@
     // "Loading…" until the last file finished — a big folder took tens of seconds before
     // showing anything. Render immediately instead and let meta land in the background, then
     // refresh filters + grid once so sort-by-ISO/camera-filter pick it up.
-    await getSidecarsBatch(state.entries.map((e) => e.path));
+    // L2: a catalog-backed view seeds rating/label/favorite/edited from the rows themselves (no
+    // sidecar reads off the drive before first paint); only rows whose sidecar the catalog has not
+    // parsed yet — and every non-catalog view — still read the real sidecars up front.
+    if (state._catalogPaged) {
+      const stale = seedLightSidecars(state.entries);
+      if (stale.length) await getSidecarsBatch(stale);
+    } else {
+      await getSidecarsBatch(state.entries.map((e) => e.path));
+    }
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     state.dupeClusters.clear(); state.dupeClusterSizes.clear();
     await renderGrid();
@@ -7244,6 +7367,14 @@
     // only ever block when the user explicitly asks for it, not silently gate ordinary browsing.
     loadSyncedForFolder(state.entries, openToken);
     markFolderSyncedIfGphotosDownloads(path, state.entries);
+    if (state._catalogPaged) {
+      // Edited photos need their recipe for thumbnail rotation / edited looks: fetch just those, in
+      // the background, then repaint once.
+      upgradeEditedSidecars(state.entries, openToken).then((any) => {
+        if (any && state._openToken === openToken && state.currentFolder === path && state.source === 'folder') renderGrid();
+      }).catch(() => {});
+    }
+    if (bgScan) bgScan.then((r) => catalogMergeAfterScan(path, openToken, r)).catch(() => {});
     getMetaBatch(state.entries.map((e) => e.path)).then(() => {
       // source check: without it, opening a folder then clicking a Lightroom album while this
       // background meta pass was still running clobbered the cloud grid seconds later.
@@ -7360,7 +7491,7 @@
     if (state.syncedFilter === 'notsynced' && state.syncedPaths.has(entry.path)) return false;
     if (state.facesFilter === 'indexed' && !entry.faces_scanned) return false;
     if (state.facesFilter === 'pending' && entry.faces_scanned) return false;
-    if (state.search && !entryMatchesSearch(entry, sc, state.search)) return false;
+    if (state.search && !searchIsServerSide() && !entryMatchesSearch(entry, sc, state.search)) return false;
     // "N or more", except '0' which means exactly unrated — the two useful questions.
     if (state.ratingFilter !== 'all') {
       const want = parseInt(state.ratingFilter, 10);
@@ -7401,7 +7532,7 @@
   // any recipe write to the same path (see the invoke wrapper in head.part).
   const SIDECAR_DEBOUNCE_MS = 200;
   const sidecarPending = new Map(), sidecarInflight = new Map();
-  function sidecarRepaint(path) {
+  function sidecarRepaint(path, skipCounts) {
     const sc = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
     qlBadgesRefresh(path);
     const card = grid && grid.querySelector(`.lib-card[data-path="${CSS.escape(path)}"]`);
@@ -7416,7 +7547,7 @@
       const holder = card.querySelector('.lib-stars');
       if (holder) holder.outerHTML = starsHtml(sc.rating || 0);
     }
-    if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
+    if (!skipCounts && typeof renderCollectionCounts === 'function') renderCollectionCounts(); // flagged/rejected counts changed
     // E5 fix (editor_ux_spec.json, 2026-09-09): setLabel/setRating/setFavorite are the ONE
     // canonical write path every flag UI funnels through; tell the Editor's topbar flag buttons
     // (fxUpdateFlagBtns, chromasmith-22.html) to re-read state so flagging the CURRENTLY OPEN photo
@@ -7462,6 +7593,50 @@
     sidecarRepaint(path);
     return sidecarWriteSoon(path, cur, opts && opts.immediate);
   }
+  // L7: a flag/rating/favorite change on MANY photos is one `set_sidecar_batch` IPC carrying only the
+  // changed field (Rust writes the XMPs on its bounded pool, updates the registries and the catalog
+  // once) instead of one debounced `set_sidecar` per photo. One path / no-op stays on the per-photo
+  // path above, unchanged. Optimistic UI + per-photo undo records + rollback match setLabel/setRating.
+  async function setFieldBatch(paths, field, value) {
+    const one = (p) => field === 'label' ? setLabel(p, value) : field === 'rating' ? setRating(p, value) : setFavorite(p, value);
+    paths = [...new Set(paths)];
+    if (paths.length < 2) return Promise.all(paths.map(one));
+    // Never start from a made-up default: load anything not cached yet (a light catalog-seeded entry is fine — it carries these fields).
+    const uncached = paths.filter((p) => !state.sidecars.has(p));
+    if (uncached.length) await getSidecarsBatch(uncached);
+    const norm = field === 'rating' ? Math.max(0, Math.min(5, parseInt(value, 10) || 0)) : value;
+    const cur = (p) => state.sidecars.get(p) || { rating: 0, label: '', edited: false };
+    const same = (c) => field === 'label' ? (c.label || '') === (norm || '') : field === 'rating' ? (c.rating || 0) === norm : !!c.favorite === !!norm;
+    const changed = paths.filter((p) => !same(cur(p)));
+    if (!changed.length) return true;
+    // Anything still waiting in the per-photo debounce for these paths goes out first, so the batch can
+    // send just this one field without dropping an earlier change.
+    changed.forEach(sidecarFlushPath);
+    await Promise.all(changed.map((p) => sidecarInflight.get(p)).filter(Boolean));
+    const prevs = new Map();
+    for (const p of changed) {
+      const c = cur(p);
+      prevs.set(p, c);
+      libMetaRecord(field === 'label' ? { kind: 'label', path: p, prev: c.label || '' }
+        : field === 'rating' ? { kind: 'rating', path: p, prev: c.rating || 0 }
+        : { kind: 'favorite', path: p, prev: !!c.favorite });
+      state.sidecars.set(p, { ...c, [field]: norm });
+      sidecarRepaint(p, true);
+    }
+    if (typeof renderCollectionCounts === 'function') renderCollectionCounts(); // once for the whole batch
+    let errs;
+    try {
+      const patch = field === 'label' ? { label: norm || '' } : field === 'rating' ? { rating: norm } : { favorite: !!norm };
+      errs = await invoke('set_sidecar_batch', { paths: changed, patch });
+    } catch (e) { errs = changed.map(() => String(e)); }
+    let failed = 0;
+    changed.forEach((p, i) => { if (errs && errs[i]) { failed++; sidecarWriteFailed(p, prevs.get(p), errs[i]); sidecarRepaint(p, true); } });
+    if (failed && typeof renderCollectionCounts === 'function') renderCollectionCounts();
+    return failed === 0;
+  }
+  const setLabelsBatch = (paths, label) => setFieldBatch(paths, 'label', label);
+  const setRatingsBatch = (paths, n) => setFieldBatch(paths, 'rating', n);
+  const setFavoritesBatch = (paths, fav) => setFieldBatch(paths, 'favorite', fav);
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
     if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;
@@ -9217,6 +9392,7 @@
     toast(n > 1 ? `Reset ${n} photos — ⌘Z to undo` : 'Reset edit — ⌘Z to undo');
   }
   async function libUndoLastReset(paths) {
+    await getSidecarsBatch(paths); // light catalog-seeded entries carry no last_reset_recipe
     const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
     if (!restorable.length) return;
     await Promise.all(restorable.map(async (p) => {
@@ -9807,9 +9983,9 @@
     // renamed from "Rate & flag" and given a hearting row — favorite was previously only
     // reachable from the flag icons on the card itself / the deskbar's flag button, not here).
     const rateMenu = submenu('Rate');
-    rateMenu.subItem('Reject', () => Promise.all(paths.map((p) => setLabel(p, 'Red'))), 'X');
-    rateMenu.subItem('Pick', () => Promise.all(paths.map((p) => setLabel(p, 'Green'))), 'P');
-    rateMenu.subItem('Clear flag', () => Promise.all(paths.map((p) => setLabel(p, ''))), 'U');
+    rateMenu.subItem('Reject', () => setLabelsBatch(paths, 'Red'), 'X');
+    rateMenu.subItem('Pick', () => setLabelsBatch(paths, 'Green'), 'P');
+    rateMenu.subItem('Clear flag', () => setLabelsBatch(paths, ''), 'U');
     if (COLOR_LABELS_ENABLED) {
       const colorMenu = submenu('Colour label');
       COLOR_LABELS.forEach((color) => colorMenu.subItem(color, () => Promise.all(paths.map((p) => setColorLabel(p, color)))));
@@ -9818,7 +9994,7 @@
     rateMenu.subSep();
     const allFavorited = paths.every((p) => (state.sidecars.get(p) || {}).favorite);
     rateMenu.subItem(allFavorited ? '♥ Remove from favorites' : '♡ Add to favorites',
-      () => Promise.all(paths.map((p) => setFavorite(p, !allFavorited))));
+      () => setFavoritesBatch(paths, !allFavorited));
 
     // ── Rotate & flip ▸ — the OPEN photo goes through the editor's own geomRotate/geomFlip
     // (chromasmith-22.html: history, crop/mask remap, autosave); every other selected photo gets
@@ -9945,7 +10121,7 @@
     // `last_reset_recipe` on its sidecar — and restores each photo INDEPENDENTLY (a multi-photo
     // reset can be partially undone: reset 3, then export 1, then undo the other 2).
     const undoResetItem = verMenu.subItem('Undo last reset', () => libUndoLastReset(paths), kbd([], 'Z'));
-    if (!paths.some((p) => (state.sidecars.get(p) || {}).last_reset_recipe)) {
+    if (!paths.some((p) => { const s = state.sidecars.get(p) || {}; return s.last_reset_recipe || s._light; })) {
       undoResetItem.style.opacity = '.4';
       undoResetItem.style.pointerEvents = 'none';
     }
@@ -10740,7 +10916,7 @@
   /// points share one rule.
   // CHR-184: keyword edits record the photo's previous list so undo restores it exactly.
   async function restoreKeywords(path, prev) {
-    const sc = state.sidecars.get(path) || { keywords: [] };
+    const sc = await getSidecar(path); // full sidecar: a catalog-seeded light entry has no keywords
     try {
       await invoke('set_keywords', { path, keywords: prev });
       state.sidecars.set(path, { ...sc, keywords: prev });
@@ -10750,7 +10926,7 @@
   async function addKeywordToPhoto(path, keyword) {
     const paths = infoPanelTargetPaths(path);
     await Promise.all(paths.map(async (p) => {
-      const sc = state.sidecars.get(p) || { keywords: [] };
+      const sc = await getSidecar(p); // full sidecar: a catalog-seeded light entry has no keywords
       const current = sc.keywords || [];
       if (current.includes(keyword)) return;
       libMetaRecord({ kind: 'keywords', path: p, prev: [...current] });
@@ -10766,7 +10942,7 @@
   async function removeKeywordFromPhoto(path, keyword) {
     const paths = infoPanelTargetPaths(path);
     await Promise.all(paths.map(async (p) => {
-      const sc = state.sidecars.get(p) || { keywords: [] };
+      const sc = await getSidecar(p); // full sidecar: a catalog-seeded light entry has no keywords
       const next = (sc.keywords || []).filter((k) => k !== keyword);
       if (next.length !== (sc.keywords || []).length) libMetaRecord({ kind: 'keywords', path: p, prev: [...(sc.keywords || [])] });
       try {
@@ -12993,15 +13169,15 @@
     // recorded as shipped but never was.
     if (STARS_ENABLED && e.key >= '0' && e.key <= '5' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const n = parseInt(e.key, 10);
-      e.preventDefault(); kbTargets().forEach((p) => setRating(p, n)); return;
+      e.preventDefault(); kbTargets().length > 1 ? setRatingsBatch(kbTargets(), n) : kbTargets().forEach((p) => setRating(p, n)); return;
     }
-    if (e.key === 'x' || e.key === 'X') { kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
-    if (e.key === 'p' || e.key === 'P') { kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
+    if (e.key === 'x' || e.key === 'X') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), 'Red') : kbTargets().forEach((p) => setLabel(p, 'Red')); return; }
+    if (e.key === 'p' || e.key === 'P') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), 'Green') : kbTargets().forEach((p) => setLabel(p, 'Green')); return; }
     // Clear flag — the context menu's "Rate & flag ▸" submenu has always documented U for this
     // (the comment right above this block already says "X/P/U"), and Quick Look/Compare both
     // bind it, but the main grid never did. Added alongside the U-labeled menu item above rather
     // than leaving the menu's own shortcut hint pointing at a key that did nothing.
-    if (e.key === 'u' || e.key === 'U') { kbTargets().forEach((p) => setLabel(p, '')); return; }
+    if (e.key === 'u' || e.key === 'U') { kbTargets().length > 1 ? setLabelsBatch(kbTargets(), '') : kbTargets().forEach((p) => setLabel(p, '')); return; }
     if (e.key === 'i' || e.key === 'I') { state.showInfo = !state.showInfo; renderInfoPanel(); return; }
     if (e.key === 'g' || e.key === 'G') toggleExpandedView();
     else if (e.key === 'Escape' && (state.expanded_view || state.unified_view)) toggleExpandedView(false);
@@ -13429,7 +13605,7 @@
     const paths = [...state.selected];
     if (!paths.length) return;
     const clear = paths.every((p) => ((state.sidecars.get(p) || {}).label || '') === label);
-    await Promise.all(paths.map((p) => setLabel(p, clear ? '' : label)));
+    await setLabelsBatch(paths, clear ? '' : label);
     syncLibActionButtons();
   };
   overlay.querySelector('#lib-flag-reject').onclick = () => applySelectionLabel('Red');
@@ -13438,7 +13614,7 @@
     const paths = [...state.selected];
     if (!paths.length) return;
     const allFavorited = paths.every((p) => !!(state.sidecars.get(p) || {}).favorite);
-    await Promise.all(paths.map((p) => setFavorite(p, !allFavorited)));
+    await setFavoritesBatch(paths, !allFavorited);
     syncLibActionButtons();
   };
   syncLibActionButtons();
@@ -13511,7 +13687,15 @@
   const searchInput = overlay.querySelector('#lib-search');
   searchInput.oninput = (e) => {
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { state.search = e.target.value.toLowerCase(); renderGrid(); renderSearchSuggest(e.target.value); }, 150);
+    // L5: paged catalog views search the whole catalog server-side (250 ms debounce, stale
+    // responses dropped); every other view keeps the instant client-side filter.
+    const val = e.target.value;
+    const serverSide = searchIsServerSide();
+    searchDebounce = setTimeout(() => {
+      state.search = val.toLowerCase();
+      if (serverSide && searchIsServerSide()) catalogApplySearch(); else renderGrid();
+      renderSearchSuggest(val);
+    }, serverSide ? 250 : 150);
   };
   searchInput.onfocus = () => { if (!placeList.length) refreshPlaces(); renderSearchSuggest(searchInput.value); };
   searchInput.onblur = () => { const b = document.getElementById('lib-search-suggest'); if (b) b.hidden = true; };
@@ -15905,20 +16089,27 @@
         if (!root) return null;
         const needsScan = !_catalogScannedRoots.has(root.id);
         if (needsScan) _catalogScannedRoots.add(root.id);
-        const scanPromise = needsScan ? invoke('catalog_scan', { volumeId: root.volume_id }).then(() => true) : Promise.resolve(false);
-        return scanPromise.then((scanned) => {
-          if (scanned) { refreshCatalogCounts(); _catalogBgPending = true; }
-          // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
-          // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
-          // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
-          // the rest of the library is swept in the background by catalog_scan itself.
-          // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
-          // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
-          // the catalog as soon as the sync lands and shows on the next render of that folder.
-          if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
-            .then((r) => { if (r && r.changed > 0) refreshCatalogCounts(); }).catch(() => {});
-          return { volumeId: root.volume_id, relDir: root.requested_rel_path };
-        });
+        // L1: resolves as soon as the root is registered (cheap). The scan is returned UN-awaited as
+        // `scan` (null when this root was already scanned this session) so openFolder can paint
+        // from the rows already in the DB and merge the scan's changes in when it lands. A scan
+        // that rejects resolves to null (same "best effort" posture the old awaited chain had).
+        let scan = null;
+        if (needsScan) {
+          scan = invoke('catalog_scan', { volumeId: root.volume_id }).then((r) => {
+            refreshCatalogCounts(); _catalogBgPending = true;
+            // The launch scan only compares directory mtimes (cheap); an in-place .xmp rewrite
+            // (rating/label edited elsewhere) moves none. Verify the sidecars of the folder being
+            // opened now (Rust bounds it to ~1.5 s and remembers verified dirs for the session);
+            // the rest of the library is swept in the background by catalog_scan itself.
+            // Not awaited: a 0.6-1.2s wait on a 3k-file folder is a visible open-latency regression for
+            // a rare case (a sidecar rewritten by another app). A changed sidecar is picked up in
+            // the catalog as soon as the sync lands and shows on the next render of that folder.
+            if (!LIBTEST) invoke('catalog_sync_sidecars', { volumeId: root.volume_id, relDir: root.requested_rel_path })
+              .then((r2) => { if (r2 && r2.changed > 0) refreshCatalogCounts(); }).catch(() => {});
+            return r || {};
+          }).catch((e) => { _catalogScannedRoots.delete(root.id); console.error('catalog_scan', path, e); return null; });
+        }
+        return { volumeId: root.volume_id, relDir: root.requested_rel_path, scan };
       })
       .catch((e) => { console.error('catalog_add_root/scan', path, e); return null; });
   }
@@ -17125,8 +17316,11 @@
     const openToken = (state._openToken = (state._openToken || 0) + 1);
     {
       const paths = entries.filter((e) => !e.offline).map((e) => e.path);
-      await getSidecarsBatch(paths);
+      // L2: rating/label/favorite/edited come from the catalog rows; only unparsed rows read sidecars.
+      const staleSc = seedLightSidecars(entries.filter((e) => !e.offline));
+      if (staleSc.length) await getSidecarsBatch(staleSc);
       updateBootSplashProgress({ phase: 'cache', done: 0, total: 0 });
+      upgradeEditedSidecars(entries, openToken).then((any) => { if (any && state._openToken === openToken && state.source === 'catalog') renderGrid(); }).catch(() => {});
       getMetaBatch(paths).then(() => {
         if (state._openToken !== openToken || state.source !== 'catalog') return; // user moved on
         refreshFacetSelects();

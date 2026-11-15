@@ -1,9 +1,39 @@
   // ── grid ────────────────────────────────────────────────────────────────────
   async function getSidecar(path) {
-    if (state.sidecars.has(path)) return state.sidecars.get(path);
+    const cached = state.sidecars.get(path);
+    if (cached && !cached._light) return cached; // a catalog-seeded "_light" entry (rating/label/favorite/edited only) is upgraded to the full sidecar here
     const sc = await invoke('get_sidecar', { path }).catch(() => ({ rating: 0, label: '', edited: false, recipe: '' }));
-    state.sidecars.set(path, sc);
-    return sc;
+    // A light-seeded entry may have been optimistically patched (rating/flag) while the read was in
+    // flight — keep those user-visible fields from the cache, take everything else from disk.
+    const now = state.sidecars.get(path);
+    if (now && !now._light && now !== cached) return now; // another caller already loaded/wrote the full entry
+    const merged = now && now._light ? { ...sc, rating: now.rating, label: now.label, favorite: now.favorite } : sc;
+    state.sidecars.set(path, merged);
+    return merged;
+  }
+  /// Catalog rows already carry rating/label/favorite/edited (written through from the sidecar),
+  /// so a catalog-backed grid seeds those instead of reading every sidecar off the drive. The seeded
+  /// entry is marked `_light`: it has NO recipe/keywords/versions, and getSidecar/getSidecarsBatch
+  /// replace it with the real sidecar the first time something needs more. Rows whose sidecar the
+  /// catalog has not parsed yet (sc_stale) are returned so the caller reads those for real.
+  function seedLightSidecars(entries) {
+    const stale = [];
+    for (const e of entries) {
+      if (e.rating === undefined || e.sc_stale) { stale.push(e.path); continue; }
+      if (state.sidecars.has(e.path)) continue;
+      state.sidecars.set(e.path, { rating: e.rating || 0, label: e.sc_label || '', edited: !!e.edited, favorite: !!e.favorite, color_label: e.color_label || '', _light: true });
+    }
+    return stale;
+  }
+  /// Background: edited photos need their recipe for the sync thumbnail-rotation read, so fetch the
+  /// full sidecar for just those (one batched IPC per chunk) and repaint once.
+  async function upgradeEditedSidecars(entries, token) {
+    const paths = entries.filter((e) => e.edited).map((e) => e.path).filter((p) => (state.sidecars.get(p) || {})._light);
+    for (let i = 0; i < paths.length; i += 400) {
+      if (token !== undefined && state._openToken !== token) return false;
+      await getSidecarsBatch(paths.slice(i, i + 400));
+    }
+    return paths.length > 0;
   }
   async function getMeta(path) {
     if (state.meta.has(path)) return state.meta.get(path);
@@ -18,11 +48,16 @@
   // per-path path (still cached individually) if the batch command itself fails, so one bad
   // call can't lose the whole folder.
   async function getSidecarsBatch(paths) {
-    const need = paths.filter((p) => !state.sidecars.has(p));
+    const need = paths.filter((p) => { const c = state.sidecars.get(p); return !c || c._light; });
     if (!need.length) return;
     try {
       const scs = await invoke('get_sidecar_batch', { paths: need });
-      need.forEach((p, i) => state.sidecars.set(p, scs[i] || { rating: 0, label: '', edited: false, recipe: '' }));
+      need.forEach((p, i) => {
+        const old = state.sidecars.get(p);
+        const sc = scs[i] || { rating: 0, label: '', edited: false, recipe: '' };
+        if (old && !old._light) return; // upgraded meanwhile
+        state.sidecars.set(p, old ? { ...sc, rating: old.rating, label: old.label, favorite: old.favorite } : sc);
+      });
     } catch (e) {
       console.warn('get_sidecar_batch failed, falling back to per-file', e);
       await Promise.all(need.map((p) => getSidecar(p)));

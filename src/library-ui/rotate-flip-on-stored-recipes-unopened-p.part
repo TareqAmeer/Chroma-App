@@ -97,6 +97,7 @@
     toast(n > 1 ? `Reset ${n} photos — ⌘Z to undo` : 'Reset edit — ⌘Z to undo');
   }
   async function libUndoLastReset(paths) {
+    await getSidecarsBatch(paths); // light catalog-seeded entries carry no last_reset_recipe
     const restorable = paths.filter((p) => (state.sidecars.get(p) || {}).last_reset_recipe);
     if (!restorable.length) return;
     await Promise.all(restorable.map(async (p) => {

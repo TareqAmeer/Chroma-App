@@ -42,6 +42,15 @@ pub struct CatalogEntry {
     pub thumb_path: Option<String>,
     /// Reverse-geocoded place name from the photo's GPS, when it has one.
     pub place: Option<String>,
+    /// Sidecar-derived light fields (written through by sync_sidecar_fields_run / scan phase C),
+    /// so the grid can paint stars/flags/Edited without reading every XMP sidecar off the drive.
+    pub rating: i64,
+    pub sc_label: String,
+    pub favorite: bool,
+    pub edited: bool,
+    /// True when the sidecar changed since phase C last parsed it — the light fields above are
+    /// then not trustworthy and the frontend reads the real sidecar for this row.
+    pub sc_stale: bool,
 }
 
 #[derive(Serialize, Default)]
@@ -436,7 +445,8 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 (SELECT COUNT(*) FROM photos p3 WHERE p3.stack_id = p.id AND p3.present = 1),
                 (SELECT p2.rel_path FROM photos p2 WHERE p2.stack_id = p.id AND p2.present = 1 AND p2.id != p.id
                  ORDER BY p2.mtime DESC LIMIT 1),
-                p.stack_id, p.faces_scanned_at, p.place, p.captured
+                p.stack_id, p.faces_scanned_at, p.place, p.captured,
+                p.rating, p.label, p.favorite, p.edited, (p.sidecar_mtime != p.sidecar_parsed_mtime)
          FROM photos p JOIN volumes v ON v.id = p.volume_id
          WHERE {where_clause}
          {order_by}
@@ -475,6 +485,11 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
             let faces_scanned_at: Option<i64> = r.get(16)?;
             let place: Option<String> = r.get(17)?;
             let captured: Option<i64> = r.get(18)?;
+            let sc_rating: i64 = r.get(19)?;
+            let sc_label: String = r.get(20)?;
+            let sc_favorite: i64 = r.get(21)?;
+            let sc_edited: i64 = r.get(22)?;
+            let sc_stale: i64 = r.get(23)?;
             let is_photo = kind != "video";
             let online = is_local != 0 || {
                 let mut cache = online_cache.borrow_mut();
@@ -506,6 +521,11 @@ pub fn query_run(conn: &Connection, q: CatalogQuery) -> Result<CatalogPage, Stri
                 stack_n: if expanding && stack_id != Some(id) { 0 } else { stack_n as u32 },
                 thumb_path: if expanding { None } else { newest_deriv_rel.map(|rel| abs_path(&last_path, is_local != 0, &rel)) },
                 place,
+                rating: sc_rating,
+                sc_label,
+                favorite: sc_favorite != 0,
+                edited: sc_edited != 0,
+                sc_stale: sc_stale != 0,
             })
         })
         .map_err(|e| e.to_string())?

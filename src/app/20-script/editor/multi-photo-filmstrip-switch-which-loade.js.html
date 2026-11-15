@@ -30,6 +30,7 @@ function buildFilmstrip(){
   syncBatchScopeStatus();
 }
 function fxSelectImage(idx){
+  _fxEditFlush(); // E7: land any deferred autosave against the OUTGOING photo first
   // A user switch while semantic mask work is awaiting SAM/save cancels the remaining targets.
   // Let the requested switch happen; the stale callback checks this flag before committing.
   if(_mskSemanticCopyJob&&!_mskSemanticCopyJob.internalSwitch)_mskSemanticCopyJob.cancelled=true;

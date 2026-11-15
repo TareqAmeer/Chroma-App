@@ -507,7 +507,7 @@
   /// points share one rule.
   // CHR-184: keyword edits record the photo's previous list so undo restores it exactly.
   async function restoreKeywords(path, prev) {
-    const sc = state.sidecars.get(path) || { keywords: [] };
+    const sc = await getSidecar(path); // full sidecar: a catalog-seeded light entry has no keywords
     try {
       await invoke('set_keywords', { path, keywords: prev });
       state.sidecars.set(path, { ...sc, keywords: prev });
@@ -517,7 +517,7 @@
   async function addKeywordToPhoto(path, keyword) {
     const paths = infoPanelTargetPaths(path);
     await Promise.all(paths.map(async (p) => {
-      const sc = state.sidecars.get(p) || { keywords: [] };
+      const sc = await getSidecar(p); // full sidecar: a catalog-seeded light entry has no keywords
       const current = sc.keywords || [];
       if (current.includes(keyword)) return;
       libMetaRecord({ kind: 'keywords', path: p, prev: [...current] });
@@ -533,7 +533,7 @@
   async function removeKeywordFromPhoto(path, keyword) {
     const paths = infoPanelTargetPaths(path);
     await Promise.all(paths.map(async (p) => {
-      const sc = state.sidecars.get(p) || { keywords: [] };
+      const sc = await getSidecar(p); // full sidecar: a catalog-seeded light entry has no keywords
       const next = (sc.keywords || []).filter((k) => k !== keyword);
       if (next.length !== (sc.keywords || []).length) libMetaRecord({ kind: 'keywords', path: p, prev: [...(sc.keywords || [])] });
       try {

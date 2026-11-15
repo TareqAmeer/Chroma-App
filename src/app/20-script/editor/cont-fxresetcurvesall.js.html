@@ -173,6 +173,23 @@ function pointColorsIdentity(){return!(fxState.pointColors&&fxState.pointColors.
 // independent toggles sharing one texture, turning Color Mixer off while Point Color stays on
 // would still silently re-apply whatever Color Mixer band values happened to be sitting in
 // fxState.hsl. ~36k evals ≈ a few ms; debounced during slider drags. Hue slider ±100 → ±45°.
+// Fill the odd nodes of an S^3 RGB byte cube whose even nodes are populated (separable midpoint average, r then g then b).
+function hslExpandCoarse(d,S){
+  const S2=S*S,av=(o,a,b)=>{d[o]=d[a]+d[b]+1>>1;d[o+1]=d[a+1]+d[b+1]+1>>1;d[o+2]=d[a+2]+d[b+2]+1>>1;};
+  for(let bi=0;bi<S;bi+=2)for(let g=0;g<S;g+=2)for(let r=1;r<S;r+=2){const o=(bi*S2+g*S+r)*3;av(o,o-3,o+3);}
+  for(let bi=0;bi<S;bi+=2)for(let g=1;g<S;g+=2)for(let r=0;r<S;r++){const o=(bi*S2+g*S+r)*3;av(o,o-S*3,o+S*3);}
+  for(let bi=1;bi<S;bi+=2)for(let g=0;g<S;g++)for(let r=0;r<S;r++){const o=(bi*S2+g*S+r)*3;av(o,o-S2*3,o+S2*3);}
+}
+// Pure (worker-safe) cube bake. step 2 = even nodes only + midpoint expansion (drag draft); step 1 = exact full cube.
+function bakeHslCube(hA,sA,lA,pts,S,step){
+  const S2=S*S,d=new Uint8Array(S*S*S*3),n=S-1;
+  for(let bi=0;bi<S;bi+=step)for(let g=0;g<S;g+=step)for(let r=0;r<S;r+=step){
+    let[R,G,B]=applyHSL(r/n,g/n,bi/n,hA,sA,lA);
+    if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
+    const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
+  if(step===2)hslExpandCoarse(d,S);
+  return d;
+}
 function bakeHsl(){
   const hslOn=!!(document.getElementById('tg-hsl')||{}).classList?.contains('on');
   const pcOn=!!(document.getElementById('tg-pointcolor')||{}).classList?.contains('on');
@@ -185,16 +202,28 @@ function bakeHsl(){
   // more in WKWebView). Reuse the last few results; setHslLUT copies, so sharing is safe.
   const key=JSON.stringify([hA,sA,lA,pts],(k,v)=>k==='name'?undefined:v); // a range's name never changes the cube
   const memo=bakeHsl._memo||(bakeHsl._memo=new Map());
+  // E2: mid-drag (_fxPreviewInteracting) bake only the even nodes (17^3 = 4.9k evals, 7x cheaper) and
+  // midpoint-expand to the 33^3 texture; a settle timer re-bakes the exact full cube once the drag ends.
+  const coarse=!!_fxPreviewInteracting&&!memo.has(key);
   let hit=memo.get(key);
-  if(!hit){
-    const d=new Uint8Array(S*S*S*3);
-    for(let bi=0;bi<S;bi++)for(let g=0;g<S;g++)for(let r=0;r<S;r++){
-      let[R,G,B]=applyHSL(r/32,g/32,bi/32,hA,sA,lA);
-      if(pts)[R,G,B]=applyPointColors(R,G,B,pts);
-      const o=(bi*S2+g*S+r)*3;d[o]=R*255+.5|0;d[o+1]=G*255+.5|0;d[o+2]=B*255+.5|0;}
-    hit=d;memo.set(key,hit);
+  const tok=bakeHsl._tok=(bakeHsl._tok||0)+1; // any newer bake invalidates an in-flight worker settle
+  if(!hit&&coarse){
+    hit=bakeHslCube(hA,sA,lA,pts,S,2);clearTimeout(bakeHsl._settleT);
+    // Settle: the exact 33^3 cube is baked in the pixel worker (pure fns via _cpuFns), uploaded when it lands.
+    const settle=()=>{
+      if(_fxPreviewInteracting){bakeHsl._settleT=setTimeout(settle,150);return;}
+      _cpuRun('bakeHslCube',[hA,sA,lA,pts,S,1]).then(d=>{
+        if(bakeHsl._tok!==tok)return;
+        memo.set(key,d);if(memo.size>4)memo.delete(memo.keys().next().value);
+        if(FX.ok)FX.setHslLUT(d);fxUpdate();
+      }).catch(()=>{if(bakeHsl._tok===tok){bakeHsl();fxUpdate();}});
+    };
+    bakeHsl._settleT=setTimeout(settle,150);
+  }else if(!hit){
+    clearTimeout(bakeHsl._settleT);
+    hit=bakeHslCube(hA,sA,lA,pts,S,1);memo.set(key,hit);
     if(memo.size>4)memo.delete(memo.keys().next().value);
-  }
+  }else clearTimeout(bakeHsl._settleT);
   if(FX.ok)FX.setHslLUT(hit);
 }
 // DRK-style before/after split swatch: left half is the band's canonical hue, right half
