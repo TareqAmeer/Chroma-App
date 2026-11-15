@@ -132,7 +132,7 @@ pub fn disable_app_nap() {}
 ///     save battery — running a full-speed AI scan is directly against that stated preference,
 ///     independent of whether the machine happens to be thermally comfortable right now.
 #[cfg(target_os = "macos")]
-pub fn throttle_pause() -> Option<Duration> {
+fn system_throttle_pause() -> Option<Duration> {
     use objc2::runtime::AnyObject;
     use objc2::{class, msg_send};
     unsafe {
@@ -162,7 +162,7 @@ pub fn throttle_pause() -> Option<Duration> {
 /// "seriously overheating" from "battery saver on" on this platform, and treating every
 /// battery-saver session as a thermal emergency would be needlessly aggressive.
 #[cfg(windows)]
-pub fn throttle_pause() -> Option<Duration> {
+fn system_throttle_pause() -> Option<Duration> {
     use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
     let mut status = SYSTEM_POWER_STATUS::default();
     // SAFETY: status is a valid, appropriately-sized out-pointer for the call's duration.
@@ -177,8 +177,43 @@ pub fn throttle_pause() -> Option<Duration> {
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
-pub fn throttle_pause() -> Option<Duration> {
+fn system_throttle_pause() -> Option<Duration> {
     None
+}
+
+// ── Foreground-busy lease ────────────────────────────────────────────────────────────────────
+// While the editor plays graded video (hardware decode + per-frame GL on 4 physical cores),
+// background indexing must yield. The AI scans run in a SEPARATE worker process, so an
+// in-memory flag is invisible to them; the lease therefore lives in a tiny file holding a
+// unix-ms deadline that both processes read. The webview refreshes it every ~1 s while playing
+// (`set_foreground_busy(true)`), so a crashed/hidden page can never leave work paused: the
+// lease simply expires. `false` shortens it to a 1.5 s tail.
+fn fg_lease_path() -> std::path::PathBuf {
+    std::env::temp_dir().join("chromasmith_fg_busy")
+}
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+/// Set (`busy`) or shorten (`!busy`) the lease. Interactive commands never consult it.
+pub fn set_foreground_busy(busy: bool) {
+    let ms = if busy { 3000 } else { 1500 };
+    let _ = std::fs::write(fg_lease_path(), (unix_ms() + ms).to_string());
+}
+/// Milliseconds of lease left (0 = background work may run).
+pub fn foreground_busy_remaining_ms() -> u64 {
+    let Ok(t) = std::fs::read_to_string(fg_lease_path()) else { return 0 };
+    t.trim().parse::<u64>().unwrap_or(0).saturating_sub(unix_ms())
+}
+
+/// How long to pause before the NEXT unit of background work. While the foreground lease is
+/// active this BLOCKS (250 ms polls, capped at 10 s per call so cancel/kill stay responsive)
+/// and then falls through to the system-state check.
+pub fn throttle_pause() -> Option<Duration> {
+    let t0 = Instant::now();
+    while foreground_busy_remaining_ms() > 0 && t0.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    system_throttle_pause()
 }
 
 /// Adaptive pacing between chunks of background work: measures each chunk's wall time and

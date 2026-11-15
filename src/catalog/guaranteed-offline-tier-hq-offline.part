@@ -382,6 +382,13 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         // hour of clicking Cancel did nothing. The drain loop clears the flag ONCE before its
         // first batch instead (catalog_cancel_reset, below).
         let mut result = ThumbResult::default();
+        // Video playing in the editor: skip this bulk batch (the JS pacer polls again in ~200 ms,
+        // has_more keeps the drain alive). Visible-thumbnail lanes are other commands.
+        if crate::bgwork::foreground_busy_remaining_ms() > 0 && !state.cancel.load(Ordering::Relaxed) && !bg_is_paused() {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            result.has_more = true;
+            return Ok(result);
+        }
         // Pause is checked with the same weight as cancel: a paused user must not have a new
         // batch started behind their back.
         if state.cancel.load(Ordering::Relaxed) || bg_is_paused() {

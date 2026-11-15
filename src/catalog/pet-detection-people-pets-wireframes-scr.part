@@ -114,6 +114,9 @@ pub fn pets_run(
                 total: grand_total.max(base_scanned + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
             let mut part: Vec<(i64, i64, Option<Vec<PetHit>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {

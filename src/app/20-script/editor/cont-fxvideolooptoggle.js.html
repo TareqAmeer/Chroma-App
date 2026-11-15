@@ -231,7 +231,21 @@ function _fxVeStart(it){
   run.t0=(f0+0.25)/fps;
   run.wd=setTimeout(chk,4000);
 }
-function fxVideoPlayToggle(){
+// Playback yields background work: while a clip plays, the desktop shell is told every ~1 s that the foreground is busy
+// (Rust holds a 3 s lease - background AI scans / sweeps / bulk thumbnails wait on it, interactive lanes ignore it).
+// Pause/stop/clip switch send "false" (1.5 s tail on the Rust side); page hide stops the heartbeat and the lease expires on
+// its own, so work can never stay paused.
+let _fxFgTimer=null;
+function _fxFgSend(b){try{if(window.__TAURI__&&window.__TAURI__.core)window.__TAURI__.core.invoke('set_foreground_busy',{busy:b}).catch(()=>{});}catch(_){}}
+function _fxFgSync(){
+  const playing=!!_fxPlayRAF&&!document.hidden;
+  if(playing&&!_fxFgTimer){_fxFgSend(true);_fxFgTimer=setInterval(()=>{if(_fxPlayRAF&&!document.hidden)_fxFgSend(true);else _fxFgSync();},1000);}
+  else if(!playing&&_fxFgTimer){clearInterval(_fxFgTimer);_fxFgTimer=null;_fxFgSend(false);}
+}
+document.addEventListener('visibilitychange',()=>{try{_fxFgSync();}catch(_){}});
+window.addEventListener('pagehide',()=>{if(_fxFgTimer){clearInterval(_fxFgTimer);_fxFgTimer=null;}_fxFgSend(false);});
+function fxVideoPlayToggle(){try{_fxVideoPlayToggle();}finally{try{_fxFgSync();}catch(_){}}}
+function _fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
   if(_fxVeEligible(it)){
@@ -258,6 +272,9 @@ function fxVideoPlayToggle(){
   _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoPause(){
+  try{return _fxVideoPause();}finally{try{_fxFgSync();}catch(_){}}
+}
+function _fxVideoPause(){
   const ve=_fxVeStop();
   if(_fxPlayRAF&&_fxPlayRAF!==-1)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;

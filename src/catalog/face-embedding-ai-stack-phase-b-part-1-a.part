@@ -122,6 +122,9 @@ pub fn embed_run(
                 total: base_embedded + total_faces,
                 current: photo_batch_current(chunk.iter().map(|(_, path)| path.clone())),
             });
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
             let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .flat_map(|(photo_id, abs)| {

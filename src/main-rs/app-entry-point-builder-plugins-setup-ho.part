@@ -408,6 +408,7 @@ fn main() {
             catalog::catalog_hq_offline_set_active,
             catalog::catalog_cancel_reset,
             catalog::catalog_bg_set_paused,
+            catalog::set_foreground_busy,
             hq_offline_force_quit,
             catalog::catalog_focus,
             catalog::catalog_stack,

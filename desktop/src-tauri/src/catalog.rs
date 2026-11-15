@@ -3792,6 +3792,9 @@ pub fn pets_run(
                 total: grand_total.max(base_scanned + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
             let mut part: Vec<(i64, i64, Option<Vec<PetHit>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
@@ -5114,6 +5117,9 @@ pub fn embed_run(
                 total: base_embedded + total_faces,
                 current: photo_batch_current(chunk.iter().map(|(_, path)| path.clone())),
             });
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause);
+            }
             let mut part: Vec<(i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .flat_map(|(photo_id, abs)| {
@@ -7131,6 +7137,9 @@ pub fn clip_embed_run(
                 total: grand_total.max(base_embedded + total_in_batch),
                 current: photo_batch_current(chunk.iter().map(|(_, path, _)| path.clone())),
             });
+            if let Some(pause) = crate::bgwork::throttle_pause() {
+                std::thread::sleep(pause); // also waits out the video-playback lease
+            }
             let mut part: Vec<(i64, i64, Option<Vec<f32>>)> = chunk
                 .par_iter()
                 .map(|(id, abs, mtime)| {
@@ -7531,6 +7540,15 @@ pub fn catalog_bg_set_paused(paused: bool, state: tauri::State<CatalogState>) {
     if paused {
         kill_ai_worker(&state);
     }
+}
+
+/// Video-playback yield: the webview calls this with `true` roughly once a second while graded
+/// video plays (a 3 s lease, so a hidden/crashed page can never leave work paused) and with `false`
+/// at pause/stop (1.5 s tail). Background AI scans, hash/sidecar sweeps and bulk thumbnail
+/// generation wait on the lease (see bgwork::throttle_pause); interactive lanes never consult it.
+#[tauri::command(async)]
+pub fn set_foreground_busy(busy: bool) {
+    crate::bgwork::set_foreground_busy(busy);
 }
 
 pub(crate) fn bg_is_paused() -> bool {
@@ -9092,6 +9110,13 @@ pub async fn catalog_thumbnails(app: tauri::AppHandle) -> Result<ThumbResult, St
         // hour of clicking Cancel did nothing. The drain loop clears the flag ONCE before its
         // first batch instead (catalog_cancel_reset, below).
         let mut result = ThumbResult::default();
+        // Video playing in the editor: skip this bulk batch (the JS pacer polls again in ~200 ms,
+        // has_more keeps the drain alive). Visible-thumbnail lanes are other commands.
+        if crate::bgwork::foreground_busy_remaining_ms() > 0 && !state.cancel.load(Ordering::Relaxed) && !bg_is_paused() {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            result.has_more = true;
+            return Ok(result);
+        }
         // Pause is checked with the same weight as cancel: a paused user must not have a new
         // batch started behind their back.
         if state.cancel.load(Ordering::Relaxed) || bg_is_paused() {
