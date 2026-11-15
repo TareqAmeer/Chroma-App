@@ -10501,19 +10501,19 @@
       for (const ch of grid.children) if (ch._reuseTag) reuseMap.set(ch.dataset.path, ch);
     }
     if (!reuseMap.size) grid.innerHTML = '';
-    const frag = document.createDocumentFragment();
+    const want = []; // final child order; kept cards stay where they are (re-appending them forced a full restyle of every kept card per shift)
     const built = [];
     if (opts && opts.padTop) {
       const pad = document.createElement('div');
       pad.className = 'lib-virt-pad';
       pad.style.cssText = `grid-column:1/-1;height:${opts.padTop}px;pointer-events:none`;
-      frag.appendChild(pad);
+      want.push(pad);
     }
     list.forEach((entry, _i) => {
       const idx = offset + _i;
       const kept = reuseMap.get(entry.path);
       if (kept && kept._reuseTag.entry === entry && kept._reuseTag.idx === idx && kept._reuseTag.shown === shown && kept._reuseTag.isList === isList) {
-        frag.appendChild(kept);
+        want.push(kept);
         return;
       }
     const cachedSidecar = state.sidecars.get(entry.path);
@@ -10587,11 +10587,26 @@
           ${stripInfo}`;
       }
       card._reuseTag = { entry, idx, shown, isList };
-      frag.appendChild(card);
+      want.push(card);
       built.push({ entry, card, idx });
     });
-    if (reuseMap.size) grid.textContent = ''; // everything still wanted is already in frag; drop the rest (old pads, scrolled-out cards)
-    grid.appendChild(frag);
+    if (opts && opts.padBot) {
+      const pad = document.createElement('div');
+      pad.className = 'lib-virt-pad';
+      pad.style.cssText = `grid-column:1/-1;height:${opts.padBot}px;pointer-events:none`;
+      want.push(pad);
+    }
+    if (reuseMap.size) {
+      // Drop what is no longer wanted (old pads, scrolled-out cards), then insert only the new nodes in place.
+      const wantSet = new Set(want);
+      for (const ch of Array.from(grid.children)) if (!wantSet.has(ch)) ch.remove();
+      let cur = grid.firstChild;
+      for (const n of want) { if (n === cur) cur = cur.nextSibling; else grid.insertBefore(n, cur); }
+    } else {
+      const frag = document.createDocumentFragment();
+      for (const n of want) frag.appendChild(n);
+      grid.appendChild(frag);
+    }
     if (!grid.querySelector('.lib-card[tabindex="0"]')) { const first = grid.querySelector('.lib-card'); if (first) first.tabIndex = 0; } // always one tab stop into the grid
     syncPhotoWorkBadges();
     // Second pass: every card is now connected, so loadThumb()'s isConnected check (see its
@@ -10661,12 +10676,6 @@
     // a miss. Start as soon as cards mount so a first click can reuse a decoded JPEG instead of
     // waiting through the former arbitrary 1.2s delay.
     queueMicrotask(() => prefetchDisplayProxies(prefetchPaths));
-    if (opts && opts.padBot) {
-      const pad = document.createElement('div');
-      pad.className = 'lib-virt-pad';
-      pad.style.cssText = `grid-column:1/-1;height:${opts.padBot}px;pointer-events:none`;
-      grid.appendChild(pad);
-    }
   }
 
   /// A metadata panel for the focused photo. The list view already exposes EXIF as columns, but

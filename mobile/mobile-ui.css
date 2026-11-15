@@ -187,7 +187,8 @@ body.sk2.mobile-fx .fx-act-home .fx-act-ic{display:none!important}
 body.sk2.mobile-fx .fx-act-home .fx-act-logo{display:flex!important;align-items:center;justify-content:center}
 body.sk2.mobile-fx .fx-act-home .fx-act-logo svg{width:24px;height:24px}
 body.sk2.mobile-fx #fx-wrap{position:relative}
-body.sk2.mobile-fx #fx-wrap:not(:has(#fx-canvas[style*="block"])) #phone-compare{display:none}
+/* .phone-has-img is mirrored from #fx-canvas style by mobile-editor.js: a :has() on a style-attribute selector made EVERY inline-style write on the page (e.g. library grid spacers) restyle the whole document (~45ms). */
+body.sk2.mobile-fx #fx-wrap:not(.phone-has-img) #phone-compare{display:none}
 /* Toggles keep the desktop look and sliding knob; only the touch area grows to 48px. */
 body.sk2.mobile-fx .fx-toggle::before{inset:calc((var(--ctl-toggle-h) - 48px)/2) -8px!important}
 /* No per-slider reset buttons on phones. */
@@ -253,7 +254,7 @@ body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(
 /* The 48px corner chip carries only the Reset control. In a multi-card group (.sk2-dup-title) the desktop rule that prints the card name via ::before still applied, pushing the Reset cluster ~30px past the chip and giving .fx-panel a horizontal overflow (ui_audit FRAGMENT at 700px). */
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields))::before{display:none}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare):has(+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row,.fx-fields)){overflow:hidden}
-body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row),body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.fx-fields:not(:has(>#cv-ar-chips))>:first-child{padding-right:56px;min-height:48px;box-sizing:border-box}
+body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+:is(.cs-sub,.fx-sub,.adj-scope-row,.btn-row),body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.fx-fields>:first-child:not(#cv-ar-chips){padding-right:56px;min-height:48px;box-sizing:border-box}
 body.sk2.mobile-fx .fx-ctrl.sec-active>.fx-ctrl-title:not(.phone-bare)+.cs-sub{display:flex;align-items:center;margin:0}
 body.sk2.mobile-fx #fx-pull-cue{display:none!important}
 /* Tab strip is opaque edge to edge: the side fade let scrolled controls (icons, values) show through behind it. */

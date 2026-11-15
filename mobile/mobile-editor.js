@@ -226,6 +226,7 @@ function syncNavigation(){
 const section0=window.fxSection;window.fxSection=function(){const r=section0.apply(this,arguments);if(mob()){syncNavigation();setupLooks();labelControls($('.fx-panel'));lookActions();}return r;};
 function boot(){
   const link=document.createElement('link');link.rel='stylesheet';link.href='mobile/mobile-ui.css';document.head.appendChild(link);
+  {const cv=$('#fx-canvas'),w=$('#fx-wrap');if(cv&&w){const sync=()=>w.classList.toggle('phone-has-img',/block/.test(cv.getAttribute('style')||''));new MutationObserver(sync).observe(cv,{attributes:true,attributeFilter:['style']});sync();}}
   const ctx=document.createElement('div');ctx.id='phone-context';ctx.innerHTML='<span id="phone-original" hidden>Original</span>';
   $('#fx-actionbar')?.after(ctx);
   const queue=$('#phone-queue');if(queue)ctx.appendChild(queue);
