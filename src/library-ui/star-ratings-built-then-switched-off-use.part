@@ -163,7 +163,7 @@
     toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
   async function setRating(path, rating, opts) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path); // never write from an unloaded default
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     if ((cur.rating || 0) === n) return true; // no-op: no undo entry, no write, no repaint
     libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });

@@ -135,16 +135,59 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();fxComparePreviousBegin(e);return;
   }
   if(e.key===' '&&!e.shiftKey&&!e.repeat){ // hold Space = original before/after compare
-    e.preventDefault();if(!fxCompare){fxCompare=true;renderPreview();}return;
+    e.preventDefault();if(!fxCompare&&!fxCompareFastBegin()){fxCompare=true;renderPreview();}return;
   }
   if((e.key==='c'||e.key==='C')&&typeof cropToggle==='function'&&!cropMode){e.preventDefault();cropToggle();return;}
   if(e.key==='1'&&typeof toggleLoupe==='function'&&!fxLoupe){e.preventDefault();toggleLoupe();return;}
   if((e.key==='0'||e.key==='f'||e.key==='F')&&typeof _resetZoom==='function'){e.preventDefault();_resetZoom();if(fxLoupe&&typeof toggleLoupe==='function')toggleLoupe();return;}
 });
+// E3: hold-Space before/after without a full renderPreview per toggle. The untouched original is
+// rendered ONCE into #fx-canvas-orig (cached per recipe-without-grade + size + work image) and the
+// toggle just shows/hides that canvas over the graded FX.cv. Only the whole-frame, un-bordered,
+// un-zoomed, no-overlay case qualifies; anything else returns false and uses the old renderPreview path.
+function fxCompareFastBegin(){
+  try{
+    const orig=document.getElementById('fx-canvas-orig');
+    const it=curItem();
+    if(!orig||!FX||!FX.ok||!FX.cv||!_fxWholeLast||!_fxWholeLast.key||!_fxWholeLast.work)return false;
+    if(fxSplit||fxComparePreviousSnapshot!==null||fxLoupe||cropMode||fxFullResPreview||fxHistOn||fxPeakOn||_fxPreviewInteracting)return false;
+    if(it&&it.kind==='video')return false;
+    if(fxCrispZoom()&&fxZoom>1)return false;
+    if(fxClipCode())return false;
+    const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none')return false;
+    const rd=document.getElementById('fx-canvas-redeye');if(rd&&rd.dataset.active==='1')return false;
+    const P=fxCompareParams();
+    if(P.bordersEnabled||(P.b1&&P.b1.thickness)||(P.b2&&P.b2.thickness))return false;
+    const pw=FX.cv.width,ph=FX.cv.height;
+    if(!pw||!ph)return false;
+    const key=_fxRecipeKey(P)+'|'+pw+'x'+ph;
+    const c=window._fxCmpCache;
+    let clobbered=false;
+    if(!(c&&c.key===key&&c.work===_fxWholeLast.work&&orig.width===pw&&orig.height===ph)){
+      FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:fxGlowScale(),lutCache:true}));
+      orig.width=pw;orig.height=ph;orig.getContext('2d').drawImage(FX.cv,0,0);
+      window._fxCmpCache={key,work:_fxWholeLast.work};
+      clobbered=true; // FX.cv now holds the original, not the graded frame
+    }
+    orig.style.display='block';orig.style.clipPath='';
+    orig.style.width=FX.cv.style.width;orig.style.height=FX.cv.style.height;
+    fxCompare=true;
+    if(typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
+    window._fxCmpFast={clobbered,seq:window.__fxRPseq|0};
+    return true;
+  }catch(e){window._fxCmpFast=null;return false;}
+}
+function fxCompareFastEnd(){
+  const st=window._fxCmpFast;if(!st)return false;
+  window._fxCmpFast=null;
+  const orig=document.getElementById('fx-canvas-orig');
+  if(orig){orig.style.display='none';orig.style.clipPath='';}
+  return !st.clobbered&&st.seq===(window.__fxRPseq|0); // FX.cv still holds the graded frame: nothing to redraw
+}
 document.addEventListener('keyup',e=>{
   if(e.key===' '&&typeof fxCompare!=='undefined'&&fxCompare){
     const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]'))return;
-    fxCompare=false;renderPreview();
+    fxCompare=false;if(!fxCompareFastEnd())renderPreview();
   }
 });
 // Shortcut callbacks stay thin adapters to existing application actions; registry dispatch

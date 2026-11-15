@@ -40,6 +40,20 @@ function fxPeakUpdate(){
   o.style.left=src.offsetLeft+'px';o.style.top=src.offsetTop+'px';o.style.width=src.offsetWidth+'px';o.style.height=src.offsetHeight+'px';
   o.style.transform=src.style.transform||'';o.style.transformOrigin=src.style.transformOrigin||'';
 }
+// E1: drawHistogram/fxPeakUpdate each force a GPU readback. While a control is being dragged
+// (_fxPreviewInteracting) run them at most every 150ms (trailing); the settle render (flag false)
+// runs them immediately and cancels any pending trailing call, so the scopes never stay stale.
+let _fxScopeT=0;
+function fxScopesUpdateNow(){
+  if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
+}
+function fxScopesAfterRender(){
+  if(!fxHistOn&&!fxPeakOn)return;
+  if(!_fxPreviewInteracting){clearTimeout(_fxScopeT);_fxScopeT=0;fxScopesUpdateNow();return;}
+  if(_fxScopeT)return;
+  _fxScopeT=setTimeout(()=>{_fxScopeT=0;fxScopesUpdateNow();},150);
+}
 function fxClipCode(){return fxGamutWarn?4:(fxClipLo?1:0)+(fxClipHi?2:0)}
 function toggleGamutWarn(){
   fxGamutWarn=!fxGamutWarn;

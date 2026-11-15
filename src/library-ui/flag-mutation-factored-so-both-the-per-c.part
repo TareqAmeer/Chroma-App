@@ -69,7 +69,9 @@
   window.addEventListener('blur', sidecarFlushAll);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sidecarFlushAll(); });
   async function setLabel(path, label, opts) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    // Never start from a made-up default: a never-loaded sidecar (cards past the first catalog page)
+    // would otherwise write rating 0 / edited false over the real XMP values.
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     if ((cur.label || '') === (label || '')) return true; // no-op: no undo entry, no write, no repaint
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
@@ -80,7 +82,7 @@
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
     if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', color_label: '', edited: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     const prev = cur.color_label || '';
     if (prev === colorLabel) return true;
     const updated = { ...cur, color_label: colorLabel };
@@ -102,7 +104,7 @@
   // sidecar-write + rollback pattern, kept separate since favorite is independent of
   // (and can coexist with) a Red/Green flag.
   async function setFavorite(path, favorite) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     if (!!cur.favorite === !!favorite) return true;
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     state.sidecars.set(path, { ...cur, favorite });

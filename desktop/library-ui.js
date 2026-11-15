@@ -4146,7 +4146,12 @@
       // Same offline-filtering note as query_run's own: entries already excludes offline rows
       // when includeOffline was false, so simple concatenation is correct — nothing to dedupe,
       // since OFFSET always continues the same ORDER BY the first page used.
+      // Load the new page's sidecars (like openFolder) so cards show real stars/flags and writes
+      // never start from a default. Meta streams in the background.
+      const newPaths = page.entries.map((e) => e.path);
+      await getSidecarsBatch(newPaths);
       state.entries = state.entries.concat(page.entries);
+      getMetaBatch(newPaths).catch(() => {});
       state._catalogTotal = page.total;
       state._catalogCapped = page.capped;
       renderGrid();
@@ -4784,7 +4789,9 @@
   /// `_thumbPaintWaiters` is checked in loadThumb's job `.finally()` below, the one place every
   /// job (success or failure) is guaranteed to pass through.
   let _thumbPaintWaiters = [];
-  function firstPaintReady(timeoutMs) {
+  // Optional minDone: resolve as soon as that many cards have settled (the rest keep streaming)
+  // instead of waiting for the whole generation. Callers that omit it keep the full-drain behavior.
+  function firstPaintReady(timeoutMs, minDone) {
     return new Promise((resolve) => {
       // Nothing queued yet (e.g. an empty folder, or every card was already a cache hit and
       // painted synchronously in loadThumb before this is even called) — already ready.
@@ -4792,15 +4799,16 @@
       const gen = _thumbGen;
       let settled = false;
       const done = () => { if (settled) return; settled = true; resolve(); };
-      _thumbPaintWaiters.push({ gen, done });
+      _thumbPaintWaiters.push({ gen, done, minDone: minDone || 0 });
       if (timeoutMs) setTimeout(done, timeoutMs); // never let a stuck/slow card hang the caller forever
     });
   }
   function _resolveThumbPaintWaiters() {
-    if (_thumbDoneCount < _thumbTotalCount || !_thumbPaintWaiters.length) return;
-    const waiters = _thumbPaintWaiters;
-    _thumbPaintWaiters = [];
-    for (const w of waiters) w.done();
+    if (!_thumbPaintWaiters.length) return;
+    const all = _thumbDoneCount >= _thumbTotalCount;
+    const keep = [];
+    for (const w of _thumbPaintWaiters) { if (all || (w.minDone && _thumbDoneCount >= w.minDone)) w.done(); else keep.push(w); }
+    _thumbPaintWaiters = keep;
   }
   function fmtDuration(sec) {
     if (!sec || !isFinite(sec)) return '';
@@ -5137,7 +5145,7 @@
     toast(restored.length ? `Restored ${restored.length} photo${restored.length === 1 ? '' : 's'} from Trash` : 'Nothing could be restored from this delete');
   }
   async function setRating(path, rating, opts) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path); // never write from an unloaded default
     const n = Math.max(0, Math.min(5, parseInt(rating, 10) || 0));
     if ((cur.rating || 0) === n) return true; // no-op: no undo entry, no write, no repaint
     libMetaRecord({ kind: 'rating', path, prev: cur.rating || 0 });
@@ -7444,7 +7452,9 @@
   window.addEventListener('blur', sidecarFlushAll);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sidecarFlushAll(); });
   async function setLabel(path, label, opts) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false };
+    // Never start from a made-up default: a never-loaded sidecar (cards past the first catalog page)
+    // would otherwise write rating 0 / edited false over the real XMP values.
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     if ((cur.label || '') === (label || '')) return true; // no-op: no undo entry, no write, no repaint
     libMetaRecord({ kind: 'label', path, prev: cur.label || '' });
     const updated = { ...cur, label };
@@ -7455,7 +7465,7 @@
   async function setColorLabel(path, colorLabel, allowWhenHidden = false) {
     if (!COLOR_LABELS_ENABLED && !allowWhenHidden) return false;
     if (colorLabel !== '' && !COLOR_LABELS.includes(colorLabel)) return false;
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', color_label: '', edited: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     const prev = cur.color_label || '';
     if (prev === colorLabel) return true;
     const updated = { ...cur, color_label: colorLabel };
@@ -7477,7 +7487,7 @@
   // sidecar-write + rollback pattern, kept separate since favorite is independent of
   // (and can coexist with) a Red/Green flag.
   async function setFavorite(path, favorite) {
-    const cur = state.sidecars.get(path) || { rating: 0, label: '', edited: false, favorite: false };
+    const cur = state.sidecars.get(path) || await getSidecar(path);
     if (!!cur.favorite === !!favorite) return true;
     libMetaRecord({ kind: 'favorite', path, prev: !!cur.favorite });
     state.sidecars.set(path, { ...cur, favorite });
@@ -9456,11 +9466,16 @@
     // This used to load the whole selection into the editor first — an interactive-quality decode
     // of every RAW (~3 s each, before the progress bar even appeared) — and then decode each one
     // AGAIN at export quality, while every loaded photo stayed in memory.
-    const sidecars = [];
-    for (const p of paths) { try { sidecars.push(await getSidecar(p)); } catch (e) { sidecars.push({}); } }
+    // One batched IPC for every sidecar (was one awaited round trip per photo).
+    try { await getSidecarsBatch(paths); } catch (e) { console.error('sidecar batch for export', e); }
+    const sidecars = paths.map((p) => state.sidecars.get(p) || {});
+    const prepProgress = (i) => { if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting', done: 0, total: n, current: `Preparing ${i}/${n}`, cancelFn: () => { window.__csExportPreCancel = true; } }); };
+    const preCancelled = () => { window.libActivityJobDone?.('export', { label: 'Exporting', outcome: 'cancelled' }); };
     const snapOf = (sc) => { try { return sc && sc.recipe ? snapshotFromB64(sc.recipe) : null; } catch (e) { console.error('restore recipe', e); return null; } };
     const items = [], failed = [];
     for (let i = 0; i < paths.length; i++) {
+      if (window.__csExportPreCancel) { preCancelled(); return; }
+      prepProgress(i + 1);
       const p = paths[i], isRaw = RAW_EXT_RE.test(p);
       let ext = (p.split('.').pop() || '').toLowerCase(); if (ext === 'jpeg') ext = 'jpg'; if (ext === 'tiff') ext = 'tif';
       const stub = document.createElement('canvas'); stub.width = stub.height = 1;
@@ -9500,11 +9515,14 @@
         return { ...entries[0], ...perPhoto() };
       };
       if (isRaw && window.__TAURI__ && typeof window.chromasmithApplyFullCleanup === 'function') {
-        let file = null;
-        try { file = (await readPathsAsFiles([p], { pathBackedRaw: true }))[0] || null; } catch (e) { console.error('read RAW head', p, e); }
+        // Both lookups are independent: run them together (item.rawFile/exif are read by exportFX's
+        // pre-pass before _exportLoad, so they can't be deferred without changing behaviour).
+        let file = null, ident = null;
+        await Promise.all([
+          readPathsAsFiles([p], { pathBackedRaw: true }).then((r) => { file = r[0] || null; }, (e) => { console.error('read RAW head', p, e); }),
+          invoke('peek_raw_camera_path', { path: p }).then((r) => { ident = r; }, (e) => { console.error('peek_raw_camera_path', p, e); }),
+        ]);
         if (!file) { failed.push(p); continue; }
-        let ident = null;
-        try { ident = await invoke('peek_raw_camera_path', { path: p }); } catch (e) { console.error('peek_raw_camera_path', p, e); }
         item.rawFile = file; item.fileSize = file.size;
         if (ident) item.exif = { make: ident.make || '', model: ident.model || '', lens: ident.lens || '', photoStyle: ident.photoStyle };
         // The export-quality decode (full cleanup tier) straight into a fresh canvas — the same
@@ -19189,7 +19207,7 @@
       // the bar to 0% on every phase-key change — for a phase that already has a real number
       // available, producing exactly the "bar reaches the end and restarts" flash this replaces.
       updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount, current: '' });
-      await firstPaintReady(8000);
+      await firstPaintReady(1500, 12); // ~12 cards with pixels or 1.5s; the rest keep streaming
       bootMark('firstpaint');
       // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
       // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not

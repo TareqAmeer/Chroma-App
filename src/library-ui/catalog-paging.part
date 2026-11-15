@@ -54,7 +54,12 @@
       // Same offline-filtering note as query_run's own: entries already excludes offline rows
       // when includeOffline was false, so simple concatenation is correct — nothing to dedupe,
       // since OFFSET always continues the same ORDER BY the first page used.
+      // Load the new page's sidecars (like openFolder) so cards show real stars/flags and writes
+      // never start from a default. Meta streams in the background.
+      const newPaths = page.entries.map((e) => e.path);
+      await getSidecarsBatch(newPaths);
       state.entries = state.entries.concat(page.entries);
+      getMetaBatch(newPaths).catch(() => {});
       state._catalogTotal = page.total;
       state._catalogCapped = page.capped;
       renderGrid();

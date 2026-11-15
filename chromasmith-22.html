@@ -7687,7 +7687,7 @@ const PRINT_PRESETS={
 <script>
 // BUMP THIS on every edit — shown in the header + startup log so a stale cached copy
 // (GitHub Pages caches ~10 min; iOS Safari longer) is instantly recognisable.
-const BUILD='1.1113B';
+const BUILD='1.1115A';
 {const sv=document.getElementById('boot-splash-version');if(sv)sv.textContent='Version '+BUILD;}
 // User-facing changelog for the "What's New" panel (Help menu / window.chromasmithShowWhatsNew).
 // PREPEND a short entry here in any session that ships a user-visible change, same discipline as
@@ -24944,6 +24944,20 @@ function fxPeakUpdate(){
   o.style.left=src.offsetLeft+'px';o.style.top=src.offsetTop+'px';o.style.width=src.offsetWidth+'px';o.style.height=src.offsetHeight+'px';
   o.style.transform=src.style.transform||'';o.style.transformOrigin=src.style.transformOrigin||'';
 }
+// E1: drawHistogram/fxPeakUpdate each force a GPU readback. While a control is being dragged
+// (_fxPreviewInteracting) run them at most every 150ms (trailing); the settle render (flag false)
+// runs them immediately and cancels any pending trailing call, so the scopes never stay stale.
+let _fxScopeT=0;
+function fxScopesUpdateNow(){
+  if(fxHistOn)drawHistogram();
+  if(fxPeakOn)fxPeakUpdate();
+}
+function fxScopesAfterRender(){
+  if(!fxHistOn&&!fxPeakOn)return;
+  if(!_fxPreviewInteracting){clearTimeout(_fxScopeT);_fxScopeT=0;fxScopesUpdateNow();return;}
+  if(_fxScopeT)return;
+  _fxScopeT=setTimeout(()=>{_fxScopeT=0;fxScopesUpdateNow();},150);
+}
 function fxClipCode(){return fxGamutWarn?4:(fxClipLo?1:0)+(fxClipHi?2:0)}
 function toggleGamutWarn(){
   fxGamutWarn=!fxGamutWarn;
@@ -27475,7 +27489,12 @@ function renderLoupe(){
   // re-render AT the zoomed-to resolution from a proportionally TIGHTER source crop, so higher
   // zoom means more magnification of real source detail, not a stretched fixed buffer.
   const z=Math.max(0.25,Math.min(8,fxZoom||1));
-  const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  let outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  // E4: cap output pixels — ~2MP while a control/pan is being dragged (draft), ~8MP at settle. Same crop
+  // (framing unchanged), only the render resolution drops; outW/cropW below follows, so grain and
+  // halation (scOverride) stay at the matching scale for the smaller buffer.
+  {const cap=_fxPreviewInteracting?2e6:8e6,px=outW*outH;
+   if(px>cap){const k=Math.sqrt(cap/px);outW=Math.max(1,Math.floor(outW*k));outH=Math.max(1,Math.floor(outH*k));}}
   const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z/kF),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z/kF),fh)); // work px; cw*dpr/z is the crop in full-frame px
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
@@ -27486,7 +27505,8 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(fw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  const _zo=fxZoomGlowOpts(fw,outW/cropW);if(_fxPreviewInteracting)_zo.glowScale=Math.max(_zo.glowScale,fxPreviewGlowScale()); // E4: draft glow scale mid-drag
+  FX.render(P,outW,outH,mskPreviewRenderOptions({..._zo,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -27501,8 +27521,7 @@ function renderLoupe(){
   document.getElementById('fx-no-img').style.display='none';
   document.getElementById('fx-info').textContent=`1:1 — native ${Math.round(cropW*kF)}×${Math.round(cropH*kF)}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;
-  if(fxHistOn)drawHistogram();
-  if(fxPeakOn)fxPeakUpdate();
+  fxScopesAfterRender();
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.
@@ -27824,6 +27843,7 @@ const FX_ORIG_PARAMS={lut:null,adjust:{enabled:false},grain:{enabled:false},hala
   bloom:{enabled:false},debug:0,bordersEnabled:false,b1:{thickness:0},b2:{thickness:0}};
 function renderSnapshotTo(dstCanvas,snap,pw,ph,opts){
   opts=opts||{};
+  window._fxCmpCache=null; // E3: any snapshot render may overwrite fx-canvas-orig — drop the cached hold-Space original
   const blit=()=>{dstCanvas.width=pw;dstCanvas.height=ph;dstCanvas.getContext('2d').drawImage(FX.cv,0,0);};
   if(snap==='orig'){
     FX.render(FX_ORIG_PARAMS,pw,ph,{glowScale:fxGlowScale(),...opts});
@@ -27970,6 +27990,7 @@ function fxRenderBusy(on){let el=document.getElementById('fx-render-busy');const
   if(on&&wrap){if(!el){el=document.createElement('div');el.id='fx-render-busy';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.innerHTML='<span class="msk-ai-spin"></span><span>Rendering\u2026</span>';wrap.appendChild(el);}el.classList.add('on');}
   else if(el)el.classList.remove('on');}
 function renderPreview(){
+  window.__fxRPseq=(window.__fxRPseq|0)+1; // E3: lets hold-Space tell whether FX.cv was redrawn during the hold
   _fxBdGen++;clearTimeout(_fxBdSlice); // abandon any half-finished progressive tile pass
   if(!fxBdHeavy())fxRenderBusy(false);
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
@@ -28201,8 +28222,7 @@ function renderPreview(){
     :`Preview ${pw}\u00d7${ph}`;
   fxRefreshDims();
   document.getElementById('btn-fx-export').disabled=false;
-  if(fxHistOn)drawHistogram();
-  if(fxPeakOn)fxPeakUpdate();
+  fxScopesAfterRender(); // E1: histogram/peaking readbacks are skipped on draft frames, run on settle
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
   fxSecondDisplayUpdate();
 }
@@ -30995,6 +31015,9 @@ function applyRedEyeCorrections(canvas,ops){
 function drawRedEyePreview(P){
   const cv=document.getElementById('fx-canvas-redeye');if(!cv)return;
   if(fxCompare||!P.redEyeOps||!P.redEyeOps.some(o=>o.enabled!==false)){cv.dataset.active='0';cv.style.display='none';return;}
+  // E1: the overlay costs a GPU readback + pixel pass per frame — skip it on draft frames (hide the now-stale
+  // overlay so the live canvas shows through); the settle render redraws it.
+  if(_fxPreviewInteracting){if(cv.dataset.active==='1'){cv.dataset.active='0';cv.style.display='none';}return;}
   if(cv.width!==FX.cv.width||cv.height!==FX.cv.height){cv.width=FX.cv.width;cv.height=FX.cv.height;}
   const x=cv.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,cv.width,cv.height);x.drawImage(FX.cv,0,0);applyRedEyeCorrections(cv,P.redEyeOps);
   ['width','height','left','top'].forEach(key=>cv.style[key]=FX.cv.style[key]);cv.dataset.active='1';cv.style.display='block';
@@ -36237,16 +36260,59 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();fxComparePreviousBegin(e);return;
   }
   if(e.key===' '&&!e.shiftKey&&!e.repeat){ // hold Space = original before/after compare
-    e.preventDefault();if(!fxCompare){fxCompare=true;renderPreview();}return;
+    e.preventDefault();if(!fxCompare&&!fxCompareFastBegin()){fxCompare=true;renderPreview();}return;
   }
   if((e.key==='c'||e.key==='C')&&typeof cropToggle==='function'&&!cropMode){e.preventDefault();cropToggle();return;}
   if(e.key==='1'&&typeof toggleLoupe==='function'&&!fxLoupe){e.preventDefault();toggleLoupe();return;}
   if((e.key==='0'||e.key==='f'||e.key==='F')&&typeof _resetZoom==='function'){e.preventDefault();_resetZoom();if(fxLoupe&&typeof toggleLoupe==='function')toggleLoupe();return;}
 });
+// E3: hold-Space before/after without a full renderPreview per toggle. The untouched original is
+// rendered ONCE into #fx-canvas-orig (cached per recipe-without-grade + size + work image) and the
+// toggle just shows/hides that canvas over the graded FX.cv. Only the whole-frame, un-bordered,
+// un-zoomed, no-overlay case qualifies; anything else returns false and uses the old renderPreview path.
+function fxCompareFastBegin(){
+  try{
+    const orig=document.getElementById('fx-canvas-orig');
+    const it=curItem();
+    if(!orig||!FX||!FX.ok||!FX.cv||!_fxWholeLast||!_fxWholeLast.key||!_fxWholeLast.work)return false;
+    if(fxSplit||fxComparePreviousSnapshot!==null||fxLoupe||cropMode||fxFullResPreview||fxHistOn||fxPeakOn||_fxPreviewInteracting)return false;
+    if(it&&it.kind==='video')return false;
+    if(fxCrispZoom()&&fxZoom>1)return false;
+    if(fxClipCode())return false;
+    const bd=document.getElementById('fx-canvas-bd');if(bd&&bd.style.display!=='none')return false;
+    const rd=document.getElementById('fx-canvas-redeye');if(rd&&rd.dataset.active==='1')return false;
+    const P=fxCompareParams();
+    if(P.bordersEnabled||(P.b1&&P.b1.thickness)||(P.b2&&P.b2.thickness))return false;
+    const pw=FX.cv.width,ph=FX.cv.height;
+    if(!pw||!ph)return false;
+    const key=_fxRecipeKey(P)+'|'+pw+'x'+ph;
+    const c=window._fxCmpCache;
+    let clobbered=false;
+    if(!(c&&c.key===key&&c.work===_fxWholeLast.work&&orig.width===pw&&orig.height===ph)){
+      FX.render(P,pw,ph,mskPreviewRenderOptions({glowScale:fxGlowScale(),lutCache:true}));
+      orig.width=pw;orig.height=ph;orig.getContext('2d').drawImage(FX.cv,0,0);
+      window._fxCmpCache={key,work:_fxWholeLast.work};
+      clobbered=true; // FX.cv now holds the original, not the graded frame
+    }
+    orig.style.display='block';orig.style.clipPath='';
+    orig.style.width=FX.cv.style.width;orig.style.height=FX.cv.style.height;
+    fxCompare=true;
+    if(typeof csFirstEditCompareShown==='function')csFirstEditCompareShown();
+    window._fxCmpFast={clobbered,seq:window.__fxRPseq|0};
+    return true;
+  }catch(e){window._fxCmpFast=null;return false;}
+}
+function fxCompareFastEnd(){
+  const st=window._fxCmpFast;if(!st)return false;
+  window._fxCmpFast=null;
+  const orig=document.getElementById('fx-canvas-orig');
+  if(orig){orig.style.display='none';orig.style.clipPath='';}
+  return !st.clobbered&&st.seq===(window.__fxRPseq|0); // FX.cv still holds the graded frame: nothing to redraw
+}
 document.addEventListener('keyup',e=>{
   if(e.key===' '&&typeof fxCompare!=='undefined'&&fxCompare){
     const t=e.target;if(t&&t.closest&&t.closest('input,textarea,select,[contenteditable]'))return;
-    fxCompare=false;renderPreview();
+    fxCompare=false;if(!fxCompareFastEnd())renderPreview();
   }
 });
 // Shortcut callbacks stay thin adapters to existing application actions; registry dispatch

@@ -279,7 +279,9 @@
   /// `_thumbPaintWaiters` is checked in loadThumb's job `.finally()` below, the one place every
   /// job (success or failure) is guaranteed to pass through.
   let _thumbPaintWaiters = [];
-  function firstPaintReady(timeoutMs) {
+  // Optional minDone: resolve as soon as that many cards have settled (the rest keep streaming)
+  // instead of waiting for the whole generation. Callers that omit it keep the full-drain behavior.
+  function firstPaintReady(timeoutMs, minDone) {
     return new Promise((resolve) => {
       // Nothing queued yet (e.g. an empty folder, or every card was already a cache hit and
       // painted synchronously in loadThumb before this is even called) — already ready.
@@ -287,15 +289,16 @@
       const gen = _thumbGen;
       let settled = false;
       const done = () => { if (settled) return; settled = true; resolve(); };
-      _thumbPaintWaiters.push({ gen, done });
+      _thumbPaintWaiters.push({ gen, done, minDone: minDone || 0 });
       if (timeoutMs) setTimeout(done, timeoutMs); // never let a stuck/slow card hang the caller forever
     });
   }
   function _resolveThumbPaintWaiters() {
-    if (_thumbDoneCount < _thumbTotalCount || !_thumbPaintWaiters.length) return;
-    const waiters = _thumbPaintWaiters;
-    _thumbPaintWaiters = [];
-    for (const w of waiters) w.done();
+    if (!_thumbPaintWaiters.length) return;
+    const all = _thumbDoneCount >= _thumbTotalCount;
+    const keep = [];
+    for (const w of _thumbPaintWaiters) { if (all || (w.minDone && _thumbDoneCount >= w.minDone)) w.done(); else keep.push(w); }
+    _thumbPaintWaiters = keep;
   }
   function fmtDuration(sec) {
     if (!sec || !isFinite(sec)) return '';

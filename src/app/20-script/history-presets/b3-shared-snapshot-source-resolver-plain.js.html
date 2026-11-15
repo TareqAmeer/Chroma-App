@@ -79,6 +79,7 @@ function fxRenderBusy(on){let el=document.getElementById('fx-render-busy');const
   if(on&&wrap){if(!el){el=document.createElement('div');el.id='fx-render-busy';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.innerHTML='<span class="msk-ai-spin"></span><span>Rendering\u2026</span>';wrap.appendChild(el);}el.classList.add('on');}
   else if(el)el.classList.remove('on');}
 function renderPreview(){
+  window.__fxRPseq=(window.__fxRPseq|0)+1; // E3: lets hold-Space tell whether FX.cv was redrawn during the hold
   _fxBdGen++;clearTimeout(_fxBdSlice); // abandon any half-finished progressive tile pass
   if(!fxBdHeavy())fxRenderBusy(false);
   // Every renderPreview that is not a pure zoom/pan settle may carry a recipe or photo change:
@@ -310,8 +311,7 @@ function renderPreview(){
     :`Preview ${pw}\u00d7${ph}`;
   fxRefreshDims();
   document.getElementById('btn-fx-export').disabled=false;
-  if(fxHistOn)drawHistogram();
-  if(fxPeakOn)fxPeakUpdate();
+  fxScopesAfterRender(); // E1: histogram/peaking readbacks are skipped on draft frames, run on settle
   if(typeof mskOverlaySync==='function')mskOverlaySync(); // canvas rect may have just changed (new photo / resize)
   fxSecondDisplayUpdate();
 }

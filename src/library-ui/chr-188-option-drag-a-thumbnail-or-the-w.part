@@ -146,11 +146,16 @@
     // This used to load the whole selection into the editor first — an interactive-quality decode
     // of every RAW (~3 s each, before the progress bar even appeared) — and then decode each one
     // AGAIN at export quality, while every loaded photo stayed in memory.
-    const sidecars = [];
-    for (const p of paths) { try { sidecars.push(await getSidecar(p)); } catch (e) { sidecars.push({}); } }
+    // One batched IPC for every sidecar (was one awaited round trip per photo).
+    try { await getSidecarsBatch(paths); } catch (e) { console.error('sidecar batch for export', e); }
+    const sidecars = paths.map((p) => state.sidecars.get(p) || {});
+    const prepProgress = (i) => { if (typeof window.libActivityJob === 'function') window.libActivityJob('export', { label: 'Exporting', done: 0, total: n, current: `Preparing ${i}/${n}`, cancelFn: () => { window.__csExportPreCancel = true; } }); };
+    const preCancelled = () => { window.libActivityJobDone?.('export', { label: 'Exporting', outcome: 'cancelled' }); };
     const snapOf = (sc) => { try { return sc && sc.recipe ? snapshotFromB64(sc.recipe) : null; } catch (e) { console.error('restore recipe', e); return null; } };
     const items = [], failed = [];
     for (let i = 0; i < paths.length; i++) {
+      if (window.__csExportPreCancel) { preCancelled(); return; }
+      prepProgress(i + 1);
       const p = paths[i], isRaw = RAW_EXT_RE.test(p);
       let ext = (p.split('.').pop() || '').toLowerCase(); if (ext === 'jpeg') ext = 'jpg'; if (ext === 'tiff') ext = 'tif';
       const stub = document.createElement('canvas'); stub.width = stub.height = 1;
@@ -190,11 +195,14 @@
         return { ...entries[0], ...perPhoto() };
       };
       if (isRaw && window.__TAURI__ && typeof window.chromasmithApplyFullCleanup === 'function') {
-        let file = null;
-        try { file = (await readPathsAsFiles([p], { pathBackedRaw: true }))[0] || null; } catch (e) { console.error('read RAW head', p, e); }
+        // Both lookups are independent: run them together (item.rawFile/exif are read by exportFX's
+        // pre-pass before _exportLoad, so they can't be deferred without changing behaviour).
+        let file = null, ident = null;
+        await Promise.all([
+          readPathsAsFiles([p], { pathBackedRaw: true }).then((r) => { file = r[0] || null; }, (e) => { console.error('read RAW head', p, e); }),
+          invoke('peek_raw_camera_path', { path: p }).then((r) => { ident = r; }, (e) => { console.error('peek_raw_camera_path', p, e); }),
+        ]);
         if (!file) { failed.push(p); continue; }
-        let ident = null;
-        try { ident = await invoke('peek_raw_camera_path', { path: p }); } catch (e) { console.error('peek_raw_camera_path', p, e); }
         item.rawFile = file; item.fileSize = file.size;
         if (ident) item.exif = { make: ident.make || '', model: ident.model || '', lens: ident.lens || '', photoStyle: ident.photoStyle };
         // The export-quality decode (full cleanup tier) straight into a fresh canvas — the same

@@ -251,7 +251,12 @@ function renderLoupe(){
   // re-render AT the zoomed-to resolution from a proportionally TIGHTER source crop, so higher
   // zoom means more magnification of real source detail, not a stretched fixed buffer.
   const z=Math.max(0.25,Math.min(8,fxZoom||1));
-  const outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  let outW=Math.max(1,Math.round(cw*dpr*z)),outH=Math.max(1,Math.round(ch*dpr*z));
+  // E4: cap output pixels — ~2MP while a control/pan is being dragged (draft), ~8MP at settle. Same crop
+  // (framing unchanged), only the render resolution drops; outW/cropW below follows, so grain and
+  // halation (scOverride) stay at the matching scale for the smaller buffer.
+  {const cap=_fxPreviewInteracting?2e6:8e6,px=outW*outH;
+   if(px>cap){const k=Math.sqrt(cap/px);outW=Math.max(1,Math.floor(outW*k));outH=Math.max(1,Math.floor(outH*k));}}
   const cropW=Math.max(1,Math.min(Math.round(cw*dpr/z/kF),fw)),cropH=Math.max(1,Math.min(Math.round(ch*dpr/z/kF),fh)); // work px; cw*dpr/z is the crop in full-frame px
   const ox=Math.min(fw-cropW,Math.max(0,Math.round(loupeCX*fw-cropW/2)));
   const oy=Math.min(fh-cropH,Math.max(0,Math.round(loupeCY*fh-cropH/2)));
@@ -262,7 +267,8 @@ function renderLoupe(){
   }
   const P=fxCompare?fxCompareParams():getFXParams();
   const REF=FXR.CAL.refWidth;
-  FX.render(P,outW,outH,mskPreviewRenderOptions({...fxZoomGlowOpts(fw,outW/cropW),seed:fxLoupeSeed,gamutWarn:fxClipCode(),
+  const _zo=fxZoomGlowOpts(fw,outW/cropW);if(_fxPreviewInteracting)_zo.glowScale=Math.max(_zo.glowScale,fxPreviewGlowScale()); // E4: draft glow scale mid-drag
+  FX.render(P,outW,outH,mskPreviewRenderOptions({..._zo,seed:fxLoupeSeed,gamutWarn:fxClipCode(),
     uvOff:[ox/fw,(fh-(oy+cropH))/fh],uvScale:[cropW/fw,cropH/fh]})); // export-scale grain & glow
   if(!FX.popTempImage())FX.setImage(fxWork);                        // restore working texture for later renders
   FX.cv.style.display='block';FX.cv.style.clipPath='';
@@ -277,8 +283,7 @@ function renderLoupe(){
   document.getElementById('fx-no-img').style.display='none';
   document.getElementById('fx-info').textContent=`1:1 — native ${Math.round(cropW*kF)}×${Math.round(cropH*kF)}px crop · grain & halation at true export scale · drag to move`;
   document.getElementById('btn-fx-export').disabled=false;
-  if(fxHistOn)drawHistogram();
-  if(fxPeakOn)fxPeakUpdate();
+  fxScopesAfterRender();
 }
 // On phones the preview is moved to the top and made sticky, so cap its height to ~46% of
 // the viewport — otherwise a portrait image would fill the screen and bury the controls.

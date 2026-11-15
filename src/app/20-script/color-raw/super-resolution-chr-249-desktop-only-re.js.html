@@ -110,6 +110,9 @@ function applyRedEyeCorrections(canvas,ops){
 function drawRedEyePreview(P){
   const cv=document.getElementById('fx-canvas-redeye');if(!cv)return;
   if(fxCompare||!P.redEyeOps||!P.redEyeOps.some(o=>o.enabled!==false)){cv.dataset.active='0';cv.style.display='none';return;}
+  // E1: the overlay costs a GPU readback + pixel pass per frame — skip it on draft frames (hide the now-stale
+  // overlay so the live canvas shows through); the settle render redraws it.
+  if(_fxPreviewInteracting){if(cv.dataset.active==='1'){cv.dataset.active='0';cv.style.display='none';}return;}
   if(cv.width!==FX.cv.width||cv.height!==FX.cv.height){cv.width=FX.cv.width;cv.height=FX.cv.height;}
   const x=cv.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,cv.width,cv.height);x.drawImage(FX.cv,0,0);applyRedEyeCorrections(cv,P.redEyeOps);
   ['width','height','left','top'].forEach(key=>cv.style[key]=FX.cv.style[key]);cv.dataset.active='1';cv.style.display='block';

@@ -44,7 +44,7 @@
       // the bar to 0% on every phase-key change — for a phase that already has a real number
       // available, producing exactly the "bar reaches the end and restarts" flash this replaces.
       updateBootSplashProgress({ phase: 'paint', done: _thumbDoneCount, total: _thumbTotalCount, current: '' });
-      await firstPaintReady(8000);
+      await firstPaintReady(1500, 12); // ~12 cards with pixels or 1.5s; the rest keep streaming
       bootMark('firstpaint');
       // ⚠️ Deliberately does NOT auto-reopen the last-edited photo any more. It used to, right
       // here, via `openInEditor(lastPath)` — and that turned out to be actively harmful, not
