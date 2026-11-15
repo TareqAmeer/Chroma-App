@@ -52,6 +52,7 @@ function fxVideoMuteToggle(){
   {const sa=document.getElementById('sel-vid-audio');if(sa)sa.value=fxVideoMuted?'mute':'keep';}
   const btn=document.getElementById('btn-vid-mute');if(btn)btn.innerHTML=icon(fxVideoMuted?'volumeOff':'volume',18);
   const it=curItem();
+  if(_fxVe){_fxVe.v.muted=fxVideoMuted;return;} // native-<video> playback owns its own audio
   if(_fxPlayRAF&&it&&it.kind==='video'){ // playing right now — apply immediately instead of waiting for the next play
     if(fxVideoMuted)_fxAudioStop();
     else _fxAudioStart(it,(+document.getElementById('vid-scrub').value||0)/(it.fps||30));
@@ -72,9 +73,176 @@ function fxVideoPreviewQualityChanged(v){
   const it=curItem();
   if(it&&it.kind==='video'&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);}else renderPreview();
 }
+// ── Native <video> playback (hardware decode) ─────────────────────────────────────────────────────
+// The JS decode path (mediabunny/WebCodecs -> 2D canvas -> texture) costs ~150-400 ms per 4K frame on the Intel
+// Mac (decode alone 4.7 fps on 4K HEVC 10-bit), so no clock trick could reach the clip's frame rate. A hidden
+// <video> plays the clip through the platform decoder (VideoToolbox on macOS) at real time WITH its own audio
+// (A/V sync comes from the media element, not from our code); requestVideoFrameCallback hands us each frame the
+// compositor actually presents, which we upload straight into the GL texture (FX.setVideoElement, ~15 ms) and
+// grade. If the grade can't keep up, rVFC simply skips frames: playback stays at real speed and drops frames
+// (never slow motion). Desktop shell only (colour of the element upload verified on WKWebView only);
+// HDR/HLG clips off macOS, geometry (crop/rotate), compare/split/loupe keep the JS path. On pause the exact frame is
+// re-presented through the normal full-quality seek path, so a paused frame is unchanged by this feature.
+let _fxVe=null,_fxVeGen=0,_fxVeItem=null; // _fxVe = the active run {it,v,gen,...}; _fxVeItem = clip that owns a hidden element
+function _fxVeEligible(it){
+  if(!window.__TAURI__&&!window.__fxVeForce)return false;
+  if(!it||it.kind!=='video'||!it.videoFile||it._veFail)return false;
+  // HLG: WKWebView relabels the element's pixels exactly like it does a WebCodecs VideoFrame (no conversion), so the lut pass's
+  // hlg2rec709 applies unchanged - measured equal to the canvas path on an iPhone HLG clip (mean RGB within 1.5/255). Other engines (WebView2)
+  // convert HLG themselves, so HDR clips stay on the JS path there.
+  if((it.isHdr||it.needsHlg)&&!/Mac/.test(navigator.platform||''))return false;
+  if(typeof HTMLVideoElement==='undefined'||typeof HTMLVideoElement.prototype.requestVideoFrameCallback!=='function')return false;
+  const g=it.geom||defGeom();
+  if(it.heal||(it.inpaint||[]).some(p=>p.enabled!==false)||g.crop||g.rot||g.flipH||g.flipV||g.angle)return false;
+  if(fxCompare||fxSplit||fxComparePreviousSnapshot!==null||fxLoupe||cropMode)return false;
+  return true;
+}
+// Creates (once per clip) the hidden element over a blob URL of the clip's File; e.ok is null while loading.
+function _fxVeEnsure(it){
+  if(it._ve)return it._ve;
+  const v=document.createElement('video');
+  v.muted=true;v.playsInline=true;v.preload='auto';v.tabIndex=-1;v.setAttribute('aria-hidden','true');
+  v.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
+  const url=URL.createObjectURL(it.videoFile);
+  const e={v,url,ok:null,ready:null};
+  e.ready=new Promise(res=>{
+    const tm=setTimeout(()=>done(false),8000);
+    const done=ok=>{clearTimeout(tm);v.onloadeddata=v.onerror=null;e.ok=ok;res(ok);};
+    v.onloadeddata=()=>done(v.videoWidth>0);v.onerror=()=>done(false);
+  });
+  document.body.appendChild(v);v.src=url;
+  it._ve=e;
+  if(_fxVeItem&&_fxVeItem!==it)_fxVeDrop(_fxVeItem);
+  _fxVeItem=it;
+  return e;
+}
+function _fxVeDrop(it){
+  const e=it&&it._ve;if(!e)return;
+  it._ve=null;if(_fxVeItem===it)_fxVeItem=null;
+  try{e.v.pause();}catch(_){}
+  e.v.onloadeddata=e.v.onerror=e.v.onended=null;e.v.removeAttribute('src');try{e.v.load();}catch(_){}
+  e.v.remove();URL.revokeObjectURL(e.url);
+}
+function _fxVeStop(){
+  const r=_fxVe;_fxVe=null;
+  if(r){if(r.ownRender)FX.render=r.origRender;else delete FX.render;clearTimeout(r.wd);r.v.onended=null;r.v.onseeked=null;try{r.v.pause();}catch(_){}}
+  return r;
+}
+const _fxVePx=new Uint8Array(4),_FX_VE_SCALES=[1,0.85,0.7,0.6,0.5,0.42,0.35,0.3];
+// Adaptive render size while playing (the same idea as the scrub draft): GPU cost of the grade is ~proportional to
+// pixels (measured 70 ms at 1808x1018 with a look+grain+bloom, ~20 ms at half the edge), so if one frame's GPU time
+// would eat the frame budget, step the backing store down; step back up when there is headroom. Pausing restores
+// full size through the normal seek path. Target = 80% of the frame period (the probe includes the video upload the GPU still owes).
+function _fxVeAdapt(run,ms,fps,dt){
+  const target=0.8*1000/fps;let i=_FX_VE_SCALES.indexOf(run.scale);if(i<0)i=0;
+  run.gpuMs=run.gpuMs?run.gpuMs*0.5+ms*0.5:ms;
+  const cur=_FX_VE_SCALES[i];
+  if(run.gpuMs>target&&i<_FX_VE_SCALES.length-1){ // jump straight to the step that should fit (cost ~ scale^2)
+    const want=cur*Math.sqrt(target/run.gpuMs);
+    while(i<_FX_VE_SCALES.length-1&&_FX_VE_SCALES[i]>want)i++;
+  }else if(dt>1.12*1000/fps&&i<_FX_VE_SCALES.length-1)i++; // GPU probe looks fine but frames still arrive late (upload/decode share the GPU): measured pace wins
+  else if(i>0&&dt<1.06*1000/fps&&run.gpuMs*Math.pow(_FX_VE_SCALES[i-1]/cur,2)<0.8*target)i--;
+  if(_FX_VE_SCALES[i]!==run.scale){run.scale=_FX_VE_SCALES[i];run.it._veScale=run.scale;run.gpuMs=0;}
+  window.__fxVeStats={scale:run.scale,gpuMs:ms,fps:fps};
+}
+function _fxVeStart(it){
+  const e=it._ve,v=e.v,fps=it.fps||30,maxFrame=it.frameCount-1;
+  const loopIn=it.trimInFrame||0,loopOut=it.trimOutFrame!=null?Math.min(it.trimOutFrame,maxFrame):maxFrame;
+  const scrub=document.getElementById('vid-scrub');
+  let f0=+scrub.value||0;if(f0>=loopOut||f0<loopIn)f0=loopIn;
+  // Logical render size = what the JS path's source canvas would be (proxy dims at the chosen preview quality).
+  const d=fxVideoProxyDims(it);
+  const lw=d?d.w:it.img.width,lh=d?d.h:it.img.height;
+  if(d){if(!it._pvImg||it._pvImg.width!==d.w||it._pvImg.height!==d.h){it._pvImg=document.createElement('canvas');it._pvImg.width=d.w;it._pvImg.height=d.h;}it._imgStale=true;}
+  else{it._pvImg=null;it._imgStale=false;}
+  updateWork(); // fxWork = a canvas of the logical size; its pixels are never read while the element supplies the texture
+  _fxSeekGen++;_fxSeekQueued=null; // an exact-frame seek still decoding from the last pause must not paint over the live texture
+  const run={it,v,gen:++_fxVeGen,n:0,fr:0,scale:it._veScale||1,gpuMs:0,times:[],lw,lh,loopIn,loopOut,seeking:true};
+  _fxVe=run;_fxPlayRAF=-1; // sentinel: "playing" for the rest of the transport code (it only tests truthiness / cancels a RAF id)
+  const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('pause',18);
+  v.muted=fxVideoMuted||!it._mbAudioTrack;
+  const wrap=()=>{ // loop-in / end of clip: restart inside the trim window, or stop on the last frame
+    if(_fxVe!==run)return;
+    if(fxVideoLoop&&loopOut>loopIn){run.seeking=true;v.currentTime=(loopIn+0.25)/fps;if(v.paused)v.play().catch(()=>{});}
+    else{it.curFrame=Math.min(loopOut,it.curFrame||0);fxVideoPause();}
+  };
+  // Tap FX.render for the duration of the run: remembers the arguments of the latest real preview render (see the lean frame below).
+  run.ownRender=Object.prototype.hasOwnProperty.call(FX,'render');run.origRender=FX.render;
+  FX.render=function(){run.last=arguments;return run.origRender.apply(this,arguments);};
+  v.onseeked=()=>{run.seeking=false;};
+  v.onended=wrap;
+  const cb=(now,md)=>{
+    if(_fxVe!==run)return;
+    v.requestVideoFrameCallback(cb); // re-arm first: a throw below must not end playback silently
+    run.n++;it._veStrikes=0;it._veRetried=false;
+    if(run.seeking)return;
+    const fi=Math.max(0,Math.round(md.mediaTime*fps));
+    if(fi>loopOut){wrap();return;}
+    FX.setVideoElement(v,lw,lh);
+    it.curFrame=fi;it._shownFrame=fi; // fxVideoFrameSeed reads curFrame: grain follows the frame on screen
+    // Lean frame: renderPreview's JS (sizing, DOM text, borders, overlays) costs ~14 ms of main thread per call and none of it
+    // changes between frames. The first frame (and any frame after the user touched the recipe, which re-enters renderPreview
+    // and refreshes run.last through the FX.render tap below) goes through it; the rest re-issue the SAME FX.render call
+    // with the new frame's grain seed (0.5 ms). Scopes need renderPreview's readbacks, so they keep the full path.
+    if(run.last&&!fxHistOn&&!fxPeakOn){
+      const a=run.last,sd=fxVideoFrameSeed(it),k=run.scale;
+      const rw=k<1?Math.max(2,Math.round(a[1]*k)):a[1],rh=k<1?Math.max(2,Math.round(a[2]*k)):a[2];
+      const probe=(run.fr++%12)===3,t0=probe?performance.now():0;
+      run.origRender.call(FX,a[0],rw,rh,sd!=null?{...a[3],seed:sd}:a[3]); // origRender, not the tap: run.last must keep the FULL-size args
+      if(probe){ // GPU time is invisible to JS timers (calls return at once): a 1-px readback waits for the queue
+        FX.gl.readPixels(0,0,1,1,FX.gl.RGBA,FX.gl.UNSIGNED_BYTE,_fxVePx);
+        const tt=run.times,dt=tt.length>11?(tt[tt.length-1]-tt[tt.length-12])/11:0; // mean frame interval over the last 12 presented frames
+        _fxVeAdapt(run,performance.now()-t0,fps,dt);
+      }
+    }else{renderPreview();run.fr=0;}
+    scrub.value=fi;
+    document.getElementById('vid-time').textContent=fxVideoTimeLabel(fi,fps);
+    run.times.push(now);if(run.times.length>30)run.times.shift();
+    if(run.times.length>1){
+      const dt=(run.times[run.times.length-1]-run.times[0])/(run.times.length-1);
+      const ro=document.getElementById('vid-fps-readout');if(ro&&dt>0)ro.textContent=(1000/dt).toFixed(1)+' fps';
+    }
+  };
+  v.requestVideoFrameCallback(cb);
+  v.currentTime=(f0+0.25)/fps; // half-open frame slot: lands on frame f0 whatever the timestamp rounding
+  v.play().catch(()=>{ // refused / undecodable: this clip permanently falls back to the JS path
+    if(_fxVe!==run)return;
+    _fxVeStop();it._veFail=true;_fxPlayRAF=null;fxVideoPlayToggle();
+  });
+  // Watchdog: started but no frame callback yet. (a) the element is advancing: the callback may just be queued behind a blocked
+  // main thread (the first render of a heavy look compiles shaders for seconds) - wait once. (b) still none: this element's
+  // rVFC is dead (seen in WKWebView after play/pause cycles) - replace the element and start again, once. (c) otherwise a
+  // strike; two in a row = this clip stays on the JS path.
+  let waited=false;
+  const chk=()=>{
+    if(_fxVe!==run||run.n>0)return;
+    if(!waited&&!v.paused&&v.currentTime>run.t0+0.5){waited=true;run.wd=setTimeout(chk,3000);return;}
+    _fxVeStop();_fxPlayRAF=null;
+    if(!it._veRetried){it._veRetried=true;_fxVeDrop(it);fxVideoPlayToggle();return;}
+    it._veStrikes=(it._veStrikes||0)+1;if(it._veStrikes>=2)it._veFail=true;
+    const was=it._veFail;it._veFail=true;fxVideoPlayToggle();it._veFail=was;
+  };
+  run.t0=(f0+0.25)/fps;
+  run.wd=setTimeout(chk,4000);
+}
 function fxVideoPlayToggle(){
   const it=curItem();if(!it||it.kind!=='video')return;
   if(_fxPlayRAF){fxVideoPause();return;}
+  if(_fxVeEligible(it)){
+    const e=_fxVeEnsure(it);
+    if(e.ok===true){_fxVeStart(it);return;} // synchronous: play() must stay inside the click's user gesture (audio)
+    if(e.ok===null){ // still loading the element: show "playing", start when it is ready
+      const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('pause',18);
+      _fxPlayRAF=-1;const gen=_fxVeGen;
+      e.ready.then(ok=>{
+        if(_fxPlayRAF!==-1||_fxVe||_fxVeGen!==gen||curItem()!==it)return; // paused / switched meanwhile
+        _fxPlayRAF=null;
+        if(ok)_fxVeStart(it);else{it._veFail=true;_fxVeDrop(it);fxVideoPlayToggle();}
+      });
+      return;
+    }
+    it._veFail=true;_fxVeDrop(it); // load failed: JS path
+  }
   const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('pause',18);
   _fxPlayStartMs=performance.now();
   _fxPlayStartFrame=+document.getElementById('vid-scrub').value||0;
@@ -84,11 +252,19 @@ function fxVideoPlayToggle(){
   _fxPlayRAF=requestAnimationFrame(fxVideoPlayTick);
 }
 function fxVideoPause(){
-  if(_fxPlayRAF)cancelAnimationFrame(_fxPlayRAF);
+  const ve=_fxVeStop();
+  if(_fxPlayRAF&&_fxPlayRAF!==-1)cancelAnimationFrame(_fxPlayRAF);
   _fxPlayRAF=null;
   _fxPlayClose();
   _fxAudioStop();
   const btn=document.getElementById('btn-vid-play');if(btn)btn.innerHTML=icon('play',18);
+  if(ve){
+    // A played element is replaced, not reused: its frame callbacks were observed to stop for good after a few play/pause
+    // cycles in WKWebView. A fresh one loads in ~0.2 s; preload it a moment later (not while the exact-frame decode runs).
+    const it=ve.it;_fxVeDrop(it);
+    setTimeout(()=>{if(curItem()===it&&!_fxVe&&_fxVeEligible(it))_fxVeEnsure(it);},600);
+    if(curItem()===it&&it._mbSampleSink){it._shownFrame=-1;fxVideoSeekTo(it,it.curFrame||0);} // paused frame = the normal full-quality path
+  }
 }
 async function fxVideoPlayTick(nowMs){
   const it=curItem();
@@ -149,6 +325,7 @@ function fxSyncTransportUI(){
   // and forgotten in the hide path, which is how a control ends up stranded on a still photo.
   const vidRows=['row-grain-motion','row-gate-weave','row-film-breath'].map(id=>document.getElementById(id));
   document.body.classList.toggle('fx-cur-video',!!(it&&it.kind==='video')); // swaps the Output card between still and video export controls (.fx-still-only / .fx-vid-only)
+  if(_fxVeItem&&_fxVeItem!==it)_fxVeDrop(_fxVeItem); // free the previous clip's hidden <video> + blob URL
   if(!it||it.kind!=='video'){bar.style.display='none';vidRows.forEach(r=>{if(r)r.style.display='none';});if(typeof fxVideoProxyCancel==='function')fxVideoProxyCancel();return;}
   bar.style.display='';
   vidRows.forEach(r=>{if(r)r.style.display='';});
@@ -173,6 +350,7 @@ function fxSyncTransportUI(){
     asel.disabled=!it._mbAudioTrack;if(!it._mbAudioTrack)asel.title='This clip has no audio track';}
   fxVideoExportSummary();
   fxVideoProxyMaybe(it);
+  if(_fxVeEligible(it))_fxVeEnsure(it); // preload so Play starts inside the click's user gesture
   if(typeof fxVideoBuildThumbs==='function')fxVideoBuildThumbs(it); // fire-and-forget — fills in #vid-thumbstrip as frames decode
 }
 // Thumbnail strip (B3): N evenly-spaced low-res frames under the scrubber, Premiere/Resolve-

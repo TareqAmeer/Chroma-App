@@ -509,6 +509,28 @@ void main(){
     this.imgW=w;this.imgH=h;
     this._ensureLutTx();
   }
+  // setVideoElement(v,lw,lh) — live-playback sibling of setVideoFrame: uploads the CURRENT frame of a playing
+  // <video> straight into the persistent vidTx (hardware-decoded, no JS decode, no 2D-canvas hop). Measured on a
+  // 4K HEVC clip in WKWebView: ~15 ms, against ~150 ms for decode -> 2D canvas -> texture. lw/lh are the LOGICAL
+  // size (the proxy canvas dims the shader constants were tuned against); the texture itself keeps the video's
+  // native size, so sampling it is a plain LINEAR minify.
+  setVideoElement(v,lw,lh){const gl=this.gl;const vw=v.videoWidth,vh=v.videoHeight;
+    const needAlloc=!this.vidTx;
+    if(needAlloc){
+      this.vidTx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    }else gl.bindTexture(gl.TEXTURE_2D,this.vidTx);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    // ⚠️ texImage2D EVERY frame, never texSubImage2D: WebKit only takes its fast GPU path for texImage2D(video)
+    // (measured on a playing 4K HEVC clip: texImage2D 16 ms, texSubImage2D 140 ms - it falls back to a CPU copy).
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,v);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    if(this.imgTx&&this.imgTx!==this.vidTx)gl.deleteTexture(this.imgTx);
+    this.imgTx=this.vidTx;this.vidW=vw;this.vidH=vh;this.imgW=lw;this.imgH=lh;
+    this.usingSceneLinear=false;this.vidTx._csDims=null;this.vidTx._csSrc=null;
+    this._ensureLutTx();
+  }
   setLUT(lut){const gl=this.gl;if(this.lutTx)gl.deleteTexture(this.lutTx);
     this._lutSnapshot=lut?new Float32Array(lut):null;
     const d=new Uint8Array(SZ*SZ*SZ*3);
