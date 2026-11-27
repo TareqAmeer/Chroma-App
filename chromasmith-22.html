@@ -21,7 +21,9 @@ if(/[?&]csrender=1/.test(location.search)){window.__csRender=true;try{Storage.pr
 <link rel="icon" href="assets/brand/favicon.svg?v=3" type="image/svg+xml">
 <link rel="icon" href="assets/brand/icon-32.png?v=3" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png?v=3">
-<link rel="manifest" href="assets/brand/site.webmanifest">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0b0a">
+<meta name="mobile-web-app-capable" content="yes">
 <meta property="og:title" content="CHRO-MA-SMITH">
 <meta property="og:image" content="https://tareqameer.github.io/Chroma-App/assets/brand/og-image.jpeg">
 <!-- Desktop (Tauri) boot gate — set SYNCHRONOUSLY here, before the parser ever reaches <body>,
@@ -37,10 +39,33 @@ if(/[?&]csrender=1/.test(location.search)){window.__csRender=true;try{Storage.pr
    parsing ends, then show it already laid out. */
 else{document.documentElement.classList.add('cs-boot-web');var _csBootOff=function(){document.documentElement.classList.remove('cs-boot-web')};
   document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){requestAnimationFrame(_csBootOff)})});setTimeout(_csBootOff,8000)}</script>
-<!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
-     works on GitHub Pages (which can't set headers). Required by the libraw-wasm RW2 decoder.
-     It reloads the page once on first visit to gain cross-origin isolation. -->
-<script src="coi-serviceworker.min.js"></script>
+<!-- sw.js: injects COOP/COEP client-side so SharedArrayBuffer works on GitHub Pages (which
+     can't set headers) — required by the libraw-wasm RW2 decoder — and precaches the offline
+     shell. It reloads the page once on first visit to gain cross-origin isolation.
+     coi-serviceworker.min.js stays in the tree as the registration fallback only. -->
+<script>
+/* Installs sw.js — offline shell + COOP/COEP injection (SharedArrayBuffer for libraw-wasm).
+   The first controlled load reloads once: the document itself arrived without COEP, so
+   crossOriginIsolated only turns true after a reload. Guarded against reload loops. */
+(function () {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  if (!('serviceWorker' in navigator)) return;
+  var KEY = 'csSwReloaded';
+  function reloadOnce() {
+    if (sessionStorage.getItem(KEY)) return;
+    sessionStorage.setItem(KEY, '1');
+    location.reload();
+  }
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).then(function () {
+    if (navigator.serviceWorker.controller) return;
+    navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
+  }).catch(function () {
+    var script = document.createElement('script');
+    script.src = 'coi-serviceworker.min.js';
+    document.head.appendChild(script);
+  });
+}());
+</script>
 <style>
 /* Desktop boot gate (see the inline script above): hides the web-layout editor chrome until
    the Tauri shell has actually settled into the Library. visibility (not display:none) so
@@ -38153,5 +38178,79 @@ if(/[?&]catalog=1/.test(location.search)){
 <script src="mobile/mobile-project.js"></script>
 <script src="mobile/mobile-editor.js"></script>
 <script src="mobile/mobile-export.js"></script>
+<script>
+/* PWA runtime (web only — Tauri/Capacitor already have native equivalents).
+   - Update chip: a new service worker took over, so the page is running old JS.
+   - Offline chip: the shell is cached, but network-backed actions (Google Photos, import by URL) are not.
+   - Wake lock: keeps the screen on in the installed app; released whenever the page is hidden. */
+(function () {
+  if (window.__TAURI__) return;
+  if (typeof capNative === 'function' && capNative()) return;
+  var hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  var chip = null, chipTimer = null;
+
+  function hideChip() {
+    clearTimeout(chipTimer);
+    if (chip) { chip.remove(); chip = null; }
+  }
+  function showChip(text, onClick, sticky) {
+    if (!chip) {
+      chip = document.createElement('button');
+      chip.type = 'button';
+      chip.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:2147483000;' +
+        'display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;' +
+        'border:1px solid rgba(232,230,225,.18);background:#1c1c1a;color:#e8e6e1;' +
+        'font:13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;' +
+        'box-shadow:0 6px 24px rgba(0,0,0,.45);white-space:nowrap;';
+      document.body.appendChild(chip);
+    }
+    chip.textContent = text;
+    chip.style.top = 'calc(env(safe-area-inset-top, 0px) + 54px)';
+    chip.style.pointerEvents = onClick ? 'auto' : 'none';
+    chip.onclick = onClick || null;
+    clearTimeout(chipTimer);
+    if (!sticky) chipTimer = setTimeout(hideChip, 6000);
+  }
+
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) return;
+      showChip('Update ready — reload', function () { location.reload(); }, true);
+    });
+  }
+
+  var offlineChip = false;
+  function syncOnline() {
+    if (navigator.onLine === false) {
+      offlineChip = true;
+      showChip('Offline — cached library only', null, true);
+    } else if (offlineChip) {
+      offlineChip = false;
+      hideChip();
+    }
+  }
+  window.addEventListener('online', syncOnline);
+  window.addEventListener('offline', syncOnline);
+  syncOnline();
+
+  if (!standalone || !('wakeLock' in navigator)) return;
+  var lock = null;
+  function keepAwake() {
+    if (document.hidden || lock) return;
+    navigator.wakeLock.request('screen').then(function (sentinel) {
+      lock = sentinel;
+      sentinel.addEventListener('release', function () { lock = null; });
+    }).catch(function () {});
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (lock) { lock.release(); lock = null; }
+    } else keepAwake();
+  });
+  keepAwake();
+}());
+</script>
+
 </body>
 </html>

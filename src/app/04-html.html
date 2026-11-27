@@ -1,3 +1,4 @@
-<!-- coi-serviceworker (MIT, Guido Zuidhof): injects COOP/COEP client-side so SharedArrayBuffer
-     works on GitHub Pages (which can't set headers). Required by the libraw-wasm RW2 decoder.
-     It reloads the page once on first visit to gain cross-origin isolation. -->
+<!-- sw.js: injects COOP/COEP client-side so SharedArrayBuffer works on GitHub Pages (which
+     can't set headers) — required by the libraw-wasm RW2 decoder — and precaches the offline
+     shell. It reloads the page once on first visit to gain cross-origin isolation.
+     coi-serviceworker.min.js stays in the tree as the registration fallback only. -->
