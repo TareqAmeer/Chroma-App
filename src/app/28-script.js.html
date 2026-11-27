@@ -1,1 +1,74 @@
 <script src="mobile/mobile-export.js"></script>
+<script>
+/* PWA runtime (web only — Tauri/Capacitor already have native equivalents).
+   - Update chip: a new service worker took over, so the page is running old JS.
+   - Offline chip: the shell is cached, but network-backed actions (Google Photos, import by URL) are not.
+   - Wake lock: keeps the screen on in the installed app; released whenever the page is hidden. */
+(function () {
+  if (window.__TAURI__) return;
+  if (typeof capNative === 'function' && capNative()) return;
+  var hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  var chip = null, chipTimer = null;
+
+  function hideChip() {
+    clearTimeout(chipTimer);
+    if (chip) { chip.remove(); chip = null; }
+  }
+  function showChip(text, onClick, sticky) {
+    if (!chip) {
+      chip = document.createElement('button');
+      chip.type = 'button';
+      chip.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);z-index:2147483000;' +
+        'display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;' +
+        'border:1px solid rgba(232,230,225,.18);background:#1c1c1a;color:#e8e6e1;' +
+        'font:13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;' +
+        'box-shadow:0 6px 24px rgba(0,0,0,.45);white-space:nowrap;';
+      document.body.appendChild(chip);
+    }
+    chip.textContent = text;
+    chip.style.top = 'calc(env(safe-area-inset-top, 0px) + 54px)';
+    chip.style.pointerEvents = onClick ? 'auto' : 'none';
+    chip.onclick = onClick || null;
+    clearTimeout(chipTimer);
+    if (!sticky) chipTimer = setTimeout(hideChip, 6000);
+  }
+
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) return;
+      showChip('Update ready — reload', function () { location.reload(); }, true);
+    });
+  }
+
+  var offlineChip = false;
+  function syncOnline() {
+    if (navigator.onLine === false) {
+      offlineChip = true;
+      showChip('Offline — cached library only', null, true);
+    } else if (offlineChip) {
+      offlineChip = false;
+      hideChip();
+    }
+  }
+  window.addEventListener('online', syncOnline);
+  window.addEventListener('offline', syncOnline);
+  syncOnline();
+
+  if (!standalone || !('wakeLock' in navigator)) return;
+  var lock = null;
+  function keepAwake() {
+    if (document.hidden || lock) return;
+    navigator.wakeLock.request('screen').then(function (sentinel) {
+      lock = sentinel;
+      sentinel.addEventListener('release', function () { lock = null; });
+    }).catch(function () {});
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (lock) { lock.release(); lock = null; }
+    } else keepAwake();
+  });
+  keepAwake();
+}());
+</script>

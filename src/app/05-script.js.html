@@ -1,1 +1,23 @@
-<script src="coi-serviceworker.min.js"></script>
+<script>
+/* Installs sw.js — offline shell + COOP/COEP injection (SharedArrayBuffer for libraw-wasm).
+   The first controlled load reloads once: the document itself arrived without COEP, so
+   crossOriginIsolated only turns true after a reload. Guarded against reload loops. */
+(function () {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  if (!('serviceWorker' in navigator)) return;
+  var KEY = 'csSwReloaded';
+  function reloadOnce() {
+    if (sessionStorage.getItem(KEY)) return;
+    sessionStorage.setItem(KEY, '1');
+    location.reload();
+  }
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).then(function () {
+    if (navigator.serviceWorker.controller) return;
+    navigator.serviceWorker.addEventListener('controllerchange', reloadOnce);
+  }).catch(function () {
+    var script = document.createElement('script');
+    script.src = 'coi-serviceworker.min.js';
+    document.head.appendChild(script);
+  });
+}());
+</script>
